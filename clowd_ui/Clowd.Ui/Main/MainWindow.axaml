@@ -7,6 +7,8 @@
     Title="Clowd"
     Width="800"
     Height="600"
+    MinWidth="560"
+    MinHeight="360"
     WindowStartupLocation="CenterScreen">
 
     <!-- Replaces the WPFUI NavigationFluent / Breadcrumb / Frame shell (decision table #53):
@@ -18,7 +20,7 @@
 
         <Grid Grid.Row="0" Grid.Column="0" Margin="6,0,0,24" ColumnDefinitions="Auto,*">
             <Viewbox Width="40" Height="40" HorizontalAlignment="Left">
-                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="#00AFF0" />
+                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
             </Viewbox>
             <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                 <TextBlock FontWeight="Medium" Text="CLOWD" />
@@ -31,18 +33,52 @@
                    Grid.Column="0"
                    Margin="0,0,0,16"
                    MinWidth="150">
-            <u:NavMenuItem Header="Recent" Tag="RecentSessions" />
-            <u:NavMenuItem Header="General" Tag="SettingsGeneral" />
-            <u:NavMenuItem Header="Hotkeys" Tag="SettingsHotkeys" />
-            <u:NavMenuItem Header="Capture" Tag="SettingsCapture" />
-            <u:NavMenuItem Header="Editor" Tag="SettingsEditor" />
-            <u:NavMenuItem Header="Uploads" Tag="SettingsUploads" />
-            <u:NavMenuItem Header="About" Tag="About" />
+            <u:NavMenuItem Header="Recent" Tag="RecentSessions">
+                <u:NavMenuItem.Icon>
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecent}" />
+                </u:NavMenuItem.Icon>
+            </u:NavMenuItem>
+            <u:NavMenuItem IsSeparator="True" />
+            <u:NavMenuItem Header="General" Tag="SettingsGeneral">
+                <u:NavMenuItem.Icon>
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavGeneral}" />
+                </u:NavMenuItem.Icon>
+            </u:NavMenuItem>
+            <u:NavMenuItem Header="Hotkeys" Tag="SettingsHotkeys">
+                <u:NavMenuItem.Icon>
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavHotkeys}" />
+                </u:NavMenuItem.Icon>
+            </u:NavMenuItem>
+            <u:NavMenuItem Header="Capture" Tag="SettingsCapture">
+                <u:NavMenuItem.Icon>
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
+                </u:NavMenuItem.Icon>
+            </u:NavMenuItem>
+            <u:NavMenuItem Header="Editor" Tag="SettingsEditor">
+                <u:NavMenuItem.Icon>
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavEditor}" />
+                </u:NavMenuItem.Icon>
+            </u:NavMenuItem>
+            <u:NavMenuItem Header="Uploads" Tag="SettingsUploads">
+                <u:NavMenuItem.Icon>
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavUploads}" />
+                </u:NavMenuItem.Icon>
+            </u:NavMenuItem>
+            <u:NavMenuItem IsSeparator="True" />
+            <u:NavMenuItem Header="About" Tag="About">
+                <u:NavMenuItem.Icon>
+                    <PathIcon Width="16" Height="16" Data="{StaticResource IconNavAbout}" />
+                </u:NavMenuItem.Icon>
+            </u:NavMenuItem>
         </u:NavMenu>
 
         <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="24,0,0,0" RowDefinitions="Auto,*">
             <TextBlock x:Name="PageTitle" Classes="Subtitle" Margin="0,8,16,16" />
-            <ContentControl x:Name="PageHost" Grid.Row="1" />
+            <TransitioningContentControl x:Name="PageHost" Grid.Row="1">
+                <TransitioningContentControl.PageTransition>
+                    <CrossFade Duration="0:0:0.12" />
+                </TransitioningContentControl.PageTransition>
+            </TransitioningContentControl>
         </Grid>
     </Grid>
 </ui:SystemThemedWindow>

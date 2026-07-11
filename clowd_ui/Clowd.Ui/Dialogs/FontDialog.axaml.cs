@@ -20,23 +20,35 @@ namespace Clowd.UI.Dialogs
         public FontDialog() : this("Segoe UI", 12, FontStyle.Normal, FontWeight.Normal)
         { }
 
+        private readonly System.Collections.Generic.List<string> _allFamilies;
+
         public FontDialog(string fontFamily, double fontSize, FontStyle fontStyle, FontWeight fontWeight)
         {
             InitializeComponent();
             Icon = AppStyles.AppIcon;
 
-            var names = FontManager.Current.SystemFonts
-                                   .Select(f => f.Name)
-                                   .Where(n => !string.IsNullOrWhiteSpace(n))
-                                   .Distinct(StringComparer.OrdinalIgnoreCase)
-                                   .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                                   .ToList();
+            _allFamilies = FontManager.Current.SystemFonts
+                                      .Select(f => f.Name)
+                                      .Where(n => !string.IsNullOrWhiteSpace(n))
+                                      .Distinct(StringComparer.OrdinalIgnoreCase)
+                                      .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                                      .ToList();
 
-            FontList.ItemsSource = names;
+            // each family renders in its own typeface as a mini preview
+            FontList.ItemTemplate = new Avalonia.Controls.Templates.FuncDataTemplate<string>((name, _) =>
+                new TextBlock
+                {
+                    Text = name,
+                    FontFamily = string.IsNullOrWhiteSpace(name) ? FontFamily.Default : new FontFamily(name),
+                });
 
-            var match = names.FirstOrDefault(n => string.Equals(n, fontFamily, StringComparison.OrdinalIgnoreCase));
+            FontList.ItemsSource = _allFamilies;
+
+            var match = _allFamilies.FirstOrDefault(n => string.Equals(n, fontFamily, StringComparison.OrdinalIgnoreCase));
             if (match != null)
                 FontList.SelectedItem = match;
+
+            FilterBox.TextChanged += (_, _) => ApplyFilter();
 
             // The WPF FontDialog enforced MinSize 8 / MaxSize 64 — mirrored by the NumericUpDown.
             SizeBox.Value = (decimal)Math.Clamp(double.IsFinite(fontSize) ? fontSize : 12d, 8d, 64d);
@@ -72,6 +84,26 @@ namespace Clowd.UI.Dialogs
             }
 
             base.OnKeyDown(e);
+        }
+
+        /// <summary>Narrows the family list to names containing the filter text, keeping the
+        /// current selection when it survives the filter.</summary>
+        private void ApplyFilter()
+        {
+            var filter = FilterBox.Text?.Trim();
+            var selected = FontList.SelectedItem as string;
+
+            var filtered = string.IsNullOrEmpty(filter)
+                ? _allFamilies
+                : _allFamilies.Where(n => n.Contains(filter, StringComparison.OrdinalIgnoreCase)).ToList();
+
+            FontList.ItemsSource = filtered;
+
+            if (selected != null && filtered.Contains(selected, StringComparer.OrdinalIgnoreCase))
+            {
+                FontList.SelectedItem = selected;
+                FontList.ScrollIntoView(selected);
+            }
         }
 
         private double CurrentSize => (double)(SizeBox.Value ?? 12);

@@ -34,11 +34,13 @@ namespace Clowd.UI
         private readonly HashSet<Key> _pressedKeys = new HashSet<Key>(); // repeat tracker (decision table #37)
 
         private readonly string _graphicsPath;
+        private readonly string _historyPath;
 
         private DispatcherTimer _sessionInfoDebounce;
 
-        // graphics.json persistence is latest-wins on a background thread (see StateUpdated handler)
+        // graphics.json/history.json persistence is latest-wins on a background thread (see StateUpdated handler)
         private byte[] _pendingGraphicsJson;
+        private byte[] _pendingHistoryJson;
         private Task _graphicsWriteTask = Task.CompletedTask;
         private readonly object _graphicsWriteLock = new object();
 
@@ -53,6 +55,7 @@ namespace Clowd.UI
         {
             _session = info;
             _graphicsPath = Path.Combine(Path.GetDirectoryName(info.FilePath), "graphics.json");
+            _historyPath = Path.Combine(Path.GetDirectoryName(info.FilePath), "history.json");
 
             SelectToolCommand = new RelayCommand { Executed = SelectToolExecuted, Text = "Select tool" };
             CommandSave = new RelayCommand { Executed = SaveCommandExecuted, Text = "_Save", Gesture = new SimpleKeyGesture(Key.S, KeyModifiers.Control) };
@@ -489,6 +492,7 @@ namespace Clowd.UI
                 try {
                     var state = (JsonObject) JsonNode.Parse(File.ReadAllText(_graphicsPath));
                     drawingCanvas.RestoreState(state);
+                    RestoreHistoryFile(state);
                     return true;
                 } catch {; }
             }
@@ -516,6 +520,25 @@ namespace Clowd.UI
             return false;
         }
 
+        private void RestoreHistoryFile(JsonObject state)
+        {
+            // best-effort: a missing/corrupt/out-of-sync history.json (graphics.json is the
+            // authority) opens the session with empty undo history exactly as before the file
+            // existed; the next commit overwrites it with a fresh chain
+            try {
+                if (File.Exists(_historyPath))
+                    drawingCanvas.TryRestoreHistory((JsonObject) JsonNode.Parse(File.ReadAllText(_historyPath)), state);
+            } catch {; }
+        }
+
+        private static byte[] SerializeToBytes(JsonObject json)
+        {
+            using var ms = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(ms))
+                json.WriteTo(writer);
+            return ms.ToArray();
+        }
+
         private void drawingCanvas_StateUpdated(object sender, StateChangedEventArgs e)
         {
             if (_session == null)
@@ -527,14 +550,9 @@ namespace Clowd.UI
             // serialize in memory on the UI thread (cheap), then hand the bytes to a latest-wins
             // background writer — undo/redo and merged drag steps fire this on every step, and a
             // synchronous File.Create here stalls the canvas for the duration of the disk write.
-            byte[] bytes;
-            using (var ms = new MemoryStream()) {
-                using (var writer = new Utf8JsonWriter(ms))
-                    e.State.WriteTo(writer);
-                bytes = ms.ToArray();
-            }
-
-            Interlocked.Exchange(ref _pendingGraphicsJson, bytes);
+            Interlocked.Exchange(ref _pendingGraphicsJson, SerializeToBytes(e.State));
+            if (e.History != null)
+                Interlocked.Exchange(ref _pendingHistoryJson, SerializeToBytes(e.History));
             lock (_graphicsWriteLock)
                 _graphicsWriteTask = _graphicsWriteTask.ContinueWith(_ => WritePendingGraphicsJson(), TaskScheduler.Default);
         }
@@ -542,13 +560,24 @@ namespace Clowd.UI
         private void WritePendingGraphicsJson()
         {
             var bytes = Interlocked.Exchange(ref _pendingGraphicsJson, null);
-            if (bytes == null)
-                return;
+            if (bytes != null) {
+                try {
+                    File.WriteAllBytes(_graphicsPath, bytes);
+                } catch (Exception ex) {
+                    Debug.WriteLine($"failed to persist graphics.json: {ex.Message}");
+                }
+            }
 
-            try {
-                File.WriteAllBytes(_graphicsPath, bytes);
-            } catch (Exception ex) {
-                Debug.WriteLine($"failed to persist graphics.json: {ex.Message}");
+            // history.json second: after a crash between the two writes, graphics.json (the
+            // authority) is the newer file and the stale history fails its load-time replay
+            // check, falling back cleanly to empty history
+            var history = Interlocked.Exchange(ref _pendingHistoryJson, null);
+            if (history != null) {
+                try {
+                    File.WriteAllBytes(_historyPath, history);
+                } catch (Exception ex) {
+                    Debug.WriteLine($"failed to persist history.json: {ex.Message}");
+                }
             }
         }
 

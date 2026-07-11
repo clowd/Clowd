@@ -26,7 +26,46 @@ namespace Clowd.UI
         {
             InitializeComponent();
             NavList.SelectionChanged += OnNavSelectionChanged;
-            NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault();
+            NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
+            RestoreWindowBounds();
+        }
+
+        /// <summary>Restores the last window placement when it still intersects a connected
+        /// screen; otherwise the default 800x600 CenterScreen applies.</summary>
+        private void RestoreWindowBounds()
+        {
+            var saved = SettingsRoot.Current?.General?.MainWindowBounds;
+            if (String.IsNullOrEmpty(saved))
+                return;
+
+            var parts = saved.Split(',');
+            if (parts.Length != 4
+                || !int.TryParse(parts[0], out var x) || !int.TryParse(parts[1], out var y)
+                || !double.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture, out var w)
+                || !double.TryParse(parts[3], System.Globalization.CultureInfo.InvariantCulture, out var h))
+                return;
+
+            if (w < MinWidth || h < MinHeight)
+                return;
+
+            var rect = new Avalonia.PixelRect(x, y, (int)w, (int)h);
+            if (!Screens.All.Any(s => s.WorkingArea.Intersects(rect)))
+                return;
+
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Position = new Avalonia.PixelPoint(x, y);
+            Width = w;
+            Height = h;
+        }
+
+        private void SaveWindowBounds()
+        {
+            if (SettingsRoot.Current?.General == null || WindowState != WindowState.Normal)
+                return;
+
+            SettingsRoot.Current.General.MainWindowBounds = String.Create(
+                System.Globalization.CultureInfo.InvariantCulture,
+                $"{Position.X},{Position.Y},{Width},{Height}");
         }
 
         private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -52,7 +91,8 @@ namespace Clowd.UI
             {
                 SettingsPageTab.RecentSessions => new RecentSessionsPage(),
                 SettingsPageTab.SettingsGeneral => CreateGeneralPage(),
-                SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys),
+                SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys,
+                    "Click a shortcut, then press the new key combination — Esc cancels. Use ✕ to remove a shortcut."),
                 SettingsPageTab.SettingsCapture => CreateFactoryPage(getWindow, SettingsRoot.Current.Capture),
                 SettingsPageTab.SettingsEditor => CreateFactoryPage(getWindow, SettingsRoot.Current.Editor),
                 SettingsPageTab.SettingsUploads => CreateUploadsPage(),
@@ -80,9 +120,9 @@ namespace Clowd.UI
             return new UploadSettingsPage();
         }
 
-        private Control CreateFactoryPage(Func<Window> getWindow, object category)
+        private Control CreateFactoryPage(Func<Window> getWindow, object category, string introText = null)
         {
-            var panel = new SettingsControlFactory(getWindow, category).GetSettingsPanel();
+            var panel = new SettingsControlFactory(getWindow, category).GetSettingsPanel(introText);
             AttachAutoSave(category);
             return panel;
         }
@@ -137,8 +177,8 @@ namespace Clowd.UI
 
         protected override void OnClosing(WindowClosingEventArgs e)
         {
-            if (_saveTimer?.IsEnabled == true)
-                FlushPendingSave();
+            SaveWindowBounds();
+            FlushPendingSave();
 
             base.OnClosing(e);
         }

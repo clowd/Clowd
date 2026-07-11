@@ -29,7 +29,7 @@
             <Setter Property="Opacity" Value="0.7" />
         </Style>
         <Style Selector="TextBlock.status.error">
-            <Setter Property="Foreground" Value="#E54D42" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorDanger}" />
             <Setter Property="Opacity" Value="1" />
         </Style>
     </Window.Styles>
@@ -42,12 +42,17 @@
             Background="{DynamicResource ApplicationBackgroundBrush}"
             BoxShadow="0 2 12 0 #50000000">
         <StackPanel>
-            <Grid Margin="12,8,8,4" ColumnDefinitions="*,Auto">
+            <!-- header doubles as a drag handle so the overlay can be moved off content -->
+            <Grid Margin="12,8,8,4"
+                  ColumnDefinitions="*,Auto"
+                  Background="Transparent"
+                  PointerPressed="HeaderPressed">
                 <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Uploads" />
                 <Button Grid.Column="1"
                         Classes="icon"
                         Click="MinimizeClicked"
-                        ToolTip.Tip="Minimize (reopen from the tray menu)">
+                        ToolTip.Tip="Minimize (reopen from the tray menu)"
+                        AutomationProperties.Name="Minimize">
                     <Viewbox>
                         <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconChevronDown}" />
                     </Viewbox>
@@ -71,18 +76,27 @@
                                 <Button Grid.Column="1"
                                         Classes="icon"
                                         Click="DismissClicked"
-                                        ToolTip.Tip="Cancel / dismiss">
+                                        ToolTip.Tip="{Binding DismissTooltip}"
+                                        AutomationProperties.Name="{Binding DismissTooltip}">
                                     <Viewbox>
                                         <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClose}" />
                                     </Viewbox>
                                 </Button>
 
-                                <TextBlock Grid.Row="1" Grid.ColumnSpan="2"
+                                <TextBlock Grid.Row="1"
                                            Classes="status"
                                            Classes.error="{Binding IsError}"
                                            TextWrapping="Wrap"
                                            MaxLines="3"
                                            Text="{Binding Status}" />
+
+                                <TextBlock Grid.Row="1" Grid.Column="1"
+                                           Classes="status"
+                                           Margin="8,0,0,0"
+                                           VerticalAlignment="Bottom"
+                                           HorizontalAlignment="Right"
+                                           IsVisible="{Binding IsInProgress}"
+                                           Text="{Binding ProgressText}" />
 
                                 <ProgressBar Grid.Row="2" Grid.ColumnSpan="2"
                                              Margin="0,6,0,2"

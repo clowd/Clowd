@@ -6,7 +6,7 @@
     <ScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="8">
             <Viewbox Width="60" HorizontalAlignment="Left">
-                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="#00AFF0" />
+                <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
             </Viewbox>
 
             <TextBlock Classes="Title" Text="Clowd" />

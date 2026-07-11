@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Layout;
@@ -28,6 +29,8 @@ namespace Clowd.UI.Dialogs
             {
                 Title = $"{type} Upload",
                 Width = 420,
+                // the SystemThemedWindow default MinWidth (460) would silently win over Width
+                MinWidth = 420,
                 SizeToContent = SizeToContent.Height,
                 WindowStartupLocation = WindowStartupLocation.CenterScreen,
                 CanResize = false,
@@ -89,15 +92,30 @@ namespace Clowd.UI.Dialogs
 
             panel.Children.Add(setDefault);
 
+            // footer strip matching MessageDialog (tinted bar, action right-aligned)
             var cancel = new Button
             {
                 Content = "Cancel",
+                MinWidth = 80,
                 HorizontalAlignment = HorizontalAlignment.Right,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                IsCancel = true,
             };
             cancel.Click += (_, _) => wnd.Close();
-            panel.Children.Add(cancel);
 
-            wnd.Content = panel;
+            var footer = new Border
+            {
+                Child = cancel,
+                Padding = new Avalonia.Thickness(16, 10),
+            };
+            footer.Bind(Border.BackgroundProperty, footer.GetResourceObservable("SemiColorFill0"));
+
+            var root = new DockPanel { LastChildFill = true };
+            DockPanel.SetDock(footer, Dock.Bottom);
+            root.Children.Add(footer);
+            root.Children.Add(panel);
+
+            wnd.Content = root;
 
             var owner = GetActiveWindow();
             if (owner != null && owner != wnd)

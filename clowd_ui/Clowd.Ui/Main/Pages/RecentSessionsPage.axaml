@@ -11,37 +11,70 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
-        <Style Selector="Border.sessionItem">
+        <Style Selector="ListBox.sessions">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="0" />
         </Style>
-        <Style Selector="Border.sessionItem:pointerover">
-            <!-- Semi fill token replaces the hardcoded #20808080 hover tint. -->
-            <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+        <Style Selector="ListBox.sessions ListBoxItem">
+            <Setter Property="Padding" Value="4" />
+            <Setter Property="Margin" Value="0,1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <!-- row actions appear on hover / selection; hidden but layout-stable otherwise -->
+        <Style Selector="ListBox.sessions ListBoxItem StackPanel.rowActions">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="ListBox.sessions ListBoxItem:pointerover StackPanel.rowActions,
+                         ListBox.sessions ListBoxItem:selected StackPanel.rowActions">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <Style Selector="Button.rowAction">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+        </Style>
+        <Style Selector="Button.rowAction:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
         </Style>
     </UserControl.Styles>
 
     <ScrollViewer>
-        <!-- VM-side grouping replaces the WPF CollectionViewSource (decision table #52). -->
-        <ItemsControl Margin="0,0,16,16" ItemsSource="{Binding Groups}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel>
-                        <TextBlock Margin="0,8" Classes="H6" Text="{Binding Name}" />
-                        <ItemsControl ItemsSource="{Binding Items}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Classes="sessionItem" DoubleTapped="ViewDoubleClick">
-                                        <Border.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="Open" Click="OpenItemClicked" />
-                                                <MenuItem Header="Copy" Click="CopyItemClicked" />
-                                                <MenuItem Header="Delete" Click="DeleteItemClicked" />
-                                            </ContextMenu>
-                                        </Border.ContextMenu>
-                                        <Grid HorizontalAlignment="Stretch"
+        <StackPanel Margin="0,0,16,16">
+
+            <!-- zero state: shown until the first capture exists -->
+            <StackPanel IsVisible="{Binding !Groups.Count}" Margin="0,24,0,0" Spacing="6">
+                <TextBlock Classes="Base" Text="No captures yet" />
+                <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding EmptyHint}" />
+            </StackPanel>
+
+            <!-- VM-side grouping replaces the WPF CollectionViewSource (decision table #52). -->
+            <ItemsControl ItemsSource="{Binding Groups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel>
+                            <TextBlock Margin="0,8" Classes="H6" Text="{Binding Name}" />
+                            <ListBox Classes="sessions"
+                                     SelectionMode="Single"
+                                     KeyDown="SessionListKeyDown"
+                                     ItemsSource="{Binding Items}">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Background="Transparent"
+                                              DoubleTapped="ViewDoubleClick"
                                               RowDefinitions="25,25,25"
-                                              ColumnDefinitions="Auto,12,*,24">
+                                              ColumnDefinitions="Auto,12,*,Auto">
+                                            <Grid.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="Open" Click="OpenItemClicked" />
+                                                    <MenuItem Header="Copy" Click="CopyItemClicked" />
+                                                    <MenuItem Header="Delete" Click="DeleteItemClicked" />
+                                                </ContextMenu>
+                                            </Grid.ContextMenu>
                                             <Border Grid.RowSpan="3"
                                                     Width="110"
                                                     Height="75"
@@ -54,6 +87,9 @@
                                                        Grid.Column="2"
                                                        VerticalAlignment="Center"
                                                        Classes="Base"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       TextWrapping="NoWrap"
+                                                       ToolTip.Tip="{Binding Name}"
                                                        Text="{Binding Name}" />
                                             <TextBlock Grid.Row="1"
                                                        Grid.Column="2"
@@ -63,7 +99,8 @@
                                             <TextBlock Grid.Row="2"
                                                        Grid.Column="2"
                                                        VerticalAlignment="Center"
-                                                       Text="--"
+                                                       Opacity="0.6"
+                                                       Text="Not uploaded"
                                                        IsVisible="{Binding UploadUrl, Converter={x:Static StringConverters.IsNullOrEmpty}}" />
                                             <HyperlinkButton Grid.Row="2"
                                                              Grid.Column="2"
@@ -72,14 +109,47 @@
                                                              Content="{Binding UploadUrl}"
                                                              NavigateUri="{Binding UploadUrl}"
                                                              IsVisible="{Binding UploadUrl, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                                            <StackPanel Grid.Column="3"
+                                                        Grid.RowSpan="3"
+                                                        Classes="rowActions"
+                                                        Margin="8,0,4,0"
+                                                        Orientation="Horizontal"
+                                                        Spacing="2"
+                                                        VerticalAlignment="Center">
+                                                <Button Classes="rowAction"
+                                                        Click="OpenItemClicked"
+                                                        ToolTip.Tip="Open in editor"
+                                                        AutomationProperties.Name="Open in editor">
+                                                    <Viewbox>
+                                                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
+                                                    </Viewbox>
+                                                </Button>
+                                                <Button Classes="rowAction"
+                                                        Click="CopyItemClicked"
+                                                        ToolTip.Tip="Copy image to clipboard"
+                                                        AutomationProperties.Name="Copy image to clipboard">
+                                                    <Viewbox>
+                                                        <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
+                                                    </Viewbox>
+                                                </Button>
+                                                <Button Classes="rowAction"
+                                                        Click="DeleteItemClicked"
+                                                        ToolTip.Tip="Delete capture"
+                                                        AutomationProperties.Name="Delete capture">
+                                                    <Viewbox>
+                                                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconDelete}" />
+                                                    </Viewbox>
+                                                </Button>
+                                            </StackPanel>
                                         </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
     </ScrollViewer>
 </UserControl>

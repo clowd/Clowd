@@ -2,7 +2,9 @@ using System;
 using System.ComponentModel;
 using System.Text;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
@@ -11,10 +13,10 @@ using Avalonia.Media;
 namespace Clowd.UI.Config
 {
     /// <summary>
-    /// Gesture editor row for a <see cref="HotkeyEntry"/>. The gesture can be viewed and edited
-    /// (writing it persists the settings and re-registers immediately); the status square reflects
-    /// the hotkey's live registration state (green when the SharpHook host registered it, red with
-    /// the error in a tooltip otherwise).
+    /// Gesture editor row for a <see cref="HotkeyEntry"/>: a gesture button (click, then press
+    /// the new combination), a clear button, and a live status indicator (colored dot + text,
+    /// with the registration error in a tooltip). Cancelling an edit (Esc / focus loss) restores
+    /// the previous gesture.
     /// </summary>
     public class GlobalTriggerEditor : UserControl
     {
@@ -30,15 +32,21 @@ namespace Clowd.UI.Config
         public bool IsEditing { get; private set; }
 
         private readonly Button _button;
-        private readonly Border _status;
+        private readonly Button _clearButton;
+        private readonly Ellipse _statusDot;
+        private readonly TextBlock _statusText;
+        private readonly StackPanel _statusPanel;
         private KeyModifiers _editModifiers;
+        private SimpleKeyGesture _gestureBeforeEdit;
 
         public GlobalTriggerEditor()
         {
-            var grid = new Grid();
+            var grid = new Grid { MinWidth = 340 };
             grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(6)));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
             grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(10)));
-            grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(50)));
+            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
 
             _button = new Button
             {
@@ -46,19 +54,50 @@ namespace Clowd.UI.Config
                 HorizontalContentAlignment = HorizontalAlignment.Center,
             };
             _button.Click += OnButtonClick;
-            ToolTip.SetTip(_button, "Click to edit the current gesture");
+            ToolTip.SetTip(_button, "Click, then press the new key combination (Esc cancels)");
             grid.Children.Add(_button);
 
-            _status = new Border
+            _clearButton = new Button
             {
-                BorderBrush = Brushes.DarkGray,
-                BorderThickness = new Thickness(1),
+                Content = "✕",
+                Padding = new Thickness(8, 0),
+                VerticalAlignment = VerticalAlignment.Stretch,
             };
-            Grid.SetColumn(_status, 2);
-            grid.Children.Add(_status);
+            _clearButton.Classes.Add("Tertiary");
+            _clearButton.Click += OnClearClick;
+            ToolTip.SetTip(_clearButton, "Remove this shortcut");
+            AutomationProperties.SetName(_clearButton, "Remove shortcut");
+            Grid.SetColumn(_clearButton, 2);
+            grid.Children.Add(_clearButton);
+
+            _statusDot = new Ellipse
+            {
+                Width = 8,
+                Height = 8,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            _statusText = new TextBlock
+            {
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            _statusPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                MinWidth = 92,
+                VerticalAlignment = VerticalAlignment.Center,
+                Background = Brushes.Transparent, // hit-testable so the error tooltip shows
+            };
+            _statusPanel.Children.Add(_statusDot);
+            _statusPanel.Children.Add(_statusText);
+            Grid.SetColumn(_statusPanel, 4);
+            grid.Children.Add(_statusPanel);
 
             Content = grid;
             Focusable = true;
+
+            ActualThemeVariantChanged += (_, _) => UpdateControls();
 
             UpdateControls();
         }
@@ -80,7 +119,7 @@ namespace Clowd.UI.Config
         {
             // IsRegistered / Error / Gesture can all change asynchronously (e.g. the SharpHook
             // host failing to start on macOS without the Accessibility permission) — keep the
-            // status square and gesture text live.
+            // status indicator and gesture text live.
             UpdateControls();
         }
 
@@ -92,11 +131,22 @@ namespace Clowd.UI.Config
             manager.IsPaused = true;
             IsEditing = true;
             _editModifiers = KeyModifiers.None;
+            // unregister while listening so the previous binding can be re-used; restored on cancel.
+            _gestureBeforeEdit = Entry.Gesture;
             Entry.Gesture = null;
             KeyDown += OnKeyDown;
             KeyUp += OnKeyUp;
             LostFocus += OnLostFocus;
             Focus();
+            UpdateControls();
+        }
+
+        private void OnClearClick(object sender, RoutedEventArgs e)
+        {
+            if (IsEditing || Entry == null)
+                return;
+
+            Entry.Gesture = null;
             UpdateControls();
         }
 
@@ -150,18 +200,28 @@ namespace Clowd.UI.Config
             KeyUp -= OnKeyUp;
             LostFocus -= OnLostFocus;
 
-            if (!IsBlacklisted(key, modifiers) && Entry != null)
+            if (Entry != null)
             {
-                try
+                if (!IsBlacklisted(key, modifiers))
                 {
-                    Entry.Gesture = new SimpleKeyGesture(key, modifiers);
+                    try
+                    {
+                        Entry.Gesture = new SimpleKeyGesture(key, modifiers);
+                    }
+                    catch
+                    {
+                        // invalid keygesture — treat as a cancelled edit
+                        Entry.Gesture = _gestureBeforeEdit;
+                    }
                 }
-                catch
+                else
                 {
-                    // invalid keygesture
+                    // cancelled (Esc / focus loss) — an aborted edit must not destroy the binding.
+                    Entry.Gesture = _gestureBeforeEdit;
                 }
             }
 
+            _gestureBeforeEdit = null;
             UpdateControls();
         }
 
@@ -176,15 +236,35 @@ namespace Clowd.UI.Config
             return false;
         }
 
+        private IBrush GetToken(string key, IBrush fallback)
+        {
+            if (this.TryFindResource(key, ActualThemeVariant, out var value))
+            {
+                if (value is IBrush brush)
+                    return brush;
+                if (value is Color color)
+                    return new SolidColorBrush(color);
+            }
+
+            return fallback;
+        }
+
+        private void SetStatus(string tokenKey, IBrush fallback, string text, string tooltip)
+        {
+            _statusDot.Fill = GetToken(tokenKey, fallback);
+            _statusText.Text = text;
+            ToolTip.SetTip(_statusPanel, tooltip);
+        }
+
         private void UpdateControls()
         {
-            if (_button == null || _status == null)
+            if (_button == null || _statusDot == null)
                 return;
 
             if (IsEditing)
             {
-                _status.Background = Brushes.PaleGoldenrod;
-                ToolTip.SetTip(_status, null);
+                SetStatus("SemiColorWarning", Brushes.Orange, "Listening…", null);
+                _clearButton.IsVisible = false;
 
                 StringBuilder key = new StringBuilder();
                 if (_editModifiers.HasFlag(KeyModifiers.Control))
@@ -198,30 +278,29 @@ namespace Clowd.UI.Config
 
                 key.Append(" ...");
                 _button.Content = key.ToString();
+                return;
+            }
+
+            if (Entry == null || Entry.Gesture == null)
+            {
+                _button.Content = "(not set)";
+                _clearButton.IsVisible = false;
+                SetStatus("SemiColorText2", Brushes.Gray, "Not set",
+                          Entry?.Error ?? "No key combination is assigned to this action.");
             }
             else
             {
-                if (Entry == null || Entry.Gesture == null)
+                // the gesture text is kept visible even on error — the red dot + tooltip carry
+                // the registration failure.
+                _button.Content = Entry.Gesture.ToString();
+                _clearButton.IsVisible = true;
+                if (!Entry.IsRegistered && !String.IsNullOrEmpty(Entry.Error))
                 {
-                    _button.Content = "(not set)";
-                    ToolTip.SetTip(_status, Entry?.Error ?? "The gesture is not set or is an invalid gesture.");
-                    _status.Background = Brushes.PaleVioletRed;
+                    SetStatus("SemiColorDanger", Brushes.IndianRed, "Not registered", Entry.Error);
                 }
                 else
                 {
-                    // unlike WPF (which displayed "(error)"), the gesture text is kept visible —
-                    // the red status square + tooltip carry the registration error.
-                    _button.Content = Entry.Gesture.ToString();
-                    if (!Entry.IsRegistered && !String.IsNullOrEmpty(Entry.Error))
-                    {
-                        ToolTip.SetTip(_status, Entry.Error);
-                        _status.Background = Brushes.PaleVioletRed;
-                    }
-                    else
-                    {
-                        ToolTip.SetTip(_status, null);
-                        _status.Background = Brushes.PaleGreen;
-                    }
+                    SetStatus("SemiColorSuccess", Brushes.Green, "Active", null);
                 }
             }
         }

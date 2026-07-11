@@ -31,6 +31,18 @@ namespace Clowd.UI
     {
         public ObservableCollection<SessionGroupVm> Groups { get; } = new();
 
+        /// <summary>Call-to-action shown while there are no sessions.</summary>
+        public string EmptyHint
+        {
+            get
+            {
+                var gesture = Clowd.Config.SettingsRoot.Current?.Hotkeys?.CaptureRegionShortcut?.ToString();
+                return String.IsNullOrEmpty(gesture)
+                    ? "Use the tray icon to take your first screenshot — it will show up here."
+                    : $"Press {gesture} or use the tray icon to take your first screenshot — it will show up here.";
+            }
+        }
+
         private readonly DispatcherTimer _regroupTimer;
 
         public RecentSessionsPage()
@@ -93,21 +105,24 @@ namespace Clowd.UI
         }
 
         // group keys ported from the WPF TimeAgoConverter (PrettyTime approximated locally).
-        private static string GetTimeAgoGroupName(DateTime time)
+        // Bucketing happens in *local* time so "Today"/"Yesterday" match the user's clock.
+        private static string GetTimeAgoGroupName(DateTime timeUtc)
         {
-            if (time == default)
+            if (timeUtc == default)
                 return "Unknown";
 
-            if (time.Date == DateTime.UtcNow.Date)
+            var time = ToLocalTime(timeUtc);
+
+            if (time.Date == DateTime.Now.Date)
                 return "Today";
 
-            if (time.Date == DateTime.UtcNow.Date.AddDays(-1))
+            if (time.Date == DateTime.Now.Date.AddDays(-1))
                 return "Yesterday";
 
-            if (time.Date >= DateTime.UtcNow.Date.AddDays(-7))
+            if (time.Date >= DateTime.Now.Date.AddDays(-7))
                 return "This week";
 
-            var days = Math.Abs((DateTime.UtcNow - time).TotalDays);
+            var days = Math.Abs((DateTime.Now - time).TotalDays);
 
             if (days < 32)
                 return $"{Math.Max(2, (int)Math.Round(days / 7d))} weeks ago";
@@ -120,6 +135,15 @@ namespace Clowd.UI
 
             var years = Math.Max(1, (int)Math.Round(days / 365.25));
             return years == 1 ? "A year ago" : $"{years} years ago";
+        }
+
+        /// <summary>Session timestamps are written with DateTime.UtcNow — normalize to local
+        /// time for anything user-facing.</summary>
+        internal static DateTime ToLocalTime(DateTime time)
+        {
+            return time.Kind == DateTimeKind.Local
+                ? time
+                : DateTime.SpecifyKind(time, DateTimeKind.Utc).ToLocalTime();
         }
 
         private static SessionInfo GetSessionFromEvent(object sender)
@@ -144,15 +168,21 @@ namespace Clowd.UI
         private async void DeleteItemClicked(object sender, RoutedEventArgs e)
         {
             var session = GetSessionFromEvent(sender);
-            if (session == null)
-                return;
+            if (session != null)
+                await DeleteWithConfirmation(session);
+        }
 
+        private async System.Threading.Tasks.Task DeleteWithConfirmation(SessionInfo session)
+        {
             if (session.OpenEditor != null)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Information,
                     "The selected item is currently open and can not be deleted.");
+                return;
             }
-            else
+
+            if (await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning,
+                    "Delete this capture? It cannot be recovered afterwards."))
             {
                 SessionManager.Current.DeleteSession(session);
             }
@@ -164,14 +194,36 @@ namespace Clowd.UI
             if (session != null)
                 SessionManager.Current.OpenSession(session);
         }
+
+        private async void SessionListKeyDown(object sender, KeyEventArgs e)
+        {
+            if ((sender as ListBox)?.SelectedItem is not SessionInfo session)
+                return;
+
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                SessionManager.Current.OpenSession(session);
+            }
+            else if (e.Key == Key.Delete)
+            {
+                e.Handled = true;
+                await DeleteWithConfirmation(session);
+            }
+        }
     }
 
     /// <summary>
-    /// Loads (and caches) a Bitmap from a file path — replaces the WPF convCacheImage
-    /// converter used by the recent sessions list.
+    /// Loads (and caches) a thumbnail-sized Bitmap from a file path — replaces the WPF
+    /// convCacheImage converter used by the recent sessions list. Full screenshots are decoded
+    /// at thumbnail width (the list renders them at 110px logical / ~220px at 2x scale), which
+    /// keeps decode time and memory per entry small; the cache is bounded as a backstop.
     /// </summary>
     public sealed class ImagePathToBitmapConverter : IValueConverter
     {
+        private const int ThumbnailDecodeWidth = 220;
+        private const int MaxCacheEntries = 256;
+
         private static readonly object _lock = new();
         private static readonly Dictionary<string, (DateTime Written, Bitmap Bitmap)> _cache =
             new(StringComparer.OrdinalIgnoreCase);
@@ -193,7 +245,13 @@ namespace Clowd.UI
                     if (_cache.TryGetValue(path, out var hit) && hit.Written == written)
                         return hit.Bitmap;
 
-                    var bmp = new Bitmap(path);
+                    // decoded thumbnails are tiny — dropping the whole cache on overflow is
+                    // cheaper than bookkeeping a true LRU.
+                    if (_cache.Count >= MaxCacheEntries)
+                        _cache.Clear();
+
+                    using var stream = File.OpenRead(path);
+                    var bmp = Bitmap.DecodeToWidth(stream, ThumbnailDecodeWidth);
                     _cache[path] = (written, bmp);
                     return bmp;
                 }
@@ -210,13 +268,13 @@ namespace Clowd.UI
         }
     }
 
-    /// <summary>Formats a DateTime using AppStyles.UiDateTimePattern (WPF used StringFormat).</summary>
+    /// <summary>Formats a (UTC) DateTime in local time using AppStyles.UiDateTimePattern.</summary>
     public sealed class UiDateTimeConverter : IValueConverter
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
             if (value is DateTime time)
-                return time.ToString(AppStyles.UiDateTimePattern, culture);
+                return RecentSessionsPage.ToLocalTime(time).ToString(AppStyles.UiDateTimePattern, culture);
 
             return null;
         }

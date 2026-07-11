@@ -8,20 +8,25 @@
         Background="{DynamicResource ApplicationBackgroundBrush}"
         WindowStartupLocation="CenterOwner">
 
-    <Grid Margin="14" RowDefinitions="Auto,*,Auto,Auto" ColumnDefinitions="*,150">
+    <Grid Margin="14" RowDefinitions="Auto,Auto,*,Auto,Auto" ColumnDefinitions="*,150">
 
         <TextBlock Grid.Row="0" Grid.Column="0" Text="Font family:" Margin="0,0,0,6" />
         <TextBlock Grid.Row="0" Grid.Column="1" Text="Size &amp; style:" Margin="12,0,0,6" />
 
-        <ListBox x:Name="FontList"
+        <TextBox x:Name="FilterBox"
                  Grid.Row="1" Grid.Column="0"
+                 Margin="0,0,0,6"
+                 Watermark="Filter fonts…" />
+
+        <ListBox x:Name="FontList"
+                 Grid.Row="2" Grid.Column="0"
                  SelectionMode="Single"
                  BorderThickness="1"
                  BorderBrush="{DynamicResource SemiColorBorder}"
                  CornerRadius="3"
                  Background="Transparent" />
 
-        <StackPanel Grid.Row="1" Grid.Column="1" Margin="12,0,0,0" Spacing="8">
+        <StackPanel Grid.Row="1" Grid.RowSpan="2" Grid.Column="1" Margin="12,0,0,0" Spacing="8">
             <NumericUpDown x:Name="SizeBox"
                            Minimum="8"
                            Maximum="64"
@@ -40,7 +45,7 @@
                           HorizontalContentAlignment="Center" />
         </StackPanel>
 
-        <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
+        <Border Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
                 Margin="0,12,0,0"
                 Height="90"
                 Padding="8"
@@ -54,7 +59,7 @@
                        TextTrimming="CharacterEllipsis" />
         </Border>
 
-        <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2"
+        <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="8"

@@ -73,12 +73,16 @@ namespace Clowd.Config
 
     public class SettingsEditor : SimpleNotifyObject
     {
+        [DisplayName("Restore sessions on startup")]
+        [Description("Reopen the editor sessions that were still open when Clowd last exited")]
         public bool RestoreSessionsOnClowdStart
         {
             get => _restoreSessionsOnClowdStart;
             set => Set(ref _restoreSessionsOnClowdStart, value);
         }
 
+        [DisplayName("Canvas background")]
+        [Description("Color drawn behind transparent areas of the image in the editor")]
         public Color CanvasBackground
         {
             get => _canvasBackground;
@@ -93,12 +97,15 @@ namespace Clowd.Config
         }
 
         [DisplayName("Tool preferences")]
+        [Description("Every drawing tool remembers the color, line width and font last used with it")]
         public Dictionary<ToolType, SavedToolSettings> Tools
         {
             get => _tools;
             set => Set(ref _tools, value);
         }
 
+        [DisplayName("Delete sessions after")]
+        [Description("Captures older than this are removed from Recent sessions automatically")]
         public TimeOption DeleteSessionsAfter
         {
             get => _deleteSessionsAfter;
