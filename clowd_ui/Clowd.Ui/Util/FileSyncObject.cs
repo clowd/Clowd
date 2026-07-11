@@ -148,7 +148,10 @@ namespace Clowd.Util
         {
             lock (_lock)
             {
-                if (_busy) return;
+                // a Read posted to the UI thread (or an FSW event in flight) can arrive after this
+                // object was disposed and its backing file deleted — e.g. a blank editor session
+                // being discarded on close. There is nothing left to sync with; don't throw.
+                if (_busy || _disposed) return;
                 _busy = true;
 
                 try
@@ -159,6 +162,13 @@ namespace Clowd.Util
                         try
                         {
                             fn();
+                            break;
+                        }
+                        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                        {
+                            // the backing file/directory has been deleted out from under us
+                            // (session discarded or removed externally) — retrying cannot help,
+                            // and the deletion path is already tearing this object down.
                             break;
                         }
                         catch
