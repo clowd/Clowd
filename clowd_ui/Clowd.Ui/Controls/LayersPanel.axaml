@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Clowd.UI.Controls.LayersPanel">
+
+    <UserControl.Resources>
+        <!-- Hand-styled dark theme: the editor window is a fixed dark palette (NOT Semi tokens),
+             so the row buttons get a minimal flat theme matching the ToolButton feedback colors
+             (#33FFFFFF hover veil, #55FFFFFF pressed/checked fill). -->
+        <ControlTheme x:Key="LayerRowButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="_bg"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="2">
+                        <ContentPresenter Name="PART_ContentPresenter"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="#33FFFFFF" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#_bg">
+                <Setter Property="Background" Value="#55FFFFFF" />
+            </Style>
+            <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+                <Setter Property="Opacity" Value="0.35" />
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Border.layerRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="MinHeight" Value="27" />
+            <Setter Property="Padding" Value="6,0,4,0" />
+        </Style>
+        <Style Selector="Border.layerRow:pointerover">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <!-- declared after :pointerover so the stronger selected fill wins while hovering -->
+        <Style Selector="Border.layerRow.selected">
+            <Setter Property="Background" Value="#55FFFFFF" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel Background="#454545">
+        <TextBlock x:Name="emptyText"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   FontSize="12"
+                   Foreground="#88FFFFFF"
+                   Text="No objects yet" />
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="rowsHost" />
+        </ScrollViewer>
+    </Panel>
+
+</UserControl>

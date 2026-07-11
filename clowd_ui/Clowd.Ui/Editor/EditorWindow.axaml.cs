@@ -11,16 +11,22 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.Drawing;
 using Clowd.Drawing.Graphics;
 using Clowd.PlatformUtil;
+using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.Util;
+using Path = System.IO.Path;
 
 namespace Clowd.UI
 {
@@ -37,6 +43,7 @@ namespace Clowd.UI
         private readonly string _historyPath;
 
         private DispatcherTimer _sessionInfoDebounce;
+        private readonly bool _openedEmpty; // no graphics on the canvas when the window opened (see Closing)
 
         // graphics.json/history.json persistence is latest-wins on a background thread (see StateUpdated handler)
         private byte[] _pendingGraphicsJson;
@@ -44,12 +51,29 @@ namespace Clowd.UI
         private Task _graphicsWriteTask = Task.CompletedTask;
         private readonly object _graphicsWriteLock = new object();
 
+        // sidebar drag bounds — also mirrored onto the sidebar ColumnDefinition (MinWidth/MaxWidth)
+        // so Avalonia's own splitter clamps the drag; the editor re-clamps on read/persist.
+        private const double SidebarMinWidth = 140;
+        private const double SidebarMaxWidth = 600;
+
+        // the sidebar's ColumnDefinition (contentGrid column 3). Avalonia's XAML compiler does not
+        // emit a field for an x:Named ColumnDefinition, so reach it through the named grid.
+        private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
+
         public RelayCommand SelectToolCommand { get; }
         public RelayCommand CommandSave { get; }
         public RelayCommand CommandCopy { get; }
         public RelayCommand CommandCut { get; }
         public RelayCommand CommandPaste { get; }
         public RelayCommand CommandUpload { get; }
+
+        // satisfies the XAML compiler's runtime-loader check (AVLN3001); an editor is only
+        // ever constructed through ShowSession with a real SessionInfo
+        [Obsolete("Runtime-loader signature only — use EditorWindow(SessionInfo).", error: true)]
+        public EditorWindow()
+        {
+            throw new NotSupportedException("EditorWindow requires a SessionInfo.");
+        }
 
         public EditorWindow(SessionInfo info)
         {
@@ -72,6 +96,9 @@ namespace Clowd.UI
             drawingCanvas.HandleColor = AppStyles.AccentColor;
             drawingCanvas.StateUpdated += drawingCanvas_StateUpdated;
             LoadSessionState();
+            // a blank "new document" window (no capture, no restored graphics) that is still
+            // blank when it closes is discarded rather than persisted to the recent list
+            _openedEmpty = drawingCanvas.GraphicsList.Count == 0;
 
             // Modifier-carrying command gestures become Window.KeyBindings (§2.4). Bare gestures
             // (Escape/Delete/Home/End and the tool letters) are routed exclusively by the tunnel
@@ -127,6 +154,19 @@ namespace Clowd.UI
 
             miniColor.ParentWindow = this;
             miniColor.Cancelled += (_, _) => miniColorPopup.IsOpen = false;
+
+            // opt-in editor features (customizable toolbar / layers sidebar). The sidebar flag
+            // defaults false, so with default settings the strip renders exactly as before plus
+            // the customize button, and no sidebar.
+            //
+            // ApplySidebarVisible sets the border + splitter visibility, sizes (or collapses) the
+            // sidebar column, and attaches the layers panel only when the sidebar is actually shown —
+            // an IsVisible=false panel stays in the visual tree, so an unconditional Attach would
+            // rebuild rows on every edit for a panel nobody can see. The SidebarVisible setter runs
+            // the same path on toggle.
+            ApplySidebarVisible(_settings.Editor.SidebarVisible);
+            RebuildToolStrip();
+            RebuildCustomizePopup();
         }
 
         private void ScheduleUpdateSessionInfo()
@@ -199,7 +239,24 @@ namespace Clowd.UI
             // the property bar mutates Editor.Tools (SavedToolSettings) through two-way bindings;
             // persist those edits when the editor closes (explicit-save policy). Saved before the
             // preview render so a rendering failure can't skip the save.
+            UpdateSidebarWidthSetting(); // belt-and-suspenders: fold in any un-persisted drag width
             try { SettingsService.Save(_settings); } catch {; }
+
+            // a session that opened blank and is still blank holds nothing worth keeping —
+            // delete it (session dir included) so it never lingers in the recent sessions list.
+            // Checked after the flushes above so a pending text edit / debounced state can't be
+            // mistaken for an empty canvas.
+            if (_openedEmpty && drawingCanvas.GraphicsList.Count == 0) {
+                var session = _session;
+                _session = null;
+                session.OpenEditor = null; // DeleteSession refuses sessions marked open in an editor
+                try {
+                    SessionManager.Current.DeleteSession(session);
+                } catch (Exception ex) {
+                    Debug.WriteLine($"failed to discard empty session: {ex.Message}");
+                }
+                return;
+            }
 
             UpdatePreview(drawingCanvas.DrawGraphicsToBitmap());
             _session.OpenEditor = null;
@@ -483,6 +540,295 @@ namespace Clowd.UI
         }
 
         // ====================================================================
+        // Opt-in features: generated tool strip, customize popup, master toggles
+        // ====================================================================
+
+        private sealed class ToolRegistryEntry
+        {
+            public ToolType Tool;
+            public string DisplayName;
+            public string IconKey;
+            public string Tooltip;
+            public double? Padding;
+        }
+
+        // Rows mirror the original static XAML 1:1 (icons, tooltips and the Count/Text
+        // Padding=8 overrides).
+        private static readonly ToolRegistryEntry[] ToolRegistry =
+        {
+            new ToolRegistryEntry { Tool = ToolType.None, DisplayName = "Pan", IconKey = "IconToolNone", Tooltip = "Pan Tool (D)\nCan also hold SHIFT or SPACE to enter Pan Mode." },
+            new ToolRegistryEntry { Tool = ToolType.Pointer, DisplayName = "Selection", IconKey = "IconToolPointer", Tooltip = "Selection Tool (S)" },
+            new ToolRegistryEntry { Tool = ToolType.Rectangle, DisplayName = "Rectangle", IconKey = "IconToolRectangle", Tooltip = "Rectangle (R)" },
+            new ToolRegistryEntry { Tool = ToolType.FilledRectangle, DisplayName = "Filled Rectangle", IconKey = "IconToolFilledRectangle", Tooltip = "Filled Rectangle (F)" },
+            new ToolRegistryEntry { Tool = ToolType.Ellipse, DisplayName = "Ellipse", IconKey = "IconToolEllipse", Tooltip = "Ellipse (E)" },
+            new ToolRegistryEntry { Tool = ToolType.Line, DisplayName = "Line", IconKey = "IconToolLine", Tooltip = "Line (L)" },
+            new ToolRegistryEntry { Tool = ToolType.Arrow, DisplayName = "Arrow", IconKey = "IconToolArrow", Tooltip = "Arrow (A)" },
+            new ToolRegistryEntry { Tool = ToolType.PolyLine, DisplayName = "Pencil", IconKey = "IconToolPolyLine", Tooltip = "Pencil (P)" },
+            new ToolRegistryEntry { Tool = ToolType.Count, DisplayName = "Step Count", IconKey = "IconToolNumericCount", Tooltip = "Numerical Step Count (N)", Padding = 8 },
+            new ToolRegistryEntry { Tool = ToolType.Text, DisplayName = "Text", IconKey = "IconToolText", Tooltip = "Text (T)", Padding = 8 },
+            new ToolRegistryEntry { Tool = ToolType.Pixelate, DisplayName = "Obscure", IconKey = "IconToolPixelate", Tooltip = "Obscure (O)" },
+        };
+
+        private readonly List<Control> _generatedToolControls = new List<Control>();
+
+        private static ToolRegistryEntry GetToolEntry(ToolType tool) => ToolRegistry.FirstOrDefault(e => e.Tool == tool);
+
+        /// <summary>Toggles the right-hand layers sidebar. Backed by settings.</summary>
+        public bool SidebarVisible
+        {
+            get => _settings.Editor.SidebarVisible;
+            set
+            {
+                if (_settings.Editor.SidebarVisible == value)
+                    return;
+
+                _settings.Editor.SidebarVisible = value;
+                // shared setting: mirror the sidebar visibility (and attach/detach) across all editors
+                foreach (var wnd in GetOpenEditors())
+                    wnd.ApplySidebarVisible(value);
+                TrySaveSettings();
+            }
+        }
+
+        /// <summary>Applies the current sidebar-visible flag to this window. Attaches the layers panel
+        /// when shown and detaches it when hidden so a hidden panel does no per-edit rebuild work.</summary>
+        private void ApplySidebarVisible(bool value)
+        {
+            sidebarBorder.IsVisible = value;
+            sidebarSplitter.IsVisible = value;
+
+            // a pixel-width column reserves its space even when its content is collapsed, so a hidden
+            // sidebar would leave an empty gap. Collapse the column when hidden (both Width AND
+            // MinWidth — the MinWidth that bounds the drag would otherwise pin the column open) and
+            // restore the persisted, clamped width when shown.
+            if (value) {
+                SidebarColumn.MinWidth = SidebarMinWidth;
+                SidebarColumn.Width = new GridLength(Math.Clamp(_settings.Editor.SidebarWidth, SidebarMinWidth, SidebarMaxWidth), GridUnitType.Pixel);
+                layersPanel.Attach(drawingCanvas);
+            } else {
+                SidebarColumn.MinWidth = 0;
+                SidebarColumn.Width = new GridLength(0, GridUnitType.Pixel);
+                layersPanel.Detach();
+            }
+        }
+
+        private void sidebarSplitter_DragCompleted(object sender, VectorEventArgs e)
+        {
+            UpdateSidebarWidthSetting();
+            TrySaveSettings();
+        }
+
+        /// <summary>Captures the current sidebar column width (clamped) into settings. No-op while the
+        /// sidebar is hidden so a collapsed 0-width column can't overwrite the remembered width.</summary>
+        private void UpdateSidebarWidthSetting()
+        {
+            if (!_settings.Editor.SidebarVisible)
+                return;
+
+            // the border stretches to fill the sidebar column, so its arranged width is the column's
+            // actual width; clamp to guard a value the drag bounds should already have enforced.
+            _settings.Editor.SidebarWidth = Math.Clamp(sidebarBorder.Bounds.Width, SidebarMinWidth, SidebarMaxWidth);
+        }
+
+        /// <summary>Rebuilds the generated portion of the vertical tool strip (visible tools in the
+        /// resolved order). The fixed Undo/Redo/customize buttons stay at the end; generated
+        /// controls are always inserted at the front.</summary>
+        private void RebuildToolStrip()
+        {
+            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor);
+            var hidden = ToolbarConfig.ResolveHiddenTools(_settings.Editor);
+
+            bool IsToolVisible(ToolType t) => order.Contains(t) && !hidden.Contains(t);
+
+            // if the active tool's button is about to disappear, fall back to the pointer first
+            var active = drawingCanvas.Tool;
+            if (!IsToolVisible(active))
+                drawingCanvas.Tool = ToolType.Pointer;
+
+            // during a held-key pan the active tool is None but the tool to restore on key-up is
+            // saved in _panPreviousTool; if its button is disappearing (hidden via the customize
+            // popup), drop it to Pointer so key-up can't reinstate a now-hidden tool
+            if (_panPreviousTool != null && !IsToolVisible(_panPreviousTool.Value))
+                _panPreviousTool = ToolType.Pointer;
+
+            foreach (var control in _generatedToolControls)
+                ToolBar.Children.Remove(control);
+            _generatedToolControls.Clear();
+
+            var generated = new List<Control>();
+
+            foreach (var tool in order)
+            {
+                if (hidden.Contains(tool))
+                    continue;
+
+                var entry = GetToolEntry(tool);
+                if (entry != null)
+                    generated.Add(CreateToolButton(entry));
+            }
+
+            for (int i = 0; i < generated.Count; i++)
+                ToolBar.Children.Insert(i, generated[i]);
+            _generatedToolControls.AddRange(generated);
+        }
+
+        private ToolButton CreateToolButton(ToolRegistryEntry entry)
+        {
+            var name = entry.Tool.ToString();
+            var button = new ToolButton
+            {
+                Command = SelectToolCommand,
+                CommandParameter = name,
+                IconPath = FindIconGeometry(entry.IconKey),
+            };
+
+            if (entry.Padding.HasValue)
+                button.Padding = new Thickness(entry.Padding.Value);
+
+            ToolTip.SetTip(button, entry.Tooltip);
+
+            // mirror the original XAML IsChecked pattern: OneWay from the canvas Tool through the
+            // ToolTypeConverter, checked iff the active tool equals this button's tool.
+            button.Bind(ToggleButton.IsCheckedProperty, new Binding
+            {
+                Source = drawingCanvas,
+                Path = "Tool",
+                Mode = BindingMode.OneWay,
+                Converter = new ToolTypeConverter(),
+                ConverterParameter = name,
+            });
+
+            return button;
+        }
+
+        private Geometry FindIconGeometry(string key)
+        {
+            return this.TryFindResource(key, ActualThemeVariant, out var value) ? value as Geometry : null;
+        }
+
+        /// <summary>Regenerates the customize-popup rows (one per vector tool in resolved order) in place.</summary>
+        private void RebuildCustomizePopup()
+        {
+            customizeRows.Children.Clear();
+
+            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor);
+            var hidden = ToolbarConfig.ResolveHiddenTools(_settings.Editor);
+
+            for (int i = 0; i < order.Count; i++)
+            {
+                var tool = order[i];
+                var entry = GetToolEntry(tool);
+                if (entry == null)
+                    continue;
+
+                var row = new Grid
+                {
+                    Height = 28,
+                    ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"),
+                };
+
+                var check = new CheckBox
+                {
+                    VerticalAlignment = VerticalAlignment.Center,
+                    IsChecked = !hidden.Contains(tool),
+                    IsEnabled = tool != ToolType.Pointer, // the pointer can never be hidden
+                };
+                Grid.SetColumn(check, 0);
+                var toolForCheck = tool;
+                check.IsCheckedChanged += (_, _) => SetToolHidden(toolForCheck, check.IsChecked != true);
+                row.Children.Add(check);
+
+                var label = new TextBlock
+                {
+                    Margin = new Thickness(6, 0, 0, 0),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Foreground = Brushes.White,
+                    Text = entry.DisplayName,
+                };
+                Grid.SetColumn(label, 1);
+                row.Children.Add(label);
+
+                int index = i;
+
+                var up = CreateReorderButton("IconChevronUp", i > 0);
+                Grid.SetColumn(up, 2);
+                up.Click += (_, _) => MoveTool(index, index - 1);
+                row.Children.Add(up);
+
+                var down = CreateReorderButton("IconChevronDown", i < order.Count - 1);
+                Grid.SetColumn(down, 3);
+                down.Click += (_, _) => MoveTool(index, index + 1);
+                row.Children.Add(down);
+
+                customizeRows.Children.Add(row);
+            }
+        }
+
+        private ToolButton CreateReorderButton(string iconKey, bool enabled)
+        {
+            return new ToolButton
+            {
+                Width = 24,
+                Height = 24,
+                Padding = new Thickness(4),
+                IconPath = FindIconGeometry(iconKey),
+                IsEnabled = enabled,
+            };
+        }
+
+        private void SetToolHidden(ToolType tool, bool hide)
+        {
+            if (tool == ToolType.Pointer)
+                return; // guarded — the pointer is always visible
+
+            var hidden = ToolbarConfig.ResolveHiddenTools(_settings.Editor);
+            if (hide)
+                hidden.Add(tool);
+            else
+                hidden.Remove(tool);
+
+            _settings.Editor.HiddenTools = hidden.Select(t => t.ToString()).ToList();
+            RebuildToolStrip();
+            TrySaveSettings();
+            RebuildCustomizePopup();
+        }
+
+        private void MoveTool(int from, int to)
+        {
+            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor).ToList();
+            if (from < 0 || to < 0 || from >= order.Count || to >= order.Count)
+                return;
+
+            (order[to], order[from]) = (order[from], order[to]);
+            _settings.Editor.ToolbarOrder = order.Select(t => t.ToString()).ToList();
+            RebuildToolStrip();
+            TrySaveSettings();
+            RebuildCustomizePopup();
+        }
+
+        private void customize_Click(object sender, RoutedEventArgs e)
+        {
+            RebuildCustomizePopup();
+            customizePopup.PlacementTarget = btnCustomize;
+            customizePopup.IsOpen = true;
+        }
+
+        private void customizeReset_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.Editor.ToolbarOrder = null;
+            _settings.Editor.HiddenTools = null;
+            RebuildToolStrip();
+            TrySaveSettings();
+            RebuildCustomizePopup();
+        }
+
+        private void TrySaveSettings()
+        {
+            // the editor has no ambient auto-save; persist customization/toggle changes explicitly
+            try { SettingsService.Save(_settings); } catch {; }
+        }
+
+        // ====================================================================
         // Session lifecycle (§5.7)
         // ====================================================================
 
@@ -741,38 +1087,21 @@ namespace Clowd.UI
             await UploadManager.UploadSession(_session, provider);
         }
 
-        private void btnUpload_RightMouseDown(object sender, PointerPressedEventArgs e)
+        private async void btnUpload_RightMouseDown(object sender, PointerPressedEventArgs e)
         {
             if (!e.GetCurrentPoint(btnUpload).Properties.IsRightButtonPressed)
                 return;
 
-            var ctx = new ContextMenu() { Placement = PlacementMode.Pointer };
+            e.Handled = true;
 
-            ctx.Items.Add(new MenuItem() {
-                Header = "Upload to:",
-                IsEnabled = false,
-            });
-
-            var providers = UploadManager.GetAvailableProviders(SupportedUploadType.Image).ToArray();
-            if (providers.Length < 2) {
-                btnUpload.ContextMenu = null;
+            if (!VerifyArtworkExists())
                 return;
-            }
 
-            for (var i = 0; i < providers.Length; i++) {
-                var f = providers[i];
-
-                var mu = new MenuItem();
-                mu.Header = f.Name + (i == 0 ? " (default)" : "");
-                mu.Click += (s, ev) => UploadCommandImpl(f);
-
-                ctx.Items.Add(mu);
-
-                if (i == 0)
-                    ctx.Items.Add(new Separator());
-            }
-
-            btnUpload.ContextMenu = ctx;
+            // same destination-picker shown when no default is set; picking here uploads to that
+            // provider once, unless the user ticks "set as default" in the dialog
+            var provider = await UploadManager.SelectProvider(SupportedUploadType.Image);
+            if (provider != null)
+                UploadCommandImpl(provider);
         }
 
         private static void RevealFileOrFolder(string path)

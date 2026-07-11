@@ -242,6 +242,14 @@
                 IconPath="{StaticResource IconSaveSmall}"
                 ToolTip.Tip="Save" />
 
+            <Rectangle
+                Width="1"
+                Height="20"
+                Margin="6,0"
+                VerticalAlignment="Center"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Fill="#666666" />
+
             <controls:ToolButton
                 Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
@@ -260,11 +268,26 @@
 
         </controls:DockAndWrapPanel>
 
-        <Grid Grid.Row="1">
+        <Grid x:Name="contentGrid" Grid.Row="1">
+            <Grid.Styles>
+                <Style Selector="GridSplitter#sidebarSplitter">
+                    <Setter Property="Background" Value="#666666" />
+                </Style>
+                <Style Selector="GridSplitter#sidebarSplitter:pointerover">
+                    <Setter Property="Background" Value="#808080" />
+                </Style>
+            </Grid.Styles>
+
+            <!--  Column 3 is the resizable sidebar (reached in code as SidebarColumn); its pixel
+                  Width/MinWidth are driven by ApplySidebarVisible, MaxWidth bounds the drag.  -->
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition
+                    Width="230"
+                    MinWidth="140"
+                    MaxWidth="600" />
             </Grid.ColumnDefinitions>
 
             <Rectangle
@@ -315,10 +338,18 @@
                     VerticalAlignment="Stretch" />
             </Border>
 
+            <GridSplitter
+                x:Name="sidebarSplitter"
+                Grid.Column="2"
+                Width="5"
+                IsVisible="False"
+                ResizeBehavior="PreviousAndNext"
+                ResizeDirection="Columns"
+                DragCompleted="sidebarSplitter_DragCompleted" />
+
             <Border
                 x:Name="sidebarBorder"
-                Grid.Column="2"
-                Width="230"
+                Grid.Column="3"
                 Background="#454545"
                 BorderBrush="#666666"
                 BorderThickness="1,0,0,0"

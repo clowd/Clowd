@@ -49,13 +49,16 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void ResolveToolbarOrder_RasterToolsExcluded()
+        public void ResolveToolbarOrder_StaleRasterEraNames_DroppedAsUnknown()
         {
+            // "Brush"/"Eraser" were ToolType members in the removed raster v1 build and may
+            // linger in persisted settings; they no longer parse and must drop silently
             var editor = new SettingsEditor { ToolbarOrder = new List<string> { "Brush", "Eraser", "Rectangle" } };
             var resolved = ToolbarConfig.ResolveToolbarOrder(editor);
 
-            Assert.DoesNotContain(ToolType.Brush, resolved);
-            Assert.DoesNotContain(ToolType.Eraser, resolved);
+            var expected = new List<ToolType> { ToolType.Rectangle };
+            expected.AddRange(ToolbarConfig.DefaultOrder.Where(t => t != ToolType.Rectangle));
+            Assert.Equal(expected, resolved);
         }
 
         [Fact]
@@ -77,19 +80,10 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void ResolveHiddenTools_RasterToolsExcluded()
+        public void ResolveHiddenTools_StaleRasterEraNames_DroppedAsUnknown()
         {
             var editor = new SettingsEditor { HiddenTools = new List<string> { "Brush", "Eraser" } };
             Assert.Empty(ToolbarConfig.ResolveHiddenTools(editor));
-        }
-
-        [Fact]
-        public void IsRasterTool_TrueOnlyForRasterTools()
-        {
-            Assert.True(ToolbarConfig.IsRasterTool(ToolType.Brush));
-            Assert.True(ToolbarConfig.IsRasterTool(ToolType.Eraser));
-            Assert.False(ToolbarConfig.IsRasterTool(ToolType.Rectangle));
-            Assert.False(ToolbarConfig.IsRasterTool(ToolType.Pointer));
         }
     }
 }

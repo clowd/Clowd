@@ -106,7 +106,6 @@ namespace Clowd.Shared.Tests
         {
             var loaded = SettingsService.Load(_path);
 
-            Assert.False(loaded.Editor.RasterToolsEnabled);
             Assert.False(loaded.Editor.SidebarVisible);
             Assert.Null(loaded.Editor.ToolbarOrder);
             Assert.Null(loaded.Editor.HiddenTools);
@@ -116,7 +115,6 @@ namespace Clowd.Shared.Tests
         public void EditorFeatureFlags_And_ToolbarLists_RoundTrip()
         {
             var original = new SettingsRoot();
-            original.Editor.RasterToolsEnabled = true;
             original.Editor.SidebarVisible = true;
             original.Editor.ToolbarOrder = new System.Collections.Generic.List<string> { "Rectangle", "Bogus", "Rectangle" };
             original.Editor.HiddenTools = new System.Collections.Generic.List<string> { "Ellipse", "Pointer" };
@@ -124,7 +122,6 @@ namespace Clowd.Shared.Tests
             SettingsService.Save(original, _path);
             var loaded = SettingsService.Load(_path);
 
-            Assert.True(loaded.Editor.RasterToolsEnabled);
             Assert.True(loaded.Editor.SidebarVisible);
             Assert.Equal(new[] { "Rectangle", "Bogus", "Rectangle" }, loaded.Editor.ToolbarOrder);
             Assert.Equal(new[] { "Ellipse", "Pointer" }, loaded.Editor.HiddenTools);
@@ -134,6 +131,26 @@ namespace Clowd.Shared.Tests
             var expected = new System.Collections.Generic.List<ToolType> { ToolType.Rectangle };
             expected.AddRange(System.Linq.Enumerable.Where(ToolbarConfig.DefaultOrder, t => t != ToolType.Rectangle));
             Assert.Equal(expected, resolved);
+        }
+
+        [Fact]
+        public void SidebarWidth_Default_WhenAbsentFromFile()
+        {
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(230d, loaded.Editor.SidebarWidth);
+        }
+
+        [Fact]
+        public void SidebarWidth_RoundTrips()
+        {
+            var original = new SettingsRoot();
+            original.Editor.SidebarWidth = 375;
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(375d, loaded.Editor.SidebarWidth);
         }
 
         [Fact]

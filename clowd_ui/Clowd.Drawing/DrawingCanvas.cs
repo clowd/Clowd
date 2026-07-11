@@ -712,6 +712,95 @@ namespace Clowd.Drawing
             GraphicsList.UnselectAllExcept(excluded);
         }
 
+        // ====================================================================
+        // Layers-panel mutation seam (opt-in editor features): explicit per-graphic operations
+        // the panel drives regardless of the current canvas selection.
+        // ====================================================================
+
+        /// <summary>Toggles a graphic's Hidden flag. If it becomes hidden while selected it is
+        /// unselected first (a hidden graphic is not canvas-interactive).</summary>
+        public void ToggleHidden(GraphicBase g)
+        {
+            if (g == null || !GraphicsList.Contains(g))
+                return;
+
+            if (!g.Hidden && g.IsSelected)
+                g.IsSelected = false; // becoming hidden: drop it from the canvas selection first
+
+            g.Hidden = !g.Hidden;
+            AddCommandToHistory(false);
+            GraphicsList.RequestValidation();
+        }
+
+        /// <summary>Toggles a graphic's Locked flag. Any existing (panel-driven) selection is left
+        /// as-is — a locked graphic remains a valid panel selection.</summary>
+        public void ToggleLocked(GraphicBase g)
+        {
+            if (g == null || !GraphicsList.Contains(g))
+                return;
+
+            g.Locked = !g.Locked;
+            AddCommandToHistory(false);
+            GraphicsList.RequestValidation();
+        }
+
+        /// <summary>
+        /// Panel-driven selection: additive toggles the graphic's selection, non-additive makes it
+        /// the sole selection. Deliberately bypasses the canvas hit-test rules so the panel can
+        /// select even a locked graphic. No history commit — selection is transient; the change
+        /// flows through the SelectedItems validation funnel, which raises PropertyChanged and drives
+        /// the property-bar SyncObjectState.
+        /// </summary>
+        public void SetPanelSelection(GraphicBase g, bool additive)
+        {
+            if (g == null || !GraphicsList.Contains(g))
+                return;
+
+            if (additive)
+            {
+                g.IsSelected = !g.IsSelected;
+            }
+            else
+            {
+                UnselectAllExcept(g);
+                g.IsSelected = true;
+            }
+        }
+
+        /// <summary>
+        /// Reorders a single graphic to <paramref name="newIndex"/> (clamped) regardless of the
+        /// current selection. Uses the same RemoveAt+Insert approach as <see cref="MoveToIndex"/>.
+        /// </summary>
+        public void MoveGraphicToIndex(GraphicBase g, int newIndex)
+        {
+            if (g == null || !GraphicsList.Contains(g))
+                return;
+
+            int currentIndex = GraphicsList.IndexOf(g);
+            if (newIndex < 0)
+                newIndex = 0;
+            if (newIndex > Count - 1)
+                newIndex = Count - 1;
+            if (newIndex == currentIndex)
+                return;
+
+            GraphicsList.RemoveAt(currentIndex);
+            if (newIndex > GraphicsList.Count)
+                GraphicsList.Add(g);
+            else
+                GraphicsList.Insert(newIndex, g);
+
+            // RemoveAt→DisconnectFromParent cleared g's PropertyChanged delegates (skill bindings +
+            // BoundGraphicPropertyChanged); force the StateChanged-driven SyncObjectState to rebind
+            // even though the selection array instance is unchanged.
+            _syncStateForced = true;
+            AddCommandToHistory(false);
+            GraphicsList.RequestValidation();
+            // a no-op commit raises no StateChanged, so resync here to guarantee the forced rebind
+            // still happens (early-outs to O(1) when the commit already ran it).
+            SyncObjectState();
+        }
+
         public void Delete()
         {
             bool wasChange = false;

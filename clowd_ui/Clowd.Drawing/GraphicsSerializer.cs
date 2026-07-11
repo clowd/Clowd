@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -36,6 +37,12 @@ namespace Clowd.Drawing
     {
         public static JsonSerializerOptions Options { get; } = CreateOptions();
 
+        // the registered "$type" names; the tolerant array converter drops elements whose
+        // discriminator is not in this set (sessions saved by a build with graphic types that
+        // no longer exist — e.g. the removed raster v1's GraphicRaster — must still load)
+        private static readonly HashSet<string> _knownTypeNames =
+            new HashSet<string>(ConcreteGraphicTypes().Select(t => t.Name), StringComparer.Ordinal);
+
         /// <summary>Serializes a graphics array to UTF-8 JSON bytes (clipboard payload).</summary>
         public static byte[] SerializeToUtf8Bytes(GraphicBase[] graphics) =>
             JsonSerializer.SerializeToUtf8Bytes(graphics, Options);
@@ -60,8 +67,15 @@ namespace Clowd.Drawing
             options.Converters.Add(new SizeJsonConverter());
             options.Converters.Add(new RectJsonConverter());
             options.Converters.Add(new PixelRectJsonConverter());
+            options.Converters.Add(new TolerantGraphicArrayConverter());
             return options;
         }
+
+        private static IEnumerable<Type> ConcreteGraphicTypes() =>
+            typeof(GraphicBase).Assembly
+                               .GetTypes()
+                               .Where(t => t.IsPublic && !t.IsAbstract && typeof(GraphicBase).IsAssignableFrom(t))
+                               .OrderBy(t => t.Name, StringComparer.Ordinal);
 
         private static void ConfigureGraphicTypes(JsonTypeInfo info)
         {
@@ -73,11 +87,7 @@ namespace Clowd.Drawing
                     UnknownDerivedTypeHandling = JsonUnknownDerivedTypeHandling.FailSerialization,
                 };
 
-                var derived = typeof(GraphicBase).Assembly
-                                                 .GetTypes()
-                                                 .Where(t => t.IsPublic && !t.IsAbstract && typeof(GraphicBase).IsAssignableFrom(t))
-                                                 .OrderBy(t => t.Name, StringComparer.Ordinal);
-                foreach (var t in derived)
+                foreach (var t in ConcreteGraphicTypes())
                     info.PolymorphismOptions.DerivedTypes.Add(new JsonDerivedType(t, t.Name));
             }
 
@@ -100,6 +110,49 @@ namespace Clowd.Drawing
 
             if (!info.Type.IsAbstract)
                 info.CreateObject = map.CreateObject;
+        }
+
+        /// <summary>
+        /// Array-element tolerance for unknown "$type" discriminators: an element whose
+        /// discriminator names a type that is no longer registered (e.g. "GraphicRaster" from a
+        /// session saved by a build that had it) is dropped, and the remaining graphics load.
+        /// Elements without a recognizable string discriminator fall through to the normal
+        /// pipeline, so malformed JSON fails exactly as before. Writing is delegated element-wise
+        /// to the polymorphic contract — serialized bytes are unchanged.
+        /// </summary>
+        private sealed class TolerantGraphicArrayConverter : JsonConverter<GraphicBase[]>
+        {
+            public override GraphicBase[] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                if (reader.TokenType != JsonTokenType.StartArray)
+                    throw new JsonException($"Expected an array of graphics, found {reader.TokenType}.");
+
+                var graphics = new List<GraphicBase>();
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                    using var element = JsonDocument.ParseValue(ref reader);
+                    var root = element.RootElement;
+                    if (root.ValueKind == JsonValueKind.Object &&
+                        root.TryGetProperty("$type", out var discriminator) &&
+                        discriminator.ValueKind == JsonValueKind.String &&
+                        !_knownTypeNames.Contains(discriminator.GetString()))
+                    {
+                        continue; // unknown graphic type — drop this element, keep the rest
+                    }
+
+                    graphics.Add(root.Deserialize<GraphicBase>(options));
+                }
+
+                return graphics.ToArray();
+            }
+
+            public override void Write(Utf8JsonWriter writer, GraphicBase[] value, JsonSerializerOptions options)
+            {
+                writer.WriteStartArray();
+                foreach (var graphic in value)
+                    JsonSerializer.Serialize(writer, graphic, options);
+                writer.WriteEndArray();
+            }
         }
     }
 }

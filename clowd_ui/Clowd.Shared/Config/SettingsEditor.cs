@@ -117,17 +117,17 @@ namespace Clowd.Config
         }
 
         [Browsable(false)]
-        public bool RasterToolsEnabled
-        {
-            get => _rasterToolsEnabled;
-            set => Set(ref _rasterToolsEnabled, value);
-        }
-
-        [Browsable(false)]
         public bool SidebarVisible
         {
             get => _sidebarVisible;
             set => Set(ref _sidebarVisible, value);
+        }
+
+        [Browsable(false)]
+        public double SidebarWidth
+        {
+            get => _sidebarWidth;
+            set => Set(ref _sidebarWidth, value);
         }
 
         [Browsable(false)]
@@ -158,8 +158,8 @@ namespace Clowd.Config
         private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
         private Dictionary<ToolType, SavedToolSettings> _tools = new Dictionary<ToolType, SavedToolSettings>();
         private bool _restoreSessionsOnClowdStart = true;
-        private bool _rasterToolsEnabled;
         private bool _sidebarVisible;
+        private double _sidebarWidth = 230;
         private List<string> _toolbarOrder;
         private List<string> _hiddenTools;
     }
