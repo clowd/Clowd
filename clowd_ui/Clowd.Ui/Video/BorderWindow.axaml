@@ -1,0 +1,60 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Clowd.UI.BorderWindow"
+        Title="Clowd Recording Frame"
+        SystemDecorations="None"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        CanResize="False"
+        ShowActivated="False"
+        Focusable="False">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.overlay">
+            <Setter Property="FontSize" Value="48" />
+            <Setter Property="FontWeight" Value="Black" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </Window.Styles>
+
+    <!-- IsHitTestVisible=False is the Avalonia-level pass-through; the real click-through is the
+         WS_EX_TRANSPARENT ex-style + WM_NCHITTEST->HTTRANSPARENT hook applied in code-behind. -->
+    <Grid IsHitTestVisible="False">
+
+        <!-- 2px accent frame with a 1px white inner line. The window is positioned/sized so both
+             lines (plus >=1 physical px of slack) sit entirely OUTSIDE the recorded region. -->
+        <Border Name="AccentBorder" BorderThickness="2">
+            <Border BorderThickness="1" BorderBrush="White" Background="Transparent" />
+        </Border>
+
+        <!-- 48pt overlay text ("WAIT…"/"START"); the accent outline is approximated by four
+             accent-colored copies offset +/-2px behind the white copy (design §4.2). -->
+        <Panel Name="OverlayHost" IsVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock Name="OutlineNW" Classes="overlay">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform X="-2" Y="-2" />
+                </TextBlock.RenderTransform>
+            </TextBlock>
+            <TextBlock Name="OutlineNE" Classes="overlay">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform X="2" Y="-2" />
+                </TextBlock.RenderTransform>
+            </TextBlock>
+            <TextBlock Name="OutlineSW" Classes="overlay">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform X="-2" Y="2" />
+                </TextBlock.RenderTransform>
+            </TextBlock>
+            <TextBlock Name="OutlineSE" Classes="overlay">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform X="2" Y="2" />
+                </TextBlock.RenderTransform>
+            </TextBlock>
+            <TextBlock Name="OverlayText" Classes="overlay" Foreground="White" />
+        </Panel>
+
+    </Grid>
+
+</Window>

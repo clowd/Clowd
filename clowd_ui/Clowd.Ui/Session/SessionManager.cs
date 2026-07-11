@@ -2,10 +2,6 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Input;
-using Avalonia.Input.Platform;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI;
@@ -156,7 +152,7 @@ namespace Clowd
             if (String.IsNullOrEmpty(path) || !File.Exists(path))
                 return;
 
-            _ = ClipboardImpl.SetClipboardImage(GetClipboard(), File.ReadAllBytes(path));
+            _ = ClipboardImpl.SetClipboardImage(Toast.GetPrimaryClipboard(), File.ReadAllBytes(path));
         }
 
         public string GetNextSessionDirectory()
@@ -176,17 +172,27 @@ namespace Clowd
             return session;
         }
 
-        private static IClipboard GetClipboard()
+        /// <summary>Creates a session backed by an already-existing directory (e.g. a video
+        /// recording dir the capturer pre-populated with cropped.png). Identical to
+        /// <see cref="CreateNewSession"/> except the directory is not created, and a session the
+        /// FileSystemWatcher may have already registered for this dir is reused rather than
+        /// duplicated.</summary>
+        public SessionInfo CreateSessionInDirectory(string dir)
         {
-            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            lock (_lock)
             {
-                var window = desktop.MainWindow
-                             ?? desktop.Windows.FirstOrDefault(w => w.IsActive)
-                             ?? desktop.Windows.FirstOrDefault();
-                return window?.Clipboard;
-            }
+                var jsonPath = Path.Combine(dir, "session.json");
 
-            return null;
+                var existing = Sessions.FirstOrDefault(s => s.FilePath.Equals(jsonPath, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                    return existing;
+
+                var session = new SessionInfo(jsonPath);
+                session.Name = "Document";
+                session.CreatedUtc = DateTime.UtcNow;
+                Sessions.Add(session);
+                return session;
+            }
         }
     }
 }
