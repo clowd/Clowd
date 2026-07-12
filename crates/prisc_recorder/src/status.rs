@@ -196,6 +196,7 @@ mod tests {
 
     #[test]
     fn clock_subtracts_paused_time() {
+        let wall_start = Instant::now();
         let clock = RecordingClock::new();
         std::thread::sleep(Duration::from_millis(30));
         clock.pause();
@@ -204,9 +205,17 @@ mod tests {
         clock.resume();
         assert!(!clock.is_paused());
         let elapsed = clock.elapsed_ms();
-        // ~30 ms of unpaused time; if the 50 ms pause were not subtracted the
-        // clock would read >= 80 ms. Generous bounds for scheduler noise.
-        assert!(elapsed >= 20, "elapsed {elapsed}");
-        assert!(elapsed < 75, "elapsed {elapsed}");
+        let wall = wall_start.elapsed().as_millis() as u64;
+        // The clock must exclude the ~50 ms spent paused, so it reads
+        // meaningfully less than the total wall time. Assert the *gap* between
+        // wall and clock rather than an absolute upper bound on the clock: under
+        // CI scheduler load any sleep can overrun by tens of ms, which is what
+        // flaked the old `elapsed < 75` bound (observed `elapsed 160`). The gap
+        // is just the paused span, which is stable regardless of overrun.
+        assert!(elapsed >= 20, "clock lost unpaused time: elapsed {elapsed}");
+        assert!(
+            wall >= elapsed + 40,
+            "pause not subtracted: elapsed {elapsed} wall {wall}"
+        );
     }
 }

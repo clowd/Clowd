@@ -381,7 +381,15 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
     let mut builder = bindgen::Builder::default()
         .header(manifest_dir.join("wrapper.h").to_str().unwrap())
         .clang_arg(format!("-I{}", libobs_include.display()))
-        .clang_arg(format!("-I{}", config_include.display()));
+        .clang_arg(format!("-I{}", config_include.display()))
+        // OBS's util_uint64.h calls the MSVC intrinsic `_udiv128` (guarded by
+        // _MSC_VER/_M_X64). libclang parses in MSVC mode but does not resolve
+        // that intrinsic's declaration, and clang 16+ promotes an implicit
+        // function declaration to a hard error — which bindgen treats as fatal.
+        // The offending helper (util_mul_div64) is not in our allowlist, so its
+        // body is irrelevant to the generated bindings: silence the diagnostic
+        // and let generation proceed. Harmless on macOS (no such intrinsic).
+        .clang_arg("-Wno-implicit-function-declaration");
 
     if let Some(deps_inc) = &deps_include {
         builder = builder.clang_arg(format!("-I{}", deps_inc.display()));
