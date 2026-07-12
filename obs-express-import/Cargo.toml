@@ -3,7 +3,24 @@ resolver = "2"
 members = ["crates/obs-sys", "crates/obs", "crates/obs-express"]
 
 [workspace.dependencies]
+# Internal crates. Path deps declared once here; members inherit via
+# `{ workspace = true }`. Paths are relative to the workspace root.
+obs-sys = { path = "crates/obs-sys" }
+obs = { path = "crates/obs" }
+
+# External crates. Versions (and shared feature sets) live here only; members
+# declare `{ workspace = true }`.
+anyhow = "1"
+# 0.72+ required: bindgen 0.71 + libclang 22 intermittently emitted opaque
+# 1-byte structs (vec2/vec3/vec4/obs_transform_info/obs_audio_data/
+# obs_source_frame) whose layout asserts then fail with E0080. See the
+# assert_no_opaque_regressions guard in crates/obs-sys/build.rs.
+bindgen = "0.72"
+clap = { version = "4", features = ["derive"] }
 ctrlc = { version = "3", features = ["termination"] }
+libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 windows-sys = { version = "0.60", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
