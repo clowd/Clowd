@@ -2,7 +2,6 @@
 .DS_Store
 *.dylib
 obs-studio/.deps/
-Cargo.lock
 
 # win-capture compat-updater writes to CWD when obs-express runs from the crate dir (tests)
 /crates/obs-express/win-capture/
