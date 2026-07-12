@@ -57,7 +57,10 @@ namespace Clowd.UI.Pages
             var wnd = new SystemThemedWindow
             {
                 Title = "Edit settings for " + info.Provider.Name,
-                Width = 500,
+                // wide enough that the longest label ("Disable checksum validation") plus a
+                // full-width editor doesn't overflow the right edge.
+                Width = 580,
+                MinWidth = 580,
                 MaxHeight = 600,
                 SizeToContent = SizeToContent.Height,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,

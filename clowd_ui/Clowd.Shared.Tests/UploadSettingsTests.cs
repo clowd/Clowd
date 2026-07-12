@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using Clowd.Config;
@@ -38,9 +39,66 @@ namespace Clowd.Shared.Tests
             Assert.Contains("HastebinUploadProvider", names);
             Assert.Contains("PicsurUploadProvider", names);
             Assert.Contains("VgyMeUploadProvider", names);
+            Assert.Contains("S3UploadProvider", names);
 
             // all providers start disabled with no defaults
             Assert.All(settings.Providers, p => Assert.False(p.IsEnabled));
+        }
+
+        [Fact]
+        public void S3Provider_SettingsRoundTrip_IncludingBoolCompatibilityToggles()
+        {
+            _ = typeof(MimeProvider).Assembly;
+
+            var original = new SettingsRoot();
+            original.Uploads.DiscoverProviders();
+
+            var s3Info = original.Uploads.Providers.Single(p => p.Provider is S3UploadProvider);
+            s3Info.IsEnabled = true;
+            var s3 = (S3UploadProvider)s3Info.Provider;
+            s3.AccessKeyId = "AKIAEXAMPLE";
+            s3.SecretAccessKey = "secretsecret";
+            s3.BucketName = "my-bucket";
+            s3.Region = "eu-west-2";
+            s3.UseCustomEndpoint = true;
+            s3.CustomEndpoint = "https://s3.example.com";
+            s3.DisablePathStyle = true;
+            s3.DisableChecksumValidation = true;
+            s3.MakeObjectsPublic = true;
+            s3.CustomDomain = "cdn.example.com";
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+            loaded.Uploads.DiscoverProviders();
+
+            var loadedInfo = loaded.Uploads.Providers.Single(p => p.Provider is S3UploadProvider);
+            var l = (S3UploadProvider)loadedInfo.Provider;
+
+            Assert.True(loadedInfo.IsEnabled);
+            Assert.Equal("AKIAEXAMPLE", l.AccessKeyId);
+            Assert.Equal("secretsecret", l.SecretAccessKey);
+            Assert.Equal("my-bucket", l.BucketName);
+            Assert.Equal("eu-west-2", l.Region);
+            Assert.True(l.UseCustomEndpoint);
+            Assert.Equal("https://s3.example.com", l.CustomEndpoint);
+            Assert.True(l.DisablePathStyle);
+            Assert.True(l.DisableChecksumValidation);
+            Assert.True(l.MakeObjectsPublic);
+            Assert.Equal("cdn.example.com", l.CustomDomain);
+        }
+
+        [Fact]
+        public void S3Provider_Region_SuggestsBuiltInAwsRegions()
+        {
+            // the enumerated list feeds the editable region dropdown
+            var regions = S3UploadProvider.GetKnownRegions().ToList();
+            Assert.Contains("eu-west-2", regions);
+            Assert.Contains("us-east-1", regions);
+
+            // and the Region property carries the attribute that resolves that same list
+            var pd = TypeDescriptor.GetProperties(typeof(S3UploadProvider))[nameof(S3UploadProvider.Region)];
+            var attr = pd.Attributes.OfType<SuggestedValuesAttribute>().Single();
+            Assert.Contains("eu-west-2", attr.GetValues());
         }
 
         [Fact]
