@@ -141,17 +141,26 @@ namespace Clowd.UI.Controls
             }
             else
             {
-                Background = AppStyles.IdealBackgroundBrush;
+                // transparent — the host panel's gray backdrop shows through
+                Background = Brushes.Transparent;
             }
         }
+
+        // Matches the wgpu overlay's label rendering: Cascadia Code Regular 11px with a
+        // 1.2 line height, white (clowd_capture_wgpu ui/gpu/panel.rs LABEL_FONT_PX +
+        // text.rs FAMILY_CODE). The ttf is the same file the overlay embeds.
+        private static readonly FontFamily LabelFontFamily =
+            new FontFamily("avares://Clowd.Ui/Assets/Fonts#Cascadia Code");
 
         private void OnTextChanged(string newValue)
         {
             var tb = new TextBlock();
             tb.HorizontalAlignment = HorizontalAlignment.Center;
             tb.VerticalAlignment = VerticalAlignment.Bottom;
-            tb.FontSize = 10;
-            tb.FontWeight = FontWeight.DemiBold;
+            tb.FontFamily = LabelFontFamily;
+            tb.FontSize = 11;
+            tb.LineHeight = 11 * 1.2;
+            tb.FontWeight = FontWeight.Normal;
             tb.Foreground = Brushes.White;
 
             if (newValue != null)

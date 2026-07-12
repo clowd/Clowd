@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -236,6 +237,13 @@ namespace Clowd.UI
         private static void CleanupEmptyUploadOnly(SessionInfo session)
         {
             if (session == null || !session.IsUploadOnly)
+                return;
+
+            // never delete a session that owns real content: a video recording is IsUploadOnly
+            // too, and its session dir is the only copy of video.mp4 — a failed or cancelled
+            // upload must not destroy the recording. This cleanup exists only for the ephemeral
+            // sessions UploadManager creates around a payload *copy* (clipboard/file/text).
+            if (!String.IsNullOrEmpty(session.VideoPath) && File.Exists(session.VideoPath))
                 return;
 
             var hasUpload = (session.Uploads != null && session.Uploads.Length > 0) || !String.IsNullOrEmpty(session.UploadUrl);

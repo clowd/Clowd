@@ -6,7 +6,8 @@
     <Nullable>disable</Nullable>
     <RootNamespace>Clowd.UI</RootNamespace>
     <ApplicationIcon>Assets\clowd-default.ico</ApplicationIcon>
-    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <!-- NAudio's WASAPI MMDevice enumeration/metering requires built-in COM (Windows-only at runtime) -->
+    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <NoWarn>$(NoWarn);CA2007</NoWarn>
@@ -20,6 +21,8 @@
     <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="1.15.1" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.3.13" Condition="'$(Configuration)'=='Debug'" />
     <PackageReference Include="SharpHook" Version="7.1.2" />
+    <!-- WASAPI via built-in COM interop; all call sites are OperatingSystem.IsWindows()-guarded -->
+    <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />

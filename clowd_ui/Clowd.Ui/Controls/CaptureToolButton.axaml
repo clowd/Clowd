@@ -2,10 +2,19 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="using:Clowd.UI.Controls">
 
-    <!-- Ported from the WPF App.xaml implicit CaptureToolButton style (50x50, stacked icon +
-         text content, optional overlay, #33FFFFFF hover veil fading over 0.1s, and a 5s
-         infinite background opacity pulse 0.2 -> 0.8 -> 0.2 while PulseBackground is set). -->
+    <!-- Styled to match the wgpu capture overlay's button panel 1:1 (clowd_capture_wgpu):
+         50x50 buttons (layout.rs:29), a fixed 26px icon slot with the glyph canvas-fitted
+         inside (panel.rs:30), Cascadia Code 11px white labels with 1.2 line height
+         (panel.rs:28,47 + text.rs FAMILY_CODE), even-thirds vertical layout (panel.rs
+         v_gap = (h - icon - label)/3), and hover = fill blended 30% toward white with a
+         ~200ms exponential ease-out (panel.rs HOVER_OVERLAY_STRENGTH/HOVER_ANIM_SPEED,
+         ui_rect.wgsl lighten). The 5s background pulse is recording-specific state (WPF
+         heritage), not part of the overlay look — kept intentionally. -->
     <ControlTheme x:Key="{x:Type controls:CaptureToolButton}" TargetType="controls:CaptureToolButton">
+        <!-- non-Primary buttons are transparent — the gray panel behind them (the host
+             window's backdrop, e.g. FloatingToolbarWindow's RootBorder #373737) shows
+             through, matching the wgpu overlay look. Primary buttons get the accent brush
+             in code-behind. -->
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="White" />
         <Setter Property="Height" Value="50" />
@@ -16,35 +25,42 @@
             <ControlTemplate>
                 <Grid>
                     <Rectangle Name="_bg" Fill="{TemplateBinding Background}" />
-                    <Grid Name="contentGrid">
-                        <StackPanel HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    Orientation="Vertical">
-                            <Viewbox Width="{TemplateBinding IconSize}"
-                                     Height="{TemplateBinding IconSize}"
-                                     IsVisible="{TemplateBinding ShowAlternateIcon, Converter={x:Static BoolConverters.Not}}">
-                                <Path Data="{TemplateBinding IconPath}"
-                                      Fill="{TemplateBinding Foreground}"
-                                      Stretch="Uniform" />
-                            </Viewbox>
-                            <Viewbox Width="{TemplateBinding IconSize}"
-                                     Height="{TemplateBinding IconSize}"
-                                     IsVisible="{TemplateBinding ShowAlternateIcon}">
-                                <Path Data="{TemplateBinding IconPathAlternate}"
-                                      Fill="{TemplateBinding Foreground}"
-                                      Stretch="Uniform" />
-                            </Viewbox>
-                            <ContentPresenter HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"
-                                              Content="{TemplateBinding Content}"
-                                              ContentTemplate="{TemplateBinding ContentTemplate}" />
-                        </StackPanel>
-                        <ContentPresenter Content="{TemplateBinding Overlay}" />
+                    <Grid Name="contentGrid" RowDefinitions="*,26,*,Auto,*">
+                        <!-- fixed 26px icon slot; the IconSize viewbox centers inside it so
+                             per-icon canvas padding renders exactly like the overlay's
+                             26px-rasterised SVGs -->
+                        <Viewbox Grid.Row="1"
+                                 Width="{TemplateBinding IconSize}"
+                                 Height="{TemplateBinding IconSize}"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 IsVisible="{TemplateBinding ShowAlternateIcon, Converter={x:Static BoolConverters.Not}}">
+                            <Path Data="{TemplateBinding IconPath}"
+                                  Fill="{TemplateBinding Foreground}"
+                                  Stretch="Uniform" />
+                        </Viewbox>
+                        <Viewbox Grid.Row="1"
+                                 Width="{TemplateBinding IconSize}"
+                                 Height="{TemplateBinding IconSize}"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 IsVisible="{TemplateBinding ShowAlternateIcon}">
+                            <Path Data="{TemplateBinding IconPathAlternate}"
+                                  Fill="{TemplateBinding Foreground}"
+                                  Stretch="Uniform" />
+                        </Viewbox>
+                        <ContentPresenter Grid.Row="3"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}"
+                                          ContentTemplate="{TemplateBinding ContentTemplate}" />
+                        <ContentPresenter Grid.RowSpan="5" Content="{TemplateBinding Overlay}" />
                     </Grid>
-                    <Rectangle Name="_hover" Fill="#33FFFFFF">
+                    <!-- overlay hover: fill lerps 30% toward white -> white veil at 0.30 alpha -->
+                    <Rectangle Name="_hover" Fill="#4DFFFFFF">
                         <Rectangle.Transitions>
                             <Transitions>
-                                <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="ExponentialEaseOut" />
                             </Transitions>
                         </Rectangle.Transitions>
                     </Rectangle>

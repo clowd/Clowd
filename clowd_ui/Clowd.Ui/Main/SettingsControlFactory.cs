@@ -217,6 +217,12 @@ namespace Clowd.UI.Config
             var type = pd.PropertyType;
             var tcode = Type.GetTypeCode(pd.PropertyType);
 
+            // audio device ids render as a dropdown of live devices; the property stays a plain
+            // string ("default" or the platform device id passed through to obs-express).
+            var audioSelector = GetFirstAttributeOrDefault<AudioDeviceSelectorAttribute>(pd);
+            if (audioSelector != null && Is(pd, typeof(string)))
+                return AudioDeviceComboBinding(audioSelector.DeviceType, pd);
+
             if (Is(pd, typeof(string)))
             {
                 var txt = SimpleControlBinding(new TextBox { MinWidth = 280 }, pd, TextBox.TextProperty);
@@ -513,6 +519,44 @@ namespace Clowd.UI.Config
         {
             control.Bind(property, CreateBinding(pd.Name, converter));
             return control;
+        }
+
+        /// <summary>A dropdown of live audio devices for a string device-id property. The list is
+        /// rebuilt on every open (device hot-plug); a stored id that no longer exists is kept as a
+        /// raw-id row so the user can see the selection is stale rather than it silently changing.</summary>
+        Control AudioDeviceComboBinding(string deviceType, PropertyDescriptor pd)
+        {
+            var isSpeaker = String.Equals(deviceType, AudioDeviceManager.TypeSpeaker, StringComparison.OrdinalIgnoreCase);
+
+            List<AudioDeviceInfo> BuildItems()
+            {
+                var items = isSpeaker ? AudioDeviceManager.GetSpeakers() : AudioDeviceManager.GetMicrophones();
+                var current = pd.GetValue(_obj) as string;
+                if (!String.IsNullOrEmpty(current) && !items.Any(d => d.DeviceId == current))
+                    items.Add(new AudioDeviceInfo(current, deviceType, current));
+                return items;
+            }
+
+            var combo = new ComboBox { MinWidth = 280 };
+            combo.ItemTemplate = new FuncDataTemplate<AudioDeviceInfo>((o, ns) => new TextBlock { Text = o?.FriendlyName });
+
+            void Reload()
+            {
+                var items = BuildItems();
+                var current = pd.GetValue(_obj) as string;
+                combo.ItemsSource = items;
+                combo.SelectedItem = items.FirstOrDefault(d => d.DeviceId == current) ?? items.FirstOrDefault();
+            }
+
+            Reload();
+            combo.DropDownOpened += (s, e) => Reload();
+            combo.SelectionChanged += (s, e) =>
+            {
+                if (combo.SelectedItem is AudioDeviceInfo info && (pd.GetValue(_obj) as string) != info.DeviceId)
+                    pd.SetValue(_obj, info.DeviceId);
+            };
+
+            return combo;
         }
 
         Control ComboSelectBinding(Func<IEnumerable> items, PropertyDescriptor pd, Func<object, string> display = null, bool canClear = true)

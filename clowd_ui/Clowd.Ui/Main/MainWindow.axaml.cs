@@ -99,6 +99,8 @@ namespace Clowd.UI
                 SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys,
                     "Click a shortcut, then press the new key combination — Esc cancels. Use ✕ to remove a shortcut."),
                 SettingsPageTab.SettingsCapture => CreateFactoryPage(getWindow, SettingsRoot.Current.Capture),
+                SettingsPageTab.SettingsRecording => CreateFactoryPage(getWindow, SettingsRoot.Current.Recording,
+                    "Recording settings apply to your next recording. Changes made while a recording is in progress take effect only after it finishes."),
                 SettingsPageTab.SettingsEditor => CreateFactoryPage(getWindow, SettingsRoot.Current.Editor),
                 SettingsPageTab.SettingsUploads => CreateUploadsPage(),
                 SettingsPageTab.About => new AboutPage(),

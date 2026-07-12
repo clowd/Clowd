@@ -1,0 +1,101 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Clowd.UI.Controls"
+        xmlns:ui="using:Clowd"
+        x:Class="Clowd.UI.FloatingToolbarWindow"
+        Title="Clowd Recording Toolbar"
+        SystemDecorations="None"
+        SizeToContent="WidthAndHeight"
+        Topmost="True"
+        ShowInTaskbar="False"
+        CanResize="False"
+        ShowActivated="False"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent">
+
+    <!-- Styled to match the wgpu capture overlay's button panel (clowd_capture_wgpu
+         ui/components/panel/layout.rs + ui/gpu/panel.rs): buttons carry their own fill
+         (accent / #373737) on a dark-gray panel backdrop (IdealBackgroundBrush, the same
+         #373737 the overlay uses for its rects — matches the WPF FloatingButtonWindow
+         backdrop), so the 3px gaps read as panel rather than screen. Gap pattern mirrors
+         layout.rs (area→3→btn0→3→btn1, rest contiguous): 3px after the drag handle and
+         3px after the first action button — the START/FINISH spacers are visibility-paired
+         with their buttons so exactly one gap exists in either state. Per-button IconSize
+         values scale each glyph by its declared canvas ratio inside the fixed 26px icon
+         slot, reproducing the overlay's canvas-fitted SVG rendering. OUTPUT (GIF) and
+         DRAW are intentionally absent — GIF encoding is deferred scope and Live Draw was
+         removed from clowd-rust. -->
+    <Border Name="RootBorder" Background="{x:Static ui:AppStyles.IdealBackgroundBrush}">
+        <StackPanel Name="MainPanel" Orientation="Horizontal">
+
+            <!-- drag handle: click rotates the toolbar, drag past 5px moves it (state machine in
+                 code-behind; pointer events are wired as tunnel handlers there because Button's
+                 class handler marks bubbling PointerPressed as handled). Shows FPS/timer text
+                 once recording statuses arrive. -->
+            <controls:CaptureToolButton Name="BtnDrag"
+                                        Cursor="SizeAll"
+                                        IconPath="{StaticResource IconToolNone}"
+                                        IsDragHandle="True"
+                                        Primary="True"
+                                        ShowHover="False"
+                                        Text="DRAG ME"
+                                        ToolTip.Tip="Click to Rotate, Drag to Move" />
+
+            <Rectangle Width="3" Height="3" />
+
+            <!-- WAIT… -> START (page swaps the text once obs-express is initialized) -->
+            <controls:CaptureToolButton Name="BtnStart"
+                                        Click="StartButtonClicked"
+                                        IconPath="{StaticResource IconPlay}"
+                                        IconSize="16"
+                                        Primary="True"
+                                        PulseBackground="True"
+                                        Text="WAIT…" />
+            <Rectangle Width="3" Height="3" IsVisible="{Binding #BtnStart.IsVisible}" />
+
+            <!-- visible only while recording -->
+            <controls:CaptureToolButton Name="BtnFinish"
+                                        Click="FinishButtonClicked"
+                                        IconPath="{StaticResource IconStop}"
+                                        IconSize="15.2"
+                                        IsVisible="False"
+                                        Primary="True"
+                                        Text="FINISH" />
+            <Rectangle Width="3" Height="3" IsVisible="{Binding #BtnFinish.IsVisible}" />
+
+            <!-- ShowAlternateIcon (enabled glyph) tracks the capture toggle; the Overlay slot
+                 hosts the live audio level bar (code-behind) -->
+            <controls:CaptureToolButton Name="BtnMic"
+                                        Click="MicClicked"
+                                        IconPath="{StaticResource IconMicrophoneDisabled}"
+                                        IconPathAlternate="{StaticResource IconMicrophoneEnabled}"
+                                        IconSize="20.6"
+                                        Text="MIC"
+                                        ToolTip.Tip="Capture microphone" />
+
+            <controls:CaptureToolButton Name="BtnSpeaker"
+                                        Click="SpeakerClicked"
+                                        IconPath="{StaticResource IconSpeakerDisabled}"
+                                        IconPathAlternate="{StaticResource IconSpeakerEnabled}"
+                                        IconSize="21.7"
+                                        Text="SPK"
+                                        ToolTip.Tip="Capture speakers" />
+
+            <controls:CaptureToolButton Name="BtnSettings"
+                                        Click="SettingsButtonClicked"
+                                        IconPath="{StaticResource IconSettings}"
+                                        IconSize="21.7"
+                                        Text="OPTIONS"
+                                        ToolTip.Tip="Recording settings (applies to the next recording)" />
+
+            <controls:CaptureToolButton Name="BtnCancel"
+                                        Click="CancelButtonClicked"
+                                        IconPath="{StaticResource IconClose}"
+                                        IconSize="18"
+                                        Text="CANCEL"
+                                        ToolTip.Tip="Cancel recording" />
+
+        </StackPanel>
+    </Border>
+
+</Window>

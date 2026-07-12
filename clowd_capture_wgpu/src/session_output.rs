@@ -122,11 +122,13 @@ fn write_video_action_inner(
     std::fs::create_dir_all(session_dir)?;
     let session_dir = absolute_path(session_dir);
 
-    // Selection clamped to the desktop bitmap — this is the region the
-    // poster contains and the rect obs-express records.
+    // Selection clamped to the desktop bitmap, then grown to the contract
+    // minimum of 2×2 — this is the region the poster contains and the rect
+    // obs-express records (obs-express rejects W,H < 2 with exit 2, §1.1).
     let selection = selection
         .intersection(&buffer.bounds)
         .ok_or_else(|| anyhow!("selection {:?} does not intersect desktop bounds {:?}", selection, buffer.bounds))?;
+    let selection = ensure_min_video_size(selection, buffer.bounds)?;
 
     // cropped.png — poster frame. No peek compositing (see doc above);
     // cursor included only if the user has it visible, matching the
@@ -147,6 +149,31 @@ fn write_video_action_inner(
     let action_path = session_dir.join(ACTION_FILE);
     std::fs::write(&action_path, format!("video {x},{y},{w},{h}\n"))?;
     Ok(action_path)
+}
+
+/// Grow a clamped selection to the §1.1 contract minimum of 2×2 (a drag only
+/// needs one axis to cross the threshold, so 300×1 slivers are reachable),
+/// staying inside `bounds`. Errors when `bounds` itself cannot fit 2×2 — the
+/// same failure path as a selection outside the desktop.
+fn ensure_min_video_size(selection: ScreenRect, bounds: ScreenRect) -> anyhow::Result<ScreenRect> {
+    const MIN: i32 = 2;
+    if selection.width() >= MIN && selection.height() >= MIN {
+        return Ok(selection);
+    }
+    if bounds.width() < MIN || bounds.height() < MIN {
+        return Err(anyhow!("desktop bounds {:?} cannot fit a {}x{} capture region", bounds, MIN, MIN));
+    }
+    // Extend forward to MIN, shifting back if that runs past the bounds edge.
+    let grow = |min: i32, len: i32, b_min: i32, b_max: i32| -> (i32, i32) {
+        if len >= MIN {
+            (min, len)
+        } else {
+            (min.min(b_max - MIN).max(b_min), MIN)
+        }
+    };
+    let (x, w) = grow(selection.min_x(), selection.width(), bounds.min_x(), bounds.max_x());
+    let (y, h) = grow(selection.min_y(), selection.height(), bounds.min_y(), bounds.max_y());
+    Ok(ScreenRect::from_xy_size(x, y, w, h))
 }
 
 /// The `action.txt` rect in the platform capture coordinate space
@@ -420,5 +447,45 @@ mod tests {
     fn rect_json_shape() {
         let r = ScreenRect::from_xy_size(-10, 20, 300, 400);
         assert_eq!(rect_json(r), "{ \"X\": -10, \"Y\": 20, \"Width\": 300, \"Height\": 400 }");
+    }
+
+    #[test]
+    fn min_video_size_passthrough() {
+        let bounds = ScreenRect::from_xy_size(0, 0, 1920, 1080);
+        let sel = ScreenRect::from_xy_size(10, 10, 300, 200);
+        assert_eq!(ensure_min_video_size(sel, bounds).unwrap(), sel);
+    }
+
+    #[test]
+    fn min_video_size_grows_sliver() {
+        let bounds = ScreenRect::from_xy_size(0, 0, 1920, 1080);
+        let sel = ScreenRect::from_xy_size(10, 10, 300, 1);
+        let grown = ensure_min_video_size(sel, bounds).unwrap();
+        assert_eq!((grown.min_x(), grown.min_y(), grown.width(), grown.height()), (10, 10, 300, 2));
+    }
+
+    #[test]
+    fn min_video_size_shifts_at_bounds_edge() {
+        let bounds = ScreenRect::from_xy_size(0, 0, 1920, 1080);
+        // 1x1 selection in the bottom-right corner: must shift back inside.
+        let sel = ScreenRect::from_xy_size(1919, 1079, 1, 1);
+        let grown = ensure_min_video_size(sel, bounds).unwrap();
+        assert_eq!((grown.min_x(), grown.min_y(), grown.width(), grown.height()), (1918, 1078, 2, 2));
+    }
+
+    #[test]
+    fn min_video_size_negative_virtual_desktop() {
+        // Secondary monitor left of primary: negative coords.
+        let bounds = ScreenRect::from_xy_size(-1920, 0, 3840, 1080);
+        let sel = ScreenRect::from_xy_size(-1920, 500, 1, 300);
+        let grown = ensure_min_video_size(sel, bounds).unwrap();
+        assert_eq!((grown.min_x(), grown.min_y(), grown.width(), grown.height()), (-1920, 500, 2, 300));
+    }
+
+    #[test]
+    fn min_video_size_degenerate_desktop_errors() {
+        let bounds = ScreenRect::from_xy_size(0, 0, 1, 1);
+        let sel = ScreenRect::from_xy_size(0, 0, 1, 1);
+        assert!(ensure_min_video_size(sel, bounds).is_err());
     }
 }
