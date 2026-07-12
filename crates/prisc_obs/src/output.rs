@@ -39,7 +39,9 @@ impl ObsOutput {
     pub fn start(&self) -> Result<(), ObsError> {
         let ok = unsafe { obs_sys::obs_output_start(self.ptr) };
         if !ok {
-            let err = self.get_last_error().unwrap_or_else(|| "unknown error".to_string());
+            let err = self
+                .get_last_error()
+                .unwrap_or_else(|| "unknown error".to_string());
             return Err(ObsError::OutputStart(err));
         }
         Ok(())
@@ -70,7 +72,11 @@ impl ObsOutput {
         if ptr.is_null() {
             return None;
         }
-        Some(unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned())
+        Some(
+            unsafe { CStr::from_ptr(ptr) }
+                .to_string_lossy()
+                .into_owned(),
+        )
     }
 
     pub fn signal_handler(&self) -> *mut obs_sys::signal_handler_t {

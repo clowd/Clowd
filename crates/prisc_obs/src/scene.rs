@@ -42,6 +42,21 @@ impl ObsSceneItem {
     pub fn set_visible(&self, visible: bool) {
         unsafe { obs_sys::obs_sceneitem_set_visible(self.ptr, visible) };
     }
+
+    pub fn set_pos(&self, x: f32, y: f32) {
+        // Local mirror of `struct vec2` — the bindgen output renders vec2 as an
+        // opaque type (anonymous-union member), so it cannot be constructed
+        // directly. The layout is two f32s; cast at the call site.
+        #[repr(C)]
+        struct Vec2 {
+            x: f32,
+            y: f32,
+        }
+        let pos = Vec2 { x, y };
+        unsafe {
+            obs_sys::obs_sceneitem_set_pos(self.ptr, &pos as *const Vec2 as *const obs_sys::vec2)
+        };
+    }
 }
 
 impl Clone for ObsSceneItem {

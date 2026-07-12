@@ -3,34 +3,31 @@ mod commands;
 mod encoder_config;
 mod platform;
 mod recorder;
+mod region;
 mod status;
 
 use clap::Parser;
 
 fn main() {
+    // Route every libobs log line to stderr before anything else can touch
+    // libobs — stdout is reserved for the JSON protocol (§1.3). Also installs
+    // the crash handler (stderr + exit 1 instead of libobs's silent exit 0).
+    obs::log::install_handlers();
+
+    // clap itself exits 2 on invalid arguments; mirror that for the §1.1
+    // validations it cannot express.
     let cli = cli::Cli::parse();
+    if let Err(msg) = cli.validate() {
+        eprintln!("Error: {msg}");
+        platform::exit_process(2);
+    }
 
-    let plugin_path = std::env::var("OBS_PLUGIN_PATH")
-        .unwrap_or_else(|_| env!("OBS_PLUGIN_DIR").to_string());
+    // Recorder::new exits the process itself on any construction failure (it
+    // must not unwind — partial OBS state is never torn down, §1.4).
+    let recorder = recorder::Recorder::new(&cli);
 
-    let recorder = match recorder::Recorder::new(&cli, &plugin_path) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("Failed to initialize recorder: {e:#}");
-            std::process::exit(1);
-        }
-    };
-
-    let exit_code = match recorder.run(cli.start_paused) {
-        Ok(()) => 0,
-        Err(e) => {
-            eprintln!("Recording error: {e:#}");
-            1
-        }
-    };
-
-    // Recording is complete and the MP4 is flushed. Exit immediately to skip
-    // OBS resource teardown which can segfault (known OBS issue — the C++ version
-    // calls ExitProcess for the same reason).
-    unsafe { libc::_exit(exit_code) };
+    // Never returns: every exit routes through platform::exit_process, which
+    // skips libobs teardown intentionally (known OBS shutdown crashes; the C++
+    // original calls ExitProcess for the same reason).
+    recorder.run(cli.pause)
 }

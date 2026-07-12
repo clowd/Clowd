@@ -1,2 +1,135 @@
+//! Platform abstraction. Both platform modules expose identical public
+//! signatures (DESIGN §2.2); shared, platform-neutral types and the pure
+//! monitor-matching logic live here.
+
+use std::path::PathBuf;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use self::windows::*;
+
 #[cfg(target_os = "macos")]
-pub mod macos;
+mod macos;
+#[cfg(target_os = "macos")]
+pub use self::macos::*;
+
+#[derive(Debug, Clone)]
+pub struct MonitorInfo {
+    /// Stable id: Windows device interface path (`\\?\DISPLAY#…`) / mac display UUID.
+    pub id: String,
+    /// Windows: GDI device name (`\\.\DISPLAY1`); mac: CGDirectDisplayID as string.
+    pub alt_id: Option<String>,
+    /// Origin in the platform capture coordinate space (§1.1):
+    /// Windows = physical px, virtual desktop; macOS = CG points.
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub is_primary: bool,
+}
+
+/// Paths handed to `obs_add_module_path` / `obs_add_data_path`. `module_bin` /
+/// `module_data` are passed to libobs verbatim (they may contain the
+/// `%module%` template token).
+pub struct ObsPaths {
+    pub module_bin: String,
+    pub module_data: String,
+    pub libobs_data: Option<PathBuf>,
+}
+
+/// Pure monitor matching: exact `id`, then `alt_id`, then 0-based index.
+/// Platform `find_monitor` implementations delegate here.
+pub(crate) fn match_monitor(id: &str, monitors: &[MonitorInfo]) -> Option<MonitorInfo> {
+    if let Some(m) = monitors.iter().find(|m| m.id == id) {
+        return Some(m.clone());
+    }
+    if let Some(m) = monitors.iter().find(|m| m.alt_id.as_deref() == Some(id)) {
+        return Some(m.clone());
+    }
+    if let Ok(index) = id.parse::<usize>() {
+        return monitors.get(index).cloned();
+    }
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn synthetic() -> Vec<MonitorInfo> {
+        vec![
+            MonitorInfo {
+                id: r"\\?\DISPLAY#DELA1E2#5&fef00e1&0&UID4353#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}".to_string(),
+                alt_id: Some(r"\\.\DISPLAY1".to_string()),
+                x: 0,
+                y: 0,
+                width: 2560,
+                height: 1440,
+                is_primary: true,
+            },
+            MonitorInfo {
+                id: r"\\?\DISPLAY#GSM5B08#5&fef00e1&0&UID4357#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}".to_string(),
+                alt_id: Some(r"\\.\DISPLAY2".to_string()),
+                x: -1920,
+                y: 200,
+                width: 1920,
+                height: 1080,
+                is_primary: false,
+            },
+        ]
+    }
+
+    #[test]
+    fn matches_device_interface_path() {
+        let mons = synthetic();
+        let m = match_monitor(&mons[1].id.clone(), &mons).unwrap();
+        assert_eq!(m.alt_id.as_deref(), Some(r"\\.\DISPLAY2"));
+    }
+
+    #[test]
+    fn matches_alt_id() {
+        let mons = synthetic();
+        let m = match_monitor(r"\\.\DISPLAY1", &mons).unwrap();
+        assert!(m.is_primary);
+    }
+
+    #[test]
+    fn matches_zero_based_index() {
+        let mons = synthetic();
+        let m = match_monitor("1", &mons).unwrap();
+        assert_eq!(m.x, -1920);
+        assert!(match_monitor("2", &mons).is_none());
+    }
+
+    #[test]
+    fn id_takes_priority_over_index() {
+        // A monitor whose id happens to be a digit must match by id, not index.
+        let mons = vec![
+            MonitorInfo {
+                id: "1".to_string(),
+                alt_id: None,
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+                is_primary: true,
+            },
+            MonitorInfo {
+                id: "0".to_string(),
+                alt_id: None,
+                x: 100,
+                y: 0,
+                width: 100,
+                height: 100,
+                is_primary: false,
+            },
+        ];
+        assert_eq!(match_monitor("1", &mons).unwrap().x, 0);
+    }
+
+    #[test]
+    fn no_match() {
+        assert!(match_monitor("nope", &synthetic()).is_none());
+    }
+}

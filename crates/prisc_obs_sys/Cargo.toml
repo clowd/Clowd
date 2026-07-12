@@ -5,4 +5,8 @@ edition = "2021"
 links = "obs"
 
 [build-dependencies]
-bindgen = "0.71"
+# 0.72+ required: bindgen 0.71 + libclang 22 intermittently emitted opaque
+# 1-byte structs (vec2/vec3/vec4/obs_transform_info/obs_audio_data/
+# obs_source_frame) whose layout asserts then fail with E0080. See the
+# assert_no_opaque_regressions guard in build.rs.
+bindgen = "0.72"

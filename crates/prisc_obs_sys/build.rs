@@ -3,6 +3,22 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn main() {
+    // Build scripts must branch on the *target* OS, not the host cfg — the
+    // build script itself is compiled for the host, so `#[cfg(target_os)]`
+    // would be wrong when cross-compiling.
+    let target_os = env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    match target_os.as_str() {
+        "macos" => build_macos(),
+        "windows" => build_windows(),
+        other => panic!("obs-sys: unsupported CARGO_CFG_TARGET_OS `{other}`"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// macOS (unchanged behavior — Xcode generator, framework link, source watch)
+// ---------------------------------------------------------------------------
+
+fn build_macos() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
@@ -10,17 +26,20 @@ fn main() {
     let obs_build = out_dir.join("obs-build");
 
     println!("cargo:rerun-if-changed=wrapper.h");
-    println!("cargo:rerun-if-changed={}", obs_src.join("libobs").display());
+    println!(
+        "cargo:rerun-if-changed={}",
+        obs_src.join("libobs").display()
+    );
 
     let config = "RelWithDebInfo";
 
-    cmake_configure(&obs_src, &obs_build);
-    cmake_build(&obs_build, config);
-    emit_link_directives(&obs_src, &obs_build, config);
+    mac_cmake_configure(&obs_src, &obs_build);
+    mac_cmake_build(&obs_build, config);
+    mac_emit_link_directives(&obs_src, &obs_build, config);
     generate_bindings(&manifest_dir, &obs_src, &obs_build);
 }
 
-fn cmake_configure(obs_src: &Path, obs_build: &Path) {
+fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
     if obs_build.join("CMakeCache.txt").exists() {
         return;
     }
@@ -66,7 +85,7 @@ fn cmake_configure(obs_src: &Path, obs_build: &Path) {
     );
 }
 
-fn cmake_build(obs_build: &Path, config: &str) {
+fn mac_cmake_build(obs_build: &Path, config: &str) {
     let marker = obs_build.join(".build_complete");
     if marker.exists() {
         return;
@@ -89,7 +108,8 @@ fn cmake_build(obs_build: &Path, config: &str) {
     for target in &targets {
         cmd.arg("--target").arg(target);
     }
-    cmd.arg("--config").arg(config)
+    cmd.arg("--config")
+        .arg(config)
         .arg("--")
         .arg("-parallelizeTargets");
 
@@ -99,7 +119,7 @@ fn cmake_build(obs_build: &Path, config: &str) {
     std::fs::write(&marker, "").expect("Failed to write build marker");
 }
 
-fn emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
+fn mac_emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
     let framework_search = obs_build.join("libobs").join(config);
     assert!(
         framework_search.join("libobs.framework").exists(),
@@ -107,7 +127,10 @@ fn emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
         framework_search.display()
     );
 
-    println!("cargo:rustc-link-search=framework={}", framework_search.display());
+    println!(
+        "cargo:rustc-link-search=framework={}",
+        framework_search.display()
+    );
     println!("cargo:rustc-link-lib=framework=libobs");
 
     // Export paths so downstream crates can locate frameworks and plugins at runtime
@@ -115,6 +138,209 @@ fn emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
     println!("cargo:obs_build_dir={}", obs_build.display());
     println!("cargo:obs_build_config={config}");
 }
+
+// ---------------------------------------------------------------------------
+// Windows (Visual Studio generator, obs.lib import link, self-contained deps)
+// ---------------------------------------------------------------------------
+
+fn build_windows() {
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let repo_root = manifest_dir.parent().unwrap().parent().unwrap();
+    let obs_src = repo_root.join("obs-studio");
+    let build_dir = win_build_dir();
+    let config = "RelWithDebInfo";
+
+    // The Windows branch does NOT watch the obs-studio source tree — idempotency
+    // is provided by the CMakeCache.txt / .build_complete markers instead.
+    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo:rerun-if-env-changed=OBS_BUILD_DIR");
+    println!("cargo:rerun-if-env-changed=CARGO_TARGET_DIR");
+
+    let cmake = find_cmake();
+    win_cmake_configure(&cmake, &obs_src, &build_dir);
+    win_cmake_build(&cmake, &build_dir, config);
+    win_emit_link_directives(&build_dir, config);
+    generate_bindings(&manifest_dir, &obs_src, &build_dir);
+    win_emit_exports(&obs_src, &build_dir, config);
+}
+
+/// MAX_PATH-safe CMake build dir: never under the deep cargo OUT_DIR (MSB3491).
+/// `OBS_BUILD_DIR` override, else `<workspace_target>/obs-x64` where the target
+/// dir is `CARGO_TARGET_DIR` if set, else the OUT_DIR ancestor named `target`.
+fn win_build_dir() -> PathBuf {
+    if let Ok(dir) = env::var("OBS_BUILD_DIR") {
+        return PathBuf::from(dir);
+    }
+
+    let workspace_target = if let Ok(t) = env::var("CARGO_TARGET_DIR") {
+        PathBuf::from(t)
+    } else {
+        let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+        out_dir
+            .ancestors()
+            .find(|p| p.file_name().map(|n| n == "target").unwrap_or(false))
+            .expect("could not find a `target` ancestor of OUT_DIR")
+            .to_path_buf()
+    };
+
+    workspace_target.join("obs-x64")
+}
+
+/// cmake is frequently not on PATH on dev machines; fall back to the copy that
+/// ships with Visual Studio 2022.
+fn find_cmake() -> PathBuf {
+    if Command::new("cmake")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+    {
+        return PathBuf::from("cmake");
+    }
+
+    let vs = PathBuf::from("C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe");
+    if vs.exists() {
+        return vs;
+    }
+
+    panic!(
+        "cmake not found on PATH and the Visual Studio fallback is missing at {}",
+        vs.display()
+    );
+}
+
+fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
+    if build_dir.join("CMakeCache.txt").exists() {
+        return;
+    }
+
+    // Deps auto-download into <src>/.deps at configure time (needs network on
+    // first run). Configure also creates <src>/build_x86 (the 32-bit child) —
+    // that is expected.
+    let status = Command::new(cmake)
+        .arg("-S")
+        .arg(obs_src)
+        .arg("-B")
+        .arg(build_dir)
+        .arg("-G")
+        .arg("Visual Studio 17 2022")
+        .arg("-A")
+        .arg("x64")
+        .arg("-DOBS_VERSION_OVERRIDE=32.1.2")
+        .arg("-DENABLE_FRONTEND=OFF")
+        .arg("-DENABLE_UI=OFF")
+        .arg("-DENABLE_SCRIPTING=OFF")
+        .arg("-DENABLE_BROWSER=OFF")
+        .arg("-DENABLE_WEBSOCKET=OFF")
+        .arg("-DENABLE_VST=OFF")
+        .arg("-DENABLE_AJA=OFF")
+        .arg("-DENABLE_DECKLINK=OFF")
+        .arg("-DENABLE_WEBRTC=OFF")
+        .arg("-DENABLE_VIRTUALCAM=OFF")
+        .arg("-DENABLE_NEW_MPEGTS_OUTPUT=OFF")
+        .arg("-Wno-dev")
+        .status()
+        .expect("Failed to run cmake configure");
+
+    assert!(status.success(), "cmake configure failed");
+    assert!(
+        build_dir.join("CMakeCache.txt").exists(),
+        "cmake configure did not produce CMakeCache.txt at {}",
+        build_dir.display()
+    );
+}
+
+fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
+    let marker = build_dir.join(".build_complete");
+    if marker.exists() {
+        return;
+    }
+
+    // w32-pthreads and the win-capture helpers (graphics-hook, inject-helper,
+    // get-graphics-offsets) come along via add_dependencies, but the three
+    // encoder test exes do NOT — they are standalone add_executable targets with
+    // no dependency edge from their plugins, and without them the hw encoders
+    // never register. They must be explicit targets.
+    let targets = [
+        "libobs",
+        "libobs-d3d11",
+        "libobs-winrt",
+        "win-capture",
+        "win-wasapi",
+        "obs-ffmpeg",
+        "obs-ffmpeg-mux",
+        "obs-x264",
+        "obs-outputs",
+        "obs-nvenc",
+        "obs-qsv11",
+        "coreaudio-encoder",
+        "obs-nvenc-test",
+        "obs-qsv-test",
+        "obs-amf-test",
+    ];
+
+    let mut cmd = Command::new(cmake);
+    cmd.arg("--build")
+        .arg(build_dir)
+        .arg("--config")
+        .arg(config);
+    for target in &targets {
+        cmd.arg("--target").arg(target);
+    }
+
+    let status = cmd.status().expect("Failed to run cmake build");
+    assert!(status.success(), "cmake build failed");
+
+    std::fs::write(&marker, "").expect("Failed to write .build_complete marker");
+}
+
+fn win_emit_link_directives(build_dir: &Path, config: &str) {
+    // obs.lib is a normal MSVC import library next to obs.dll (PREFIX "" =>
+    // obs.lib / obs.dll, not libobs.*).
+    let link_search = build_dir.join("libobs").join(config);
+    assert!(
+        link_search.join("obs.lib").exists(),
+        "obs.lib not found at {} — did the libobs target build?",
+        link_search.display()
+    );
+
+    println!("cargo:rustc-link-search=native={}", link_search.display());
+    println!("cargo:rustc-link-lib=dylib=obs");
+}
+
+fn win_emit_exports(obs_src: &Path, build_dir: &Path, config: &str) {
+    // Consumed downstream as DEP_OBS_OBS_BUILD_DIR / DEP_OBS_OBS_BUILD_CONFIG /
+    // DEP_OBS_DEPS_BIN (links key is `obs`).
+    println!("cargo:obs_build_dir={}", build_dir.display());
+    println!("cargo:obs_build_config={config}");
+
+    if let Some(bin) = find_obs_deps_bin(obs_src) {
+        println!("cargo:deps_bin={}", bin.display());
+    } else {
+        println!(
+            "cargo:warning=obs-sys: could not locate the obs-deps bin dir under {}",
+            obs_src.join(".deps").display()
+        );
+    }
+}
+
+fn find_obs_deps_bin(obs_src: &Path) -> Option<PathBuf> {
+    let deps_dir = obs_src.join(".deps");
+    for entry in std::fs::read_dir(&deps_dir).ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("obs-deps-") && !name.contains("qt6") {
+            let bin = entry.path().join("bin");
+            if bin.exists() {
+                return Some(bin);
+            }
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// Shared: bindgen + obs-deps include discovery (identical wrapper/allowlists)
+// ---------------------------------------------------------------------------
 
 fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
@@ -152,9 +378,36 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         .generate()
         .expect("Failed to generate bindings");
 
-    bindings
-        .write_to_file(&bindings_path)
-        .expect("Failed to write bindings");
+    let generated = bindings.to_string();
+    assert_no_opaque_regressions(&generated);
+
+    std::fs::write(&bindings_path, generated).expect("Failed to write bindings");
+}
+
+/// bindgen 0.71 + libclang 22 intermittently emitted these structs as opaque
+/// 1-byte `{ _address: u8 }` bodies (while still emitting the real-size layout
+/// asserts, which then fail downstream with E0080). bindgen 0.72 fixed it on
+/// this machine, but fail fast here with a clear message if it ever recurs —
+/// the alternative is six baffling layout-assert errors in generated code.
+fn assert_no_opaque_regressions(generated: &str) {
+    let critical = [
+        "vec2",
+        "vec3",
+        "vec4",
+        "obs_transform_info",
+        "obs_audio_data",
+        "obs_source_frame",
+    ];
+    for name in critical {
+        let opaque = format!("pub struct {name} {{\n    pub _address: u8,");
+        assert!(
+            !generated.contains(&opaque),
+            "bindgen emitted `{name}` as an opaque 1-byte struct — this is the \
+             bindgen/libclang layout bug (seen with bindgen 0.71 + libclang 22). \
+             Check the installed LLVM version against the bindgen version in \
+             crates/obs-sys/Cargo.toml."
+        );
+    }
 }
 
 fn find_obs_deps_include(obs_src: &Path) -> Option<PathBuf> {
@@ -169,7 +422,10 @@ fn find_obs_deps_include(obs_src: &Path) -> Option<PathBuf> {
         if name.starts_with("obs-deps-") && !name.contains("qt6") {
             let include = entry.path().join("include");
             if include.exists() {
-                println!("cargo:warning=Using obs-deps include: {}", include.display());
+                println!(
+                    "cargo:warning=Using obs-deps include: {}",
+                    include.display()
+                );
                 return Some(include);
             }
         }

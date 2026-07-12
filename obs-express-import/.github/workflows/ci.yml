@@ -1,0 +1,223 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Windows: VS 2022 generator, obs-sys builds libobs into target/obs-x64, and
+  # the obs-express build.rs assembles a self-contained runtime tree in
+  # target/release. That whole tree is the artifact.
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Build (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      # windows-latest ships LLVM here; bindgen needs libclang. If a future
+      # image moves it, the diagnostics step below prints a clear warning.
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+    steps:
+      - name: Checkout (recursive submodules)
+        uses: actions/checkout@v4
+        with:
+          # obs-studio must be recursive: obs-browser / obs-websocket submodule
+          # dirs must EXIST even though disabled, or their CMakeLists FATAL_ERROR.
+          submodules: recursive
+
+      - name: Record OBS submodule SHA
+        id: obs
+        run: |
+          $sha = git -C obs-studio rev-parse HEAD
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          Write-Host "OBS submodule SHA: $sha"
+
+      - name: Toolchain diagnostics
+        run: |
+          cmake --version
+          rustc --version
+          cargo --version
+          Write-Host "LIBCLANG_PATH=$env:LIBCLANG_PATH"
+          if (Test-Path "$env:LIBCLANG_PATH\libclang.dll") {
+            Write-Host "libclang.dll: found"
+          } else {
+            Write-Host "::warning::libclang.dll not found at LIBCLANG_PATH ($env:LIBCLANG_PATH) - bindgen may fail"
+          }
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # The native OBS build and its downloaded prebuilt deps (.deps) are cached
+      # together under one key so they can never evict independently and leave a
+      # build tree that references a missing deps dir. CMakePresets.json (which
+      # pins the deps version) lives inside the submodule, so the submodule SHA
+      # already changes whenever the deps version does.
+      - name: Cache OBS native build + prebuilt deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/obs-x64
+            obs-studio/.deps
+          key: ${{ runner.os }}-obs-${{ steps.obs.outputs.sha }}
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Test (release, unit tests only)
+        run: |
+          # obs-express links obs.dll (import lib), so the test exe in
+          # target/release/deps needs the runtime DLLs (assembled in
+          # target/release) on PATH. The #[ignore] smoke test is not run.
+          $env:PATH = "$(Resolve-Path target/release);$env:PATH"
+          cargo test --release -p obs-express
+
+      - name: Stage artifact
+        run: |
+          $dist = "dist/obs-express-windows-x64"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          # obs-express.exe plus the copied helpers (obs-ffmpeg-mux.exe,
+          # obs-*-test.exe) and all runtime DLLs. *.pdb is excluded by only
+          # matching *.exe / *.dll; cargo build junk (build/, deps/,
+          # .fingerprint/, incremental/) stays behind because we copy explicit
+          # top-level items only.
+          Copy-Item target/release/*.exe $dist
+          Copy-Item target/release/*.dll $dist
+          if (Test-Path target/release/obs-plugins) { Copy-Item -Recurse target/release/obs-plugins $dist }
+          if (Test-Path target/release/data)        { Copy-Item -Recurse target/release/data $dist }
+          Write-Host "Staged contents:"
+          Get-ChildItem $dist | Select-Object Name
+          $mb = (Get-ChildItem -Recurse $dist | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host ("Total staged size: {0:N1} MB" -f $mb)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-express-windows-x64
+          path: dist/obs-express-windows-x64
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # macOS: Xcode generator (full Xcode required for the Metal renderer / Swift),
+  # obs-sys builds libobs.framework into OUT_DIR/obs-build. The linked binary is
+  # NOT relocatable today - its rpaths point at the build machine's OUT_DIR - so
+  # the artifact is the binary + helper + a README documenting that limitation.
+  # ---------------------------------------------------------------------------
+  macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout (recursive submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Record OBS submodule SHA
+        id: obs
+        run: |
+          sha=$(git -C obs-studio rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "OBS submodule SHA: $sha"
+
+      - name: Select full Xcode
+        run: |
+          # build.rs uses the Xcode generator + enable_language(Swift); the CLT
+          # alone are not enough. macos-latest ships a full Xcode.
+          sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+          xcode-select -p
+          xcodebuild -version
+
+      - name: Ensure cmake (>= 3.28)
+        run: |
+          cmake --version || brew install cmake
+          cmake --version
+
+      - name: Toolchain diagnostics
+        run: |
+          rustc --version
+          cargo --version
+          clang --version
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      # obs-sys has no build-dir override on macOS; the OBS build lands in the
+      # obs-sys OUT_DIR (a metadata-hashed but run-stable path). Cache that whole
+      # `out` dir together with the downloaded deps under one submodule-SHA key.
+      # build.rs still re-runs each build (its cargo fingerprint is not cached),
+      # but the CMakeCache.txt / .build_complete markers short-circuit the heavy
+      # cmake work, so bindings are always regenerated fresh and cheap.
+      - name: Cache OBS native build + prebuilt deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/release/build/obs-sys-*/out
+            obs-studio/.deps
+          key: ${{ runner.os }}-obs-${{ steps.obs.outputs.sha }}
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Test (release, unit tests only)
+        run: cargo test --release -p obs-express
+
+      - name: Stage artifact
+        run: |
+          dist="dist/obs-express-macos"
+          mkdir -p "$dist"
+          cp target/release/obs-express "$dist/"
+          [ -f target/release/obs-ffmpeg-mux ] && cp target/release/obs-ffmpeg-mux "$dist/" || true
+          cat > "$dist/README.txt" <<'EOF'
+          obs-express (macOS build)
+
+          KNOWN LIMITATION - this binary is NOT relocatable.
+
+          It is linked with absolute rpaths that point at the OBS build tree on
+          the CI build machine (the obs-sys OUT_DIR), and OBS_PLUGIN_DIR is baked
+          to that same absolute path. It therefore will not run as-is on another
+          machine: libobs.framework, libobs-metal, the FFmpeg dylibs, and the OBS
+          plugin/data trees are not bundled here.
+
+          To run it you must reproduce the OBS build layout at the original paths,
+          or rebuild locally from source (build.sh). A self-contained .app bundle
+          (relocated rpaths + bundled frameworks/plugins/data) is future work.
+          EOF
+          echo "Staged contents:"
+          ls -la "$dist"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-express-macos
+          path: dist/obs-express-macos
+          if-no-files-found: error

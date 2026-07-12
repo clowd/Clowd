@@ -1,11 +1,12 @@
+pub mod audio;
 pub mod context;
 pub mod data;
-pub mod error;
-pub mod source;
-pub mod scene;
 pub mod encoder;
+pub mod error;
+pub mod log;
 pub mod output;
-pub mod signal;
 pub mod properties;
+pub mod scene;
+pub mod signal;
+pub mod source;
 pub mod video;
-pub mod audio;

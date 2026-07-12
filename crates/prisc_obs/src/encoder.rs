@@ -9,7 +9,11 @@ pub struct ObsEncoder {
 }
 
 impl ObsEncoder {
-    pub fn create_video(id: &str, name: &str, settings: Option<&ObsData>) -> Result<Self, ObsError> {
+    pub fn create_video(
+        id: &str,
+        name: &str,
+        settings: Option<&ObsData>,
+    ) -> Result<Self, ObsError> {
         let id_c = CString::new(id).unwrap();
         let name_c = CString::new(name).unwrap();
         let settings_ptr = settings.map_or(ptr::null_mut(), |s| s.ptr);
@@ -51,10 +55,13 @@ impl ObsEncoder {
         Ok(Self { ptr })
     }
 
+    // The raw pointer is passed straight to libobs, never dereferenced here.
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn set_video(&self, video: *mut obs_sys::video_t) {
         unsafe { obs_sys::obs_encoder_set_video(self.ptr, video) };
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn set_audio(&self, audio: *mut obs_sys::audio_t) {
         unsafe { obs_sys::obs_encoder_set_audio(self.ptr, audio) };
     }

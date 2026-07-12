@@ -1,11 +1,19 @@
-#[derive(Debug, Clone)]
-pub struct MonitorInfo {
-    pub id: u32,
-    pub uuid: String,
-    pub width: u32,
-    pub height: u32,
-    pub is_primary: bool,
-}
+//! macOS platform implementation (DESIGN §2.2). Compile-guarded and untested
+//! on this machine; ports the pre-refactor CoreGraphics logic behind the new
+//! platform signatures. Monitor bounds are CG points (§1.1 capture space).
+
+use std::env;
+use std::ffi::CStr;
+use std::path::Path;
+
+use obs::data::ObsData;
+
+use super::{MonitorInfo, ObsPaths};
+
+pub const GRAPHICS_MODULE: &CStr = c"libobs-metal.dylib";
+pub const DISPLAY_CAPTURE_ID: &str = "screen_capture";
+pub const AUDIO_OUTPUT_CAPTURE_ID: &str = "coreaudio_output_capture";
+pub const AUDIO_INPUT_CAPTURE_ID: &str = "coreaudio_input_capture";
 
 extern "C" {
     fn CGGetActiveDisplayList(
@@ -16,7 +24,10 @@ extern "C" {
     fn CGDisplayBounds(display: u32) -> CGRect;
     fn CGMainDisplayID() -> u32;
     fn CGDisplayCreateUUIDFromDisplayID(display: u32) -> *const std::ffi::c_void;
-    fn CFUUIDCreateString(allocator: *const std::ffi::c_void, uuid: *const std::ffi::c_void) -> *const std::ffi::c_void;
+    fn CFUUIDCreateString(
+        allocator: *const std::ffi::c_void,
+        uuid: *const std::ffi::c_void,
+    ) -> *const std::ffi::c_void;
     fn CFRelease(cf: *const std::ffi::c_void);
 }
 
@@ -46,9 +57,9 @@ fn cfstring_to_string(cfstr: *const std::ffi::c_void) -> String {
         return String::new();
     }
     extern "C" {
-        fn CFStringGetLength(theString: *const std::ffi::c_void) -> isize;
+        fn CFStringGetLength(the_string: *const std::ffi::c_void) -> isize;
         fn CFStringGetCString(
-            theString: *const std::ffi::c_void,
+            the_string: *const std::ffi::c_void,
             buffer: *mut u8,
             buffer_size: isize,
             encoding: u32,
@@ -59,13 +70,16 @@ fn cfstring_to_string(cfstr: *const std::ffi::c_void) -> String {
         let mut buf = vec![0u8; (len as usize + 1) * 4];
         let ok = CFStringGetCString(cfstr, buf.as_mut_ptr(), buf.len() as isize, 0x08000100); // kCFStringEncodingUTF8
         if ok {
-            let s = std::ffi::CStr::from_ptr(buf.as_ptr() as *const _);
+            let s = CStr::from_ptr(buf.as_ptr() as *const _);
             s.to_string_lossy().into_owned()
         } else {
             String::new()
         }
     }
 }
+
+/// No-op on macOS.
+pub fn init_process() {}
 
 pub fn enumerate_monitors() -> Vec<MonitorInfo> {
     let mut monitors = Vec::new();
@@ -79,11 +93,10 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
 
     let main_display = unsafe { CGMainDisplayID() };
 
-    for i in 0..count as usize {
-        let id = display_ids[i];
-        let bounds = unsafe { CGDisplayBounds(id) };
+    for &display_id in display_ids.iter().take(count as usize) {
+        let bounds = unsafe { CGDisplayBounds(display_id) };
 
-        let uuid_ref = unsafe { CGDisplayCreateUUIDFromDisplayID(id) };
+        let uuid_ref = unsafe { CGDisplayCreateUUIDFromDisplayID(display_id) };
         let uuid = if !uuid_ref.is_null() {
             let cfstr = unsafe { CFUUIDCreateString(std::ptr::null(), uuid_ref) };
             let s = cfstring_to_string(cfstr);
@@ -93,33 +106,54 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
             unsafe { CFRelease(uuid_ref) };
             s
         } else {
-            format!("{id}")
+            format!("{display_id}")
         };
 
         monitors.push(MonitorInfo {
-            id,
-            uuid,
+            id: uuid,
+            alt_id: Some(display_id.to_string()),
+            x: bounds.origin.x as i32,
+            y: bounds.origin.y as i32,
             width: bounds.size.width as u32,
             height: bounds.size.height as u32,
-            is_primary: id == main_display,
+            is_primary: display_id == main_display,
         });
     }
 
     monitors
 }
 
-pub fn get_primary_monitor() -> Option<MonitorInfo> {
-    enumerate_monitors().into_iter().find(|m| m.is_primary)
+pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
+    super::match_monitor(id, &enumerate_monitors())
 }
 
-pub fn find_monitor(id_str: &str) -> Option<MonitorInfo> {
-    let monitors = enumerate_monitors();
-    // Try matching by UUID first, then by numeric ID
-    monitors.iter().find(|m| m.uuid == id_str)
-        .or_else(|| {
-            let id: u32 = id_str.parse().ok()?;
-            monitors.iter().find(|m| m.id == id)
-        })
-        .cloned()
+pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
+    let settings = ObsData::new();
+    settings.set_int("type", 0);
+    settings.set_string("display_uuid", &m.id);
+    settings.set_bool("show_cursor", show_cursor);
+    settings
 }
 
+pub fn default_obs_paths(_exe_dir: &Path) -> ObsPaths {
+    // Base plugin dir: env override, else the path baked in by build.rs
+    // (kept as the mac fallback only — §2.4).
+    let base = env::var("OBS_PLUGIN_PATH").unwrap_or_else(|_| env!("OBS_PLUGIN_DIR").to_string());
+    let module_bin = format!("{base}/%module%/RelWithDebInfo/%module%.plugin/Contents/MacOS");
+    let module_data = match env::var("OBS_PLUGIN_DATA_PATH") {
+        Ok(v) => format!("{v}/%module%"),
+        Err(_) => format!("{base}/%module%/RelWithDebInfo/%module%.plugin/Contents/Resources"),
+    };
+    // libobs core data is framework-embedded on macOS; only an explicit
+    // override registers an extra data path.
+    let libobs_data = env::var("OBS_DATA_PATH").ok().map(std::path::PathBuf::from);
+    ObsPaths {
+        module_bin,
+        module_data,
+        libobs_data,
+    }
+}
+
+pub fn exit_process(code: i32) -> ! {
+    unsafe { libc::_exit(code) }
+}
