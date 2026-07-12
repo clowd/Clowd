@@ -94,6 +94,32 @@ namespace Clowd
             set => Set(value);
         }
 
+        // null/empty for capture/editor sessions; for upload-only sessions (clipboard / file / tray
+        // uploads that have no editor) one of "image", "video", "text", "file".
+        public string ContentKind
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+
+        [JsonIgnore] public bool IsUploadOnly => !String.IsNullOrEmpty(ContentKind);
+
+        // set for video ("video") sessions; the playable recording file (video.mp4).
+        public string VideoPath
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+
+        // recorded duration in milliseconds (from the last obs-express status line).
+        public long DurationMs
+        {
+            get => Get<long>();
+            set => Set(value);
+        }
+
+        [JsonIgnore] public bool IsVideo => String.Equals(ContentKind, "video", StringComparison.OrdinalIgnoreCase);
+
         public string UploadFileKey
         {
             get => Get<string>();

@@ -219,6 +219,16 @@ namespace Clowd
             };
             menu.Add(capture);
 
+            var record = new NativeMenuItem("Start / Stop Recording");
+            ApplyGesture(record, SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut);
+            record.Click += async (s, e) =>
+            {
+                // wait long enough for the menu to disappear (matches WPF).
+                await Task.Delay(400);
+                ToggleRecording();
+            };
+            menu.Add(record);
+
             var colorp = new NativeMenuItem("Color Picker");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
             menu.Add(colorp);
@@ -258,9 +268,20 @@ namespace Clowd
             menu.Add(exit);
         }
 
-        public void StartCapture(PlatformUtil.ScreenRect region = null)
+        public void StartCapture(CaptureMode mode = CaptureMode.Region, bool video = false)
         {
-            PageManager.Current.GetScreenCapturePage().Open(region);
+            PageManager.Current.GetScreenCapturePage().Open(mode, video);
+        }
+
+        /// <summary>The Start/Stop Recording hotkey and tray action (DESIGN §4.3): toggles the
+        /// active recording session, or launches the capture overlay in video mode to pick a
+        /// recording region. Toggle() during the WAIT state is a no-op (§4.2).</summary>
+        public void ToggleRecording()
+        {
+            if (VideoCapturePage.ActiveInstance is { } page)
+                page.Toggle();
+            else
+                StartCapture(CaptureMode.Region, video: true);
         }
 
         private void ApplyTheme()
@@ -284,15 +305,13 @@ namespace Clowd
         {
             _hotkeys = new HotkeyManager(new GlobalHotkeyHost(), SettingsRoot.Current.Hotkeys);
 
-            // capture is provided by the separate Rust process; recording is not ported yet, so its
-            // hotkey routes to a NiceDialog notice.
+            // capture and the recording region picker are provided by the separate Rust process.
             _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
             _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
-            _hotkeys.SetAction(HotkeyId.CaptureRegion, () => StartCapture());
-            _hotkeys.SetAction(HotkeyId.CaptureFullscreen, () => StartCapture());
-            _hotkeys.SetAction(HotkeyId.CaptureActive, () => StartCapture());
-            _hotkeys.SetAction(HotkeyId.StartStopRecording, () => NiceDialog.ShowNoticeAsync(
-                null, NiceDialogIcon.Information, "Screen recording is not available in this build.", "Recording unavailable"));
+            _hotkeys.SetAction(HotkeyId.CaptureRegion, () => StartCapture(CaptureMode.Region));
+            _hotkeys.SetAction(HotkeyId.CaptureFullscreen, () => StartCapture(CaptureMode.Screen));
+            _hotkeys.SetAction(HotkeyId.CaptureActive, () => StartCapture(CaptureMode.Window));
+            _hotkeys.SetAction(HotkeyId.StartStopRecording, ToggleRecording);
 
             HotkeyManager.Current = _hotkeys;
         }
@@ -326,11 +345,25 @@ namespace Clowd
             }
         }
 
-        public void ExitApp()
+        public async void ExitApp()
         {
             if (_exiting)
                 return;
             _exiting = true;
+
+            // finish/cancel an active recording FIRST (bounded by the capturer's stop timeout):
+            // exiting mid-recording otherwise flushes a valid video.mp4 via stdin EOF but never
+            // writes session.json — the recording would be invisible in Recents and its
+            // directory would leak forever.
+            try
+            {
+                if (VideoCapturePage.ActiveInstance is { } recording)
+                    await recording.ShutdownAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error finishing recording during exit: " + ex);
+            }
 
             // close all open windows first so per-window persistence runs before the process dies
             // (EditorWindow.Closing renders the session preview and clears OpenEditor, §5.7).
@@ -359,6 +392,16 @@ namespace Clowd
             // OS session ending / explicit lifetime shutdown — close editor windows so their
             // Closing persistence runs (§5.7), persist settings, release the single-instance
             // pipe, and let the shutdown proceed.
+
+            // best-effort only (cannot await here without holding up the OS): the mp4 itself is
+            // flushed by obs-express on stdin EOF regardless (§1.2); this races to also register
+            // the session so the recording shows up in Recents on the next launch.
+            try
+            {
+                _ = VideoCapturePage.ActiveInstance?.ShutdownAsync();
+            }
+            catch { }
+
             CloseAllWindows();
 
             ShutdownGlobalHotkeys();
@@ -412,14 +455,14 @@ namespace Clowd
                 var (bitmap, _) = await ClipboardImpl.GetClipboardCanvasData(clipboard);
                 if (bitmap != null)
                 {
-                    await UploadManager.UploadImage(bitmap, "Clipboard Image");
+                    await UploadManager.UploadImage(bitmap, "Clipboard Upload");
                     return;
                 }
 
                 var text = clipboard != null ? await clipboard.TryGetTextAsync() : null;
                 if (!String.IsNullOrEmpty(text))
                 {
-                    await UploadManager.UploadText(text, "Clipboard Text");
+                    await UploadManager.UploadText(text, "Clipboard Upload");
                     return;
                 }
             }

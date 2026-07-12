@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -44,6 +45,10 @@ namespace Clowd.UI
 
         private DispatcherTimer _sessionInfoDebounce;
         private readonly bool _openedEmpty; // no graphics on the canvas when the window opened (see Closing)
+
+        // the ActiveUpload currently forwarding its Progress into btnUpload's ring, or null. Tracked
+        // separately from _session.ActiveUpload so we can detach its PropertyChanged on swap/close.
+        private ActiveUpload _trackedUpload;
 
         // graphics.json/history.json persistence is latest-wins on a background thread (see StateUpdated handler)
         private byte[] _pendingGraphicsJson;
@@ -167,6 +172,46 @@ namespace Clowd.UI
             ApplySidebarVisible(_settings.Editor.SidebarVisible);
             RebuildToolStrip();
             RebuildCustomizePopup();
+
+            // reflect the session's in-flight upload (if any) on the upload button's ring, and keep
+            // it in sync as uploads start/finish. Handles a window opened onto an already-active upload.
+            _session.PropertyChanged += Session_PropertyChanged;
+            SyncUploadProgress();
+        }
+
+        private void Session_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SessionInfo.ActiveUpload))
+                SyncUploadProgress();
+        }
+
+        /// <summary>Points btnUpload's ring at the session's current ActiveUpload: subscribes to the
+        /// new upload's Progress (or clears the ring when there is none), detaching any previous one.</summary>
+        private void SyncUploadProgress()
+        {
+            var upload = _session?.ActiveUpload;
+            if (ReferenceEquals(upload, _trackedUpload))
+                return;
+
+            if (_trackedUpload != null)
+                _trackedUpload.PropertyChanged -= ActiveUpload_PropertyChanged;
+
+            _trackedUpload = upload;
+
+            if (upload != null) {
+                upload.PropertyChanged += ActiveUpload_PropertyChanged;
+                btnUpload.Progress = upload.Progress;
+                btnUpload.ShowProgress = true;
+            } else {
+                btnUpload.ShowProgress = false;
+                btnUpload.Progress = 0;
+            }
+        }
+
+        private void ActiveUpload_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(ActiveUpload.Progress))
+                btnUpload.Progress = ((ActiveUpload) sender).Progress;
         }
 
         private void ScheduleUpdateSessionInfo()
@@ -222,6 +267,14 @@ namespace Clowd.UI
         {
             _sessionInfoDebounce?.Stop();
 
+            // detach upload-progress handlers while _session is still alive (it is nulled below).
+            if (_session != null)
+                _session.PropertyChanged -= Session_PropertyChanged;
+            if (_trackedUpload != null) {
+                _trackedUpload.PropertyChanged -= ActiveUpload_PropertyChanged;
+                _trackedUpload = null;
+            }
+
             // an in-place text edit commits on focus loss (ToolText.FinishEdit); force that now,
             // while _session is still alive: FlushPendingState defers while an edit is active, and
             // a commit raised after this handler (window Deactivated fires post-close) is dropped
@@ -245,8 +298,9 @@ namespace Clowd.UI
             // a session that opened blank and is still blank holds nothing worth keeping —
             // delete it (session dir included) so it never lingers in the recent sessions list.
             // Checked after the flushes above so a pending text edit / debounced state can't be
-            // mistaken for an empty canvas.
-            if (_openedEmpty && drawingCanvas.GraphicsList.Count == 0) {
+            // mistaken for an empty canvas. Upload-only sessions (clipboard/file uploads) render
+            // blank in the editor but own real upload content, so they are never discarded here.
+            if (_openedEmpty && drawingCanvas.GraphicsList.Count == 0 && !_session.IsUploadOnly) {
                 var session = _session;
                 _session = null;
                 session.OpenEditor = null; // DeleteSession refuses sessions marked open in an editor
@@ -368,6 +422,17 @@ namespace Clowd.UI
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
                 return desktop.Windows.OfType<EditorWindow>();
             return Enumerable.Empty<EditorWindow>();
+        }
+
+        /// <summary>The session this editor is displaying (null once the window has closed).</summary>
+        public SessionInfo Session => _session;
+
+        /// <summary>The open editor window showing <paramref name="session"/>, or null if none is.</summary>
+        public static EditorWindow FindWindowForSession(SessionInfo session)
+        {
+            if (session == null)
+                return null;
+            return GetOpenEditors().FirstOrDefault(w => ReferenceEquals(w._session, session));
         }
 
         private void SetWindowRect(PixelRect rect)
@@ -1009,6 +1074,7 @@ namespace Clowd.UI
                 SettingsService.Save(_settings); // settings no longer auto-save on PropertyChanged
                 if (_settings.Capture.OpenSavedInExplorer)
                     RevealFileOrFolder(savedPath);
+                Toast.Show(this, "Image Saved");
             }
         }
 
@@ -1031,6 +1097,7 @@ namespace Clowd.UI
             var graphics = drawingCanvas.GraphicsList.GetGraphicList(drawingCanvas.SelectedCount > 0);
             var bytes = GraphicsSerializer.SerializeToUtf8Bytes(graphics);
             await ClipboardImpl.SetClipboardCanvasData(Clipboard, bitmap, bytes);
+            Toast.Show(this, "Copied to Clipboard");
         }
 
         private async void CutCommandExecuted(object parameter)
@@ -1093,6 +1160,9 @@ namespace Clowd.UI
 
         private async void UploadCommandImpl(IUploadProvider provider = null)
         {
+            if (_session.ActiveUpload != null)
+                return; // one active upload per document
+
             if (!VerifyArtworkExists())
                 return;
 
@@ -1110,6 +1180,9 @@ namespace Clowd.UI
                 return;
 
             e.Handled = true;
+
+            if (_session.ActiveUpload != null)
+                return; // one active upload per document
 
             if (!VerifyArtworkExists())
                 return;

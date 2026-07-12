@@ -15,9 +15,23 @@ namespace Clowd
         SettingsGeneral,
         SettingsHotkeys,
         SettingsCapture,
+        SettingsRecording,
         SettingsEditor,
         SettingsUploads,
         About,
+    }
+
+    /// <summary>
+    /// Which capture the user asked for, chosen by the hotkey / menu that fired.
+    /// Maps to the Rust capturer's <c>--capture-mode</c> flag: <see cref="Region"/>
+    /// opens free selection, while <see cref="Screen"/> and <see cref="Window"/>
+    /// pre-select the active monitor / foreground window for confirmation.
+    /// </summary>
+    public enum CaptureMode
+    {
+        Region,
+        Screen,
+        Window,
     }
 
     public interface IPage
@@ -33,7 +47,12 @@ namespace Clowd
 
     public interface IScreenCapturePage : IPage
     {
-        void Open(ScreenRect captureArea);
+        void Open(CaptureMode mode, bool video = false);
+    }
+
+    public interface IVideoCapturePage : IPage
+    {
+        void Open(ScreenRect region, string sessionDir);
     }
 }
 
@@ -65,6 +84,12 @@ namespace Clowd.UI
             // backed by the external Rust capture process (CAPTURE_PROTOCOL.md); the page
             // itself guards against concurrent captures, so a fresh instance per call is fine.
             return new ScreenCapturePage();
+        }
+
+        public IVideoCapturePage GetVideoCapturePage()
+        {
+            // self-guarding via VideoCapturePage.ActiveInstance, same rationale as screenshots.
+            return new VideoCapturePage();
         }
 
         private T GetOrCreate<T>(Action closing = null) where T : IPage

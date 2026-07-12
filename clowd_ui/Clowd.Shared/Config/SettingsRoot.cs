@@ -22,6 +22,8 @@ namespace Clowd.Config
 
         public SettingsCapture Capture { get; set; } = new SettingsCapture();
 
+        public SettingsRecording Recording { get; set; } = new SettingsRecording();
+
         public SettingsEditor Editor { get; set; } = new SettingsEditor();
 
         public SettingsUpload Uploads { get; set; } = new SettingsUpload();

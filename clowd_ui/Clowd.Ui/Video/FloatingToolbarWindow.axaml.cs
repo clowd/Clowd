@@ -1,0 +1,444 @@
+using System;
+using System.Diagnostics;
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Threading;
+using Clowd.Config;
+using Clowd.PlatformUtil;
+using Clowd.UI.Helpers;
+
+namespace Clowd.UI
+{
+    /// <summary>
+    /// The floating recording toolbar. Behavior ports the WPF FloatingButtonWindow +
+    /// VideoCaptureWindow button strip (drag handle rotates on click / moves on drag with a 5px
+    /// threshold, manual interaction disables auto-placement, below → right → left → inside
+    /// placement cascade, live audio level bars on MIC/SPK); visuals match the wgpu capture
+    /// overlay's button panel (clowd_capture_wgpu ui/gpu/panel.rs — Cascadia Code labels,
+    /// canvas-fitted icons, transparent gaps; see CaptureToolButton.axaml for the mapping).
+    /// Deliberately decoupled from VideoCapturePage — it only raises events and persists
+    /// the mic/speaker toggles; the page wires the events and drives state via the Set* methods.
+    /// On Windows WS_EX_NOACTIVATE keeps button clicks from stealing focus from the recorded app;
+    /// on macOS a plain Avalonia window still activates the app on click (deferred, risk §6.11).
+    /// </summary>
+    public partial class FloatingToolbarWindow : Window
+    {
+        public event EventHandler StartClicked;
+        public event EventHandler FinishClicked;
+        public event EventHandler CancelClicked;
+        public event EventHandler SettingsClicked;
+        public event EventHandler<bool> MicToggled;
+        public event EventHandler<bool> SpeakerToggled;
+
+        private readonly DispatcherTimer _saveDebounce;
+        private readonly DispatcherTimer _meterTimer;
+        private ScreenRect _region;
+        private bool _micEnabled;
+        private bool _spkEnabled;
+        private bool _hasStatusText;
+
+        // drag handle state machine (WPF FloatingButtonWindow.SetupDragHandle)
+        private bool _manuallyPositioned;
+        private bool _mouseDown;
+        private bool _dragging;
+        private PixelPoint _mouseDownPt;
+        private PixelPoint _initialPos;
+
+        // audio level meters (WPF VideoCaptureWindow.RefreshListeners / GetLevelVisual)
+        private IAudioLevelListener _micLevel;
+        private IAudioLevelListener _spkLevel;
+        private Control _micBar, _spkBar;
+        private Rectangle _micFill, _spkFill;
+
+        public FloatingToolbarWindow()
+        {
+            InitializeComponent();
+
+            // gray panel backdrop (#373737) comes from RootBorder's XAML background;
+            // buttons are transparent (accent when Primary) so the panel shows through.
+
+            // never steal focus from the app being recorded; no taskbar/alt-tab entry
+            WindowNativeExtensions.AddExStyles(this, WindowNativeExtensions.WS_EX_NOACTIVATE | WindowNativeExtensions.WS_EX_TOOLWINDOW);
+
+            // park off-screen until the placement pass runs so the strip never flashes at the
+            // OS-default window position
+            Position = new PixelPoint(-32000, -32000);
+
+            // tunnel: Button's class handler marks bubbling pointer events handled, so plain
+            // XAML subscriptions on the drag button would never fire.
+            BtnDrag.AddHandler(PointerPressedEvent, DragHandlePressed, RoutingStrategies.Tunnel);
+            BtnDrag.AddHandler(PointerMovedEvent, DragHandleMoved, RoutingStrategies.Tunnel);
+            BtnDrag.AddHandler(PointerReleasedEvent, DragHandleReleased, RoutingStrategies.Tunnel);
+
+            // nothing in the settings graph saves itself, and the Recording page's auto-save only
+            // attaches when that page is opened — the toolbar persists its own toggles (debounced).
+            _saveDebounce = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _saveDebounce.Tick += (s, e) =>
+            {
+                _saveDebounce.Stop();
+                SaveSettings();
+            };
+
+            var recording = SettingsRoot.Current.Recording;
+            _micEnabled = recording.CaptureMicrophone;
+            _spkEnabled = recording.CaptureSpeaker;
+            BtnMic.ShowAlternateIcon = _micEnabled;
+            BtnSpeaker.ShowAlternateIcon = _spkEnabled;
+
+            (_micBar, _micFill) = BuildMeterBar();
+            (_spkBar, _spkFill) = BuildMeterBar();
+            BtnMic.Overlay = _micBar;
+            BtnSpeaker.Overlay = _spkBar;
+
+            _meterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _meterTimer.Tick += (s, e) => UpdateMeters();
+
+            ScalingChanged += (s, e) => Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Sets the start button label ("WAIT…" → "START").</summary>
+        public void SetPrimaryText(string text)
+        {
+            BtnStart.Text = text;
+        }
+
+        /// <summary>Swaps START for FINISH while recording is rolling.</summary>
+        public void SetRecordingState(bool recording)
+        {
+            BtnStart.IsVisible = !recording;
+            BtnFinish.IsVisible = recording;
+
+            if (!recording)
+                _hasStatusText = false;
+        }
+
+        /// <summary>Sets the drag handle's status text (timer / FPS); null or empty restores
+        /// "DRAG ME" (which also remains until the first status arrives — WPF parity).</summary>
+        public void SetStatusText(string text)
+        {
+            _hasStatusText = !String.IsNullOrEmpty(text);
+            BtnDrag.Text = _hasStatusText ? text : "DRAG ME";
+        }
+
+        /// <summary>
+        /// Shows the toolbar placed via the original WPF cascade (centered below the region →
+        /// vertical right → vertical left → horizontally inside near its bottom), clamped to the
+        /// monitor bounds. The region is in physical px on Windows / CG points on macOS — the
+        /// same space Avalonia PixelPoint positioning uses.
+        /// </summary>
+        public void ShowNear(ScreenRect region)
+        {
+            _region = region;
+            _manuallyPositioned = false;
+
+            if (!IsVisible)
+                Show();
+
+            RefreshListeners();
+            _meterTimer.Start();
+
+            // position after the size-to-content layout pass so Bounds is real
+            Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            // flush a pending debounced save so a quick toggle-then-finish isn't lost
+            if (_saveDebounce.IsEnabled)
+            {
+                _saveDebounce.Stop();
+                SaveSettings();
+            }
+
+            _meterTimer.Stop();
+            _micLevel?.Dispose();
+            _micLevel = null;
+            _spkLevel?.Dispose();
+            _spkLevel = null;
+
+            base.OnClosed(e);
+        }
+
+        /// <summary>Port of FloatingButtonWindow_LayoutUpdated: all math in physical px on the
+        /// monitor containing the region's center, clamped to its FULL bounds (not the working
+        /// area — original behavior). Skipped once the user has dragged or rotated the strip.
+        /// The short/long-edge formulation is orientation-independent, so a single pass both
+        /// picks the orientation and computes the final position.</summary>
+        private void PositionNearRegion()
+        {
+            if (_region == null || !IsVisible || _manuallyPositioned)
+                return;
+
+            var scaling = RenderScaling;
+            var panelWidth = (int)Math.Ceiling(MainPanel.Bounds.Width * scaling);
+            var panelHeight = (int)Math.Ceiling(MainPanel.Bounds.Height * scaling);
+            if (panelWidth <= 0 || panelHeight <= 0)
+                return;
+
+            var screen = Screens.ScreenFromPoint(new PixelPoint(_region.Center.X, _region.Center.Y)) ?? Screens.Primary;
+            if (screen == null)
+                return;
+
+            var b = screen.Bounds;
+            var screenBounds = new ScreenRect(b.X, b.Y, b.Width, b.Height);
+
+            var selection = _region.Intersect(screenBounds);
+            if (selection.IsEmpty())
+                selection = _region;
+
+            var minDistance = (int)Math.Ceiling(2 * scaling);
+            var maxDistance = (int)Math.Ceiling(15 * scaling);
+
+            var bottomSpace = Math.Max(screenBounds.Bottom - selection.Bottom, 0) - minDistance;
+            var rightSpace = Math.Max(screenBounds.Right - selection.Right, 0) - minDistance;
+            var leftSpace = Math.Max(selection.Left - screenBounds.Left, 0) - minDistance;
+
+            var shortEdge = Math.Min(panelWidth, panelHeight);
+            var longEdge = Math.Max(panelWidth, panelHeight);
+
+            int indLeft, indTop;
+
+            if (bottomSpace >= shortEdge)
+            {
+                MainPanel.Orientation = Orientation.Horizontal;
+                indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
+                indTop = Math.Min(screenBounds.Bottom, selection.Bottom + maxDistance + shortEdge) - shortEdge;
+            }
+            else if (rightSpace >= shortEdge)
+            {
+                MainPanel.Orientation = Orientation.Vertical;
+                indLeft = Math.Min(screenBounds.Right, selection.Right + maxDistance + shortEdge) - shortEdge;
+                indTop = selection.Bottom - longEdge;
+            }
+            else if (leftSpace >= shortEdge)
+            {
+                MainPanel.Orientation = Orientation.Vertical;
+                indLeft = Math.Max(selection.Left - maxDistance - shortEdge, 0);
+                indTop = selection.Bottom - longEdge;
+            }
+            else // inside capture rect
+            {
+                MainPanel.Orientation = Orientation.Horizontal;
+                indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
+                indTop = selection.Bottom - shortEdge - maxDistance * 2;
+            }
+
+            var horizontalSize = MainPanel.Orientation == Orientation.Horizontal ? longEdge : shortEdge;
+
+            if (indLeft < screenBounds.Left)
+                indLeft = screenBounds.Left;
+            else if (indLeft + horizontalSize > screenBounds.Right)
+                indLeft = screenBounds.Right - horizontalSize;
+
+            Position = new PixelPoint(indLeft, indTop);
+        }
+
+        // -- drag handle: click rotates, drag past 5px (logical) moves; both count as manual --
+
+        private void DragHandlePressed(object sender, PointerPressedEventArgs e)
+        {
+            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+                return;
+
+            e.Pointer.Capture(BtnDrag);
+            _manuallyPositioned = true;
+            _mouseDown = true;
+            _dragging = false;
+            _mouseDownPt = this.PointToScreen(e.GetPosition(this));
+            _initialPos = Position;
+            e.Handled = true;
+        }
+
+        private void DragHandleMoved(object sender, PointerEventArgs e)
+        {
+            if (!_mouseDown)
+                return;
+
+            var pos = this.PointToScreen(e.GetPosition(this));
+            var deltaX = pos.X - _mouseDownPt.X;
+            var deltaY = pos.Y - _mouseDownPt.Y;
+
+            var dragDelta = 5 * RenderScaling;
+            if (Math.Abs(deltaX) > dragDelta || Math.Abs(deltaY) > dragDelta)
+                _dragging = true;
+
+            if (_dragging)
+                Position = new PixelPoint(_initialPos.X + deltaX, _initialPos.Y + deltaY);
+
+            e.Handled = true;
+        }
+
+        private void DragHandleReleased(object sender, PointerReleasedEventArgs e)
+        {
+            if (!_mouseDown)
+                return;
+
+            e.Pointer.Capture(null);
+            _mouseDown = false;
+
+            if (!_dragging)
+            {
+                // click without drag: rotate horizontal ⇄ vertical in place (top-left anchored;
+                // SizeToContent re-lays the strip out along the new axis)
+                MainPanel.Orientation = MainPanel.Orientation == Orientation.Horizontal
+                    ? Orientation.Vertical
+                    : Orientation.Horizontal;
+            }
+
+            _dragging = false;
+            e.Handled = true;
+        }
+
+        // -- buttons --
+
+        private void StartButtonClicked(object sender, RoutedEventArgs e)
+        {
+            StartClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void FinishButtonClicked(object sender, RoutedEventArgs e)
+        {
+            FinishClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void SettingsButtonClicked(object sender, RoutedEventArgs e)
+        {
+            SettingsClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void CancelButtonClicked(object sender, RoutedEventArgs e)
+        {
+            CancelClicked?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void MicClicked(object sender, RoutedEventArgs e)
+        {
+            _micEnabled = !_micEnabled;
+            BtnMic.ShowAlternateIcon = _micEnabled;
+            SettingsRoot.Current.Recording.CaptureMicrophone = _micEnabled;
+            QueueSettingsSave();
+            RefreshListeners();
+            MicToggled?.Invoke(this, _micEnabled);
+        }
+
+        private void SpeakerClicked(object sender, RoutedEventArgs e)
+        {
+            _spkEnabled = !_spkEnabled;
+            BtnSpeaker.ShowAlternateIcon = _spkEnabled;
+            SettingsRoot.Current.Recording.CaptureSpeaker = _spkEnabled;
+            QueueSettingsSave();
+            RefreshListeners();
+            SpeakerToggled?.Invoke(this, _spkEnabled);
+        }
+
+        // -- audio level meters (visible only while that source is enabled, WPF parity) --
+
+        /// <summary>The WPF AudioLevelProgressBarStyle: a 2px vertical bar on the button's left
+        /// edge — white 0.6-opacity track, accent fill growing bottom-up.</summary>
+        private static (Control bar, Rectangle fill) BuildMeterBar()
+        {
+            var track = new Rectangle { Fill = Brushes.White, Opacity = 0.6 };
+            var fill = new Rectangle
+            {
+                Fill = AppStyles.AccentBackgroundBrush,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Height = 0,
+            };
+
+            var bar = new Grid
+            {
+                Width = 2,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Margin = new Thickness(3, 6),
+                IsHitTestVisible = false,
+                IsVisible = false,
+            };
+            bar.Children.Add(track);
+            bar.Children.Add(fill);
+            return (bar, fill);
+        }
+
+        /// <summary>Mirrors WPF RefreshListeners: a listener exists only while the toolbar is
+        /// open AND that source's toggle is enabled; recreated when the device setting changes.
+        /// A dead meter on a live toggle is the user's signal the picked device is wrong.</summary>
+        private void RefreshListeners()
+        {
+            var recording = SettingsRoot.Current.Recording;
+
+            if (!_micEnabled)
+            {
+                _micLevel?.Dispose();
+                _micLevel = null;
+            }
+            else
+            {
+                var device = AudioDeviceManager.VerifyMicrophoneOrDefault(recording.MicrophoneDeviceId);
+                if (_micLevel == null || _micLevel.DeviceId != device)
+                {
+                    _micLevel?.Dispose();
+                    _micLevel = AudioDeviceManager.CreateLevelListener(device, AudioDeviceManager.TypeMicrophone);
+                }
+            }
+
+            if (!_spkEnabled)
+            {
+                _spkLevel?.Dispose();
+                _spkLevel = null;
+            }
+            else
+            {
+                var device = AudioDeviceManager.VerifySpeakerOrDefault(recording.SpeakerDeviceId);
+                if (_spkLevel == null || _spkLevel.DeviceId != device)
+                {
+                    _spkLevel?.Dispose();
+                    _spkLevel = AudioDeviceManager.CreateLevelListener(device, AudioDeviceManager.TypeSpeaker);
+                }
+            }
+
+            _micBar.IsVisible = _micLevel is { IsSupported: true };
+            _spkBar.IsVisible = _spkLevel is { IsSupported: true };
+        }
+
+        private void UpdateMeters()
+        {
+            UpdateMeter(_micBar, _micFill, _micLevel);
+            UpdateMeter(_spkBar, _spkFill, _spkLevel);
+        }
+
+        private static void UpdateMeter(Control bar, Rectangle fill, IAudioLevelListener listener)
+        {
+            if (listener == null || !bar.IsVisible)
+                return;
+
+            var trackHeight = bar.Bounds.Height;
+            if (trackHeight <= 0)
+                return;
+
+            fill.Height = Math.Clamp(listener.PeakLevel / 100d, 0d, 1d) * trackHeight;
+        }
+
+        private void QueueSettingsSave()
+        {
+            _saveDebounce.Stop();
+            _saveDebounce.Start();
+        }
+
+        private void SaveSettings()
+        {
+            try
+            {
+                SettingsService.Save(SettingsRoot.Current);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to save recording toggle settings: " + ex.Message);
+            }
+        }
+    }
+}

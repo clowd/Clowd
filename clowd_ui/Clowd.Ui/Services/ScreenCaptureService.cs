@@ -80,14 +80,11 @@ namespace Clowd.UI
         // one capture process at a time, across all page instances.
         private static int _captureActive;
 
-        public async void Open(ScreenRect captureArea)
+        public async void Open(CaptureMode mode, bool video = false)
         {
-            // the protocol has no region/fullscreen hint — the capturer always starts with
-            // free region selection, so captureArea is intentionally ignored.
             if (!Dispatcher.UIThread.CheckAccess())
             {
-                var area = captureArea;
-                Dispatcher.UIThread.Post(() => Open(area));
+                Dispatcher.UIThread.Post(() => Open(mode, video));
                 return;
             }
 
@@ -120,7 +117,7 @@ namespace Clowd.UI
                     UseShellExecute = false,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                foreach (var arg in CaptureArguments.Build(sessionDir, AppStyles.AccentColor, SettingsRoot.Current.Capture))
+                foreach (var arg in CaptureArguments.Build(sessionDir, AppStyles.AccentColor, SettingsRoot.Current.Capture, mode, video))
                     psi.ArgumentList.Add(arg);
 
                 using var process = Process.Start(psi);
@@ -140,6 +137,12 @@ namespace Clowd.UI
                         break;
                     case CaptureAction.SelectColor:
                         NiceDialog.ShowColorViewer(result.Color);
+                        break;
+                    case CaptureAction.Video:
+                        // the capture-active interlock is released in `finally` before the video
+                        // page runs its own lifetime — correct: the screenshot overlay is done and
+                        // VideoCapturePage has its own single-instance guard.
+                        PageManager.Current.GetVideoCapturePage().Open(result.Region, result.SessionDir);
                         break;
                 }
             }
@@ -170,13 +173,22 @@ namespace Clowd.UI
     /// </summary>
     public static class CaptureArguments
     {
-        public static IReadOnlyList<string> Build(string sessionDir, Color accent, SettingsCapture settings)
+        public static IReadOnlyList<string> Build(string sessionDir, Color accent, SettingsCapture settings, CaptureMode mode,
+                                                  bool video = false)
         {
             var args = new List<string>
             {
                 "--session-dir", sessionDir,
                 "--accent-color", $"#{accent.R:X2}{accent.G:X2}{accent.B:X2}",
             };
+
+            // Region is the capturer's default (free selection) and is left implicit;
+            // Screen / Window pre-select the active monitor / foreground window.
+            if (mode != CaptureMode.Region)
+            {
+                args.Add("--capture-mode");
+                args.Add(mode.ToString().ToLowerInvariant());
+            }
 
             if (settings.TipsMode != CapturerTipsMode.Hints)
             {
@@ -197,6 +209,11 @@ namespace Clowd.UI
             if (!settings.ScreenshotWithCursor)
                 args.Add("--no-cursor");
 
+            // the overlay was launched specifically to pick a recording region: a confirmed
+            // selection immediately dispatches the video action (DESIGN §3.1).
+            if (video)
+                args.Add("--video");
+
             return args;
         }
     }
@@ -208,15 +225,19 @@ namespace Clowd.UI
         Edit,
         Upload,
         SelectColor,
+        Video,
     }
 
     /// <summary>A finished, non-cancelled capture. <see cref="Session"/> is set for
-    /// Edit/Upload; <see cref="Color"/> for SelectColor.</summary>
+    /// Edit/Upload; <see cref="Color"/> for SelectColor; <see cref="Region"/> and
+    /// <see cref="SessionDir"/> for Video.</summary>
     public sealed class CaptureResult
     {
         public CaptureAction Action { get; init; }
         public SessionInfo Session { get; init; }
         public Color? Color { get; init; }
+        public ScreenRect Region { get; init; }
+        public string SessionDir { get; init; }
     }
 
     /// <summary>
@@ -266,6 +287,32 @@ namespace Clowd.UI
                 return null;
             }
 
+            // a "video x,y,w,h" marker means the overlay confirmed a recording region: the dir
+            // holds cropped.png (the poster frame, DESIGN §4.1) and must NOT be deleted — only
+            // the consumed action.txt marker is removed (§4.3).
+            const string videoPrefix = "video";
+            if (action != null && action.StartsWith(videoPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var region = ParseRegion(action.Substring(videoPrefix.Length).Trim());
+                if (region != null)
+                {
+                    try
+                    {
+                        File.Delete(Path.Combine(sessionDir, "action.txt"));
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("Failed to delete video action file: " + ex);
+                    }
+
+                    return new CaptureResult { Action = CaptureAction.Video, Region = region, SessionDir = sessionDir };
+                }
+
+                Debug.WriteLine("Unparseable video action: " + action);
+                DeleteSessionDir(sessionDir);
+                return null;
+            }
+
             // no session payload — either a color pick or a cancelled capture; in both cases
             // the pre-created directory has nothing worth keeping.
             DeleteSessionDir(sessionDir);
@@ -281,6 +328,31 @@ namespace Clowd.UI
             }
 
             return null;
+        }
+
+        /// <summary>Parses the "x,y,w,h" rect of a video action (invariant ints, x/y may be
+        /// negative in virtual-desktop space). Returns null when unparseable.</summary>
+        private static ScreenRect ParseRegion(string rect)
+        {
+            var parts = rect.Split(',');
+            if (parts.Length != 4)
+                return null;
+
+            var nums = new int[4];
+            for (int i = 0; i < 4; i++)
+            {
+                if (!Int32.TryParse(parts[i].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out nums[i]))
+                    return null;
+            }
+
+            // obs-express requires W,H >= 2 (--region validation, exit 2 — DESIGN §1.1): reject
+            // degenerate rects here so an out-of-contract selection is discarded like any other
+            // unparseable action instead of surfacing as a process-exit error dialog. The overlay
+            // also clamps at the source; this is defense-in-depth.
+            if (nums[2] < 2 || nums[3] < 2)
+                return null;
+
+            return new ScreenRect(nums[0], nums[1], nums[2], nums[3]);
         }
 
         private static void DeleteSessionDir(string sessionDir)

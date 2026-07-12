@@ -8,26 +8,25 @@
     <UserControl.Resources>
         <local:ImagePathToBitmapConverter x:Key="ConvCacheImage" />
         <local:UiDateTimeConverter x:Key="ConvUiDateTime" />
+        <local:ContentKindToIconConverter x:Key="ConvContentKindIcon" />
 
-        <!-- one finished upload: link + date + copy/delete, shared by the standalone list and session rows -->
+        <!-- one finished upload: link (click copies) + launch/delete, shared by the standalone list and session rows -->
         <DataTemplate x:Key="UploadRecordTemplate" DataType="clowd:UploadRecord">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <HyperlinkButton Padding="0"
+                                 MinHeight="0"
                                  MaxWidth="360"
                                  VerticalAlignment="Center"
-                                 NavigateUri="{Binding Url}"
-                                 ToolTip.Tip="{Binding Url}">
+                                 Click="CopyUrlClicked"
+                                 ToolTip.Tip="{Binding Url, StringFormat='Copy \'{0}\''}">
                     <TextBlock Text="{Binding Url}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                 </HyperlinkButton>
-                <TextBlock VerticalAlignment="Center"
-                           Opacity="0.6"
-                           Text="{Binding UploadedUtc, Converter={StaticResource ConvUiDateTime}}" />
                 <Button Classes="rowActionSmall"
-                        Click="CopyUrlClicked"
-                        ToolTip.Tip="Copy link"
-                        AutomationProperties.Name="Copy link">
+                        Click="OpenUrlClicked"
+                        ToolTip.Tip="Open in browser"
+                        AutomationProperties.Name="Open in browser">
                     <Viewbox>
-                        <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
+                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
                     </Viewbox>
                 </Button>
                 <Button Classes="rowActionSmall"
@@ -88,8 +87,12 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="5" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
             <Setter Property="Width" Value="28" />
             <Setter Property="Height" Value="28" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="Button.rowAction:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
@@ -98,9 +101,13 @@
         <Style Selector="Button.rowActionSmall">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="3" />
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
+            <Setter Property="Padding" Value="4" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="Button.rowActionSmall:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
@@ -114,43 +121,6 @@
             <StackPanel IsVisible="{Binding !Groups.Count}" Margin="0,24,0,0" Spacing="6">
                 <TextBlock Classes="Base" Text="No captures yet" />
                 <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding EmptyHint}" />
-            </StackPanel>
-
-            <!-- uploads: in-flight standalone uploads and finished (non-session) upload results -->
-            <StackPanel>
-                <TextBlock Margin="0,8" Classes="H6" Text="Uploads">
-                    <TextBlock.IsVisible>
-                        <MultiBinding Converter="{x:Static BoolConverters.Or}">
-                            <Binding Path="!!Uploads.Standalone.Count" />
-                            <Binding Path="!!Uploads.Completed.Count" />
-                        </MultiBinding>
-                    </TextBlock.IsVisible>
-                </TextBlock>
-
-                <ItemsControl ItemsSource="{Binding Uploads.Standalone}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="local:ActiveUpload">
-                            <StackPanel Margin="0,2">
-                                <TextBlock Classes="Base" TextTrimming="CharacterEllipsis" Text="{Binding Name}" />
-                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ActiveUploadTemplate}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <ItemsControl ItemsSource="{Binding Uploads.Completed}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate DataType="clowd:UploadRecord">
-                            <StackPanel Margin="0,2">
-                                <TextBlock Classes="Base"
-                                           TextTrimming="CharacterEllipsis"
-                                           Text="{Binding FileName}"
-                                           IsVisible="{Binding FileName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
-                                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource UploadRecordTemplate}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
             </StackPanel>
 
             <!-- VM-side grouping replaces the WPF CollectionViewSource (decision table #52). -->
@@ -167,39 +137,51 @@
                                     <DataTemplate>
                                         <Grid Background="Transparent"
                                               DoubleTapped="ViewDoubleClick"
-                                              RowDefinitions="25,25,Auto"
                                               ColumnDefinitions="Auto,12,*,Auto">
                                             <Grid.ContextMenu>
                                                 <ContextMenu>
-                                                    <MenuItem Header="Open" Click="OpenItemClicked" />
-                                                    <MenuItem Header="Copy" Click="CopyItemClicked" />
+                                                    <MenuItem Header="Open" Click="OpenItemClicked" IsVisible="{Binding !IsUploadOnly}" />
+                                                    <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding IsVideo}" />
+                                                    <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding IsVideo}" />
+                                                    <MenuItem Header="Copy" Click="CopyItemClicked"
+                                                              IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                                                     <MenuItem Header="Delete" Click="DeleteItemClicked" />
                                                 </ContextMenu>
                                             </Grid.ContextMenu>
-                                            <Border Grid.RowSpan="3"
-                                                    Width="110"
+                                            <Border Width="110"
                                                     Height="75"
                                                     Margin="4"
-                                                    Background="{x:Static clowd:AppStyles.CheckerboardBrushSmall}">
-                                                <Image Source="{Binding PreviewImgPath, Converter={StaticResource ConvCacheImage}}"
-                                                       Stretch="Uniform" />
+                                                    VerticalAlignment="Center">
+                                                <Panel>
+                                                    <!-- checkerboard only backs a real preview; the icon placeholder sits on a transparent tile -->
+                                                    <Border Background="{x:Static clowd:AppStyles.CheckerboardBrushSmall}"
+                                                            IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                        <Image Source="{Binding PreviewImgPath, Converter={StaticResource ConvCacheImage}}"
+                                                               Stretch="Uniform" />
+                                                    </Border>
+                                                    <Viewbox Width="36"
+                                                             Height="36"
+                                                             Opacity="0.5"
+                                                             HorizontalAlignment="Center"
+                                                             VerticalAlignment="Center"
+                                                             IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNullOrEmpty}}">
+                                                        <Path Fill="{DynamicResource SemiColorText1}"
+                                                              Data="{Binding ContentKind, Converter={StaticResource ConvContentKindIcon}}" />
+                                                    </Viewbox>
+                                                </Panel>
                                             </Border>
-                                            <TextBlock Grid.Row="0"
-                                                       Grid.Column="2"
-                                                       VerticalAlignment="Center"
-                                                       Classes="Base"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       TextWrapping="NoWrap"
-                                                       ToolTip.Tip="{Binding Name}"
-                                                       Text="{Binding Name}" />
-                                            <TextBlock Grid.Row="1"
-                                                       Grid.Column="2"
-                                                       VerticalAlignment="Center"
-                                                       Classes="Body"
-                                                       Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
-                                            <StackPanel Grid.Row="2"
-                                                        Grid.Column="2"
-                                                        VerticalAlignment="Center">
+                                            <!-- three tight lines (name / date / uploads) regardless of the
+                                                 thumbnail height — a row-spanned grid would inflate the rows -->
+                                            <StackPanel Grid.Column="2"
+                                                        VerticalAlignment="Center"
+                                                        Spacing="2">
+                                                <TextBlock Classes="Base"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           TextWrapping="NoWrap"
+                                                           ToolTip.Tip="{Binding Name}"
+                                                           Text="{Binding Name}" />
+                                                <TextBlock Classes="Body"
+                                                           Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
                                                 <TextBlock Opacity="0.6"
                                                            Text="Not uploaded"
                                                            IsVisible="{Binding ShowNotUploaded}" />
@@ -211,7 +193,6 @@
                                             </StackPanel>
 
                                             <StackPanel Grid.Column="3"
-                                                        Grid.RowSpan="3"
                                                         Classes="rowActions"
                                                         Margin="8,0,4,0"
                                                         Orientation="Horizontal"
@@ -219,6 +200,7 @@
                                                         VerticalAlignment="Center">
                                                 <Button Classes="rowAction"
                                                         Click="OpenItemClicked"
+                                                        IsVisible="{Binding !IsUploadOnly}"
                                                         ToolTip.Tip="Open in editor"
                                                         AutomationProperties.Name="Open in editor">
                                                     <Viewbox>
@@ -226,7 +208,26 @@
                                                     </Viewbox>
                                                 </Button>
                                                 <Button Classes="rowAction"
+                                                        Click="PlayItemClicked"
+                                                        IsVisible="{Binding IsVideo}"
+                                                        ToolTip.Tip="Play video"
+                                                        AutomationProperties.Name="Play video">
+                                                    <Viewbox>
+                                                        <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconPlay}" />
+                                                    </Viewbox>
+                                                </Button>
+                                                <Button Classes="rowAction"
+                                                        Click="ShowInFolderClicked"
+                                                        IsVisible="{Binding IsVideo}"
+                                                        ToolTip.Tip="Show in folder"
+                                                        AutomationProperties.Name="Show in folder">
+                                                    <Viewbox>
+                                                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
+                                                    </Viewbox>
+                                                </Button>
+                                                <Button Classes="rowAction"
                                                         Click="CopyItemClicked"
+                                                        IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                                         ToolTip.Tip="Copy image to clipboard"
                                                         AutomationProperties.Name="Copy image to clipboard">
                                                     <Viewbox>

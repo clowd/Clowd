@@ -11,6 +11,7 @@ using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Clowd.UI.Helpers;
@@ -31,10 +32,6 @@ namespace Clowd.UI
     public partial class RecentSessionsPage : UserControl
     {
         public ObservableCollection<SessionGroupVm> Groups { get; } = new();
-
-        /// <summary>In-flight standalone uploads and finished upload records, surfaced by the
-        /// top "Uploads" section of the page.</summary>
-        public UploadsManager Uploads => PageManager.Current.Uploads;
 
         /// <summary>Call-to-action shown while there are no sessions.</summary>
         public string EmptyHint
@@ -196,8 +193,46 @@ namespace Clowd.UI
         private void ViewDoubleClick(object sender, TappedEventArgs e)
         {
             var session = GetSessionFromEvent(sender);
-            if (session != null)
+            if (session == null)
+                return;
+
+            if (session.IsVideo)
+                PlayVideo(session);
+            else if (!session.IsUploadOnly)
                 SessionManager.Current.OpenSession(session);
+        }
+
+        private void PlayItemClicked(object sender, RoutedEventArgs e)
+        {
+            var session = GetSessionFromEvent(sender);
+            if (session != null)
+                PlayVideo(session);
+        }
+
+        private static void PlayVideo(SessionInfo session)
+        {
+            if (session == null || String.IsNullOrEmpty(session.VideoPath) || !File.Exists(session.VideoPath))
+                return;
+
+            try
+            {
+                // hand the file to the OS default player.
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(session.VideoPath) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Play video failed: " + ex);
+            }
+        }
+
+        private void ShowInFolderClicked(object sender, RoutedEventArgs e)
+        {
+            var session = GetSessionFromEvent(sender);
+            if (session == null)
+                return;
+
+            var target = !String.IsNullOrEmpty(session.VideoPath) ? session.VideoPath : session.PreviewImgPath;
+            Helpers.ShellHelper.RevealFileInFolder(target);
         }
 
         private async void SessionListKeyDown(object sender, KeyEventArgs e)
@@ -208,7 +243,10 @@ namespace Clowd.UI
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
-                SessionManager.Current.OpenSession(session);
+                if (session.IsVideo)
+                    PlayVideo(session);
+                else if (!session.IsUploadOnly)
+                    SessionManager.Current.OpenSession(session);
             }
             else if (e.Key == Key.Delete)
             {
@@ -231,11 +269,30 @@ namespace Clowd.UI
             {
                 var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
                 if (clipboard != null)
+                {
                     await clipboard.SetTextAsync(record.Url);
+                    if (TopLevel.GetTopLevel(this) is Window window)
+                        Toast.Show(window, "Upload URL Copied to Clipboard");
+                }
             }
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("Copy upload link failed: " + ex);
+            }
+        }
+
+        private void OpenUrlClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as Control)?.DataContext is not UploadRecord record || String.IsNullOrEmpty(record.Url))
+                return;
+
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(record.Url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Open upload link failed: " + ex);
             }
         }
 
@@ -258,28 +315,24 @@ namespace Clowd.UI
                 return;
             }
 
-            // drop the record from its owning session, else from the standalone Completed list.
+            // drop the record from its owning session (records are always session-owned now).
             var session = (sender as Control)?.GetLogicalAncestors()
                                               .OfType<Control>()
                                               .Select(c => c.DataContext)
                                               .OfType<SessionInfo>()
                                               .FirstOrDefault();
 
-            if (session != null)
-            {
-                session.Uploads = (session.Uploads ?? Array.Empty<UploadRecord>())
-                                  .Where(u => !ReferenceEquals(u, record))
-                                  .ToArray();
+            if (session == null)
+                return;
 
-                if (record.Url == session.UploadUrl)
-                {
-                    session.UploadUrl = null;
-                    session.UploadFileKey = null;
-                }
-            }
-            else
+            session.Uploads = (session.Uploads ?? Array.Empty<UploadRecord>())
+                              .Where(u => !ReferenceEquals(u, record))
+                              .ToArray();
+
+            if (record.Url == session.UploadUrl)
             {
-                PageManager.Current.Uploads.Completed.Remove(record);
+                session.UploadUrl = null;
+                session.UploadFileKey = null;
             }
         }
     }
@@ -331,6 +384,33 @@ namespace Clowd.UI
             {
                 return null;
             }
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    /// <summary>Maps a session's ContentKind to the placeholder icon geometry shown when an
+    /// upload-only session has no preview image. Unknown/other non-empty kinds fall back to the
+    /// generic file icon.</summary>
+    public sealed class ContentKindToIconConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            var key = (value as string)?.ToLowerInvariant() switch
+            {
+                "video" => "IconVideo",
+                "image" => "IconPhoto",
+                "text" => "IconTextFile",
+                _ => "IconFileGeneric",
+            };
+
+            if (Application.Current != null && Application.Current.TryGetResource(key, null, out var res) && res is Geometry geometry)
+                return geometry;
+
+            return null;
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
