@@ -149,7 +149,11 @@ jobs:
   # ---------------------------------------------------------------------------
   macos:
     name: Build (macOS ${{ matrix.arch }})
-    runs-on: macos-14
+    # macos-latest (not a pinned older image): OBS 32.1.2's CMake requires the
+    # macOS 15.0 SDK (Xcode 16+). macos-14's default Xcode is 15.4 (SDK 14.5),
+    # which is too low; macos-latest ships a current Xcode. Both the arm64
+    # (native) and x64 (cross) slices run on this arm64 runner.
+    runs-on: macos-latest
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -189,7 +193,7 @@ jobs:
       - name: Select full Xcode
         run: |
           # build.rs uses the Xcode generator + enable_language(Swift); the CLT
-          # alone are not enough. macos-14 ships a full Xcode.
+          # alone are not enough. macos-latest's default Xcode.app is current.
           sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
           xcode-select -p
           xcodebuild -version

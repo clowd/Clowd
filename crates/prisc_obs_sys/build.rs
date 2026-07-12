@@ -317,11 +317,9 @@ fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
     }
 
     // w32-pthreads and the win-capture helpers (graphics-hook, inject-helper,
-    // get-graphics-offsets) come along via add_dependencies, but the three
-    // encoder test exes do NOT — they are standalone add_executable targets with
-    // no dependency edge from their plugins, and without them the hw encoders
-    // never register. They must be explicit targets.
-    let targets = [
+    // get-graphics-offsets) come along via add_dependencies. Base targets are
+    // built for every Windows arch.
+    let mut targets = vec![
         "libobs",
         "libobs-d3d11",
         "libobs-winrt",
@@ -331,13 +329,23 @@ fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
         "obs-ffmpeg-mux",
         "obs-x264",
         "obs-outputs",
-        "obs-nvenc",
-        "obs-qsv11",
         "coreaudio-encoder",
-        "obs-nvenc-test",
-        "obs-qsv-test",
-        "obs-amf-test",
     ];
+
+    // GPU-vendor hardware encoders (NVIDIA NVENC, Intel QSV, AMD AMF) exist only
+    // for x64/x86 — OBS does not generate these targets for ARM64 (Windows-on-ARM
+    // has no such discrete encoders), so naming them there fails MSBuild with
+    // MSB1009 (project file not found). Their standalone registration-test exes
+    // have no dependency edge from the plugins, so they must be named explicitly.
+    if target_arch() == "x86_64" {
+        targets.extend_from_slice(&[
+            "obs-nvenc",
+            "obs-qsv11",
+            "obs-nvenc-test",
+            "obs-qsv-test",
+            "obs-amf-test",
+        ]);
+    }
 
     let mut cmd = Command::new(cmake);
     cmd.arg("--build")
