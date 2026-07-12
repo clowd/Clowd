@@ -256,9 +256,15 @@ jobs:
           rm -rf "$dist"; mkdir -p "$dist/Frameworks" "$dist/obs-plugins"
 
           # Locate the OBS build tree obs-sys assembled (OUT_DIR/obs-build).
-          obs_build=$(echo "$outdir"/build/obs-sys-*/out/obs-build)
-          echo "OBS build tree: $obs_build"
-          test -d "$obs_build"
+          # Multiple obs-sys-<hash>/out/obs-build dirs can accumulate in the
+          # restored cache as obs-sys/build.rs changes across commits, so pick the
+          # newest one that actually holds the built framework.
+          obs_build=""
+          for cand in $(ls -dt "$outdir"/build/obs-sys-*/out/obs-build 2>/dev/null); do
+            if [ -d "$cand/libobs/$config/libobs.framework" ]; then obs_build="$cand"; break; fi
+          done
+          echo "OBS build tree: ${obs_build:-<none found>}"
+          test -n "$obs_build"
 
           # 1. Executables
           cp "$outdir/obs-express" "$dist/"
