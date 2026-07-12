@@ -14,6 +14,23 @@ fn main() {
     }
 }
 
+/// The version stamped into the OBS build.
+///
+/// OBS's `versionconfig.cmake` derives its version from `git describe --tags`.
+/// That works in a full local clone, but CI checkouts of the submodule have no
+/// tags, so `git describe --always` falls back to the short commit hash (e.g.
+/// `fb4d98b`). That is not a valid `MAJOR.MINOR.PATCH`, so OBS's version parsing
+/// (and the top-level `project(... VERSION ...)`) fails the configure step.
+///
+/// Passing `-DOBS_VERSION_OVERRIDE` sidesteps `git describe` entirely and makes
+/// the build reproducible regardless of tag availability. The default matches
+/// the pinned `obs-studio` submodule tag; override via the `OBS_VERSION_OVERRIDE`
+/// env var if the submodule is bumped or a custom stamp is desired.
+fn obs_version_override() -> String {
+    println!("cargo:rerun-if-env-changed=OBS_VERSION_OVERRIDE");
+    env::var("OBS_VERSION_OVERRIDE").unwrap_or_else(|_| "32.1.2".to_string())
+}
+
 // ---------------------------------------------------------------------------
 // macOS (unchanged behavior — Xcode generator, framework link, source watch)
 // ---------------------------------------------------------------------------
@@ -51,6 +68,7 @@ fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
         .arg(obs_build)
         .arg("-G")
         .arg("Xcode")
+        .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
         .arg("-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0")
         .arg("-DENABLE_UI=OFF")
         .arg("-DENABLE_SCRIPTING=OFF")
@@ -226,7 +244,7 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
         .arg("Visual Studio 17 2022")
         .arg("-A")
         .arg("x64")
-        .arg("-DOBS_VERSION_OVERRIDE=32.1.2")
+        .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
         .arg("-DENABLE_FRONTEND=OFF")
         .arg("-DENABLE_UI=OFF")
         .arg("-DENABLE_SCRIPTING=OFF")
