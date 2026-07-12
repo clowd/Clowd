@@ -435,6 +435,15 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         builder = builder.clang_arg(format!("-I{}", deps_inc.display()));
     }
 
+    // On ARM64, OBS's prebuilt deps ship SIMDE to emulate x86 SSE intrinsics.
+    // SIMDE's sse.h references C11 <stdatomic.h> names (memory_order_seq_cst)
+    // that libclang leaves undeclared while parsing in MSVC mode, which bindgen
+    // treats as a fatal error. Force-include stdatomic.h so those names exist.
+    // x64 uses native intrinsics and never pulls in SIMDE, so this is arm64-only.
+    if target_arch() == "aarch64" {
+        builder = builder.clang_arg("-include").clang_arg("stdatomic.h");
+    }
+
     let bindings = builder
         .allowlist_function("obs_.*")
         .allowlist_function("signal_handler_.*")
