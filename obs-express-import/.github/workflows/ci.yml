@@ -50,6 +50,16 @@ jobs:
           "sha=$sha" >> $env:GITHUB_OUTPUT
           Write-Host "OBS submodule SHA: $sha"
 
+      # OBS derives its version from `git describe --tags`. CI submodule
+      # checkouts have no tags, so OBS falls back to the short commit hash
+      # (`fb4d98b`) — not a valid MAJOR.MINOR.PATCH. The top-level build gets
+      # -DOBS_VERSION_OVERRIDE, but OBS's windows/architecture.cmake spawns a
+      # *child* CMake configure (build_x86) that ignores that cache var and
+      # re-runs `git describe`. HEAD is exactly the 32.1.2 release commit, so a
+      # lightweight tag on it makes `git describe --tags` resolve everywhere.
+      - name: Tag OBS submodule for versioning
+        run: git -C obs-studio tag -f 32.1.2
+
       - name: Toolchain diagnostics
         run: |
           cmake --version
@@ -146,6 +156,12 @@ jobs:
           sha=$(git -C obs-studio rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "OBS submodule SHA: $sha"
+
+      # See the Windows job: give the tagless CI submodule a lightweight tag on
+      # HEAD (the 32.1.2 release commit) so OBS's `git describe --tags` version
+      # discovery resolves to a valid MAJOR.MINOR.PATCH.
+      - name: Tag OBS submodule for versioning
+        run: git -C obs-studio tag -f 32.1.2
 
       - name: Select full Xcode
         run: |

@@ -69,6 +69,12 @@ fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
         .arg("-G")
         .arg("Xcode")
         .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
+        // OBS builds itself with -Werror (via CMAKE_COMPILE_WARNING_AS_ERROR,
+        // which it defaults ON). Newer toolchains — e.g. the Xcode 26 clang on
+        // CI — enable warnings OBS 32.1.2 never saw (-Wimplicit-int-float-
+        // conversion), turning them into hard build failures. OBS is a vendored
+        // dependency, so opt out of warnings-as-errors for its tree.
+        .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
         .arg("-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0")
         .arg("-DENABLE_UI=OFF")
         .arg("-DENABLE_SCRIPTING=OFF")
@@ -245,6 +251,10 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
         .arg("-A")
         .arg("x64")
         .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
+        // See the macOS branch: OBS defaults to -Werror / MSVC /WX. Disable
+        // warnings-as-errors so a newer MSVC toolchain than OBS 32.1.2 was
+        // tested against cannot break our build on a stray warning.
+        .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
         .arg("-DENABLE_FRONTEND=OFF")
         .arg("-DENABLE_UI=OFF")
         .arg("-DENABLE_SCRIPTING=OFF")
