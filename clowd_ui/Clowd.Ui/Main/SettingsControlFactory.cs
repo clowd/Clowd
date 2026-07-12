@@ -225,6 +225,12 @@ namespace Clowd.UI.Config
 
             if (Is(pd, typeof(string)))
             {
+                // a property with a known-but-open value set (e.g. AWS region) renders as an
+                // editable dropdown: pick a suggestion or type your own.
+                var suggested = GetFirstAttributeOrDefault<SuggestedValuesAttribute>(pd);
+                if (suggested != null)
+                    return SuggestedValuesBinding(suggested, pd);
+
                 var txt = SimpleControlBinding(new TextBox { MinWidth = 280 }, pd, TextBox.TextProperty);
                 if (pd.Name.EndsWith("Directory"))
                 {
@@ -557,6 +563,53 @@ namespace Clowd.UI.Config
             };
 
             return combo;
+        }
+
+        /// <summary>An editable field for a string property carrying [SuggestedValues]: a free-text
+        /// box (so the user can type a value of their own, e.g. a custom region string for a
+        /// third-party S3 endpoint) with a chevron button hosted *inside* the box (via
+        /// InnerRightContent) that drops down the known values. Deliberately NOT an AutoCompleteBox —
+        /// that control throws on detach in Avalonia 11.3; a Flyout-hosted ListBox uses the same
+        /// stable popup path as the ComboBox editors.</summary>
+        Control SuggestedValuesBinding(SuggestedValuesAttribute attr, PropertyDescriptor pd)
+        {
+            var txt = new TextBox { MinWidth = 280, VerticalAlignment = VerticalAlignment.Center };
+            txt.Bind(TextBox.TextProperty, CreateBinding(pd.Name));
+
+            var list = new ListBox
+            {
+                ItemsSource = attr.GetValues(),
+                MinWidth = 180,
+                MaxHeight = 300, // ListBox scrolls internally past this
+            };
+
+            var flyout = new Flyout { Content = list };
+
+            list.SelectionChanged += (_, _) =>
+            {
+                if (list.SelectedItem is string picked)
+                {
+                    pd.SetValue(_obj, picked);
+                    flyout.Hide();
+                    list.SelectedItem = null; // reset so picking the same value again still registers
+                }
+            };
+
+            // a flat, chrome-less chevron that lives inside the text box's right edge
+            var btn = new Button
+            {
+                Content = "▾",
+                Flyout = flyout,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(6, 0),
+                VerticalAlignment = VerticalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Cursor = new Cursor(StandardCursorType.Hand),
+            };
+
+            txt.InnerRightContent = btn;
+            return txt;
         }
 
         Control ComboSelectBinding(Func<IEnumerable> items, PropertyDescriptor pd, Func<object, string> display = null, bool canClear = true)
