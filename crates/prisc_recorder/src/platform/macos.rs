@@ -135,10 +135,19 @@ pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
     settings
 }
 
-pub fn default_obs_paths(_exe_dir: &Path) -> ObsPaths {
-    // Base plugin dir: env override, else the path baked in by build.rs
-    // (kept as the mac fallback only — §2.4).
-    let base = env::var("OBS_PLUGIN_PATH").unwrap_or_else(|_| env!("OBS_PLUGIN_DIR").to_string());
+pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {
+    // Base plugin dir. A bundled `obs-plugins` dir next to the executable (the
+    // relocatable release layout) wins; otherwise honour the OBS_PLUGIN_PATH
+    // override, then the absolute path baked in by build.rs (dev builds run
+    // against the OBS build tree in place — §2.4).
+    let base = env::var("OBS_PLUGIN_PATH").unwrap_or_else(|_| {
+        let bundled = exe_dir.join("obs-plugins");
+        if bundled.is_dir() {
+            bundled.to_string_lossy().into_owned()
+        } else {
+            env!("OBS_PLUGIN_DIR").to_string()
+        }
+    });
     let module_bin = format!("{base}/%module%/RelWithDebInfo/%module%.plugin/Contents/MacOS");
     let module_data = match env::var("OBS_PLUGIN_DATA_PATH") {
         Ok(v) => format!("{v}/%module%"),

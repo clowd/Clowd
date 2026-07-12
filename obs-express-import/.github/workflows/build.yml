@@ -141,11 +141,11 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # macOS: Xcode generator, obs-sys builds libobs.framework. Both slices run on
-  # the arm64 macos-14 runner; the x64 slice is cross-compiled via
+  # the arm64 macos-latest runner; the x64 slice is cross-compiled via
   # `--target x86_64-apple-darwin` (build.rs forwards the arch to
-  # CMAKE_OSX_ARCHITECTURES; OBS's macOS prebuilt deps are universal). The
-  # linked binary is NOT relocatable today (rpaths point at the build machine's
-  # OUT_DIR), so the artifact is the binary + helper + a README documenting that.
+  # CMAKE_OSX_ARCHITECTURES; OBS's macOS prebuilt deps are universal). The Stage
+  # step assembles a self-contained, relocatable bundle (framework + graphics
+  # modules + dep dylibs + plugins) and rewrites rpaths to @executable_path.
   # ---------------------------------------------------------------------------
   macos:
     name: Build (macOS ${{ matrix.arch }})
@@ -246,29 +246,93 @@ jobs:
         if: matrix.arch == 'arm64'
         run: cargo test --release -p obs-express ${{ matrix.target_flag }}
 
-      - name: Stage artifact
+      - name: Stage artifact (self-contained bundle)
         run: |
-          dist="dist/obs-express-macos-${{ matrix.arch }}"
-          mkdir -p "$dist"
-          cp ${{ matrix.outdir }}/obs-express "$dist/"
-          [ -f ${{ matrix.outdir }}/obs-ffmpeg-mux ] && cp ${{ matrix.outdir }}/obs-ffmpeg-mux "$dist/" || true
+          set -euo pipefail
+          arch="${{ matrix.arch }}"
+          outdir="${{ matrix.outdir }}"
+          config=RelWithDebInfo
+          dist="dist/obs-express-macos-$arch"
+          rm -rf "$dist"; mkdir -p "$dist/Frameworks" "$dist/obs-plugins"
+
+          # Locate the OBS build tree obs-sys assembled (OUT_DIR/obs-build).
+          obs_build=$(echo "$outdir"/build/obs-sys-*/out/obs-build)
+          echo "OBS build tree: $obs_build"
+          test -d "$obs_build"
+
+          # 1. Executables
+          cp "$outdir/obs-express" "$dist/"
+          [ -f "$outdir/obs-ffmpeg-mux" ] && cp "$outdir/obs-ffmpeg-mux" "$dist/" || true
+
+          # 2. libobs.framework + Metal/OpenGL graphics modules
+          cp -R "$obs_build/libobs/$config/libobs.framework" "$dist/Frameworks/"
+          cp -a "$obs_build/libobs-metal/$config/"*.dylib "$dist/Frameworks/" 2>/dev/null || true
+          cp -a "$obs_build/libobs-opengl/$config/"*.dylib "$dist/Frameworks/" 2>/dev/null || true
+
+          # 3. Prebuilt dependency dylibs (FFmpeg, x264, ...)
+          deps_lib=$(ls -d obs-studio/.deps/obs-deps-*/lib 2>/dev/null | grep -v qt6 | head -1 || true)
+          if [ -n "$deps_lib" ]; then
+            find "$deps_lib" -maxdepth 1 -name '*.dylib' -exec cp -a {} "$dist/Frameworks/" \;
+          fi
+
+          # 4. Plugins (.plugin bundles), preserving the <name>/RelWithDebInfo
+          #    layout the runtime plugin-path template expects.
+          for pdir in "$obs_build/plugins/"*/; do
+            name=$(basename "$pdir")
+            plug="$pdir$config/$name.plugin"
+            if [ -d "$plug" ]; then
+              mkdir -p "$dist/obs-plugins/$name/$config"
+              cp -R "$plug" "$dist/obs-plugins/$name/$config/"
+            fi
+          done
+
+          # 5. Relocate: add an @executable_path-relative rpath, drop the absolute
+          #    build-tree rpaths, then ad-hoc re-sign (install_name_tool
+          #    invalidates the signature on Apple Silicon).
+          relocate() {
+            local bin="$1"
+            install_name_tool -add_rpath "@executable_path/Frameworks" "$bin" 2>/dev/null || true
+            otool -l "$bin" | grep -A2 'cmd LC_RPATH' | awk '$1=="path"{print $2}' | while read -r rp; do
+              case "$rp" in
+                @*) : ;;
+                *) install_name_tool -delete_rpath "$rp" "$bin" 2>/dev/null || true ;;
+              esac
+            done
+            codesign --force --sign - "$bin" 2>/dev/null || true
+          }
+          relocate "$dist/obs-express"
+          [ -f "$dist/obs-ffmpeg-mux" ] && relocate "$dist/obs-ffmpeg-mux" || true
+          # Plugin binaries are dlopen'd by obs-express; @executable_path in them
+          # resolves to obs-express, so the same rpath reaches the app Frameworks.
+          find "$dist/obs-plugins" -type f -path '*/Contents/MacOS/*' | while read -r pb; do
+            install_name_tool -add_rpath "@executable_path/Frameworks" "$pb" 2>/dev/null || true
+            codesign --force --sign - "$pb" 2>/dev/null || true
+          done
+
           cat > "$dist/README.txt" <<'EOF'
-          obs-express (macOS build)
+          obs-express (macOS, self-contained)
 
-          KNOWN LIMITATION - this binary is NOT relocatable.
+          libobs.framework, the Metal/OpenGL graphics modules, the FFmpeg/x264
+          dylibs, and the OBS plugins are bundled alongside the binary. The
+          executables carry an @executable_path/Frameworks rpath and the plugin
+          path is resolved relative to obs-express at runtime, so this whole
+          directory can be moved anywhere and run in place.
 
-          It is linked with absolute rpaths that point at the OBS build tree on
-          the CI build machine (the obs-sys OUT_DIR), and OBS_PLUGIN_DIR is baked
-          to that same absolute path. It therefore will not run as-is on another
-          machine: libobs.framework, libobs-metal, the FFmpeg dylibs, and the OBS
-          plugin/data trees are not bundled here.
-
-          To run it you must reproduce the OBS build layout at the original paths,
-          or rebuild locally from source (build.sh). A self-contained .app bundle
-          (relocated rpaths + bundled frameworks/plugins/data) is future work.
+          The binaries are ad-hoc signed (not notarized); first launch may need:
+            xattr -dr com.apple.quarantine <this directory>
           EOF
-          echo "Staged contents:"
-          ls -la "$dist"
+
+          # 6. Verify relocation: relative rpaths only, no build-tree leakage.
+          echo "=== obs-express LC_RPATH ==="
+          otool -l "$dist/obs-express" | grep -A2 'cmd LC_RPATH' | awk '$1=="path"{print "  rpath:",$2}'
+          if otool -l "$dist/obs-express" | grep -Eq "/Users/runner|obs-build|/\.deps/"; then
+            echo "::error::obs-express still references an absolute build-tree path"
+            otool -l "$dist/obs-express" | grep -E "/Users/runner|obs-build|/\.deps/" || true
+            exit 1
+          fi
+          echo "Frameworks:"; ls "$dist/Frameworks"
+          echo "Plugins:";    ls "$dist/obs-plugins"
+          echo "Bundle size:"; du -sh "$dist"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
