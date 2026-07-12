@@ -1,0 +1,91 @@
+name: Release
+
+# Manually dispatched. Bumps the obs-express version to the freetext input,
+# commits it, builds all four variants (via the reusable build.yml), and
+# publishes a GitHub Release with each build attached as a zipped asset.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    name: Bump version and commit
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.push.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate version format
+        run: |
+          if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$'; then
+            echo "Error: invalid version '${{ inputs.version }}'. Expected semver (e.g. 0.2.0)"
+            exit 1
+          fi
+
+      - name: Bump version in Cargo.toml
+        run: sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' crates/obs-express/Cargo.toml
+
+      - name: Update Cargo.lock
+        # Resolves the new obs-express version into the lockfile. `cargo update`
+        # does not run build scripts, so it works on Linux without the OBS
+        # native toolchain.
+        run: cargo update -p obs-express
+
+      - name: Verify version was updated
+        run: grep -q '^version = "${{ inputs.version }}"' crates/obs-express/Cargo.toml
+
+      - name: Commit and push version bump
+        id: push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add crates/obs-express/Cargo.toml Cargo.lock
+          git commit -m "release: v${{ inputs.version }}"
+          git push
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: bump
+    uses: ./.github/workflows/build.yml
+    with:
+      ref: ${{ needs.bump.outputs.sha }}
+
+  release:
+    name: Publish GitHub Release
+    needs: [bump, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Zip each variant
+        run: |
+          cd artifacts
+          for d in */; do
+            name="${d%/}"
+            (cd "$d" && zip -r "../${name}.zip" .)
+          done
+          ls -la
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ inputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --target "${{ needs.bump.outputs.sha }}" \
+            --title "v${{ inputs.version }}" \
+            --generate-notes \
+            artifacts/*.zip

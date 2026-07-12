@@ -31,6 +31,35 @@ fn obs_version_override() -> String {
     env::var("OBS_VERSION_OVERRIDE").unwrap_or_else(|_| "32.1.2".to_string())
 }
 
+/// Rust's target arch (`CARGO_CFG_TARGET_ARCH`) drives the native OBS build's
+/// architecture, so a single `cargo build --target <triple>` yields a matching
+/// native or cross build. `x86_64` and `aarch64` are the only architectures
+/// obs-express ships (Windows x64/ARM64, macOS x86_64/arm64).
+fn target_arch() -> String {
+    env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default()
+}
+
+/// Visual Studio generator platform (`-A`) for the current target arch.
+fn win_vs_platform() -> &'static str {
+    match target_arch().as_str() {
+        "x86_64" => "x64",
+        "aarch64" => "ARM64",
+        other => panic!("obs-sys: unsupported Windows target arch `{other}`"),
+    }
+}
+
+/// `CMAKE_OSX_ARCHITECTURES` value for the current target arch. Setting it
+/// explicitly (rather than defaulting to the host) is what lets the arm64 CI
+/// runner cross-build the x86_64 slice — OBS's macOS prebuilt deps are
+/// universal, so both arches link.
+fn mac_osx_arch() -> &'static str {
+    match target_arch().as_str() {
+        "x86_64" => "x86_64",
+        "aarch64" => "arm64",
+        other => panic!("obs-sys: unsupported macOS target arch `{other}`"),
+    }
+}
+
 // ---------------------------------------------------------------------------
 // macOS (unchanged behavior — Xcode generator, framework link, source watch)
 // ---------------------------------------------------------------------------
@@ -75,6 +104,7 @@ fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
         // conversion), turning them into hard build failures. OBS is a vendored
         // dependency, so opt out of warnings-as-errors for its tree.
         .arg("-DCMAKE_COMPILE_WARNING_AS_ERROR=OFF")
+        .arg(format!("-DCMAKE_OSX_ARCHITECTURES={}", mac_osx_arch()))
         .arg("-DCMAKE_OSX_DEPLOYMENT_TARGET=12.0")
         .arg("-DENABLE_UI=OFF")
         .arg("-DENABLE_SCRIPTING=OFF")
@@ -189,8 +219,10 @@ fn build_windows() {
 }
 
 /// MAX_PATH-safe CMake build dir: never under the deep cargo OUT_DIR (MSB3491).
-/// `OBS_BUILD_DIR` override, else `<workspace_target>/obs-x64` where the target
-/// dir is `CARGO_TARGET_DIR` if set, else the OUT_DIR ancestor named `target`.
+/// `OBS_BUILD_DIR` override, else `<workspace_target>/obs-<arch>` (obs-x64 /
+/// obs-arm64) where the target dir is `CARGO_TARGET_DIR` if set, else the
+/// OUT_DIR ancestor named `target`. The arch suffix keeps the x64 and ARM64
+/// build trees from colliding in a shared target dir.
 fn win_build_dir() -> PathBuf {
     if let Ok(dir) = env::var("OBS_BUILD_DIR") {
         return PathBuf::from(dir);
@@ -207,7 +239,7 @@ fn win_build_dir() -> PathBuf {
             .to_path_buf()
     };
 
-    workspace_target.join("obs-x64")
+    workspace_target.join(format!("obs-{}", win_vs_platform().to_lowercase()))
 }
 
 /// cmake is frequently not on PATH on dev machines; fall back to the copy that
@@ -249,7 +281,7 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
         .arg("-G")
         .arg("Visual Studio 17 2022")
         .arg("-A")
-        .arg("x64")
+        .arg(win_vs_platform())
         .arg(format!("-DOBS_VERSION_OVERRIDE={}", obs_version_override()))
         // See the macOS branch: OBS defaults to -Werror / MSVC /WX. Disable
         // warnings-as-errors so a newer MSVC toolchain than OBS 32.1.2 was

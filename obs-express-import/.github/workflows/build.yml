@@ -1,0 +1,274 @@
+name: Build
+
+# Reusable build matrix: Windows and macOS, each for x64 and arm64. Called by
+# ci.yml (on push / PR) and release.yml (after the version bump). Every variant
+# uploads an `obs-express-<os>-<arch>` artifact that the release job attaches to
+# the GitHub Release.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build (defaults to the triggering ref)
+        required: false
+        type: string
+        default: ""
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Windows: VS 2022 generator (-A per arch), obs-sys builds libobs into
+  # target/obs-<arch>, and the obs-express build.rs assembles a self-contained
+  # runtime tree in target/release. That whole tree is the artifact. Each arch
+  # builds natively on its matching runner (windows-2022 = x64,
+  # windows-11-arm = arm64), so no --target / cross toolchain is needed.
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Build (Windows ${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # windows-latest now points at the VS 2026 image (no VS 17), so pin
+          # windows-2022 which still ships VS 2022 Enterprise for the
+          # "Visual Studio 17 2022" generator.
+          - arch: x64
+            runner: windows-2022
+          - arch: arm64
+            runner: windows-11-arm
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      LIBCLANG_PATH: C:\Program Files\LLVM\bin
+    steps:
+      - name: Checkout (recursive submodules)
+        uses: actions/checkout@v4
+        with:
+          # obs-studio must be recursive: obs-browser / obs-websocket submodule
+          # dirs must EXIST even though disabled, or their CMakeLists FATAL_ERROR.
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - name: Record OBS submodule SHA
+        id: obs
+        run: |
+          $sha = git -C obs-studio rev-parse HEAD
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          Write-Host "OBS submodule SHA: $sha"
+
+      # OBS derives its version from `git describe --tags`. CI submodule
+      # checkouts have no tags, so OBS falls back to the short commit hash
+      # (`fb4d98b`) — not a valid MAJOR.MINOR.PATCH. The top-level build gets
+      # -DOBS_VERSION_OVERRIDE, but OBS's windows/architecture.cmake spawns
+      # *child* CMake configures (build_x86, and build_x64 for the ARM64 parent)
+      # that ignore that cache var and re-run `git describe`. HEAD is exactly the
+      # 32.1.2 release commit, so a lightweight tag makes it resolve everywhere.
+      - name: Tag OBS submodule for versioning
+        run: git -C obs-studio tag -f 32.1.2
+
+      - name: Toolchain diagnostics
+        run: |
+          cmake --version
+          rustc --version
+          cargo --version
+          Write-Host "Target arch: ${{ matrix.arch }}"
+          Write-Host "LIBCLANG_PATH=$env:LIBCLANG_PATH"
+          if (Test-Path "$env:LIBCLANG_PATH\libclang.dll") {
+            Write-Host "libclang.dll: found"
+          } else {
+            Write-Host "::warning::libclang.dll not found at LIBCLANG_PATH ($env:LIBCLANG_PATH) - bindgen may fail"
+          }
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
+
+      # The native OBS build and its downloaded prebuilt deps (.deps) are cached
+      # together under one arch-scoped key so they can never evict independently.
+      # runner.os is "Windows" for both x64 and arm64, so the arch MUST be in the
+      # key or the two builds would clobber each other's cache.
+      - name: Cache OBS native build + prebuilt deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/obs-${{ matrix.arch }}
+            obs-studio/.deps
+          key: ${{ runner.os }}-${{ matrix.arch }}-obs-${{ steps.obs.outputs.sha }}
+
+      - name: Build (release)
+        run: cargo build --release
+
+      - name: Test (release, unit tests only)
+        run: |
+          # obs-express links obs.dll (import lib), so the test exe in
+          # target/release/deps needs the runtime DLLs (assembled in
+          # target/release) on PATH.
+          $env:PATH = "$(Resolve-Path target/release);$env:PATH"
+          cargo test --release -p obs-express
+
+      - name: Stage artifact
+        run: |
+          $dist = "dist/obs-express-windows-${{ matrix.arch }}"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          # obs-express.exe plus the copied helpers and all runtime DLLs. *.pdb
+          # is excluded by only matching *.exe / *.dll; cargo build junk stays
+          # behind because we copy explicit top-level items only.
+          Copy-Item target/release/*.exe $dist
+          Copy-Item target/release/*.dll $dist
+          if (Test-Path target/release/obs-plugins) { Copy-Item -Recurse target/release/obs-plugins $dist }
+          if (Test-Path target/release/data)        { Copy-Item -Recurse target/release/data $dist }
+          Write-Host "Staged contents:"
+          Get-ChildItem $dist | Select-Object Name
+          $mb = (Get-ChildItem -Recurse $dist | Measure-Object -Property Length -Sum).Sum / 1MB
+          Write-Host ("Total staged size: {0:N1} MB" -f $mb)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-express-windows-${{ matrix.arch }}
+          path: dist/obs-express-windows-${{ matrix.arch }}
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # macOS: Xcode generator, obs-sys builds libobs.framework. Both slices run on
+  # the arm64 macos-14 runner; the x64 slice is cross-compiled via
+  # `--target x86_64-apple-darwin` (build.rs forwards the arch to
+  # CMAKE_OSX_ARCHITECTURES; OBS's macOS prebuilt deps are universal). The
+  # linked binary is NOT relocatable today (rpaths point at the build machine's
+  # OUT_DIR), so the artifact is the binary + helper + a README documenting that.
+  # ---------------------------------------------------------------------------
+  macos:
+    name: Build (macOS ${{ matrix.arch }})
+    runs-on: macos-14
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            triple: aarch64-apple-darwin
+            target_flag: ""
+            outdir: target/release
+          - arch: x64
+            triple: x86_64-apple-darwin
+            target_flag: --target x86_64-apple-darwin
+            outdir: target/x86_64-apple-darwin/release
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout (recursive submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ inputs.ref }}
+
+      - name: Record OBS submodule SHA
+        id: obs
+        run: |
+          sha=$(git -C obs-studio rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "OBS submodule SHA: $sha"
+
+      # See the Windows job: give the tagless CI submodule a lightweight tag on
+      # HEAD (the 32.1.2 release commit) so OBS's `git describe --tags` version
+      # discovery resolves to a valid MAJOR.MINOR.PATCH.
+      - name: Tag OBS submodule for versioning
+        run: git -C obs-studio tag -f 32.1.2
+
+      - name: Select full Xcode
+        run: |
+          # build.rs uses the Xcode generator + enable_language(Swift); the CLT
+          # alone are not enough. macos-14 ships a full Xcode.
+          sudo xcode-select -switch /Applications/Xcode.app/Contents/Developer
+          xcode-select -p
+          xcodebuild -version
+
+      - name: Ensure cmake (>= 3.28)
+        run: |
+          cmake --version || brew install cmake
+          cmake --version
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.triple }}
+
+      - name: Toolchain diagnostics
+        run: |
+          rustc --version
+          cargo --version
+          clang --version
+          echo "Target: ${{ matrix.triple }}"
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
+
+      # obs-sys has no build-dir override on macOS; the OBS build lands in the
+      # obs-sys OUT_DIR, which is under the per-target output dir. Cache that
+      # whole `out` dir together with the downloaded deps under one arch-scoped
+      # key (runner.os is "macOS" for both slices, so arch must be in the key).
+      - name: Cache OBS native build + prebuilt deps
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ matrix.outdir }}/build/obs-sys-*/out
+            obs-studio/.deps
+          key: ${{ runner.os }}-${{ matrix.arch }}-obs-${{ steps.obs.outputs.sha }}
+
+      - name: Build (release)
+        run: cargo build --release ${{ matrix.target_flag }}
+
+      - name: Test (release, unit tests only)
+        # Only the arm64 slice is native to the arm64 runner; the x64 slice is
+        # cross-compiled and cannot execute here (no Rosetta). The same unit
+        # tests run on the arm64 mac and on both Windows arches, so coverage is
+        # preserved.
+        if: matrix.arch == 'arm64'
+        run: cargo test --release -p obs-express ${{ matrix.target_flag }}
+
+      - name: Stage artifact
+        run: |
+          dist="dist/obs-express-macos-${{ matrix.arch }}"
+          mkdir -p "$dist"
+          cp ${{ matrix.outdir }}/obs-express "$dist/"
+          [ -f ${{ matrix.outdir }}/obs-ffmpeg-mux ] && cp ${{ matrix.outdir }}/obs-ffmpeg-mux "$dist/" || true
+          cat > "$dist/README.txt" <<'EOF'
+          obs-express (macOS build)
+
+          KNOWN LIMITATION - this binary is NOT relocatable.
+
+          It is linked with absolute rpaths that point at the OBS build tree on
+          the CI build machine (the obs-sys OUT_DIR), and OBS_PLUGIN_DIR is baked
+          to that same absolute path. It therefore will not run as-is on another
+          machine: libobs.framework, libobs-metal, the FFmpeg dylibs, and the OBS
+          plugin/data trees are not bundled here.
+
+          To run it you must reproduce the OBS build layout at the original paths,
+          or rebuild locally from source (build.sh). A self-contained .app bundle
+          (relocated rpaths + bundled frameworks/plugins/data) is future work.
+          EOF
+          echo "Staged contents:"
+          ls -la "$dist"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: obs-express-macos-${{ matrix.arch }}
+          path: dist/obs-express-macos-${{ matrix.arch }}
+          if-no-files-found: error
