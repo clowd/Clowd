@@ -24,6 +24,12 @@
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
+          "name": "AWSSDK.S3",
+          "version": "4.0.25.3",
+          "license": "Apache-2.0",
+          "url": "https://github.com/aws/aws-sdk-net/"
+        },
+        {
           "name": "B2Net",
           "version": "0.7.5",
           "license": "MIT",
@@ -70,6 +76,12 @@
           "version": "8.0.1",
           "license": "MIT",
           "url": "https://github.com/dotnet/runtime"
+        },
+        {
+          "name": "NAudio.Wasapi",
+          "version": "2.3.0",
+          "license": "MIT",
+          "url": "https://github.com/naudio/NAudio"
         },
         {
           "name": "Semi.Avalonia",
