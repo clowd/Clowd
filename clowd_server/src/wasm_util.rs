@@ -32,19 +32,34 @@ pub async fn send(url: &str, method: Method, body: Option<Vec<u8>>, headers: &[(
     Fetch::Request(req).send().await
 }
 
-/// Cancel an unread request body before responding early (401/409/400 …).
+/// Drain and discard an unread request body before responding early (401/409/400 …).
 ///
 /// Responding while the client is still transmitting the body leaves workerd's
-/// body-proxy pump reading a stream whose response has already been sent —
-/// an uncaught "Can't read from request stream after response has been sent"
-/// TypeError that fails the whole invocation with a 503. Timing-dependent (the
-/// fast path where the body fully arrived first is fine), so cancel explicitly.
-/// A cancel is a discard signal, not a drain — no buffering, attacker-sized
-/// bodies cost nothing.
-pub async fn discard_body(req: &Request) {
-    if let Some(body) = req.inner().body() {
-        if !body.locked() {
-            let _ = wasm_bindgen_futures::JsFuture::from(body.cancel()).await;
+/// body-proxy pump reading a stream whose response has already been sent — an
+/// uncaught "Can't read from request stream after response has been sent"
+/// TypeError that fails the whole invocation with a 503. Cancelling the stream
+/// is NOT enough: the cancel propagates asynchronously through the DO channel
+/// and still loses the race intermittently (flaky 503s in CI). Draining to EOF
+/// is deterministic — once consumed, nothing is left to read post-response.
+/// Bytes are discarded as they arrive (no buffering); the cap stops a hostile
+/// oversized body from pinning the DO, falling back to cancel past it.
+pub async fn discard_body(req: &mut Request) {
+    use futures::StreamExt;
+    // Comfortably above the 32 MiB max chunk size; hostile territory beyond.
+    const DISCARD_CAP: u64 = 64 * 1024 * 1024;
+    let Ok(mut stream) = req.stream() else {
+        return; // no/unreadable body — nothing to drain
+    };
+    let mut seen: u64 = 0;
+    while let Some(chunk) = stream.next().await {
+        match chunk {
+            Ok(bytes) => {
+                seen += bytes.len() as u64;
+                if seen > DISCARD_CAP {
+                    break;
+                }
+            }
+            Err(_) => break,
         }
     }
 }
