@@ -1,0 +1,163 @@
+name: CI
+
+# Test + package on every commit. clowd_server has its own workflow
+# (deploy-server.yml) and is excluded from the cargo workspace.
+#
+# Packages (4): win-x64, win-arm64, osx-x64, osx-arm64. Each contains the
+# published Clowd.Ui app with the Rust capture binary alongside it and the
+# obs-express recording distribution in an obs-express/ subdirectory — the
+# layout expected by ScreenCaptureService/ObsBinaryLocator. obs-express is
+# pulled from the latest clowd/obs-express-rs GitHub release (public repo,
+# so the default workflow token suffices).
+
+on:
+  push:
+    paths-ignore:
+      - "clowd_server/**"
+      - ".github/workflows/deploy-server.yml"
+      - "**.md"
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: "Rust gate: format + lint + tests"
+        run: |
+          cargo fmt --check
+          cargo clippy -p clowd_capture_wgpu -- -D warnings
+          cargo test -p clowd_capture_wgpu
+        shell: bash
+
+      - name: "UI gate: dotnet tests"
+        run: |
+          dotnet test clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj -c Release --nologo
+          dotnet test clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj -c Release --nologo
+        shell: bash
+
+  package:
+    name: package (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            obs-asset: obs-express-windows-x64.zip
+            exe: .exe
+          - rid: win-arm64
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            obs-asset: obs-express-windows-arm64.zip
+            exe: .exe
+          - rid: osx-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            obs-asset: obs-express-macos-x64.zip
+            exe: ""
+          - rid: osx-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            obs-asset: obs-express-macos-arm64.zip
+            exe: ""
+    runs-on: ${{ matrix.os }}
+    env:
+      VERSION: 0.0.${{ github.run_number }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.rid }}
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Publish Clowd.Ui
+        run: >
+          dotnet publish clowd_ui/Clowd.Ui/Clowd.Ui.csproj
+          -c Release -r ${{ matrix.rid }} --self-contained true
+          -p:PublishSingleFile=true
+          -p:Version=${{ env.VERSION }}
+          -o publish
+
+      - name: Build capture binary
+        run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
+
+      - name: Copy capture binary into package
+        run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
+        shell: bash
+
+      - name: Download obs-express (latest release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo clowd/obs-express-rs --pattern "${{ matrix.obs-asset }}" --output obs-express.zip
+        shell: bash
+
+      - name: Extract obs-express into package (Windows)
+        if: runner.os == 'Windows'
+        run: Expand-Archive obs-express.zip -DestinationPath publish/obs-express
+        shell: pwsh
+
+      - name: Extract obs-express into package (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          unzip -q obs-express.zip -d publish/obs-express
+          chmod +x publish/obs-express/obs-express publish/obs-express/obs-ffmpeg-mux 2>/dev/null || true
+
+      # upload-artifact does not preserve unix file modes, so on macOS wrap
+      # the package in a zip (which does) before uploading.
+      - name: Zip package (macOS)
+        if: runner.os == 'macOS'
+        run: cd publish && zip -qry "../clowd-${{ matrix.rid }}-${{ env.VERSION }}.zip" .
+
+      - name: Upload package (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clowd-${{ matrix.rid }}
+          path: clowd-${{ matrix.rid }}-${{ env.VERSION }}.zip
+          if-no-files-found: error
+
+      - name: Upload package (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clowd-${{ matrix.rid }}
+          path: publish/
+          if-no-files-found: error

@@ -779,13 +779,12 @@ impl ApplicationHandler for App {
                         ..
                     },
                 ..
-            } => {
+            }
                 // Mirrors the Dx capturer: Return acts as the default
                 // accept ("open in editor") once a selection is made.
-                if self.input.captured {
+                if self.input.captured => {
                     self.dispatch_command(Command::Edit, event_loop, id);
                 }
-            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
