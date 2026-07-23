@@ -19,6 +19,14 @@
         <Style Selector="Grid.dimmed">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
+        <!-- Semi's switch template keeps the label margin even when OnContent/OffContent are
+             empty. Remove it for this icon-only provider toggle so the logo gap stays even. -->
+        <Style Selector="ToggleSwitch.iconOnly /template/ ContentPresenter#PART_OnContentPresenter">
+            <Setter Property="Margin" Value="0" />
+        </Style>
+        <Style Selector="ToggleSwitch.iconOnly /template/ ContentPresenter#PART_OffContentPresenter">
+            <Setter Property="Margin" Value="0" />
+        </Style>
         <!-- "supports" chips: outlined toggles when merely supported, accent-filled with a
              check glyph when this provider is the default destination for that upload type.
              Click toggles the default. -->
@@ -54,7 +62,7 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
         </Style>
-        <Style Selector="ToggleButton.lightning:pointerover, ToggleButton.lightning:checked, ToggleButton.lightning:checked:pointerover">
+        <Style Selector="ToggleButton.lightning:pointerover, ToggleButton.lightning:checked, ToggleButton.lightning:checked:pointerover, ToggleButton.lightning:disabled">
             <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="ToggleButton.lightning Path">
@@ -71,12 +79,6 @@
     <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="4">
             <TextBlock Classes="Body"
-                       Margin="0,0,0,8"
-                       Opacity="0.7"
-                       TextWrapping="Wrap"
-                       Text="Enable the upload destinations you wish to use, then click a category chip (e.g. Image) to make a provider the default destination for that kind of file." />
-
-            <TextBlock Classes="Body"
                        IsVisible="{Binding !Providers.Length}"
                        Text="No upload providers available." />
 
@@ -87,8 +89,11 @@
                             <DockPanel>
                                 <!-- the switch stays outside the dimmed part: it is the control
                                      that un-dims the row -->
-                                <ToggleSwitch DockPanel.Dock="Left"
+                                <ToggleSwitch Classes="iconOnly"
+                                              DockPanel.Dock="Left"
                                               VerticalAlignment="Center"
+                                              OnContent=""
+                                              OffContent=""
                                               IsChecked="{Binding IsEnabled}"
                                               ToolTip.Tip="Enable this upload destination"
                                               AutomationProperties.Name="{Binding Provider.Name}" />
@@ -198,7 +203,6 @@
                                                 Spacing="8">
                                         <ToggleButton Classes="lightning"
                                                       IsVisible="{Binding SupportsAcceleration}"
-                                                      IsEnabled="{Binding IsEnabled}"
                                                       IsChecked="{Binding Provider.AccelerateUploads}"
                                                       ToolTip.Tip="Accelerate uploads through clwd.app — the shareable link is ready instantly while the file transfers to your storage in the background"
                                                       AutomationProperties.Name="Accelerate uploads">

@@ -60,7 +60,7 @@ namespace Clowd.UI.Config
             }
         }
 
-        public Control GetSettingsPanel(string introText = null)
+        public Control GetSettingsPanel()
         {
             var rows = EnumerateRows().ToList();
 
@@ -69,7 +69,7 @@ namespace Clowd.UI.Config
             // settings) keep the flat list.
             var grouped = rows.Any(r => GetFirstAttributeOrDefault<CategoryAttribute>(r.Pd) != null);
 
-            var content = grouped ? BuildGroupedPanel(rows, introText) : BuildFlatPanel(rows, introText);
+            var content = grouped ? BuildGroupedPanel(rows) : BuildFlatPanel(rows);
 
             // margin on the *content* (not ScrollViewer padding) exactly like the hand-written
             // pages: the 16px right/bottom clearance then scrolls with the content, so the last
@@ -99,14 +99,6 @@ namespace Clowd.UI.Config
             }
         }
 
-        private static TextBlock NewIntroText(string introText) => new()
-        {
-            Text = introText,
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.7,
-            Margin = new Thickness(0, 0, 0, 4),
-        };
-
         private static Grid NewRowsGrid()
         {
             var grid = new Grid();
@@ -115,13 +107,9 @@ namespace Clowd.UI.Config
             return grid;
         }
 
-        private Control BuildFlatPanel(List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> rows, string introText)
+        private Control BuildFlatPanel(List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> rows)
         {
             var stack = new StackPanel { Spacing = 8 };
-
-            if (!String.IsNullOrEmpty(introText))
-                stack.Children.Add(NewIntroText(introText));
-
             var grid = NewRowsGrid();
             int row = 0;
             foreach (var (owner, pd) in rows)
@@ -131,12 +119,9 @@ namespace Clowd.UI.Config
             return stack;
         }
 
-        private Control BuildGroupedPanel(List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> rows, string introText)
+        private Control BuildGroupedPanel(List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> rows)
         {
             var stack = new StackPanel { Spacing = 16 };
-
-            if (!String.IsNullOrEmpty(introText))
-                stack.Children.Add(NewIntroText(introText));
 
             // GroupBy preserves first-appearance order, so a category's rows collect together
             // even when declarations interleave.

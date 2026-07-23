@@ -30,17 +30,27 @@
 
         <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*">
 
-            <Button x:Name="NewImageButton"
-                    Grid.Row="0"
-                    Margin="0,0,0,12"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Center"
-                    Click="NewImage_Click">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconAdd}" />
-                    <TextBlock Text="New Image" />
-                </StackPanel>
-            </Button>
+            <StackPanel Grid.Row="0" Margin="0,0,0,12" Spacing="8">
+                <Button x:Name="NewEditorButton"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="NewEditor_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavEditor}" />
+                        <TextBlock Text="New Editor" />
+                    </StackPanel>
+                </Button>
+
+                <Button x:Name="NewCaptureButton"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Click="NewCapture_Click">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
+                        <TextBlock Text="Screen Capture" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
 
             <u:NavMenu x:Name="NavList"
                        Grid.Row="1"
@@ -93,7 +103,15 @@
         </Grid>
 
         <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="24,0,0,0" RowDefinitions="Auto,*">
-            <TextBlock x:Name="PageTitle" Classes="Subtitle" Margin="0,8,16,16" />
+            <!-- The page header lives outside PageHost, so both the title and introduction stay
+                 visible while the settings page scrolls underneath them. -->
+            <StackPanel Margin="0,8,16,16" Spacing="8">
+                <TextBlock x:Name="PageTitle" Classes="Subtitle" />
+                <TextBlock x:Name="PageIntro"
+                           Classes="Body"
+                           Opacity="0.7"
+                           TextWrapping="Wrap" />
+            </StackPanel>
             <TransitioningContentControl x:Name="PageHost" Grid.Row="1">
                 <TransitioningContentControl.PageTransition>
                     <CrossFade Duration="0:0:0.12" />

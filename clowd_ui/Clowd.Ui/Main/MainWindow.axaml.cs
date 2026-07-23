@@ -21,10 +21,12 @@ namespace Clowd.UI
         private readonly HashSet<INotifyPropertyChanged> _autoSaveTargets = new();
 
         private DispatcherTimer _saveTimer;
+        private SettingsPageTab? _selectedTab;
 
         public MainWindow()
         {
             InitializeComponent();
+            SettingsRoot.Current.Hotkeys.PropertyChanged += OnHotkeyPropertyChanged;
             NavList.SelectionChanged += OnNavSelectionChanged;
             NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
             RestoreWindowBounds();
@@ -68,9 +70,14 @@ namespace Clowd.UI
                 $"{Position.X},{Position.Y},{Width},{Height}");
         }
 
-        private void NewImage_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void NewEditor_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             EditorWindow.ShowSession(null);
+        }
+
+        private void NewCapture_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Clowd.App.Current.StartCapture();
         }
 
         private void OnNavSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -81,8 +88,49 @@ namespace Clowd.UI
             if (!Enum.TryParse<SettingsPageTab>(tag, out var tab))
                 return;
 
+            _selectedTab = tab;
             PageTitle.Text = item.Header as string ?? tab.ToString();
+            SetPageIntro(tab);
             PageHost.Content = GetPageForTab(tab);
+        }
+
+        private void SetPageIntro(SettingsPageTab tab)
+        {
+            var intro = tab switch
+            {
+                SettingsPageTab.SettingsGeneral =>
+                    "Choose how Clowd looks and behaves, including its appearance, close confirmation, and tray icon action.",
+                SettingsPageTab.SettingsHotkeys =>
+                    "Click a shortcut, then press the new key combination — Esc cancels. Use ✕ to remove a shortcut.",
+                SettingsPageTab.SettingsCapture => GetCaptureIntroText(),
+                SettingsPageTab.SettingsRecording =>
+                    "Recording settings apply to your next recording. Changes made while a recording is in progress take effect only after it finishes.",
+                SettingsPageTab.SettingsEditor =>
+                    "Choose how editor sessions are restored and cleaned up, set the canvas appearance, or reset saved drawing-tool preferences.",
+                SettingsPageTab.SettingsUploads =>
+                    "Enable the upload destinations you wish to use, then click a category chip (e.g. Image) to make a provider the default destination for that kind of file.",
+                _ => null,
+            };
+
+            PageIntro.Text = intro;
+            PageIntro.IsVisible = !String.IsNullOrEmpty(intro);
+        }
+
+        private static string GetCaptureIntroText()
+        {
+            var gesture = SettingsRoot.Current.Hotkeys.CaptureRegionShortcut?.ToString();
+            return String.IsNullOrEmpty(gesture)
+                ? "These settings apply to the live capture opened from Clowd's tray menu. No Capture Region shortcut is currently assigned; you can add one on the Hotkeys page."
+                : $"These settings apply to the live capture opened when you press {gesture}. You can change this shortcut on the Hotkeys page.";
+        }
+
+        private void OnHotkeyPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (_selectedTab == SettingsPageTab.SettingsCapture
+                && (String.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsHotkey.CaptureRegionShortcut)))
+            {
+                PageIntro.Text = GetCaptureIntroText();
+            }
         }
 
         private Control GetPageForTab(SettingsPageTab tab)
@@ -96,11 +144,9 @@ namespace Clowd.UI
             {
                 SettingsPageTab.RecentSessions => new RecentSessionsPage(),
                 SettingsPageTab.SettingsGeneral => CreateGeneralPage(),
-                SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys,
-                    "Click a shortcut, then press the new key combination — Esc cancels. Use ✕ to remove a shortcut."),
+                SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys),
                 SettingsPageTab.SettingsCapture => CreateFactoryPage(getWindow, SettingsRoot.Current.Capture),
-                SettingsPageTab.SettingsRecording => CreateFactoryPage(getWindow, SettingsRoot.Current.Recording,
-                    "Recording settings apply to your next recording. Changes made while a recording is in progress take effect only after it finishes."),
+                SettingsPageTab.SettingsRecording => CreateFactoryPage(getWindow, SettingsRoot.Current.Recording),
                 SettingsPageTab.SettingsEditor => CreateFactoryPage(getWindow, SettingsRoot.Current.Editor),
                 SettingsPageTab.SettingsUploads => CreateUploadsPage(),
                 SettingsPageTab.About => new AboutPage(),
@@ -127,9 +173,9 @@ namespace Clowd.UI
             return new UploadSettingsPage();
         }
 
-        private Control CreateFactoryPage(Func<Window> getWindow, object category, string introText = null)
+        private Control CreateFactoryPage(Func<Window> getWindow, object category)
         {
-            var panel = new SettingsControlFactory(getWindow, category).GetSettingsPanel(introText);
+            var panel = new SettingsControlFactory(getWindow, category).GetSettingsPanel();
             AttachAutoSave(category);
             return panel;
         }
@@ -188,6 +234,12 @@ namespace Clowd.UI
             FlushPendingSave();
 
             base.OnClosing(e);
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            SettingsRoot.Current.Hotkeys.PropertyChanged -= OnHotkeyPropertyChanged;
+            base.OnClosed(e);
         }
 
         public void Open(SettingsPageTab? selectedTab = null)
