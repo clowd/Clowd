@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Clowd is a screen capture utility for macOS and Windows that allows editing screenshots and uploading them. The active implementation is in `clowd_capture_wgpu/` (Rust/wgpu).
+Clowd is a screen capture utility for macOS and Windows that allows editing screenshots and uploading them. The active implementation is in `clowd_capture/` (Rust/wgpu).
 
 The project is incomplete: the capture-and-render pipeline works (screenshot, selection, peek-through of obstructed windows, cursor compositing), but the editing tools and upload flow are not yet implemented.
 
