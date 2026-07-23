@@ -61,7 +61,9 @@ namespace Clowd.UI.Pages
             }
 
             button.IsEnabled = false;
-            button.Content = TestButtonContent(new LoadingIcon { Width = 14, Height = 14, IsLoading = true }, "Testing...");
+            // Use Ursa's Small class so the template's 20px arc is resized too; constraining only
+            // the outer LoadingIcon to 14px clips the rotating arc into a square.
+            button.Content = TestButtonContent(new LoadingIcon { Classes = { "Small" }, IsLoading = true }, "Testing...");
 
             string failure = null;
             try
@@ -87,7 +89,6 @@ namespace Clowd.UI.Pages
                 var check = new Path
                 {
                     Width = 12,
-                    Height = 12,
                     Stretch = Stretch.Uniform,
                     VerticalAlignment = VerticalAlignment.Center,
                     Fill = this.FindResource("SemiColorSuccess") as IBrush,

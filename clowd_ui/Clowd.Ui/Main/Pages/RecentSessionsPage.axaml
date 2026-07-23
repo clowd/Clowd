@@ -14,8 +14,7 @@
         <!-- one finished upload: link (click copies) + launch/delete, shared by the standalone list and session rows -->
         <DataTemplate x:Key="UploadRecordTemplate" DataType="clowd:UploadRecord">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <Path Width="10"
-                      Height="10"
+                <Path Height="10"
                       VerticalAlignment="Center"
                       Stretch="Uniform"
                       Fill="{DynamicResource SemiColorWarning}"

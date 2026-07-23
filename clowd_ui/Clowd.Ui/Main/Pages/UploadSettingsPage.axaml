@@ -202,8 +202,10 @@
                                                       IsChecked="{Binding Provider.AccelerateUploads}"
                                                       ToolTip.Tip="Accelerate uploads through clwd.app — the shareable link is ready instantly while the file transfers to your storage in the background"
                                                       AutomationProperties.Name="Accelerate uploads">
-                                            <Path Width="14"
-                                                  Height="14"
+                                            <!-- no explicit Width: Avalonia pins uniformly-stretched geometry to the
+                                                 top-left of a fixed box, so a square box leaves this narrow glyph
+                                                 off-centre; height-only sizing measures at the true aspect ratio -->
+                                            <Path Height="14"
                                                   Stretch="Uniform"
                                                   Data="{StaticResource IconLightning}" />
                                         </ToggleButton>
