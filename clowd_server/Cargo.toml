@@ -1,0 +1,49 @@
+# Standalone workspace — deliberately NOT part of the root clowd workspace.
+# Different target (wasm32-unknown-unknown), profile, and dependency constraints
+# than clowd_capture_wgpu. The root Cargo.toml lists `exclude = ["clowd_server"]`.
+[package]
+name = "clowd-server"
+version = "0.1.0"
+edition = "2021"
+authors = ["Caelan Sayler <git@caesay.com>"]
+license = "MIT"
+repository = "https://github.com/clowd/Clowd"
+description = "clwd.app streaming upload relay — Cloudflare Workers (Rust/WASM) server"
+
+[workspace]
+# Own workspace so this crate resolves independently of the desktop app.
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Pure logic — compiles and unit-tests on the native host as well as wasm.
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+sha2 = "0.10"
+subtle = "2"
+url = "2"
+percent-encoding = "2"
+getrandom = { version = "0.2", features = ["js"] }
+
+# wasm-only: the Cloudflare Workers runtime bindings and JS interop. Kept off the
+# native `cargo test` build so the pure-logic modules stay host-testable.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+worker = { version = "0.8.5", features = ["queue"] }
+worker-macros = "0.8.5"
+async-stream = "0.3"
+futures = "0.3"
+js-sys = "0.3"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[profile.release]
+opt-level = "s"    # workers value small wasm binaries
+lto = true
+codegen-units = 1
+panic = "abort"
+# NOTE: do NOT set `strip = true` — with worker-build 0.8.5 / wasm-bindgen 0.2.126
+# it strips the reference-types target feature and wasm-bindgen then fails with
+# "externref table required for catch wrappers" (workers-rs issue #1014).
+# worker-build runs wasm-opt, which strips debug info regardless.

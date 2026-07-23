@@ -10,6 +10,7 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Clowd.Config;
+using Clowd.Upload.Accelerate;
 
 namespace Clowd.Upload
 {
@@ -108,6 +109,21 @@ namespace Clowd.Upload
             set => Set(ref _customDomain, value);
         }
 
+        [Description("Route uploads through clwd.app so a shareable link is ready immediately, "
+                    + "while the file relays to this bucket in the background.")]
+        public bool AccelerateUploads
+        {
+            get => _accelerateUploads;
+            set => Set(ref _accelerateUploads, value);
+        }
+
+        [Description("The accelerate server to route uploads through when the toggle above is on.")]
+        public string AccelerateServerUrl
+        {
+            get => _accelerateServerUrl;
+            set => Set(ref _accelerateServerUrl, value);
+        }
+
         private string _accessKeyId;
         private string _secretAccessKey;
         private string _bucketName;
@@ -118,6 +134,8 @@ namespace Clowd.Upload
         private bool _disableChecksumValidation;
         private bool _makeObjectsPublic;
         private string _customDomain;
+        private bool _accelerateUploads;
+        private string _accelerateServerUrl = "https://clwd.app";
 
         private readonly IMimeProvider _mimeDb = new MimeProvider();
 
@@ -171,6 +189,97 @@ namespace Clowd.Upload
             };
         }
 
+        public override Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable,
+            string uploadName, CancellationToken cancelToken)
+            => AccelerateUploads
+                ? UploadAcceleratedAsync(fileStream, progress, urlAvailable, uploadName, cancelToken)
+                : UploadAsync(fileStream, progress, uploadName, cancelToken);
+
+        private async Task<UploadResult> UploadAcceleratedAsync(Stream fileStream, UploadProgressHandler progress,
+            UploadUrlHandler urlAvailable, string uploadName, CancellationToken cancelToken)
+        {
+            var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(uploadName)).ContentType;
+            var bucket = _bucketName.Trim();
+            var key = GetObjectKey(uploadName);
+            var contentLength = fileStream.Length;
+
+            // the client owns the chunk plan; partUrls below are minted one-per-chunk for it. 16 MiB
+            // is inside the server's [5,32] MiB clamp so the plan survives the round-trip unchanged.
+            var chunkSize = AcceleratedUploadClient.ClampChunkSize(AcceleratedUploadClient.DefaultChunkSize);
+            var chunkCount = AcceleratedUploadClient.ComputeChunkCount(contentLength, chunkSize);
+
+            using var client = CreateClient();
+
+            var init = new InitiateMultipartUploadRequest
+            {
+                BucketName = bucket,
+                Key = key,
+                ContentType = mimeType,
+                CannedACL = _makeObjectsPublic ? S3CannedACL.PublicRead : null,
+            };
+            init.Headers.ContentDisposition = $"inline; filename=\"{uploadName}\"";
+
+            var initiated = await client.InitiateMultipartUploadAsync(init, cancelToken);
+            var uploadId = initiated.UploadId;
+
+            var descriptor = BuildS3Descriptor(client, bucket, key, uploadId, chunkCount);
+
+            return await AcceleratedUploadRunner.RunAsync(
+                AccelerateServerUrl, descriptor, fileStream, mimeType, contentLength, uploadName, key,
+                chunkSize, this, progress, urlAvailable, cancelToken);
+        }
+
+        /// <summary>Builds the s3-multipart destination descriptor: a presigned UploadPart URL for
+        /// every chunk plus presigned Complete/Abort URLs, all SigV4 query-signed with
+        /// UNSIGNED-PAYLOAD. All URLs are derived from the SDK's own endpoint resolution (via a
+        /// stripped presigned GET) so path-style / virtual-hosted / custom-endpoint / region choices
+        /// match exactly what the SDK would use.</summary>
+        private DestinationDescriptor BuildS3Descriptor(AmazonS3Client client, string bucket, string key, string uploadId, int chunkCount)
+        {
+            // the real S3 object URL (host + path), independent of any CustomDomain override.
+            var signedGet = client.GetPreSignedURL(new GetPreSignedUrlRequest
+            {
+                BucketName = bucket,
+                Key = key,
+                Verb = HttpVerb.GET,
+                Expires = DateTime.UtcNow.AddMinutes(5),
+            });
+            var baseUri = new Uri(signedGet.Split('?')[0]);
+
+            // match the SDK's signing scope: the configured region, defaulting to us-east-1 when a
+            // custom endpoint is used without one (the AWS SDK's own default signing region).
+            var region = String.IsNullOrWhiteSpace(_region) ? "us-east-1" : _region.Trim();
+            var accessKey = _accessKeyId.Trim();
+            var secretKey = _secretAccessKey.Trim();
+            var expires = TimeSpan.FromHours(48);
+            var now = DateTimeOffset.UtcNow;
+
+            var partUrls = new string[chunkCount];
+            for (int n = 0; n < chunkCount; n++)
+            {
+                partUrls[n] = SigV4Presigner.Presign("PUT", baseUri,
+                    new Dictionary<string, string> { ["partNumber"] = (n + 1).ToString(), ["uploadId"] = uploadId },
+                    accessKey, secretKey, region, "s3", expires, now);
+            }
+
+            var completeUrl = SigV4Presigner.Presign("POST", baseUri,
+                new Dictionary<string, string> { ["uploadId"] = uploadId },
+                accessKey, secretKey, region, "s3", expires, now);
+
+            var abortUrl = SigV4Presigner.Presign("DELETE", baseUri,
+                new Dictionary<string, string> { ["uploadId"] = uploadId },
+                accessKey, secretKey, region, "s3", expires, now);
+
+            return new DestinationDescriptor
+            {
+                Type = "s3-multipart",
+                PartUrls = partUrls,
+                CompleteUrl = completeUrl,
+                AbortUrl = abortUrl,
+                FinalUrl = BuildPublicUrl(client, bucket, key),
+            };
+        }
+
         public override bool CanDelete(UploadDeleteInfo info)
             => info != null
                && !String.IsNullOrEmpty(info.UploadKey)
@@ -180,12 +289,18 @@ namespace Clowd.Upload
 
         public override async Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
         {
-            using var client = CreateClient();
-            await client.DeleteObjectAsync(new DeleteObjectRequest
+            using (var client = CreateClient())
             {
-                BucketName = _bucketName.Trim(),
-                Key = info.UploadKey,
-            }, cancelToken);
+                await client.DeleteObjectAsync(new DeleteObjectRequest
+                {
+                    BucketName = _bucketName.Trim(),
+                    Key = info.UploadKey,
+                }, cancelToken);
+            }
+
+            // accelerated records also carry a clwd.app short link — remove it too.
+            if (AcceleratedDeleteToken.TryParse(info.DeleteKey, out var id, out var token))
+                await AcceleratedUploadClient.DeleteAsync(AccelerateServerUrl, id, token, cancelToken);
         }
 
         /// <summary>Builds an <see cref="AmazonS3Client"/> from the current settings, validating the

@@ -1,0 +1,5 @@
+# workers-rs 0.8 + wasm-bindgen 0.2.126 need reference-types (externref) for the
+# generated catch wrappers, and multivalue for efficient returns. Scoped to the
+# wasm target so native `cargo test` is unaffected.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+reference-types,+multivalue"]

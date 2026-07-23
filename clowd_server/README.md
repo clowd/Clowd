@@ -1,141 +1,241 @@
-# Clowd.Server — streaming upload proxy
+# clwd.app — streaming upload relay (Cloudflare Workers)
 
-A mostly-stateless ASP.NET Core service that sits between the Clowd client and an upload
-destination (Azure blob storage, etc.) so a download link can be shared *before* the upload
-finishes. Destinations like Azure block blobs only become downloadable once every block is
-staged and the block list is committed; this proxy bridges that gap.
+A single Cloudflare Worker (Rust → WASM, via [`workers-rs`](https://github.com/cloudflare/workers-rs))
+that hands out a shareable download URL **before** an upload finishes, live-tails the bytes to
+recipients as they arrive, relays them to the user's own Azure Blob / S3-compatible bucket, and
+then `301`s to the final destination. It supersedes the legacy C#/ASP.NET Core docker server in
+this folder (`Clowd.Server`, kept as the semantic reference); see `REFACTOR.md` for the full spec.
 
-## How it works
+- **Worker `fetch`** — router (`/`, `/healthz`), control plane (`/api/v1/uploads…`), and the
+  live-tail `GET /u/{id}`.
+- **Durable Object `UploadSession`** — one per upload: manifest, capability tokens, status, an
+  in-memory wakeup list for tailing readers, and alarms (10-min idle timeout, 60-s post-complete
+  linger cleanup).
+- **Queue `RELAY` (+ `clowd-relay-dlq`)** — relays each staged chunk to the destination
+  (Azure `Put Block` / S3 `UploadPart`); DLQ marks the session failed.
+- **R2 `STAGING`** — transient chunk objects `{id}/{n:05}`.
+- **KV `REDIRECTS`** — write-once `{finalUrl,length,completedUtc}` for completed uploads.
 
-```
-client                      clowd_server                        azure
-  |-- POST /api/v1/uploads --->|                                  |
-  |   (creds + metadata)       |-- open streaming blob write ---->|
-  |<-- uploadUrl, downloadUrl -|                                  |
-  |                            |                                  |
-  |   (share downloadUrl now!) |                                  |
-  |                            |                                  |
-  |-- PUT /api/v1/uploads/id ->|-- stage blocks as bytes arrive ->|
-  |   (raw file body)          |-> tee to local cache file        |
-  |                            |     ^                            |
-  |              recipient --->|-- GET /d/id tails the cache      |
-  |                            |   (bytes flow immediately)       |
-  |                            |                                  |
-  |   (upload ends)            |-- commit block list ------------>|
-  |<-- finalUrl, delete info --|   persist id -> finalUrl         |
-  |                            |   forget everything else         |
-  |                            |                                  |
-  |              recipient --->|-- GET /d/id => 301 to azure      |
-```
+---
 
-- **In-progress uploads** live only in memory plus a cache file under the cache mount.
-  Credentials sent in StartUpload are held in memory for the duration of the upload and
-  never persisted.
-- **Completed uploads** leave behind exactly one thing: a tiny json file mapping the id to
-  the final destination url, served as a `301 Moved Permanently`.
-- A failed or abandoned upload kills any in-flight downloads (connection abort, so
-  recipients don't end up with a silently-truncated file) and is swept from disk.
+## 1. Prerequisites
 
-## API
+- **Rust** with the wasm target:
+  ```sh
+  rustup target add wasm32-unknown-unknown
+  ```
+- **worker-build** (compiles the crate + emits the JS shim; installed once, *not* in the build
+  command):
+  ```sh
+  cargo install worker-build --locked
+  ```
+- **Node** 20+ and the pinned wrangler devDependency:
+  ```sh
+  npm install
+  ```
+- A **Cloudflare account on the Workers Paid plan** ($5/mo — required for Durable Objects,
+  Queues, and the 5-minute CPU limit).
 
-### `POST /api/v1/uploads`
+---
 
-```json
-{
-  "provider": "azure",
-  "fileName": "screenshot.png",
-  "contentType": "image/png",
-  "contentLength": 1048576,
-  "credentials": {
-    "containerSasUrl": "https://account.blob.core.windows.net/uploads?sv=...&sp=cw...&sig=...",
-    "customDomain": "files.example.com"
-  }
-}
-```
+## 2. One-time Cloudflare setup (~15 min)
 
-`contentLength` is optional but recommended. When provided:
+1. **Add the `clwd.app` zone** in the Cloudflare dashboard, then point your registrar's
+   nameservers at the two Cloudflare nameservers it shows. Wait until the zone is **Active**
+   (the custom-domain route in `wrangler.jsonc` provisions DNS + TLS automatically on deploy).
 
-- proxied downloads carry a `Content-Length` header,
-- the upload is rejected if the byte count doesn't match, and
-- the **onward** request to the destination carries `Content-Length` instead of
-  `Transfer-Encoding: chunked` (the body still streams). Some hosts reject chunked request
-  bodies, so declaring the length here makes the proxy work against more destinations.
+2. **Authenticate wrangler** (interactive, or set `CLOUDFLARE_API_TOKEN` for CI):
+   ```sh
+   npx wrangler login
+   ```
 
-`backblaze` *requires* it — B2 won't accept chunked uploads at all.
+3. **Create the resources:**
+   ```sh
+   # R2 staging bucket
+   npx wrangler r2 bucket create clowd-staging
 
-### Providers and their `credentials` keys
+   # KV namespace for completed-upload redirects — copy the printed id
+   npx wrangler kv namespace create REDIRECTS
 
-| Provider | Required | Optional | Notes |
-|----------|----------|----------|-------|
-| `azure` | `containerSasUrl` | `customDomain` | SAS needs create+write only — the server never sees account keys. Final url known up front. |
-| `backblaze` | `keyId`, `applicationKey`, `bucketName` | | requires `contentLength`; streams with a sha1 trailer (`hex_digits_at_end`) |
-| `imgur` | `clientId` | | anonymous; deletehash returned after commit |
-| `catbox` | | `userHash`, `expiry` (`never`/`1h`/`12h`/`24h`/`72h`) | expiry ≠ never goes to litterbox |
-| `picsur` | `baseUrl` | `apiKey`, `directLink` (`true`/`false`) | self-hosted |
-| `vgyme` | `userKey` | | |
-| `hastebin` | | `url` (default `https://pastie.io`) | raw text post, not multipart |
+   # Relay queue + its dead-letter queue
+   npx wrangler queues create clowd-relay
+   npx wrangler queues create clowd-relay-dlq
+   ```
 
-Credentials are held in memory only while the upload is in flight, and prefer scoped
-secrets where the service supports them (azure SAS instead of a connection string).
+4. **R2 lifecycle backstop — delete staged chunks older than 2 days** (crashed-session cleanup;
+   R2 lifecycle granularity is days):
+   ```sh
+   npx wrangler r2 bucket lifecycle add clowd-staging --name expire-staging --expire-days 2
+   ```
+   (If your wrangler version differs, run `npx wrangler r2 bucket lifecycle --help`, or add the
+   rule in the dashboard: R2 → clowd-staging → Settings → Object lifecycle rules → delete after
+   2 days.)
 
-Response:
+5. **Paste the KV namespace id** from step 3 into `wrangler.jsonc`, replacing
+   `PASTE_REDIRECTS_KV_NAMESPACE_ID_HERE`:
+   ```jsonc
+   "kv_namespaces": [ { "binding": "REDIRECTS", "id": "<the id from step 3>" } ],
+   ```
 
-```json
-{
-  "id": "8fz-K2v1Qx0pLmNa",
-  "uploadUrl": "https://share.example.com/api/v1/uploads/8fz-K2v1Qx0pLmNa?token=...",
-  "downloadUrl": "https://share.example.com/d/8fz-K2v1Qx0pLmNa",
-  "finalUrl": "https://account.blob.core.windows.net/uploads/3a1b...",
-  "delete": { "provider": "azure", "uploadKey": "3a1b..." }
-}
-```
+---
 
-`downloadUrl` is shareable immediately. `finalUrl`/`delete` are included when the provider
-knows them up front (Azure does); for anonymous hosts that only hand back a delete url
-after the fact, the definitive values come in the upload response below.
+## 3. Local development — full offline stack
 
-### `PUT /api/v1/uploads/{id}?token=...`
-
-Raw file body (the token can also be sent as `Authorization: Bearer ...`). Returns the
-definitive `finalUrl` and `delete` info once the destination commits. One body per id.
-
-### `GET /d/{id}`
-
-While the upload is in flight: streams from the local cache, bytes flowing as they arrive.
-After completion: `301` to the destination, so the proxy never serves the bytes again.
-
-## Configuration
-
-Bound from the `Clowd` section (env vars use `Clowd__` prefix):
-
-| Key | Default | |
-|-----|---------|-|
-| `CachePath` | `data/cache` | in-progress upload buffer (mount 1) |
-| `RedirectsPath` | `data/redirects` | persisted 301s (mount 2) |
-| `PublicBaseUrl` | *(request host)* | origin used in generated urls, set when behind a proxy |
-| `MaxUploadBytes` | 10 GiB | hard cap per upload |
-| `UploadIdleTimeout` | 10 min | abandon uploads with no incoming bytes |
-| `FinishedLinger` | 1 min | how long finished sessions stay around for draining downloads |
-
-## Docker
+`wrangler dev` runs the real Workers runtime (workerd) locally with Miniflare emulation of R2,
+KV, Queues, and Durable Objects **including alarms** — the entire flow works with no cloud
+account. State persists across restarts under `.wrangler-state`.
 
 ```sh
-docker build -t clowd-server clowd_server
-docker run -p 8080:8080 \
-  -v clowd-cache:/data/cache \
-  -v clowd-redirects:/data/redirects \
-  -e Clowd__PublicBaseUrl=https://share.example.com \
-  clowd-server
+npm run dev          # → http://localhost:8787
 ```
 
-## Development
+`.dev.vars` sets `DEV_ALLOW_DISCARD=true`, which enables the **`discard`** destination (relays to
+nowhere, commit is a no-op) so you can exercise everything end to end without a real bucket. This
+flag is deliberately absent from `wrangler.jsonc`, so production never enables it.
+
+### Exercise the whole flow with curl
 
 ```sh
-dotnet test clowd_server/Clowd.Server.Tests   # unit + api tests (no azure account needed)
-dotnet run --project clowd_server/Clowd.Server
+BASE=http://localhost:8787
+
+# 1) Create a session (discard destination — dev only).
+resp=$(curl -s -X POST "$BASE/api/v1/uploads" \
+  -H 'content-type: application/json' \
+  -d '{
+        "fileName":"hello.txt",
+        "contentType":"text/plain",
+        "contentLength":11,
+        "destination":{"type":"discard","finalUrl":"https://example.com/hello.txt"}
+      }')
+echo "$resp"
+ID=$(echo "$resp"        | sed -E 's/.*"id":"([^"]+)".*/\1/')
+TOKEN=$(echo "$resp"     | sed -E 's/.*"uploadToken":"([^"]+)".*/\1/')
+# chunkCount here is 1 (11 bytes < the 5 MiB minimum chunk).
+
+# 2) (Optional) open a live tail BEFORE uploading — headers come back immediately,
+#    the body streams as chunks arrive. Run this in a second terminal:
+curl -sN "$BASE/u/$ID"
+
+# 3) Upload chunk 0 (raw bytes, bearer token).
+curl -s -X PUT "$BASE/api/v1/uploads/$ID/chunks/0" \
+  -H "authorization: Bearer $TOKEN" \
+  --data-binary 'hello world'
+# → {"received":0}
+
+# 4) Complete — commits the destination, writes KV, returns finalUrl + length.
+curl -s -X POST "$BASE/api/v1/uploads/$ID/complete" \
+  -H "authorization: Bearer $TOKEN"
+# → {"finalUrl":"https://example.com/hello.txt","length":11}
+
+# 5) The download URL is now a permanent redirect.
+curl -si "$BASE/u/$ID" | grep -i '^location'
+# → location: https://example.com/hello.txt
 ```
 
-Adding a destination: implement `IDestinationProvider`/`IDestinationUpload`
-(`Destinations/IDestinationProvider.cs`) and register it in `Program.cs`. The contract that
-matters: `WriteStream` receives bytes as they arrive, `CommitAsync` makes the object
-public, and `AbortAsync` must never publish partial data.
+Other routes: `POST /api/v1/uploads/{id}/abort` (bearer uploadToken) and
+`DELETE /api/v1/uploads/{id}` (bearer **deleteToken** — removes the short link so `/u/{id}` 404s).
+
+For **larger, multi-chunk** files, split the file into `chunkSize`-byte pieces and `PUT` them to
+`/chunks/0`, `/chunks/1`, … sequentially; every chunk is exactly `chunkSize` except the last.
+
+Smoke-test against real R2/Queues before deploying:
+
+```sh
+npm run dev:remote
+```
+
+---
+
+## 4. Running tests
+
+Pure logic (id/token validation, chunk-plan math, the manifest state machine, Azure block-list
+XML, S3 complete XML, destination URL construction/validation) is host-testable:
+
+```sh
+cargo test                                   # native unit tests
+```
+
+Full-surface checks (what CI should gate on):
+
+```sh
+cargo fmt --check
+cargo check  --target wasm32-unknown-unknown
+cargo clippy --target wasm32-unknown-unknown -- -D warnings
+cargo test
+```
+
+End-to-end smoke test (the full lifecycle against a local `wrangler dev`: create → chunked
+upload → **mid-upload live tail** with Content-Length + byte-exact content → complete → 301
+→ auth rejection → delete → 404). Start `npm run dev` in one terminal, then:
+
+```sh
+npm run e2e                                  # or E2E_BASE=http://127.0.0.1:xxxx npm run e2e
+```
+
+---
+
+## 5. Deploy
+
+```sh
+npm run deploy        # worker-build --release, then wrangler deploy
+```
+
+The custom-domain route provisions DNS + a TLS cert for `clwd.app` automatically. Verify:
+
+```sh
+curl -si https://clwd.app/healthz          # → 200 {"ok":true}
+curl -si https://clwd.app/                 # → 301 github.com/clowd/Clowd
+```
+
+Tail production logs with `npm run tail`.
+
+---
+
+## 6. Configuration knobs
+
+| Where | Knob | Default | Notes |
+|---|---|---|---|
+| `wrangler.jsonc` | `limits.cpu_ms` | `300000` | 5-min CPU cap (I/O wait is free; live tails aren't CPU-bound). |
+| `wrangler.jsonc` | queue `max_batch_size` / `max_batch_timeout` / `max_retries` | 5 / 1s / 5 | Relay batching + retries before the DLQ. |
+| `.dev.vars` | `DEV_ALLOW_DISCARD` | `true` (dev only) | Enables the `discard` destination. Never set in production. |
+| `src/consts.rs` | `IDLE_TIMEOUT_MS` | 10 min | No chunk received → session failed (DO alarm). |
+| `src/consts.rs` | `LINGER_MS` | 60 s | Post-complete/abort staging + DO-storage cleanup delay. |
+| `src/consts.rs` | `REDIRECT_MAX_AGE_SECS` | 3600 | `Cache-Control` on the completed-upload 301. |
+| `src/chunkplan.rs` | `MAX_UPLOAD_BYTES` | 10 GiB | Hard per-upload cap. |
+| `src/chunkplan.rs` | chunk-size band | 5–32 MiB (default 16 MiB) | Clamped at create time; 16 MiB floor for files > 5 GiB. |
+
+### Destinations
+
+The server only ever receives **capability URLs**, never account keys (unauthenticated create):
+
+- **`azure-blob`** — client-supplied blob-level SAS URL (`create+write`):
+  `{"type":"azure-blob","sasUrl":"https://…?sv=…&sig=…","customDomain":"files.example.com"}`
+  (`customDomain`/`finalUrl` optional). Relay = `Put Block`; commit = `Put Block List`.
+- **`s3-multipart`** — client presigns everything:
+  `{"type":"s3-multipart","partUrls":["…","…"],"completeUrl":"…","abortUrl":"…","finalUrl":"…"}`
+  (`partUrls` length must equal `chunkCount`). Relay = `UploadPart`; commit = `CompleteMultipartUpload`.
+- **`discard`** — dev/local only (see `DEV_ALLOW_DISCARD`).
+
+All destination URLs must be `https`.
+
+---
+
+## 7. Known gaps
+
+- **Real Azure/S3 destinations have not been exercised live** — the e2e suite runs the full
+  lifecycle (create → chunked upload → mid-upload live tail → complete → 301 → delete)
+  against the `discard` destination only. Watch the first real uploads with `npm run tail`.
+- **No rate limiting on the unauthenticated create endpoint.** Add a Cloudflare WAF rate
+  rule on `POST /api/v1/uploads` before publicizing the endpoint. Related: any https URL is
+  accepted as a destination/`finalUrl` (inherent open-redirect surface of a public
+  shortener); a destination-host allowlist knob is future work.
+- **Zero-byte files fail when accelerated** (client plans 1 chunk, server plans 0) — the
+  client should fall back to the direct provider path for empty files.
+- **No `Range`/resume on live tails** (`Accept-Ranges: none`); a severed tail must restart.
+- Chunk PUT/relay bodies are buffered per-operation (≤ 32 MiB) inside the session's Durable
+  Object; fine at the default 16 MiB chunks, but a pathological number of concurrent
+  operations on one upload pressures the 128 MB isolate limit. Tails are pass-through
+  streamed and unaffected.
+- A destination-commit failure leaves staging cleanup to the idle alarm / 2-day R2
+  lifecycle instead of cleaning up immediately; transient DO storage read errors are
+  reported as "not found" rather than 500/retry.

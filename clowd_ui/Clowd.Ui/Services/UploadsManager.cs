@@ -38,6 +38,14 @@ namespace Clowd.UI
 
         public bool IsCancelled { get; private set; }
 
+        // Set by UploadsManager.SetEarlyUrl for accelerated uploads: the shareable link surfaced
+        // (copied to the clipboard, written to session.UploadUrl) before any bytes transferred, and
+        // the session's UploadUrl from just before it was overwritten. If the upload then fails or is
+        // cancelled the server aborts the session and the link 410s, so these let the UI roll the dead
+        // link back rather than leave it on the Recent page and blocking junk-row cleanup.
+        internal string EarlyUrl { get; set; }
+        internal string PreEarlyUploadUrl { get; set; }
+
         private readonly CancellationTokenSource _source = new();
         private string _status;
         private double _progress;
@@ -143,6 +151,11 @@ namespace Clowd.UI
                 };
 
                 var session = upload.Session;
+
+                // an accelerated upload already surfaced this exact URL (and copied/toasted it) the
+                // moment the session was created — don't copy or toast it a second time here.
+                var alreadySurfaced = String.Equals(session.UploadUrl, result.PublicUrl, StringComparison.Ordinal);
+
                 session.Uploads = (session.Uploads ?? Array.Empty<UploadRecord>()).Append(record).ToArray();
 
                 // keep the legacy single-upload fields in sync for older readers of session.json.
@@ -150,7 +163,36 @@ namespace Clowd.UI
                 session.UploadFileKey = result.UploadKey;
 
                 // always copy the resulting URL to the clipboard and notify the user.
-                CopyUrlAndToast(session, result.PublicUrl);
+                if (!alreadySurfaced)
+                    CopyUrlAndToast(session, result.PublicUrl);
+            });
+        }
+
+        /// <summary>Surfaces a shareable URL for an in-flight upload before it finishes — used by
+        /// accelerated uploads, whose download link is live the instant the server session is
+        /// created. Sets the Recent page's link and copies/toasts exactly as completion would, so
+        /// the completion handler can then skip the duplicate.</summary>
+        public void SetEarlyUrl(ActiveUpload upload, string url)
+        {
+            if (String.IsNullOrEmpty(url))
+                return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (upload.IsCancelled)
+                    return;
+
+                var session = upload.Session;
+                if (String.Equals(session.UploadUrl, url, StringComparison.Ordinal))
+                    return; // already surfaced (idempotent)
+
+                // remember what to restore if this (still-in-flight) upload later fails/cancels and the
+                // server invalidates the link.
+                upload.PreEarlyUploadUrl = session.UploadUrl;
+                upload.EarlyUrl = url;
+
+                session.UploadUrl = url;
+                CopyUrlAndToast(session, url);
             });
         }
 
@@ -170,8 +212,17 @@ namespace Clowd.UI
                 // an open editor shows its own progress — don't steal focus to the recents tab.
                 if (EditorWindow.FindWindowForSession(session) == null)
                     OpenRecentTab();
+
+                // the server aborted the session on failure, so any early (pre-transfer) link is now
+                // dead — roll it off the session and warn that the copied link no longer works.
+                var invalidatedLink = RollbackEarlyUrl(upload);
+                var notice = invalidatedLink
+                    ? message + Environment.NewLine + Environment.NewLine
+                              + "The shareable link copied to your clipboard is no longer valid."
+                    : message;
+
                 // spec: show the error first, then drop the row from the page.
-                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, message, "Upload failed");
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, notice, "Upload failed");
                 Detach(upload);
                 CleanupEmptyUploadOnly(session);
             });
@@ -193,8 +244,33 @@ namespace Clowd.UI
                 return;
 
             var session = upload.Session;
+            // a cancel also aborts the server session, invalidating any early link — roll it back so
+            // it doesn't linger on the Recent page and so CleanupEmptyUploadOnly can drop the junk row.
+            RollbackEarlyUrl(upload);
             Detach(upload);
             CleanupEmptyUploadOnly(session);
+        }
+
+        /// <summary>Undoes an early (pre-transfer) URL the server has now invalidated by aborting the
+        /// session (the link 410s). Restores <see cref="SessionInfo.UploadUrl"/> to its pre-upload
+        /// value, but only when the early URL is still the one on the session and no completed upload
+        /// record captured it — so a genuinely-completed upload is never disturbed. Returns true when a
+        /// dead link was rolled back.</summary>
+        private static bool RollbackEarlyUrl(ActiveUpload upload)
+        {
+            var session = upload?.Session;
+            if (session == null || String.IsNullOrEmpty(upload.EarlyUrl))
+                return false;
+
+            // a completed upload replaces UploadUrl with its record's URL and appends a record; if
+            // either happened, this is not a dead early link and must be left alone.
+            if (!String.Equals(session.UploadUrl, upload.EarlyUrl, StringComparison.Ordinal))
+                return false;
+            if (session.Uploads != null && session.Uploads.Any(u => String.Equals(u?.Url, upload.EarlyUrl, StringComparison.Ordinal)))
+                return false;
+
+            session.UploadUrl = upload.PreEarlyUploadUrl;
+            return true;
         }
 
         private static void Detach(ActiveUpload upload)

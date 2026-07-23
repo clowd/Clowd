@@ -2,9 +2,11 @@
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Core.Util;
 using System;
+using System.ComponentModel;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Clowd.Upload.Accelerate;
 
 namespace Clowd.Upload
 {
@@ -69,12 +71,29 @@ namespace Clowd.Upload
             }
         }
 
+        [Description("Route uploads through clwd.app so a shareable link is ready immediately, "
+                    + "while the file relays to this container in the background.")]
+        public bool AccelerateUploads
+        {
+            get => _accelerateUploads;
+            set => Set(ref _accelerateUploads, value);
+        }
+
+        [Description("The accelerate server to route uploads through when the toggle above is on.")]
+        public string AccelerateServerUrl
+        {
+            get => _accelerateServerUrl;
+            set => Set(ref _accelerateServerUrl, value);
+        }
+
         private readonly IMimeProvider _mimeDb;
 
         const string AZURE_SERVICE_VERSION = "2019-12-12";
         private string _connectionString;
         private string _containerName;
         private string _customDomain;
+        private bool _accelerateUploads;
+        private string _accelerateServerUrl = "https://clwd.app";
 
         public AzureUploadProvider() : base()
         {
@@ -99,6 +118,46 @@ namespace Clowd.Upload
             return await SetPropertiesAndGetResult(blob, uploadName, false);
         }
 
+        public override Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable,
+            string uploadName, CancellationToken cancelToken)
+            => AccelerateUploads
+                ? UploadAcceleratedAsync(fileStream, progress, urlAvailable, uploadName, cancelToken)
+                : UploadAsync(fileStream, progress, uploadName, cancelToken);
+
+        private async Task<UploadResult> UploadAcceleratedAsync(Stream fileStream, UploadProgressHandler progress,
+            UploadUrlHandler urlAvailable, string uploadName, CancellationToken cancelToken)
+        {
+            var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(uploadName)).ContentType;
+            var contentLength = fileStream.Length;
+
+            var key = GetNewBlobKey();
+            var account = CloudStorageAccount.Parse(ConnectionString);
+            var container = account.CreateCloudBlobClient().GetContainerReference(ContainerName);
+            var blob = container.GetBlockBlobReference(key);
+
+            // a blob-level SAS with create+write only — the server never sees the account key.
+            var sas = blob.GetSharedAccessSignature(new SharedAccessBlobPolicy
+            {
+                Permissions = SharedAccessBlobPermissions.Create | SharedAccessBlobPermissions.Write,
+                SharedAccessExpiryTime = DateTimeOffset.UtcNow.AddHours(48),
+            });
+
+            var finalUrl = String.IsNullOrWhiteSpace(CustomDomain)
+                ? blob.Uri.ToString()
+                : $"https://{CustomDomain}/{ContainerName}/{blob.Name}";
+
+            var descriptor = new DestinationDescriptor
+            {
+                Type = "azure-blob",
+                BlobSasUrl = blob.Uri + sas,
+                FinalUrl = finalUrl,
+            };
+
+            return await AcceleratedUploadRunner.RunAsync(
+                AccelerateServerUrl, descriptor, fileStream, mimeType, contentLength, uploadName, blob.Name,
+                AcceleratedUploadClient.DefaultChunkSize, this, progress, urlAvailable, cancelToken);
+        }
+
         public override bool CanDelete(UploadDeleteInfo info)
             => !String.IsNullOrEmpty(info.UploadKey)
                && !String.IsNullOrEmpty(ConnectionString)
@@ -106,10 +165,15 @@ namespace Clowd.Upload
 
         public override async Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
         {
+            // delete the destination blob with the account's own credentials (as always).
             var account = CloudStorageAccount.Parse(ConnectionString);
             var container = account.CreateCloudBlobClient().GetContainerReference(ContainerName);
             var blob = container.GetBlockBlobReference(info.UploadKey);
             await blob.DeleteIfExistsAsync();
+
+            // accelerated records also carry a clwd.app short link — remove it too.
+            if (AcceleratedDeleteToken.TryParse(info.DeleteKey, out var id, out var token))
+                await AcceleratedUploadClient.DeleteAsync(AccelerateServerUrl, id, token, cancelToken);
         }
 
         private string GetNewBlobKey() => Guid.NewGuid().ToString().Replace("-", "");

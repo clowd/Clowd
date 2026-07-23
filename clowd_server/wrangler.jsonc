@@ -1,0 +1,76 @@
+{
+  // clwd.app — streaming upload relay Worker (Rust/WASM via workers-rs).
+  // See README.md for the one-time resource-creation commands and how to paste
+  // the KV namespace id below.
+  "name": "clowd-server",
+  "main": "build/worker/shim.mjs", // produced by `worker-build`
+  "compatibility_date": "2026-07-01",
+
+  // `worker-build` compiles the crate to wasm and emits the JS shim + bindings.
+  // (Install it once with `cargo install worker-build --locked` — NOT here.)
+  "build": {
+    "command": "worker-build --release"
+  },
+
+  // Custom domain: Cloudflare provisions DNS + TLS automatically. Requires the
+  // clwd.app zone to be active on this account (see README one-time setup).
+  "routes": [
+    { "pattern": "clwd.app", "custom_domain": true }
+  ],
+
+  // 5-minute CPU cap (Workers Paid). I/O wait is not metered, so multi-GB live
+  // tails are fine — only per-invocation CPU counts.
+  "limits": { "cpu_ms": 300000 },
+
+  "observability": { "enabled": true },
+
+  // Completed-upload redirects (id -> {finalUrl,length,completedUtc}), write-once.
+  // Paste the id printed by `wrangler kv namespace create REDIRECTS`.
+  "kv_namespaces": [
+    { "binding": "REDIRECTS", "id": "PASTE_REDIRECTS_KV_NAMESPACE_ID_HERE" }
+  ],
+
+  // Transient chunk staging: objects {id}/{n:05}. A 2-day lifecycle rule (set via
+  // the CLI, see README) backstops crashed sessions.
+  "r2_buckets": [
+    { "binding": "STAGING", "bucket_name": "clowd-staging" }
+  ],
+
+  // One Durable Object class holds per-upload session state + alarms.
+  "durable_objects": {
+    "bindings": [
+      { "name": "SESSIONS", "class_name": "UploadSession" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["UploadSession"] }
+  ],
+
+  // Relay queue: producer + consumer live in this same script. A dead-letter
+  // queue receives messages that exhaust their retries; the same consumer marks
+  // the session failed for DLQ messages.
+  "queues": {
+    "producers": [
+      { "binding": "RELAY", "queue": "clowd-relay" }
+    ],
+    "consumers": [
+      {
+        "queue": "clowd-relay",
+        "max_batch_size": 5,
+        "max_batch_timeout": 1,
+        "max_retries": 5,
+        "dead_letter_queue": "clowd-relay-dlq"
+      },
+      {
+        "queue": "clowd-relay-dlq",
+        "max_batch_size": 5,
+        "max_batch_timeout": 1,
+        "max_retries": 1
+      }
+    ]
+  }
+
+  // NOTE: DEV_ALLOW_DISCARD is intentionally NOT set here. The `discard`
+  // destination is enabled only for local development via `.dev.vars`
+  // (loaded automatically by `wrangler dev`). Production never enables it.
+}
