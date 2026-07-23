@@ -1,6 +1,7 @@
 <UserControl
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Clowd.UI.Controls"
     x:Class="Clowd.UI.Pages.AboutPage">
 
     <UserControl.Styles>
@@ -27,7 +28,7 @@
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
+    <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="8">
             <Viewbox Width="60" HorizontalAlignment="Left">
                 <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
@@ -88,5 +89,5 @@
                        Margin="0,8,0,0"
                        Text="Missed your project in this list? Feel free to reach out through our GitHub." />
         </StackPanel>
-    </ScrollViewer>
+    </controls:FadeEdgeScrollViewer>
 </UserControl>

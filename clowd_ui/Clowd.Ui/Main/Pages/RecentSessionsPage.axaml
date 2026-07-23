@@ -2,6 +2,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:Clowd.UI"
+    xmlns:controls="using:Clowd.UI.Controls"
     xmlns:clowd="using:Clowd"
     x:Class="Clowd.UI.RecentSessionsPage">
 
@@ -13,6 +14,14 @@
         <!-- one finished upload: link (click copies) + launch/delete, shared by the standalone list and session rows -->
         <DataTemplate x:Key="UploadRecordTemplate" DataType="clowd:UploadRecord">
             <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <Path Width="10"
+                      Height="10"
+                      VerticalAlignment="Center"
+                      Stretch="Uniform"
+                      Fill="{DynamicResource SemiColorWarning}"
+                      Data="{StaticResource IconLightning}"
+                      IsVisible="{Binding Accelerated}"
+                      ToolTip.Tip="Accelerated upload" />
                 <HyperlinkButton Padding="0"
                                  MinHeight="0"
                                  MaxWidth="360"
@@ -114,7 +123,7 @@
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
+    <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16">
 
             <!-- zero state: shown until the first capture exists -->
@@ -252,5 +261,5 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </StackPanel>
-    </ScrollViewer>
+    </controls:FadeEdgeScrollViewer>
 </UserControl>

@@ -18,6 +18,7 @@ using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Clowd.Config;
+using Clowd.UI.Controls;
 using Clowd.UI.Converters;
 using Clowd.UI.Helpers;
 
@@ -75,7 +76,7 @@ namespace Clowd.UI.Config
             // group keeps its gap at the bottom and the right edge never runs under the scrollbar.
             content.Margin = new Thickness(0, 0, 16, 16);
 
-            return new ScrollViewer { Content = content };
+            return new FadeEdgeScrollViewer { Content = content };
         }
 
         /// <summary>All rows of this object in declaration order, with [FlattenSettingsObject]
