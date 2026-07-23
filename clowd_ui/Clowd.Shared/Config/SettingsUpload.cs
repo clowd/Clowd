@@ -32,6 +32,9 @@ namespace Clowd.Config
             get => _provider;
         }
 
+        [Browsable(false)]
+        public bool SupportsAcceleration => _provider is IAccelerateProvider;
+
         public UploadProviderInfo(IUploadProvider provider)
         {
             _provider = provider;

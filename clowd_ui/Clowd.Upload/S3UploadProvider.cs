@@ -20,7 +20,7 @@ namespace Clowd.Upload
     /// toggles and the custom-endpoint fields exist to accommodate third-party providers that
     /// diverge from Amazon's request format.
     /// </summary>
-    public class S3UploadProvider : UploadProviderBase
+    public class S3UploadProvider : UploadProviderBase, IAccelerateProvider
     {
         public override string Name => "Amazon S3";
 
@@ -134,7 +134,7 @@ namespace Clowd.Upload
         private bool _disableChecksumValidation;
         private bool _makeObjectsPublic;
         private string _customDomain;
-        private bool _accelerateUploads;
+        private bool _accelerateUploads = true;
         private string _accelerateServerUrl = "https://clwd.app";
 
         private readonly IMimeProvider _mimeDb = new MimeProvider();

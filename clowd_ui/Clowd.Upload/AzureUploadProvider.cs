@@ -25,7 +25,7 @@ namespace Clowd.Upload
         }
     }
 
-    public class AzureUploadProvider : UploadProviderBase
+    public class AzureUploadProvider : UploadProviderBase, IAccelerateProvider
     {
         public override string Name => "Azure Storage";
         public override string Description => "Uploads any file as a BlockBlob to a public container";
@@ -92,7 +92,7 @@ namespace Clowd.Upload
         private string _connectionString;
         private string _containerName;
         private string _customDomain;
-        private bool _accelerateUploads;
+        private bool _accelerateUploads = true;
         private string _accelerateServerUrl = "https://clwd.app";
 
         public AzureUploadProvider() : base()

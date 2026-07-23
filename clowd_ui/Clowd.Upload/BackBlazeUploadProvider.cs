@@ -1,23 +1,19 @@
-﻿using System;
-using System.Collections.Generic;
+using System;
+using System.ComponentModel;
 using System.IO;
-using System.Linq;
-using System.Net.Http;
-using System.Net.Http.Handlers;
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using B2Net;
-using B2Net.Http;
-using B2Net.Http.RequestGenerators;
-using B2Net.Models;
-using System.Text.Json;
 
 namespace Clowd.Upload
 {
-    public class BackBlazeUploadProvider : UploadProviderBase
+    /// <summary>
+    /// Uploads to Backblaze B2 through its S3-compatible API by delegating to a
+    /// privately-configured <see cref="S3UploadProvider"/>, so B2 shares the S3 implementation
+    /// including accelerated uploads. The native B2 API is no longer used; uploads made by the
+    /// retired native provider stored a B2 fileId (always "4_...") and can no longer be deleted
+    /// from within Clowd.
+    /// </summary>
+    public class BackBlazeUploadProvider : UploadProviderBase, IAccelerateProvider
     {
         public override string Name => "BackBlaze B2";
 
@@ -27,190 +23,121 @@ namespace Clowd.Upload
 
         public override Stream Icon => new Resource().BackBlazeIcon;
 
-        public string BucketName
-        {
-            get => _bucketName;
-            set => Set(ref _bucketName, value);
-        }
-
+        [Description("The keyID of a B2 application key. The account master key does not work with "
+                    + "the S3-compatible API — create an application key instead.")]
         public string KeyId
         {
             get => _keyId;
             set => Set(ref _keyId, value);
         }
 
+        [Description("The applicationKey secret paired with the keyID above.")]
         public string ApplicationKey
         {
             get => _applicationKey;
             set => Set(ref _applicationKey, value);
         }
 
-        private string _bucketName;
+        [Description("The name of the bucket to upload into. It must already exist.")]
+        public string BucketName
+        {
+            get => _bucketName;
+            set => Set(ref _bucketName, value);
+        }
+
+        [Description("The S3 endpoint shown on your B2 bucket page, e.g. s3.us-west-004.backblazeb2.com. "
+                    + "The bucket's region is derived from it.")]
+        public string Endpoint
+        {
+            get => _endpoint;
+            set => Set(ref _endpoint, value);
+        }
+
+        [Description("Route uploads through clwd.app so a shareable link is ready immediately, "
+                    + "while the file relays to this bucket in the background.")]
+        public bool AccelerateUploads
+        {
+            get => _accelerateUploads;
+            set => Set(ref _accelerateUploads, value);
+        }
+
+        [Description("The accelerate server to route uploads through when the toggle above is on.")]
+        public string AccelerateServerUrl
+        {
+            get => _accelerateServerUrl;
+            set => Set(ref _accelerateServerUrl, value);
+        }
+
         private string _keyId;
         private string _applicationKey;
-
-        private readonly IMimeProvider _mimeDb = new MimeProvider();
+        private string _bucketName;
+        private string _endpoint;
+        private bool _accelerateUploads = true;
+        private string _accelerateServerUrl = "https://clwd.app";
 
         public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
             CancellationToken cancelToken)
         {
-            var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(uploadName)).ContentType;
-
-            var options = new B2Options()
-            {
-                KeyId = _keyId,
-                ApplicationKey = _applicationKey,
-            };
-
-            options = await B2Client.AuthorizeAsync(options);
-
-            var bucketId = await GetBucketId(options, _bucketName, cancelToken);
-            var uploadUrlObject = await GetUploadUrl(options, bucketId, cancelToken);
-            options.UploadAuthorizationToken = uploadUrlObject.AuthorizationToken;
-
-            using var http = GetHttpClient(TimeSpan.FromMinutes(60), progress);
-
-            // https://www.backblaze.com/b2/docs/b2_upload_file.html
-            var requestMessage = GetUploadReq(options, uploadUrlObject.UploadUrl, fileStream, uploadName);
-            var response = await http.SendAsync(requestMessage, cancelToken);
-
-            // check for errors, and capture the file id so the upload can later be deleted.
-            var file = await ResponseParser.ParseResponse<B2File>(response, "Files");
-
-            var url = $"{options.DownloadUrl}/file/{_bucketName}/{uploadName}";
-
-            return new UploadResult()
-            {
-                ContentType = mimeType,
-                Provider = this,
-                FileName = uploadName,
-                PublicUrl = url,
-                UploadKey = file.FileId,
-                UploadTime = DateTimeOffset.Now,
-            };
+            var result = await CreateS3().UploadAsync(fileStream, progress, uploadName, cancelToken);
+            result.Provider = this;
+            return result;
         }
 
+        public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable,
+            string uploadName, CancellationToken cancelToken)
+        {
+            var result = await CreateS3().UploadAsync(fileStream, progress, urlAvailable, uploadName, cancelToken);
+            result.Provider = this;
+            return result;
+        }
+
+        // records from the retired native-API provider stored the B2 fileId as UploadKey, which
+        // the S3 API cannot delete by — and S3 DeleteObject on a nonexistent key reports success,
+        // so refuse those rather than silently no-op.
         public override bool CanDelete(UploadDeleteInfo info)
-            => !String.IsNullOrEmpty(info.UploadKey)
-               && !String.IsNullOrEmpty(info.FileName)
-               && !String.IsNullOrEmpty(_keyId)
-               && !String.IsNullOrEmpty(_applicationKey);
+            => info != null
+               && !String.IsNullOrEmpty(info.UploadKey)
+               && !info.UploadKey.StartsWith("4_", StringComparison.Ordinal)
+               && !String.IsNullOrWhiteSpace(_keyId)
+               && !String.IsNullOrWhiteSpace(_applicationKey)
+               && !String.IsNullOrWhiteSpace(_bucketName)
+               && !String.IsNullOrWhiteSpace(_endpoint);
 
-        public override async Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
+        public override Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)
+            => CreateS3().DeleteAsync(info, cancelToken);
+
+        private S3UploadProvider CreateS3()
         {
-            var options = new B2Options()
+            if (String.IsNullOrWhiteSpace(_keyId) || String.IsNullOrWhiteSpace(_applicationKey))
+                throw new InvalidOperationException("A BackBlaze B2 keyID and applicationKey are required.");
+            if (String.IsNullOrWhiteSpace(_bucketName))
+                throw new InvalidOperationException("A BackBlaze B2 bucket name is required.");
+
+            var host = (_endpoint ?? "").Trim();
+            if (host.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                host = host.Substring("https://".Length);
+            else if (host.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+                host = host.Substring("http://".Length);
+            host = host.TrimEnd('/');
+
+            var parts = host.Split('.');
+            if (parts.Length != 4 || parts[0] != "s3" || parts[2] != "backblazeb2" || parts[3] != "com")
+                throw new InvalidOperationException(
+                    "The endpoint must be the S3 endpoint shown on your B2 bucket page, e.g. s3.us-west-004.backblazeb2.com.");
+
+            return new S3UploadProvider
             {
-                KeyId = _keyId,
-                ApplicationKey = _applicationKey,
+                AccessKeyId = _keyId,
+                SecretAccessKey = _applicationKey,
+                BucketName = _bucketName,
+                UseCustomEndpoint = true,
+                CustomEndpoint = "https://" + host,
+                Region = parts[1],
+                // B2 rejects the data-integrity checksums newer AWS SDKs send by default
+                DisableChecksumValidation = true,
+                AccelerateUploads = _accelerateUploads,
+                AccelerateServerUrl = _accelerateServerUrl,
             };
-
-            options = await B2Client.AuthorizeAsync(options);
-
-            using var http = GetHttpClient(TimeSpan.FromSeconds(30));
-
-            var json = JsonSerializer.Serialize(
-                new B2DeleteFileRequest { fileId = info.UploadKey, fileName = info.FileName },
-                UploadJsonContext.Default.B2DeleteFileRequest);
-            var req = BaseRequestGenerator.PostRequest("b2_delete_file_version", json, options);
-            var response = await http.SendAsync(req, cancelToken);
-
-            if (!response.IsSuccessStatusCode)
-                throw new Exception($"Failed to delete upload (error {response.StatusCode}).");
         }
-
-        private static HttpRequestMessage GetUploadReq(B2Options options, string uploadUrl, Stream fileData, string fileName,
-            Dictionary<string, string> fileInfo = null, string contentType = "")
-        {
-            string hash = GetSHA1Hash(fileData);
-            fileData.Position = 0;
-
-            var uri = new Uri(uploadUrl);
-            var request = new HttpRequestMessage()
-            {
-                Method = HttpMethod.Post,
-                RequestUri = uri,
-                Content = new StreamContent(fileData)
-            };
-
-            request.Headers.TryAddWithoutValidation("Authorization", options.UploadAuthorizationToken);
-            request.Headers.Add("X-Bz-File-Name", fileName.b2UrlEncode());
-            request.Headers.Add("X-Bz-Content-Sha1", hash);
-            if (fileInfo != null && fileInfo.Count > 0)
-            {
-                foreach (var info in fileInfo.Take(10))
-                {
-                    request.Headers.Add($"X-Bz-Info-{info.Key}", info.Value);
-                }
-            }
-
-            request.Content.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(contentType) ? "b2/x-auto" : contentType);
-            request.Content.Headers.ContentLength = fileData.Length;
-
-            return request;
-        }
-
-        private async Task<string> GetBucketId(B2Options options, string bucketName, CancellationToken token)
-        {
-            if (String.IsNullOrWhiteSpace(bucketName))
-                throw new ArgumentNullException(nameof(bucketName));
-
-            using var http = GetHttpClient(TimeSpan.FromSeconds(15));
-
-            var json = JsonSerializer.Serialize(
-                new B2ListBucketsRequest { accountId = options.AccountId, bucketName = bucketName },
-                UploadJsonContext.Default.B2ListBucketsRequest);
-            var req = BaseRequestGenerator.PostRequest("b2_list_buckets", json, options);
-            var response = await http.SendAsync(req, token);
-
-            if (!response.IsSuccessStatusCode)
-                throw new Exception($"Error retrieving bucket id ({response.StatusCode}).");
-
-            var bucketList = await ResponseParser.ParseResponse<B2BucketListDeserializeModel>(response);
-
-            if (bucketList.Buckets.Count == 0)
-                throw new Exception($"Bucket '{bucketName}' was not found.");
-
-            return bucketList.Buckets.First().BucketId;
-        }
-
-        private async Task<B2UploadUrl> GetUploadUrl(B2Options options, string bucketId, CancellationToken token)
-        {
-            using var http = GetHttpClient(TimeSpan.FromSeconds(15));
-            var uploadUrlRequest = FileUploadRequestGenerators.GetUploadUrl(options, bucketId);
-            var uploadUrlResponse = await http.SendAsync(uploadUrlRequest, token);
-            return await ResponseParser.ParseResponse<B2UploadUrl>(uploadUrlResponse);
-        }
-
-        private static string GetSHA1Hash(Stream fileData)
-        {
-            using (var sha1 = SHA1.Create())
-            {
-                return HexStringFromBytes(sha1.ComputeHash(fileData));
-            }
-        }
-
-        private static string HexStringFromBytes(byte[] bytes)
-        {
-            var sb = new StringBuilder();
-            foreach (byte b in bytes)
-            {
-                var hex = b.ToString("x2");
-                sb.Append(hex);
-            }
-
-            return sb.ToString();
-        }
-    }
-
-    internal class B2ListBucketsRequest
-    {
-        public string accountId { get; set; }
-        public string bucketName { get; set; }
-    }
-
-    internal class B2DeleteFileRequest
-    {
-        public string fileId { get; set; }
-        public string fileName { get; set; }
     }
 }

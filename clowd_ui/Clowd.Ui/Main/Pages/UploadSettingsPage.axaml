@@ -40,6 +40,29 @@
         <Style Selector="Button.chip.isDefault Path.chipCheck">
             <Setter Property="IsVisible" Value="True" />
         </Style>
+        <!-- Cloudflare-orange-cloud-style accelerate toggle: grey outline when off,
+             warning-filled when routing uploads through the accelerate server -->
+        <Style Selector="ToggleButton.lightning">
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+        </Style>
+        <Style Selector="ToggleButton.lightning Path">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText2}" />
+        </Style>
+        <Style Selector="ToggleButton.lightning:checked">
+            <Setter Property="Background" Value="{DynamicResource SemiColorWarning}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorWarning}" />
+        </Style>
+        <Style Selector="ToggleButton.lightning:checked Path">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorWhite}" />
+        </Style>
     </UserControl.Styles>
 
     <ScrollViewer>
@@ -164,13 +187,27 @@
                                         </Button>
                                     </StackPanel>
 
-                                    <Button Grid.Column="3"
-                                            Grid.RowSpan="3"
-                                            VerticalAlignment="Center"
-                                            Margin="10,0,0,0"
-                                            Content="Settings"
-                                            Click="ProviderSettingsClicked"
-                                            ToolTip.Tip="Edit this provider's settings" />
+                                    <StackPanel Grid.Column="3"
+                                                Grid.RowSpan="3"
+                                                Orientation="Horizontal"
+                                                VerticalAlignment="Center"
+                                                Margin="10,0,0,0"
+                                                Spacing="8">
+                                        <ToggleButton Classes="lightning"
+                                                      IsVisible="{Binding SupportsAcceleration}"
+                                                      IsEnabled="{Binding IsEnabled}"
+                                                      IsChecked="{Binding Provider.AccelerateUploads}"
+                                                      ToolTip.Tip="Accelerate uploads through clwd.app — the shareable link is ready instantly while the file transfers to your storage in the background"
+                                                      AutomationProperties.Name="Accelerate uploads">
+                                            <Path Width="12"
+                                                  Height="12"
+                                                  Stretch="Uniform"
+                                                  Data="{StaticResource IconLightning}" />
+                                        </ToggleButton>
+                                        <Button Content="Settings"
+                                                Click="ProviderSettingsClicked"
+                                                ToolTip.Tip="Edit this provider's settings" />
+                                    </StackPanel>
                                 </Grid>
                             </DockPanel>
                         </Border>
