@@ -11,6 +11,7 @@ namespace Clowd
         public string UploadKey { get; set; }
         public string DeleteKey { get; set; }
         public DateTime UploadedUtc { get; set; }
+        public bool Accelerated { get; set; }
 
         [JsonIgnore] public bool CanDelete => UploadManager.CanDeleteUpload(this);
     }

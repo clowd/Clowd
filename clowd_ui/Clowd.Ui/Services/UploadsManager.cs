@@ -45,6 +45,7 @@ namespace Clowd.UI
         // link back rather than leave it on the Recent page and blocking junk-row cleanup.
         internal string EarlyUrl { get; set; }
         internal string PreEarlyUploadUrl { get; set; }
+        internal bool WasAccelerated { get; set; }
 
         private readonly CancellationTokenSource _source = new();
         private string _status;
@@ -148,6 +149,7 @@ namespace Clowd.UI
                     UploadKey = result.UploadKey,
                     DeleteKey = result.DeleteKey,
                     UploadedUtc = DateTime.UtcNow,
+                    Accelerated = upload.WasAccelerated,
                 };
 
                 var session = upload.Session;
@@ -181,6 +183,8 @@ namespace Clowd.UI
             {
                 if (upload.IsCancelled)
                     return;
+
+                upload.WasAccelerated = true;
 
                 var session = upload.Session;
                 if (String.Equals(session.UploadUrl, url, StringComparison.Ordinal))
