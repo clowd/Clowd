@@ -284,17 +284,24 @@ impl UploadSession {
     }
 
     async fn chunk(&self, req: &mut Request, n: u64) -> Result<Response> {
+        // Every rejection before the `req.bytes()` read below must cancel the
+        // still-streaming body first, or workerd 503s the response (see
+        // `discard_body`).
         let Some(state) = self.load().await? else {
+            crate::wasm_util::discard_body(req).await;
             return Response::error("not found", 404);
         };
         if !Self::authed(req, &state.upload_token) {
+            crate::wasm_util::discard_body(req).await;
             return Response::error("unauthorized", 401);
         }
         if !manifest::can_accept_chunk(state.status) {
             // terminal session — no more bytes accepted
+            crate::wasm_util::discard_body(req).await;
             return Response::error("session is no longer accepting chunks", 409);
         }
         if n >= state.chunk_count {
+            crate::wasm_util::discard_body(req).await;
             return error_json("chunk number out of range", 400);
         }
 
