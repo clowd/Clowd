@@ -1,0 +1,287 @@
+//! Worker entry points: the `fetch` router (control plane + live tail) and the
+//! `queue` consumer. Routes are validated (id regex, https destinations) before
+//! any storage access.
+
+use worker::{event, Context, Env, Headers, MessageBatch, Method, Request, Response, ResponseBuilder, Result};
+
+use crate::chunkplan::plan;
+use crate::consts::{BASE_URL_VAR, DEFAULT_ORIGIN, DEV_ALLOW_DISCARD_VAR, GITHUB_URL, REDIRECT_MAX_AGE_SECS};
+use crate::ids::{bearer, hash_matches, is_valid_id, new_id, new_token};
+use crate::model::{CreateRequest, CreateResponse, SessionState, SessionStatus};
+use crate::relay;
+use crate::wasm_util::{do_request, error_json, json_status, now_ms};
+
+#[event(fetch)]
+async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    let path = req.path();
+    let method = req.method();
+    let seg: Vec<String> = path
+        .split('/')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect();
+    let seg: Vec<&str> = seg.iter().map(|s| s.as_str()).collect();
+
+    match (&method, seg.as_slice()) {
+        (Method::Get, []) => redirect_301(GITHUB_URL, None),
+        (Method::Get, ["healthz"]) => healthz(),
+        (Method::Post, ["api", "v1", "uploads"]) => create(req, &env).await,
+        (Method::Put, ["api", "v1", "uploads", id, "chunks", n]) => forward(&env, id, &format!("/chunk/{n}"), req).await,
+        (Method::Post, ["api", "v1", "uploads", id, "complete"]) => forward(&env, id, "/complete", req).await,
+        (Method::Post, ["api", "v1", "uploads", id, "abort"]) => forward(&env, id, "/abort", req).await,
+        (Method::Delete, ["api", "v1", "uploads", id]) => delete_upload(&env, id, req).await,
+        (Method::Get, ["u", id]) => download(&env, id).await,
+        _ => Response::error("not found", 404),
+    }
+}
+
+#[event(queue)]
+async fn queue(batch: MessageBatch<crate::model::RelayMessage>, env: Env, _ctx: Context) -> Result<()> {
+    relay::handle(batch, env).await
+}
+
+fn healthz() -> Result<Response> {
+    #[derive(serde::Serialize)]
+    struct Ok {
+        ok: bool,
+    }
+    Response::from_json(&Ok {
+        ok: true,
+    })
+}
+
+/// Build a `301` redirect manually.
+///
+/// `Response::redirect_with_status` wraps `web_sys::Response.redirect()`, whose
+/// headers carry the Fetch-spec **immutable** guard — so a later
+/// `headers_mut().set("Cache-Control", …)` throws a `TypeError` and the handler
+/// 500s. Constructing the response from a fresh mutable `Headers` avoids that.
+fn redirect_301(url: &str, cache: Option<u64>) -> Result<Response> {
+    // Validate the URL up front (parity with the old `Url::parse` guard) but emit
+    // the original string as the `Location` value.
+    worker::Url::parse(url).map_err(|e| worker::Error::RustError(format!("bad url: {e}")))?;
+    let headers = Headers::new();
+    headers.set("Location", url)?;
+    if let Some(max_age) = cache {
+        headers.set("Cache-Control", &format!("public, max-age={max_age}"))?;
+    }
+    Ok(ResponseBuilder::new()
+        .with_headers(headers)
+        .with_status(301)
+        .empty())
+}
+
+async fn create(mut req: Request, env: &Env) -> Result<Response> {
+    // Derive the origin that will serve `/u/{id}` from this request (or a
+    // configured override) so non-clwd.app deployments — `wrangler dev`, custom
+    // domains — hand out working links instead of a hardcoded production URL.
+    let origin = download_origin(&req, env);
+
+    let body: CreateRequest = match req.json().await {
+        Ok(b) => b,
+        Err(_) => return error_json("invalid JSON body", 400),
+    };
+
+    let chunk_plan = match plan(body.content_length, body.chunk_size) {
+        Ok(p) => p,
+        Err(e) => return error_json(&e, 400),
+    };
+
+    // discard destination is dev-only.
+    if body.destination.is_discard() {
+        let allowed = env
+            .var(DEV_ALLOW_DISCARD_VAR)
+            .map(|v| v.to_string())
+            .unwrap_or_default()
+            == "true";
+        if !allowed {
+            return error_json("discard destination is not enabled", 400);
+        }
+    }
+
+    if let Err(e) = body
+        .destination
+        .validate(chunk_plan.chunk_count)
+    {
+        return error_json(&e, 400);
+    }
+
+    let id = new_id();
+    let upload_token = new_token();
+    let delete_token = new_token();
+    let final_url = body.destination.final_url();
+    let now = now_ms();
+
+    let state = SessionState {
+        id: id.clone(),
+        file_name: crate::sanitize::sanitize_filename(body.file_name.as_deref()),
+        content_type: crate::sanitize::header_safe_content_type(body.content_type.as_deref().unwrap_or("")),
+        content_length: chunk_plan.content_length,
+        chunk_size: chunk_plan.chunk_size,
+        chunk_count: chunk_plan.chunk_count,
+        upload_token: upload_token.clone(),
+        delete_token: delete_token.clone(),
+        destination: body.destination,
+        final_url: final_url.clone(),
+        status: SessionStatus::Uploading,
+        staged: vec![false; chunk_plan.chunk_count as usize],
+        relayed: vec![None; chunk_plan.chunk_count as usize],
+        last_activity_ms: now,
+        created_ms: now,
+    };
+
+    let stub = env
+        .durable_object("SESSIONS")?
+        .id_from_name(&id)?
+        .get_stub()?;
+    let init_body = serde_json::to_vec(&state)?;
+    let resp = do_request(
+        &stub,
+        "/init",
+        Method::Post,
+        Some(init_body),
+        &[("Content-Type", "application/json")],
+    )
+    .await?;
+    if !crate::wasm_util::is_success(&resp) {
+        return Response::error("failed to initialize session", 500);
+    }
+
+    let out = CreateResponse {
+        id: id.clone(),
+        download_url: format!("{origin}/u/{id}"),
+        upload_token,
+        delete_token,
+        chunk_size: chunk_plan.chunk_size,
+        chunk_count: chunk_plan.chunk_count,
+        final_url,
+    };
+    json_status(&out, 201)
+}
+
+/// Forward a control-plane mutation to the session DO, preserving method, body,
+/// and headers (the DO does the constant-time token check).
+///
+/// The DO route is carried in an `X-DO-Route` header rather than by rewriting the
+/// URL: `Request::path_mut` only mutates the Rust-side wrapper's cached path, so
+/// the `web_sys::Request` that `fetch_with_request` actually sends still has the
+/// original `/api/v1/…` URL — the DO would re-derive that path and 404. Cloning
+/// with `clone_mut` keeps the request body as a live stream (no buffering), and
+/// the added header survives because the clone is mutable.
+async fn forward(env: &Env, id: &str, internal_path: &str, req: Request) -> Result<Response> {
+    if !is_valid_id(id) {
+        return Response::error("not found", 404);
+    }
+    let stub = env
+        .durable_object("SESSIONS")?
+        .id_from_name(id)?
+        .get_stub()?;
+    let mut internal = req.clone_mut()?;
+    internal
+        .headers_mut()?
+        .set(crate::consts::DO_ROUTE_HEADER, internal_path)?;
+    stub.fetch_with_request(internal).await
+}
+
+/// Origin (`scheme://host[:port]`) that serves `/u/{id}` for links minted here.
+/// Priority: `BASE_URL` var → this request's own origin → `clwd.app`.
+fn download_origin(req: &Request, env: &Env) -> String {
+    if let Ok(v) = env.var(BASE_URL_VAR) {
+        let s = v.to_string();
+        let trimmed = s.trim_end_matches('/');
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+    if let Ok(url) = req.url() {
+        if let Some(host) = url.host_str() {
+            let scheme = url.scheme();
+            return match url.port() {
+                Some(port) => format!("{scheme}://{host}:{port}"),
+                None => format!("{scheme}://{host}"),
+            };
+        }
+    }
+    DEFAULT_ORIGIN.to_string()
+}
+
+/// `DELETE /api/v1/uploads/{id}` — remove the short link (deleteToken).
+///
+/// Deletes normally happen long after upload (the Recent page's "remove short
+/// link"), by which time the DO's 60 s post-completion linger has wiped its
+/// storage — including `delete_token`. So: try the live DO first (handles
+/// in-progress / freshly-completed sessions and their staging cleanup); if it has
+/// no state (404), fall back to authorizing against the `deleteTokenHash` stored
+/// in the KV record and delete the KV entry directly (REFACTOR §3.1/§4.4).
+async fn delete_upload(env: &Env, id: &str, req: Request) -> Result<Response> {
+    if !is_valid_id(id) {
+        return Response::error("not found", 404);
+    }
+
+    // Capture the presented delete token before the request is consumed by the DO
+    // forward (needed for the post-linger KV fallback).
+    let presented = req
+        .headers()
+        .get("Authorization")
+        .ok()
+        .flatten()
+        .and_then(|hv| bearer(Some(&hv)).map(str::to_string));
+
+    let resp = forward(env, id, "/del", req).await?;
+    if resp.status_code() != 404 {
+        return Ok(resp);
+    }
+
+    // DO has no state (post-linger) — authorize + delete against KV directly.
+    let Some(token) = presented else {
+        return Response::error("not found", 404);
+    };
+    let kv = env.kv("REDIRECTS")?;
+    let Some(raw) = kv.get(id).text().await? else {
+        return Response::error("not found", 404);
+    };
+    let Ok(rec) = serde_json::from_str::<RedirectRecord>(&raw) else {
+        return Response::error("not found", 404);
+    };
+    let Some(hash) = rec.delete_token_hash else {
+        // Record predates delete-token hashing — cannot authorize here.
+        return Response::error("not found", 404);
+    };
+    if !hash_matches(&token, &hash) {
+        return Response::error("unauthorized", 401);
+    }
+    kv.delete(id).await?;
+    Response::empty()
+}
+
+/// `GET /u/{id}` — KV fast path, else ask the session DO.
+async fn download(env: &Env, id: &str) -> Result<Response> {
+    if !is_valid_id(id) {
+        return Response::error("not found", 404);
+    }
+
+    // 1) KV hit → edge-cacheable 301.
+    let kv = env.kv("REDIRECTS")?;
+    if let Some(raw) = kv.get(id).text().await? {
+        if let Ok(rec) = serde_json::from_str::<RedirectRecord>(&raw) {
+            return redirect_301(&rec.final_url, Some(REDIRECT_MAX_AGE_SECS));
+        }
+    }
+
+    // 2) KV miss → the DO decides (live tail / 301 / 410 / 404).
+    let stub = env
+        .durable_object("SESSIONS")?
+        .id_from_name(id)?
+        .get_stub()?;
+    do_request(&stub, "/tail", Method::Get, None, &[]).await
+}
+
+#[derive(serde::Deserialize)]
+struct RedirectRecord {
+    #[serde(rename = "finalUrl")]
+    final_url: String,
+    /// SHA-256 (url-safe base64) of the delete token — lets `DELETE` authorize
+    /// against KV after the DO's storage is gone. Optional for forward-compat.
+    #[serde(rename = "deleteTokenHash", default)]
+    delete_token_hash: Option<String>,
+}

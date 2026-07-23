@@ -46,7 +46,7 @@ namespace Clowd
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, info.Length, true);
 
             var fileName = GetPatternFileName(Path.GetExtension(info.Name));
-            var uploadTask = provider.UploadAsync(info.FullName, handler, fileName, upload.CancelToken);
+            var uploadTask = Upload(provider, info.FullName, handler, upload, fileName);
 
             // CompleteUpload persists UploadUrl/UploadFileKey (and the new Uploads list) on the session.
             return await HandleUploadResult(upload, uploadTask);
@@ -86,7 +86,7 @@ namespace Clowd
             upload.SetStatus("Uploading...");
 
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, ms.Length, true);
-            var uploadTask = provider.UploadAsync(ms, handler, fileName, upload.CancelToken);
+            var uploadTask = Upload(provider, ms, handler, upload, fileName);
             return await HandleUploadResult(upload, uploadTask);
         }
 
@@ -120,7 +120,7 @@ namespace Clowd
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, ms.Length, true);
 
             var fileName = GetRandomName(10);
-            var uploadTask = provider.UploadAsync(ms, handler, fileName, upload.CancelToken);
+            var uploadTask = Upload(provider, ms, handler, upload, fileName);
             return await HandleUploadResult(upload, uploadTask);
         }
 
@@ -174,7 +174,7 @@ namespace Clowd
             upload.SetStatus("Uploading...");
 
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, fileInfo.Length, true);
-            var uploadTask = provider.UploadAsync(filePath, handler, fileName, upload.CancelToken);
+            var uploadTask = Upload(provider, filePath, handler, upload, fileName);
             return await HandleUploadResult(upload, uploadTask);
         }
 
@@ -300,7 +300,7 @@ namespace Clowd
                 UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, size, true);
 
                 var archiveName = GetRandomName(10) + ".zip";
-                var uploadTask = provider.UploadAsync(zipPath, handler, archiveName, upload.CancelToken);
+                var uploadTask = Upload(provider, zipPath, handler, upload, archiveName);
                 return await HandleUploadResult(upload, uploadTask);
             }
             catch (OperationCanceledException)
@@ -315,6 +315,21 @@ namespace Clowd
                 try { Directory.Delete(tmpFolder, true); } catch {; }
             }
         }
+
+        // Routes through the early-URL-aware overload when the provider supports it (all shipped
+        // providers derive from UploadProviderBase), so an accelerated upload can surface its
+        // shareable link the instant the server session is created.
+        private static Task<UploadResult> Upload(IUploadProvider provider, string filePath, UploadProgressHandler handler, ActiveUpload upload,
+            string fileName)
+            => provider is UploadProviderBase b
+                ? b.UploadAsync(filePath, handler, url => _uploads.SetEarlyUrl(upload, url), fileName, upload.CancelToken)
+                : provider.UploadAsync(filePath, handler, fileName, upload.CancelToken);
+
+        private static Task<UploadResult> Upload(IUploadProvider provider, Stream stream, UploadProgressHandler handler, ActiveUpload upload,
+            string fileName)
+            => provider is UploadProviderBase b
+                ? b.UploadAsync(stream, handler, url => _uploads.SetEarlyUrl(upload, url), fileName, upload.CancelToken)
+                : provider.UploadAsync(stream, handler, fileName, upload.CancelToken);
 
         private static async Task<UploadResult> HandleUploadResult(ActiveUpload upload, Task<UploadResult> uploadTask)
         {

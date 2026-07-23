@@ -1,2 +1,13 @@
-# local dev cache/redirect mounts (docker uses /data volumes instead)
+# Rust / workers-rs
+/target/
+/build/
+
+# Node / wrangler
+/node_modules/
+/.wrangler/
+/.wrangler-state/
+
+# legacy C# server (kept as reference; build artifacts only)
+**/bin/
+**/obj/
 **/data/

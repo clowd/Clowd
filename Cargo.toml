@@ -3,6 +3,8 @@ resolver = "2"
 members = [
     "clowd_capture_wgpu",
 ]
+# clowd_server is a standalone workers-rs crate (own [workspace], wasm target).
+exclude = ["clowd_server"]
 
 [workspace.package]
 version = "0.0.0-local"

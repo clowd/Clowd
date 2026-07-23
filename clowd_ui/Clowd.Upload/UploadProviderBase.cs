@@ -35,6 +35,21 @@ namespace Clowd
 
         public abstract Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 
+        /// <summary>Upload overload that can surface a shareable URL early (before the transfer
+        /// finishes) via <paramref name="urlAvailable"/>. The base implementation ignores it and
+        /// delegates to the standard upload; only providers that support the clwd.app accelerated
+        /// flow (Azure, S3) override it.</summary>
+        public virtual Task<UploadResult> UploadAsync(
+            Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable, string uploadName, CancellationToken cancelToken)
+            => UploadAsync(fileStream, progress, uploadName, cancelToken);
+
+        public virtual async Task<UploadResult> UploadAsync(
+            string filePath, UploadProgressHandler progress, UploadUrlHandler urlAvailable, string uploadName, CancellationToken cancelToken)
+        {
+            using FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+            return await UploadAsync(fs, progress, urlAvailable, uploadName, cancelToken);
+        }
+
         public virtual bool CanDelete(UploadDeleteInfo info) => false;
 
         public virtual Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken)

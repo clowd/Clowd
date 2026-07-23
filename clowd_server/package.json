@@ -1,0 +1,16 @@
+{
+  "name": "clowd-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "clwd.app streaming upload relay — Cloudflare Worker (Rust/WASM)",
+  "scripts": {
+    "dev": "wrangler dev --persist-to .wrangler-state",
+    "dev:remote": "wrangler dev --remote",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "e2e": "node e2e/e2e.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.42.0"
+  }
+}

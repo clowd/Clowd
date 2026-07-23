@@ -8,6 +8,10 @@ namespace Clowd
 {
     public delegate void UploadProgressHandler(long bytesUploaded);
 
+    /// <summary>Invoked as soon as a shareable download URL is known — for accelerated uploads this
+    /// fires the moment the upload session is created, before any bytes finish transferring.</summary>
+    public delegate void UploadUrlHandler(string url);
+
     public class UploadResult
     {
         public IUploadProvider Provider { get; set; }
