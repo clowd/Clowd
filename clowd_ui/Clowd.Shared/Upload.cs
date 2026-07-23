@@ -62,4 +62,12 @@ namespace Clowd
 
         Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken);
     }
+
+    /// <summary>Implemented by providers that can route uploads through a clwd.app accelerate
+    /// server (shareable link available immediately, file relays to the destination in the
+    /// background). Lets the UI expose the toggle without knowing concrete provider types.</summary>
+    public interface IAccelerateProvider
+    {
+        bool AccelerateUploads { get; set; }
+    }
 }
