@@ -32,6 +32,23 @@ pub async fn send(url: &str, method: Method, body: Option<Vec<u8>>, headers: &[(
     Fetch::Request(req).send().await
 }
 
+/// Cancel an unread request body before responding early (401/409/400 …).
+///
+/// Responding while the client is still transmitting the body leaves workerd's
+/// body-proxy pump reading a stream whose response has already been sent —
+/// an uncaught "Can't read from request stream after response has been sent"
+/// TypeError that fails the whole invocation with a 503. Timing-dependent (the
+/// fast path where the body fully arrived first is fine), so cancel explicitly.
+/// A cancel is a discard signal, not a drain — no buffering, attacker-sized
+/// bodies cost nothing.
+pub async fn discard_body(req: &Request) {
+    if let Some(body) = req.inner().body() {
+        if !body.locked() {
+            let _ = wasm_bindgen_futures::JsFuture::from(body.cancel()).await;
+        }
+    }
+}
+
 /// True for a 2xx status.
 pub fn is_success(resp: &Response) -> bool {
     (200..300).contains(&resp.status_code())
