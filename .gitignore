@@ -9,3 +9,4 @@ obj/
 bin/
 .DS_Store
 build/
+.wrangler/
