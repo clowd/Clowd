@@ -25,9 +25,8 @@
   "observability": { "enabled": true },
 
   // Completed-upload redirects (id -> {finalUrl,length,completedUtc}), write-once.
-  // Paste the id printed by `wrangler kv namespace create REDIRECTS`.
   "kv_namespaces": [
-    { "binding": "REDIRECTS", "id": "PASTE_REDIRECTS_KV_NAMESPACE_ID_HERE" }
+    { "binding": "REDIRECTS", "id": "fcae3d71aa2649d49e0e986298ea4c51" }
   ],
 
   // Transient chunk staging: objects {id}/{n:05}. A 2-day lifecycle rule (set via

@@ -71,8 +71,9 @@ this folder (`Clowd.Server`, kept as the semantic reference); see `REFACTOR.md` 
    rule in the dashboard: R2 → clowd-staging → Settings → Object lifecycle rules → delete after
    2 days.)
 
-5. **Paste the KV namespace id** from step 3 into `wrangler.jsonc`, replacing
-   `PASTE_REDIRECTS_KV_NAMESPACE_ID_HERE`:
+5. **Check the KV namespace id** in `wrangler.jsonc` matches the id printed in step 3.
+   The production id is committed (KV namespace ids are not secrets); only replace it if
+   you recreated the namespace or are deploying to a different account:
    ```jsonc
    "kv_namespaces": [ { "binding": "REDIRECTS", "id": "<the id from step 3>" } ],
    ```
@@ -148,6 +149,9 @@ npm run dev:remote
 
 ## 4. Running tests
 
+> **[TESTING.md](TESTING.md)** covers the full testing ladder — including driving a real
+> Clowd desktop client through a locally-running worker — in more detail.
+
 Pure logic (id/token validation, chunk-plan math, the manifest state machine, Azure block-list
 XML, S3 complete XML, destination URL construction/validation) is host-testable:
 
@@ -175,6 +179,13 @@ npm run e2e                                  # or E2E_BASE=http://127.0.0.1:xxxx
 ---
 
 ## 5. Deploy
+
+The usual path is CI: run the **Deploy server** workflow from the GitHub Actions tab
+(manual dispatch — `.github/workflows/deploy-server.yml`). It gates on fmt/clippy/tests
+plus the offline e2e suite, deploys with the `CLOUDFLARE_API_TOKEN` /
+`CLOUDFLARE_ACCOUNT_ID` repository secrets, and verifies `/healthz` afterwards.
+
+To deploy from your machine instead:
 
 ```sh
 npm run deploy        # worker-build --release, then wrangler deploy

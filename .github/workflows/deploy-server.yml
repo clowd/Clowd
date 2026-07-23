@@ -1,0 +1,113 @@
+name: Deploy server
+
+# Manually-dispatched deploy of clowd_server (the clwd.app upload relay,
+# Rust/WASM Cloudflare Worker) — see clowd_server/TESTING.md §6.
+#
+# Gate: fmt + wasm clippy + cargo test, then the offline e2e suite against a
+# background `wrangler dev` (Miniflare — no Cloudflare credentials needed).
+# Only the deploy step touches production, so a failed gate never deploys.
+#
+# Required repository secrets:
+#   CLOUDFLARE_ACCOUNT_ID — from `npx wrangler whoami` / dashboard sidebar
+#   CLOUDFLARE_API_TOKEN  — "Edit Cloudflare Workers" template scoped to the
+#                           account + clwd.app zone, PLUS Account→Queues:Edit
+#                           and Zone→DNS:Edit (custom-domain route).
+on:
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Skip the test gate and deploy immediately (emergencies only)"
+        type: boolean
+        default: false
+
+# Never let two deploys race; don't cancel a deploy that is mid-flight.
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: clowd_server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (wasm32)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clowd_server
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: clowd_server/package-lock.json
+
+      - name: Install npm dependencies (pinned wrangler)
+        run: npm ci
+
+      # cargo-binstall grabs a prebuilt worker-build in seconds; rust-cache
+      # keeps the ~/.cargo/bin copy so later runs skip even that.
+      - name: Install worker-build
+        run: |
+          command -v worker-build >/dev/null && { echo "worker-build already cached"; exit 0; }
+          curl -fsSL https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash
+          cargo binstall --no-confirm worker-build
+
+      - name: "Gate: format + lint + unit tests"
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          cargo fmt --check
+          cargo check  --target wasm32-unknown-unknown
+          cargo clippy --target wasm32-unknown-unknown -- -D warnings
+          cargo test
+
+      # Fully offline: Miniflare emulates R2/KV/Queues/DOs, so this needs no
+      # Cloudflare credentials and cannot touch production resources.
+      - name: "Gate: offline e2e against wrangler dev"
+        if: ${{ !inputs.skip_tests }}
+        run: |
+          npm run dev >wrangler-dev.log 2>&1 &
+          DEV_PID=$!
+          trap 'kill $DEV_PID 2>/dev/null || true' EXIT
+
+          echo "Waiting for wrangler dev on :8787 ..."
+          for i in $(seq 1 90); do
+            if curl -sf http://127.0.0.1:8787/healthz >/dev/null 2>&1; then
+              echo "wrangler dev is up (${i}s)"
+              break
+            fi
+            if ! kill -0 $DEV_PID 2>/dev/null; then
+              echo "wrangler dev exited early:"; cat wrangler-dev.log; exit 1
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8787/healthz >/dev/null || { echo "wrangler dev never became healthy:"; cat wrangler-dev.log; exit 1; }
+
+          npm run e2e
+
+      - name: Show wrangler dev log on failure
+        if: ${{ failure() && !inputs.skip_tests }}
+        run: cat wrangler-dev.log || true
+
+      - name: Deploy to Cloudflare
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
+
+      - name: Verify production health
+        run: |
+          sleep 5
+          curl -sif https://clwd.app/healthz
