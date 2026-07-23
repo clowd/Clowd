@@ -1,9 +1,10 @@
 <UserControl
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Clowd.UI.Controls"
     x:Class="Clowd.UI.Pages.GeneralSettingsPage">
 
-    <ScrollViewer>
+    <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="16">
             <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
                  (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
@@ -38,5 +39,5 @@
                 </StackPanel>
             </HeaderedContentControl>
         </StackPanel>
-    </ScrollViewer>
+    </controls:FadeEdgeScrollViewer>
 </UserControl>

@@ -2,6 +2,7 @@
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:conv="using:Clowd.UI.Converters"
+    xmlns:controls="using:Clowd.UI.Controls"
     x:Class="Clowd.UI.Pages.UploadSettingsPage">
 
     <UserControl.Resources>
@@ -40,32 +41,34 @@
         <Style Selector="Button.chip.isDefault Path.chipCheck">
             <Setter Property="IsVisible" Value="True" />
         </Style>
-        <!-- Cloudflare-orange-cloud-style accelerate toggle: grey outline when off,
-             warning-filled when routing uploads through the accelerate server -->
+        <!-- accelerate toggle: bare lightning bolt, grey when off,
+             orange when routing uploads through the accelerate server -->
         <Style Selector="ToggleButton.lightning">
             <Setter Property="MinWidth" Value="0" />
             <Setter Property="MinHeight" Value="0" />
             <Setter Property="Width" Value="28" />
             <Setter Property="Height" Value="28" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="ToggleButton.lightning:pointerover, ToggleButton.lightning:checked, ToggleButton.lightning:checked:pointerover">
+            <Setter Property="Background" Value="Transparent" />
         </Style>
         <Style Selector="ToggleButton.lightning Path">
             <Setter Property="Fill" Value="{DynamicResource SemiColorText2}" />
         </Style>
-        <Style Selector="ToggleButton.lightning:checked">
-            <Setter Property="Background" Value="{DynamicResource SemiColorWarning}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorWarning}" />
+        <Style Selector="ToggleButton.lightning:pointerover Path">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText1}" />
         </Style>
         <Style Selector="ToggleButton.lightning:checked Path">
-            <Setter Property="Fill" Value="{DynamicResource SemiColorWhite}" />
+            <Setter Property="Fill" Value="{DynamicResource SemiColorWarning}" />
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
+    <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="4">
             <TextBlock Classes="Body"
                        Margin="0,0,0,8"
@@ -199,8 +202,8 @@
                                                       IsChecked="{Binding Provider.AccelerateUploads}"
                                                       ToolTip.Tip="Accelerate uploads through clwd.app — the shareable link is ready instantly while the file transfers to your storage in the background"
                                                       AutomationProperties.Name="Accelerate uploads">
-                                            <Path Width="12"
-                                                  Height="12"
+                                            <Path Width="14"
+                                                  Height="14"
                                                   Stretch="Uniform"
                                                   Data="{StaticResource IconLightning}" />
                                         </ToggleButton>
@@ -215,5 +218,5 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </StackPanel>
-    </ScrollViewer>
+    </controls:FadeEdgeScrollViewer>
 </UserControl>
