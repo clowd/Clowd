@@ -9,6 +9,8 @@ namespace Clowd.Upload
 
         public Stream BackBlazeIcon => GetStream("backblaze.png");
 
+        public Stream CloudflareIcon => GetStream("cloudflare.png");
+
         public Stream AzureIcon => GetStream("azure.png");
         
         public Stream VgyMeIcon => GetStream("vgyme.png");

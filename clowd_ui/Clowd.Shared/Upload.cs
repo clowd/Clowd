@@ -57,6 +57,9 @@ namespace Clowd
 
         Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName, CancellationToken cancelToken);
 
+        /// <summary>Performs a real end-to-end upload check and throws a human-readable exception on failure.</summary>
+        Task TestAsync(CancellationToken cancelToken);
+
         /// <summary>True when this provider can delete the given previously-uploaded file.</summary>
         bool CanDelete(UploadDeleteInfo info);
 

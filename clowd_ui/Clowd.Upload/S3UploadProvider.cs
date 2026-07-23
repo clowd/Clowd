@@ -83,8 +83,8 @@ namespace Clowd.Upload
             set => Set(ref _disablePathStyle, value);
         }
 
-        [Description("Don't send or require the extra data-integrity checksums added by newer AWS SDKs. "
-                    + "Turn on if your provider rejects uploads with a checksum or signature error.")]
+        [Description("Use UNSIGNED-PAYLOAD and don't send or require the extra data-integrity checksums added by newer AWS SDKs. "
+                    + "Turn on if your provider rejects uploads with a checksum or streaming-signature error.")]
         public bool DisableChecksumValidation
         {
             get => _disableChecksumValidation;
@@ -156,22 +156,7 @@ namespace Clowd.Upload
 
             using var client = CreateClient();
 
-            var request = new PutObjectRequest
-            {
-                BucketName = _bucketName.Trim(),
-                Key = key,
-                InputStream = fileStream,
-                ContentType = mimeType,
-                // the base wraps the file stream in a `using`; don't let the SDK close it out from under that.
-                AutoCloseStream = false,
-                // belt-and-suspenders with the config-level checksum settings applied in CreateClient().
-                DisableDefaultChecksumValidation = _disableChecksumValidation ? true : (bool?)null,
-                // grant public read at the object level (only honoured by buckets with ACLs enabled).
-                CannedACL = _makeObjectsPublic ? S3CannedACL.PublicRead : null,
-            };
-
-            // filename hint + inline rendering, matching the Azure provider's behaviour.
-            request.Headers.ContentDisposition = $"inline; filename=\"{uploadName}\"";
+            var request = CreatePutObjectRequest(fileStream, mimeType, key, uploadName);
 
             if (progress != null)
                 request.StreamTransferProgress += (_, e) => progress(e.TransferredBytes);
@@ -194,6 +179,29 @@ namespace Clowd.Upload
             => AccelerateUploads
                 ? UploadAcceleratedAsync(fileStream, progress, urlAvailable, uploadName, cancelToken)
                 : UploadAsync(fileStream, progress, uploadName, cancelToken);
+
+        internal PutObjectRequest CreatePutObjectRequest(Stream fileStream, string mimeType, string key, string uploadName)
+        {
+            var request = new PutObjectRequest
+            {
+                BucketName = _bucketName.Trim(),
+                Key = key,
+                InputStream = fileStream,
+                ContentType = mimeType,
+                // the base wraps the file stream in a `using`; don't let the SDK close it out from under that.
+                AutoCloseStream = false,
+                // R2 and some other S3-compatible services do not implement the SDK's streaming SigV4 payload format.
+                DisablePayloadSigning = _disableChecksumValidation ? true : (bool?)null,
+                // belt-and-suspenders with the config-level checksum settings applied in CreateClient().
+                DisableDefaultChecksumValidation = _disableChecksumValidation ? true : (bool?)null,
+                // grant public read at the object level (only honoured by buckets with ACLs enabled).
+                CannedACL = _makeObjectsPublic ? S3CannedACL.PublicRead : null,
+            };
+
+            // filename hint + inline rendering, matching the Azure provider's behaviour.
+            request.Headers.ContentDisposition = $"inline; filename=\"{uploadName}\"";
+            return request;
+        }
 
         private async Task<UploadResult> UploadAcceleratedAsync(Stream fileStream, UploadProgressHandler progress,
             UploadUrlHandler urlAvailable, string uploadName, CancellationToken cancelToken)

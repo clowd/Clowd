@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using Amazon.Runtime;
 using Amazon.S3;
 using Clowd.Upload;
@@ -57,6 +58,19 @@ namespace Clowd.Shared.Tests
 
             Assert.Equal(RequestChecksumCalculation.WHEN_REQUIRED, config.RequestChecksumCalculation);
             Assert.Equal(ResponseChecksumValidation.WHEN_REQUIRED, config.ResponseChecksumValidation);
+        }
+
+        [Fact]
+        public void DisableChecksumValidation_AlsoDisablesStreamingPayloadSigning()
+        {
+            var p = NewAwsProvider();
+            p.DisableChecksumValidation = true;
+            using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
+
+            var request = p.CreatePutObjectRequest(stream, "application/octet-stream", "abc/file.bin", "file.bin");
+
+            Assert.True(request.DisableDefaultChecksumValidation);
+            Assert.True(request.DisablePayloadSigning);
         }
 
         [Fact]
