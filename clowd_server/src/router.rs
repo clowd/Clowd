@@ -2,7 +2,7 @@
 //! `queue` consumer. Routes are validated (id regex, https destinations) before
 //! any storage access.
 
-use worker::{event, Context, Env, Headers, MessageBatch, Method, Request, Response, ResponseBuilder, Result};
+use worker::{event, web_sys, Context, Env, Headers, MessageBatch, Method, Request, Response, ResponseBuilder, Result};
 
 use crate::chunkplan::plan;
 use crate::consts::{BASE_URL_VAR, DEFAULT_ORIGIN, DEV_ALLOW_DISCARD_VAR, GITHUB_URL, REDIRECT_MAX_AGE_SECS};
@@ -165,9 +165,14 @@ async fn create(mut req: Request, env: &Env) -> Result<Response> {
 /// The DO route is carried in an `X-DO-Route` header rather than by rewriting the
 /// URL: `Request::path_mut` only mutates the Rust-side wrapper's cached path, so
 /// the `web_sys::Request` that `fetch_with_request` actually sends still has the
-/// original `/api/v1/…` URL — the DO would re-derive that path and 404. Cloning
-/// with `clone_mut` keeps the request body as a live stream (no buffering), and
-/// the added header survives because the clone is mutable.
+/// original `/api/v1/…` URL — the DO would re-derive that path and 404.
+///
+/// The internal request is built with `new Request(original, {headers})`, which
+/// **transfers** the body stream (no buffering, original becomes disturbed).
+/// Don't use `clone_mut` here: cloning tees the body, and when the DO rejects a
+/// chunk PUT early (401/409/400) without reading it, the dangling tee branch
+/// makes workerd throw "Can't read from request stream after response has been
+/// sent" and fail the whole invocation with a 503.
 async fn forward(env: &Env, id: &str, internal_path: &str, req: Request) -> Result<Response> {
     if !is_valid_id(id) {
         return Response::error("not found", 404);
@@ -176,11 +181,13 @@ async fn forward(env: &Env, id: &str, internal_path: &str, req: Request) -> Resu
         .durable_object("SESSIONS")?
         .id_from_name(id)?
         .get_stub()?;
-    let mut internal = req.clone_mut()?;
-    internal
-        .headers_mut()?
-        .set(crate::consts::DO_ROUTE_HEADER, internal_path)?;
-    stub.fetch_with_request(internal).await
+    let headers = web_sys::Headers::new_with_headers(&req.inner().headers())?;
+    headers.set(crate::consts::DO_ROUTE_HEADER, internal_path)?;
+    let init = web_sys::RequestInit::new();
+    init.set_headers(headers.as_ref());
+    let internal = web_sys::Request::new_with_request_and_init(req.inner(), &init)?;
+    stub.fetch_with_request(Request::from(internal))
+        .await
 }
 
 /// Origin (`scheme://host[:port]`) that serves `/u/{id}` for links minted here.
