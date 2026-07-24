@@ -184,7 +184,6 @@ namespace Clowd.Shared.Tests
         {
             var loaded = SettingsService.Load(_path);
 
-            Assert.False(loaded.Editor.SidebarVisible);
             Assert.Null(loaded.Editor.ToolbarOrder);
             Assert.Null(loaded.Editor.HiddenTools);
         }
@@ -193,14 +192,12 @@ namespace Clowd.Shared.Tests
         public void EditorFeatureFlags_And_ToolbarLists_RoundTrip()
         {
             var original = new SettingsRoot();
-            original.Editor.SidebarVisible = true;
             original.Editor.ToolbarOrder = new System.Collections.Generic.List<string> { "Rectangle", "Bogus", "Rectangle" };
             original.Editor.HiddenTools = new System.Collections.Generic.List<string> { "Ellipse", "Pointer" };
 
             SettingsService.Save(original, _path);
             var loaded = SettingsService.Load(_path);
 
-            Assert.True(loaded.Editor.SidebarVisible);
             Assert.Equal(new[] { "Rectangle", "Bogus", "Rectangle" }, loaded.Editor.ToolbarOrder);
             Assert.Equal(new[] { "Ellipse", "Pointer" }, loaded.Editor.HiddenTools);
 
