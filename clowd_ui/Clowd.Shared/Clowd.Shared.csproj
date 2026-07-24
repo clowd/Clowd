@@ -4,9 +4,23 @@
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <RootNamespace>Clowd</RootNamespace>
+    <!-- emits [assembly: NeutralResourcesLanguage("en")]: Localization\Strings.resx *is* the
+         English copy, so ResourceManager must not go looking for an "en" satellite. -->
+    <NeutralLanguage>en</NeutralLanguage>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Strongly-typed accessors for Localization\Strings.resx (Clowd.Localization.Strings).
+         Only the neutral resx is registered — Strings.xx.resx files are picked up by the SDK as
+         satellite assemblies and resolved at runtime through ResourceManager culture fallback. -->
+    <AdditionalFiles Include="Localization\Strings.resx"
+                     Namespace="Clowd.Localization"
+                     ClassName="Strings"
+                     ResourceName="Clowd.Localization.Strings"
+                     Visibility="Public" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.3.13" />
+    <PackageReference Include="Meziantou.Framework.ResxSourceGenerator" Version="2.0.0" PrivateAssets="all" />
     <PackageReference Include="Clowd.Clipboard.Gdi" Version="1.1.4" />
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
