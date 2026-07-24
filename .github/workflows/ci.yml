@@ -77,7 +77,11 @@ jobs:
       - name: Compute nbgv version
         run: |
           dotnet tool update -g nbgv
-          nbgv get-version -v SimpleVersion | tee version.txt
+          # capture first, write after: nbgv treats a version.txt in the repo root as a
+          # (legacy) version file, so tee-ing into it while nbgv runs makes it read an
+          # empty version file and crash.
+          VERSION="$(nbgv get-version -v SimpleVersion)"
+          echo "$VERSION" | tee version.txt
 
       - name: Upload version artifact
         uses: actions/upload-artifact@v4
