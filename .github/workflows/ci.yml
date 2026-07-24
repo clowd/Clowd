@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest, macos-15]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -107,12 +107,12 @@ jobs:
             obs-asset: obs-express-windows-arm64.zip
             exe: .exe
           - rid: osx-x64
-            os: macos-latest
+            os: macos-15
             target: x86_64-apple-darwin
             obs-asset: obs-express-macos-x64.zip
             exe: ""
           - rid: osx-arm64
-            os: macos-latest
+            os: macos-15
             target: aarch64-apple-darwin
             obs-asset: obs-express-macos-arm64.zip
             exe: ""

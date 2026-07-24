@@ -121,6 +121,9 @@ namespace Clowd.UI
                 var psi = new ProcessStartInfo(binary)
                 {
                     UseShellExecute = false,
+                    // capture the capturer's log output (simplelog writes errors and any
+                    // Rust panic to stderr) so a crash can be reported to the user.
+                    RedirectStandardError = true,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
                 foreach (var arg in CaptureArguments.Build(sessionDir, AppStyles.AccentColor, SettingsRoot.Current.Capture, mode, video))
@@ -130,7 +133,25 @@ namespace Clowd.UI
                 if (process == null)
                     throw new InvalidOperationException("Failed to start capture process: " + binary);
 
+                // drain stderr concurrently so a full pipe buffer can never block the
+                // process from exiting (classic redirect deadlock).
+                var stderrTask = process.StandardError.ReadToEndAsync();
                 await process.WaitForExitAsync();
+                var stderr = await stderrTask;
+
+                // Every normal outcome (edit / upload / colour / video / cancel) exits 0.
+                // A non-zero exit means the capturer crashed or aborted — e.g. a GPU shader
+                // that failed to load — so surface it instead of silently treating the empty
+                // session directory as a user cancellation (which produced no error at all).
+                if (process.ExitCode != 0)
+                {
+                    Debug.WriteLine($"Capture process exited with code {process.ExitCode}:\n{stderr}");
+                    CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                        $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeStdErr(stderr)}",
+                        "Screen capture failed");
+                    return;
+                }
 
                 var result = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
                 switch (result?.Action)
@@ -173,6 +194,27 @@ namespace Clowd.UI
         {
             // the capture process owns its own lifetime (Escape / X closes it); nothing to do here.
             Closed?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>Condenses the capturer's captured stderr into the tail few lines for an
+        /// error dialog — the failure (a shader error, a panic) is always at the end, after
+        /// the routine startup log lines.</summary>
+        private static string SummarizeStdErr(string stderr)
+        {
+            if (String.IsNullOrWhiteSpace(stderr))
+                return "No diagnostic output was captured.";
+
+            var lines = new List<string>();
+            foreach (var raw in stderr.Replace("\r\n", "\n").Split('\n'))
+            {
+                var line = raw.TrimEnd();
+                if (line.Length > 0)
+                    lines.Add(line);
+            }
+
+            const int maxLines = 15;
+            var start = Math.Max(0, lines.Count - maxLines);
+            return String.Join("\n", lines.GetRange(start, lines.Count - start));
         }
     }
 
@@ -365,7 +407,7 @@ namespace Clowd.UI
             return new ScreenRect(nums[0], nums[1], nums[2], nums[3]);
         }
 
-        private static void DeleteSessionDir(string sessionDir)
+        public static void DeleteSessionDir(string sessionDir)
         {
             try
             {
