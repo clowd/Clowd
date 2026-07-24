@@ -11,6 +11,15 @@ namespace Clowd.Shared.Tests
     {
         private readonly string _path = Path.Combine(Path.GetTempPath(), "ClowdSettingsTests", Guid.NewGuid() + ".json");
 
+        // SettingsGeneral.DefaultRegisterAutoStart is compiled against Clowd.Shared's configuration,
+        // which is the same one this test assembly is built with.
+        private static bool IsDebugBuild =>
+#if DEBUG
+            true;
+#else
+            false;
+#endif
+
         public void Dispose()
         {
             try
@@ -99,6 +108,29 @@ namespace Clowd.Shared.Tests
             // untouched values still come back as defaults
             Assert.Equal(new SimpleKeyGesture(Key.Snapshot, KeyModifiers.Alt), loaded.Hotkeys.CaptureActiveShortcut);
             Assert.True(loaded.Editor.RestoreSessionsOnClowdStart);
+        }
+
+        [Fact]
+        public void StartupOptions_DefaultToAutoStart_AndRoundTrip()
+        {
+            // auto-start is registered by the Velopack install hook on Windows only, and
+            // start-minimised follows it so a manual launch on other platforms still shows a window.
+            var expected = SettingsGeneral.DefaultRegisterAutoStart;
+            Assert.Equal(OperatingSystem.IsWindows() && !IsDebugBuild, expected);
+
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(expected, loaded.General.RegisterAutoStart);
+            Assert.Equal(expected, loaded.General.StartMinimized);
+
+            var original = new SettingsRoot();
+            original.General.RegisterAutoStart = !expected;
+            original.General.StartMinimized = !expected;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(!expected, loaded.General.RegisterAutoStart);
+            Assert.Equal(!expected, loaded.General.StartMinimized);
         }
 
         [Fact]

@@ -66,13 +66,20 @@ namespace Clowd
             try
             {
                 await SetupMutex(args);
-                bool firstRun = await SetupSettings();
+                bool firstRun = await SetupSettings() || Program.IsVelopackFirstRun;
 
                 ApplyTheme();
+
+                // the saved setting is the source of truth for the login item; reconcile it with the
+                // OS once at startup, then follow it whenever the user toggles the checkbox.
+                AutoStartManager.Sync(SettingsRoot.Current.General.RegisterAutoStart);
+
                 SettingsRoot.Current.General.PropertyChanged += (s, e) =>
                 {
                     if (e.PropertyName == nameof(SettingsGeneral.Theme))
                         Dispatcher.UIThread.Post(ApplyTheme);
+                    else if (e.PropertyName == nameof(SettingsGeneral.RegisterAutoStart))
+                        AutoStartManager.TrySetEnabled(SettingsRoot.Current.General.RegisterAutoStart);
                 };
 
                 SetupTrayIcon();
@@ -89,11 +96,17 @@ namespace Clowd
 
                 if (firstRun)
                 {
-                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.About);
+                    // first launch after an install: show the window regardless of StartMinimized,
+                    // on General so the auto-start / minimised options are the first thing seen.
+                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
                 }
-                else if (SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
+                else
                 {
-                    EditorWindow.ShowAllPreviouslyActiveSessions();
+                    if (!SettingsRoot.Current.General.StartMinimized)
+                        PageManager.Current.GetSettingsPage().Open();
+
+                    if (SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
+                        EditorWindow.ShowAllPreviouslyActiveSessions();
                 }
             }
             catch (Exception ex)

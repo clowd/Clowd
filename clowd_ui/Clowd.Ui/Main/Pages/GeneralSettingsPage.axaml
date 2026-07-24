@@ -9,8 +9,8 @@
             <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
                  (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
                  the groupbox look is the keyed "GroupBox" theme). -->
-            <!-- The WPF "Shell" (auto-start / context menu) group is not available in this
-                 build and is hidden until implemented. -->
+            <!-- The WPF "Shell" group's explorer context-menu registration is not available in
+                 this build and is hidden until implemented; auto-start lives under Behavior. -->
             <HeaderedContentControl Header="Updates" Theme="{StaticResource GroupBox}">
                 <StackPanel Spacing="8">
                     <TextBlock x:Name="VersionText" />
@@ -42,6 +42,21 @@
             </HeaderedContentControl>
             <HeaderedContentControl Header="Behavior" Theme="{StaticResource GroupBox}">
                 <StackPanel Spacing="8">
+                    <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding RegisterAutoStart}">
+                        <TextBlock Text="Start Clowd when your computer starts up" />
+                    </CheckBox>
+                    <TextBlock x:Name="AutoStartStatusText"
+                               FontSize="12"
+                               Opacity="0.65"
+                               TextWrapping="Wrap"
+                               IsVisible="False" />
+                    <CheckBox IsChecked="{Binding StartMinimized}">
+                        <TextBlock Text="Start Clowd minimised" />
+                    </CheckBox>
+                    <TextBlock FontSize="12"
+                               Opacity="0.65"
+                               TextWrapping="Wrap"
+                               Text="Clowd starts in the notification area without opening this window." />
                     <CheckBox IsChecked="{Binding ConfirmClose}">
                         <TextBlock Text="Ask/confirm before exiting" />
                     </CheckBox>
