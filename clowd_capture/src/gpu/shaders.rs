@@ -9,10 +9,7 @@ use std::sync::{Arc, Mutex};
 pub enum ShaderPair {
     /// Separate vertex and fragment modules (Windows DXBC passthrough).
     #[cfg(windows)]
-    Split {
-        vs: wgpu::ShaderModule,
-        fs: wgpu::ShaderModule,
-    },
+    Split { vs: wgpu::ShaderModule, fs: wgpu::ShaderModule },
     /// One module exposing both `vs_main` and `fs_main` (macOS metallib
     /// passthrough, and the runtime-WGSL fallback on either platform).
     Unified(wgpu::ShaderModule),
@@ -22,7 +19,10 @@ impl ShaderPair {
     pub fn vs(&self) -> &wgpu::ShaderModule {
         match self {
             #[cfg(windows)]
-            ShaderPair::Split { vs, .. } => vs,
+            ShaderPair::Split {
+                vs,
+                ..
+            } => vs,
             ShaderPair::Unified(module) => module,
         }
     }
@@ -30,7 +30,10 @@ impl ShaderPair {
     pub fn fs(&self) -> &wgpu::ShaderModule {
         match self {
             #[cfg(windows)]
-            ShaderPair::Split { fs, .. } => fs,
+            ShaderPair::Split {
+                fs,
+                ..
+            } => fs,
             ShaderPair::Unified(module) => module,
         }
     }
@@ -64,7 +67,10 @@ pub fn install_error_handler(device: &wgpu::Device) {
 
 /// Drain any error recorded by the uncaptured-error handler since the last drain.
 fn take_uncaptured_error() -> Option<String> {
-    LAST_UNCAPTURED_ERROR.lock().ok().and_then(|mut slot| slot.take())
+    LAST_UNCAPTURED_ERROR
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.take())
 }
 
 unsafe fn passthrough(device: &wgpu::Device, label: &str, bytes: &'static [u8]) -> wgpu::ShaderModule {
@@ -106,13 +112,7 @@ fn load(device: &wgpu::Device, label: &str, metallib_bytes: &'static [u8], wgsl_
 }
 
 #[cfg(windows)]
-fn load(
-    device: &wgpu::Device,
-    label: &str,
-    vs_bytes: &'static [u8],
-    fs_bytes: &'static [u8],
-    wgsl_source: &'static str,
-) -> ShaderPair {
+fn load(device: &wgpu::Device, label: &str, vs_bytes: &'static [u8], fs_bytes: &'static [u8], wgsl_source: &'static str) -> ShaderPair {
     let _guard = LOAD_GUARD.lock().unwrap();
     take_uncaptured_error(); // clear any stale error
     let vs = unsafe { passthrough(device, &format!("{label} VS"), vs_bytes) };
@@ -121,7 +121,10 @@ fn load(
         log::warn!("precompiled DX shader '{label}' failed to load; falling back to runtime WGSL compilation");
         return wgsl_fallback(device, label, wgsl_source);
     }
-    ShaderPair::Split { vs, fs }
+    ShaderPair::Split {
+        vs,
+        fs,
+    }
 }
 
 pub fn desktop(device: &wgpu::Device) -> ShaderPair {
