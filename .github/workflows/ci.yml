@@ -171,6 +171,20 @@ jobs:
           unzip -q obs-express.zip -d publish/obs-express
           chmod +x publish/obs-express/obs-express publish/obs-express/obs-ffmpeg-mux 2>/dev/null || true
 
+          # The obs-express zip materializes the framework symlinks as full copies
+          # (Versions/Current, libobs, Headers, Resources duplicate Versions/A),
+          # which codesign rejects as "bundle format is ambiguous". Rebuild the
+          # canonical symlink structure so the .app can be signed + notarized.
+          # (zip -y below preserves symlinks into the artifact.)
+          FW=publish/obs-express/Frameworks/libobs.framework
+          if [ -d "$FW" ] && [ ! -L "$FW/Versions/Current" ]; then
+            rm -rf "$FW/Versions/Current" "$FW/libobs" "$FW/Headers" "$FW/Resources"
+            ln -s A "$FW/Versions/Current"
+            ln -s Versions/Current/libobs "$FW/libobs"
+            ln -s Versions/Current/Headers "$FW/Headers"
+            ln -s Versions/Current/Resources "$FW/Resources"
+          fi
+
       # upload-artifact does not preserve unix file modes, so on macOS wrap
       # the package in a zip (which does) before uploading.
       - name: Zip package (macOS)
