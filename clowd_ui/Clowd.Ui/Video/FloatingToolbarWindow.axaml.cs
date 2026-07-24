@@ -65,10 +65,6 @@ namespace Clowd.UI
             // never steal focus from the app being recorded; no taskbar/alt-tab entry
             WindowNativeExtensions.AddExStyles(this, WindowNativeExtensions.WS_EX_NOACTIVATE | WindowNativeExtensions.WS_EX_TOOLWINDOW);
 
-            // park off-screen until the placement pass runs so the strip never flashes at the
-            // OS-default window position
-            Position = new PixelPoint(-32000, -32000);
-
             // tunnel: Button's class handler marks bubbling pointer events handled, so plain
             // XAML subscriptions on the drag button would never fire.
             BtnDrag.AddHandler(PointerPressedEvent, DragHandlePressed, RoutingStrategies.Tunnel);
@@ -137,13 +133,40 @@ namespace Clowd.UI
             _manuallyPositioned = false;
 
             if (!IsVisible)
+            {
+                ParkOnRegionScreen(region);
                 Show();
+
+                // Show() has already run the initial layout pass, so MainPanel.Bounds is real by
+                // now — place the strip before the first frame can be presented at the parking pixel.
+                PositionNearRegion();
+            }
 
             RefreshListeners();
             _meterTimer.Start();
 
             // position after the size-to-content layout pass so Bounds is real
             Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
+        }
+
+        /// <summary>
+        /// Pre-show parking spot, and the only thing that makes SizeToContent produce a correctly
+        /// scaled window on a non-100% monitor. Window.ShowCore sizes the platform window during
+        /// Show() using the scaling of Screens.ScreenFromPoint(Position) (WindowStartupLocation is
+        /// Manual here), and the Win32 impl seeds its DPI from the monitor nearest the window rect.
+        /// Parking off the virtual desktop resolved both lookups to no screen / the top-left
+        /// monitor, so on a scaled target monitor the toolbar was created at the wrong scale and the
+        /// buttons were clipped until a monitor change forced a WM_DPICHANGED to rescale it.
+        /// The target monitor's last pixel resolves both lookups to the right monitor while keeping
+        /// all but one pixel of the strip off-screen for the frame before PositionNearRegion runs.
+        /// </summary>
+        private void ParkOnRegionScreen(ScreenRect region)
+        {
+            var screen = Screens.ScreenFromPoint(new PixelPoint(region.Center.X, region.Center.Y)) ?? Screens.Primary;
+            if (screen == null)
+                return;
+
+            Position = new PixelPoint(screen.Bounds.Right - 1, screen.Bounds.Bottom - 1);
         }
 
         protected override void OnClosed(EventArgs e)
@@ -246,6 +269,12 @@ namespace Clowd.UI
                 return;
 
             e.Pointer.Capture(BtnDrag);
+
+            // the tip is advice about how to start an interaction, so it has no business appearing
+            // during one — the hover timer would otherwise pop it up under the pointer mid-drag
+            ToolTip.SetIsOpen(BtnDrag, false);
+            ToolTip.SetServiceEnabled(BtnDrag, false);
+
             _manuallyPositioned = true;
             _mouseDown = true;
             _dragging = false;
@@ -279,6 +308,7 @@ namespace Clowd.UI
                 return;
 
             e.Pointer.Capture(null);
+            ToolTip.SetServiceEnabled(BtnDrag, true);
             _mouseDown = false;
 
             if (!_dragging)
