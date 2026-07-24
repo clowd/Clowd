@@ -154,6 +154,21 @@ namespace Clowd.Config
             set => Set(ref _updateChannel, value);
         }
 
+        /// <summary>
+        /// UI language as a culture name ("de", "fr-CA"). Null or empty means "follow the OS", which
+        /// is the state of every install until the user picks a language; a name with no matching
+        /// satellite assembly also falls back to the OS language (see Loc.ApplyCulture).
+        ///
+        /// Not browsable: the settings-control factory would render a text box. The General page
+        /// hosts a hand-built combo populated from Loc.GetAvailableLanguages().
+        /// </summary>
+        [Browsable(false)]
+        public string Language
+        {
+            get => _language;
+            set => Set(ref _language, value);
+        }
+
         [DisplayName("Theme")]
         [Description("Choose the light or dark appearance, or follow the Windows setting.")]
         public AppTheme Theme
@@ -180,6 +195,7 @@ namespace Clowd.Config
 
         private string _lastSavePath;
         private string _mainWindowBounds;
+        private string _language;
         private bool _confirmClose = true;
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;
         private bool _registerAutoStart = DefaultRegisterAutoStart;

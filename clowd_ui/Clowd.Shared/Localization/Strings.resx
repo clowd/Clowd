@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <!--
+    Neutral (English) strings for Clowd. This file is the source of truth: every other language is
+    a sibling Strings.<culture>.resx holding the same keys with translated <value>s.
+    See TRANSLATING.md before editing.
+  -->
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="Main_NewEditor" xml:space="preserve">
+    <value>New Editor</value>
+    <comment>Sidebar button that opens an empty image editor window.</comment>
+  </data>
+  <data name="Main_ScreenCapture" xml:space="preserve">
+    <value>Screen Capture</value>
+    <comment>Sidebar button that starts a new region capture.</comment>
+  </data>
+  <data name="Main_Tagline" xml:space="preserve">
+    <value>Screen Capture Tool</value>
+    <comment>Subtitle under the CLOWD wordmark in the main window. "Clowd" itself is a brand name and is never translated.</comment>
+  </data>
+  <data name="Nav_About" xml:space="preserve">
+    <value>About</value>
+    <comment>Navigation item: version, licence and credits.</comment>
+  </data>
+  <data name="Nav_RecentSessions" xml:space="preserve">
+    <value>Recent</value>
+    <comment>Navigation item: list of recent captures, recordings and uploads. Keep short — the sidebar is narrow.</comment>
+  </data>
+  <data name="Nav_SettingsCapture" xml:space="preserve">
+    <value>Capture</value>
+    <comment>Navigation item: settings for the screen-capture overlay.</comment>
+  </data>
+  <data name="Nav_SettingsEditor" xml:space="preserve">
+    <value>Editor</value>
+    <comment>Navigation item: settings for the image editor.</comment>
+  </data>
+  <data name="Nav_SettingsGeneral" xml:space="preserve">
+    <value>General</value>
+    <comment>Navigation item: general application settings.</comment>
+  </data>
+  <data name="Nav_SettingsHotkeys" xml:space="preserve">
+    <value>Hotkeys</value>
+    <comment>Navigation item: global keyboard shortcuts.</comment>
+  </data>
+  <data name="Nav_SettingsRecording" xml:space="preserve">
+    <value>Recording</value>
+    <comment>Navigation item: settings for screen (video) recording.</comment>
+  </data>
+  <data name="Nav_SettingsUploads" xml:space="preserve">
+    <value>Uploads</value>
+    <comment>Navigation item: upload destinations and credentials.</comment>
+  </data>
+  <data name="Tray_CaptureScreen" xml:space="preserve">
+    <value>Capture Screen</value>
+    <comment>Tray menu item: start a screen capture.</comment>
+  </data>
+  <data name="Tray_ColorPicker" xml:space="preserve">
+    <value>Color Picker</value>
+    <comment>Tray menu item: opens the screen colour picker.</comment>
+  </data>
+  <data name="Tray_Exit" xml:space="preserve">
+    <value>Exit</value>
+    <comment>Tray menu item: quits Clowd.</comment>
+  </data>
+  <data name="Tray_ImageEditor" xml:space="preserve">
+    <value>Image Editor</value>
+    <comment>Tray menu item: opens an empty image editor window.</comment>
+  </data>
+  <data name="Tray_RecentsAndUploads" xml:space="preserve">
+    <value>Recents &amp; Uploads</value>
+    <comment>Tray menu item: opens the Recent page.</comment>
+  </data>
+  <data name="Tray_Settings" xml:space="preserve">
+    <value>Settings</value>
+    <comment>Tray menu item: opens the settings window on the General page.</comment>
+  </data>
+  <data name="Tray_StartStopRecording" xml:space="preserve">
+    <value>Start / Stop Recording</value>
+    <comment>Tray menu item: one item toggles video recording on and off.</comment>
+  </data>
+  <data name="Tray_UploadClipboard" xml:space="preserve">
+    <value>Upload Clipboard</value>
+    <comment>Tray menu item: uploads the current clipboard contents.</comment>
+  </data>
+  <data name="Tray_UploadFile" xml:space="preserve">
+    <value>Upload File…</value>
+    <comment>Tray menu item: opens a file picker, then uploads the chosen files. Keep the trailing ellipsis (…), it means "this opens a dialog".</comment>
+  </data>
+</root>

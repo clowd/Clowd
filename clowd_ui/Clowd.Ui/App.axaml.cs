@@ -10,6 +10,7 @@ using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using Clowd.Config;
+using Clowd.Localization;
 using Clowd.UI;
 using Clowd.UI.Helpers;
 using Clowd.Util;
@@ -70,6 +71,10 @@ namespace Clowd
 
                 ApplyTheme();
 
+                // must run before anything resolves a string. An empty Language setting keeps the
+                // OS UI language, which Loc captured on first touch just now.
+                Loc.ApplyCulture(SettingsRoot.Current.General.Language);
+
                 // the saved settings are the source of truth for the shell registrations; reconcile
                 // them with the OS once at startup, then follow whenever the user toggles a checkbox.
                 AutoStartManager.Sync(SettingsRoot.Current.General.RegisterAutoStart);
@@ -79,6 +84,8 @@ namespace Clowd
                 {
                     if (e.PropertyName == nameof(SettingsGeneral.Theme))
                         Dispatcher.UIThread.Post(ApplyTheme);
+                    else if (e.PropertyName == nameof(SettingsGeneral.Language))
+                        Dispatcher.UIThread.Post(() => Loc.ApplyCulture(SettingsRoot.Current.General.Language));
                     else if (e.PropertyName == nameof(SettingsGeneral.RegisterAutoStart))
                         AutoStartManager.TrySetEnabled(SettingsRoot.Current.General.RegisterAutoStart);
                     else if (e.PropertyName == nameof(SettingsGeneral.RegisterExplorerContextMenu))
@@ -91,6 +98,10 @@ namespace Clowd
                 // beside each item stays current (decision table #48 / §6). SettingsHotkey is pure
                 // data now — every PropertyChanged is a gesture change.
                 SettingsRoot.Current.Hotkeys.PropertyChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
+
+                // same mechanism for the language: the tray menu is native and cannot be bound, so
+                // it is rebuilt in place whenever the UI culture changes.
+                Loc.CultureChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
 
                 SetupGlobalHotkeys();
 
