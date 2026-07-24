@@ -33,6 +33,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # nbgv (Nerdbank.GitVersioning) needs full history to compute the version height
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -59,6 +62,29 @@ jobs:
           dotnet test clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj -c Release --nologo
           dotnet test clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj -c Release --nologo
         shell: bash
+
+  # Computes the nbgv version once and publishes it as an artifact. The release
+  # workflow (release.yml) downloads version.txt from a completed run and trusts
+  # it as the version of the packages built by that run.
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compute nbgv version
+        run: |
+          dotnet tool install -g nbgv
+          nbgv get-version -v SimpleVersion | tee version.txt
+
+      - name: Upload version artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: version
+          path: version.txt
+          if-no-files-found: error
 
   package:
     name: package (${{ matrix.rid }})
@@ -87,11 +113,12 @@ jobs:
             obs-asset: obs-express-macos-arm64.zip
             exe: ""
     runs-on: ${{ matrix.os }}
-    env:
-      VERSION: 0.0.${{ github.run_number }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # nbgv (Nerdbank.GitVersioning) needs full history to compute the version height
+          fetch-depth: 0
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -108,12 +135,12 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      # No PublishSingleFile: Velopack (vpk pack in release.yml) requires a normal
+      # multi-file publish directory. Version stamping comes from nbgv automatically.
       - name: Publish Clowd.Ui
         run: >
           dotnet publish clowd_ui/Clowd.Ui/Clowd.Ui.csproj
           -c Release -r ${{ matrix.rid }} --self-contained true
-          -p:PublishSingleFile=true
-          -p:Version=${{ env.VERSION }}
           -o publish
 
       - name: Build capture binary
@@ -144,14 +171,14 @@ jobs:
       # the package in a zip (which does) before uploading.
       - name: Zip package (macOS)
         if: runner.os == 'macOS'
-        run: cd publish && zip -qry "../clowd-${{ matrix.rid }}-${{ env.VERSION }}.zip" .
+        run: cd publish && zip -qry "../clowd-${{ matrix.rid }}.zip" .
 
       - name: Upload package (macOS)
         if: runner.os == 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: clowd-${{ matrix.rid }}
-          path: clowd-${{ matrix.rid }}-${{ env.VERSION }}.zip
+          path: clowd-${{ matrix.rid }}.zip
           if-no-files-found: error
 
       - name: Upload package (Windows)

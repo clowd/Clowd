@@ -23,6 +23,7 @@
     <PackageReference Include="SharpHook" Version="7.1.2" />
     <!-- WASAPI via built-in COM interop; all call sites are OperatingSystem.IsWindows()-guarded -->
     <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />

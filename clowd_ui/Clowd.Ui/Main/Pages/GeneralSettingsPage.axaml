@@ -9,8 +9,25 @@
             <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
                  (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
                  the groupbox look is the keyed "GroupBox" theme). -->
-            <!-- The WPF "Updates" (Squirrel) and "Shell" (auto-start / context menu) groups are
-                 not available in this build and are hidden until implemented. -->
+            <!-- The WPF "Shell" (auto-start / context menu) group is not available in this
+                 build and is hidden until implemented. -->
+            <HeaderedContentControl Header="Updates" Theme="{StaticResource GroupBox}">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="VersionText" />
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button x:Name="UpdateButton" Content="Check for Updates" Click="OnUpdateButtonClick" />
+                        <ProgressBar x:Name="UpdateProgress"
+                                     Width="180"
+                                     VerticalAlignment="Center"
+                                     Minimum="0" Maximum="100"
+                                     IsVisible="False" />
+                    </StackPanel>
+                    <TextBlock x:Name="UpdateStatusText"
+                               FontSize="12"
+                               Opacity="0.65"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </HeaderedContentControl>
             <HeaderedContentControl Header="Appearance" Theme="{StaticResource GroupBox}">
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="12">
