@@ -20,6 +20,45 @@ namespace Clowd.UI.Pages
             BindEnumCombo(TrayClickCombo, nameof(SettingsGeneral.TrayClick), typeof(TrayClickAction));
 
             InitializeUpdateGroup();
+            InitializeAutoStart();
+        }
+
+        // ---- Auto-start ----
+
+        /// <summary>The checkbox writes the setting; App applies it to the OS (registry key /
+        /// LaunchAgent). This only reports back when that failed — a stale checkbox that silently
+        /// does nothing is worse than no checkbox.</summary>
+        private void InitializeAutoStart()
+        {
+            if (!AutoStartManager.IsSupported)
+            {
+                AutoStartCheck.IsEnabled = false;
+                AutoStartStatusText.Text = "Starting Clowd at login is not supported on this platform.";
+                AutoStartStatusText.IsVisible = true;
+                return;
+            }
+
+            // StateChanged is static and the settings window is rebuilt every time it is reopened
+            // (PageManager evicts it on close), so the subscription has to be tied to the visual
+            // tree or each open would leak another handler.
+            AttachedToVisualTree += (s, e) =>
+            {
+                AutoStartManager.StateChanged += OnAutoStartStateChanged;
+                ShowAutoStartError();
+            };
+
+            DetachedFromVisualTree += (s, e) => AutoStartManager.StateChanged -= OnAutoStartStateChanged;
+        }
+
+        private void OnAutoStartStateChanged(object sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(ShowAutoStartError);
+
+        private void ShowAutoStartError()
+        {
+            AutoStartStatusText.Text = AutoStartManager.LastError is { } err
+                ? "Could not change the startup setting: " + err
+                : null;
+            AutoStartStatusText.IsVisible = AutoStartStatusText.Text != null;
         }
 
         // ---- Updates group ----
