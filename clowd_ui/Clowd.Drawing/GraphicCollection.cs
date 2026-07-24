@@ -468,8 +468,19 @@ namespace Clowd.Drawing
             if (bounds.Width < 1 || bounds.Height < 1)
                 return null;
 
-            var width = (int)Math.Ceiling(bounds.Width);
-            var height = (int)Math.Ceiling(bounds.Height);
+            // Snap the export rect outward to whole pixels BEFORE it becomes the render offset.
+            // ContentBounds is a union of double-precision artwork rects, so any annotation sitting
+            // at a fractional coordinate used to drag the whole scene — the screenshot underneath
+            // included — onto a sub-pixel offset. Images are blitted, not re-rasterised, so that
+            // offset makes the sampler resample every pixel (visibly soft) and leaves a partly
+            // transparent edge row. An integral offset keeps pixel-aligned raster content aligned,
+            // and snapping outward (floor origin / ceil extent) can never crop.
+            var left = Math.Floor(bounds.X);
+            var top = Math.Floor(bounds.Y);
+            bounds = new Rect(left, top, Math.Ceiling(bounds.Right) - left, Math.Ceiling(bounds.Bottom) - top);
+
+            var width = (int)bounds.Width;
+            var height = (int)bounds.Height;
 
             // Export always uses b=1 full-res shadow sprites (final-design §0.3/§A.3): pre-bake any
             // that are missing, stale, interactively capped or on a different zoom bucket, so the

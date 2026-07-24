@@ -376,7 +376,14 @@ namespace Clowd.Drawing.Graphics
             }
             else
             {
-                base.Move(deltaX, deltaY);
+                // Keep raster content pixel aligned. A body drag arrives as a fractional
+                // logical-unit delta, and unlike a vector graphic an image is blitted rather than
+                // re-rasterised: land it on a fractional origin and the sampler resamples every
+                // pixel, which reads as a blurry screenshot with a half-transparent edge row — on
+                // screen and in anything exported from the canvas. Quantise the delta to whatever
+                // puts the origin back on a whole unit instead of applying it raw. Nudges (already
+                // integral) are unaffected.
+                base.Move(Math.Round(Left + deltaX) - Left, Math.Round(Top + deltaY) - Top);
             }
         }
 
