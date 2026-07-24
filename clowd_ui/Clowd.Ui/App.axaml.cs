@@ -175,7 +175,7 @@ namespace Clowd
             {
                 _trayIcon = new TrayIcon
                 {
-                    Icon = AppStyles.AppIcon,
+                    Icon = AppStyles.TrayIcon,
                     ToolTipText = "Clowd",
                     // the macOS native-menu exporter binds to the first Menu instance and
                     // throws "The menu being updated does not match" if it is replaced, so

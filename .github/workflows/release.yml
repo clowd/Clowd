@@ -151,6 +151,7 @@ jobs:
           vpk pack --packId Clowd --packTitle Clowd --packAuthors "Caelan Sayler"
           --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui
           --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
+          --icon clowd_ui/Clowd.Ui/Assets/clowd-default.icns
           --signAppIdentity "$APP_IDENTITY" --signInstallIdentity "$INSTALL_IDENTITY"
           --notaryProfile velopack-profile --keychain "$KEYCHAIN_PATH"
         shell: bash
