@@ -11,7 +11,9 @@ euclid.workspace = true
 log.workspace = true
 simplelog.workspace = true
 winit.workspace = true
-wgpu = { workspace = true, features = ["dx12", "metal"] }
+# "wgsl" enables the runtime WGSL frontend used as a fallback when a precompiled
+# passthrough shader (metallib / dxbc) fails to load on the host — see gpu/shaders.rs.
+wgpu = { workspace = true, features = ["dx12", "metal", "wgsl"] }
 pollster.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 usvg.workspace = true

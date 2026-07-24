@@ -39,9 +39,9 @@ jobs:
           - rid: win-arm64
             os: windows-latest
           - rid: osx-x64
-            os: macos-latest
+            os: macos-15
           - rid: osx-arm64
-            os: macos-latest
+            os: macos-15
     runs-on: ${{ matrix.os }}
     env:
       GH_TOKEN: ${{ github.token }}
