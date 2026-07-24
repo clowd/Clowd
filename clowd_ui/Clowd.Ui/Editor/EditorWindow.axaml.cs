@@ -1112,9 +1112,15 @@ namespace Clowd.UI
 
         private async void CutCommandExecuted(object parameter)
         {
-            // Cut = Copy + DeleteAll (entire canvas) — intentional WPF behavior, do not "fix" (§5.4)
+            // Cut removes exactly what it copied. CopyCommandImpl serializes the selection when
+            // there is one and the whole canvas otherwise, so mirror that split here — the WPF-era
+            // "cut always clears the canvas" behavior (§5.4) destroyed unselected work.
             await CopyCommandImpl();
-            drawingCanvas.DeleteAll();
+
+            if (drawingCanvas.SelectedCount > 0)
+                drawingCanvas.Delete();
+            else
+                drawingCanvas.DeleteAll();
         }
 
         private async void PasteCommandExecuted(object parameter)
