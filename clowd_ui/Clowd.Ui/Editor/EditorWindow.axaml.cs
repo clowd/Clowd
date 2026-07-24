@@ -505,6 +505,15 @@ namespace Clowd.UI
             // pressed-set repeat tracker (decision table #37)
             bool isRepeat = !_pressedKeys.Add(e.Key);
 
+            // An open mini colour picker owns Escape and Enter: both dismiss it, and neither may
+            // reach the canvas underneath (Escape cancels the in-progress drawing operation).
+            // Checked ahead of the TextBox bail-out so the keys still work from the hex field.
+            if (miniColorPopup.IsOpen && (e.Key == Key.Escape || e.Key == Key.Enter)) {
+                miniColorPopup.IsOpen = false;
+                e.Handled = true;
+                return;
+            }
+
             if (e.Source is TextBox)
                 return;
 
