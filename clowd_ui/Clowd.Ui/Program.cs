@@ -39,8 +39,18 @@ namespace Clowd
             if (OperatingSystem.IsWindows())
             {
                 velopack = velopack
-                    .OnAfterInstallFastCallback(_ => AutoStartManager.TrySetEnabled(true))
-                    .OnBeforeUninstallFastCallback(_ => AutoStartManager.TrySetEnabled(false));
+                    .OnAfterInstallFastCallback(_ =>
+                    {
+                        AutoStartManager.TrySetEnabled(true);
+                        ExplorerContextMenuManager.TrySetEnabled(true);
+                    })
+                    // the settings file outlives an uninstall, so both registrations have to be torn
+                    // down explicitly here or they linger pointing at a deleted executable.
+                    .OnBeforeUninstallFastCallback(_ =>
+                    {
+                        AutoStartManager.TrySetEnabled(false);
+                        ExplorerContextMenuManager.TrySetEnabled(false);
+                    });
             }
 
             velopack.Run();

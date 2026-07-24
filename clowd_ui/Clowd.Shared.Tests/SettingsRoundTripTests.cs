@@ -134,6 +134,26 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void ExplorerContextMenu_DefaultsToWindowsOnly_AndRoundTrips()
+        {
+            // the verb is a Windows-only registry registration, and debug builds are never installed
+            // so they must not register a verb pointing into a bin directory.
+            var expected = SettingsGeneral.DefaultRegisterExplorerContextMenu;
+            Assert.Equal(OperatingSystem.IsWindows() && !IsDebugBuild, expected);
+
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(expected, loaded.General.RegisterExplorerContextMenu);
+
+            var original = new SettingsRoot();
+            original.General.RegisterExplorerContextMenu = !expected;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(!expected, loaded.General.RegisterExplorerContextMenu);
+        }
+
+        [Fact]
         public void UpdateOptions_DefaultToCheckingEveryThreeHours_AndRoundTrip()
         {
             var loaded = SettingsService.Load(_path);

@@ -94,8 +94,20 @@ namespace Clowd.Config
             set => Set(ref _startMinimized, value);
         }
 
-        // compat field: no explorer context menu registration is performed in this build
-        [Browsable(false)]
+        /// <summary>
+        /// Default for <see cref="RegisterExplorerContextMenu"/>. Windows-only, and never in debug
+        /// builds — which are not installed, so registering a verb pointing into a bin directory
+        /// would put a stale entry in the developer's own Explorer menu.
+        /// </summary>
+        public static bool DefaultRegisterExplorerContextMenu { get; } =
+#if DEBUG
+            false;
+#else
+            OperatingSystem.IsWindows();
+#endif
+
+        [DisplayName("Add 'Upload with Clowd' to the Explorer context menu")]
+        [Description("Adds a right-click entry for files and folders that uploads them with Clowd.")]
         public bool RegisterExplorerContextMenu
         {
             get => _registerExplorerContextMenu;
@@ -169,7 +181,7 @@ namespace Clowd.Config
         private string _lastSavePath;
         private string _mainWindowBounds;
         private bool _confirmClose = true;
-        private bool _registerExplorerContextMenu = true;
+        private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;
         private bool _registerAutoStart = DefaultRegisterAutoStart;
 
         // only on by default where auto-start is: otherwise the first thing a manual launch does is

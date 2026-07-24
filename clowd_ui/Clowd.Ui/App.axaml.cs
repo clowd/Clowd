@@ -70,9 +70,10 @@ namespace Clowd
 
                 ApplyTheme();
 
-                // the saved setting is the source of truth for the login item; reconcile it with the
-                // OS once at startup, then follow it whenever the user toggles the checkbox.
+                // the saved settings are the source of truth for the shell registrations; reconcile
+                // them with the OS once at startup, then follow whenever the user toggles a checkbox.
                 AutoStartManager.Sync(SettingsRoot.Current.General.RegisterAutoStart);
+                ExplorerContextMenuManager.Sync(SettingsRoot.Current.General.RegisterExplorerContextMenu);
 
                 SettingsRoot.Current.General.PropertyChanged += (s, e) =>
                 {
@@ -80,6 +81,8 @@ namespace Clowd
                         Dispatcher.UIThread.Post(ApplyTheme);
                     else if (e.PropertyName == nameof(SettingsGeneral.RegisterAutoStart))
                         AutoStartManager.TrySetEnabled(SettingsRoot.Current.General.RegisterAutoStart);
+                    else if (e.PropertyName == nameof(SettingsGeneral.RegisterExplorerContextMenu))
+                        ExplorerContextMenuManager.TrySetEnabled(SettingsRoot.Current.General.RegisterExplorerContextMenu);
                 };
 
                 SetupTrayIcon();
