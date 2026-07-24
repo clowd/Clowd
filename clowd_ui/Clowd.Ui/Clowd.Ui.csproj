@@ -32,5 +32,8 @@
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
+    <!-- The macOS icon is consumed by vpk pack (release.yml) from the repo tree, not at
+         runtime, so keep it out of the embedded Avalonia resources. -->
+    <AvaloniaResource Remove="Assets\clowd-default.icns" />
   </ItemGroup>
 </Project>

@@ -55,6 +55,7 @@ namespace Clowd
     public static class AppStyles
     {
         private static WindowIcon _appIcon;
+        private static WindowIcon _trayIcon;
 
         public static Color AccentColor
         {
@@ -84,8 +85,21 @@ namespace Clowd
 
         public static bool IsDarkTheme => Application.Current?.ActualThemeVariant == ThemeVariant.Dark;
 
+        // The .ico's multi-resolution frames are ideal for the Windows taskbar/title bar, but
+        // ico decoding isn't reliable across Avalonia's non-Windows backends, so the tray and
+        // window icons load a plain PNG everywhere else. (The macOS dock/bundle icon is separate:
+        // it comes from clowd-default.icns baked into the .app by vpk pack — see release.yml.)
         public static WindowIcon AppIcon
-            => _appIcon ??= new WindowIcon(AssetLoader.Open(new Uri("avares://Clowd.Ui/Assets/clowd-default.ico")));
+            => _appIcon ??= new WindowIcon(AssetLoader.Open(new Uri(OperatingSystem.IsWindows()
+                ? "avares://Clowd.Ui/Assets/clowd-default.ico"
+                : "avares://Clowd.Ui/Assets/clowd-default.png")));
+
+        // Tray icon. The macOS menu bar wants the white glyph (it sits on a dark/translucent bar);
+        // the Windows notification area keeps the full-colour icon.
+        public static WindowIcon TrayIcon
+            => _trayIcon ??= new WindowIcon(AssetLoader.Open(new Uri(OperatingSystem.IsWindows()
+                ? "avares://Clowd.Ui/Assets/clowd-default.ico"
+                : "avares://Clowd.Ui/Assets/clowd-white.png")));
 
         public static string UiDateTimePattern
             => CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern + " " +
