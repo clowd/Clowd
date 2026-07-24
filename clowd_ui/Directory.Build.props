@@ -1,0 +1,7 @@
+<Project>
+  <!-- Version stamping for all UI assemblies comes from nbgv (version.json at repo root):
+       patch = git height since version.json introduced 4.0. -->
+  <ItemGroup>
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

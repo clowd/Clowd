@@ -1,0 +1,114 @@
+name: Release
+
+# Packages and publishes a completed CI run to GitHub Releases via Velopack.
+#
+# Manually dispatched with the run id of a CI run (the "package" jobs upload one
+# artifact per rid plus a version.txt artifact computed by nbgv at build time —
+# the version published here is always the version of that original build).
+#
+# Runs as a matrix over the four rids; Velopack supports multiple jobs uploading
+# to the same GitHub release (--merge). Each rid maps to a Velopack channel
+# (win-x64, osx-arm64, ...), with a "-pre" suffix when publishing a pre-release.
+# The app (UpdateService) follows whichever channel it was installed from.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "CI run id to publish (must have package + version artifacts)"
+        required: true
+        type: string
+      prerelease:
+        description: "Publish as a pre-release (uses -pre channels)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    name: release (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            os: windows-latest
+          - rid: win-arm64
+            os: windows-latest
+          - rid: osx-x64
+            os: macos-latest
+          - rid: osx-arm64
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO_URL: https://github.com/${{ github.repository }}
+    steps:
+      # only needed for the packaging icon
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk
+        shell: bash
+
+      - name: Download build artifacts
+        run: |
+          gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n version -D version-artifact
+          VERSION=$(tr -d '[:space:]' < version-artifact/version.txt)
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+          CHANNEL="${{ matrix.rid }}"
+          if [ "${{ inputs.prerelease }}" = "true" ]; then CHANNEL="$CHANNEL-pre"; fi
+          echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
+
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            # the macOS artifact is a zip (preserves unix file modes)
+            gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n clowd-${{ matrix.rid }} -D package
+            unzip -q "package/clowd-${{ matrix.rid }}.zip" -d publish
+          else
+            gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n clowd-${{ matrix.rid }} -D publish
+          fi
+          echo "Publishing version $VERSION to channel $CHANNEL"
+        shell: bash
+
+      # fetch the previous release for this channel so vpk can build delta packages;
+      # fails harmlessly on the very first release of a channel.
+      - name: Download previous release (deltas)
+        run: >
+          vpk download github --repoUrl "$REPO_URL" --token "$GH_TOKEN"
+          --channel "$CHANNEL" --pre ${{ inputs.prerelease }} -o releases
+          || echo "No previous release found for channel $CHANNEL (first release?)"
+        shell: bash
+
+      - name: Pack (Windows)
+        if: runner.os == 'Windows'
+        run: >
+          vpk pack --packId Clowd --packTitle Clowd --packAuthors "Caelan Sayler"
+          --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui.exe
+          --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
+          --icon clowd_ui/Clowd.Ui/Assets/clowd-default.ico
+        shell: bash
+
+      - name: Pack (macOS)
+        if: runner.os == 'macOS'
+        run: >
+          vpk pack --packId Clowd --packTitle Clowd --packAuthors "Caelan Sayler"
+          --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui
+          --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
+        shell: bash
+
+      - name: Upload to GitHub Releases
+        run: >
+          vpk upload github --repoUrl "$REPO_URL" --token "$GH_TOKEN"
+          --channel "$CHANNEL" -o releases
+          --merge true --publish true --pre ${{ inputs.prerelease }}
+        shell: bash

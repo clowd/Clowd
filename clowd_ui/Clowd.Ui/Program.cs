@@ -1,5 +1,6 @@
 using System;
 using Avalonia;
+using Velopack;
 
 namespace Clowd
 {
@@ -11,6 +12,10 @@ namespace Clowd
         [STAThread]
         public static void Main(string[] args)
         {
+            // Velopack hooks (install/update/uninstall) must run before anything else; Run()
+            // exits the process when invoked with a hook argument.
+            VelopackApp.Build().Run();
+
             // single-instance enforcement (MutexArgsForwarder) and argument forwarding happens
             // in App.OnFrameworkInitializationCompleted (NiceDialog needs the Avalonia platform
             // initialized for the unresponsive-instance error paths).
