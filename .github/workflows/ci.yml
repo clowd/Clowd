@@ -76,7 +76,7 @@ jobs:
 
       - name: Compute nbgv version
         run: |
-          dotnet tool install -g nbgv
+          dotnet tool update -g nbgv
           nbgv get-version -v SimpleVersion | tee version.txt
 
       - name: Upload version artifact
