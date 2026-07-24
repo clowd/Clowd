@@ -33,8 +33,9 @@
             <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
                  (decision table #54; the Semi implicit HeaderedContentControl theme is plain,
                  the groupbox look is the keyed "GroupBox" theme). -->
-            <!-- The WPF "Shell" group's explorer context-menu registration is not available in
-                 this build and is hidden until implemented; auto-start lives under Behavior. -->
+            <!-- The WPF "Shell" group's auto-start checkbox lives under Behavior in this build; the
+                 context menu entry it kept is Windows-only and is disabled elsewhere
+                 (see InitializeContextMenu). -->
             <HeaderedContentControl Header="Updates" Theme="{StaticResource GroupBox}">
                 <StackPanel Classes="SettingsGroup">
                     <StackPanel Classes="Setting" Spacing="8">
@@ -120,6 +121,16 @@
                         </StackPanel>
                         <TextBlock Classes="Caption"
                                    Text="What a single click on the tray icon does. The right-click menu always offers everything." />
+                    </StackPanel>
+                </StackPanel>
+            </HeaderedContentControl>
+            <HeaderedContentControl Header="Shell" Theme="{StaticResource GroupBox}">
+                <StackPanel Classes="SettingsGroup">
+                    <StackPanel Classes="Setting">
+                        <CheckBox x:Name="ContextMenuCheck" IsChecked="{Binding RegisterExplorerContextMenu}">
+                            <TextBlock Text="Add 'Upload with Clowd' to the Explorer context menu" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <TextBlock x:Name="ContextMenuCaption" Classes="Caption" />
                     </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>

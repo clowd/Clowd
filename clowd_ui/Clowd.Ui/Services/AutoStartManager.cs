@@ -3,8 +3,8 @@ using System.Diagnostics;
 using System.IO;
 using System.Runtime.Versioning;
 using System.Security;
+using Clowd.Util;
 using Microsoft.Win32;
-using Velopack.Locators;
 
 namespace Clowd.UI
 {
@@ -96,13 +96,14 @@ namespace Clowd.UI
 
         /// <summary>Reconciles the OS state with the saved setting at startup — the setting is the
         /// source of truth, so this repairs a login item removed behind Clowd's back (or left behind
-        /// by an install whose setting was later turned off).</summary>
+        /// by an install whose setting was later turned off). Rewrites rather than merely checking
+        /// presence when enabled, so an entry pointing at a stale executable path repairs itself.</summary>
         public static void Sync(bool enabled)
         {
             if (!IsSupported)
                 return;
 
-            if (IsEnabled() != enabled)
+            if (enabled || IsEnabled())
                 TrySetEnabled(enabled);
         }
 
@@ -120,25 +121,9 @@ namespace Clowd.UI
                             ?? throw new InvalidOperationException("Could not open the Windows Run registry key.");
 
             if (enabled)
-                key.SetValue(RunValueName, "\"" + GetWindowsLaunchTarget() + "\"", RegistryValueKind.String);
+                key.SetValue(RunValueName, "\"" + AppLaunchPath.Current + "\"", RegistryValueKind.String);
             else if (key.GetValue(RunValueName) != null)
                 key.DeleteValue(RunValueName, false);
-        }
-
-        /// <summary>
-        /// The path to launch at login. Velopack keeps the installed app under
-        /// <c>&lt;root&gt;\current\</c> and swaps that directory's contents in place on update, so
-        /// this stays valid across updates — unlike the versioned staging paths.
-        /// </summary>
-        private static string GetWindowsLaunchTarget()
-        {
-            var locator = VelopackLocator.Current;
-            if (locator != null && !String.IsNullOrEmpty(locator.AppContentDir) && !String.IsNullOrEmpty(locator.ThisExeRelativePath))
-                return Path.Combine(locator.AppContentDir, locator.ThisExeRelativePath);
-
-            // loose / dev build — register whatever is actually running.
-            return Environment.ProcessPath
-                   ?? throw new InvalidOperationException("Could not determine the path of the running executable.");
         }
 
         private static void SetEnabledMacOS(bool enabled)

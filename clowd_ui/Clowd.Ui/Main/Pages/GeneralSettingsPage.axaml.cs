@@ -21,6 +21,47 @@ namespace Clowd.UI.Pages
 
             InitializeUpdateGroup();
             InitializeAutoStart();
+            InitializeContextMenu();
+        }
+
+        // ---- Shell group ----
+
+        /// <summary>Same shape as the auto-start checkbox: the box writes the setting, App applies it
+        /// to the registry, and this reports back only when that failed.</summary>
+        private void InitializeContextMenu()
+        {
+            if (!ExplorerContextMenuManager.IsSupported)
+            {
+                ContextMenuCheck.IsEnabled = false;
+                ContextMenuCaption.Text = "The Explorer context menu is only available on Windows.";
+                return;
+            }
+
+            AttachedToVisualTree += (s, e) =>
+            {
+                ExplorerContextMenuManager.StateChanged += OnContextMenuStateChanged;
+                ShowContextMenuCaption();
+            };
+
+            DetachedFromVisualTree += (s, e) => ExplorerContextMenuManager.StateChanged -= OnContextMenuStateChanged;
+        }
+
+        private void OnContextMenuStateChanged(object sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(ShowContextMenuCaption);
+
+        private void ShowContextMenuCaption()
+        {
+            if (ExplorerContextMenuManager.LastError is { } err)
+            {
+                ContextMenuCaption.Text = "Could not change the context menu setting: " + err;
+                return;
+            }
+
+            // Windows 11 reserves its compact menu for packaged apps and pushes classic verbs like
+            // this one into the overflow, so say where to actually look for it.
+            ContextMenuCaption.Text = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)
+                ? "Right-click a file or folder and choose \"Show more options\" to find it."
+                : "Right-click a file or folder to find it.";
         }
 
         // ---- Auto-start ----
