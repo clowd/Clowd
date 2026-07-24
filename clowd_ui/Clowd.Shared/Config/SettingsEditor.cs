@@ -116,12 +116,9 @@ namespace Clowd.Config
             set => Set(ref _deleteSessionsAfter, value);
         }
 
-        [Browsable(false)]
-        public bool SidebarVisible
-        {
-            get => _sidebarVisible;
-            set => Set(ref _sidebarVisible, value);
-        }
+        // NOTE: there is deliberately no SidebarVisible setting. The layers sidebar is per-editor-
+        // window view state, not a preference: it always opens closed and toggling it affects only
+        // the window you toggled it in. Only its width is remembered.
 
         [Browsable(false)]
         public double SidebarWidth
@@ -158,7 +155,6 @@ namespace Clowd.Config
         private TimeOption _deleteSessionsAfter = new TimeOption(30, TimeOptionUnit.Days);
         private Dictionary<ToolType, SavedToolSettings> _tools = new Dictionary<ToolType, SavedToolSettings>();
         private bool _restoreSessionsOnClowdStart = true;
-        private bool _sidebarVisible;
         private double _sidebarWidth = 230;
         private List<string> _toolbarOrder;
         private List<string> _hiddenTools;

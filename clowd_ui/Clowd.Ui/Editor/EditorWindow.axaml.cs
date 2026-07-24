@@ -58,6 +58,9 @@ namespace Clowd.UI
 
         // sidebar drag bounds — also mirrored onto the sidebar ColumnDefinition (MinWidth/MaxWidth)
         // so Avalonia's own splitter clamps the drag; the editor re-clamps on read/persist.
+        // per-window, deliberately not persisted — every editor opens with the layers sidebar closed
+        private bool _sidebarVisible;
+
         private const double SidebarMinWidth = 140;
         private const double SidebarMaxWidth = 600;
 
@@ -170,16 +173,16 @@ namespace Clowd.UI
             miniColor.ParentWindow = this;
             miniColor.Cancelled += (_, _) => miniColorPopup.IsOpen = false;
 
-            // opt-in editor features (customizable toolbar / layers sidebar). The sidebar flag
-            // defaults false, so with default settings the strip renders exactly as before plus
-            // the customize button, and no sidebar.
+            // opt-in editor features (customizable toolbar / layers sidebar). The sidebar is
+            // per-window and always starts closed, so the strip renders exactly as before plus the
+            // customize button, and no sidebar.
             //
             // ApplySidebarVisible sets the border + splitter visibility, sizes (or collapses) the
             // sidebar column, and attaches the layers panel only when the sidebar is actually shown —
             // an IsVisible=false panel stays in the visual tree, so an unconditional Attach would
             // rebuild rows on every edit for a panel nobody can see. The SidebarVisible setter runs
             // the same path on toggle.
-            ApplySidebarVisible(_settings.Editor.SidebarVisible);
+            ApplySidebarVisible(_sidebarVisible);
             RebuildToolStrip();
             RebuildCustomizePopup();
 
@@ -657,20 +660,20 @@ namespace Clowd.UI
 
         private static ToolRegistryEntry GetToolEntry(ToolType tool) => ToolRegistry.FirstOrDefault(e => e.Tool == tool);
 
-        /// <summary>Toggles the right-hand layers sidebar. Backed by settings.</summary>
+        /// <summary>Toggles the right-hand layers sidebar. Deliberately per-window and transient:
+        /// it is a view of the document you are looking at right now, not a preference, so it always
+        /// starts closed and toggling it never touches the other editors or the settings file.
+        /// (Only the sidebar's *width* is still remembered.)</summary>
         public bool SidebarVisible
         {
-            get => _settings.Editor.SidebarVisible;
+            get => _sidebarVisible;
             set
             {
-                if (_settings.Editor.SidebarVisible == value)
+                if (_sidebarVisible == value)
                     return;
 
-                _settings.Editor.SidebarVisible = value;
-                // shared setting: mirror the sidebar visibility (and attach/detach) across all editors
-                foreach (var wnd in GetOpenEditors())
-                    wnd.ApplySidebarVisible(value);
-                TrySaveSettings();
+                _sidebarVisible = value;
+                ApplySidebarVisible(value);
             }
         }
 
@@ -706,7 +709,7 @@ namespace Clowd.UI
         /// sidebar is hidden so a collapsed 0-width column can't overwrite the remembered width.</summary>
         private void UpdateSidebarWidthSetting()
         {
-            if (!_settings.Editor.SidebarVisible)
+            if (!_sidebarVisible)
                 return;
 
             // the border stretches to fill the sidebar column, so its arranged width is the column's

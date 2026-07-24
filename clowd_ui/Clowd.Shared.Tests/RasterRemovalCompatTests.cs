@@ -58,9 +58,9 @@ namespace Clowd.Shared.Tests
             var loaded = SettingsService.Load(_path);
 
             Assert.NotNull(loaded);
-            // the removed "RasterToolsEnabled" property is silently ignored; a real property on the
-            // same object still binds, proving the load did not abort on the unknown key
-            Assert.True(loaded.Editor.SidebarVisible);
+            // the removed "RasterToolsEnabled" and "SidebarVisible" properties are silently ignored;
+            // a real property on the same object still binds, proving the load did not abort on them
+            Assert.Equal(new[] { "Brush", "Rectangle" }, loaded.Editor.ToolbarOrder);
             // the unparseable "Brush" dictionary key is dropped while the valid "Text" entry binds
             var text = Assert.Contains(ToolType.Text, (IDictionary<ToolType, SavedToolSettings>)loaded.Editor.Tools);
             Assert.Equal("Consolas", text.FontFamily);
