@@ -77,12 +77,4 @@ https://user-images.githubusercontent.com/1287295/177044423-7f90f7b3-01fa-45a9-9
 
 ----
 
-# Building Clowd
-
-You will need the .NET 8 SDK and a stable Rust toolchain installed.
-
-```cmd
-git clone https://github.com/clowd/Clowd.git
-cargo build -p clowd_capture_wgpu
-dotnet build clowd_ui/Clowd.Ui/Clowd.Ui.csproj
-```
+Interested in building Clowd from source? See [BUILDING.md](BUILDING.md).
