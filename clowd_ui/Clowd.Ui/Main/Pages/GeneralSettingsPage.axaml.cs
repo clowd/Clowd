@@ -5,7 +5,6 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Config;
-using Velopack;
 
 namespace Clowd.UI.Pages
 {
@@ -18,6 +17,7 @@ namespace Clowd.UI.Pages
 
             BindEnumCombo(ThemeCombo, nameof(SettingsGeneral.Theme), typeof(AppTheme));
             BindEnumCombo(TrayClickCombo, nameof(SettingsGeneral.TrayClick), typeof(TrayClickAction));
+            BindEnumCombo(UpdateIntervalCombo, nameof(SettingsGeneral.UpdateCheckInterval), typeof(UpdateInterval));
 
             InitializeUpdateGroup();
             InitializeAutoStart();
@@ -63,101 +63,126 @@ namespace Clowd.UI.Pages
 
         // ---- Updates group ----
 
-        private UpdateInfo _availableUpdate;
-        private bool _updateBusy;
+        private const string StableChannelLabel = "Stable";
+        private const string PrereleaseChannelLabel = "Pre-release";
 
+        // set while the channel combo is being populated, so seeding the selection doesn't look like
+        // the user picking a channel (which would kick off a switch + check).
+        private bool _settingChannelSelection;
+
+        /// <summary>The update group renders <see cref="UpdateService"/>'s state rather than owning
+        /// any of its own: the background scheduler can check, download and stage an update while
+        /// this page is closed, or while it is open and untouched.</summary>
         private void InitializeUpdateGroup()
         {
-            VersionText.Text = "Current version: " + UpdateService.Default.CurrentVersion;
+            InitializeChannelCombo();
+            RenderUpdateState();
 
-            if (!UpdateService.Default.IsSupported)
+            // UpdateService outlives the settings window (PageManager evicts the window on close), so
+            // like AutoStartManager the subscription is tied to the visual tree.
+            AttachedToVisualTree += (s, e) =>
             {
-                UpdateButton.IsEnabled = false;
-                UpdateStatusText.Text = "Automatic updates are not available in this build.";
-                return;
-            }
+                UpdateService.Default.StateChanged += OnUpdateStateChanged;
+                RenderUpdateState();
+            };
 
-            if (UpdateService.Default.UpdatePendingRestart != null)
+            DetachedFromVisualTree += (s, e) => UpdateService.Default.StateChanged -= OnUpdateStateChanged;
+        }
+
+        private void OnUpdateStateChanged(object sender, EventArgs e) =>
+            Dispatcher.UIThread.Post(RenderUpdateState);
+
+        private void RenderUpdateState()
+        {
+            var update = UpdateService.Default;
+
+            VersionText.Text = "Current version: " + update.CurrentVersion
+                               + (update.IsPrereleaseChannel ? " (pre-release)" : "");
+
+            UpdateStatusText.Text = update.StatusMessage;
+            UpdateStatusText.IsVisible = !String.IsNullOrEmpty(update.StatusMessage);
+
+            UpdateProgress.IsVisible = update.State == UpdateState.Downloading;
+            UpdateProgress.Value = update.DownloadProgress;
+
+            UpdateButton.Content = update.State switch
             {
-                UpdateButton.Content = "Restart to Update";
-                UpdateStatusText.Text = "An update has been downloaded and will be applied on restart.";
-                return;
-            }
+                UpdateState.ReadyToRestart => "Restart to Update",
+                UpdateState.UpdateAvailable => "Download Update",
+                _ => "Check for Updates",
+            };
 
-            // silent check when the page opens; the button reflects the result.
-            _ = CheckForUpdates(interactive: false);
+            UpdateButton.IsEnabled = update.IsSupported
+                                     && update.State != UpdateState.Checking
+                                     && update.State != UpdateState.Downloading;
+
+            // shown even where it cannot be used (a loose build has no installed channel to switch
+            // away from) — a missing control reads as a missing feature.
+            ChannelSection.IsEnabled = update.CanSwitchChannel;
+            ChannelHelpText.Text = !update.CanSwitchChannel
+                ? "The update channel can only be changed in an installed build."
+                : update.IsPrereleaseChannel
+                    ? "Pre-release builds get new features first, and are more likely to contain bugs."
+                    : "Stable builds only. Switching channel checks for a new version straight away.";
+
+            SetChannelSelection(update.IsPrereleaseChannel);
+        }
+
+        private void InitializeChannelCombo()
+        {
+            _settingChannelSelection = true;
+            try
+            {
+                ChannelCombo.ItemsSource = new[] { StableChannelLabel, PrereleaseChannelLabel };
+            }
+            finally
+            {
+                _settingChannelSelection = false;
+            }
+        }
+
+        private void SetChannelSelection(bool prerelease)
+        {
+            var index = prerelease ? 1 : 0;
+            if (ChannelCombo.SelectedIndex == index)
+                return;
+
+            _settingChannelSelection = true;
+            try
+            {
+                ChannelCombo.SelectedIndex = index;
+            }
+            finally
+            {
+                _settingChannelSelection = false;
+            }
+        }
+
+        private async void OnChannelChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_settingChannelSelection)
+                return;
+
+            await UpdateService.Default.SetPrereleaseChannelAsync(ChannelCombo.SelectedIndex == 1);
         }
 
         private async void OnUpdateButtonClick(object sender, RoutedEventArgs e)
         {
-            if (_updateBusy)
-                return;
+            var update = UpdateService.Default;
 
-            if (UpdateService.Default.UpdatePendingRestart is { } pending)
+            switch (update.State)
             {
-                UpdateService.Default.ApplyUpdatesAndRestart(pending);
-                return;
-            }
+                case UpdateState.ReadyToRestart:
+                    update.ApplyUpdatesAndRestart();
+                    break;
 
-            if (_availableUpdate != null)
-            {
-                await DownloadUpdate(_availableUpdate);
-                return;
-            }
+                case UpdateState.UpdateAvailable:
+                    await update.DownloadAvailableUpdateAsync();
+                    break;
 
-            await CheckForUpdates(interactive: true);
-        }
-
-        private async System.Threading.Tasks.Task CheckForUpdates(bool interactive)
-        {
-            _updateBusy = true;
-            try
-            {
-                UpdateStatusText.Text = "Checking for updates…";
-                var info = await UpdateService.Default.CheckForUpdatesAsync();
-                _availableUpdate = info;
-                if (info != null)
-                {
-                    UpdateButton.Content = "Download Update";
-                    UpdateStatusText.Text = $"Version {info.TargetFullRelease.Version} is available.";
-                }
-                else
-                {
-                    UpdateStatusText.Text = "You are using the latest version.";
-                }
-            }
-            catch (Exception ex)
-            {
-                UpdateStatusText.Text = interactive ? "Update check failed: " + ex.Message : "";
-            }
-            finally
-            {
-                _updateBusy = false;
-            }
-        }
-
-        private async System.Threading.Tasks.Task DownloadUpdate(UpdateInfo info)
-        {
-            _updateBusy = true;
-            try
-            {
-                UpdateButton.IsEnabled = false;
-                UpdateProgress.IsVisible = true;
-                UpdateStatusText.Text = $"Downloading version {info.TargetFullRelease.Version}…";
-                await UpdateService.Default.DownloadUpdatesAsync(info,
-                    p => Dispatcher.UIThread.Post(() => UpdateProgress.Value = p));
-                UpdateButton.Content = "Restart to Update";
-                UpdateStatusText.Text = "Update downloaded. Restart Clowd to finish installing.";
-            }
-            catch (Exception ex)
-            {
-                UpdateStatusText.Text = "Download failed: " + ex.Message;
-            }
-            finally
-            {
-                UpdateProgress.IsVisible = false;
-                UpdateButton.IsEnabled = true;
-                _updateBusy = false;
+                default:
+                    await update.CheckForUpdatesAsync();
+                    break;
             }
         }
 

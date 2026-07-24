@@ -24,6 +24,29 @@ namespace Clowd.Config
         CaptureRegion,
     }
 
+    /// <summary>How often Clowd polls the release feed while running. Values are minutes — the
+    /// update scheduler converts them straight to a <see cref="System.TimeSpan"/>.</summary>
+    public enum UpdateInterval
+    {
+        [Description("Every 30 minutes")]
+        HalfHourly = 30,
+
+        [Description("Every hour")]
+        Hourly = 60,
+
+        [Description("Every 3 hours")]
+        ThreeHourly = 180,
+
+        [Description("Every 6 hours")]
+        SixHourly = 360,
+
+        [Description("Every 12 hours")]
+        TwelveHourly = 720,
+
+        [Description("Once a day")]
+        Daily = 1440,
+    }
+
     public class SettingsGeneral : SimpleNotifyObject
     {
         [Browsable(false)]
@@ -79,6 +102,46 @@ namespace Clowd.Config
             set => Set(ref _registerExplorerContextMenu, value);
         }
 
+        [DisplayName("Automatically check for and download updates")]
+        [Description("Periodically looks for a newer release while Clowd is running, and downloads it ready to be applied.")]
+        public bool AutoDownloadUpdates
+        {
+            get => _autoDownloadUpdates;
+            set => Set(ref _autoDownloadUpdates, value);
+        }
+
+        [DisplayName("Check for updates")]
+        [Description("How often Clowd looks for a newer release.")]
+        public UpdateInterval UpdateCheckInterval
+        {
+            get => _updateCheckInterval;
+            set => Set(ref _updateCheckInterval, value);
+        }
+
+        [DisplayName("Automatically restart Clowd to apply updates in the background")]
+        [Description("Silently restarts Clowd to finish installing a downloaded update, but only once the computer has been idle for a while.")]
+        public bool AutoApplyUpdates
+        {
+            get => _autoApplyUpdates;
+            set => Set(ref _autoApplyUpdates, value);
+        }
+
+        /// <summary>
+        /// The Velopack channel to fetch updates from, overriding the channel this build was
+        /// installed from (see UpdateService). Null means "follow the installed channel", which is
+        /// the state of every install until the user switches between stable and pre-release.
+        ///
+        /// Once written this is never set back to null: SettingsService.Load binds through
+        /// ConfigurationBuilder, which skips null values, so a null would let the previously saved
+        /// channel resurrect on the next launch. The effective channel is always stored in full.
+        /// </summary>
+        [Browsable(false)]
+        public string UpdateChannel
+        {
+            get => _updateChannel;
+            set => Set(ref _updateChannel, value);
+        }
+
         [DisplayName("Theme")]
         [Description("Choose the light or dark appearance, or follow the Windows setting.")]
         public AppTheme Theme
@@ -114,5 +177,14 @@ namespace Clowd.Config
         private bool _startMinimized = DefaultRegisterAutoStart;
         private AppTheme _theme = AppTheme.System;
         private TrayClickAction _trayClick = TrayClickAction.OpenSettings;
+
+        private bool _autoDownloadUpdates = true;
+        private UpdateInterval _updateCheckInterval = UpdateInterval.ThreeHourly;
+
+        // on by default: the restart only happens once the machine itself has been idle for ten
+        // minutes (IdleMonitor), so in practice the user finds Clowd already up to date rather than
+        // ever seeing it happen.
+        private bool _autoApplyUpdates = true;
+        private string _updateChannel;
     }
 }

@@ -91,10 +91,20 @@ namespace Clowd
 
                 SetupGlobalHotkeys();
 
+                // periodic update checks, and (opt-in) downloading + applying them while idle.
+                UpdateService.Default.Start();
+
                 // start receiving command line arguments forwarded from secondary instances
                 _processor.Ready();
 
-                if (firstRun)
+                if (Program.IsSilentUpdateRestart)
+                {
+                    // relaunched by the updater after a background update: come back up exactly as
+                    // the user left it — in the tray, with whatever editors were open restored.
+                    if (SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
+                        EditorWindow.ShowAllPreviouslyActiveSessions();
+                }
+                else if (firstRun)
                 {
                     // first launch after an install: show the window regardless of StartMinimized,
                     // on General so the auto-start / minimised options are the first thing seen.
@@ -384,6 +394,9 @@ namespace Clowd
 
             ShutdownGlobalHotkeys();
 
+            try { UpdateService.Default.Stop(); }
+            catch { }
+
             try
             {
                 if (SettingsRoot.Current != null)
@@ -418,6 +431,9 @@ namespace Clowd
             CloseAllWindows();
 
             ShutdownGlobalHotkeys();
+
+            try { UpdateService.Default.Stop(); }
+            catch { }
 
             try
             {

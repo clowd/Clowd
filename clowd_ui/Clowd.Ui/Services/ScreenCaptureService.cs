@@ -80,6 +80,10 @@ namespace Clowd.UI
         // one capture process at a time, across all page instances.
         private static int _captureActive;
 
+        /// <summary>True while the capture overlay is on screen — a hard block on applying a
+        /// background update (IdleMonitor).</summary>
+        public static bool IsCaptureActive => Volatile.Read(ref _captureActive) != 0;
+
         public async void Open(CaptureMode mode, bool video = false)
         {
             if (!Dispatcher.UIThread.CheckAccess())
@@ -93,6 +97,8 @@ namespace Clowd.UI
                 Debug.WriteLine("Screen capture is already in progress; ignoring re-entrant request.");
                 return;
             }
+
+            IdleMonitor.NotifyCaptureActivity();
 
             try
             {
@@ -155,6 +161,10 @@ namespace Clowd.UI
             finally
             {
                 Interlocked.Exchange(ref _captureActive, 0);
+
+                // re-stamp on the way out so the quiet period is measured from when the overlay
+                // disappeared, not from when it was opened.
+                IdleMonitor.NotifyCaptureActivity();
                 Closed?.Invoke(this, EventArgs.Empty);
             }
         }
