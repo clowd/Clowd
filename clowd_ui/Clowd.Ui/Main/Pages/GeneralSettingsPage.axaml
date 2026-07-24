@@ -4,6 +4,30 @@
     xmlns:controls="using:Clowd.UI.Controls"
     x:Class="Clowd.UI.Pages.GeneralSettingsPage">
 
+    <UserControl.Styles>
+        <!-- Vertical rhythm matched to the generated settings pages (SettingsControlFactory
+             .AddRowToGrid): 24px between one setting and the next, 2px between a control and its
+             own caption. Each setting is a "Setting"-classed StackPanel holding the control
+             followed by its caption; the group's own panel spaces those blocks apart. -->
+        <Style Selector="StackPanel.SettingsGroup">
+            <Setter Property="Spacing" Value="24" />
+        </Style>
+        <Style Selector="StackPanel.Setting">
+            <Setter Property="Spacing" Value="2" />
+        </Style>
+        <Style Selector="StackPanel.SettingRow">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="12" />
+        </Style>
+        <Style Selector="TextBlock.Caption">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="560" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+    </UserControl.Styles>
+
     <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="16">
             <!-- WPF GroupBox -> HeaderedContentControl using Semi's keyed GroupBox ControlTheme
@@ -12,62 +36,91 @@
             <!-- The WPF "Shell" group's explorer context-menu registration is not available in
                  this build and is hidden until implemented; auto-start lives under Behavior. -->
             <HeaderedContentControl Header="Updates" Theme="{StaticResource GroupBox}">
-                <StackPanel Spacing="8">
-                    <TextBlock x:Name="VersionText" />
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <Button x:Name="UpdateButton" Content="Check for Updates" Click="OnUpdateButtonClick" />
-                        <ProgressBar x:Name="UpdateProgress"
-                                     Width="180"
-                                     VerticalAlignment="Center"
-                                     Minimum="0" Maximum="100"
-                                     IsVisible="False" />
+                <StackPanel Classes="SettingsGroup">
+                    <StackPanel Classes="Setting" Spacing="8">
+                        <TextBlock x:Name="VersionText" />
+                        <StackPanel Classes="SettingRow">
+                            <Button x:Name="UpdateButton" Content="Check for Updates" Click="OnUpdateButtonClick" />
+                            <ProgressBar x:Name="UpdateProgress"
+                                         Width="180"
+                                         VerticalAlignment="Center"
+                                         Minimum="0" Maximum="100"
+                                         IsVisible="False" />
+                        </StackPanel>
+                        <TextBlock x:Name="UpdateStatusText" Classes="Caption" />
                     </StackPanel>
-                    <TextBlock x:Name="UpdateStatusText"
-                               FontSize="12"
-                               Opacity="0.65"
-                               TextWrapping="Wrap" />
+
+                    <StackPanel Classes="Setting" Spacing="8">
+                        <CheckBox x:Name="AutoDownloadCheck" IsChecked="{Binding AutoDownloadUpdates}">
+                            <TextBlock Text="Automatically check for and download updates" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <StackPanel Classes="SettingRow" IsEnabled="{Binding AutoDownloadUpdates}">
+                            <TextBlock VerticalAlignment="Center" Text="Check" />
+                            <ComboBox x:Name="UpdateIntervalCombo" MinWidth="160" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <CheckBox x:Name="AutoApplyCheck" IsChecked="{Binding AutoApplyUpdates}">
+                            <TextBlock Text="Automatically restart Clowd to apply updates in the background"
+                                       TextWrapping="Wrap" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   Text="The restart happens only once you have been away from the computer for 10 minutes, and never while a capture, recording or upload is running." />
+                    </StackPanel>
+
+                    <StackPanel x:Name="ChannelSection" Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Update channel" />
+                            <ComboBox x:Name="ChannelCombo" MinWidth="160" SelectionChanged="OnChannelChanged" />
+                        </StackPanel>
+                        <TextBlock x:Name="ChannelHelpText" Classes="Caption" />
+                    </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>
             <HeaderedContentControl Header="Appearance" Theme="{StaticResource GroupBox}">
-                <StackPanel Spacing="8">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <TextBlock VerticalAlignment="Center" Text="Theme" />
-                        <ComboBox x:Name="ThemeCombo" MinWidth="160" />
+                <StackPanel Classes="SettingsGroup">
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Theme" />
+                            <ComboBox x:Name="ThemeCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   Text="Choose the light or dark appearance, or follow the Windows setting." />
                     </StackPanel>
-                    <TextBlock FontSize="12"
-                               Opacity="0.65"
-                               TextWrapping="Wrap"
-                               Text="Choose the light or dark appearance, or follow the Windows setting." />
                 </StackPanel>
             </HeaderedContentControl>
             <HeaderedContentControl Header="Behavior" Theme="{StaticResource GroupBox}">
-                <StackPanel Spacing="8">
-                    <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding RegisterAutoStart}">
-                        <TextBlock Text="Start Clowd when your computer starts up" />
-                    </CheckBox>
-                    <TextBlock x:Name="AutoStartStatusText"
-                               FontSize="12"
-                               Opacity="0.65"
-                               TextWrapping="Wrap"
-                               IsVisible="False" />
-                    <CheckBox IsChecked="{Binding StartMinimized}">
-                        <TextBlock Text="Start Clowd minimised" />
-                    </CheckBox>
-                    <TextBlock FontSize="12"
-                               Opacity="0.65"
-                               TextWrapping="Wrap"
-                               Text="Clowd starts in the notification area without opening this window." />
-                    <CheckBox IsChecked="{Binding ConfirmClose}">
-                        <TextBlock Text="Ask/confirm before exiting" />
-                    </CheckBox>
-                    <StackPanel Margin="0,4,0,0" Orientation="Horizontal" Spacing="12">
-                        <TextBlock VerticalAlignment="Center" Text="Tray icon click" />
-                        <ComboBox x:Name="TrayClickCombo" MinWidth="160" />
+                <StackPanel Classes="SettingsGroup">
+                    <StackPanel Classes="Setting">
+                        <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding RegisterAutoStart}">
+                            <TextBlock Text="Start Clowd when your computer starts up" />
+                        </CheckBox>
+                        <TextBlock x:Name="AutoStartStatusText" Classes="Caption" IsVisible="False" />
                     </StackPanel>
-                    <TextBlock FontSize="12"
-                               Opacity="0.65"
-                               TextWrapping="Wrap"
-                               Text="What a single click on the tray icon does. The right-click menu always offers everything." />
+
+                    <StackPanel Classes="Setting">
+                        <CheckBox IsChecked="{Binding StartMinimized}">
+                            <TextBlock Text="Start Clowd minimised" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   Text="Clowd starts in the notification area without opening this window." />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <CheckBox IsChecked="{Binding ConfirmClose}">
+                            <TextBlock Text="Ask/confirm before exiting" />
+                        </CheckBox>
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Tray icon click" />
+                            <ComboBox x:Name="TrayClickCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   Text="What a single click on the tray icon does. The right-click menu always offers everything." />
+                    </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>
         </StackPanel>

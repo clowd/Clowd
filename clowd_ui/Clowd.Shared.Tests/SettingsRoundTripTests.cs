@@ -134,6 +134,32 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void UpdateOptions_DefaultToCheckingEveryThreeHours_AndRoundTrip()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.True(loaded.General.AutoDownloadUpdates);
+            Assert.Equal(UpdateInterval.ThreeHourly, loaded.General.UpdateCheckInterval);
+            Assert.True(loaded.General.AutoApplyUpdates);
+
+            // no override until the user switches channel: updates follow the installed channel.
+            Assert.Null(loaded.General.UpdateChannel);
+
+            var original = new SettingsRoot();
+            original.General.AutoDownloadUpdates = false;
+            original.General.UpdateCheckInterval = UpdateInterval.Daily;
+            original.General.AutoApplyUpdates = false;
+            original.General.UpdateChannel = "win-x64-pre";
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.False(loaded.General.AutoDownloadUpdates);
+            Assert.Equal(UpdateInterval.Daily, loaded.General.UpdateCheckInterval);
+            Assert.False(loaded.General.AutoApplyUpdates);
+            Assert.Equal("win-x64-pre", loaded.General.UpdateChannel);
+        }
+
+        [Fact]
         public void EditorFeatureFlags_Default_WhenAbsentFromFile()
         {
             var loaded = SettingsService.Load(_path);

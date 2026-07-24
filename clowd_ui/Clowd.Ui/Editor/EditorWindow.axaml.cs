@@ -134,9 +134,19 @@ namespace Clowd.UI
             AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
             AddHandler(KeyUpEvent, OnTunnelKeyUp, RoutingStrategies.Tunnel);
 
+            // feeds the "has this editor been touched lately" test that gates background update
+            // restarts (IdleMonitor). Tunnelling handlers so they see the input regardless of
+            // which child control ends up handling it.
+            AddHandler(KeyDownEvent, (object s, KeyEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
+            AddHandler(PointerPressedEvent, (object s, PointerPressedEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
+            AddHandler(PointerWheelChangedEvent, (object s, PointerWheelEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
+
             Opened += EditorWindow_Opened;
             Closing += EditorWindow_Closing;
-            Activated += (_, _) => UpdateSessionInfo();
+            Activated += (_, _) => {
+                IdleMonitor.NotifyInteraction();
+                UpdateSessionInfo();
+            };
             Deactivated += (_, _) => {
                 _pressedKeys.Clear();
                 if (_panPreviousTool != null) {
@@ -417,7 +427,7 @@ namespace Clowd.UI
             }
         }
 
-        private static IEnumerable<EditorWindow> GetOpenEditors()
+        internal static IEnumerable<EditorWindow> GetOpenEditors()
         {
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
                 return desktop.Windows.OfType<EditorWindow>();

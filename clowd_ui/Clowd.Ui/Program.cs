@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Avalonia;
 using Clowd.UI;
 using Velopack;
@@ -10,6 +11,15 @@ namespace Clowd
         /// <summary>Set by the Velopack first-run hook: this is the first launch after an install,
         /// so the settings window opens instead of going straight to the tray.</summary>
         public static bool IsVelopackFirstRun { get; private set; }
+
+        /// <summary>Restart argument UpdateService passes when it applies an update in the background,
+        /// so the relaunched process knows to stay in the tray.</summary>
+        public const string SilentUpdateRestartArg = "--applied-background-update";
+
+        /// <summary>True when this process was relaunched by the updater after a background update.
+        /// The argument is stripped before Avalonia sees it — every other command line argument is
+        /// treated as a file to upload (MutexArgsForwarder).</summary>
+        public static bool IsSilentUpdateRestart { get; private set; }
 
         // Initialization code. Don't use any Avalonia, third-party APIs or any
         // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
@@ -35,10 +45,22 @@ namespace Clowd
 
             velopack.Run();
 
+            args = ConsumeSilentUpdateArg(args);
+
             // single-instance enforcement (MutexArgsForwarder) and argument forwarding happens
             // in App.OnFrameworkInitializationCompleted (NiceDialog needs the Avalonia platform
             // initialized for the unresponsive-instance error paths).
             BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+
+        private static string[] ConsumeSilentUpdateArg(string[] args)
+        {
+            if (args == null || args.Length == 0)
+                return args;
+
+            var remaining = args.Where(a => !String.Equals(a, SilentUpdateRestartArg, StringComparison.OrdinalIgnoreCase)).ToArray();
+            IsSilentUpdateRestart = remaining.Length != args.Length;
+            return remaining;
         }
 
         public static AppBuilder BuildAvaloniaApp()
