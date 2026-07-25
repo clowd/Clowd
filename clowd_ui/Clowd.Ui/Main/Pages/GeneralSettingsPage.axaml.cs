@@ -22,7 +22,107 @@ namespace Clowd.UI.Pages
             InitializeUpdateGroup();
             InitializeAutoStart();
             InitializeContextMenu();
+            InitializePermissions();
         }
+
+        // ---- Permissions group (macOS only) ----
+
+        /// <summary>
+        /// The macOS privacy permissions Clowd depends on (issue #49): Screen Recording for capture,
+        /// recording and the eyedropper, Accessibility for the global hotkeys. Neither is something
+        /// Clowd can grant itself, so this group's whole job is to say where each one stands and get
+        /// the user to the right System Settings pane. It sits at the top of the page on macOS — an
+        /// ungranted Screen Recording permission makes every other setting here moot.
+        /// </summary>
+        /// <remarks>
+        /// The group renders live state rather than a setting: the user leaves for System Settings,
+        /// flips a switch and comes back, so the statuses are re-read on every window activation as
+        /// well as on <see cref="MacPermissions.StateChanged"/>. Both permissions only take effect
+        /// for a process at launch, which is why a granted-but-not-yet-restarted state still tells
+        /// the user to restart.
+        /// </remarks>
+        private void InitializePermissions()
+        {
+            if (!MacPermissions.IsRelevant)
+                return;
+
+            PermissionsGroup.IsVisible = true;
+            RenderPermissions();
+
+            // MacPermissions is static and this page is rebuilt on every settings open (PageManager
+            // evicts the window on close), so the subscriptions are tied to the visual tree — same
+            // shape as the auto-start and update groups above.
+            AttachedToVisualTree += (s, e) =>
+            {
+                MacPermissions.StateChanged += OnPermissionsChanged;
+
+                // the window is remembered rather than looked up again on detach: by then this
+                // control may already be off the tree, GetTopLevel would answer null, and the
+                // Activated handler would be left attached to a window that outlives the page.
+                _activationSource = TopLevel.GetTopLevel(this) as Window;
+                if (_activationSource != null)
+                    _activationSource.Activated += OnWindowActivated;
+
+                RenderPermissions();
+            };
+
+            DetachedFromVisualTree += (s, e) =>
+            {
+                MacPermissions.StateChanged -= OnPermissionsChanged;
+                if (_activationSource != null)
+                {
+                    _activationSource.Activated -= OnWindowActivated;
+                    _activationSource = null;
+                }
+            };
+        }
+
+        /// <summary>The window whose <see cref="Window.Activated"/> is currently hooked, held so the
+        /// handler can be removed on detach. See <see cref="InitializePermissions"/>.</summary>
+        private Window _activationSource;
+
+        private void OnPermissionsChanged(object sender, EventArgs e) => Dispatcher.UIThread.Post(RenderPermissions);
+
+        private void OnWindowActivated(object sender, EventArgs e) => RenderPermissions();
+
+        private void RenderPermissions()
+        {
+            RenderPermission(MacPermission.ScreenRecording, ScreenRecordingStatus, ScreenRecordingButton,
+                             ScreenRecordingCaption,
+                             "Lets Clowd capture screenshots, record video, and pick colors from the screen with the "
+                             + "eyedropper. Without it, captures and the eyedropper are unavailable.");
+
+            RenderPermission(MacPermission.Accessibility, AccessibilityStatus, AccessibilityButton, AccessibilityCaption,
+                             "Lets Clowd listen for its global hotkeys while other apps are in the foreground. Without "
+                             + "it, hotkeys do nothing and every action has to be started from the menu bar.");
+        }
+
+        private static void RenderPermission(MacPermission permission, TextBlock status, Button button, TextBlock caption,
+                                             string what)
+        {
+            var granted = MacPermissions.IsGranted(permission);
+
+            status.Text = granted ? "Granted" : "Not granted";
+            status.Classes.Set("Granted", granted);
+            status.Classes.Set("Missing", !granted);
+
+            // the button stays even once granted: revoking happens in System Settings too, and a
+            // control that vanishes on success leaves no way back in. It always goes straight to the
+            // pane rather than trying the OS prompt first — macOS only offers each prompt once ever,
+            // so a button that sometimes prompts and sometimes doesn't is unpredictable, and the
+            // first-run prompt is already covered where it belongs, on the first capture attempt.
+            button.Content = "Open System Settings";
+
+            caption.Text = granted
+                ? what
+                : what + " Clowd has to be restarted after you grant it.";
+        }
+
+        private void OnScreenRecordingClick(object sender, RoutedEventArgs e) =>
+            MacPermissions.OpenSettings(MacPermission.ScreenRecording);
+
+        private void OnAccessibilityClick(object sender, RoutedEventArgs e) =>
+            MacPermissions.OpenSettings(MacPermission.Accessibility);
 
         // ---- Shell group ----
 

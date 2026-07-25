@@ -2,6 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Media;
+using Clowd.UI;
 
 namespace Clowd.Util
 {
@@ -14,19 +15,38 @@ namespace Clowd.Util
     /// needs the same Screen Recording permission the full capturer already requires. Linux has no
     /// equivalent that works without a compositor-specific portal, so <see cref="IsSupported"/> is
     /// false there and callers hide the eyedropper rather than offering a control that cannot work.
+    ///
+    /// The two reasons an eyedropper cannot sample are kept apart, because they call for different
+    /// UI: <see cref="IsSupported"/> is a platform verdict that will never change, while
+    /// <see cref="IsPermitted"/> is something the user can fix in System Settings. Missing
+    /// permission is worse than useless rather than merely unavailable — an unpermitted
+    /// <c>CGWindowListCreateImage</c> succeeds and hands back the desktop picture instead of the
+    /// window in front of it, so it would silently sample the wrong pixel. Callers must gate on
+    /// <see cref="IsAvailable"/>, not on <see cref="IsSupported"/> alone.
     /// </remarks>
     public static class ScreenColorReader
     {
+        /// <summary>Whether this platform can sample the screen at all. False on Linux; no user
+        /// action can change it.</summary>
         public static bool IsSupported => OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+
+        /// <summary>Whether the OS currently permits the read — macOS Screen Recording. Always true
+        /// where no such permission exists.</summary>
+        public static bool IsPermitted => MacPermissions.HasScreenRecording;
+
+        /// <summary>Whether a sample taken right now would be trustworthy.</summary>
+        public static bool IsAvailable => IsSupported && IsPermitted;
 
         /// <summary>
         /// Samples the pixel at <paramref name="point"/> (screen coordinates, as produced by
-        /// <see cref="TopLevel.PointToScreen"/>). Returns null when unsupported, when the point is
-        /// on no display, or when the platform refuses the read (e.g. macOS Screen Recording
-        /// permission has not been granted).
+        /// <see cref="TopLevel.PointToScreen"/>). Returns null when unsupported, when macOS Screen
+        /// Recording permission has not been granted, or when the point is on no display.
         /// </summary>
         public static Color? GetColorAt(PixelPoint point)
         {
+            if (!IsPermitted)
+                return null;
+
             if (OperatingSystem.IsWindows())
                 return Win32.GetColorAt(point);
 

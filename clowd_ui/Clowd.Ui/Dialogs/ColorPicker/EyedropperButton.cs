@@ -18,7 +18,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
     /// <remarks>
     /// Pointer capture is what makes this work past the window edge: Avalonia maps it to Win32
     /// SetCapture, so moves outside the owning window (or popup) keep arriving here.
-    /// Hidden entirely where <see cref="ScreenColorReader"/> cannot sample the screen.
+    ///
+    /// Hidden entirely where <see cref="ScreenColorReader"/> cannot sample the screen at all
+    /// (Linux), but only disabled — with a tooltip saying why — when the platform could sample and
+    /// macOS Screen Recording permission is what's missing. That's a state the user can fix, and a
+    /// vanished button reads as a feature Clowd doesn't have.
     /// </remarks>
     public class EyedropperButton : ToolButton
     {
@@ -51,6 +55,30 @@ namespace Clowd.UI.Dialogs.ColorPicker
             // than no eyedropper, so take it out of the layout entirely
             if (!ScreenColorReader.IsSupported)
                 IsVisible = false;
+
+            // permission can be granted while a picker is open, and this control is created fresh
+            // each time a dialog opens, so re-check on the way into the tree rather than only here.
+            AttachedToVisualTree += (s, e) => ApplyPermissionState();
+            ApplyPermissionState();
+        }
+
+        /// <summary>Greys the button out, with the reason as its tooltip, while macOS Screen
+        /// Recording is missing.</summary>
+        private void ApplyPermissionState()
+        {
+            if (!ScreenColorReader.IsSupported)
+                return;
+
+            var permitted = ScreenColorReader.IsPermitted;
+            IsEnabled = permitted;
+
+            // ShowOnDisabled is off by default, and the tooltip is the only thing explaining why the
+            // button is greyed out — without this the disabled state has no explanation at all.
+            ToolTip.SetShowOnDisabled(this, true);
+            ToolTip.SetTip(this, permitted
+                ? null
+                : "Clowd needs Screen Recording permission to pick a color from the screen. "
+                  + "Grant it under Settings → General → Permissions.");
         }
 
         protected override Type StyleKeyOverride => typeof(ToolButton);
@@ -59,7 +87,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             base.OnPointerPressed(e);
 
-            if (!ScreenColorReader.IsSupported)
+            if (!ScreenColorReader.IsAvailable)
                 return;
 
             _dragging = true;

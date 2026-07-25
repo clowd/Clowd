@@ -252,8 +252,20 @@ pub struct CapturedDesktop {
 
 pub struct SystemInterop;
 
+/// Exit code for "the OS has not granted this process permission to capture the
+/// screen" (macOS Screen Recording). Distinct from the generic failure exit so the
+/// shell can tell a missing permission apart from a crash and offer the user the
+/// System Settings route instead of a stack trace — keep in sync with
+/// `ScreenCaptureService.cs`'s `ExitCodeNoScreenPermission`.
+pub const EXIT_NO_SCREEN_PERMISSION: i32 = 3;
+
 #[cfg(windows)]
 impl SystemInterop {
+    /// Windows has no screen-capture permission to ask for.
+    pub fn has_screen_recording_permission() -> bool {
+        true
+    }
+
     pub fn get_mouse_position(_monitors: &[MonitorInfo]) -> ScreenPoint {
         win_mouse::get_position()
     }
@@ -337,6 +349,10 @@ impl SystemInterop {
     /// One-time platform init. Must be called early in `main()`.
     pub fn init() {
         xdialog::init_maccf_direct();
+    }
+
+    pub fn has_screen_recording_permission() -> bool {
+        mac_capture::has_screen_recording_permission()
     }
 
     pub fn get_mouse_position(monitors: &[MonitorInfo]) -> ScreenPoint {
