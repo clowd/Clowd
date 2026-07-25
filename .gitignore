@@ -10,3 +10,6 @@ bin/
 .DS_Store
 build/
 .wrangler/
+
+# obs writes its game-capture compatibility data into the cwd when launched
+win-capture/
