@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
@@ -37,6 +38,15 @@ namespace Clowd.UI
 
         private readonly DispatcherTimer _saveDebounce;
         private readonly DispatcherTimer _meterTimer;
+        private readonly SettingsRecording _settings;
+
+        // start-button glyphs: play (declared in XAML) and the reload glyph shown in the RESTART
+        // state. Sizes differ because the two icons have different canvas ratios (see
+        // CaptureToolButton.axaml — IconSize fits the glyph inside the fixed 26px slot).
+        private readonly Geometry _iconPlay;
+        private readonly Geometry _iconReload;
+        private const double PlayIconSize = 16;
+        private const double ReloadIconSize = 20;
         private ScreenRect _region;
         private bool _micEnabled;
         private bool _spkEnabled;
@@ -80,9 +90,13 @@ namespace Clowd.UI
                 SaveSettings();
             };
 
-            var recording = SettingsRoot.Current.Recording;
-            _micEnabled = recording.CaptureMicrophone;
-            _spkEnabled = recording.CaptureSpeaker;
+            _iconPlay = BtnStart.IconPath;
+            if (Application.Current?.TryGetResource("IconUndo", Application.Current.ActualThemeVariant, out var reload) == true)
+                _iconReload = reload as Geometry;
+
+            _settings = SettingsRoot.Current.Recording;
+            _micEnabled = _settings.CaptureMicrophone;
+            _spkEnabled = _settings.CaptureSpeaker;
             BtnMic.ShowAlternateIcon = _micEnabled;
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
 
@@ -91,16 +105,32 @@ namespace Clowd.UI
             BtnMic.Overlay = _micBar;
             BtnSpeaker.Overlay = _spkBar;
 
+            // the OPTIONS button opens the same settings this toolbar writes: without this, the
+            // cached toggles above go stale and the next MIC/SPK click would flip the *old* value
+            // back over the user's choice. Subscribed after the meter bars exist — the handler
+            // refreshes them.
+            _settings.PropertyChanged += OnSettingsChanged;
+
             _meterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
             _meterTimer.Tick += (s, e) => UpdateMeters();
 
             ScalingChanged += (s, e) => Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
         }
 
-        /// <summary>Sets the start button label ("WAIT…" → "START").</summary>
-        public void SetPrimaryText(string text)
+        /// <summary>
+        /// Sets the start button label ("WAIT…" → "START", or "RESTART" once a settings change has
+        /// invalidated the pending capturer). <paramref name="restart"/> also swaps the play glyph
+        /// for the reload one — WPF parity with the IconUndo/MustReload binding.
+        /// </summary>
+        public void SetPrimaryText(string text, bool restart = false)
         {
             BtnStart.Text = text;
+
+            // keep the play glyph if the reload resource could not be resolved — a missing icon
+            // must not leave the button blank.
+            var showReload = restart && _iconReload != null;
+            BtnStart.IconPath = showReload ? _iconReload : _iconPlay;
+            BtnStart.IconSize = showReload ? ReloadIconSize : PlayIconSize;
         }
 
         /// <summary>Swaps START for FINISH while recording is rolling.</summary>
@@ -169,8 +199,27 @@ namespace Clowd.UI
             Position = new PixelPoint(screen.Bounds.Right - 1, screen.Bounds.Bottom - 1);
         }
 
+        /// <summary>Mirrors settings edited elsewhere (the recording settings page) back into the
+        /// toolbar: the capture toggles drive the MIC/SPK glyphs and the level meters, and a device
+        /// change has to rebuild the listener behind them.</summary>
+        private void OnSettingsChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is not (null
+                or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)
+                or nameof(SettingsRecording.MicrophoneDeviceId) or nameof(SettingsRecording.SpeakerDeviceId)))
+                return;
+
+            _micEnabled = _settings.CaptureMicrophone;
+            _spkEnabled = _settings.CaptureSpeaker;
+            BtnMic.ShowAlternateIcon = _micEnabled;
+            BtnSpeaker.ShowAlternateIcon = _spkEnabled;
+            RefreshListeners();
+        }
+
         protected override void OnClosed(EventArgs e)
         {
+            _settings.PropertyChanged -= OnSettingsChanged;
+
             // flush a pending debounced save so a quick toggle-then-finish isn't lost
             if (_saveDebounce.IsEnabled)
             {
@@ -350,7 +399,7 @@ namespace Clowd.UI
         {
             _micEnabled = !_micEnabled;
             BtnMic.ShowAlternateIcon = _micEnabled;
-            SettingsRoot.Current.Recording.CaptureMicrophone = _micEnabled;
+            _settings.CaptureMicrophone = _micEnabled;
             QueueSettingsSave();
             RefreshListeners();
             MicToggled?.Invoke(this, _micEnabled);
@@ -360,7 +409,7 @@ namespace Clowd.UI
         {
             _spkEnabled = !_spkEnabled;
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
-            SettingsRoot.Current.Recording.CaptureSpeaker = _spkEnabled;
+            _settings.CaptureSpeaker = _spkEnabled;
             QueueSettingsSave();
             RefreshListeners();
             SpeakerToggled?.Invoke(this, _spkEnabled);
@@ -399,7 +448,7 @@ namespace Clowd.UI
         /// A dead meter on a live toggle is the user's signal the picked device is wrong.</summary>
         private void RefreshListeners()
         {
-            var recording = SettingsRoot.Current.Recording;
+            var recording = _settings;
 
             if (!_micEnabled)
             {
