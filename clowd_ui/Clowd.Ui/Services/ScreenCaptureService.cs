@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Clowd.Config;
@@ -84,6 +85,12 @@ namespace Clowd.UI
         /// background update (IdleMonitor).</summary>
         public static bool IsCaptureActive => Volatile.Read(ref _captureActive) != 0;
 
+        /// <summary>The capturer's exit code for "macOS has not granted Screen Recording" — see
+        /// <c>EXIT_NO_SCREEN_PERMISSION</c> in clowd_capture/src/system/mod.rs. Reported instead of
+        /// crashing, so a revoked permission gets the permission dialog rather than a stack trace.
+        /// </summary>
+        private const int ExitCodeNoScreenPermission = 3;
+
         public async void Open(CaptureMode mode, bool video = false)
         {
             if (!Dispatcher.UIThread.CheckAccess())
@@ -102,6 +109,13 @@ namespace Clowd.UI
 
             try
             {
+                // The capturer must never be launched into a desktop it cannot see: without Screen
+                // Recording it would put an overlay over a blank screenshot. Ask here, where there is
+                // a real UI to explain it, instead of letting the capture process own the
+                // conversation (issue #49).
+                if (!await EnsureScreenRecordingPermissionAsync())
+                    return;
+
                 var binary = CaptureBinaryLocator.Resolve();
                 if (binary == null)
                 {
@@ -147,6 +161,15 @@ namespace Clowd.UI
                 {
                     Debug.WriteLine($"Capture process exited with code {process.ExitCode}:\n{stderr}");
                     CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
+
+                    // permission revoked between our preflight and the capturer's own check, or the
+                    // capturer's TCC verdict differs from ours — either way it is not a crash.
+                    if (process.ExitCode == ExitCodeNoScreenPermission)
+                    {
+                        await PromptForScreenRecordingPermissionAsync();
+                        return;
+                    }
+
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
                         $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeStdErr(stderr)}",
                         "Screen capture failed");
@@ -194,6 +217,35 @@ namespace Clowd.UI
         {
             // the capture process owns its own lifetime (Escape / X closes it); nothing to do here.
             Closed?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>
+        /// Returns whether the capture may go ahead. The first capture on a fresh install is where
+        /// macOS still has its own one-tap prompt to offer, so try that before anything else; every
+        /// later attempt falls through to the dialog, since the only route left by then is System
+        /// Settings plus a restart. True on every platform without such a permission.
+        /// </summary>
+        private static async Task<bool> EnsureScreenRecordingPermissionAsync()
+        {
+            if (MacPermissions.HasScreenRecording || MacPermissions.Request(MacPermission.ScreenRecording))
+                return true;
+
+            await PromptForScreenRecordingPermissionAsync();
+            return false;
+        }
+
+        /// <summary>The "you need to grant this in System Settings" dialog, offering to open the
+        /// pane. Shared by the pre-launch gate and the capturer's own permission exit code.</summary>
+        private static async Task PromptForScreenRecordingPermissionAsync()
+        {
+            var openSettings = await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,
+                "Clowd needs Screen Recording permission to capture your screen.\n\n"
+                + "Enable Clowd under Privacy & Security → Screen & System Audio Recording, then "
+                + "restart Clowd.",
+                "Screen Recording permission required", "Open System Settings", "Cancel");
+
+            if (openSettings)
+                MacPermissions.OpenSettings(MacPermission.ScreenRecording);
         }
 
         /// <summary>Condenses the capturer's captured stderr into the tail few lines for an

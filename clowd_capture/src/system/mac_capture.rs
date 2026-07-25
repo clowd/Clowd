@@ -14,34 +14,19 @@ pub struct DesktopBitmap {
     pub height: u32,
 }
 
+/// Whether the process may capture the screen. Reported to `main()` so the
+/// capturer can refuse to start; it never prompts and never opens System
+/// Settings, because Screen Recording is the shell's to explain and request
+/// (Settings → General → Permissions).
+pub fn has_screen_recording_permission() -> bool {
+    ScreenCaptureAccess.preflight()
+}
+
 /// Capture the desktop bitmap using pre-enumerated monitors for
-/// positioning. Checks Screen Recording permission, re-enumerates
-/// display IDs (cheap CG call), and composites each display into a
-/// single BGRA buffer.
+/// positioning. Re-enumerates display IDs (cheap CG call) and composites
+/// each display into a single BGRA buffer. Assumes Screen Recording is
+/// already granted — `main()` gates on that before anything runs.
 pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
-    // --- Screen Recording permission gate ---
-    let access = ScreenCaptureAccess;
-    if !access.preflight() && !access.request() {
-        use xdialog::XDialogIcon::Warning;
-        let open_settings = xdialog::show_message_ok_cancel(
-            "Clowd Capture",
-            "Screen Recording Permission Required",
-            "Clowd Capture needs Screen Recording permission to capture your screen.\n\n\
-             Click OK to open System Settings, then enable Clowd Capture in the list.\n\
-             You may need to restart the app after granting permission.",
-            Warning,
-        )
-        .unwrap_or(false);
-
-        if open_settings {
-            let _ = std::process::Command::new("open")
-                .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-                .spawn();
-        }
-
-        bail!("Screen Recording permission not granted");
-    }
-
     let vd = super::virtual_desktop_bounds(monitors);
     let vd_w = vd.width() as usize;
     let vd_h = vd.height() as usize;

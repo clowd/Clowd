@@ -38,6 +38,16 @@ fn main() -> anyhow::Result<()> {
 
     system::SystemInterop::init();
 
+    // The shell preflights this before spawning us and owns the whole permission
+    // conversation with the user (Settings → General → Permissions), so all we do
+    // here is refuse to run — no prompt, no System Settings, no overlay flashing up
+    // over a blank desktop. This still fires if permission was revoked between the
+    // shell's check and now.
+    if !system::SystemInterop::has_screen_recording_permission() {
+        error!("Screen Recording permission has not been granted; refusing to capture");
+        std::process::exit(system::EXIT_NO_SCREEN_PERMISSION);
+    }
+
     let settings = Arc::new(args.into_settings());
     if let Some(dir) = &settings.session_dir {
         info!("session mode: payload will be written to {:?}", dir);
