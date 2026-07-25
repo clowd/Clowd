@@ -62,5 +62,28 @@ namespace Clowd.UI
 
             return args;
         }
+
+        /// <summary>
+        /// True when changing <paramref name="propertyName"/> on <see cref="SettingsRecording"/>
+        /// changes the CLI built above. obs-express fixes every one of these at spawn time, so an
+        /// already-running (but not yet recording) process can never honor the new value — it has
+        /// to be torn down and re-initialized (§4.2).
+        /// </summary>
+        /// <remarks>
+        /// Deliberately a deny-list of the settings that do NOT reach the CLI: a setting added to
+        /// <see cref="Build"/> without touching this method costs at worst a needless re-init,
+        /// never a recording made with the value the user just changed away from. A null or empty
+        /// name ("everything changed") therefore also requires a restart.
+        /// </remarks>
+        public static bool RequiresRestart(string propertyName) => propertyName switch
+        {
+            // runtime mutes applied over stdin after init, never CLI args (see the device-arg
+            // comment above) — changing them mid-session is exactly what the toolbar buttons do.
+            nameof(SettingsRecording.CaptureSpeaker) => false,
+            nameof(SettingsRecording.CaptureMicrophone) => false,
+            // post-recording UI behavior; the capturer never sees it.
+            nameof(SettingsRecording.OpenRecentsWhenFinished) => false,
+            _ => true,
+        };
     }
 }

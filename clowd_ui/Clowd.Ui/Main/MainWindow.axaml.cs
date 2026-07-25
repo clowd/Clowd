@@ -104,7 +104,7 @@ namespace Clowd.UI
                     "Click a shortcut, then press the new key combination — Esc cancels. Use ✕ to remove a shortcut.",
                 SettingsPageTab.SettingsCapture => GetCaptureIntroText(),
                 SettingsPageTab.SettingsRecording =>
-                    "Recording settings apply to your next recording. Changes made while a recording is in progress take effect only after it finishes.",
+                    "Recording settings apply to your next recording. If a recording is waiting to start, changing one here reloads the recorder — press RESTART on its toolbar. Changes made while a recording is in progress take effect only after it finishes.",
                 SettingsPageTab.SettingsEditor =>
                     "Choose how editor sessions are restored and cleaned up, set the canvas appearance, or reset saved drawing-tool preferences.",
                 SettingsPageTab.SettingsUploads =>
