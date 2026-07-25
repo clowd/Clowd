@@ -70,10 +70,12 @@
         </Grid>
 
         <!-- rows/columns are sized for the theme font (the old 24px rows and 58px value
-             column were tuned for 9px Consolas and clipped anything larger) -->
+             column were tuned for 9px Consolas and clipped anything larger). The middle
+             column is Auto so it tracks the font rather than clipping again; its width comes
+             from the MinWidth on the HSL readout below, which is the widest content. -->
         <Grid Grid.Column="1"
               Margin="12"
-              ColumnDefinitions="Auto,190,86"
+              ColumnDefinitions="Auto,Auto,86"
               RowDefinitions="30,12,30,30,30,30,30,12,30,30,30,30,16,*,32">
 
             <Control x:Name="tabReset" Focusable="True" />
@@ -152,10 +154,15 @@
                      Classes="val"
                      helpers:SelectTextOnFocus.Active="True" />
 
+            <!-- widest readout in the dialog, so this MinWidth sets the column width. The
+                 longest string the formatter can produce is "hsla(360, 100%, 100%, 0.55)" —
+                 27 Consolas chars, ~208px at the theme's 14px — and reserving it here keeps
+                 the window a constant size instead of resizing as the alpha slider moves. -->
             <TextBlock Classes="lbl"
                        Grid.Row="8"
                        Grid.Column="1"
                        HorizontalAlignment="Left"
+                       MinWidth="220"
                        Text="{Binding TextHsl}" />
             <controls:AcceleratedButton x:Name="btnCopyHsl"
                                         Grid.Row="8"
