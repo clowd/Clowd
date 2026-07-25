@@ -59,6 +59,13 @@ namespace Clowd.Shared.Tests
             // Color ("#AARRGGBB")
             original.Editor.CanvasBackground = Color.FromArgb(0x80, 0x12, 0x34, 0x56);
 
+            // List<Color> — the configuration binder appends to the existing (empty) list
+            original.General.RecentColors = new System.Collections.Generic.List<Color>
+            {
+                Colors.Red,
+                Color.FromArgb(0x40, 0xAA, 0xBB, 0xCC),
+            };
+
             // nested object (TimeOption)
             original.Editor.DeleteSessionsAfter = new TimeOption(2, TimeOptionUnit.Weeks);
 
@@ -88,6 +95,8 @@ namespace Clowd.Shared.Tests
             Assert.Equal(42, loaded.Editor.StartupPadding);
 
             Assert.Equal(Color.FromArgb(0x80, 0x12, 0x34, 0x56), loaded.Editor.CanvasBackground);
+
+            Assert.Equal(new[] { Colors.Red, Color.FromArgb(0x40, 0xAA, 0xBB, 0xCC) }, loaded.General.RecentColors);
 
             Assert.Equal(2, loaded.Editor.DeleteSessionsAfter.Number);
             Assert.Equal(TimeOptionUnit.Weeks, loaded.Editor.DeleteSessionsAfter.Unit);

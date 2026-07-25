@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using Avalonia.Media;
 
 namespace Clowd.Config
 {
@@ -49,6 +51,20 @@ namespace Clowd.Config
 
     public class SettingsGeneral : SimpleNotifyObject
     {
+        /// <summary>Number of custom colors remembered by the color pickers. 12 is one full row
+        /// of 16px swatches across the 192px mini picker.</summary>
+        public const int MaxRecentColors = 12;
+
+        /// <summary>Most-recently-used custom colors, newest first, shown as an extra swatch row
+        /// in both color pickers. Written by <c>RecentColorHistory</c>.</summary>
+        [Browsable(false)]
+        public List<Color> RecentColors
+        {
+            get => _recentColors;
+            set => Set(ref _recentColors, value);
+        }
+
+
         [Browsable(false)]
         public string LastSavePath
         {
@@ -214,5 +230,6 @@ namespace Clowd.Config
         // ever seeing it happen.
         private bool _autoApplyUpdates = true;
         private string _updateChannel;
+        private List<Color> _recentColors = new List<Color>();
     }
 }

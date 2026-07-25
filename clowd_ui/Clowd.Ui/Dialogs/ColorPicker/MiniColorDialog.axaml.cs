@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -47,35 +48,70 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private TopLevel _keyRoot;
 
+        // Notation of the text field. Always starts on hex and is cycled by the user for the
+        // lifetime of this control only — deliberately not a persisted setting.
+        private ColorTextFormat _textFormat = ColorTextFormat.Hex;
+
+        // set once the current colour has been handed to the caller, so dismissing the popup does
+        // not record a colour twice (or record one that was cancelled)
+        private bool _committed;
+
+        // colour to put back if an eyedropper drag ends without a pick
+        private HslRgbColor _eyedropperRestore;
+
+        // the four component slots, in display order. Slot 0 doubles as the full-width hex box.
+        private TextBox[] _componentBoxes;
+
+        private TextBlock[] _componentLabels;
+
+        private StackPanel[] _componentPanels;
+
         public MiniColorDialog()
         {
             DataContext = this;
             InitializeComponent();
             _initialized = true;
 
-            txtHex.TextChanged += (s, e) =>
+            _componentBoxes = new[] { txtComp0, txtComp1, txtComp2, txtComp3 };
+            _componentLabels = new[] { lblComp0, lblComp1, lblComp2, lblComp3 };
+            _componentPanels = new[] { pnlComp0, pnlComp1, pnlComp2, pnlComp3 };
+
+            for (int i = 0; i < _componentBoxes.Length; i++)
             {
-                try
+                var index = i;
+                var box = _componentBoxes[i];
+
+                box.TextChanged += (s, e) =>
                 {
                     // TextChanged is dispatcher-posted in Avalonia (unlike WPF), so a boolean
                     // flag around the programmatic write in Update() cannot mask the echo — it
                     // arrives after the flag is reset and would replace CurrentColor with an
                     // RGB round-trip, quantizing or resetting the stored hue. Update() only
-                    // writes the box while unfocused, so unfocused changes are echoes.
-                    if (!txtHex.IsFocused) return;
-                    var parsed = ColorTextHelper.FromHex(txtHex.Text);
-                    // value guard: an RGB round-trip loses hue/saturation for desaturated
-                    // colors, so don't replace the color when the hex already matches it
-                    if (CurrentColor != null && parsed == CurrentColor.ToColor()) return;
-                    CurrentColor = HslRgbColor.FromColor(parsed);
-                }
-                catch {; }
-            };
+                    // writes a box while unfocused, so unfocused changes are echoes.
+                    if (!box.IsFocused) return;
+                    ApplyComponentText(index, box.Text);
+                };
 
-            txtHex.LostFocus += (s, e) =>
+                // rewrite whatever the user typed into canonical form once they leave the box
+                box.LostFocus += (s, e) => UpdateComponentValues();
+            }
+
+            UpdateComponentLayout();
+
+            btnEyedropper.Started += () => _eyedropperRestore = CurrentColor?.Clone();
+            btnEyedropper.Preview += ApplyEyedropperSample;
+            btnEyedropper.Picked += (c) =>
             {
-                if (CurrentColor != null)
-                    txtHex.Text = ColorTextHelper.GetHex(CurrentColor);
+                ApplyEyedropperSample(c);
+                _eyedropperRestore = null;
+                Accept();
+            };
+            // sampling failed or the drag was abandoned — put back what the live preview replaced
+            btnEyedropper.Cancelled += () =>
+            {
+                if (_eyedropperRestore != null)
+                    CurrentColor = _eyedropperRestore;
+                _eyedropperRestore = null;
             };
 
             CanvasBackground.PointerPressed += CanvasBackground_PointerPressed;
@@ -106,6 +142,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             ColorSelectFn = null; // don't echo the seed value back to the caller
             _originalColor = initial;
+            _committed = false;
             CurrentColor = HslRgbColor.FromColor(initial);
             ColorSelectFn = selectFn;
         }
@@ -116,6 +153,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var fn = ColorSelectFn;
             var color = CurrentColor?.ToColor();
 
+            Commit(color);
             Cancelled?.Invoke(this, EventArgs.Empty);
 
             if (fn != null && color.HasValue)
@@ -128,6 +166,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var fn = ColorSelectFn;
             var original = _originalColor;
 
+            _committed = true; // nothing was chosen, so nothing goes into the recent list
             Cancelled?.Invoke(this, EventArgs.Empty);
 
             // In Realtime mode the caller has already been given every intermediate colour, so
@@ -145,13 +184,36 @@ namespace Clowd.UI.Dialogs.ColorPicker
             // Hook the popup root so Escape/Enter work no matter which child has focus.
             _keyRoot = TopLevel.GetTopLevel(this);
             _keyRoot?.AddHandler(KeyDownEvent, RootKeyDown, RoutingStrategies.Tunnel);
+
+            // subscribed per-open rather than for the control's lifetime: the history event is
+            // static, and the editor's picker outlives any single popup
+            RecentColorHistory.Changed += OnRecentColorsChanged;
+            BuildRecentSwatches();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             _keyRoot?.RemoveHandler(KeyDownEvent, RootKeyDown);
             _keyRoot = null;
+            RecentColorHistory.Changed -= OnRecentColorsChanged;
+
+            // Light dismiss (a click outside the popup) keeps the live colour without going
+            // through Accept, so this is the only place that outcome can be recorded.
+            Commit(CurrentColor?.ToColor());
+
             base.OnDetachedFromVisualTree(e);
+        }
+
+        /// <summary>Records a chosen colour in the shared recent list, once per open.</summary>
+        private void Commit(Color? color)
+        {
+            if (_committed)
+                return;
+
+            _committed = true;
+
+            if (color.HasValue && color.Value != _originalColor)
+                RecentColorHistory.Add(color.Value);
         }
 
         private void RootKeyDown(object sender, KeyEventArgs e)
@@ -282,14 +344,16 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 }
             };
 
-            if (!txtHex.IsFocused)
-                txtHex.Text = ColorTextHelper.GetHex(hsl);
+            UpdateComponentValues();
 
             // programmatic sets do not raise ColorSlider.ValueChanged, so no feedback loop
             HueSlider.Value = hsl.Hue;
             AlphaSlider.Value = hsl.Alpha;
 
             foreach (var item in pnlPalette.Children.OfType<ColorPaletteItem>())
+                item.IsSelected = item.Color == rgb;
+
+            foreach (var item in pnlRecent.Children.OfType<ColorPaletteItem>())
                 item.IsSelected = item.Color == rgb;
 
             // convert HSL to HSB
@@ -338,11 +402,179 @@ namespace Clowd.UI.Dialogs.ColorPicker
             }
         }
 
+        /// <summary>Applies a colour sampled off the screen. The sample is always fully opaque:
+        /// what you picked off the screen is what you saw, and a partially transparent brush would
+        /// not reproduce it.</summary>
+        private void ApplyEyedropperSample(Color sampled)
+        {
+            CurrentColor = HslRgbColor.FromColor(Color.FromArgb(255, sampled.R, sampled.G, sampled.B));
+        }
+
+        private void ButtonTextFormatClicked(object sender, RoutedEventArgs e)
+        {
+            _textFormat = _textFormat switch
+            {
+                ColorTextFormat.Hex => ColorTextFormat.Rgb,
+                ColorTextFormat.Rgb => ColorTextFormat.Hsl,
+                _ => ColorTextFormat.Hex,
+            };
+
+            UpdateComponentLayout();
+        }
+
+        /// <summary>Reshapes the readout for the current notation: one full-width hex box, or four
+        /// per-channel boxes with their letter beneath.</summary>
+        private void UpdateComponentLayout()
+        {
+            btnTextFormat.Content = _textFormat.ToString().ToUpperInvariant();
+
+            var labels = _textFormat switch
+            {
+                ColorTextFormat.Rgb => new[] { "R", "G", "B", "A" },
+                ColorTextFormat.Hsl => new[] { "H", "S", "L", "A" },
+                _ => new[] { "HEX" },
+            };
+
+            for (int i = 0; i < _componentPanels.Length; i++)
+            {
+                var used = i < labels.Length;
+                _componentPanels[i].IsVisible = used;
+                if (used)
+                    _componentLabels[i].Text = labels[i];
+            }
+
+            // hex has a single value, so slot 0 takes the whole row
+            Grid.SetColumnSpan(_componentPanels[0], labels.Length == 1 ? 4 : 1);
+
+            UpdateComponentValues();
+        }
+
+        /// <summary>Writes the current colour into the component boxes, leaving whichever box has
+        /// focus alone so it does not fight the user's typing.</summary>
+        private void UpdateComponentValues(bool skipFocused = true)
+        {
+            var c = CurrentColor;
+            if (c == null)
+                return;
+
+            var values = _textFormat switch
+            {
+                ColorTextFormat.Rgb => new[]
+                {
+                    c.R.ToString(CultureInfo.InvariantCulture),
+                    c.G.ToString(CultureInfo.InvariantCulture),
+                    c.B.ToString(CultureInfo.InvariantCulture),
+                    FormatAlpha(c.Alpha),
+                },
+                ColorTextFormat.Hsl => new[]
+                {
+                    Math.Round(c.Hue).ToString(CultureInfo.InvariantCulture),
+                    Math.Round(c.Saturation * 100).ToString(CultureInfo.InvariantCulture) + "%",
+                    Math.Round(c.Lightness * 100).ToString(CultureInfo.InvariantCulture) + "%",
+                    FormatAlpha(c.Alpha),
+                },
+                _ => new[] { ColorTextHelper.GetHex(c) },
+            };
+
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (skipFocused && _componentBoxes[i].IsFocused)
+                    continue;
+
+                _componentBoxes[i].Text = values[i];
+            }
+        }
+
+        private static string FormatAlpha(double alpha) =>
+            Math.Round(alpha, 2).ToString(CultureInfo.InvariantCulture);
+
+        /// <summary>
+        /// Applies one edited component. Values are mutated in place rather than replacing
+        /// CurrentColor so the channels the user is not editing — and the controls positioned from
+        /// them — keep their exact values; an RGB round-trip would quantize the hue away.
+        /// </summary>
+        private void ApplyComponentText(int index, string text)
+        {
+            var s = (text ?? "").Trim().TrimEnd('%').Trim();
+
+            if (_textFormat == ColorTextFormat.Hex)
+            {
+                if (!ColorTextHelper.TryParse(s, out var parsed, out var detected))
+                    return;
+
+                // an RGB round-trip loses hue/saturation for desaturated colors, so don't replace
+                // the color when the text already resolves to it
+                if (CurrentColor != null && (detected == ColorTextFormat.Hsl
+                                                 ? parsed == CurrentColor
+                                                 : parsed.ToColor() == CurrentColor.ToColor()))
+                    return;
+
+                CurrentColor = parsed;
+                return;
+            }
+
+            if (!Double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+                return;
+
+            if (_textFormat == ColorTextFormat.Rgb)
+            {
+                switch (index)
+                {
+                    case 0: SetColorComponent(c => c.R = ClampByte(value)); break;
+                    case 1: SetColorComponent(c => c.G = ClampByte(value)); break;
+                    case 2: SetColorComponent(c => c.B = ClampByte(value)); break;
+                    case 3: SetColorComponent(c => c.Alpha = Math.Clamp(value, 0, 1)); break;
+                }
+
+                return;
+            }
+
+            switch (index)
+            {
+                // hue wraps rather than clamping, so typing 370 lands on red-orange not red
+                case 0: SetColorComponent(c => c.Hue = ((value % 360) + 360) % 360); break;
+                case 1: SetColorComponent(c => c.Saturation = Math.Clamp(value / 100d, 0, 1)); break;
+                case 2: SetColorComponent(c => c.Lightness = Math.Clamp(value / 100d, 0, 1)); break;
+                case 3: SetColorComponent(c => c.Alpha = Math.Clamp(value, 0, 1)); break;
+            }
+        }
+
+        private static int ClampByte(double value) => (int)Math.Clamp(Math.Round(value), 0, 255);
+
+        private void OnRecentColorsChanged(object sender, EventArgs e) => BuildRecentSwatches();
+
+        private void BuildRecentSwatches()
+        {
+            pnlRecent.Children.Clear();
+
+            foreach (var color in RecentColorHistory.Colors)
+            {
+                var item = new ColorPaletteItem(color);
+                item.Clicked += PaletteItemClicked;
+                pnlRecent.Children.Add(item);
+            }
+
+            // an empty row would just be a strip of checkerboard with no meaning
+            pnlRecent.IsVisible = pnlRecent.Children.Count > 0;
+
+            // sync the new items' selection ring directly rather than via Update(), which in
+            // Realtime mode would re-broadcast the current colour just for opening the popup
+            if (CurrentColor != null)
+            {
+                var rgb = CurrentColor.ToColor();
+                foreach (var item in pnlRecent.Children.OfType<ColorPaletteItem>())
+                    item.IsSelected = item.Color == rgb;
+            }
+        }
+
         private async void ButtonPopoutClicked(object sender, RoutedEventArgs e)
         {
             var fn = ColorSelectFn;
             var original = _originalColor;
 
+            // the full dialog owns the outcome from here — including what lands in the recent
+            // list — so closing this popup must not record the in-progress colour
+            _committed = true;
             Cancelled?.Invoke(this, EventArgs.Empty);
 
             // Clone: ColorDialog keeps the instance it is handed as its live CurrentColor, so
