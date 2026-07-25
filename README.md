@@ -7,6 +7,18 @@
 
 Clowd is a minimalist screen capture / screen recording tool. It sits out of your way in your system tray, and is activated when you press the `PrntScr` key.
 
+## Features
+ - [Region capture](#region-capture--prntscr-replacement) as a fast, zoomable `PrntScr` replacement
+ - [Video recording](#video-recorder) to MKV, MP4, or GIF, with speaker and microphone audio
+ - [Image editor](#image-editor) for quick annotations and edits
+ - [Upload anything](#upload-anything) to a variety of file sharing websites, with the URL copied to your clipboard
+ - [Color picker](#color-picker) that can sample any pixel on screen
+ - Window detection - selections snap to window borders
+ - Fully keyboard accessible
+ - Global hotkeys, configurable in settings
+ - Lives in the system tray and stays out of your way
+ - Automatic updates, with an opt-in pre-release channel
+
 ## Downloads
 
 The latest stable release can always be downloaded below. Installed builds keep themselves up to date automatically; pre-release builds can be opted into via the app settings.
@@ -40,7 +52,6 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
  - Record MKV, MP4, or GIF's easily
  - Capture Speaker and Microphone audio
  - Optionally show animation where mouse was clicked
- - Draw / annotate on screen when recording video or screen sharing
  
 ![image of video capture ui](https://user-images.githubusercontent.com/1287295/177043599-853d4718-e879-4007-919a-7aee91776c7d.png)
 
@@ -67,13 +78,6 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
  - Can also open the color picker from the tray icon.
  
 ![picture of color picker](https://user-images.githubusercontent.com/1287295/177043307-91a17f2b-3b5f-4b76-9e71-7962cc6cf5e0.png)
-
-----
-
-## Draw On Screen
- - Can draw anywhere on the screen while recording a video or sharing screen during a video conference
-
-https://user-images.githubusercontent.com/1287295/177044423-7f90f7b3-01fa-45a9-9c7b-d647c6f6159f.mp4
 
 ----
 
