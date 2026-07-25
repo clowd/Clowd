@@ -23,6 +23,7 @@ glyphon.workspace = true
 arboard.workspace = true
 rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
+sentry.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [

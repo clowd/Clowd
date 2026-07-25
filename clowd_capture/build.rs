@@ -3,6 +3,9 @@ include!("src/shader_bindings.rs");
 fn main() {
     println!("cargo:rerun-if-changed=app.manifest");
     println!("cargo:rerun-if-changed=src/shader_bindings.rs");
+    // baked into the Sentry release name via option_env! (telemetry/crash.rs), so a
+    // version bump has to invalidate the cached build
+    println!("cargo:rerun-if-env-changed=CLOWD_VERSION");
 
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
 

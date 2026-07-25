@@ -46,6 +46,15 @@ objc2-quartz-core = "0.3"
 block2 = "0.6"
 naga = "29.0"
 libloading = "0.9"
+# rustls rather than the default native-tls: keeps the capturer off OpenSSL/schannel and
+# builds identically on every target we ship.
+sentry = { version = "0.48", default-features = false, features = [
+    "backtrace",
+    "contexts",
+    "panic",
+    "reqwest",
+    "rustls",
+] }
 
 # default to small, optimized workspace release binaries
 [profile.release]
