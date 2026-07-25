@@ -121,6 +121,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private bool _initialized;
 
+        // colour to put back if an eyedropper drag ends without a pick
+        private HslRgbColor _eyedropperRestore;
+
         // the optional-parameter ctor is not parameterless in metadata, so without this the
         // XAML compiler emits AVLN3001 (resource unreachable via runtime loader)
         public ColorDialog() : this(null)
@@ -207,11 +210,56 @@ namespace Clowd.UI.Dialogs.ColorPicker
             sliderS.ValueChanged += (s, v) => CurrentColor.Saturation = v;
             sliderL.ValueChanged += (s, v) => CurrentColor.Lightness = v;
 
+            btnEyedropper.Started += () => _eyedropperRestore = CurrentColor?.Clone();
+            btnEyedropper.Preview += ApplyEyedropperSample;
+            btnEyedropper.Picked += (c) =>
+            {
+                // no auto-accept here: unlike the mini picker this dialog has an explicit OK, and
+                // the user may well want to tweak the sampled color before committing it
+                ApplyEyedropperSample(c);
+                _eyedropperRestore = null;
+            };
+            btnEyedropper.Cancelled += () =>
+            {
+                if (_eyedropperRestore != null)
+                    CurrentColor = _eyedropperRestore;
+                _eyedropperRestore = null;
+            };
+
+            RecentColorHistory.Changed += OnRecentColorsChanged;
+            Closed += (_, _) => RecentColorHistory.Changed -= OnRecentColorsChanged;
+            BuildRecentSwatches();
+
             // Reset focus when clicking on anything other than a textbox (the WPF
             // OnPreviewMouseLeftButtonDown + tabReset mechanism).
             AddHandler(PointerPressedEvent, OnPreviewPointerPressed, RoutingStrategies.Tunnel);
 
             UpdateBrushes();
+        }
+
+        /// <summary>Applies a colour sampled off the screen. The sample is always fully opaque:
+        /// what you picked off the screen is what you saw, and a partially transparent brush would
+        /// not reproduce it.</summary>
+        private void ApplyEyedropperSample(Color sampled)
+        {
+            CurrentColor = HslRgbColor.FromColor(Color.FromArgb(255, sampled.R, sampled.G, sampled.B));
+        }
+
+        private void OnRecentColorsChanged(object sender, EventArgs e) => BuildRecentSwatches();
+
+        private void BuildRecentSwatches()
+        {
+            RecentPalette.Children.Clear();
+
+            foreach (var color in RecentColorHistory.Colors)
+            {
+                var item = new ColorPaletteItem(color);
+                item.Clicked += ColorPaletteItemClicked;
+                RecentPalette.Children.Add(item);
+            }
+
+            // an empty row would just be a strip of checkerboard with no meaning
+            RecentPalette.IsVisible = RecentPalette.Children.Count > 0;
         }
 
         /// <summary>
@@ -376,10 +424,15 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             CurrentColor = HslRgbColor.FromColor(e.SelectedColor);
             if (e.ClickCount >= 2)
-            {
-                MyDialogResult = true;
-                Close(true);
-            }
+                Accept();
+        }
+
+        /// <summary>Confirms the dialog, recording the chosen colour in the shared recent list.</summary>
+        private void Accept()
+        {
+            RecentColorHistory.Add(CurrentColor.ToColor());
+            MyDialogResult = true;
+            Close(true);
         }
 
         private void HandleSet<T>(TextBox txt, Func<string, T> parse, Action<T> set)
@@ -424,8 +477,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private void OKClicked(object sender, RoutedEventArgs e)
         {
-            MyDialogResult = true;
-            Close(true);
+            Accept();
         }
 
         private void CloseClicked(object sender, RoutedEventArgs e)
