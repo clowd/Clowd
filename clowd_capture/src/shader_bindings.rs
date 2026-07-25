@@ -1,7 +1,7 @@
 // Shared binding definitions for each shader.
-// include!()'d by build.rs for naga HLSL register assignment,
-// and used by runtime code for wgpu BindGroupLayout creation.
-// This is the single source of truth — update here when shader bindings change.
+// include!()'d by build.rs (Windows only) for naga HLSL register assignment, so
+// the precompiled DXBC lands on the same registers wgpu-hal expects.
+// Update here when shader bindings change.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResourceKind {

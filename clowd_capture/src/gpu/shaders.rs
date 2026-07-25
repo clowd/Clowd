@@ -1,17 +1,16 @@
 use std::borrow::Cow;
+#[cfg(windows)]
 use std::sync::{Arc, Mutex};
 
-/// A shader program for one pipeline. Precompiled passthrough shaders come in
-/// two shapes: DX12 ships separate vertex/fragment DXBC modules, while Metal
-/// ships a single metallib exposing both entry points. The runtime-WGSL
-/// fallback (see [`load`]) always produces a single unified module regardless
-/// of platform, so both shapes are represented here.
+/// A shader program for one pipeline. Windows ships precompiled DXBC as
+/// separate vertex/fragment passthrough modules; everywhere else (and as the
+/// Windows fallback) the WGSL is compiled at runtime into a single module
+/// exposing both entry points.
 pub enum ShaderPair {
     /// Separate vertex and fragment modules (Windows DXBC passthrough).
     #[cfg(windows)]
     Split { vs: wgpu::ShaderModule, fs: wgpu::ShaderModule },
-    /// One module exposing both `vs_main` and `fs_main` (macOS metallib
-    /// passthrough, and the runtime-WGSL fallback on either platform).
+    /// One module exposing both `vs_main` and `fs_main` (runtime-WGSL).
     Unified(wgpu::ShaderModule),
 }
 
@@ -44,17 +43,20 @@ impl ShaderPair {
 // wgpu's fatal handler. We install our own non-fatal handler (see
 // `install_error_handler`) that records the message here instead, so `load` can
 // notice the failure and fall back to compiling the WGSL at runtime.
+#[cfg(windows)]
 static LAST_UNCAPTURED_ERROR: Mutex<Option<String>> = Mutex::new(None);
 // Serialises shader loads so a concurrent load can't interleave the
 // clear/create/check of `LAST_UNCAPTURED_ERROR`. Kept separate from that mutex
 // so the error handler (which runs synchronously *inside* the create call) never
 // contends with a lock this holds.
+#[cfg(windows)]
 static LOAD_GUARD: Mutex<()> = Mutex::new(());
 
 /// Install the non-fatal uncaptured-error handler on `device`. Must be called
 /// once, right after the device is created and before any shader is loaded.
 /// Without it, wgpu aborts the process on the first shader/pipeline validation
 /// error rather than letting [`load`] fall back.
+#[cfg(windows)]
 pub fn install_error_handler(device: &wgpu::Device) {
     device.on_uncaptured_error(Arc::new(|err| {
         let msg = err.to_string();
@@ -66,6 +68,7 @@ pub fn install_error_handler(device: &wgpu::Device) {
 }
 
 /// Drain any error recorded by the uncaptured-error handler since the last drain.
+#[cfg(windows)]
 fn take_uncaptured_error() -> Option<String> {
     LAST_UNCAPTURED_ERROR
         .lock()
@@ -73,24 +76,22 @@ fn take_uncaptured_error() -> Option<String> {
         .and_then(|mut slot| slot.take())
 }
 
+#[cfg(windows)]
 unsafe fn passthrough(device: &wgpu::Device, label: &str, bytes: &'static [u8]) -> wgpu::ShaderModule {
     unsafe {
         device.create_shader_module_passthrough(wgpu::ShaderModuleDescriptorPassthrough {
             label: Some(label),
-            #[cfg(windows)]
             dxil: Some(Cow::Borrowed(bytes)),
-            #[cfg(target_os = "macos")]
-            metallib: Some(Cow::Borrowed(bytes)),
             ..Default::default()
         })
     }
 }
 
 /// Compile the WGSL source at runtime. This is the "usual" wgpu path (bindings
-/// are assigned by wgpu-hal from the `@group`/`@binding` attributes), used as a
-/// fallback when a precompiled passthrough shader cannot be loaded on this host
-/// — e.g. a metallib whose deployment target is newer than the running macOS.
-fn wgsl_fallback(device: &wgpu::Device, label: &str, wgsl_source: &'static str) -> ShaderPair {
+/// are assigned by wgpu-hal from the `@group`/`@binding` attributes). It is the
+/// only path on macOS, and the fallback on Windows when a precompiled DXBC
+/// passthrough shader cannot be loaded on this host.
+fn wgsl(device: &wgpu::Device, label: &str, wgsl_source: &'static str) -> ShaderPair {
     ShaderPair::Unified(device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(wgsl_source)),
@@ -99,18 +100,6 @@ fn wgsl_fallback(device: &wgpu::Device, label: &str, wgsl_source: &'static str) 
 
 /// Load the precompiled passthrough shader; if creating it raises an uncaptured
 /// error (recorded by `install_error_handler`), fall back to runtime WGSL.
-#[cfg(target_os = "macos")]
-fn load(device: &wgpu::Device, label: &str, metallib_bytes: &'static [u8], wgsl_source: &'static str) -> ShaderPair {
-    let _guard = LOAD_GUARD.lock().unwrap();
-    take_uncaptured_error(); // clear any stale error
-    let module = unsafe { passthrough(device, label, metallib_bytes) };
-    if take_uncaptured_error().is_some() {
-        log::warn!("precompiled Metal shader '{label}' failed to load; falling back to runtime WGSL compilation");
-        return wgsl_fallback(device, label, wgsl_source);
-    }
-    ShaderPair::Unified(module)
-}
-
 #[cfg(windows)]
 fn load(device: &wgpu::Device, label: &str, vs_bytes: &'static [u8], fs_bytes: &'static [u8], wgsl_source: &'static str) -> ShaderPair {
     let _guard = LOAD_GUARD.lock().unwrap();
@@ -119,7 +108,7 @@ fn load(device: &wgpu::Device, label: &str, vs_bytes: &'static [u8], fs_bytes: &
     let fs = unsafe { passthrough(device, &format!("{label} FS"), fs_bytes) };
     if take_uncaptured_error().is_some() {
         log::warn!("precompiled DX shader '{label}' failed to load; falling back to runtime WGSL compilation");
-        return wgsl_fallback(device, label, wgsl_source);
+        return wgsl(device, label, wgsl_source);
     }
     ShaderPair::Split {
         vs,
@@ -135,11 +124,8 @@ pub fn desktop(device: &wgpu::Device) -> ShaderPair {
         const FS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/desktop_ps.dxbc"));
         load(device, "desktop", VS, FS, WGSL)
     }
-    #[cfg(target_os = "macos")]
-    {
-        const METALLIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/desktop.metallib"));
-        load(device, "desktop", METALLIB, WGSL)
-    }
+    #[cfg(not(windows))]
+    wgsl(device, "desktop", WGSL)
 }
 
 pub fn peek(device: &wgpu::Device) -> ShaderPair {
@@ -150,11 +136,8 @@ pub fn peek(device: &wgpu::Device) -> ShaderPair {
         const FS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/peek_ps.dxbc"));
         load(device, "peek", VS, FS, WGSL)
     }
-    #[cfg(target_os = "macos")]
-    {
-        const METALLIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/peek.metallib"));
-        load(device, "peek", METALLIB, WGSL)
-    }
+    #[cfg(not(windows))]
+    wgsl(device, "peek", WGSL)
 }
 
 pub fn ui_rect(device: &wgpu::Device) -> ShaderPair {
@@ -165,11 +148,8 @@ pub fn ui_rect(device: &wgpu::Device) -> ShaderPair {
         const FS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_rect_ps.dxbc"));
         load(device, "ui_rect", VS, FS, WGSL)
     }
-    #[cfg(target_os = "macos")]
-    {
-        const METALLIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_rect.metallib"));
-        load(device, "ui_rect", METALLIB, WGSL)
-    }
+    #[cfg(not(windows))]
+    wgsl(device, "ui_rect", WGSL)
 }
 
 pub fn ui_icon(device: &wgpu::Device) -> ShaderPair {
@@ -180,9 +160,6 @@ pub fn ui_icon(device: &wgpu::Device) -> ShaderPair {
         const FS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_icon_ps.dxbc"));
         load(device, "ui_icon", VS, FS, WGSL)
     }
-    #[cfg(target_os = "macos")]
-    {
-        const METALLIB: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/ui_icon.metallib"));
-        load(device, "ui_icon", METALLIB, WGSL)
-    }
+    #[cfg(not(windows))]
+    wgsl(device, "ui_icon", WGSL)
 }

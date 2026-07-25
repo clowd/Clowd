@@ -1,3 +1,8 @@
+// Only Windows precompiles shaders (WGSL → HLSL → DXBC). On macOS the WGSL is
+// compiled at runtime by wgpu: a metallib is pinned to the Metal language
+// version it was built against, which caused too many compatibility problems
+// across the macOS versions we support.
+#[cfg(windows)]
 include!("src/shader_bindings.rs");
 
 fn main() {
@@ -7,212 +12,15 @@ fn main() {
     // version bump has to invalidate the cached build
     println!("cargo:rerun-if-env-changed=CLOWD_VERSION");
 
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-
     #[cfg(windows)]
     {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let manifest_path = format!("{}/app.manifest", manifest_dir);
         println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");
         println!("cargo:rustc-link-arg-bins=/MANIFESTINPUT:{}", manifest_path);
+
+        compile_shaders(&manifest_dir);
     }
-
-    compile_shaders(&manifest_dir);
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// macOS: WGSL → naga → MSL → xcrun metal → AIR → xcrun metallib
-// ═══════════════════════════════════════════════════════════════════════
-
-#[cfg(target_os = "macos")]
-fn compile_shaders(manifest_dir: &str) {
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-
-    for shader in ALL_SHADERS {
-        let wgsl_path = format!("{}/{}", manifest_dir, shader.wgsl_path);
-        println!("cargo:rerun-if-changed={}", wgsl_path);
-
-        let wgsl_source = std::fs::read_to_string(&wgsl_path).unwrap_or_else(|e| panic!("failed to read {}: {e}", wgsl_path));
-
-        let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap_or_else(|e| panic!("failed to parse {}: {e}", shader.name));
-
-        let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty())
-            .validate(&module)
-            .unwrap_or_else(|e| panic!("validation failed for {}: {e}", shader.name));
-
-        let (options, pipeline_options) = build_msl_options(shader.bindings);
-
-        let (msl_source, translation_info) = naga::back::msl::write_string(&module, &info, &options, &pipeline_options)
-            .unwrap_or_else(|e| panic!("MSL generation failed for {}: {e}", shader.name));
-
-        for ep_result in &translation_info.entry_point_names {
-            let name = ep_result
-                .as_ref()
-                .unwrap_or_else(|e| panic!("entry point error for {}: {e}", shader.name));
-            assert!(
-                name == "vs_main" || name == "fs_main",
-                "unexpected MSL entry point name '{name}' for shader '{}' — \
-                 the passthrough path requires names to match the WGSL originals",
-                shader.name
-            );
-        }
-
-        let metallib = compile_metallib(shader.name, &msl_source, &out_dir);
-
-        std::fs::write(format!("{out_dir}/{}.metallib", shader.name), &metallib)
-            .unwrap_or_else(|e| panic!("failed to write {}.metallib: {e}", shader.name));
-    }
-}
-
-// ── MSL binding map construction ────────────────────────────────────
-// Replicates wgpu-hal's Metal create_pipeline_layout index assignment
-// for our simple case: single bind group, no immediates, no storage buffers.
-
-#[cfg(target_os = "macos")]
-fn build_msl_options(bindings: &[BindingEntry]) -> (naga::back::msl::Options, naga::back::msl::PipelineOptions) {
-    use naga::back::msl;
-
-    struct StageCounters {
-        buffers: u8,
-        textures: u8,
-        samplers: u8,
-    }
-
-    let mut vs_counters = StageCounters {
-        buffers: 0,
-        textures: 0,
-        samplers: 0,
-    };
-    let mut fs_counters = StageCounters {
-        buffers: 0,
-        textures: 0,
-        samplers: 0,
-    };
-    let mut vs_resources = msl::BindingMap::default();
-    let mut fs_resources = msl::BindingMap::default();
-
-    for entry in bindings {
-        let rb = naga::ResourceBinding {
-            group: 0,
-            binding: entry.binding,
-        };
-
-        if entry.vertex {
-            let mut target = msl::BindTarget::default();
-            match entry.kind {
-                ResourceKind::UniformBuffer => {
-                    target.buffer = Some(vs_counters.buffers);
-                    vs_counters.buffers += 1;
-                }
-                ResourceKind::Texture2D => {
-                    target.texture = Some(vs_counters.textures);
-                    vs_counters.textures += 1;
-                }
-                ResourceKind::Sampler => {
-                    target.sampler = Some(msl::BindSamplerTarget::Resource(vs_counters.samplers));
-                    vs_counters.samplers += 1;
-                }
-            }
-            vs_resources.insert(rb, target);
-        }
-
-        if entry.fragment {
-            let mut target = msl::BindTarget::default();
-            match entry.kind {
-                ResourceKind::UniformBuffer => {
-                    target.buffer = Some(fs_counters.buffers);
-                    fs_counters.buffers += 1;
-                }
-                ResourceKind::Texture2D => {
-                    target.texture = Some(fs_counters.textures);
-                    fs_counters.textures += 1;
-                }
-                ResourceKind::Sampler => {
-                    target.sampler = Some(msl::BindSamplerTarget::Resource(fs_counters.samplers));
-                    fs_counters.samplers += 1;
-                }
-            }
-            fs_resources.insert(rb, target);
-        }
-    }
-
-    // wgpu-hal ALWAYS reserves sizes_buffer for vertex stage (device.rs:850-856)
-    let vs_sizes_buffer = Some(vs_counters.buffers);
-
-    let mut per_entry_point_map = msl::EntryPointResourceMap::default();
-    per_entry_point_map.insert(
-        "vs_main".to_string(),
-        msl::EntryPointResources {
-            resources: vs_resources,
-            immediates_buffer: None,
-            sizes_buffer: vs_sizes_buffer,
-        },
-    );
-    per_entry_point_map.insert(
-        "fs_main".to_string(),
-        msl::EntryPointResources {
-            resources: fs_resources,
-            immediates_buffer: None,
-            sizes_buffer: None,
-        },
-    );
-
-    let options = msl::Options {
-        lang_version: (2, 4),
-        per_entry_point_map,
-        inline_samplers: Vec::new(),
-        spirv_cross_compatibility: false,
-        fake_missing_bindings: false,
-        bounds_check_policies: naga::proc::BoundsCheckPolicies {
-            index: naga::proc::BoundsCheckPolicy::Restrict,
-            buffer: naga::proc::BoundsCheckPolicy::Restrict,
-            image_load: naga::proc::BoundsCheckPolicy::Restrict,
-            binding_array: naga::proc::BoundsCheckPolicy::Unchecked,
-        },
-        zero_initialize_workgroup_memory: true,
-        force_loop_bounding: true,
-    };
-
-    let pipeline_options = msl::PipelineOptions {
-        entry_point: None,
-        allow_and_force_point_size: false,
-        vertex_pulling_transform: false,
-        vertex_buffer_mappings: Vec::new(),
-    };
-
-    (options, pipeline_options)
-}
-
-// ── metallib compilation via Xcode command-line tools ────────────────
-
-#[cfg(target_os = "macos")]
-fn compile_metallib(shader_name: &str, msl_source: &str, out_dir: &str) -> Vec<u8> {
-    let msl_path = format!("{out_dir}/{shader_name}.metal");
-    let air_path = format!("{out_dir}/{shader_name}.air");
-    let metallib_path = format!("{out_dir}/{shader_name}.metallib");
-
-    std::fs::write(&msl_path, msl_source).unwrap_or_else(|e| panic!("failed to write {shader_name}.metal: {e}"));
-
-    let output = std::process::Command::new("xcrun")
-        .args(["metal", "-c", "-std=macos-metal2.4", "-o", &air_path, &msl_path])
-        .output()
-        .unwrap_or_else(|e| panic!("failed to run xcrun metal for {shader_name}: {e} — is Xcode or Command Line Tools installed?"));
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        panic!("xcrun metal failed for {shader_name}:\n{stderr}\n\nMSL source:\n{msl_source}");
-    }
-
-    let output = std::process::Command::new("xcrun")
-        .args(["metallib", "-o", &metallib_path, &air_path])
-        .output()
-        .unwrap_or_else(|e| panic!("failed to run xcrun metallib for {shader_name}: {e}"));
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        panic!("xcrun metallib failed for {shader_name}:\n{stderr}");
-    }
-
-    std::fs::read(&metallib_path).unwrap_or_else(|e| panic!("failed to read {shader_name}.metallib: {e}"))
 }
 
 // ═══════════════════════════════════════════════════════════════════════
