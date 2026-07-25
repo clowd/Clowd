@@ -254,6 +254,13 @@ namespace Clowd.Drawing.Graphics
 
         internal virtual void Normalize() { }
 
+        /// <summary>
+        /// Called once on each mutated graphic when an interactive gesture ends, for state that is
+        /// scoped to a single continuous drag rather than to the geometry. Distinct from Normalize,
+        /// which rewrites geometry and does not run after a plain body move.
+        /// </summary>
+        internal virtual void OnGestureCompleted() { }
+
         internal virtual int MakeHitTest(Point point, DpiScale uiscale)
         {
             if (IsSelected)

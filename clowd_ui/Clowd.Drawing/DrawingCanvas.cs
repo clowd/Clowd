@@ -280,7 +280,18 @@ namespace Clowd.Drawing
         // pointer / capture state (decision table #5/#6/#8)
         private IPointer _capturedPointer;
         private PointerState? _lastPointerState;
+
+        // The cached pointer position for synthetic replays, kept in ROOT-WINDOW space rather than
+        // canvas space. A replay resolves it back through the CURRENT canvas transform, so a
+        // transform change between caching and replaying (Ctrl+0..3 recenter, or a window resize
+        // shifting ContentOffset) can no longer manufacture a delta out of the epoch mismatch and
+        // teleport the dragged geometry — the same reason ToolPointer keeps its own drag
+        // bookkeeping in root space.
+        private Point? _lastPointerRoot;
         private double _wheelDeltaAccumulator;
+
+        // guards the synthetic move replay against key auto-repeat (see OnKeyDown)
+        private bool _shiftReplayed;
 
         // SyncObjectState bindings (decision table #11/#12)
         private readonly List<IDisposable> _skillBindings = new List<IDisposable>();
@@ -642,10 +653,14 @@ namespace Clowd.Drawing
 
         public void AddGraphic(GraphicBase g)
         {
-            // center the object in the current viewport
+            // center the object in the current viewport. The viewport→canvas inverse is
+            // (v - offset) / s with s = ContentScale/DpiZoom (UpdateScaleTransform) — dividing by
+            // ContentScale alone lands the graphic at 1/DpiZoom of the intended spot, i.e. dragged
+            // toward the origin rather than centred, on any monitor above 100%.
             var itemBounds = g.Bounds;
-            var transformX = (-itemBounds.Left - itemBounds.Width / 2) + ((Bounds.Width / 2 - ContentOffset.X) / ContentScale);
-            var transformY = (-itemBounds.Top - itemBounds.Height / 2) + ((Bounds.Height / 2 - ContentOffset.Y) / ContentScale);
+            var scale = ContentScale / DpiZoom;
+            var transformX = (-itemBounds.Left - itemBounds.Width / 2) + ((Bounds.Width / 2 - ContentOffset.X) / scale);
+            var transformY = (-itemBounds.Top - itemBounds.Height / 2) + ((Bounds.Height / 2 - ContentOffset.Y) / scale);
             g.Move(transformX, transformY);
 
             // only the newly added item should be selected
@@ -672,8 +687,10 @@ namespace Clowd.Drawing
             for (int i = 1; i < graphics.Length; i++)
                 bounds = bounds.Union(graphics[i].Bounds);
 
-            var transformX = (-bounds.Left - bounds.Width / 2) + ((Bounds.Width / 2 - ContentOffset.X) / ContentScale);
-            var transformY = (-bounds.Top - bounds.Height / 2) + ((Bounds.Height / 2 - ContentOffset.Y) / ContentScale);
+            // same viewport→canvas inverse as AddGraphic: s = ContentScale/DpiZoom, not ContentScale
+            var scale = ContentScale / DpiZoom;
+            var transformX = (-bounds.Left - bounds.Width / 2) + ((Bounds.Width / 2 - ContentOffset.X) / scale);
+            var transformY = (-bounds.Top - bounds.Height / 2) + ((Bounds.Height / 2 - ContentOffset.Y) / scale);
 
             foreach (var g in graphics)
                 g.Move(transformX, transformY);
@@ -1287,6 +1304,13 @@ namespace Clowd.Drawing
 
             var s = PointerState.From(e, this);
             _lastPointerState = s;
+            _lastPointerRoot = CanvasToRoot(s.Position);
+
+            // Re-seed the auto-repeat latch from the real modifier state at drag start. OnKeyDown /
+            // OnKeyUp only observe keys routed through the canvas, so a Shift press or release that
+            // happened while focus sat in a property-bar TextBox or a popup is invisible to them and
+            // can leave the latch stale — which would swallow the next legitimate mid-drag replay.
+            _shiftReplayed = (s.Modifiers & KeyModifiers.Shift) != 0;
 
             var kind = e.GetCurrentPoint(this).Properties.PointerUpdateKind;
             if (kind == PointerUpdateKind.LeftButtonPressed)
@@ -1336,6 +1360,7 @@ namespace Clowd.Drawing
 
             var s = PointerState.From(e, this);
             _lastPointerState = s;
+            _lastPointerRoot = CanvasToRoot(s.Position);
 
             if (!s.MiddlePressed && !s.RightPressed)
             {
@@ -1349,6 +1374,7 @@ namespace Clowd.Drawing
 
             var s = PointerState.From(e, this);
             _lastPointerState = s;
+            _lastPointerRoot = CanvasToRoot(s.Position);
 
             if (e.InitialPressMouseButton == MouseButton.Left)
             {
@@ -1412,22 +1438,48 @@ namespace Clowd.Drawing
             if (newZoom == 0)
                 return;
 
-            // wheel zoom is anchored at the pointer position
-            double absoluteX = relativeMouse.X * ContentScale + _translateTransform.X;
-            double absoluteY = relativeMouse.Y * ContentScale + _translateTransform.Y;
+            // Wheel zoom is anchored at the pointer position: the viewport point under the cursor
+            // must not move. The render transform scales canvas-local coordinates by
+            // ContentScale/DpiZoom (see UpdateScaleTransform), NOT by ContentScale — anchoring with
+            // ContentScale alone only happens to be correct at 100% DPI, and drifts proportionally
+            // to (DpiZoom - 1) everywhere else.
+            // Anchor against ContentOffset, NOT _translateTransform: the transform is the *display*
+            // value, floored to a whole device pixel for sharpness. Feeding that floored value back
+            // in as the new offset discards the fractional part on every step, and because it is a
+            // floor rather than a round the loss is signed — so repeated wheel clicks walked the
+            // anchor steadily away from the pointer instead of jittering around it.
+            var dpiZoom = DpiZoom;
+            double absoluteX = relativeMouse.X * (ContentScale / dpiZoom) + ContentOffset.X;
+            double absoluteY = relativeMouse.Y * (ContentScale / dpiZoom) + ContentOffset.Y;
 
             ContentScale = newZoom;
-            ContentOffset = new Point(absoluteX - relativeMouse.X * ContentScale, absoluteY - relativeMouse.Y * ContentScale);
+
+            ContentOffset = new Point(
+                absoluteX - relativeMouse.X * (ContentScale / dpiZoom),
+                absoluteY - relativeMouse.Y * (ContentScale / dpiZoom));
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
             base.OnKeyDown(e);
 
-            // Shift key replays a synthetic MouseMove, so any drag-based snapping will be updated
-            if (IsMouseCaptured && (e.Key == Key.LeftShift || e.Key == Key.RightShift))
+            // Shift key replays a synthetic MouseMove, so any drag-based snapping will be updated.
+            // Only the transition matters: Windows key auto-repeat delivers OnKeyDown continuously
+            // while Shift is held, and re-running a drag step is not idempotent for every tool
+            // (aspect-ratio resize re-derives from the graphic's *current* bounds, and a rotated
+            // rectangle un-rotates the pointer about a centre that has just moved), so a held Shift
+            // made the shape creep with the pointer completely stationary.
+            // The flag latches on the first key-down whether or not a drag is in progress, so that
+            // Shift held from BEFORE the drag started cannot land a replay part-way through it.
+            if (e.Key == Key.LeftShift || e.Key == Key.RightShift)
             {
-                ReplayCachedPointerMove(addShift: true);
+                if (_shiftReplayed)
+                    return;
+
+                _shiftReplayed = true;
+
+                if (IsMouseCaptured)
+                    ReplayCachedPointerMove(addShift: true);
             }
         }
 
@@ -1435,10 +1487,16 @@ namespace Clowd.Drawing
         {
             base.OnKeyUp(e);
 
-            // Shift key replays a synthetic MouseMove, so any drag-based snapping will be updated
-            if (IsMouseCaptured && (e.Key == Key.LeftShift || e.Key == Key.RightShift))
+            // Shift key replays a synthetic MouseMove, so any drag-based snapping will be updated.
+            // Releasing ONE of two held shift keys is not a transition: KeyModifiers still reports
+            // Shift, so replaying un-shifted would pop the shape out of its constrained aspect for a
+            // frame, and clearing the latch would re-arm the replay the next auto-repeat delivers.
+            if ((e.Key == Key.LeftShift || e.Key == Key.RightShift) && (e.KeyModifiers & KeyModifiers.Shift) == 0)
             {
-                ReplayCachedPointerMove(addShift: false);
+                _shiftReplayed = false;
+
+                if (IsMouseCaptured)
+                    ReplayCachedPointerMove(addShift: false);
             }
         }
 
@@ -1453,7 +1511,12 @@ namespace Clowd.Drawing
                 return;
 
             var modifiers = addShift ? last.Modifiers | KeyModifiers.Shift : last.Modifiers & ~KeyModifiers.Shift;
-            var synthetic = new PointerState(last.Position, modifiers, last.LeftPressed, last.MiddlePressed, last.RightPressed, null);
+
+            // resolve the cached point through the transform as it is NOW, not as it was when the
+            // point was cached — see _lastPointerRoot
+            var position = _lastPointerRoot is { } root ? RootToCanvas(root) : last.Position;
+
+            var synthetic = new PointerState(position, modifiers, last.LeftPressed, last.MiddlePressed, last.RightPressed, null);
             _lastPointerState = synthetic;
 
             if (!synthetic.MiddlePressed && !synthetic.RightPressed)
@@ -1598,11 +1661,42 @@ namespace Clowd.Drawing
 
         internal double DpiZoom => TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
 
+        private Point CanvasToRoot(Point canvasPt) =>
+            this.TranslatePoint(canvasPt, (Visual)TopLevel.GetTopLevel(this) ?? this) ?? canvasPt;
+
+        private Point RootToCanvas(Point rootPt) =>
+            ((Visual)TopLevel.GetTopLevel(this) ?? this).TranslatePoint(rootPt, this) ?? rootPt;
+
+        /// <summary>
+        /// Re-applies every scaling-derived value after the window moves to a monitor with different
+        /// DPI. UpdateScaleTransform alone is not enough: the display translate is still floored onto
+        /// the OLD monitor's device-pixel grid (so raster content renders soft until the next pan or
+        /// zoom happens to re-floor it), and the clickable hit surface still pairs the new scale with
+        /// geometry sized for the old one, which can leave dead zones for the pointer.
+        /// </summary>
+        public void UpdateForScalingChange()
+        {
+            if (_scaleTransform2 == null)
+                return;
+
+            UpdateScaleTransform();
+
+            var dpiZoom = DpiZoom;
+            _translateTransform.X = Math.Floor(ContentOffset.X * dpiZoom) / dpiZoom;
+            _translateTransform.Y = Math.Floor(ContentOffset.Y * dpiZoom) / dpiZoom;
+
+            UpdateClickableSurface();
+        }
+
         protected override void OnLoaded(RoutedEventArgs e)
         {
             base.OnLoaded(e);
-            UpdateScaleTransform();
-            UpdateClickableSurface();
+
+            // Full scaling refresh, not just the scale transform: DpiZoom falls back to 1.0 while
+            // detached, so a ContentOffset restored before attach was floored onto the logical grid
+            // rather than the monitor's device-pixel grid. On a >100% monitor that leaves restored
+            // sessions rendering soft until the first pan or zoom happens to re-floor it.
+            UpdateForScalingChange();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
