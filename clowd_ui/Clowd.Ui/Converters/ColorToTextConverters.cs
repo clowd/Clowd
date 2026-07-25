@@ -139,28 +139,36 @@ namespace Clowd.UI.Converters
                 return string.Format("#{0:X2}{1:X2}{2:X2}{3:X2}", color.R, color.G, color.B, (int)Math.Round(color.Alpha * 255d));
         }
 
+        /// <summary>
+        /// Parses a hex color string in any of the CSS forms RGB, RGBA, RRGGBB or RRGGBBAA,
+        /// with or without a leading '#'. Shorthand digits are expanded by duplicating each
+        /// digit, so "#dfd" is the same color as "#ddffdd".
+        /// </summary>
         public static Color FromHex(string s)
         {
-            s = s.Trim().TrimStart('#');
+            s = (s ?? "").Trim().TrimStart('#');
 
-            if (s.Length is not 6 and not 8)
+            if (s.Length is not 3 and not 4 and not 6 and not 8)
             {
                 throw new InvalidOperationException("Invalid hex color");
             }
 
-            byte r = 0, g = 0, b = 0, a = 255;
-
-            if (s.Length >= 6)
+            // Convert.ToByte(_, 16) accepts leading whitespace and a sign, which would let
+            // strings like "+f fff" through, so the digits are validated up front instead
+            foreach (var ch in s)
             {
-                r = System.Convert.ToByte(s.Substring(0, 2), 16);
-                g = System.Convert.ToByte(s.Substring(2, 2), 16);
-                b = System.Convert.ToByte(s.Substring(4, 2), 16);
+                if (!Uri.IsHexDigit(ch))
+                    throw new InvalidOperationException("Invalid hex color");
             }
 
-            if (s.Length == 8)
-            {
-                a = System.Convert.ToByte(s.Substring(6, 2), 16);
-            }
+            var shorthand = s.Length is 3 or 4;
+
+            byte Component(int index) => shorthand
+                ? System.Convert.ToByte(new string(s[index], 2), 16)
+                : System.Convert.ToByte(s.Substring(index * 2, 2), 16);
+
+            byte r = Component(0), g = Component(1), b = Component(2);
+            byte a = s.Length is 4 or 8 ? Component(3) : (byte)255;
 
             return Color.FromArgb(a, r, g, b);
         }
