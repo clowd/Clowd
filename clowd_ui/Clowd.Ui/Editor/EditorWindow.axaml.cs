@@ -508,11 +508,15 @@ namespace Clowd.UI
             // pressed-set repeat tracker (decision table #37)
             bool isRepeat = !_pressedKeys.Add(e.Key);
 
-            // An open mini colour picker owns Escape and Enter: both dismiss it, and neither may
-            // reach the canvas underneath (Escape cancels the in-progress drawing operation).
-            // Checked ahead of the TextBox bail-out so the keys still work from the hex field.
+            // An open mini colour picker owns Escape and Enter, and neither may reach the canvas
+            // underneath (Escape cancels the in-progress drawing operation). Checked ahead of the
+            // TextBox bail-out so the keys still work from the hex field. The picker hooks its own
+            // popup root as well — that path handles the usual case where the popup holds focus.
             if (miniColorPopup.IsOpen && (e.Key == Key.Escape || e.Key == Key.Enter)) {
-                miniColorPopup.IsOpen = false;
+                if (e.Key == Key.Enter)
+                    miniColor.Accept();
+                else
+                    miniColor.Cancel();
                 e.Handled = true;
                 return;
             }
@@ -1240,17 +1244,13 @@ namespace Clowd.UI
 
         private void objectColor_Click(object sender, PointerPressedEventArgs e)
         {
-            miniColor.ColorSelectFn = null;
-            miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ObjectColor);
-            miniColor.ColorSelectFn = (c) => drawingCanvas.ObjectColor = c;
+            miniColor.Reset(drawingCanvas.ObjectColor, (c) => drawingCanvas.ObjectColor = c);
             miniColorPopup.IsOpen = true;
         }
 
         private void backgroundColor_Click(object sender, PointerPressedEventArgs e)
         {
-            miniColor.ColorSelectFn = null;
-            miniColor.CurrentColor = HslRgbColor.FromColor(drawingCanvas.ArtworkBackground);
-            miniColor.ColorSelectFn = (c) => drawingCanvas.SetBackgroundColor(c);
+            miniColor.Reset(drawingCanvas.ArtworkBackground, (c) => drawingCanvas.SetBackgroundColor(c));
             miniColorPopup.IsOpen = true;
         }
 

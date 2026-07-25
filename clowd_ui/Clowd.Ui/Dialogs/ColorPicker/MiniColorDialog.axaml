@@ -137,25 +137,11 @@
 
             <DockPanel Grid.Row="5"
                        Margin="0,8,0,0"
-                       HorizontalAlignment="Stretch"
-                       IsVisible="{Binding !Realtime}">
-                <Border Margin="5"
-                        CornerRadius="10"
-                        DockPanel.Dock="Right"
-                        Background="{x:Static util:CheckerBrushes.Swatch}">
-                    <Ellipse x:Name="CurrentColorEllipse"
-                             Width="20"
-                             Height="20" />
-                </Border>
-                <controls:ToolButton Click="ButtonCheckClicked"
-                                     DockPanel.Dock="Right"
-                                     IconPath="{StaticResource IconCheckmark}" />
-                <controls:ToolButton Click="ButtonCancelClicked"
-                                     DockPanel.Dock="Right"
-                                     IconPath="{StaticResource IconThinClose}" />
+                       HorizontalAlignment="Stretch">
                 <controls:ToolButton Click="ButtonPopoutClicked"
                                      DockPanel.Dock="Left"
-                                     IconPath="{StaticResource IconPopout}" />
+                                     IconPath="{StaticResource IconPopout}"
+                                     ToolTip.Tip="Open in full color picker" />
                 <Rectangle />
             </DockPanel>
         </Grid>
