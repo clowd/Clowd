@@ -149,6 +149,9 @@ namespace Clowd.Drawing.Graphics
         [Transient] private Bitmap _imageSource;
         [Transient] private Bitmap _imageObscured;
         [Transient] private Rect _editingAnchor;
+        // sub-unit remainder carried between Move calls so pixel-snapping can't drift (see Move)
+        [Transient] private double _moveRemainderX;
+        [Transient] private double _moveRemainderY;
         [Transient] private DrawingCanvas _editingCanvas;
 
         protected GraphicImage()
@@ -380,10 +383,26 @@ namespace Clowd.Drawing.Graphics
                 // logical-unit delta, and unlike a vector graphic an image is blitted rather than
                 // re-rasterised: land it on a fractional origin and the sampler resamples every
                 // pixel, which reads as a blurry screenshot with a half-transparent edge row — on
-                // screen and in anything exported from the canvas. Quantise the delta to whatever
-                // puts the origin back on a whole unit instead of applying it raw. Nudges (already
-                // integral) are unaffected.
-                base.Move(Math.Round(Left + deltaX) - Left, Math.Round(Top + deltaY) - Top);
+                // screen and in anything exported from the canvas.
+                //
+                // Move is called with INCREMENTAL deltas, so the rounding residual has to be carried
+                // forward explicitly. Rounding each delta in isolation discards it, and since the
+                // discarded part is a signed quantity that nothing ever repays, the image separates
+                // from the cursor without bound: at 150% DPI a 0.667-unit step rounds to 1 every
+                // event (the image outruns the pointer by half), and at zoom 2 a steady 0.5-unit
+                // step rounds to even — i.e. to zero — every event, freezing the image completely.
+                // Carrying the residual keeps the quantised position within half a unit of the
+                // intended one forever. Nudges (already integral) are unaffected either way.
+                var targetX = Left + deltaX + _moveRemainderX;
+                var targetY = Top + deltaY + _moveRemainderY;
+
+                var appliedX = Math.Round(targetX) - Left;
+                var appliedY = Math.Round(targetY) - Top;
+
+                _moveRemainderX = targetX - (Left + appliedX);
+                _moveRemainderY = targetY - (Top + appliedY);
+
+                base.Move(appliedX, appliedY);
             }
         }
 
@@ -424,8 +443,22 @@ namespace Clowd.Drawing.Graphics
             OnPropertyChanged(nameof(Editing));
         }
 
+        /// <summary>Drop the carried sub-unit rounding residual at the end of a drag — it belongs to
+        /// the gesture that produced it. Without this the next drag's first step would pop by up to
+        /// half a unit. Normalize covers the geometry-rewrite paths (undo/redo, restore, resize);
+        /// this covers a plain body move, which is the only gesture that actually builds residue and
+        /// the one path that never calls Normalize.</summary>
+        internal override void OnGestureCompleted()
+        {
+            _moveRemainderX = 0;
+            _moveRemainderY = 0;
+        }
+
         internal override void Normalize()
         {
+            _moveRemainderX = 0;
+            _moveRemainderY = 0;
+
             if (Editing) return;
             if (Right <= Left) _scaleX /= -1;
             if (Bottom <= Top) _scaleY /= -1;

@@ -166,7 +166,7 @@ namespace Clowd.UI
                 ScheduleUpdateSessionInfo();
             };
             SizeChanged += (_, _) => TrackNormalBounds();
-            ScalingChanged += (_, _) => drawingCanvas.UpdateScaleTransform(); // decision table #56
+            ScalingChanged += (_, _) => drawingCanvas.UpdateForScalingChange(); // decision table #56
 
             btnUpload.AddHandler(PointerPressedEvent, btnUpload_RightMouseDown, RoutingStrategies.Tunnel);
 

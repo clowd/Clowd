@@ -310,7 +310,10 @@ namespace Clowd.Drawing.Tools
                 // read recomputes (and re-rounds) at the final position, exactly like the old
                 // per-read getter; the export offset for a screenshot doc stays integral.
                 foreach (var g in drawingCanvas.GraphicsList.SelectedItems)
+                {
                     g.RenderCache.Clear(InvalidationAspects.Bounds);
+                    g.OnGestureCompleted();
+                }
                 drawingCanvas.GraphicsList.RequestValidation();
             }
 
