@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Avalonia;
 using Clowd.UI;
+using Clowd.Util;
 using Velopack;
 
 namespace Clowd
@@ -27,6 +28,12 @@ namespace Clowd
         [STAThread]
         public static void Main(string[] args)
         {
+            // First thing in the process, so a crash anywhere below is reported — including inside
+            // the Velopack hooks. Disposing flushes the queue on a normal exit; the hook paths
+            // terminate the process instead, which is why the panic-time flush lives in the SDK's
+            // own shutdown handling rather than here.
+            using var sentry = SentryConfig.Init();
+
             // Velopack hooks (install/update/uninstall) must run before anything else; Run()
             // exits the process when invoked with a hook argument.
             var velopack = VelopackApp.Build()

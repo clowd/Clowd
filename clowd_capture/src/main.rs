@@ -36,6 +36,9 @@ fn main() -> anyhow::Result<()> {
         simplelog::ColorChoice::Auto,
     );
 
+    // held for the rest of main: dropping the guard flushes anything still queued
+    let _sentry = telemetry::crash::init();
+
     system::SystemInterop::init();
 
     // The shell preflights this before spawning us and owns the whole permission

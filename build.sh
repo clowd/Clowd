@@ -52,7 +52,9 @@ dotnet publish "$ROOT/clowd_ui/Clowd.Ui/Clowd.Ui.csproj" \
     -o "$OUT"
 
 echo "==> Building clowd_capture_wgpu (release)"
-cargo build --release --manifest-path "$ROOT/Cargo.toml"
+# stamps the Sentry release name so the capturer reports against the same release
+# as the shell (telemetry/crash.rs)
+CLOWD_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml"
 
 echo "==> Copying capture binary into publish output"
 cp "$ROOT/target/release/clowd_capture_wgpu$EXE" "$OUT/"

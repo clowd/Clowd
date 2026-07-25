@@ -519,6 +519,12 @@ namespace Clowd
         }
 
         // decision table #68: replaces WPF DispatcherUnhandledException.
+        //
+        // Sentry's own integrations already cover AppDomain.UnhandledException and
+        // TaskScheduler.UnobservedTaskException, so those two are left alone. The Avalonia
+        // dispatcher is Sentry's blind spot — nothing else observes it, and marking the event
+        // Handled keeps it from ever reaching the AppDomain — so it is reported explicitly.
+        // SentryConfig.CaptureException is a no-op in debug builds.
         private void SetupExceptionHandling()
         {
             AppDomain.CurrentDomain.UnhandledException += (sender, e) =>
@@ -538,6 +544,7 @@ namespace Clowd
                 if (Debugger.IsAttached) Debugger.Break();
                 e.Handled = true;
                 Debug.WriteLine("DispatcherUnhandledException: " + e.Exception);
+                SentryConfig.CaptureException(e.Exception);
                 NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, e.Exception.ToString(), "An error has occurred.");
             };
         }

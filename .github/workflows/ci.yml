@@ -147,6 +147,15 @@ jobs:
           -c Release -r ${{ matrix.rid }} --self-contained true
           -o publish
 
+      # dotnet publish above gets its version from nbgv automatically; the Rust build has
+      # no such hook, so resolve the same version here and stamp it into the Sentry release
+      # name (telemetry/crash.rs). Both processes then report against one release.
+      - name: Resolve version for capture binary
+        shell: bash
+        run: |
+          dotnet tool update -g nbgv
+          echo "CLOWD_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
+
       - name: Build capture binary
         run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
 
