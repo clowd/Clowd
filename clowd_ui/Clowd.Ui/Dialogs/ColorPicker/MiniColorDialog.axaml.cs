@@ -41,6 +41,12 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private bool _suppressUpdate;
 
+        // The colour in effect before this popup was opened, so Escape can undo the live
+        // (Realtime) writes that every slider/canvas move has already pushed to the caller.
+        private Color? _originalColor;
+
+        private TopLevel _keyRoot;
+
         public MiniColorDialog()
         {
             DataContext = this;
@@ -89,6 +95,78 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             if (CurrentColor != null)
                 Update();
+        }
+
+        /// <summary>
+        /// Prepares the picker for a fresh open: seeds the colour without notifying the caller,
+        /// then wires up the callback. Also records the starting colour so <see cref="Cancel"/>
+        /// can restore it.
+        /// </summary>
+        public void Reset(Color initial, Action<Color> selectFn)
+        {
+            ColorSelectFn = null; // don't echo the seed value back to the caller
+            _originalColor = initial;
+            CurrentColor = HslRgbColor.FromColor(initial);
+            ColorSelectFn = selectFn;
+        }
+
+        /// <summary>Keeps the current colour and closes.</summary>
+        public void Accept()
+        {
+            var fn = ColorSelectFn;
+            var color = CurrentColor?.ToColor();
+
+            Cancelled?.Invoke(this, EventArgs.Empty);
+
+            if (fn != null && color.HasValue)
+                fn(color.Value);
+        }
+
+        /// <summary>Closes, restoring the colour that was in effect when the picker opened.</summary>
+        public void Cancel()
+        {
+            var fn = ColorSelectFn;
+            var original = _originalColor;
+
+            Cancelled?.Invoke(this, EventArgs.Empty);
+
+            // In Realtime mode the caller has already been given every intermediate colour, so
+            // cancelling means putting the original back.
+            if (Realtime && fn != null && original.HasValue)
+                fn(original.Value);
+        }
+
+        protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            base.OnAttachedToVisualTree(e);
+
+            // This control is hosted in a Popup, which lives in its own PopupRoot with its own
+            // focus scope — key events raised in there never reach the owning window's handlers.
+            // Hook the popup root so Escape/Enter work no matter which child has focus.
+            _keyRoot = TopLevel.GetTopLevel(this);
+            _keyRoot?.AddHandler(KeyDownEvent, RootKeyDown, RoutingStrategies.Tunnel);
+        }
+
+        protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+        {
+            _keyRoot?.RemoveHandler(KeyDownEvent, RootKeyDown);
+            _keyRoot = null;
+            base.OnDetachedFromVisualTree(e);
+        }
+
+        private void RootKeyDown(object sender, KeyEventArgs e)
+        {
+            // tunnelled, so these win over the hex TextBox as well
+            if (e.Key == Key.Enter)
+            {
+                e.Handled = true;
+                Accept();
+            }
+            else if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                Cancel();
+            }
         }
 
         private void CanvasBackground_PointerReleased(object sender, PointerReleasedEventArgs e)
@@ -177,8 +255,6 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 ColorSelectFn(rgb);
             }
 
-            CurrentColorEllipse.Fill = new SolidColorBrush(rgb);
-
             var noAlphaColor = Color.FromArgb(255, rgb.R, rgb.G, rgb.B);
             var hueOnlyColor = new HslRgbColor(hsl.Hue, 1, 0.5, 1).ToColor();
 
@@ -257,33 +333,30 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 CurrentColor = HslRgbColor.FromColor(p.Color);
                 if (e.ClickCount >= 2)
                 {
-                    ButtonCheckClicked(sender, new RoutedEventArgs());
+                    Accept();
                 }
             }
         }
 
-        private void ButtonCheckClicked(object sender, RoutedEventArgs e)
-        {
-            Cancelled?.Invoke(this, new EventArgs());
-
-            if (ColorSelectFn != default)
-                ColorSelectFn(CurrentColor.ToColor());
-        }
-
-        private void ButtonCancelClicked(object sender, RoutedEventArgs e)
-        {
-            Cancelled?.Invoke(this, new EventArgs());
-        }
-
         private async void ButtonPopoutClicked(object sender, RoutedEventArgs e)
         {
-            Cancelled?.Invoke(this, new EventArgs());
+            var fn = ColorSelectFn;
+            var original = _originalColor;
 
-            var clr = new ColorDialog(CurrentColor, true);
+            Cancelled?.Invoke(this, EventArgs.Empty);
+
+            // Clone: ColorDialog keeps the instance it is handed as its live CurrentColor, so
+            // sharing ours would let its edits mutate (and, in Realtime, re-broadcast) this one.
+            var clr = new ColorDialog(CurrentColor?.Clone(), true);
             var result = await clr.ShowAsync(ParentWindow);
 
-            if (result == true && ColorSelectFn != default)
-                ColorSelectFn(clr.CurrentColor.ToColor());
+            if (fn == null)
+                return;
+
+            if (result == true)
+                fn(clr.CurrentColor.ToColor());
+            else if (Realtime && original.HasValue)
+                fn(original.Value); // cancelled — undo the live edits made before popping out
         }
     }
 }
