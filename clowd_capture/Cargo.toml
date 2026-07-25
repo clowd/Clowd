@@ -11,8 +11,8 @@ euclid.workspace = true
 log.workspace = true
 simplelog.workspace = true
 winit.workspace = true
-# "wgsl" enables the runtime WGSL frontend used as a fallback when a precompiled
-# passthrough shader (metallib / dxbc) fails to load on the host — see gpu/shaders.rs.
+# "wgsl" enables the runtime WGSL frontend: the only shader path on macOS, and the
+# fallback on Windows when a precompiled dxbc shader fails to load — see gpu/shaders.rs.
 wgpu = { workspace = true, features = ["dx12", "metal", "wgsl"] }
 pollster.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
@@ -50,6 +50,6 @@ objc2-quartz-core = { workspace = true, features = ["CALayer", "CAAnimation", "C
 block2.workspace = true
 
 # naga version must match what wgpu 29.0 uses internally
-[build-dependencies]
-naga = { workspace = true, features = ["wgsl-in", "hlsl-out", "msl-out"] }
+[target.'cfg(windows)'.build-dependencies]
+naga = { workspace = true, features = ["wgsl-in", "hlsl-out"] }
 libloading.workspace = true
