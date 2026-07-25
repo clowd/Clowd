@@ -10,6 +10,12 @@ name: Release
 # to the same GitHub release (--merge). Each rid maps to a Velopack channel
 # (win-x64, osx-arm64, ...), with a "-pre" suffix when publishing a pre-release.
 # The app (UpdateService) follows whichever channel it was installed from.
+#
+# The draft release is created up-front by a single job rather than by whichever
+# vpk job gets there first: concurrent jobs would each fail to see the others'
+# in-flight release and create duplicates. The matrix jobs then only ever merge
+# into that existing draft (--publish false), and a final job flips the draft to
+# published once every rid has succeeded.
 
 on:
   workflow_dispatch:
@@ -28,8 +34,49 @@ permissions:
   actions: read
 
 jobs:
+  # creates the draft release the matrix jobs upload into, so that no two vpk
+  # jobs try to create it at once.
+  draft:
+    name: create draft
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.create.outputs.version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Create draft release
+        id: create
+        run: |
+          gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n version -D version-artifact
+          VERSION=$(tr -d '[:space:]' < version-artifact/version.txt)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+          # a leftover draft is from a failed run, so start clean - vpk refuses to
+          # merge into a release that already has an index for its channel. gh
+          # resolves drafts by their pending tag name, so no tag exists to clean up.
+          if IS_DRAFT=$(gh release view "$VERSION" --repo ${{ github.repository }} --json isDraft -q .isDraft 2>/dev/null); then
+            if [ "$IS_DRAFT" != "true" ]; then
+              echo "::error::Release $VERSION is already published, refusing to overwrite it."
+              exit 1
+            fi
+            echo "Deleting leftover draft release $VERSION"
+            gh release delete "$VERSION" --repo ${{ github.repository }} --yes
+          fi
+
+          PRE=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then PRE="--prerelease"; fi
+          gh release create "$VERSION" --repo ${{ github.repository }} \
+            --draft --title "$VERSION" --notes "" $PRE
+          echo "Created draft release $VERSION"
+
+      # give the release a chance to become visible to the api the vpk jobs use
+      # to look it up, otherwise they may not find it and create a duplicate.
+      - name: Wait for release to settle
+        run: sleep 60
+
   release:
     name: release (${{ matrix.rid }})
+    needs: draft
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +93,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO_URL: https://github.com/${{ github.repository }}
+      VERSION: ${{ needs.draft.outputs.version }}
     steps:
       # only needed for the packaging icon
       - name: Checkout
@@ -62,10 +110,6 @@ jobs:
 
       - name: Download build artifacts
         run: |
-          gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n version -D version-artifact
-          VERSION=$(tr -d '[:space:]' < version-artifact/version.txt)
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
-
           CHANNEL="${{ matrix.rid }}"
           if [ "${{ inputs.prerelease }}" = "true" ]; then CHANNEL="$CHANNEL-pre"; fi
           echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
@@ -156,9 +200,25 @@ jobs:
           --notaryProfile velopack-profile --keychain "$KEYCHAIN_PATH"
         shell: bash
 
+      # merges into the draft created above (matched by tag) and leaves it a draft;
+      # the publish job below flips it once every rid has uploaded.
       - name: Upload to GitHub Releases
         run: >
           vpk upload github --repoUrl "$REPO_URL" --token "$GH_TOKEN"
           --channel "$CHANNEL" -o releases
-          --merge true --publish true --pre ${{ inputs.prerelease }}
+          --tag "$VERSION" --releaseName "$VERSION"
+          --merge true --publish false --pre ${{ inputs.prerelease }}
         shell: bash
+
+  publish:
+    name: publish release
+    needs: [draft, release]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.draft.outputs.version }}
+    steps:
+      - name: Publish draft release
+        run: |
+          gh release edit "$VERSION" --repo ${{ github.repository }} --draft=false
+          echo "Published release $VERSION"
