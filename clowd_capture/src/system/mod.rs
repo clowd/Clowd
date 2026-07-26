@@ -289,7 +289,17 @@ impl SystemInterop {
     /// bundled into the result for downstream consumers.
     pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>, cursor: Option<CapturedCursor>) -> CapturedDesktop {
         let vd = virtual_desktop_bounds(&monitors);
-        let bitmap = win_capture::capture_desktop(&vd).expect("Unable to capture desktop");
+        // Runs on the screenshot thread: a panic here would leave the main thread
+        // blocked on the screenshot latch forever with nothing on screen, so treat
+        // failure as fatal for the whole process and let the shell report it.
+        let bitmap = match win_capture::capture_desktop(&vd) {
+            Ok(bitmap) => bitmap,
+            Err(err) => {
+                error!("unable to capture the desktop: {err:#}");
+                crate::telemetry::crash::flush();
+                std::process::exit(EXIT_CAPTURE_FAILED);
+            }
+        };
         CapturedDesktop {
             bgra: bitmap.bgra,
             width: bitmap.width,
