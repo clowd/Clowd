@@ -94,6 +94,10 @@ fn record_three_seconds_and_validate_mp4() {
         .arg("0,0,640,480")
         .arg("--fps")
         .arg("30")
+        .arg("--speaker")
+        .arg("default")
+        .arg("--microphone")
+        .arg("default")
         .arg("--pause")
         .arg("--output")
         .arg(&out_mp4)
@@ -107,6 +111,25 @@ fn record_three_seconds_and_validate_mp4() {
     let mut stdin = child.stdin.take().expect("stdin piped");
 
     reader.wait_for("initialized", Duration::from_secs(30));
+
+    // Levels must flow during the pre-start WAIT phase (100 ms cadence).
+    let levels = reader.collect_for("levels", Duration::from_secs(2));
+    assert!(
+        !levels.is_empty(),
+        "expected >= 1 levels message before start"
+    );
+    for l in &levels {
+        for key in ["speaker", "mic"] {
+            let arr = l[key]
+                .as_array()
+                .unwrap_or_else(|| panic!("{key} must be an array: {l}"));
+            assert!(!arr.is_empty(), "{key} must be non-empty: {l}");
+            assert!(
+                arr.iter().all(|v| v.is_f64() || v.is_i64() || v.is_u64()),
+                "{key} must be numeric: {l}"
+            );
+        }
+    }
 
     stdin.write_all(b"start\n").unwrap();
     stdin.flush().unwrap();

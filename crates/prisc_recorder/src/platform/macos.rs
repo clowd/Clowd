@@ -12,7 +12,6 @@ use super::{MonitorInfo, ObsPaths};
 
 pub const GRAPHICS_MODULE: &CStr = c"libobs-metal.dylib";
 pub const DISPLAY_CAPTURE_ID: &str = "screen_capture";
-pub const AUDIO_OUTPUT_CAPTURE_ID: &str = "coreaudio_output_capture";
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "coreaudio_input_capture";
 
 extern "C" {
@@ -156,6 +155,28 @@ pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
     settings.set_string("display_uuid", &m.id);
     settings.set_bool("show_cursor", show_cursor);
     settings
+}
+
+/// Source id + settings for a speaker (output) capture source. Must be called
+/// after modules are loaded (the registration probe reads plugin state).
+///
+/// Prefers ScreenCaptureKit system-audio capture (macOS 13+), which captures
+/// all system output — `device_id` is ignored on that path. Falls back to
+/// coreaudio_output_capture on macOS 12.
+pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
+    // NOT obs_source_create != null: libobs creates a placeholder source for
+    // unknown ids; get_display_name returns null exactly when unregistered.
+    let sck_registered =
+        !unsafe { obs_sys::obs_source_get_display_name(c"sck_audio_capture".as_ptr()) }.is_null();
+    if sck_registered {
+        let settings = ObsData::new();
+        settings.set_int("type", 0);
+        ("sck_audio_capture", settings)
+    } else {
+        let settings = ObsData::new();
+        settings.set_string("device_id", device_id);
+        ("coreaudio_output_capture", settings)
+    }
 }
 
 pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {

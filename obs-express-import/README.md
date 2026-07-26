@@ -69,7 +69,7 @@ obs-express --output clip.mp4 --monitor 0 --hw-accel --speaker default --microph
 | `--low-cpu` | off | Use the x264 `ultrafast` preset instead of `veryfast`. |
 | `--no-cursor` | off | Do not capture the mouse cursor. |
 | `--pause` | off | Build the pipeline, emit `initialized`, and wait for a stdin `start` before recording. |
-| `--speaker <DEVICE>` | — | Output-capture (system audio) device id, or `default`. Repeatable. |
+| `--speaker <DEVICE>` | — | Output-capture (system audio) device id, or `default`. Repeatable. On macOS 13+ system audio is captured via ScreenCaptureKit: the device id is ignored (the flag only toggles system-audio capture on) and repeating the flag is rejected. |
 | `--microphone <DEVICE>` | — | Input-capture (microphone) device id, or `default`. Repeatable. |
 
 Downscaling preserves aspect ratio: the tightest of the two caps is applied once to both dimensions, and the output is never upscaled.
@@ -107,6 +107,7 @@ A `--monitor` value is matched, in order, against the monitor's stable device id
 | `{"type":"started_recording"}` | The output actually started rolling. |
 | `{"type":"recording_paused"}` / `{"type":"recording_resumed"}` | In response to `pause` / `start`. |
 | `{"type":"status","timeMs":..,"fps":..,"dropped":..,"droppedPerc":..}` | Once per second while recording and not paused. |
+| `{"type":"levels","speaker":[..],"mic":[..]}` | Every 100 ms from `initialized` on (including the pre-start `--pause` wait), when at least one audio device is configured. Peak dBFS per device (in `--speaker` / `--microphone` order), floored at `-100.0`. |
 | `{"type":"stopped_recording","code":..,"message":..,"error":..}` | Final line before exit. |
 
 `status` fields: `timeMs` is elapsed recording time in milliseconds (excluding paused spans), `fps` is the measured frame rate over that clock, and `dropped` / `droppedPerc` report dropped frames. The final `stopped_recording.code` mirrors the OBS output stop code (`0` = success; negative values indicate invalid path, unsupported format, out of disk space, encoder error, etc.), with a human-readable `message`.

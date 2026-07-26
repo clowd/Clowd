@@ -2,7 +2,7 @@
 //! paused-adjusted recording clock.
 
 use std::io::Write;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -168,6 +168,48 @@ pub fn start_status_thread(
     })
 }
 
+/// Peak dBFS floor for the `levels` protocol line. JSON has no -inf/NaN (serde
+/// serializes non-finite floats as null), so every non-finite value — silence
+/// (-inf), plus NaN/+inf from corrupt device samples — clamps here.
+const LEVELS_FLOOR_DB: f64 = -100.0;
+
+fn clamp_dbfs(peak: f32) -> f64 {
+    if peak.is_finite() {
+        (peak as f64).max(LEVELS_FLOOR_DB)
+    } else {
+        LEVELS_FLOOR_DB
+    }
+}
+
+/// Emits a `levels` line every 100 ms: peak dBFS per audio source (speakers
+/// then mics, CLI order), clamped to -100.0. Runs from initialization —
+/// including the pre-start WAIT phase — until `stop_flag`.
+pub fn start_levels_thread(
+    speaker_peaks: Vec<Arc<AtomicU32>>,
+    mic_peaks: Vec<Arc<AtomicU32>>,
+    stop_flag: Arc<AtomicBool>,
+) -> std::thread::JoinHandle<()> {
+    std::thread::spawn(move || {
+        let read = |peaks: &[Arc<AtomicU32>]| -> Vec<f64> {
+            peaks
+                .iter()
+                .map(|p| clamp_dbfs(f32::from_bits(p.load(Ordering::Relaxed))))
+                .collect()
+        };
+        while !stop_flag.load(Ordering::Relaxed) {
+            std::thread::sleep(Duration::from_millis(100));
+            if stop_flag.load(Ordering::Relaxed) {
+                break;
+            }
+            emit_json(serde_json::json!({
+                "type": "levels",
+                "speaker": read(&speaker_peaks),
+                "mic": read(&mic_peaks),
+            }));
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,5 +259,19 @@ mod tests {
             wall >= elapsed + 40,
             "pause not subtracted: elapsed {elapsed} wall {wall}"
         );
+    }
+
+    #[test]
+    fn clamp_dbfs_floors_non_finite_and_quiet_values() {
+        assert_eq!(clamp_dbfs(f32::NEG_INFINITY), -100.0);
+        assert_eq!(clamp_dbfs(f32::INFINITY), -100.0);
+        assert_eq!(clamp_dbfs(f32::NAN), -100.0);
+        assert_eq!(clamp_dbfs(-250.0), -100.0);
+        assert_eq!(clamp_dbfs(-100.0), -100.0);
+        assert!((clamp_dbfs(-18.5) - -18.5f32 as f64).abs() < 1e-6);
+        assert_eq!(clamp_dbfs(0.0), 0.0);
+        // Clamped values always serialize as JSON numbers, never null.
+        let v = serde_json::json!(clamp_dbfs(f32::NEG_INFINITY));
+        assert!(v.is_f64(), "expected number, got {v}");
     }
 }

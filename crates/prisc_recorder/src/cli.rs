@@ -57,6 +57,9 @@ pub struct Cli {
     pub pause: bool,
 
     /// Audio output-capture device id ("default" or a platform device id); repeatable.
+    /// On macOS 13+ system audio is captured via ScreenCaptureKit and the value
+    /// only toggles capture on — per-device selection is not possible and
+    /// repeating the flag is rejected.
     #[arg(long)]
     pub speaker: Vec<String>,
 

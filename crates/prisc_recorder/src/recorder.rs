@@ -8,7 +8,7 @@
 use std::ffi::CString;
 use std::fmt::Display;
 use std::io::BufRead;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
@@ -21,6 +21,7 @@ use obs::scene::{ObsScene, ObsSceneItem};
 use obs::signal::SignalConnection;
 use obs::source::ObsSource;
 use obs::video::VideoInfo;
+use obs::volmeter::ObsVolmeter;
 
 use crate::cli::Cli;
 use crate::commands::{self, Command};
@@ -45,10 +46,34 @@ fn fail_args(msg: impl Display) -> ! {
     platform::exit_process(2)
 }
 
+/// Creates a volmeter on `source` whose callback stores the latest
+/// cross-channel max peak (dBFS, f32 bits) in the returned atomic. Silence is
+/// -inf; the levels emitter clamps before serializing.
+fn attach_volmeter(source: &ObsSource) -> (ObsVolmeter, Arc<AtomicU32>) {
+    let mut volmeter = match ObsVolmeter::new() {
+        Ok(v) => v,
+        Err(e) => fail(format_args!("Failed to create volmeter: {e}")),
+    };
+    let peak_store = Arc::new(AtomicU32::new(f32::NEG_INFINITY.to_bits()));
+    let store = peak_store.clone();
+    volmeter.add_callback(move |_magnitude, peak, _input_peak| {
+        let max = peak.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+        store.store(max.to_bits(), Ordering::Relaxed);
+    });
+    if !volmeter.attach_source(source) {
+        fail("Failed to attach volmeter to audio source");
+    }
+    (volmeter, peak_store)
+}
+
 pub struct Recorder {
     output: ObsOutput,
     speakers: Vec<ObsSource>,
     mics: Vec<ObsSource>,
+    /// Volmeter + latest peak dBFS (f32 bits) per source, in CLI order
+    /// (matching the mute indices).
+    speaker_meters: Vec<(ObsVolmeter, Arc<AtomicU32>)>,
+    mic_meters: Vec<(ObsVolmeter, Arc<AtomicU32>)>,
     _display_sources: Vec<ObsSource>,
     _scene_items: Vec<ObsSceneItem>,
     _scene: ObsScene,
@@ -203,24 +228,29 @@ impl Recorder {
         //    in command-line order).
         let mut channel: u32 = 1;
         let mut speakers = Vec::new();
+        let mut speaker_meters = Vec::new();
         for (i, device_id) in cli.speaker.iter().enumerate() {
-            let settings = ObsData::new();
-            settings.set_string("device_id", device_id);
-            let source = match ObsSource::create(
-                platform::AUDIO_OUTPUT_CAPTURE_ID,
-                &format!("speaker_{i}"),
-                Some(&settings),
-            ) {
-                Ok(s) => s,
-                Err(e) => fail(format_args!(
-                    "Failed to create speaker source for '{device_id}': {e}"
-                )),
-            };
+            let (source_id, settings) = platform::audio_output_capture(device_id);
+            if source_id == "sck_audio_capture" && i > 0 {
+                fail_args(
+                    "repeated --speaker is not supported on macOS 13+: \
+                     ScreenCaptureKit captures all system audio as a single stream",
+                );
+            }
+            let source =
+                match ObsSource::create(source_id, &format!("speaker_{i}"), Some(&settings)) {
+                    Ok(s) => s,
+                    Err(e) => fail(format_args!(
+                        "Failed to create speaker source for '{device_id}': {e}"
+                    )),
+                };
             context.set_output_source(channel, Some(&source));
             channel += 1;
+            speaker_meters.push(attach_volmeter(&source));
             speakers.push(source);
         }
         let mut mics = Vec::new();
+        let mut mic_meters = Vec::new();
         for (i, device_id) in cli.microphone.iter().enumerate() {
             let settings = ObsData::new();
             settings.set_string("device_id", device_id);
@@ -236,6 +266,7 @@ impl Recorder {
             };
             context.set_output_source(channel, Some(&source));
             channel += 1;
+            mic_meters.push(attach_volmeter(&source));
             mics.push(source);
         }
 
@@ -283,6 +314,8 @@ impl Recorder {
             output,
             speakers,
             mics,
+            speaker_meters,
+            mic_meters,
             _display_sources: display_sources,
             _scene_items: scene_items,
             _scene: scene,
@@ -311,10 +344,24 @@ impl Recorder {
         let status_stop = Arc::new(AtomicBool::new(false));
         let mut status_handle: Option<std::thread::JoinHandle<()>> = None;
 
+        // Levels flow from initialization on (the pre-start WAIT phase too),
+        // not just while recording.
+        let mut levels_handle: Option<std::thread::JoinHandle<()>> = None;
+        if !self.speaker_meters.is_empty() || !self.mic_meters.is_empty() {
+            let peaks = |meters: &[(ObsVolmeter, Arc<AtomicU32>)]| {
+                meters.iter().map(|(_, p)| p.clone()).collect()
+            };
+            levels_handle = Some(status::start_levels_thread(
+                peaks(&self.speaker_meters),
+                peaks(&self.mic_meters),
+                status_stop.clone(),
+            ));
+        }
+
         // Without --pause the output starts immediately; with --pause we sit in
         // initialized-wait mode until stdin `start`.
         if !pause {
-            self.start_output();
+            self.start_output(&status_stop, &mut levels_handle);
             start_requested = true;
         }
 
@@ -327,7 +374,7 @@ impl Recorder {
             match cmd {
                 Command::Start => {
                     if !start_requested {
-                        self.start_output();
+                        self.start_output(&status_stop, &mut levels_handle);
                         start_requested = true;
                     } else if started && paused {
                         if self.output.pause(false) {
@@ -377,11 +424,21 @@ impl Recorder {
                 Command::OutputStopped(code) => {
                     // Spontaneous stop (disk full, encoder error, …): surface it
                     // immediately and exit — do not wait for `quit` (§1.3).
-                    self.finish(code, &status_stop, status_handle.take());
+                    self.finish(
+                        code,
+                        &status_stop,
+                        status_handle.take(),
+                        levels_handle.take(),
+                    );
                 }
                 Command::Quit => {
                     if !start_requested {
-                        // Cancelled before recording started (§1.2).
+                        // Cancelled before recording started (§1.2). Stop the
+                        // levels thread first so stopped_recording stays last.
+                        status_stop.store(true, Ordering::Relaxed);
+                        if let Some(handle) = levels_handle.take() {
+                            let _ = handle.join();
+                        }
                         status::emit_json(serde_json::json!({
                             "type": "stopped_recording",
                             "code": 0,
@@ -396,18 +453,33 @@ impl Recorder {
                         let remaining = deadline.saturating_duration_since(Instant::now());
                         if remaining.is_zero() {
                             // Synthetic timeout stop (§1.4).
-                            self.finish(-99, &status_stop, status_handle.take());
+                            self.finish(
+                                -99,
+                                &status_stop,
+                                status_handle.take(),
+                                levels_handle.take(),
+                            );
                         }
                         match self.cmd_rx.recv_timeout(remaining.min(STOP_WARN_INTERVAL)) {
                             Ok(Command::OutputStopped(code)) => {
-                                self.finish(code, &status_stop, status_handle.take());
+                                self.finish(
+                                    code,
+                                    &status_stop,
+                                    status_handle.take(),
+                                    levels_handle.take(),
+                                );
                             }
                             Ok(_) => {} // ignore anything else while stopping
                             Err(mpsc::RecvTimeoutError::Timeout) => {
                                 eprintln!("Warning: still waiting for the recording to stop...");
                             }
                             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                                self.finish(-99, &status_stop, status_handle.take());
+                                self.finish(
+                                    -99,
+                                    &status_stop,
+                                    status_handle.take(),
+                                    levels_handle.take(),
+                                );
                             }
                         }
                     }
@@ -417,10 +489,19 @@ impl Recorder {
     }
 
     /// Starts the output; on failure emits `stopped_recording` code -4 with the
-    /// output's last error and exits 1.
-    fn start_output(&self) {
+    /// output's last error and exits 1 (joining the levels thread first so
+    /// stopped_recording stays the last JSON line).
+    fn start_output(
+        &self,
+        status_stop: &Arc<AtomicBool>,
+        levels_handle: &mut Option<std::thread::JoinHandle<()>>,
+    ) {
         if let Err(e) = self.output.start() {
             eprintln!("Failed to start recording: {e}");
+            status_stop.store(true, Ordering::Relaxed);
+            if let Some(handle) = levels_handle.take() {
+                let _ = handle.join();
+            }
             status::emit_stopped_recording(-4, self.output.get_last_error());
             platform::exit_process(1);
         }
@@ -440,10 +521,12 @@ impl Recorder {
         code: i64,
         status_stop: &Arc<AtomicBool>,
         status_handle: Option<std::thread::JoinHandle<()>>,
+        levels_handle: Option<std::thread::JoinHandle<()>>,
     ) -> ! {
         status_stop.store(true, Ordering::Relaxed);
-        if let Some(handle) = status_handle {
-            // ≤1 s: guarantees no status line can print after stopped_recording.
+        for handle in [status_handle, levels_handle].into_iter().flatten() {
+            // ≤1 s: guarantees no status/levels line can print after
+            // stopped_recording.
             let _ = handle.join();
         }
         let error = if code == 0 {

@@ -21,7 +21,6 @@ use super::{MonitorInfo, ObsPaths};
 
 pub const GRAPHICS_MODULE: &CStr = c"libobs-d3d11";
 pub const DISPLAY_CAPTURE_ID: &str = "monitor_capture";
-pub const AUDIO_OUTPUT_CAPTURE_ID: &str = "wasapi_output_capture";
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "wasapi_input_capture";
 
 /// `EDD_GET_DEVICE_INTERFACE_NAME` — request the device interface path in
@@ -132,6 +131,14 @@ pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
     settings.set_int("method", 2);
     settings.set_bool("capture_cursor", show_cursor);
     settings
+}
+
+/// Source id + settings for a speaker (output) capture source. Must be called
+/// after modules are loaded.
+pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
+    let settings = ObsData::new();
+    settings.set_string("device_id", device_id);
+    ("wasapi_output_capture", settings)
 }
 
 pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {
