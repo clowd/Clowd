@@ -94,17 +94,20 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Position first (physical px), then size at the given scaling. The border width is
-        /// inflated outward in whole physical px plus 1 extra px of slack, so logical→physical
+        /// Position first (capture space), then size at the given scaling. The border width is
+        /// inflated outward in whole capture-space units plus 1 extra of slack, so logical→capture
         /// size rounding can never place a border pixel inside the recorded region (risk §6.4).
         /// </summary>
         private void ApplyGeometry(double scaling)
         {
-            var inflate = (int)Math.Ceiling(BorderLogicalWidth * scaling) + 1;
+            // logical → capture space: physical px on Windows (× RenderScaling); on macOS the
+            // region is CG points, which ARE logical units, so the factor is 1 regardless of Retina.
+            var toCapture = OperatingSystem.IsMacOS() ? 1.0 : scaling;
+            var inflate = (int)Math.Ceiling(BorderLogicalWidth * toCapture) + 1;
 
             Position = new PixelPoint(_region.X - inflate, _region.Y - inflate);
-            Width = (_region.Width + inflate * 2) / scaling;
-            Height = (_region.Height + inflate * 2) / scaling;
+            Width = (_region.Width + inflate * 2) / toCapture;
+            Height = (_region.Height + inflate * 2) / toCapture;
         }
     }
 }

@@ -246,7 +246,9 @@ namespace Clowd.UI
             if (_region == null || !IsVisible || _manuallyPositioned)
                 return;
 
-            var scaling = RenderScaling;
+            // logical → capture space: physical px on Windows; on macOS the region and Position
+            // are CG points == logical units, so no scaling applies even on Retina.
+            var scaling = OperatingSystem.IsMacOS() ? 1.0 : RenderScaling;
             var panelWidth = (int)Math.Ceiling(MainPanel.Bounds.Width * scaling);
             var panelHeight = (int)Math.Ceiling(MainPanel.Bounds.Height * scaling);
             if (panelWidth <= 0 || panelHeight <= 0)
@@ -341,7 +343,7 @@ namespace Clowd.UI
             var deltaX = pos.X - _mouseDownPt.X;
             var deltaY = pos.Y - _mouseDownPt.Y;
 
-            var dragDelta = 5 * RenderScaling;
+            var dragDelta = 5 * (OperatingSystem.IsMacOS() ? 1.0 : RenderScaling);
             if (Math.Abs(deltaX) > dragDelta || Math.Abs(deltaY) > dragDelta)
                 _dragging = true;
 
