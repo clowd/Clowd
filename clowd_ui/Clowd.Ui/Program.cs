@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using Avalonia;
 using Clowd.UI;
-using Clowd.Util;
 using Velopack;
 
 namespace Clowd

@@ -225,6 +225,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("Failed to save settings: " + ex);
+                SentryConfig.CaptureHandled(ex, "settings.save");
             }
         }
 

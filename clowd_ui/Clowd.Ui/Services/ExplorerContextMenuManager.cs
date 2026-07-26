@@ -58,6 +58,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("ExplorerContextMenuManager: failed to read context menu state: " + ex);
+                SentryConfig.CaptureHandled(ex, "shellreg.read-context-menu");
             }
 
             return false;
@@ -81,6 +82,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("ExplorerContextMenuManager: failed to apply context menu: " + ex);
+                SentryConfig.CaptureHandled(ex, "shellreg.apply-context-menu");
                 LastError = ex.Message;
                 return false;
             }

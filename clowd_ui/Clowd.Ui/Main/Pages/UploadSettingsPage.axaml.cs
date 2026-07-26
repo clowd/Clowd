@@ -78,6 +78,7 @@ namespace Clowd.UI.Pages
             catch (Exception ex)
             {
                 failure = UploadProviderBase.DescribeError(ex);
+                SentryConfig.CaptureHandled(ex, "upload.provider-test");
             }
             finally
             {

@@ -229,6 +229,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("UpdateService: background update tick failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "update.tick");
             }
         }
 
@@ -268,6 +269,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("UpdateService: update check failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "update.check");
                 _lastCheckUtc = DateTime.UtcNow;
                 _nextCheckUtc = _lastCheckUtc + (RetryInterval < CheckInterval ? RetryInterval : CheckInterval);
                 SetState(UpdateState.Failed, userInitiated
@@ -307,6 +309,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("UpdateService: update download failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "update.download");
                 SetState(UpdateState.Failed, "Download failed: " + ex.Message);
                 return false;
             }
@@ -355,6 +358,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("UpdateService: failed to launch the updater: " + ex);
+                SentryConfig.CaptureHandled(ex, "update.launch");
                 _restarting = false;
                 SetState(UpdateState.Failed, "Could not start the updater: " + ex.Message);
                 return;
@@ -428,6 +432,7 @@ namespace Clowd.UI
             {
                 // not a velopack install (local dev build); IsSupported stays false.
                 Debug.WriteLine("UpdateService: no update manager available: " + ex);
+                SentryConfig.CaptureHandled(ex, "update.locate-manager");
                 return null;
             }
         }

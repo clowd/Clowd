@@ -75,6 +75,7 @@ namespace Clowd
             catch (Exception ex)
             {
                 Debug.WriteLine("failed to write session preview: " + ex);
+                SentryConfig.CaptureHandled(ex, "upload.write-preview");
             }
 
             ms.Position = 0;
@@ -108,6 +109,7 @@ namespace Clowd
             catch (Exception ex)
             {
                 Debug.WriteLine("failed to write session text: " + ex);
+                SentryConfig.CaptureHandled(ex, "upload.write-text");
             }
 
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
@@ -165,6 +167,7 @@ namespace Clowd
                 catch (Exception ex)
                 {
                     Debug.WriteLine("failed to copy session preview: " + ex);
+                    SentryConfig.CaptureHandled(ex, "upload.copy-preview");
                 }
             }
 
@@ -347,6 +350,7 @@ namespace Clowd
             catch (Exception ex)
             {
                 await _uploads.FailUpload(upload, ex);
+                SentryConfig.CaptureHandled(ex, "upload.transfer");
                 return null;
             }
 
@@ -397,7 +401,11 @@ namespace Clowd
         private static void TryDeleteSession(SessionInfo session)
         {
             try { SessionManager.Current.DeleteSession(session); }
-            catch (Exception ex) { Debug.WriteLine("failed to delete session: " + ex); }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("failed to delete session: " + ex);
+                SentryConfig.CaptureHandled(ex, "upload.delete-session");
+            }
         }
 
         private static string GetPatternFileName(string extension)

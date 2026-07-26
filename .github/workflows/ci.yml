@@ -117,6 +117,16 @@ jobs:
             obs-asset: obs-express-macos-arm64.zip
             exe: ""
     runs-on: ${{ matrix.os }}
+    # lifted to the job so the debug-file upload step can test for the token in an `if:`
+    # — the secrets context is not available there, but env is.
+    #
+    # No SENTRY_ORG: an organization auth token (sntrys_…) carries the org slug in its
+    # payload and sentry-cli always prefers that over the environment. Setting the var
+    # here would only produce a "using org X rather than Y" warning on every run. A
+    # personal token would need it — org tokens are what Sentry recommends for CI.
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -158,6 +168,31 @@ jobs:
 
       - name: Build capture binary
         run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
+
+      # Sentry symbolicates the capturer's stack traces server-side from these. Without
+      # them an LTO'd release build reports mangled frames with no file or line, which is
+      # most of the value of reporting the panic at all. Matched by debug ID, so there is
+      # no release to associate and the upload can happen any time before the crash.
+      #
+      # Skipped when the token is absent (forks, and any run before the secret is set)
+      # rather than failing the build. The debug files are never packaged — the copy step
+      # below takes the executable only.
+      - name: Upload capture debug files to Sentry
+        if: env.SENTRY_AUTH_TOKEN != ''
+        shell: bash
+        run: |
+          npm install -g @sentry/cli
+          OUT="target/${{ matrix.target }}/release"
+          # name the artefacts rather than handing sentry-cli the directory, which would
+          # recurse through deps/ and build/ and upload every dependency's intermediates.
+          # The executable goes up alongside the debug file for its symbol table — frames
+          # that never made it into DWARF resolve from there.
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            DIF="$OUT/clowd_capture_wgpu.pdb"
+          else
+            DIF="$OUT/clowd_capture_wgpu.dSYM"
+          fi
+          sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
 
       - name: Copy capture binary into package
         run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/

@@ -321,6 +321,7 @@ namespace Clowd.UI
                     SessionManager.Current.DeleteSession(session);
                 } catch (Exception ex) {
                     Debug.WriteLine($"failed to discard empty session: {ex.Message}");
+                    SentryConfig.CaptureHandled(ex, "editor.discard-session");
                 }
                 return;
             }
@@ -1019,6 +1020,7 @@ namespace Clowd.UI
                     File.WriteAllBytes(_graphicsPath, bytes);
                 } catch (Exception ex) {
                     Debug.WriteLine($"failed to persist graphics.json: {ex.Message}");
+                    SentryConfig.CaptureHandled(ex, "editor.persist-graphics");
                 }
             }
 
@@ -1031,6 +1033,7 @@ namespace Clowd.UI
                     File.WriteAllBytes(_historyPath, history);
                 } catch (Exception ex) {
                     Debug.WriteLine($"failed to persist history.json: {ex.Message}");
+                    SentryConfig.CaptureHandled(ex, "editor.persist-history");
                 }
             }
         }

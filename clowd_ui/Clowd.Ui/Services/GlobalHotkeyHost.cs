@@ -92,6 +92,7 @@ namespace Clowd.UI
             {
                 _hook = null;
                 OnHookFailed(ex);
+                SentryConfig.CaptureHandled(ex, "hotkey.hook-start");
             }
         }
 
@@ -162,6 +163,7 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[GlobalHotkeyHost] hotkey callback threw: " + ex);
+                    SentryConfig.CaptureHandled(ex, "hotkey.callback");
                 }
             });
         }
@@ -204,6 +206,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("[GlobalHotkeyHost] hook dispose threw: " + ex);
+                SentryConfig.CaptureHandled(ex, "hotkey.dispose");
             }
         }
 

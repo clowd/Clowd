@@ -295,7 +295,11 @@ namespace Clowd.UI
             if (!String.IsNullOrEmpty(url))
             {
                 try { _ = ClipboardImpl.SetClipboardText(Toast.GetPrimaryClipboard(), url); }
-                catch (Exception ex) { Debug.WriteLine("failed to copy upload url to clipboard: " + ex); }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("failed to copy upload url to clipboard: " + ex);
+                    SentryConfig.CaptureHandled(ex, "uploads.copy-url");
+                }
             }
 
             const string message = "Upload URL Copied to Clipboard";
@@ -338,6 +342,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("failed to delete empty upload session: " + ex);
+                SentryConfig.CaptureHandled(ex, "uploads.delete-empty");
             }
         }
 

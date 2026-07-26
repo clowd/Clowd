@@ -184,6 +184,7 @@ namespace Clowd.UI.Helpers
             catch (Exception e)
             {
                 await ShowNoticeAsync(parent, NiceDialogIcon.Error, e.Message);
+                SentryConfig.CaptureHandled(e, "dialog.file-browser");
                 return null;
             }
 

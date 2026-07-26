@@ -222,6 +222,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("Play video failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "recents.play-video");
             }
         }
 
@@ -278,6 +279,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("Copy upload link failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "recents.copy-link");
             }
         }
 
@@ -293,6 +295,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine("Open upload link failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "recents.open-link");
             }
         }
 
@@ -312,6 +315,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, ex.Message, "Delete failed");
+                SentryConfig.CaptureHandled(ex, "recents.delete");
                 return;
             }
 

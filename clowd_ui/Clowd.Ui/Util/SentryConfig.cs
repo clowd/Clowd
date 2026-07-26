@@ -2,7 +2,7 @@ using System;
 using System.Reflection;
 using Sentry;
 
-namespace Clowd.Util
+namespace Clowd
 {
     /// <summary>
     /// Sentry (crash/error reporting) setup for the shell. <see cref="Init"/> runs at the very top
@@ -12,9 +12,11 @@ namespace Clowd.Util
     /// <remarks>
     /// <para>Release builds only. Debug builds compile every call in this class down to a no-op:
     /// local crashes belong in the debugger, not in the issue tracker.</para>
-    /// <para>The Rust capturer (clowd_capture/src/telemetry/crash.rs) reports into the same Sentry
-    /// project under the same rule. The two are told apart by the <c>app</c> tag and share a
-    /// release name, so a crash in either process lines up against the same release.</para>
+    /// <para>Exceptions only — there is deliberately no logging bridge on this side. The Rust
+    /// capturer additionally routes its <c>error!</c> log calls to Sentry
+    /// (clowd_capture/src/telemetry/crash.rs); the shell does not.</para>
+    /// <para>Lives in the root <c>Clowd</c> namespace so every call site resolves it without a
+    /// using directive, the same way <see cref="Constants"/> does.</para>
     /// </remarks>
     internal static class SentryConfig
     {
@@ -66,12 +68,51 @@ namespace Clowd.Util
 #endif
         }
 
-        /// <summary>Reports an exception the app has already handled. No-ops in debug builds, which
-        /// is why callers go through here rather than touching <see cref="SentrySdk"/> directly.</summary>
-        public static void CaptureException(Exception ex)
+        /// <summary>
+        /// Reports an exception the app caught and recovered from. Use this in every
+        /// <c>catch</c> that swallows a failure — those are invisible otherwise, and doubly so in
+        /// release builds where <c>Debug.WriteLine</c> compiles away to nothing.
+        /// </summary>
+        /// <param name="ex">The caught exception.</param>
+        /// <param name="operation">
+        /// Short stable identifier for what was being attempted, e.g. <c>"upload.clipboard"</c>.
+        /// Becomes the <c>operation</c> tag, so one noisy subsystem can be filtered or muted in
+        /// Sentry without silencing the rest of the app.
+        /// </param>
+        /// <remarks>
+        /// Cancellation is dropped rather than reported: <see cref="OperationCanceledException"/>
+        /// is control flow here (shutdown, user-cancelled dialogs), not a fault, and reporting it
+        /// would bury the real failures.
+        /// </remarks>
+        public static void CaptureHandled(Exception ex, string operation)
         {
 #if !DEBUG
-            SentrySdk.CaptureException(ex);
+            if (ex is null || ex is OperationCanceledException)
+                return;
+
+            ex.SetSentryMechanism("Clowd.Handled", handled: true);
+
+            SentrySdk.CaptureException(ex, scope =>
+            {
+                scope.SetTag("operation", operation);
+                // the app kept running, so this is not fatal — but it is still a real defect
+                scope.Level = SentryLevel.Error;
+            });
+#endif
+        }
+
+        /// <summary>Reports an exception that escaped to a global handler and was only stopped
+        /// there. No-ops in debug builds.</summary>
+        /// <param name="mechanism">Which global handler caught it, e.g.
+        /// <c>"Dispatcher.UnhandledException"</c>.</param>
+        public static void CaptureUnhandled(Exception ex, string mechanism)
+        {
+#if !DEBUG
+            if (ex is null)
+                return;
+
+            ex.SetSentryMechanism(mechanism, handled: false);
+            SentrySdk.CaptureException(ex, scope => scope.Level = SentryLevel.Fatal);
 #endif
         }
 

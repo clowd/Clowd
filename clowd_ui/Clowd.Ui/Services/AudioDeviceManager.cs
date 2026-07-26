@@ -86,6 +86,7 @@ namespace Clowd.UI
                     catch (Exception ex)
                     {
                         Debug.WriteLine("No default audio endpoint for " + type + ": " + ex.Message);
+                        SentryConfig.CaptureHandled(ex, "audio.default-endpoint");
                     }
 
                     list.Add(new AudioDeviceInfo(DefaultDeviceId, type, defName));
@@ -107,6 +108,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to enumerate audio devices (" + type + "): " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "audio.enumerate");
                 if (list.Count == 0)
                     list.Add(new AudioDeviceInfo(DefaultDeviceId, type, "Default device"));
             }
@@ -189,6 +191,7 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Audio level listener failed for '{DeviceId}': {ex.Message}");
+                    SentryConfig.CaptureHandled(ex, "audio.level-listener");
                     _peak = 0f;
                 }
                 finally

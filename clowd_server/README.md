@@ -3,8 +3,9 @@
 A single Cloudflare Worker (Rust → WASM, via [`workers-rs`](https://github.com/cloudflare/workers-rs))
 that hands out a shareable download URL **before** an upload finishes, live-tails the bytes to
 recipients as they arrive, relays them to the user's own Azure Blob / S3-compatible bucket, and
-then `301`s to the final destination. It supersedes the legacy C#/ASP.NET Core docker server in
-this folder (`Clowd.Server`, kept as the semantic reference); see `REFACTOR.md` for the full spec.
+then `301`s to the final destination. It supersedes the legacy C#/ASP.NET Core docker server
+that previously lived in this folder (deleted; git history has it); see `REFACTOR.md` for the
+full spec.
 
 - **Worker `fetch`** — router (`/`, `/healthz`), control plane (`/api/v1/uploads…`), and the
   live-tail `GET /u/{id}`.

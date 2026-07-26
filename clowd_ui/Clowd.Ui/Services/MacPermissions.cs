@@ -107,6 +107,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("[MacPermissions] failed to open System Settings: " + ex);
+                SentryConfig.CaptureHandled(ex, "macperm.open-settings");
             }
 
             // the user is expected to change the setting over in System Settings while our UI stays
@@ -143,6 +144,7 @@ namespace Clowd.UI
                     // an older macOS without the symbol (it landed in 10.15) would throw here; the
                     // permission does not exist there, so nothing is being withheld.
                     Debug.WriteLine("[MacPermissions] CGPreflightScreenCaptureAccess unavailable: " + ex);
+                    SentryConfig.CaptureHandled(ex, "macperm.preflight-screen");
                     return true;
                 }
             }
@@ -156,6 +158,7 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[MacPermissions] CGRequestScreenCaptureAccess unavailable: " + ex);
+                    SentryConfig.CaptureHandled(ex, "macperm.request-screen");
                     return false;
                 }
             }
@@ -169,6 +172,7 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[MacPermissions] AXIsProcessTrusted unavailable: " + ex);
+                    SentryConfig.CaptureHandled(ex, "macperm.ax-trusted");
                     return true;
                 }
             }
@@ -195,6 +199,7 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[MacPermissions] AXIsProcessTrustedWithOptions failed: " + ex);
+                    SentryConfig.CaptureHandled(ex, "macperm.ax-trusted-opts");
                     return false;
                 }
                 finally
@@ -252,6 +257,7 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine("[MacPermissions] could not resolve kCFBooleanTrue: " + ex);
+                    SentryConfig.CaptureHandled(ex, "macperm.cfbool");
                     return IntPtr.Zero;
                 }
             }
