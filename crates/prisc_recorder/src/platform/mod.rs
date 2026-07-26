@@ -26,6 +26,10 @@ pub struct MonitorInfo {
     pub y: i32,
     pub width: u32,
     pub height: u32,
+    /// Capture pixels per coordinate-space unit: 1.0 on Windows (coords are
+    /// already physical px); the Retina backing scale on macOS, where coords
+    /// are CG points but the capture source emits pixel-sized frames.
+    pub scale: f64,
     pub is_primary: bool,
 }
 
@@ -66,6 +70,7 @@ mod tests {
                 y: 0,
                 width: 2560,
                 height: 1440,
+                scale: 1.0,
                 is_primary: true,
             },
             MonitorInfo {
@@ -75,6 +80,7 @@ mod tests {
                 y: 200,
                 width: 1920,
                 height: 1080,
+                scale: 1.0,
                 is_primary: false,
             },
         ]
@@ -113,6 +119,7 @@ mod tests {
                 y: 0,
                 width: 100,
                 height: 100,
+                scale: 1.0,
                 is_primary: true,
             },
             MonitorInfo {
@@ -122,6 +129,7 @@ mod tests {
                 y: 0,
                 width: 100,
                 height: 100,
+                scale: 1.0,
                 is_primary: false,
             },
         ];

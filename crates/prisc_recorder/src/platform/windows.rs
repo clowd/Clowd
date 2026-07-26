@@ -110,6 +110,7 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
             y: rc.top,
             width: (rc.right - rc.left).max(0) as u32,
             height: (rc.bottom - rc.top).max(0) as u32,
+            scale: 1.0,
             is_primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
         });
     }

@@ -193,6 +193,7 @@ impl Recorder {
             };
             let scene_item = scene.add(&source);
             scene_item.set_pos(item.pos.0, item.pos.1);
+            scene_item.set_scale(item.scale, item.scale);
             display_sources.push(source);
             scene_items.push(scene_item);
         }

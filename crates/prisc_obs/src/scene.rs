@@ -57,6 +57,22 @@ impl ObsSceneItem {
             obs_sys::obs_sceneitem_set_pos(self.ptr, &pos as *const Vec2 as *const obs_sys::vec2)
         };
     }
+
+    pub fn set_scale(&self, x: f32, y: f32) {
+        // Same vec2 mirror as set_pos.
+        #[repr(C)]
+        struct Vec2 {
+            x: f32,
+            y: f32,
+        }
+        let scale = Vec2 { x, y };
+        unsafe {
+            obs_sys::obs_sceneitem_set_scale(
+                self.ptr,
+                &scale as *const Vec2 as *const obs_sys::vec2,
+            )
+        };
+    }
 }
 
 impl Clone for ObsSceneItem {

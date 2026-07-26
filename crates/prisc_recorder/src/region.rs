@@ -15,7 +15,8 @@ pub struct Rect {
 
 #[derive(Debug, Clone)]
 pub struct RegionPlan {
-    /// Canvas size: the region size forced even (min 2).
+    /// Canvas size in capture PIXELS: the region size × the densest
+    /// intersected display's scale, forced even (min 2).
     pub canvas: (u32, u32),
     pub items: Vec<PlannedItem>,
 }
@@ -24,8 +25,11 @@ pub struct RegionPlan {
 pub struct PlannedItem {
     /// Index into the monitor slice given to `plan_region`.
     pub monitor_index: usize,
-    /// Scene-item position: display_origin - region_origin.
+    /// Scene-item position in canvas px: (display_origin - region_origin) × canvas scale.
     pub pos: (f32, f32),
+    /// Scene-item scale (canvas scale / display scale): maps the display's
+    /// pixel-sized frames onto the canvas density. 1.0 everywhere on Windows.
+    pub scale: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -73,23 +77,46 @@ pub fn parse_region(s: &str) -> Result<Rect, RegionError> {
     Ok(Rect { x, y, w, h })
 }
 
-/// Canvas = region (forced even, min 2); one item per monitor whose bounds
-/// intersect the region, positioned at `display_origin - region_origin`.
+/// Canvas = region × canvas scale (forced even, min 2); one item per monitor
+/// whose bounds intersect the region. Region and monitor bounds are in the
+/// §1.1 capture coordinate space (Windows: physical px; macOS: CG points);
+/// the canvas scale — the max `MonitorInfo::scale` among intersected displays
+/// — converts to capture pixels so the densest display is recorded lossless.
 pub fn plan_region(region: Rect, monitors: &[MonitorInfo]) -> Result<RegionPlan, RegionError> {
-    let mut items = Vec::new();
-    for (i, m) in monitors.iter().enumerate() {
-        if rects_intersect(region, m) {
-            items.push(PlannedItem {
-                monitor_index: i,
-                pos: ((m.x - region.x) as f32, (m.y - region.y) as f32),
-            });
-        }
-    }
-    if items.is_empty() {
+    let intersecting: Vec<usize> = monitors
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| rects_intersect(region, m))
+        .map(|(i, _)| i)
+        .collect();
+    if intersecting.is_empty() {
         return Err(RegionError::NoDisplayInBounds);
     }
+
+    let canvas_scale = intersecting
+        .iter()
+        .map(|&i| monitors[i].scale)
+        .fold(1.0f64, f64::max);
+
+    let items = intersecting
+        .iter()
+        .map(|&i| {
+            let m = &monitors[i];
+            PlannedItem {
+                monitor_index: i,
+                pos: (
+                    ((m.x - region.x) as f64 * canvas_scale) as f32,
+                    ((m.y - region.y) as f64 * canvas_scale) as f32,
+                ),
+                scale: (canvas_scale / m.scale) as f32,
+            }
+        })
+        .collect();
+
+    let canvas_w = ((region.w as f64 * canvas_scale).round() as u32 & !1).max(2);
+    let canvas_h = ((region.h as f64 * canvas_scale).round() as u32 & !1).max(2);
     Ok(RegionPlan {
-        canvas: ((region.w & !1).max(2), (region.h & !1).max(2)),
+        canvas: (canvas_w, canvas_h),
         items,
     })
 }
@@ -124,6 +151,10 @@ mod tests {
     use super::*;
 
     fn mon(x: i32, y: i32, w: u32, h: u32) -> MonitorInfo {
+        mon_scaled(x, y, w, h, 1.0)
+    }
+
+    fn mon_scaled(x: i32, y: i32, w: u32, h: u32, scale: f64) -> MonitorInfo {
         MonitorInfo {
             id: format!("mon-{x},{y}"),
             alt_id: None,
@@ -131,6 +162,7 @@ mod tests {
             y,
             width: w,
             height: h,
+            scale,
             is_primary: x == 0 && y == 0,
         }
     }
@@ -272,6 +304,51 @@ mod tests {
         )
         .unwrap();
         assert_eq!(plan.canvas, (800, 600));
+    }
+
+    #[test]
+    fn plan_retina_single_monitor() {
+        // 2x Retina display: canvas and item pos are in pixels; the source
+        // already emits pixel-sized frames, so the item scale stays 1.
+        let monitors = [mon_scaled(0, 0, 1728, 1117, 2.0)];
+        let plan = plan_region(
+            Rect {
+                x: 100,
+                y: 200,
+                w: 800,
+                h: 600,
+            },
+            &monitors,
+        )
+        .unwrap();
+        assert_eq!(plan.canvas, (1600, 1200));
+        assert_eq!(plan.items[0].pos, (-200.0, -400.0));
+        assert_eq!(plan.items[0].scale, 1.0);
+    }
+
+    #[test]
+    fn plan_mixed_scale_span() {
+        // Region spans a 2x display and a 1x display to its right: canvas
+        // density follows the denser display; the 1x frames upscale 2x.
+        let monitors = [
+            mon_scaled(0, 0, 1728, 1117, 2.0),
+            mon_scaled(1728, 0, 1920, 1080, 1.0),
+        ];
+        let plan = plan_region(
+            Rect {
+                x: 1600,
+                y: 100,
+                w: 400,
+                h: 300,
+            },
+            &monitors,
+        )
+        .unwrap();
+        assert_eq!(plan.canvas, (800, 600));
+        assert_eq!(plan.items[0].pos, (-3200.0, -200.0));
+        assert_eq!(plan.items[0].scale, 1.0);
+        assert_eq!(plan.items[1].pos, (256.0, -200.0));
+        assert_eq!(plan.items[1].scale, 2.0);
     }
 
     #[test]

@@ -24,6 +24,10 @@ extern "C" {
     fn CGDisplayBounds(display: u32) -> CGRect;
     fn CGMainDisplayID() -> u32;
     fn CGDisplayCreateUUIDFromDisplayID(display: u32) -> *const std::ffi::c_void;
+    fn CGDisplayCopyDisplayMode(display: u32) -> *mut std::ffi::c_void;
+    fn CGDisplayModeGetPixelWidth(mode: *mut std::ffi::c_void) -> usize;
+    fn CGDisplayModeGetWidth(mode: *mut std::ffi::c_void) -> usize;
+    fn CGDisplayModeRelease(mode: *mut std::ffi::c_void);
     fn CFUUIDCreateString(
         allocator: *const std::ffi::c_void,
         uuid: *const std::ffi::c_void,
@@ -96,6 +100,24 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
     for &display_id in display_ids.iter().take(count as usize) {
         let bounds = unsafe { CGDisplayBounds(display_id) };
 
+        // Retina backing scale = current mode pixel width / point width; SCK
+        // captures at the same mode's pixel resolution.
+        let scale = unsafe {
+            let mode = CGDisplayCopyDisplayMode(display_id);
+            if mode.is_null() {
+                1.0
+            } else {
+                let px = CGDisplayModeGetPixelWidth(mode) as f64;
+                let pt = CGDisplayModeGetWidth(mode) as f64;
+                CGDisplayModeRelease(mode);
+                if px > 0.0 && pt > 0.0 {
+                    px / pt
+                } else {
+                    1.0
+                }
+            }
+        };
+
         let uuid_ref = unsafe { CGDisplayCreateUUIDFromDisplayID(display_id) };
         let uuid = if !uuid_ref.is_null() {
             let cfstr = unsafe { CFUUIDCreateString(std::ptr::null(), uuid_ref) };
@@ -116,6 +138,7 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
             y: bounds.origin.y as i32,
             width: bounds.size.width as u32,
             height: bounds.size.height as u32,
+            scale,
             is_primary: display_id == main_display,
         });
     }
