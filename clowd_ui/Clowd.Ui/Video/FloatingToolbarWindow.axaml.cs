@@ -409,11 +409,14 @@ namespace Clowd.UI
         private static (Control bar, Rectangle fill) BuildMeterBar()
         {
             var track = new Rectangle { Fill = Brushes.White, Opacity = 0.6 };
+            // driven by ScaleY, not Height: an explicit Height feeds the button's measure
+            // pass (the overlay presenter spans the contentGrid rows) and inflates the Auto
+            // label row when the meter peaks, jiggling the button content
             var fill = new Rectangle
             {
                 Fill = AppStyles.AccentBackgroundBrush,
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Height = 0,
+                RenderTransformOrigin = new RelativePoint(0.5, 1, RelativeUnit.Relative),
+                RenderTransform = new ScaleTransform(1, 0),
             };
 
             var bar = new Grid
@@ -435,25 +438,15 @@ namespace Clowd.UI
         /// or the capturer was torn down — the fill empties rather than freezing.</summary>
         public void SetAudioLevels(double? micDb, double? spkDb)
         {
-            SetMeterFill(_micBar, _micFill, micDb);
-            SetMeterFill(_spkBar, _spkFill, spkDb);
+            SetMeterFill(_micFill, micDb);
+            SetMeterFill(_spkFill, spkDb);
         }
 
-        private static void SetMeterFill(Control bar, Rectangle fill, double? db)
+        private static void SetMeterFill(Rectangle fill, double? db)
         {
-            if (db == null)
-            {
-                fill.Height = 0;
-                return;
-            }
-
-            var trackHeight = bar.Bounds.Height;
-            if (trackHeight <= 0)
-                return; // layout hasn't run yet; the next 100 ms update self-heals
-
             // dBFS → percent, same -60 dB floor mapping the old WASAPI/CoreAudio listeners used
-            var percent = Math.Clamp(db.Value / 60d * 100d + 100d, 0d, 100d);
-            fill.Height = percent / 100d * trackHeight;
+            var percent = db == null ? 0d : Math.Clamp(db.Value / 60d * 100d + 100d, 0d, 100d);
+            ((ScaleTransform)fill.RenderTransform!).ScaleY = percent / 100d;
         }
 
         private void UpdateMeterVisibility()
@@ -461,9 +454,9 @@ namespace Clowd.UI
             _micBar.IsVisible = _micEnabled;
             _spkBar.IsVisible = _spkEnabled;
             if (!_micEnabled)
-                _micFill.Height = 0;
+                SetMeterFill(_micFill, null);
             if (!_spkEnabled)
-                _spkFill.Height = 0;
+                SetMeterFill(_spkFill, null);
         }
 
         private void QueueSettingsSave()
