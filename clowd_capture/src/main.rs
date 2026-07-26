@@ -29,16 +29,28 @@ use clap::Parser;
 fn main() -> anyhow::Result<()> {
     let args = settings::CliArgs::parse();
 
-    let _ = simplelog::TermLogger::init(
+    telemetry::crash::install_logger(simplelog::TermLogger::new(
         log::LevelFilter::Info,
         simplelog::Config::default(),
         simplelog::TerminalMode::Mixed,
         simplelog::ColorChoice::Auto,
-    );
+    ));
 
     // held for the rest of main: dropping the guard flushes anything still queued
     let _sentry = telemetry::crash::init();
 
+    // run() bails out with `?` in several places, and an Err return is not a panic —
+    // the hook would never see it. Report it here, then hand it back to the runtime
+    // so the exit code and stderr output are unchanged (the shell reads both:
+    // ScreenCaptureService.LaunchAsync).
+    let result = run(args);
+    if let Err(err) = &result {
+        telemetry::crash::capture_error(err);
+    }
+    result
+}
+
+fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     system::SystemInterop::init();
 
     // The shell preflights this before spawning us and owns the whole permission

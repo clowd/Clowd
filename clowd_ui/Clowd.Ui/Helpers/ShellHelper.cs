@@ -41,6 +41,7 @@ namespace Clowd.UI.Helpers
             catch (Exception ex)
             {
                 Debug.WriteLine("RevealFileInFolder failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "shell.reveal-file");
             }
         }
     }

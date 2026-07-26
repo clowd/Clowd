@@ -65,6 +65,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("IdleMonitor: failed to read system idle time: " + ex);
+                SentryConfig.CaptureHandled(ex, "idle.read");
             }
 
             return null;

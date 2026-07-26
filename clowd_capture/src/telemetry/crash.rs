@@ -1,16 +1,26 @@
-//! Crash reporting (Sentry).
+//! Error and crash reporting (Sentry).
 //!
-//! Release builds only — in a debug build [`init`] returns immediately and no
-//! hook is installed, because local crashes belong in a debugger rather than in
-//! the issue tracker.
+//! Release builds only — in a debug build [`init`] returns immediately and the
+//! plain terminal logger is installed unwrapped, because local failures belong in
+//! a debugger rather than in the issue tracker.
 //!
 //! Reports into the same Sentry project as the C# shell
 //! (clowd_ui/Clowd.Ui/Util/SentryConfig.cs) under the same rule. The two are told
-//! apart by the `app` tag and share a release name, so a crash in either process
+//! apart by the `app` tag and share a release name, so a failure in either process
 //! lines up against the same release.
+//!
+//! Three things reach Sentry:
+//!
+//! 1. Panics, via the SDK's own hook (installed by `sentry::init`). It captures
+//!    *and* flushes, so no wrapper is needed.
+//! 2. Every `error!()` in the crate, via the `log` bridge in [`install_logger`].
+//!    `warn!()` and below become breadcrumbs attached to whatever is reported next.
+//! 3. A hard failure out of `run()`, via [`capture_error`] — an `Err` return is not
+//!    a panic and nothing else would ever see it.
 
 use std::borrow::Cow;
-use std::time::Duration;
+
+use sentry::integrations::log::{LogFilter, SentryLogger};
 
 /// Client-side DSN. These are not secrets — they are meant to ship inside the
 /// application and only grant permission to submit events.
@@ -21,19 +31,42 @@ const DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.se
 /// covers both processes.
 const OPT_OUT_VAR: &str = "CLOWD_DISABLE_TELEMETRY";
 
-/// How long a panicking process is allowed to spend pushing its report out.
-const FLUSH_TIMEOUT: Duration = Duration::from_secs(2);
+/// True when this build reports at all. Debug builds never do.
+const fn reporting_compiled_in() -> bool {
+    !cfg!(debug_assertions)
+}
+
+/// Installs the process logger, bridging it into Sentry in release builds:
+/// `error!` becomes an event, everything else becomes a breadcrumb so a report
+/// arrives with the run-up to the failure attached.
+///
+/// Takes the terminal logger as the destination rather than building it here so
+/// `main` keeps ownership of the log level and formatting.
+pub fn install_logger(dest: Box<dyn log::Log>) {
+    let installed = if reporting_compiled_in() && !opted_out() {
+        let logger = SentryLogger::with_dest(dest).filter(|md| match md.level() {
+            log::Level::Error => LogFilter::Event,
+            _ => LogFilter::Breadcrumb,
+        });
+        log::set_boxed_logger(Box::new(logger))
+    } else {
+        log::set_boxed_logger(dest)
+    };
+
+    if installed.is_ok() {
+        log::set_max_level(log::LevelFilter::Info);
+    }
+}
 
 /// Starts Sentry. The returned guard flushes queued events when dropped; hold it
 /// for the lifetime of `main`. `None` means reporting is off — a debug build, the
 /// user opted out, or the client refused the DSN.
 pub fn init() -> Option<sentry::ClientInitGuard> {
-    if cfg!(debug_assertions) {
-        debug!("debug build: crash reporting is off");
+    if !reporting_compiled_in() {
         return None;
     }
 
-    if std::env::var_os(OPT_OUT_VAR).is_some_and(|v| !v.is_empty()) {
+    if opted_out() {
         info!("crash reporting disabled by {OPT_OUT_VAR}");
         return None;
     }
@@ -44,6 +77,8 @@ pub fn init() -> Option<sentry::ClientInitGuard> {
             release: Some(release()),
             environment: Some(Cow::Borrowed("production")),
             attach_stacktrace: true,
+            auto_session_tracking: true,
+            session_mode: sentry::SessionMode::Application,
             // no window titles, file paths, or captured pixels
             send_default_pii: false,
             ..Default::default()
@@ -51,7 +86,9 @@ pub fn init() -> Option<sentry::ClientInitGuard> {
     ));
 
     if !guard.is_enabled() {
-        warn!("sentry client did not initialise; crash reporting is off");
+        // can't warn!() through the bridge here — it would try to report the
+        // failure to report
+        eprintln!("sentry client did not initialise; crash reporting is off");
         return None;
     }
 
@@ -59,23 +96,20 @@ pub fn init() -> Option<sentry::ClientInitGuard> {
         scope.set_tag("app", "clowd_capture");
     });
 
-    install_flushing_panic_hook();
     Some(guard)
 }
 
-/// `sentry::init` installs a panic hook that captures the event but does not wait
-/// for it to be sent. The workspace release profile sets `panic = "abort"`, so the
-/// process dies the moment that hook returns and the background transport never
-/// drains. Wrapping the hook lets the capture happen first and then blocks on a
-/// flush, which is the only reason a panic report survives an aborting build.
-fn install_flushing_panic_hook() {
-    let previous = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        previous(info);
-        if let Some(client) = sentry::Hub::current().client() {
-            client.flush(Some(FLUSH_TIMEOUT));
-        }
-    }));
+/// Reports a fatal error that is on its way out of `main`. An `Err` return is not
+/// a panic, so the panic hook never sees it; without this the process would exit
+/// non-zero with nothing but a line on stderr.
+pub fn capture_error(err: &anyhow::Error) {
+    if reporting_compiled_in() {
+        sentry::integrations::anyhow::capture_anyhow(err);
+    }
+}
+
+fn opted_out() -> bool {
+    std::env::var_os(OPT_OUT_VAR).is_some_and(|v| !v.is_empty())
 }
 
 /// `clowd@<version>`, matching the shell's release name. `CLOWD_VERSION` is stamped

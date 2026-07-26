@@ -131,6 +131,7 @@ namespace Clowd.UI
                 catch (Exception ex)
                 {
                     Debug.WriteLine("Failed to kill wedged recording process: " + ex.Message);
+                    SentryConfig.CaptureHandled(ex, "obs.kill-wedged");
                 }
 
                 // bounded in case even Kill could not take the process down; a TimeoutException
@@ -197,6 +198,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Error shutting down recording process: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "obs.shutdown");
             }
             finally
             {
@@ -216,6 +218,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Recording stdout pump failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "obs.stdout-pump");
             }
 
             // stdout EOF: the process is gone (or going). EOF is only reached after every
@@ -234,13 +237,18 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Recording stderr pump failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "obs.stderr-pump");
             }
         }
 
         private async Task OnProcessEndedAsync()
         {
             try { await _proc.WaitForExitAsync(); }
-            catch (Exception ex) { Debug.WriteLine("WaitForExitAsync failed: " + ex.Message); }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("WaitForExitAsync failed: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "obs.wait-for-exit");
+            }
 
             // any exit without a preceding stopped_recording is a fatal error, regardless of
             // exit code (§1.4 — never key off the exit code alone).
@@ -301,6 +309,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Unparseable recording protocol line: " + trimmed + " (" + ex.Message + ")");
+                SentryConfig.CaptureHandled(ex, "obs.protocol-parse");
                 AppendLog(trimmed);
             }
         }
@@ -345,6 +354,7 @@ namespace Clowd.UI
             {
                 // the process may already be dead; commands are best-effort.
                 Debug.WriteLine($"Failed to write '{command}' to recording process stdin: {ex.Message}");
+                SentryConfig.CaptureHandled(ex, "obs.write-stdin");
             }
         }
 

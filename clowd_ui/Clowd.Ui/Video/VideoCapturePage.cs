@@ -120,6 +120,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to open recording session: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.open");
                 if (!_closing)
                     OnCriticalError(this, ex.Message);
             }
@@ -215,6 +216,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to start recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.start");
                 if (!_closing)
                     OnCriticalError(this, ex.Message);
             }
@@ -265,6 +267,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to finish recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.finish");
                 if (!_closing)
                     OnCriticalError(this, ex.Message);
             }
@@ -291,6 +294,7 @@ namespace Clowd.UI
                     catch (Exception ex)
                     {
                         Debug.WriteLine("Error stopping recording during cancel: " + ex.Message);
+                        SentryConfig.CaptureHandled(ex, "video.cancel-stop");
                     }
                 }
 
@@ -306,6 +310,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Error cancelling recording session: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.cancel");
                 Close();
             }
         }
@@ -325,6 +330,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Error toggling recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.toggle");
             }
         }
 
@@ -355,6 +361,7 @@ namespace Clowd.UI
                     catch (Exception ex)
                     {
                         Debug.WriteLine("Error stopping recording during app exit: " + ex.Message);
+                        SentryConfig.CaptureHandled(ex, "video.exit-stop");
                     }
                 }
 
@@ -368,6 +375,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Error shutting down recording session: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.shutdown");
             }
 
             Close();
@@ -464,6 +472,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to invalidate the pending recording process: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.invalidate");
             }
         }
 
@@ -558,6 +567,7 @@ namespace Clowd.UI
                         catch (Exception ex)
                         {
                             Debug.WriteLine("Failed to open error log: " + ex.Message);
+                            SentryConfig.CaptureHandled(ex, "video.open-error-log");
                         }
                     }
                 }
@@ -571,6 +581,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Error handling recording failure: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.handle-failure");
                 Close();
             }
         }
@@ -629,6 +640,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to write recording error log: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "video.write-error-log");
                 return null;
             }
         }
@@ -659,6 +671,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to delete session directory: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "video.delete-session-dir");
             }
         }
     }

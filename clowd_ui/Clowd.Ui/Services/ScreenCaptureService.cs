@@ -170,6 +170,17 @@ namespace Clowd.UI
                         return;
                     }
 
+                    // The capturer reports its own panics, but it cannot report the ways it dies
+                    // without running Rust code — a native fault in a GPU driver, an abort out of
+                    // an FFI frame, or a kill. Its exit code and stderr are all that survives
+                    // those, so report from this side. Keep the message free of the exit code so
+                    // Sentry groups every capturer death into one issue; the specifics ride along
+                    // in Data.
+                    var crash = new InvalidOperationException("Capture process exited unexpectedly");
+                    crash.Data["exit_code"] = process.ExitCode;
+                    crash.Data["stderr"] = SummarizeStdErr(stderr);
+                    SentryConfig.CaptureHandled(crash, "capture.process-crash");
+
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
                         $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeStdErr(stderr)}",
                         "Screen capture failed");
@@ -199,6 +210,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Screen capture failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "capture.screen");
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.Message,
                     "An error occurred while capturing the screen");
             }
@@ -371,6 +383,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to read capture action file: " + ex);
+                SentryConfig.CaptureHandled(ex, "capture.read-action-file");
             }
 
             var jsonPath = Path.Combine(sessionDir, "session.json");
@@ -407,6 +420,7 @@ namespace Clowd.UI
                     catch (Exception ex)
                     {
                         Debug.WriteLine("Failed to delete video action file: " + ex);
+                        SentryConfig.CaptureHandled(ex, "capture.delete-action-file");
                     }
 
                     return new CaptureResult { Action = CaptureAction.Video, Region = region, SessionDir = sessionDir };
@@ -469,6 +483,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to delete session directory: " + ex);
+                SentryConfig.CaptureHandled(ex, "capture.delete-session-dir");
             }
         }
     }

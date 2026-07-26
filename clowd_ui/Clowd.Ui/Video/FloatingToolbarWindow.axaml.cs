@@ -517,6 +517,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to save recording toggle settings: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "video.save-toggle-settings");
             }
         }
     }

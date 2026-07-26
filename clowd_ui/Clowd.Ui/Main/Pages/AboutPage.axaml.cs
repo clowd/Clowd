@@ -77,6 +77,7 @@ namespace Clowd.UI.Pages
             {
                 // The credits list is non-essential; a load failure must not break the About page.
                 Debug.WriteLine($"Failed to load credits.json: {ex}");
+                SentryConfig.CaptureHandled(ex, "about.load-credits");
                 return new CreditsData();
             }
         }

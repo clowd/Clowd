@@ -62,6 +62,7 @@ namespace Clowd.Util
             {
                 // stale or inaccessible named mutex — assume we are the first instance.
                 Debug.WriteLine("MutexArgsForwarder: failed to acquire named mutex: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "mutex.acquire");
                 _mutex = null;
                 created = true;
             }
@@ -165,6 +166,7 @@ namespace Clowd.Util
                 catch (Exception ex)
                 {
                     Debug.WriteLine("MutexArgsForwarder: unable to receive named pipe connection request: " + ex);
+                    SentryConfig.CaptureHandled(ex, "mutex.pipe-accept");
 
                     // a crashed previous instance can leave a stale unix domain socket behind which
                     // prevents the server pipe from binding — try removing it once and retrying.

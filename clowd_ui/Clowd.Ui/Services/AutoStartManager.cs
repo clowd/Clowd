@@ -59,6 +59,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("AutoStartManager: failed to read auto-start state: " + ex);
+                SentryConfig.CaptureHandled(ex, "shellreg.read-autostart");
             }
 
             return false;
@@ -85,6 +86,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("AutoStartManager: failed to apply auto-start: " + ex);
+                SentryConfig.CaptureHandled(ex, "shellreg.apply-autostart");
                 LastError = ex.Message;
                 return false;
             }

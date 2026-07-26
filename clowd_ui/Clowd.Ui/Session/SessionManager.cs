@@ -45,6 +45,7 @@ namespace Clowd
                 catch (Exception e)
                 {
                     Debug.WriteLine("Unable to load session: " + jsonPath + Environment.NewLine + e);
+                    SentryConfig.CaptureHandled(e, "session.load");
                 }
             }
 

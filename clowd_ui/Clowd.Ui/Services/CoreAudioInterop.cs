@@ -108,6 +108,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("CoreAudio enumeration failed: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "audio.coreaudio-enumerate");
             }
 
             return result;

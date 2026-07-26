@@ -47,11 +47,17 @@ block2 = "0.6"
 naga = "29.0"
 libloading = "0.9"
 # rustls rather than the default native-tls: keeps the capturer off OpenSSL/schannel and
-# builds identically on every target we ship.
+# builds identically on every target we ship. "debug-images" ships the loaded-module list
+# Sentry needs to symbolicate native frames; "log" bridges the log crate (see
+# telemetry/crash.rs) and "anyhow" preserves the error chain when main bails out.
 sentry = { version = "0.48", default-features = false, features = [
+    "anyhow",
     "backtrace",
     "contexts",
+    "debug-images",
+    "log",
     "panic",
+    "release-health",
     "reqwest",
     "rustls",
 ] }
@@ -60,10 +66,18 @@ sentry = { version = "0.48", default-features = false, features = [
 [profile.release]
 opt-level = 3            # optimize for performance
 lto = true               # link-time optimization
-debug = false            # disable debug info
+# Debug info exists for one reason: readable Sentry stack traces. "1" is line tables
+# only — file and line for every frame, without the type/variable DWARF that full
+# debug info would add. "packed" collects it into a companion debug file (.dSYM on
+# macOS, .pdb on Windows) that CI uploads to Sentry; it is the only value Windows-MSVC
+# supports, so it is safe to set for every target in the matrix.
+debug = 1
+split-debuginfo = "packed"
 debug-assertions = false # disable debug assertions
 overflow-checks = false  # disable overflow checks
-panic = "abort"          # abort on panic
+# unwind (the default) rather than abort: a panic in one render worker unwinds that
+# thread instead of taking the whole capture down with it, and Drop still runs. The
+# panic hook — and so Sentry reporting — fires identically either way.
 incremental = false      # disable incremental compilation
 codegen-units = 1        # compile all code into a single unit
 rpath = false            # disable rpath

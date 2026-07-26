@@ -1,4 +1,7 @@
 <Project>
+  <PropertyGroup>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
   <!-- Version stamping for all UI assemblies comes from nbgv (version.json at repo root):
        patch = git height since version.json introduced 4.0. -->
   <ItemGroup>
