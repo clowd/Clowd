@@ -53,6 +53,9 @@ namespace Clowd.UI.Config
                 if (!pd.IsBrowsable)
                     continue;
 
+                if (OperatingSystem.IsMacOS() && GetFirstAttributeOrDefault<HiddenOnMacOSAttribute>(pd) != null)
+                    continue;
+
                 if (pd.IsReadOnly && GetFirstAttributeOrDefault<FlattenSettingsObjectAttribute>(pd) == null)
                     continue;
 

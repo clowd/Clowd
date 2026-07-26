@@ -23,6 +23,17 @@ namespace Clowd.Config
     }
 
     /// <summary>
+    /// Hides a settings row from the generated settings UI on macOS. The property still persists
+    /// and is still applied where the platform honors it — used for the speaker device picker,
+    /// which selects nothing on macOS: ScreenCaptureKit captures the whole system mix, so there
+    /// is no output device to choose (obs-express ignores the id on macOS 13+).
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property)]
+    public class HiddenOnMacOSAttribute : Attribute
+    {
+    }
+
+    /// <summary>
     /// Recording quality preset. The numeric value is the encoder CRF/CQP passed straight through
     /// to obs-express via <c>--crf</c> (lower = higher quality). Persisted by name (no converter
     /// required); <c>(int)VideoQuality</c> yields the CRF.
@@ -117,6 +128,7 @@ namespace Clowd.Config
         [DisplayName("Speaker device")]
         [Description("Speaker/output device to record")]
         [AudioDeviceSelector("speaker")]
+        [HiddenOnMacOS]
         public string SpeakerDeviceId
         {
             get => _speakerDeviceId;
