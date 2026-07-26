@@ -56,6 +56,8 @@ namespace Clowd
                 desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 desktop.ShutdownRequested += OnShutdownRequested;
 
+                MacDockIcon.Initialize(desktop);
+
                 Startup(desktop.Args ?? Array.Empty<string>());
             }
 
