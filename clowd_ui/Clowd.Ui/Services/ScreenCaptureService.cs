@@ -160,6 +160,10 @@ namespace Clowd.UI
                 if (process.ExitCode != 0)
                 {
                     Debug.WriteLine($"Capture process exited with code {process.ExitCode}:\n{stderr}");
+
+                    // the capturer mirrors its log into the session dir (stdout is lost when
+                    // launched from an .app bundle); grab it before the dir is deleted.
+                    var captureLog = TryReadCaptureLog(sessionDir);
                     CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
 
                     // permission revoked between our preflight and the capturer's own check, or the
@@ -178,11 +182,13 @@ namespace Clowd.UI
                     // in Data.
                     var crash = new InvalidOperationException("Capture process exited unexpectedly");
                     crash.Data["exit_code"] = process.ExitCode;
-                    crash.Data["stderr"] = SummarizeStdErr(stderr);
+                    crash.Data["stderr"] = SummarizeTail(stderr);
+                    if (captureLog != null)
+                        crash.Data["capture_log"] = SummarizeTail(captureLog);
                     SentryConfig.CaptureHandled(crash, "capture.process-crash");
 
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeStdErr(stderr)}",
+                        $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeTail(stderr)}",
                         "Screen capture failed");
                     return;
                 }
@@ -260,10 +266,26 @@ namespace Clowd.UI
                 MacPermissions.OpenSettings(MacPermission.ScreenRecording);
         }
 
-        /// <summary>Condenses the capturer's captured stderr into the tail few lines for an
-        /// error dialog — the failure (a shader error, a panic) is always at the end, after
-        /// the routine startup log lines.</summary>
-        private static string SummarizeStdErr(string stderr)
+        /// <summary>Reads the capturer's session-dir log file, if it wrote one. Null when absent
+        /// or unreadable — older capturers and pre-logger crashes leave no file.</summary>
+        private static string TryReadCaptureLog(string sessionDir)
+        {
+            try
+            {
+                var logPath = Path.Combine(sessionDir, "capture.log");
+                return File.Exists(logPath) ? File.ReadAllText(logPath) : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to read capture log: " + ex);
+                return null;
+            }
+        }
+
+        /// <summary>Condenses the capturer's captured stderr (or log file) into the tail few
+        /// lines for an error dialog — the failure (a shader error, a panic) is always at the
+        /// end, after the routine startup log lines.</summary>
+        private static string SummarizeTail(string stderr)
         {
             if (String.IsNullOrWhiteSpace(stderr))
                 return "No diagnostic output was captured.";

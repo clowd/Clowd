@@ -42,6 +42,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
     // Zip monitors with display_ids; truncate to the shorter list in
     // case a display connected/disconnected between enumeration and capture.
     let count = monitors.len().min(display_ids.len());
+    let mut captured = 0;
     for i in 0..count {
         let monitor = &monitors[i];
         let display = CGDisplay::new(display_ids[i]);
@@ -82,6 +83,14 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
                 bgra[dst_start..dst_end].copy_from_slice(&src[src_start..src_end]);
             }
         }
+        captured += 1;
+    }
+
+    // A per-display null is tolerable (the region stays black), but zero captures
+    // means the overlay would show a fully black desktop — most likely a TCC verdict
+    // that differs from the preflight `main()` ran. Fail so the shell reports it.
+    if captured == 0 && count > 0 {
+        bail!("CGDisplayCreateImage produced no image for any of {count} display(s) — Screen Recording may be denied for this process");
     }
 
     Ok(DesktopBitmap {

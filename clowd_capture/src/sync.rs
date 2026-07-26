@@ -32,6 +32,17 @@ impl<T: Clone> Latch<T> {
         guard.as_ref().unwrap().clone()
     }
 
+    /// Like [`wait`](Self::wait), but gives up after `timeout` and returns `None`
+    /// if no value has arrived — the writer thread may have died or wedged.
+    pub fn wait_timeout(&self, timeout: std::time::Duration) -> Option<T> {
+        let guard = self.inner.lock().unwrap();
+        let (guard, _) = self
+            .cv
+            .wait_timeout_while(guard, timeout, |v| v.is_none())
+            .unwrap();
+        guard.as_ref().cloned()
+    }
+
     pub fn try_get(&self) -> Option<T> {
         let guard = self.inner.lock().unwrap();
         guard.as_ref().cloned()

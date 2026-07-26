@@ -29,12 +29,27 @@ use clap::Parser;
 fn main() -> anyhow::Result<()> {
     let args = settings::CliArgs::parse();
 
-    telemetry::crash::install_logger(simplelog::TermLogger::new(
+    // Terminal output plus, in session mode, a mirror into the session dir: when the
+    // shell spawns us from an installed .app, stdout goes to /dev/null and stderr is
+    // only read back after a non-zero exit, so the file is the only diagnostics that
+    // survive a hang. LineWriter flushes each record, so the log is current even if
+    // the process dies without unwinding.
+    let mut loggers: Vec<Box<dyn simplelog::SharedLogger>> = vec![simplelog::TermLogger::new(
         log::LevelFilter::Info,
         simplelog::Config::default(),
         simplelog::TerminalMode::Mixed,
         simplelog::ColorChoice::Auto,
-    ));
+    )];
+    if let Some(dir) = &args.session_dir {
+        if let Ok(file) = std::fs::File::create(dir.join("capture.log")) {
+            loggers.push(simplelog::WriteLogger::new(
+                log::LevelFilter::Info,
+                simplelog::Config::default(),
+                std::io::LineWriter::new(file),
+            ));
+        }
+    }
+    telemetry::crash::install_logger(simplelog::CombinedLogger::new(loggers));
 
     // held for the rest of main: dropping the guard flushes anything still queued
     let _sentry = telemetry::crash::init();
@@ -69,6 +84,13 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     }
     let session = capture::session::CaptureSession::new(settings)?;
 
+    // Accessory keeps us out of the dock and stops the overlay stealing activation
+    // before it is shown; focus is taken explicitly once every window is ready.
+    // Do NOT "harden" this to NSApplicationActivationPolicy::Prohibited: when the
+    // binary runs from inside an .app bundle (the installed layout — but not any
+    // `cargo run`), a pre-event-loop Prohibited poisons the window-server session
+    // and orderFrontRegardless() silently never puts windows on screen, even after
+    // winit switches the policy back to Accessory at applicationDidFinishLaunching.
     #[cfg(target_os = "macos")]
     let event_loop = {
         use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
@@ -80,14 +102,6 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     #[cfg(not(target_os = "macos"))]
     let event_loop = winit::event_loop::EventLoop::new()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-
-    #[cfg(target_os = "macos")]
-    {
-        use objc2::MainThreadMarker;
-        use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy};
-        let mtm = MainThreadMarker::new().unwrap();
-        NSApplication::sharedApplication(mtm).setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
-    }
 
     let mut app = session.into_app();
     event_loop.run_app(&mut app)?;
