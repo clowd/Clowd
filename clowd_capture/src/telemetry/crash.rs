@@ -44,8 +44,11 @@ const fn reporting_compiled_in() -> bool {
 /// `main` keeps ownership of the log level and formatting.
 pub fn install_logger(dest: Box<dyn log::Log>) {
     let installed = if reporting_compiled_in() && !opted_out() {
-        let logger = SentryLogger::with_dest(dest).filter(|md| match md.level() {
-            log::Level::Error => LogFilter::Event,
+        let logger = SentryLogger::with_dest(dest).filter(|md| match (md.level(), md.target()) {
+            // panics are already captured as events by the SDK's own hook; the mirror
+            // below must not become a second event.
+            (log::Level::Error, PANIC_TARGET) => LogFilter::Breadcrumb,
+            (log::Level::Error, _) => LogFilter::Event,
             _ => LogFilter::Breadcrumb,
         });
         log::set_boxed_logger(Box::new(logger))
@@ -55,8 +58,21 @@ pub fn install_logger(dest: Box<dyn log::Log>) {
 
     if installed.is_ok() {
         log::set_max_level(log::LevelFilter::Info);
+
+        // A panic normally prints only to stderr, which is invisible when spawned from
+        // an installed .app — mirror it through the logger so it reaches the session
+        // log file too. Chains to the previous hook, so stderr output is unchanged.
+        let prev = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            log::error!(target: PANIC_TARGET, "{info}");
+            prev(info);
+        }));
     }
 }
+
+/// Log target of the panic mirror in [`install_logger`] — filtered to a breadcrumb
+/// so Sentry's panic hook stays the single source of panic events.
+const PANIC_TARGET: &str = "clowd_panic";
 
 /// Starts Sentry. The returned guard flushes queued events when dropped; hold it
 /// for the lifetime of `main`. `None` means reporting is off — a debug build, the
@@ -97,6 +113,16 @@ pub fn init() -> Option<sentry::ClientInitGuard> {
     });
 
     Some(guard)
+}
+
+/// Flushes queued events. Call before `process::exit`, which skips the init
+/// guard's drop and would otherwise lose anything reported on that path.
+pub fn flush() {
+    if reporting_compiled_in() {
+        if let Some(client) = sentry::Hub::current().client() {
+            client.flush(Some(std::time::Duration::from_secs(2)));
+        }
+    }
 }
 
 /// Reports a fatal error that is on its way out of `main`. An `Err` return is not

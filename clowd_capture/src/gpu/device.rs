@@ -90,9 +90,9 @@ pub(crate) async fn request_adapter_device(
         })
         .await?;
 
-    // Make wgpu shader/pipeline errors non-fatal so a bad precompiled passthrough
-    // shader can fall back to runtime WGSL instead of aborting the process.
-    #[cfg(windows)]
+    // Make wgpu shader/pipeline errors non-fatal: on Windows so a bad precompiled
+    // passthrough shader can fall back to runtime WGSL, elsewhere so a validation
+    // error is reported instead of silently killing the render worker.
     crate::gpu::shaders::install_error_handler(&device);
 
     timings

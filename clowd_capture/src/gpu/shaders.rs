@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-#[cfg(windows)]
 use std::sync::{Arc, Mutex};
 
 /// A shader program for one pipeline. Windows ships precompiled DXBC as
@@ -43,7 +42,6 @@ impl ShaderPair {
 // wgpu's fatal handler. We install our own non-fatal handler (see
 // `install_error_handler`) that records the message here instead, so `load` can
 // notice the failure and fall back to compiling the WGSL at runtime.
-#[cfg(windows)]
 static LAST_UNCAPTURED_ERROR: Mutex<Option<String>> = Mutex::new(None);
 // Serialises shader loads so a concurrent load can't interleave the
 // clear/create/check of `LAST_UNCAPTURED_ERROR`. Kept separate from that mutex
@@ -54,13 +52,22 @@ static LOAD_GUARD: Mutex<()> = Mutex::new(());
 
 /// Install the non-fatal uncaptured-error handler on `device`. Must be called
 /// once, right after the device is created and before any shader is loaded.
-/// Without it, wgpu aborts the process on the first shader/pipeline validation
-/// error rather than letting [`load`] fall back.
-#[cfg(windows)]
+/// Without it, wgpu's default handler panics on the first shader/pipeline
+/// validation error — on Windows that would defeat [`load`]'s WGSL fallback,
+/// and everywhere else it killed the render worker thread, leaving the overlay
+/// invisible while the event loop spun forever.
 pub fn install_error_handler(device: &wgpu::Device) {
     device.on_uncaptured_error(Arc::new(|err| {
         let msg = err.to_string();
-        log::warn!("wgpu uncaptured error (non-fatal): {msg}");
+        if cfg!(windows) {
+            // expected when a precompiled DXBC shader can't load on this host;
+            // `load` notices and falls back to runtime WGSL.
+            log::warn!("wgpu uncaptured error (non-fatal): {msg}");
+        } else {
+            // no fallback path exists here, so this is a real bug — report it,
+            // but keep the process alive and interactive.
+            log::error!("wgpu uncaptured error (non-fatal): {msg}");
+        }
         if let Ok(mut slot) = LAST_UNCAPTURED_ERROR.lock() {
             *slot = Some(msg);
         }

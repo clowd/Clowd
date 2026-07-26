@@ -259,6 +259,12 @@ pub struct SystemInterop;
 /// `ScreenCaptureService.cs`'s `ExitCodeNoScreenPermission`.
 pub const EXIT_NO_SCREEN_PERMISSION: i32 = 3;
 
+/// Exit code for "the desktop screenshot itself failed" (e.g. every
+/// CGDisplayCreateImage returned null despite the TCC preflight passing). Kept
+/// distinct from a panic-driven exit so the shell's crash report carries the
+/// reason from stderr/capture.log rather than a stack trace.
+pub const EXIT_CAPTURE_FAILED: i32 = 4;
+
 #[cfg(windows)]
 impl SystemInterop {
     /// Windows has no screen-capture permission to ask for.
@@ -371,7 +377,17 @@ impl SystemInterop {
     /// macOS the monitor topology is used to position each display's
     /// capture in the composite buffer.
     pub fn capture_desktop_bitmap(monitors: Vec<MonitorInfo>, cursor: Option<CapturedCursor>) -> CapturedDesktop {
-        let bitmap = mac_capture::capture_bitmap(&monitors).expect("Unable to capture desktop");
+        // Runs on the screenshot thread: a panic here would leave the main thread
+        // blocked on the screenshot latch forever with nothing on screen, so treat
+        // failure as fatal for the whole process and let the shell report it.
+        let bitmap = match mac_capture::capture_bitmap(&monitors) {
+            Ok(bitmap) => bitmap,
+            Err(err) => {
+                error!("unable to capture the desktop: {err:#}");
+                crate::telemetry::crash::flush();
+                std::process::exit(EXIT_CAPTURE_FAILED);
+            }
+        };
         let vd = virtual_desktop_bounds(&monitors);
         CapturedDesktop {
             bgra: bitmap.bgra,
