@@ -83,6 +83,9 @@ namespace Clowd
             => AppBuilder.Configure<App>()
                          .UsePlatformDetect()
                          .WithInterFont()
+                         // tray-resident: launch without a dock icon; MacDockIcon flips the
+                         // activation policy to Regular whenever a real window opens.
+                         .With(new MacOSPlatformOptions { ShowInDock = false })
                          .LogToTrace();
     }
 }
