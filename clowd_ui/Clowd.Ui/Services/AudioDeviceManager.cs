@@ -19,7 +19,8 @@ namespace Clowd.UI
     {
         string DeviceId { get; }
 
-        /// <summary>False on platforms without metering support (macOS for now) — hide the bar.</summary>
+        /// <summary>False when this platform cannot meter this device (e.g. macOS speaker
+        /// metering below 14.2, which needs process taps) — hide the bar.</summary>
         bool IsSupported { get; }
 
         /// <summary>Current peak level on the WPF UI scale (0..100, dB-mapped).</summary>
@@ -29,8 +30,8 @@ namespace Clowd.UI
     /// <summary>
     /// Cross-platform audio device enumeration + level metering (mirrors the WPF
     /// Clowd.Video.AudioDeviceManager API). Windows uses NAudio.Wasapi (MMDevice ids match what
-    /// obs-express's wasapi sources expect); macOS enumerates via a CoreAudio P/Invoke shim
-    /// (device UIDs, matching the coreaudio sources) with metering deferred.
+    /// obs-express's wasapi sources expect); macOS uses a CoreAudio P/Invoke shim for both
+    /// enumeration (device UIDs, matching the coreaudio sources) and metering.
     /// </summary>
     public static class AudioDeviceManager
     {
@@ -55,8 +56,9 @@ namespace Clowd.UI
             if (OperatingSystem.IsWindows())
                 return new WasapiLevelListener(deviceId, deviceType);
 
-            // macOS metering needs AudioQueue taps (mic) / macOS 14.2+ process taps (speaker) —
-            // deferred with the rest of the mac UI work. Enumeration works; the bar stays hidden.
+            if (OperatingSystem.IsMacOS())
+                return new CoreAudioLevelListener(deviceId, deviceType);
+
             return new NullLevelListener(deviceId);
         }
 
