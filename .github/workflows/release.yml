@@ -11,6 +11,11 @@ name: Release
 # (win-x64, osx-arm64, ...), with a "-pre" suffix when publishing a pre-release.
 # The app (UpdateService) follows whichever channel it was installed from.
 #
+# A pre-release gets the same "-pre" suffix on its git tag and release title, so
+# the same build can go out as e.g. 4.0.123-pre and later as stable 4.0.123
+# without the two colliding on the tag. The packaged version is unsuffixed either
+# way; the channel is what keeps the two apart for updates.
+#
 # The draft release is created up-front by a single job rather than by whichever
 # vpk job gets there first: concurrent jobs would each fail to see the others'
 # in-flight release and create duplicates. The matrix jobs then only ever merge
@@ -41,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.create.outputs.version }}
+      tag: ${{ steps.create.outputs.tag }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -49,25 +55,28 @@ jobs:
         run: |
           gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n version -D version-artifact
           VERSION=$(tr -d '[:space:]' < version-artifact/version.txt)
+          TAG="$VERSION"
+          if [ "${{ inputs.prerelease }}" = "true" ]; then TAG="$VERSION-pre"; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
           # a leftover draft is from a failed run, so start clean - vpk refuses to
           # merge into a release that already has an index for its channel. gh
           # resolves drafts by their pending tag name, so no tag exists to clean up.
-          if IS_DRAFT=$(gh release view "$VERSION" --repo ${{ github.repository }} --json isDraft -q .isDraft 2>/dev/null); then
+          if IS_DRAFT=$(gh release view "$TAG" --repo ${{ github.repository }} --json isDraft -q .isDraft 2>/dev/null); then
             if [ "$IS_DRAFT" != "true" ]; then
-              echo "::error::Release $VERSION is already published, refusing to overwrite it."
+              echo "::error::Release $TAG is already published, refusing to overwrite it."
               exit 1
             fi
-            echo "Deleting leftover draft release $VERSION"
-            gh release delete "$VERSION" --repo ${{ github.repository }} --yes
+            echo "Deleting leftover draft release $TAG"
+            gh release delete "$TAG" --repo ${{ github.repository }} --yes
           fi
 
           PRE=""
           if [ "${{ inputs.prerelease }}" = "true" ]; then PRE="--prerelease"; fi
-          gh release create "$VERSION" --repo ${{ github.repository }} \
-            --draft --title "$VERSION" --notes "" $PRE
-          echo "Created draft release $VERSION"
+          gh release create "$TAG" --repo ${{ github.repository }} \
+            --draft --title "$TAG" --notes "" $PRE
+          echo "Created draft release $TAG"
 
       # give the release a chance to become visible to the api the vpk jobs use
       # to look it up, otherwise they may not find it and create a duplicate.
@@ -94,6 +103,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO_URL: https://github.com/${{ github.repository }}
       VERSION: ${{ needs.draft.outputs.version }}
+      TAG: ${{ needs.draft.outputs.tag }}
     steps:
       # only needed for the packaging icon
       - name: Checkout
@@ -206,7 +216,7 @@ jobs:
         run: >
           vpk upload github --repoUrl "$REPO_URL" --token "$GH_TOKEN"
           --channel "$CHANNEL" -o releases
-          --tag "$VERSION" --releaseName "$VERSION"
+          --tag "$TAG" --releaseName "$TAG"
           --merge true --publish false --pre ${{ inputs.prerelease }}
         shell: bash
 
@@ -216,9 +226,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ needs.draft.outputs.version }}
+      TAG: ${{ needs.draft.outputs.tag }}
     steps:
       - name: Publish draft release
         run: |
-          gh release edit "$VERSION" --repo ${{ github.repository }} --draft=false
-          echo "Published release $VERSION"
+          gh release edit "$TAG" --repo ${{ github.repository }} --draft=false
+          echo "Published release $TAG"
