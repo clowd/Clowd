@@ -12,6 +12,11 @@ namespace Clowd.UI
     /// <see cref="Fps"/> is a float on the wire and must be parsed as a double.</summary>
     public sealed record ObsStatus(double Fps, long Dropped, TimeSpan Elapsed);
 
+    /// <summary>Peak audio levels from obs-express, emitted every 100 ms from <c>initialized</c>
+    /// onward (including the pre-start WAIT phase) whenever audio sources exist: dBFS per source
+    /// in CLI order, always finite, floored at -100.</summary>
+    public sealed record ObsLevels(double[] Speaker, double[] Mic);
+
     /// <summary>
     /// Hosts the obs-express recording process and speaks its protocol (DESIGN §1): plain-text
     /// commands on stdin, line-delimited JSON on stdout, free-form libobs chatter on stderr.
@@ -41,6 +46,10 @@ namespace Clowd.UI
 
         /// <summary>Raised on the UI thread for every <c>status</c> message while recording.</summary>
         public event EventHandler<ObsStatus> StatusReceived;
+
+        /// <summary>Raised on the UI thread for every <c>levels</c> message (10 Hz from
+        /// <c>initialized</c> onward, only when audio sources exist).</summary>
+        public event EventHandler<ObsLevels> LevelsReceived;
 
         /// <summary>Raised on the UI thread when the recording fails: a nonzero
         /// <c>stopped_recording</c> code (possibly spontaneous) or a process exit without a
@@ -293,6 +302,11 @@ namespace Clowd.UI
                         Dispatcher.UIThread.Post(() => StatusReceived?.Invoke(this, status));
                         break;
 
+                    case "levels":
+                        var levels = new ObsLevels(ReadLevelArray(root, "speaker"), ReadLevelArray(root, "mic"));
+                        Dispatcher.UIThread.Post(() => LevelsReceived?.Invoke(this, levels));
+                        break;
+
                     case "recording_paused":
                     case "recording_resumed":
                         break; // informational; not surfaced in the UI
@@ -312,6 +326,17 @@ namespace Clowd.UI
                 SentryConfig.CaptureHandled(ex, "obs.protocol-parse");
                 AppendLog(trimmed);
             }
+        }
+
+        private static double[] ReadLevelArray(JsonElement root, string name)
+        {
+            if (!root.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Array)
+                return Array.Empty<double>();
+
+            var values = new double[el.GetArrayLength()];
+            for (var i = 0; i < values.Length; i++)
+                values[i] = el[i].GetDouble();
+            return values;
         }
 
         private void HandleStoppedRecording(JsonElement root)

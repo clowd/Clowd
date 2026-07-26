@@ -37,7 +37,6 @@ namespace Clowd.UI
         public event EventHandler<bool> SpeakerToggled;
 
         private readonly DispatcherTimer _saveDebounce;
-        private readonly DispatcherTimer _meterTimer;
         private readonly SettingsRecording _settings;
 
         // start-button glyphs: play (declared in XAML) and the reload glyph shown in the RESTART
@@ -59,9 +58,8 @@ namespace Clowd.UI
         private PixelPoint _mouseDownPt;
         private PixelPoint _initialPos;
 
-        // audio level meters (WPF VideoCaptureWindow.RefreshListeners / GetLevelVisual)
-        private IAudioLevelListener _micLevel;
-        private IAudioLevelListener _spkLevel;
+        // audio level meters (WPF VideoCaptureWindow GetLevelVisual visuals, fed by the page
+        // from obs-express's 100ms levels feed via SetAudioLevels)
         private Control _micBar, _spkBar;
         private Rectangle _micFill, _spkFill;
 
@@ -104,15 +102,13 @@ namespace Clowd.UI
             (_spkBar, _spkFill) = BuildMeterBar();
             BtnMic.Overlay = _micBar;
             BtnSpeaker.Overlay = _spkBar;
+            UpdateMeterVisibility();
 
             // the OPTIONS button opens the same settings this toolbar writes: without this, the
             // cached toggles above go stale and the next MIC/SPK click would flip the *old* value
             // back over the user's choice. Subscribed after the meter bars exist — the handler
             // refreshes them.
             _settings.PropertyChanged += OnSettingsChanged;
-
-            _meterTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
-            _meterTimer.Tick += (s, e) => UpdateMeters();
 
             ScalingChanged += (s, e) => Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
         }
@@ -172,9 +168,6 @@ namespace Clowd.UI
                 PositionNearRegion();
             }
 
-            RefreshListeners();
-            _meterTimer.Start();
-
             // position after the size-to-content layout pass so Bounds is real
             Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
         }
@@ -200,20 +193,18 @@ namespace Clowd.UI
         }
 
         /// <summary>Mirrors settings edited elsewhere (the recording settings page) back into the
-        /// toolbar: the capture toggles drive the MIC/SPK glyphs and the level meters, and a device
-        /// change has to rebuild the listener behind them.</summary>
+        /// toolbar: the capture toggles drive the MIC/SPK glyphs and the level-bar visibility.</summary>
         private void OnSettingsChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName is not (null
-                or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)
-                or nameof(SettingsRecording.MicrophoneDeviceId) or nameof(SettingsRecording.SpeakerDeviceId)))
+                or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)))
                 return;
 
             _micEnabled = _settings.CaptureMicrophone;
             _spkEnabled = _settings.CaptureSpeaker;
             BtnMic.ShowAlternateIcon = _micEnabled;
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
-            RefreshListeners();
+            UpdateMeterVisibility();
         }
 
         protected override void OnClosed(EventArgs e)
@@ -226,12 +217,6 @@ namespace Clowd.UI
                 _saveDebounce.Stop();
                 SaveSettings();
             }
-
-            _meterTimer.Stop();
-            _micLevel?.Dispose();
-            _micLevel = null;
-            _spkLevel?.Dispose();
-            _spkLevel = null;
 
             base.OnClosed(e);
         }
@@ -403,7 +388,7 @@ namespace Clowd.UI
             BtnMic.ShowAlternateIcon = _micEnabled;
             _settings.CaptureMicrophone = _micEnabled;
             QueueSettingsSave();
-            RefreshListeners();
+            UpdateMeterVisibility();
             MicToggled?.Invoke(this, _micEnabled);
         }
 
@@ -413,7 +398,7 @@ namespace Clowd.UI
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
             _settings.CaptureSpeaker = _spkEnabled;
             QueueSettingsSave();
-            RefreshListeners();
+            UpdateMeterVisibility();
             SpeakerToggled?.Invoke(this, _spkEnabled);
         }
 
@@ -445,63 +430,40 @@ namespace Clowd.UI
             return (bar, fill);
         }
 
-        /// <summary>Mirrors WPF RefreshListeners: a listener exists only while the toolbar is
-        /// open AND that source's toggle is enabled; recreated when the device setting changes.
-        /// A dead meter on a live toggle is the user's signal the picked device is wrong.</summary>
-        private void RefreshListeners()
+        /// <summary>Drives the MIC/SPK bar fills from obs-express's 100 ms levels feed (the page
+        /// forwards <see cref="ObsLevels"/>). Peak dBFS; null means that source does not exist
+        /// or the capturer was torn down — the fill empties rather than freezing.</summary>
+        public void SetAudioLevels(double? micDb, double? spkDb)
         {
-            var recording = _settings;
-
-            if (!_micEnabled)
-            {
-                _micLevel?.Dispose();
-                _micLevel = null;
-            }
-            else
-            {
-                var device = AudioDeviceManager.VerifyMicrophoneOrDefault(recording.MicrophoneDeviceId);
-                if (_micLevel == null || _micLevel.DeviceId != device)
-                {
-                    _micLevel?.Dispose();
-                    _micLevel = AudioDeviceManager.CreateLevelListener(device, AudioDeviceManager.TypeMicrophone);
-                }
-            }
-
-            if (!_spkEnabled)
-            {
-                _spkLevel?.Dispose();
-                _spkLevel = null;
-            }
-            else
-            {
-                var device = AudioDeviceManager.VerifySpeakerOrDefault(recording.SpeakerDeviceId);
-                if (_spkLevel == null || _spkLevel.DeviceId != device)
-                {
-                    _spkLevel?.Dispose();
-                    _spkLevel = AudioDeviceManager.CreateLevelListener(device, AudioDeviceManager.TypeSpeaker);
-                }
-            }
-
-            _micBar.IsVisible = _micLevel is { IsSupported: true };
-            _spkBar.IsVisible = _spkLevel is { IsSupported: true };
+            SetMeterFill(_micBar, _micFill, micDb);
+            SetMeterFill(_spkBar, _spkFill, spkDb);
         }
 
-        private void UpdateMeters()
+        private static void SetMeterFill(Control bar, Rectangle fill, double? db)
         {
-            UpdateMeter(_micBar, _micFill, _micLevel);
-            UpdateMeter(_spkBar, _spkFill, _spkLevel);
-        }
-
-        private static void UpdateMeter(Control bar, Rectangle fill, IAudioLevelListener listener)
-        {
-            if (listener == null || !bar.IsVisible)
+            if (db == null)
+            {
+                fill.Height = 0;
                 return;
+            }
 
             var trackHeight = bar.Bounds.Height;
             if (trackHeight <= 0)
-                return;
+                return; // layout hasn't run yet; the next 100 ms update self-heals
 
-            fill.Height = Math.Clamp(listener.PeakLevel / 100d, 0d, 1d) * trackHeight;
+            // dBFS → percent, same -60 dB floor mapping the old WASAPI/CoreAudio listeners used
+            var percent = Math.Clamp(db.Value / 60d * 100d + 100d, 0d, 100d);
+            fill.Height = percent / 100d * trackHeight;
+        }
+
+        private void UpdateMeterVisibility()
+        {
+            _micBar.IsVisible = _micEnabled;
+            _spkBar.IsVisible = _spkEnabled;
+            if (!_micEnabled)
+                _micFill.Height = 0;
+            if (!_spkEnabled)
+                _spkFill.Height = 0;
         }
 
         private void QueueSettingsSave()

@@ -139,6 +139,9 @@ namespace Clowd.UI
             _restartRequired = false;
             _settingsChangedDuringInit = false;
             SetPrimaryText("WAIT…");
+            // a restarted capturer with audio removed never emits levels again — clear the
+            // stale meters rather than freezing the last values through the WAIT phase.
+            _toolbar?.SetAudioLevels(null, null);
 
             try
             {
@@ -154,6 +157,7 @@ namespace Clowd.UI
                 _obs = new ObsCapturer();
                 _obs.CriticalError += OnCriticalError;
                 _obs.StatusReceived += OnStatusReceived;
+                _obs.LevelsReceived += OnLevelsReceived;
 
                 await _obs.InitializeAsync(ObsArguments.Build(_region, _outputMp4, _settings), _binaryPath);
             }
@@ -465,6 +469,8 @@ namespace Clowd.UI
                 {
                     obs.CriticalError -= OnCriticalError;
                     obs.StatusReceived -= OnStatusReceived;
+                    obs.LevelsReceived -= OnLevelsReceived;
+                    _toolbar?.SetAudioLevels(null, null);
                     _pendingShutdown = obs.DisposeAsync();
                     await AwaitPendingShutdownAsync();
                 }
@@ -520,6 +526,14 @@ namespace Clowd.UI
                 ? $"{status.Fps:F0} FPS"
                 : $"{(int)status.Elapsed.TotalMinutes:D2}:{status.Elapsed.Seconds:D2}";
             _toolbar?.SetStatusText(text);
+        }
+
+        private void OnLevelsReceived(object sender, ObsLevels levels)
+        {
+            // one device per source type (CLI index 0); an absent source sends an empty array.
+            _toolbar?.SetAudioLevels(
+                levels.Mic.Length > 0 ? levels.Mic[0] : null,
+                levels.Speaker.Length > 0 ? levels.Speaker[0] : null);
         }
 
         /// <summary>

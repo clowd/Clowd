@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Threading;
 using NAudio.CoreAudioApi;
 
 namespace Clowd.UI
@@ -12,26 +11,9 @@ namespace Clowd.UI
     public sealed record AudioDeviceInfo(string DeviceId, string DeviceType, string FriendlyName);
 
     /// <summary>
-    /// A live peak-level source for one device, driving the toolbar volume bars (WPF parity —
-    /// the meter is how the user confirms they picked the right device before recording).
-    /// </summary>
-    public interface IAudioLevelListener : IDisposable
-    {
-        string DeviceId { get; }
-
-        /// <summary>False when this platform cannot meter this device (e.g. macOS speaker
-        /// metering below 14.2, which needs process taps) — hide the bar.</summary>
-        bool IsSupported { get; }
-
-        /// <summary>Current peak level on the WPF UI scale (0..100, dB-mapped).</summary>
-        double PeakLevel { get; }
-    }
-
-    /// <summary>
-    /// Cross-platform audio device enumeration + level metering (mirrors the WPF
-    /// Clowd.Video.AudioDeviceManager API). Windows uses NAudio.Wasapi (MMDevice ids match what
-    /// obs-express's wasapi sources expect); macOS uses a CoreAudio P/Invoke shim for both
-    /// enumeration (device UIDs, matching the coreaudio sources) and metering.
+    /// Cross-platform audio device enumeration (mirrors the WPF Clowd.Video.AudioDeviceManager
+    /// API). Windows uses NAudio.Wasapi (MMDevice ids match what obs-express's wasapi sources
+    /// expect); macOS uses a CoreAudio P/Invoke shim (device UIDs, matching the coreaudio sources).
     /// </summary>
     public static class AudioDeviceManager
     {
@@ -50,17 +32,6 @@ namespace Clowd.UI
 
         /// <summary>Returns the id when it still exists, else "default" (WPF semantics).</summary>
         public static string VerifyMicrophoneOrDefault(string deviceId) => Verify(deviceId, GetMicrophones());
-
-        public static IAudioLevelListener CreateLevelListener(string deviceId, string deviceType)
-        {
-            if (OperatingSystem.IsWindows())
-                return new WasapiLevelListener(deviceId, deviceType);
-
-            if (OperatingSystem.IsMacOS())
-                return new CoreAudioLevelListener(deviceId, deviceType);
-
-            return new NullLevelListener(deviceId);
-        }
 
         private static string Verify(string deviceId, List<AudioDeviceInfo> devices)
         {
@@ -116,117 +87,6 @@ namespace Clowd.UI
             }
 
             return list;
-        }
-
-        internal static MMDevice GetMMDevice(string deviceId, string deviceType)
-        {
-            var enumerator = new MMDeviceEnumerator();
-            try
-            {
-                if (String.Equals(deviceId, DefaultDeviceId, StringComparison.OrdinalIgnoreCase))
-                {
-                    var flow = deviceType == TypeSpeaker ? DataFlow.Render : DataFlow.Capture;
-                    return enumerator.GetDefaultAudioEndpoint(flow, Role.Multimedia);
-                }
-
-                return enumerator.GetDevice(deviceId);
-            }
-            finally
-            {
-                enumerator.Dispose();
-            }
-        }
-
-        /// <summary>
-        /// Windows level listener: polls AudioMeterInformation on a background thread. Capture
-        /// endpoints only meter while a stream is open (NAudio #347), so mics hold a keep-alive
-        /// WasapiCapture; render endpoints meter passively whenever anything plays — opening a
-        /// capture stream on one throws (a swallowed bug in the original WPF listener, not
-        /// replicated here).
-        /// </summary>
-        private sealed class WasapiLevelListener : IAudioLevelListener
-        {
-            public string DeviceId { get; }
-            public bool IsSupported => true;
-            public double PeakLevel => _peak;
-
-            private readonly string _deviceType;
-            private volatile bool _exit;
-            private volatile float _peak;
-
-            public WasapiLevelListener(string deviceId, string deviceType)
-            {
-                DeviceId = deviceId;
-                _deviceType = deviceType;
-
-                var thread = new Thread(ThreadProc) { IsBackground = true, Name = "AudioLevelListener" };
-                if (OperatingSystem.IsWindows())
-                    thread.SetApartmentState(ApartmentState.STA);
-                thread.Start();
-            }
-
-            private void ThreadProc()
-            {
-                WasapiCapture keepAlive = null;
-                try
-                {
-                    using var device = GetMMDevice(DeviceId, _deviceType);
-
-                    if (device.DataFlow == DataFlow.Capture)
-                    {
-                        keepAlive = new WasapiCapture(device);
-                        keepAlive.DataAvailable += (s, e) => { };
-                        keepAlive.StartRecording();
-                    }
-
-                    while (!_exit)
-                    {
-                        Thread.Sleep(50);
-                        var level = device.AudioMeterInformation.MasterPeakValue;
-
-                        // linear peak -> dB -> 0..100 UI scale (same mapping as WPF Clowd)
-                        _peak = level > 0 && level <= 1
-                            ? (float)Math.Clamp(20d * Math.Log10(level) / 60d * 100d + 100d, 0d, 100d)
-                            : 0f;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Audio level listener failed for '{DeviceId}': {ex.Message}");
-                    SentryConfig.CaptureHandled(ex, "audio.level-listener");
-                    _peak = 0f;
-                }
-                finally
-                {
-                    try
-                    {
-                        keepAlive?.StopRecording();
-                        keepAlive?.Dispose();
-                    }
-                    catch { }
-                }
-            }
-
-            public void Dispose()
-            {
-                _exit = true;
-            }
-        }
-
-        private sealed class NullLevelListener : IAudioLevelListener
-        {
-            public string DeviceId { get; }
-            public bool IsSupported => false;
-            public double PeakLevel => 0;
-
-            public NullLevelListener(string deviceId)
-            {
-                DeviceId = deviceId;
-            }
-
-            public void Dispose()
-            {
-            }
         }
     }
 }

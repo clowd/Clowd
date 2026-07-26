@@ -6,7 +6,7 @@
     <Nullable>disable</Nullable>
     <RootNamespace>Clowd.UI</RootNamespace>
     <ApplicationIcon>Assets\clowd-default.ico</ApplicationIcon>
-    <!-- NAudio's WASAPI MMDevice enumeration/metering requires built-in COM (Windows-only at runtime) -->
+    <!-- NAudio's WASAPI MMDevice enumeration requires built-in COM (Windows-only at runtime) -->
     <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
