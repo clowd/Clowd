@@ -72,7 +72,7 @@ jobs:
       # give the release a chance to become visible to the api the vpk jobs use
       # to look it up, otherwise they may not find it and create a duplicate.
       - name: Wait for release to settle
-        run: sleep 60
+        run: sleep 30
 
   release:
     name: release (${{ matrix.rid }})
