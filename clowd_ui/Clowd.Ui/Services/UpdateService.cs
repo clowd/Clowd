@@ -70,6 +70,7 @@ namespace Clowd.UI
         private bool _managerCreated;
         private IDisposable _heartbeatTimer;
         private UpdateInfo _available;
+        private VelopackAsset _staged;
         private DateTime _nextCheckUtc = DateTime.MinValue;
         private DateTime _lastCheckUtc = DateTime.MinValue;
         private bool _restarting;
@@ -96,7 +97,11 @@ namespace Clowd.UI
             ?? "unknown";
 
         /// <summary>Non-null when an update has been downloaded and only needs a restart.</summary>
-        public VelopackAsset UpdatePendingRestart => Manager?.UpdatePendingRestart;
+        /// <remarks>Velopack's own <c>UpdatePendingRestart</c> only counts a staged package whose
+        /// version is strictly greater than the installed one, so it never sees a channel switch at
+        /// the same version (or a downgrade back to stable). Whatever this session staged wins;
+        /// Velopack's answer covers a package staged before the last restart.</remarks>
+        public VelopackAsset UpdatePendingRestart => _staged ?? Manager?.UpdatePendingRestart;
 
         /// <summary>The channel this build was installed from; null in a dev build.</summary>
         public string InstalledChannel => TryGetInstalledChannel();
@@ -303,6 +308,7 @@ namespace Clowd.UI
             {
                 SetState(UpdateState.Downloading, $"Downloading version {info.TargetFullRelease.Version}…");
                 await Manager.DownloadUpdatesAsync(info, p => SetProgress(p));
+                _staged = info.TargetFullRelease;
                 SetState(UpdateState.ReadyToRestart, "Update downloaded. Restart Clowd to finish installing.");
                 return true;
             }
@@ -353,7 +359,7 @@ namespace Clowd.UI
                 // having settings appear unprompted is the one thing that would make a background
                 // update conspicuous. An explicit "Restart to Update" click restarts normally.
                 var restartArgs = silent ? new[] { Program.SilentUpdateRestartArg } : null;
-                manager.WaitExitThenApplyUpdates(asset ?? manager.UpdatePendingRestart, silent, true, restartArgs);
+                manager.WaitExitThenApplyUpdates(asset ?? UpdatePendingRestart, silent, true, restartArgs);
             }
             catch (Exception ex)
             {
@@ -396,6 +402,7 @@ namespace Clowd.UI
             }
 
             _available = null;
+            _staged = null;
             _nextCheckUtc = DateTime.MinValue;
 
             await CheckForUpdatesAsync(userInitiated: true);
