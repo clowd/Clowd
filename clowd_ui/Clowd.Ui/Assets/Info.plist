@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <!-- Identity keys mirror what vpk generates by default (verified against a shipped
+         Clowd.app) — only the *UsageDescription keys below are additions. TCC KILLS a
+         bundled process that touches the mic or a system-audio tap without them.
+         {{VERSION}} / {{SHORT_VERSION}} are substituted by release.yml before vpk pack. -->
+    <key>CFBundleName</key>
+    <string>Clowd</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.Caelan_Sayler.Clowd</string>
+    <key>CFBundleVersion</key>
+    <string>{{VERSION}}</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleSignature</key>
+    <string>????</string>
+    <key>CFBundleExecutable</key>
+    <string>Clowd.Ui</string>
+    <key>CFBundleIconFile</key>
+    <string>clowd-default.icns</string>
+    <key>CFBundleShortVersionString</key>
+    <string>{{SHORT_VERSION}}</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>NSHighResolutionCapable</key>
+    <true />
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Clowd records your microphone when you enable it for a screen recording, and shows a live level meter so you can check the right device is selected.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Clowd captures system audio when you enable speaker sound for a screen recording, and shows a live level meter so you can check it is working.</string>
+  </dict>
+</plist>

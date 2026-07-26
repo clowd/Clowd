@@ -199,6 +199,18 @@ jobs:
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
         shell: bash
 
+      # The custom Info.plist replicates vpk's generated one plus the mic/system-audio
+      # usage-description keys (TCC kills the app on mic/tap access without them).
+      # SHORT_VERSION mirrors vpk's CFBundleShortVersionString (4-part, prerelease stripped).
+      - name: Generate Info.plist (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          SHORT_VERSION="$(echo "$VERSION" | sed 's/-.*//').0"
+          sed -e "s/{{VERSION}}/$VERSION/" -e "s/{{SHORT_VERSION}}/$SHORT_VERSION/" \
+            clowd_ui/Clowd.Ui/Assets/Info.plist > "$RUNNER_TEMP/Info.plist"
+          cat "$RUNNER_TEMP/Info.plist"
+        shell: bash
+
       - name: Pack (macOS)
         if: runner.os == 'macOS'
         run: >
@@ -206,6 +218,7 @@ jobs:
           --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui
           --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
           --icon clowd_ui/Clowd.Ui/Assets/clowd-default.icns
+          --plist "$RUNNER_TEMP/Info.plist"
           --signAppIdentity "$APP_IDENTITY" --signInstallIdentity "$INSTALL_IDENTITY"
           --notaryProfile velopack-profile --keychain "$KEYCHAIN_PATH"
         shell: bash
