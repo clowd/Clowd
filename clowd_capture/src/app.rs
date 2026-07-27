@@ -35,6 +35,12 @@ pub struct App {
     settings: Arc<CapturerSettings>,
     windows: WindowSet,
     monitors: Vec<MonitorInfo>,
+    /// `monitors` mapped to the UI-state shape, built once — cloned into
+    /// every `UiSharedState` instead of re-collected per mouse event.
+    ui_monitors: Arc<[crate::ui::shared::UiMonitor]>,
+    /// Last cursor icon set per window, to skip redundant `set_cursor`
+    /// calls on every mouse move.
+    last_cursor: HashMap<WindowId, CursorIcon>,
     cached_hovered_title: Option<String>,
     cached_peek_command: Option<PeekCommand>,
     /// Peek command locked at capture time — persists through resize,
@@ -111,6 +117,15 @@ impl App {
             ScreenRect::from_exact(min_x, min_y, max_x, max_y)
         };
 
+        let ui_monitors: Arc<[crate::ui::shared::UiMonitor]> = monitors
+            .iter()
+            .map(|m| crate::ui::shared::UiMonitor {
+                bounds: m.bounds,
+                dpi_scale: m.scale_factor,
+                is_primary: m.is_primary,
+            })
+            .collect();
+
         let expected = worker_setups.len();
         let tips_mode = settings.tips_mode_at_startup;
         let cursor_overlay_visible = settings.cursor_visible_at_startup;
@@ -123,6 +138,8 @@ impl App {
             settings,
             windows: WindowSet::new(),
             monitors,
+            ui_monitors,
+            last_cursor: HashMap::new(),
             cached_hovered_title: None,
             cached_peek_command: None,
             locked_peek: None,
@@ -210,6 +227,16 @@ impl App {
         self.update_cursor_visibility();
     }
 
+    fn set_cursor_if_changed(&mut self, id: WindowId, cursor: CursorIcon) {
+        if self.last_cursor.get(&id) == Some(&cursor) {
+            return;
+        }
+        if let Some(window) = self.windows.get(&id) {
+            window.set_cursor(cursor);
+            self.last_cursor.insert(id, cursor);
+        }
+    }
+
     fn update_cursor_visibility(&self) {
         if self.input.captured || self.input.debug_visible {
             self.windows.show_cursors();
@@ -272,7 +299,7 @@ impl App {
         };
 
         let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
-            monitors: &self.monitors,
+            monitors: self.ui_monitors.clone(),
             selection: self.input.selection,
             captured: self.input.captured,
             mouse_down: self.input.mouse_down,
@@ -430,9 +457,7 @@ impl App {
             SystemInterop::set_mouse_position(pos, &self.monitors);
         }
         if let (Some(window_id), Some(cursor)) = (window_id, effects.set_cursor) {
-            if let Some(window) = self.windows.get(&window_id) {
-                window.set_cursor(cursor);
-            }
+            self.set_cursor_if_changed(window_id, cursor);
         }
         if effects.broadcast_ui {
             self.broadcast_ui_state();
@@ -949,16 +974,12 @@ impl ApplicationHandler for App {
                             DragMode::Resize(handle) => Some(resize_with_clamp(anchor, handle, cur_x, cur_y, self.vd_bounds)),
                         };
                         self.input.selection = new_sel;
-                        self.broadcast_ui_state();
+                        // No broadcast here — the unconditional
+                        // broadcast_ui_state at the end of CursorMoved
+                        // covers this path.
                     } else if let Some(sel) = self.input.selection {
                         let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
-                        let ht = hit_test(self.input.virtual_cursor, sel, dpi);
-                        if ht != self.input.hittest {
-                            self.input.hittest = ht;
-                            if let Some(handle) = self.windows.get(&id) {
-                                handle.set_cursor(ht.cursor());
-                            }
-                        }
+                        self.input.hittest = hit_test(self.input.virtual_cursor, sel, dpi);
 
                         let pos = self.input.virtual_cursor;
                         let over_button = self
@@ -970,9 +991,7 @@ impl ApplicationHandler for App {
                         } else {
                             self.input.hittest.cursor()
                         };
-                        if let Some(handle) = self.windows.get(&id) {
-                            handle.set_cursor(cursor);
-                        }
+                        self.set_cursor_if_changed(id, cursor);
                     }
                 }
 
@@ -1041,9 +1060,7 @@ impl ApplicationHandler for App {
                             self.input.captured = false;
                             self.input.hittest = Hittest::Outside;
                             self.update_cursor_visibility();
-                            if let Some(handle) = self.windows.get(&id) {
-                                handle.set_cursor(CursorIcon::Default);
-                            }
+                            self.set_cursor_if_changed(id, CursorIcon::Default);
                             self.broadcast_ui_state();
                         }
                         if finalising {
@@ -1078,9 +1095,7 @@ impl ApplicationHandler for App {
                                 let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
                                 let ht = hit_test(self.input.virtual_cursor, sel, dpi);
                                 self.input.hittest = ht;
-                                if let Some(handle) = self.windows.get(&id) {
-                                    handle.set_cursor(ht.cursor());
-                                }
+                                self.set_cursor_if_changed(id, ht.cursor());
                             }
                             // Mouse-release drag-select captured-transition
                             // site (DESIGN §3.3).
