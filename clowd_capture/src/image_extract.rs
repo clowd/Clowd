@@ -41,18 +41,18 @@ pub fn extract_selection_rgba(selection: ScreenRect, buffer: &CapturedDesktop) -
     }
 
     let stride = (buffer.width * 4) as usize;
-    let mut rgba = Vec::with_capacity((copy_w * copy_h * 4) as usize);
+    let dst_stride = (copy_w * 4) as usize;
+    let mut rgba = vec![0u8; copy_h as usize * dst_stride];
 
-    for row in 0..copy_h {
-        let src_start = ((buf_y + row) as usize * stride) + (buf_x as usize * 4);
-        let src_end = src_start + (copy_w as usize * 4);
-        let src_row = &buffer.bgra[src_start..src_end];
-
-        for chunk in src_row.chunks_exact(4) {
-            rgba.push(chunk[2]);
-            rgba.push(chunk[1]);
-            rgba.push(chunk[0]);
-            rgba.push(chunk[3]);
+    for row in 0..copy_h as usize {
+        let src_start = ((buf_y as usize + row) * stride) + (buf_x as usize * 4);
+        let src_row = &buffer.bgra[src_start..src_start + dst_stride];
+        let dst_row = &mut rgba[row * dst_stride..(row + 1) * dst_stride];
+        for (d, s) in dst_row.chunks_exact_mut(4).zip(src_row.chunks_exact(4)) {
+            d[0] = s[2];
+            d[1] = s[1];
+            d[2] = s[0];
+            d[3] = s[3];
         }
     }
 
@@ -75,30 +75,37 @@ pub fn extract_selection_rgba_with_peek(
     let win_left = peek.window_rect.left();
     let win_top = peek.window_rect.top();
 
-    for row in 0..height {
-        for col in 0..width {
-            let vd_x = sel_left + col as i32;
-            let vd_y = sel_top + row as i32;
+    // Overlap of the extracted region, the peek window rect, and the
+    // valid part of the peek texture, in virtual-desktop coords. The
+    // texture terms mirror the old per-pixel guards: tx = crop_x +
+    // (vd_x - win_left) must land in [0, peek.width), and likewise for y.
+    let x0 = sel_left.max(win_left).max(win_left - peek.crop_x);
+    let y0 = sel_top.max(win_top).max(win_top - peek.crop_y);
+    let x1 = (sel_left + width as i32)
+        .min(peek.window_rect.right())
+        .min(win_left - peek.crop_x + peek.width as i32);
+    let y1 = (sel_top + height as i32)
+        .min(peek.window_rect.bottom())
+        .min(win_top - peek.crop_y + peek.height as i32);
+    if x0 >= x1 || y0 >= y1 {
+        return Some(result);
+    }
 
-            if vd_x < win_left || vd_x >= peek.window_rect.right() || vd_y < win_top || vd_y >= peek.window_rect.bottom() {
-                continue;
-            }
-
-            let tx = peek.crop_x + (vd_x - win_left);
-            let ty = peek.crop_y + (vd_y - win_top);
-            if tx < 0 || ty < 0 || tx >= peek.width as i32 || ty >= peek.height as i32 {
-                continue;
-            }
-            let src_idx = (ty as usize * peek.width as usize + tx as usize) * 4;
-            if src_idx + 3 >= peek.bgra.len() {
-                continue;
-            }
-
-            let dst_idx = (row as usize * width as usize + col as usize) * 4;
-            rgba[dst_idx] = peek.bgra[src_idx + 2];
-            rgba[dst_idx + 1] = peek.bgra[src_idx + 1];
-            rgba[dst_idx + 2] = peek.bgra[src_idx];
-            rgba[dst_idx + 3] = 255;
+    let span = (x1 - x0) as usize * 4;
+    for vd_y in y0..y1 {
+        let ty = (peek.crop_y + (vd_y - win_top)) as usize;
+        let tx = (peek.crop_x + (x0 - win_left)) as usize;
+        let src_start = (ty * peek.width as usize + tx) * 4;
+        let dst_start = ((vd_y - sel_top) as usize * width as usize + (x0 - sel_left) as usize) * 4;
+        let Some(src_row) = peek.bgra.get(src_start..src_start + span) else {
+            continue;
+        };
+        let dst_row = &mut rgba[dst_start..dst_start + span];
+        for (d, s) in dst_row.chunks_exact_mut(4).zip(src_row.chunks_exact(4)) {
+            d[0] = s[2];
+            d[1] = s[1];
+            d[2] = s[0];
+            d[3] = 255;
         }
     }
 
