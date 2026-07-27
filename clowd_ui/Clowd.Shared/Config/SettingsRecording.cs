@@ -115,6 +115,15 @@ namespace Clowd.Config
             set => Set(ref _showMouseCursor, value);
         }
 
+        [Category("Video")]
+        [DisplayName("Highlight mouse clicks")]
+        [Description("Show an expanding highlight at the pointer on every click — visible only in the recording, not on your screen")]
+        public bool HighlightClicks
+        {
+            get => _highlightClicks;
+            set => Set(ref _highlightClicks, value);
+        }
+
         [Category("Audio")]
         [DisplayName("Capture speakers")]
         [Description("Record system/speaker output audio")]
@@ -169,6 +178,7 @@ namespace Clowd.Config
         private int _maxResolutionHeight = 0;
         private bool _hardwareAccelerated = true;
         private bool _showMouseCursor = true;
+        private bool _highlightClicks = true;
         private bool _captureSpeaker = false;
         private string _speakerDeviceId = "default";
         private bool _captureMicrophone = false;
