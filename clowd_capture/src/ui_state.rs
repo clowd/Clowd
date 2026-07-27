@@ -2,11 +2,12 @@ use std::sync::Arc;
 
 use crate::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect};
 use crate::settings::TipsMode;
-use crate::system::{CapturedDesktop, CursorImage, MonitorInfo};
+use crate::system::{CapturedDesktop, CursorImage};
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
 pub struct UiStateBuildInput<'a> {
-    pub monitors: &'a [MonitorInfo],
+    /// Invariant for the whole session — build once and clone the Arc.
+    pub monitors: Arc<[UiMonitor]>,
     pub selection: Option<ScreenRect>,
     pub captured: bool,
     pub mouse_down: bool,
@@ -56,16 +57,6 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         Some([left, top, left + w as f32, top + h as f32])
     });
 
-    let monitors: Arc<[UiMonitor]> = input
-        .monitors
-        .iter()
-        .map(|m| UiMonitor {
-            bounds: m.bounds,
-            dpi_scale: m.scale_factor,
-            is_primary: m.is_primary,
-        })
-        .collect();
-
     let peek_covers_cursor = input.peek_active
         && cursor_image_rect
             .zip(input.hovered_window_bounds)
@@ -75,7 +66,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
             });
 
     UiSharedState {
-        monitors,
+        monitors: input.monitors,
         selection: input.selection,
         captured: input.captured,
         mouse_down: input.mouse_down,
