@@ -5,6 +5,7 @@ mod platform;
 mod recorder;
 mod region;
 mod status;
+mod tracker;
 
 use clap::Parser;
 

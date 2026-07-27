@@ -11,6 +11,7 @@ This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-expre
 - **Multi-device audio** — any number of speaker (output) and microphone (input) devices, up to 8 total, mixed into the recording.
 - **Programmatic control** — a parent process drives recording over stdin (`start` / `pause` / `quit`, per-device mute) and reads structured progress as one JSON object per line on stdout.
 - **Aspect-preserving downscale** — cap output resolution with `--max-width` / `--max-height` without distorting the picture (never upscales).
+- **Click highlight** — `--tracker` draws an expanding, fading circle at the pointer on every mouse click, in the recording only.
 - **Cursor toggle** and a **paused-start** mode for building the pipeline ahead of time and starting instantly on command.
 - **Cross-platform** — Windows (x64 / ARM64) and macOS (x64 / arm64).
 
@@ -68,6 +69,8 @@ obs-express --output clip.mp4 --monitor 0 --hw-accel --speaker default --microph
 | `--hw-accel` | off | Prefer a hardware H.264 encoder; falls back to x264 if none is available. |
 | `--low-cpu` | off | Use the x264 `ultrafast` preset instead of `veryfast`. |
 | `--no-cursor` | off | Do not capture the mouse cursor. |
+| `--tracker` | off | Highlight mouse clicks with an expanding, fading circle (see below). |
+| `--tracker-color <R,G,B>` | `255,0,0` | Color of the click highlight; each component 0-255. |
 | `--pause` | off | Build the pipeline, emit `initialized`, and wait for a stdin `start` before recording. |
 | `--speaker <DEVICE>` | — | Output-capture (system audio) device id, or `default`. Repeatable. On macOS 13+ system audio is captured via ScreenCaptureKit: the device id is ignored (the flag only toggles system-audio capture on) and repeating the flag is rejected. |
 | `--microphone <DEVICE>` | — | Input-capture (microphone) device id, or `default`. Repeatable. |
@@ -82,6 +85,16 @@ A `--region` is composited from every monitor it intersects, so a rectangle can 
 - **macOS** — CoreGraphics points.
 
 A `--monitor` value is matched, in order, against the monitor's stable device id, its alternate id (Windows GDI name / macOS `CGDirectDisplayID`), and finally as a 0-based index.
+
+### Click highlight
+
+`--tracker` adds a circle that flashes wherever a mouse button goes down and animates for 400 ms: it starts at a 20-unit diameter and 85% opacity, then expands to 80 units as it fades out. Holding a button pins the circle to the pointer and the fade starts on release. The highlight exists only in the recording — nothing is drawn on the real screen — and it is composited by libobs as an extra scene item on top of the captured displays, so it costs one texture draw per frame.
+
+Its size adapts to the display the click happened on: on Windows it scales with that monitor's DPI, and on macOS it is sized in points (already density-independent) and mapped onto a Retina canvas along with everything else.
+
+```sh
+obs-express --output demo.mp4 --tracker --tracker-color 0,128,255
+```
 
 ## Controlling a running recording
 

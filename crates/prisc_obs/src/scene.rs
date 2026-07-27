@@ -39,6 +39,10 @@ impl Drop for ObsScene {
 }
 
 impl ObsSceneItem {
+    pub fn as_ptr(&self) -> *mut obs_sys::obs_sceneitem_t {
+        self.ptr
+    }
+
     pub fn set_visible(&self, visible: bool) {
         unsafe { obs_sys::obs_sceneitem_set_visible(self.ptr, visible) };
     }

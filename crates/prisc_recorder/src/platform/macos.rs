@@ -8,7 +8,7 @@ use std::path::Path;
 
 use obs::data::ObsData;
 
-use super::{MonitorInfo, ObsPaths};
+use super::{MonitorInfo, MouseInfo, ObsPaths};
 
 pub const GRAPHICS_MODULE: &CStr = c"libobs-metal.dylib";
 pub const DISPLAY_CAPTURE_ID: &str = "screen_capture";
@@ -32,7 +32,22 @@ extern "C" {
         uuid: *const std::ffi::c_void,
     ) -> *const std::ffi::c_void;
     fn CFRelease(cf: *const std::ffi::c_void);
+
+    /// `CGEventCreate(NULL)` snapshots the current event state; its location is
+    /// the cursor position in global display coordinates (points).
+    fn CGEventCreate(source: *const std::ffi::c_void) -> *const std::ffi::c_void;
+    fn CGEventGetLocation(event: *const std::ffi::c_void) -> CGPoint;
+    /// Reads button state without an event tap, so no Accessibility /
+    /// Input Monitoring permission is involved.
+    fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
 }
+
+/// `kCGEventSourceStateCombinedSessionState` — the session's combined state,
+/// which includes synthesized clicks (the closest analogue to Win32's
+/// `GetAsyncKeyState`).
+const CG_EVENT_SOURCE_STATE_COMBINED_SESSION: i32 = 0;
+const CG_MOUSE_BUTTON_LEFT: u32 = 0;
+const CG_MOUSE_BUTTON_RIGHT: u32 = 1;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
@@ -147,6 +162,39 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
 
 pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
     super::match_monitor(id, &enumerate_monitors())
+}
+
+/// Cursor position in global display points (the same space as
+/// `CGDisplayBounds`, hence as `MonitorInfo` and `--region`) plus the
+/// left/right button state.
+///
+/// `scale` is 1.0: unlike Windows physical pixels, points are already
+/// density-independent, so the highlight needs no DPI compensation here (the
+/// region planner separately scales points → canvas pixels).
+pub fn get_mouse_info() -> MouseInfo {
+    let pressed = unsafe {
+        CGEventSourceButtonState(CG_EVENT_SOURCE_STATE_COMBINED_SESSION, CG_MOUSE_BUTTON_LEFT)
+            || CGEventSourceButtonState(
+                CG_EVENT_SOURCE_STATE_COMBINED_SESSION,
+                CG_MOUSE_BUTTON_RIGHT,
+            )
+    };
+
+    let event = unsafe { CGEventCreate(std::ptr::null()) };
+    let (x, y) = if event.is_null() {
+        (0.0, 0.0)
+    } else {
+        let p = unsafe { CGEventGetLocation(event) };
+        unsafe { CFRelease(event) };
+        (p.x, p.y)
+    };
+
+    MouseInfo {
+        x,
+        y,
+        pressed,
+        scale: 1.0,
+    }
 }
 
 pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {

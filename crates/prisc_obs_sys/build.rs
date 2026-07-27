@@ -140,11 +140,6 @@ fn mac_cmake_configure(obs_src: &Path, obs_build: &Path) {
 }
 
 fn mac_cmake_build(obs_build: &Path, config: &str) {
-    let marker = obs_build.join(".build_complete");
-    if marker.exists() {
-        return;
-    }
-
     let targets = [
         "libobs",
         "libobs-metal",
@@ -155,7 +150,15 @@ fn mac_cmake_build(obs_build: &Path, config: &str) {
         "obs-ffmpeg-mux",
         "obs-x264",
         "coreaudio-encoder",
+        // image_source + color_filter: the mouse click tracker (--tracker).
+        "image-source",
+        "obs-filters",
     ];
+
+    let marker = obs_build.join(".build_complete");
+    if build_is_current(&marker, &targets) {
+        return;
+    }
 
     let mut cmd = Command::new("cmake");
     cmd.arg("--build").arg(obs_build);
@@ -170,7 +173,19 @@ fn mac_cmake_build(obs_build: &Path, config: &str) {
     let status = cmd.status().expect("Failed to run cmake build");
     assert!(status.success(), "cmake build failed");
 
-    std::fs::write(&marker, "").expect("Failed to write build marker");
+    write_build_marker(&marker, &targets);
+}
+
+/// The build marker records the target list it was written for, so adding a
+/// target rebuilds even when a previous (or CI-cached) tree is already marked
+/// complete. cmake itself makes the rebuild incremental — only the new targets
+/// compile.
+fn build_is_current(marker: &Path, targets: &[&str]) -> bool {
+    std::fs::read_to_string(marker).is_ok_and(|s| s == targets.join(" "))
+}
+
+fn write_build_marker(marker: &Path, targets: &[&str]) {
+    std::fs::write(marker, targets.join(" ")).expect("Failed to write build marker");
 }
 
 fn mac_emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
@@ -311,11 +326,6 @@ fn win_cmake_configure(cmake: &Path, obs_src: &Path, build_dir: &Path) {
 }
 
 fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
-    let marker = build_dir.join(".build_complete");
-    if marker.exists() {
-        return;
-    }
-
     // w32-pthreads and the win-capture helpers (graphics-hook, inject-helper,
     // get-graphics-offsets) come along via add_dependencies. Base targets are
     // built for every Windows arch.
@@ -330,6 +340,9 @@ fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
         "obs-x264",
         "obs-outputs",
         "coreaudio-encoder",
+        // image_source + color_filter: the mouse click tracker (--tracker).
+        "image-source",
+        "obs-filters",
     ];
 
     // GPU-vendor hardware encoders (NVIDIA NVENC, Intel QSV, AMD AMF) exist only
@@ -347,6 +360,11 @@ fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
         ]);
     }
 
+    let marker = build_dir.join(".build_complete");
+    if build_is_current(&marker, &targets) {
+        return;
+    }
+
     let mut cmd = Command::new(cmake);
     cmd.arg("--build")
         .arg(build_dir)
@@ -359,7 +377,7 @@ fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
     let status = cmd.status().expect("Failed to run cmake build");
     assert!(status.success(), "cmake build failed");
 
-    std::fs::write(&marker, "").expect("Failed to write .build_complete marker");
+    write_build_marker(&marker, &targets);
 }
 
 fn win_emit_link_directives(build_dir: &Path, config: &str) {

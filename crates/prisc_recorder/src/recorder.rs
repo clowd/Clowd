@@ -29,6 +29,7 @@ use crate::encoder_config::{self, EncoderConfig};
 use crate::platform;
 use crate::region::{self, Rect};
 use crate::status::{self, RecordingClock};
+use crate::tracker::{self, MouseTracker};
 
 /// Overall deadline waiting for the OBS stop signal after `quit` (§1.4).
 const STOP_DEADLINE: Duration = Duration::from_secs(30);
@@ -76,6 +77,9 @@ pub struct Recorder {
     mic_meters: Vec<(ObsVolmeter, Arc<AtomicU32>)>,
     _display_sources: Vec<ObsSource>,
     _scene_items: Vec<ObsSceneItem>,
+    /// Owns the click-highlight item and its libobs tick callback; must outlive
+    /// the scene, hence a field rather than a local (`--tracker` only).
+    _tracker: Option<MouseTracker>,
     _scene: ObsScene,
     _video_encoder: ObsEncoder,
     _audio_encoder: ObsEncoder,
@@ -222,6 +226,25 @@ impl Recorder {
             display_sources.push(source);
             scene_items.push(scene_item);
         }
+
+        // The click highlight is added last so it stacks above every display
+        // capture. Its tick callback starts animating immediately — harmless
+        // before the output starts, since nothing is being encoded yet.
+        let tracker = if cli.tracker {
+            let color = match tracker::parse_color(&cli.tracker_color) {
+                Ok(c) => c,
+                Err(e) => fail_args(e),
+            };
+            match MouseTracker::create(&scene, color, capture_region, plan.canvas_scale) {
+                Ok(t) => Some(t),
+                Err(e) => fail(format_args!(
+                    "Failed to create the mouse click tracker: {e}"
+                )),
+            }
+        } else {
+            None
+        };
+
         context.set_output_source_raw(0, scene.get_source());
 
         // 8. Audio sources on output channels 1..=N (speakers first, then mics,
@@ -318,6 +341,7 @@ impl Recorder {
             mic_meters,
             _display_sources: display_sources,
             _scene_items: scene_items,
+            _tracker: tracker,
             _scene: scene,
             _video_encoder: video_encoder,
             _audio_encoder: audio_encoder,

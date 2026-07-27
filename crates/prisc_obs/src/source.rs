@@ -31,6 +31,18 @@ impl ObsSource {
         unsafe { obs_sys::obs_source_set_muted(self.ptr, muted) };
     }
 
+    /// Attaches `filter` to this source. libobs takes its own reference, so the
+    /// caller keeps ownership of the `ObsSource` it passes in.
+    pub fn add_filter(&self, filter: &ObsSource) {
+        unsafe { obs_sys::obs_source_filter_add(self.ptr, filter.ptr) };
+    }
+
+    /// Merges `settings` into the source's settings. For video sources libobs
+    /// defers the actual `update` call to the graphics thread.
+    pub fn update(&self, settings: &ObsData) {
+        unsafe { obs_sys::obs_source_update(self.ptr, settings.ptr) };
+    }
+
     pub fn as_ptr(&self) -> *mut obs_sys::obs_source_t {
         self.ptr
     }

@@ -7,17 +7,20 @@ use std::path::Path;
 
 use obs::data::ObsData;
 use windows_sys::core::BOOL;
-use windows_sys::Win32::Foundation::{LPARAM, RECT, TRUE};
+use windows_sys::Win32::Foundation::{LPARAM, POINT, RECT, TRUE};
 use windows_sys::Win32::Graphics::Gdi::{
-    EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, DISPLAY_DEVICEW, HDC, HMONITOR,
-    MONITORINFO, MONITORINFOEXW,
+    EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, DISPLAY_DEVICEW,
+    HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
 };
 use windows_sys::Win32::System::Threading::ExitProcess;
 use windows_sys::Win32::UI::HiDpi::{
-    SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    GetDpiForMonitor, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
+    MDT_DEFAULT,
 };
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, MONITORINFOF_PRIMARY};
 
-use super::{MonitorInfo, ObsPaths};
+use super::{MonitorInfo, MouseInfo, ObsPaths};
 
 pub const GRAPHICS_MODULE: &CStr = c"libobs-d3d11";
 pub const DISPLAY_CAPTURE_ID: &str = "monitor_capture";
@@ -26,10 +29,6 @@ pub const AUDIO_INPUT_CAPTURE_ID: &str = "wasapi_input_capture";
 /// `EDD_GET_DEVICE_INTERFACE_NAME` — request the device interface path in
 /// `DISPLAY_DEVICEW.DeviceID`.
 const EDD_GET_DEVICE_INTERFACE_NAME: u32 = 0x0000_0001;
-
-/// `MONITORINFOF_PRIMARY` — lives in `Win32_UI_WindowsAndMessaging`, outside
-/// the feature set this crate enables; the value is contractual.
-const MONITORINFOF_PRIMARY: u32 = 0x0000_0001;
 
 /// Must run before any monitor enumeration so `EnumDisplayMonitors` rects are
 /// physical pixels (per-monitor-v2 DPI awareness).
@@ -118,6 +117,46 @@ pub fn enumerate_monitors() -> Vec<MonitorInfo> {
 
 pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
     super::match_monitor(id, &enumerate_monitors())
+}
+
+/// Cursor position (physical px — the process is per-monitor-v2 DPI aware),
+/// button state, and the DPI zoom of the monitor under the cursor.
+///
+/// `GetAsyncKeyState`'s high bit is the *current* physical down state, so a
+/// click is caught as long as the button is still held on some tick — the same
+/// sampling the C++ original does.
+pub fn get_mouse_info() -> MouseInfo {
+    let mut p = POINT { x: 0, y: 0 };
+    let got = unsafe { GetCursorPos(&mut p) };
+    if got == 0 {
+        return MouseInfo {
+            x: 0.0,
+            y: 0.0,
+            pressed: false,
+            scale: 1.0,
+        };
+    }
+
+    let down = |vk: i32| unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 };
+    let pressed = down(VK_LBUTTON as i32) || down(VK_RBUTTON as i32);
+
+    // Per-monitor DPI: 96 = 100% scaling, so dpi/96 is the zoom factor.
+    let mut dpi_x: u32 = 96;
+    let mut dpi_y: u32 = 96;
+    let hmon = unsafe { MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST) };
+    if !hmon.is_null() {
+        let hr = unsafe { GetDpiForMonitor(hmon, MDT_DEFAULT, &mut dpi_x, &mut dpi_y) };
+        if hr < 0 || dpi_x == 0 {
+            dpi_x = 96;
+        }
+    }
+
+    MouseInfo {
+        x: p.x as f64,
+        y: p.y as f64,
+        pressed,
+        scale: dpi_x as f64 / 96.0,
+    }
 }
 
 pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {

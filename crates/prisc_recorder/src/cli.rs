@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::region;
+use crate::{region, tracker};
 
 /// Maximum total audio sources (speakers + microphones).
 pub const MAX_AUDIO_SOURCES: usize = 8;
@@ -51,6 +51,15 @@ pub struct Cli {
     #[arg(long)]
     pub no_cursor: bool,
 
+    /// Render an expanding, fading highlight at the pointer on every mouse
+    /// click (recording only — the real screen is untouched).
+    #[arg(long)]
+    pub tracker: bool,
+
+    /// Click-highlight color as "R,G,B", each component 0-255.
+    #[arg(long, default_value = "255,0,0")]
+    pub tracker_color: String,
+
     /// Initialized-wait mode: build the pipeline, emit `initialized`, and do
     /// not start the output until stdin `start` arrives.
     #[arg(long)]
@@ -98,6 +107,10 @@ impl Cli {
         if let Some(ref r) = self.region {
             region::parse_region(r).map_err(|e| e.to_string())?;
         }
+
+        // Validated even without --tracker, so a bad color is never silently
+        // accepted (the original parses it unconditionally too).
+        tracker::parse_color(&self.tracker_color)?;
 
         if self.fps == 0 {
             return Err("--fps must be at least 1".to_string());
@@ -198,5 +211,25 @@ mod tests {
         assert_eq!(cli.max_height, 0);
         assert!(!cli.pause);
         assert!(!cli.hw_accel);
+        assert!(!cli.tracker);
+        assert_eq!(cli.tracker_color, "255,0,0");
+    }
+
+    #[test]
+    fn tracker_color_is_validated() {
+        let cli = parse(&["--output", "a.mp4", "--tracker-color", "0,0"]).unwrap();
+        assert!(cli.validate().is_err());
+        let cli = parse(&["--output", "a.mp4", "--tracker-color", "300,0,0"]).unwrap();
+        assert!(cli.validate().is_err());
+        let cli = parse(&[
+            "--output",
+            "a.mp4",
+            "--tracker",
+            "--tracker-color",
+            "0,128,255",
+        ])
+        .unwrap();
+        assert!(cli.validate().is_ok());
+        assert!(cli.tracker);
     }
 }

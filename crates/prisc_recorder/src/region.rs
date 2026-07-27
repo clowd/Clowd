@@ -18,6 +18,9 @@ pub struct RegionPlan {
     /// Canvas size in capture PIXELS: the region size × the densest
     /// intersected display's scale, forced even (min 2).
     pub canvas: (u32, u32),
+    /// Canvas pixels per capture-space unit — the max `MonitorInfo::scale`
+    /// among the intersected displays. 1.0 on Windows.
+    pub canvas_scale: f64,
     pub items: Vec<PlannedItem>,
 }
 
@@ -117,6 +120,7 @@ pub fn plan_region(region: Rect, monitors: &[MonitorInfo]) -> Result<RegionPlan,
     let canvas_h = ((region.h as f64 * canvas_scale).round() as u32 & !1).max(2);
     Ok(RegionPlan {
         canvas: (canvas_w, canvas_h),
+        canvas_scale,
         items,
     })
 }

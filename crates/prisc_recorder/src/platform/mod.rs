@@ -33,6 +33,22 @@ pub struct MonitorInfo {
     pub is_primary: bool,
 }
 
+/// Live pointer state, sampled once per rendered frame by the click tracker.
+#[derive(Debug, Clone, Copy)]
+pub struct MouseInfo {
+    /// Cursor position in the platform capture coordinate space (§1.1) — the
+    /// same space as `MonitorInfo::x/y` and `--region`.
+    pub x: f64,
+    pub y: f64,
+    /// Any mouse button (left or right) currently held down.
+    pub pressed: bool,
+    /// Density factor for the highlight's on-screen size, so a click looks the
+    /// same physical size on every display. Windows: the cursor monitor's
+    /// DPI / 96, because capture coords are physical pixels. macOS: 1.0 —
+    /// capture coords are points, which are already density-independent.
+    pub scale: f64,
+}
+
 /// Paths handed to `obs_add_module_path` / `obs_add_data_path`. `module_bin` /
 /// `module_data` are passed to libobs verbatim (they may contain the
 /// `%module%` template token).
