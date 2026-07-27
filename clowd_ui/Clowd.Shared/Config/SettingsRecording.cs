@@ -189,6 +189,16 @@ namespace Clowd.Config
         }
 
         [Category("Audio")]
+        [DisplayName("Compensate for speaker volume")]
+        [Description("Boost captured speaker audio to undo the system volume slider on devices that apply it in software (common for USB audio), so recordings are not quieter than what you heard. Devices with hardware volume control are left untouched.")]
+        [HiddenOnMacOS]
+        public bool SpeakerVolumeCompensation
+        {
+            get => _speakerVolumeCompensation;
+            set => Set(ref _speakerVolumeCompensation, value);
+        }
+
+        [Category("Audio")]
         [DisplayName("Capture microphone")]
         [Description("Record microphone/input audio")]
         public bool CaptureMicrophone
@@ -235,6 +245,7 @@ namespace Clowd.Config
         private bool _highlightClicks = true;
         private bool _captureSpeaker = false;
         private string _speakerDeviceId = "default";
+        private bool _speakerVolumeCompensation = true;
         private bool _captureMicrophone = false;
         private string _microphoneDeviceId = "default";
         private string _outputDirectory = DefaultOutputDirectory;
