@@ -1,19 +1,23 @@
-use image::imageops;
-
 use crate::geometry::{RectExt, ScreenRect};
 use crate::system::{CapturedCursor, CapturedDesktop, CursorImage, WindowPeekImage};
 
 /// Blur the desktop bitmap for the peek overlay background.
-pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, sigma: f32) -> (Vec<u8>, u32, u32) {
-    let mut rgba = bgra.to_vec();
-    for chunk in rgba.chunks_exact_mut(4) {
-        chunk.swap(0, 2);
-    }
-    let img = image::RgbaImage::from_raw(width, height, rgba).expect("buffer size matches dimensions");
-    let blurred = imageops::blur(&img, sigma);
-    let mut out = blurred.into_raw();
-    for chunk in out.chunks_exact_mut(4) {
-        chunk.swap(0, 2);
+///
+/// One copy out of the (shared, concurrently-read) capture buffer is
+/// unavoidable; the blur then runs in place on that copy. No channel
+/// reordering: a gaussian blur is channel-independent, so blurring BGRA
+/// bytes directly yields the same result as RGBA round-tripping would.
+pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, radius: u32) -> (Vec<u8>, u32, u32) {
+    let mut out = bgra.to_vec();
+    let mut img = libblur::BlurImageMut::borrow(&mut out, width, height, libblur::FastBlurChannels::Channels4);
+    if let Err(e) = libblur::stack_blur(
+        &mut img,
+        libblur::AnisotropicRadius::new(radius),
+        libblur::ThreadingPolicy::Adaptive,
+    ) {
+        // Blur is cosmetic (peek ghost backdrop); fall back to the sharp
+        // desktop rather than failing the capture.
+        log::warn!("stack_blur failed: {e}");
     }
     (out, width, height)
 }

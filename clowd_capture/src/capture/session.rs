@@ -184,7 +184,8 @@ fn spawn_screenshot_job(
                 let _ = tx.send(WorkerInput::Screenshot(captured.clone()));
             }
             if peek_enabled {
-                let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 2.0);
+                // stack_blur radius 4 visually approximates the old sigma-2.0 gaussian.
+                let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 4);
                 let blurred = Arc::new(BlurredDesktopImage {
                     bgra,
                     width: w,
