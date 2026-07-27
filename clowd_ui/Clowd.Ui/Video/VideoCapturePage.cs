@@ -56,6 +56,9 @@ namespace Clowd.UI
         private string _binaryPath;
         private string _sessionDir;
         private string _outputMp4;
+        // where the finished video actually ended up (§4.5 / issue #50): the user's output folder
+        // once MoveToOutputFolderAsync has run, and _outputMp4 while recording or if the move failed.
+        private string _savedPath;
         private TimeSpan _lastStatusElapsed;
         private int _statusCount;
 
@@ -80,6 +83,14 @@ namespace Clowd.UI
                 _settings = SettingsRoot.Current.Recording;
                 _sessionDir = sessionDir;
                 _outputMp4 = Path.Combine(sessionDir, "video.mp4");
+                _savedPath = _outputMp4;
+
+                // normalize the configured output folder up-front (creating it, or falling back to
+                // Videos when it has gone away) and write it back, so the settings page the OPTIONS
+                // button opens always names the folder this recording will actually be saved to.
+                var outputDir = RecordingOutputPath.ResolveDirectory(_settings);
+                if (outputDir != null)
+                    _settings.OutputDirectory = outputDir;
 
                 var binary = ObsBinaryLocator.Resolve();
                 if (binary == null)
@@ -248,24 +259,44 @@ namespace Clowd.UI
                     return;
                 _closing = true;
 
+                // the capturer process holds the mp4 open until it exits, so it has to be gone
+                // before the file can be moved out of the session directory.
+                await ShutdownCapturersAsync();
+
+                var moveError = await MoveToOutputFolderAsync();
+
                 CreateSession();
 
-                if (SettingsRoot.Current.Recording.OpenRecentsWhenFinished)
-                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
-
-                // this is a tray app with no MainWindow: when recents is disabled and nothing
-                // else is open, there is no window to host the toast and the user would get
-                // zero save feedback — open recents as the guaranteed feedback surface.
-                var host = Toast.GetActiveOrMainWindow();
-                if (host == null)
+                switch (SettingsRoot.Current.Recording.OpenWhenFinished)
                 {
-                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
-                    host = Toast.GetActiveOrMainWindow();
+                    case RecordingFinishAction.RecentsPage:
+                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
+                        break;
+                    case RecordingFinishAction.OutputFolder:
+                        // reveals the saved file in its folder — the same affordance as the
+                        // "Show in folder" item in Recents (WPF: OpenFinishedInExplorer).
+                        ShellHelper.RevealFileInFolder(_savedPath);
+                        break;
                 }
 
-                Toast.Show(host, "Recording saved");
+                // this is a tray app with no MainWindow, so with nothing open there is simply
+                // nowhere to host the toast. That is deliberate now: opening a page the user did
+                // not ask for just to carry a toast would override the setting — revealing the
+                // folder is its own confirmation, and "None" means none.
+                var host = Toast.GetActiveOrMainWindow();
+                if (host != null)
+                    Toast.Show(host, "Recording saved");
 
-                await ShutdownCapturersAsync();
+                // reported after the session exists and the toast has shown: the recording itself
+                // is safe either way, this only says it is not in the folder the user picked.
+                if (moveError != null)
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                        $"It was saved to {_savedPath} instead.{Environment.NewLine}{Environment.NewLine}" +
+                        $"Error:{Environment.NewLine}{moveError.Message}",
+                        "Unable to save the recording to your chosen folder");
+                }
+
                 Close();
             }
             catch (Exception ex)
@@ -372,9 +403,14 @@ namespace Clowd.UI
                 await ShutdownCapturersAsync();
 
                 if (IsRecording && (stoppedCleanly || HasPartialVideo()))
+                {
+                    await MoveToOutputFolderAsync();
                     CreateSession();
+                }
                 else
+                {
                     DeleteDirectory(_sessionDir); // WAIT state: nothing was recorded
+                }
             }
             catch (Exception ex)
             {
@@ -562,9 +598,17 @@ namespace Clowd.UI
 
                 bool keepSession = HasPartialVideo();
                 if (keepSession)
+                {
+                    // a partial recording is still the user's recording — save it where they
+                    // expect it. A failure here only leaves it in the session directory, which
+                    // the message below already points at.
+                    await MoveToOutputFolderAsync();
                     CreateSession();
+                }
                 else
+                {
                     DeleteDirectory(_sessionDir);
+                }
 
                 var content = "The recording has failed:\n" + message;
                 if (keepSession)
@@ -609,10 +653,48 @@ namespace Clowd.UI
             session.Name = "Recording";
             session.CreatedUtc = DateTime.UtcNow;
             session.ContentKind = "video"; // IsUploadOnly=true → no editor affordance (correct)
-            session.VideoPath = _outputMp4;
+            // usually outside the session dir now (issue #50), so the recording survives the
+            // session being deleted here or expiring out of Recents — the user's file is theirs.
+            session.VideoPath = _savedPath;
             session.DurationMs = (long)_lastStatusElapsed.TotalMilliseconds;
             session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
             session.OriginalBounds = _region;
+        }
+
+        /// <summary>
+        /// Moves the finished mp4 out of the session directory into the folder the user chose,
+        /// named with their filename pattern (issue #50 — WPF parity with
+        /// VideoCaptureWindow.StopRecording). Updates <see cref="_savedPath"/> to wherever the
+        /// video ended up and returns the failure, if any, so the caller can report it; a failed
+        /// move is never fatal — the video simply stays in the session directory, which is exactly
+        /// where the pre-#50 rewrite always left it. Callers must have shut the capturer down
+        /// first: obs-express holds the file open until its process exits.
+        /// </summary>
+        private async Task<Exception> MoveToOutputFolderAsync()
+        {
+            try
+            {
+                if (!File.Exists(_outputMp4))
+                    return null;
+
+                var target = RecordingOutputPath.GetSavePath(_settings);
+                if (String.IsNullOrEmpty(target))
+                    return null; // no writable output folder at all; keep the session copy silently
+
+                // File.Move degrades to a full copy across volumes, which for a long recording is
+                // seconds of work — never on the UI thread.
+                await Task.Run(() => File.Move(_outputMp4, target));
+
+                _savedPath = target;
+                Debug.WriteLine("Recording saved to " + target);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to move the recording to the output folder: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.move-output");
+                return ex;
+            }
         }
 
         /// <summary>True when the output mp4 exists with any content — a crash or forced stop

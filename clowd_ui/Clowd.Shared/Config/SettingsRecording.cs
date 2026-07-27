@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.IO;
 
 namespace Clowd.Config
 {
@@ -50,14 +51,57 @@ namespace Clowd.Config
         High = 16,
     }
 
+    /// <summary>What Clowd shows the user once a recording has been saved.</summary>
+    public enum RecordingFinishAction
+    {
+        [Description("Recent Page")]
+        RecentsPage,
+
+        [Description("Output Folder")]
+        OutputFolder,
+
+        [Description("None")]
+        None,
+    }
+
     /// <summary>
     /// Screen-recording settings, mirrored into the obs-express CLI at recording start
     /// (see the video-recording design, §4.2). A settings snapshot is taken when a recording is
     /// initialized, so changes apply to the next recording only. Device ids are plain strings
     /// ("default" = system default device) rendered as dropdowns via [AudioDeviceSelector].
+    ///
+    /// Declaration order is the page's section order (the settings factory groups by first
+    /// appearance of each [Category]), which is why Output comes first.
     /// </summary>
     public class SettingsRecording : SimpleNotifyObject
     {
+        [Category("Output")]
+        [DisplayName("Output folder")]
+        [Description("Folder that finished recordings are saved to. If it is empty or unavailable, your Videos folder is used.")]
+        public string OutputDirectory
+        {
+            get => _outputDirectory;
+            set => Set(ref _outputDirectory, value);
+        }
+
+        [Category("Output")]
+        [DisplayName("Filename pattern")]
+        [Description("Date format used to name saved recordings (.NET date format string). A number is appended if the name is already taken.")]
+        public string FilenamePattern
+        {
+            get => _filenamePattern;
+            set => Set(ref _filenamePattern, value);
+        }
+
+        [Category("Output")]
+        [DisplayName("Open when finished")]
+        [Description("What to show when a recording finishes: the Recents page (to play or upload it), the folder it was saved to, or nothing")]
+        public RecordingFinishAction OpenWhenFinished
+        {
+            get => _openWhenFinished;
+            set => Set(ref _openWhenFinished, value);
+        }
+
         [Category("Video")]
         [DisplayName("Frame rate")]
         [Description("Recording frame rate in frames per second")]
@@ -163,13 +207,23 @@ namespace Clowd.Config
             set => Set(ref _microphoneDeviceId, value);
         }
 
-        [Category("Behavior")]
-        [DisplayName("Open recents when finished")]
-        [Description("Open the Recents page after a recording finishes so you can play or upload it")]
-        public bool OpenRecentsWhenFinished
+        /// <summary>
+        /// Where recordings go until the user picks a folder: the platform Videos/Movies folder,
+        /// falling back to ~/Videos on platforms where the shell returns nothing for it (Linux
+        /// without xdg-user-dirs). Used as the compiled-in default of <see cref="OutputDirectory"/>
+        /// and as the fallback when the configured folder cannot be written to.
+        /// </summary>
+        public static string DefaultOutputDirectory
         {
-            get => _openRecentsWhenFinished;
-            set => Set(ref _openRecentsWhenFinished, value);
+            get
+            {
+                var videos = Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+                if (!String.IsNullOrWhiteSpace(videos))
+                    return videos;
+
+                var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                return String.IsNullOrWhiteSpace(home) ? null : Path.Combine(home, "Videos");
+            }
         }
 
         private int _fps = 30;
@@ -183,6 +237,8 @@ namespace Clowd.Config
         private string _speakerDeviceId = "default";
         private bool _captureMicrophone = false;
         private string _microphoneDeviceId = "default";
-        private bool _openRecentsWhenFinished = true;
+        private string _outputDirectory = DefaultOutputDirectory;
+        private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
+        private RecordingFinishAction _openWhenFinished = RecordingFinishAction.RecentsPage;
     }
 }

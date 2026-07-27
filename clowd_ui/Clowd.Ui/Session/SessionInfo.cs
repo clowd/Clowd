@@ -104,7 +104,8 @@ namespace Clowd
 
         [JsonIgnore] public bool IsUploadOnly => !String.IsNullOrEmpty(ContentKind);
 
-        // set for video ("video") sessions; the playable recording file (video.mp4).
+        // set for video ("video") sessions; the playable recording file. Normally lives in the
+        // user's configured recording output folder, outside this session's directory (issue #50).
         public string VideoPath
         {
             get => Get<string>();
