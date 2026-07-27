@@ -17,7 +17,7 @@ namespace Clowd.Drawing.Tools
             {
                 foreach (var g in images)
                 {
-                    g.AddObscuredArea(selectedArea, canvas.BlurRadius);
+                    g.AddObscuredArea(selectedArea, canvas.BlurRadius, canvas.ObscureMode);
                 }
 
                 canvas.AddCommandToHistory(false);

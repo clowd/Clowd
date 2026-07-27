@@ -15,7 +15,7 @@ namespace Clowd.Drawing.Graphics
     /// every draw/hit-test path) — and changes NOTHING else: fields, JSON names, handle
     /// numbering, Normalize and the Move/MoveHandleTo raise pattern are contracts.
     /// </summary>
-    [GraphicDesc("Rectangle", Skills = Skill.Angle | Skill.Color | Skill.Stroke)]
+    [GraphicDesc("Rectangle", Skills = Skill.Angle | Skill.Color | Skill.Stroke | Skill.Radius | Skill.DashStyle)]
     public class GraphicRectangle : GraphicBase
     {
         public double Left
@@ -54,6 +54,19 @@ namespace Clowd.Drawing.Graphics
             protected set => Set(ref _centerOfRotation, value);
         }
 
+        /// <summary>
+        /// Corner rounding of the drawn rectangle, in canvas units, clamped at draw time to half
+        /// the drawn width/height. Persisted — defaults to 0 (square corners), which is what an old
+        /// document loads as. Pre-existing documents were drawn with LineWidth as the corner radius
+        /// (a ~2px rounding at the default stroke); that quirk is dropped rather than baked in as a
+        /// default, so the radius reads literally and 0 really means square.
+        /// </summary>
+        public double CornerRadius
+        {
+            get => _cornerRadius;
+            set => Set(ref _cornerRadius, value);
+        }
+
         // This is always the center of the rectangle except while the user is dragging a resizing handle.
         private Point _centerOfRotation;
         private double _left;
@@ -61,6 +74,7 @@ namespace Clowd.Drawing.Graphics
         private double _right;
         private double _bottom;
         private double _angle;
+        private double _cornerRadius; // absent from JSON → 0 (square corners)
 
         protected GraphicRectangle()
         { }
@@ -113,6 +127,7 @@ namespace Clowd.Drawing.Graphics
             map[nameof(Bottom)] = shape;
             map[nameof(Angle)] = shape;
             map[nameof(CenterOfRotation)] = shape;
+            map[nameof(CornerRadius)] = shape;
         }
 
         public virtual Rect UnrotatedBounds => HelperFunctions.CreateRectSafeRounded(Left, Top, Right, Bottom);
@@ -382,14 +397,23 @@ namespace Clowd.Drawing.Graphics
         // `new Pen(new SolidColorBrush(...))` calls).
         internal virtual void DrawRectangle(DrawingContext drawingContext)
         {
+            // stroke inset: the pen straddles the edge, so the drawn rect shrinks by one LineWidth
+            var rect = new Rect(UnrotatedBounds.Left + (LineWidth / 2),
+                                UnrotatedBounds.Top + (LineWidth / 2),
+                                Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left - LineWidth),
+                                Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top - LineWidth));
+            var radius = ClampCornerRadius(rect);
+
             drawingContext.DrawRectangle(
                 null,
-                RenderResources.GetPen(ObjectColor, LineWidth),
-                new Rect(UnrotatedBounds.Left + (LineWidth / 2),
-                         UnrotatedBounds.Top + (LineWidth / 2),
-                         Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left - LineWidth),
-                         Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top - LineWidth)),
-                LineWidth, LineWidth);
+                RenderResources.GetPen(ObjectColor, LineWidth, StrokeDash),
+                rect,
+                radius, radius);
         }
+
+        /// <summary>A corner radius larger than half the shorter side is not representable — clamp
+        /// instead of letting the renderer produce a degenerate outline.</summary>
+        protected double ClampCornerRadius(Rect rect) =>
+            Math.Max(0, Math.Min(CornerRadius, Math.Min(rect.Width, rect.Height) / 2));
     }
 }

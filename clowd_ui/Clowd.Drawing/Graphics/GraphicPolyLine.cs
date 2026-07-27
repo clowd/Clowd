@@ -8,7 +8,7 @@ using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("PolyLine", Skills = Skill.Angle | Skill.Color | Skill.Stroke)]
+    [GraphicDesc("PolyLine", Skills = Skill.Angle | Skill.Color | Skill.Stroke | Skill.DashStyle)]
     public class GraphicPolyLine : GraphicRectangle
     {
         private List<Point> _points;
@@ -62,7 +62,7 @@ namespace Clowd.Drawing.Graphics
         {
             if (_final != null)
             {
-                var pen = RenderResources.GetPen(ObjectColor, LineWidth);
+                var pen = RenderResources.GetPen(ObjectColor, LineWidth, lineCap: PenLineCap.Round);
                 EnsureFittedTransform(pen);
                 return _final.GetRenderBounds(pen);
             }
@@ -73,12 +73,17 @@ namespace Clowd.Drawing.Graphics
 
         internal override void DrawRectangle(DrawingContext context)
         {
-            var pen = RenderResources.GetPen(ObjectColor, LineWidth);
+            // `pen` is the SOLID measuring pen — the fitted transform must not shift when the dash
+            // changes, so only the ink pen carries the dash. Both carry the ink's round caps: the
+            // fitted transform and bounds must account for the half-width the caps add at the
+            // stroke ends.
+            var pen = RenderResources.GetPen(ObjectColor, LineWidth, lineCap: PenLineCap.Round);
+            var inkPen = RenderResources.GetPen(ObjectColor, LineWidth, StrokeDash, PenLineCap.Round);
             if (_drawing)
             {
                 foreach (var geo in _segments)
                 {
-                    context.DrawGeometry(null, pen, geo);
+                    context.DrawGeometry(null, inkPen, geo);
                 }
             }
             else
@@ -91,7 +96,7 @@ namespace Clowd.Drawing.Graphics
 
                 EnsureFittedTransform(pen);
 
-                context.DrawGeometry(null, pen, _final);
+                context.DrawGeometry(null, inkPen, _final);
             }
         }
 

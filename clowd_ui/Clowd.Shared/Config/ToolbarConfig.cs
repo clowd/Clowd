@@ -17,6 +17,7 @@ namespace Clowd.Config
             ToolType.Ellipse,
             ToolType.Line,
             ToolType.Arrow,
+            ToolType.Measure,
             ToolType.PolyLine,
             ToolType.Count,
             ToolType.Text,

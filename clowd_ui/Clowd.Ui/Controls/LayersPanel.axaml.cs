@@ -374,7 +374,7 @@ namespace Clowd.UI.Controls
 
         // exact/most-derived types first: GraphicCount derives from GraphicText,
         // GraphicImage/GraphicPolyLine/GraphicEllipse/GraphicFilledRectangle from
-        // GraphicRectangle, GraphicArrow from GraphicLine — pattern order is load-bearing
+        // GraphicRectangle, GraphicArrow and GraphicMeasure from GraphicLine — pattern order is load-bearing
         private static string GetIconKey(GraphicBase g) => g switch
         {
             GraphicCount => "IconToolNumericCount",
@@ -385,6 +385,7 @@ namespace Clowd.UI.Controls
             GraphicFilledRectangle => "IconToolFilledRectangle",
             GraphicRectangle => "IconToolRectangle",
             GraphicArrow => "IconToolArrow",
+            GraphicMeasure => "IconToolMeasure",
             GraphicLine => "IconToolLine",
             _ => "IconToolPointer",
         };

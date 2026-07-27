@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
@@ -17,11 +19,60 @@ namespace Clowd.Drawing.Tests
     /// </summary>
     public class GraphicImageTests
     {
+        private static readonly MethodInfo ImgUpdateObscure =
+            typeof(GraphicImage).GetMethod("UpdateObscureCache", BindingFlags.Instance | BindingFlags.NonPublic);
+
+        private static readonly FieldInfo ImgObscured =
+            typeof(GraphicImage).GetField("_imageObscured", BindingFlags.Instance | BindingFlags.NonPublic);
+
         private static void WritePng(string path, int width, int height)
         {
             using var wb = new WriteableBitmap(new PixelSize(width, height), new Vector(96, 96),
                                                PixelFormats.Bgra8888, AlphaFormat.Premul);
             wb.Save(path, PngBitmapEncoderOptions.Default);
+        }
+
+        /// <summary>Opaque white left of <paramref name="seamX"/>, opaque black right of it.</summary>
+        private static void WriteSeamPng(string path, int width, int height, int seamX)
+        {
+            using var wb = new WriteableBitmap(new PixelSize(width, height), new Vector(96, 96),
+                                               PixelFormats.Bgra8888, AlphaFormat.Premul);
+            using (var fb = wb.Lock())
+            {
+                var row = new byte[width * 4];
+                for (int x = 0; x < width; x++)
+                {
+                    byte v = x < seamX ? (byte)255 : (byte)0;
+                    row[x * 4 + 0] = v;
+                    row[x * 4 + 1] = v;
+                    row[x * 4 + 2] = v;
+                    row[x * 4 + 3] = 255;
+                }
+
+                for (int y = 0; y < height; y++)
+                    Marshal.Copy(row, 0, fb.Address + y * fb.RowBytes, row.Length);
+            }
+
+            wb.Save(path, PngBitmapEncoderOptions.Default);
+        }
+
+        // color channel + alpha of one overlay pixel. Only the first color byte is read, so this
+        // does not care whether the backend hands back BGRA or RGBA (the fixture is greyscale).
+        private static (byte Value, byte Alpha) ObscuredPixel(GraphicImage img, int x, int y)
+        {
+            var overlay = (Bitmap)ImgObscured.GetValue(img);
+            var buffer = new byte[4];
+            var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            try
+            {
+                overlay.CopyPixels(new PixelRect(x, y, 1, 1), handle.AddrOfPinnedObject(), buffer.Length, 4);
+            }
+            finally
+            {
+                handle.Free();
+            }
+
+            return (buffer[0], buffer[3]);
         }
 
         [AvaloniaFact]
@@ -46,6 +97,61 @@ namespace Clowd.Drawing.Tests
                 using var scaled = graphic.ImageSource.CreateScaledBitmap(new PixelSize(5, 4));
                 Assert.Equal(5, scaled.PixelSize.Width);
                 Assert.Equal(4, scaled.PixelSize.Height);
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        // ====================================================================
+        // Obscure modes: each mode bakes a different overlay, and none of them paints outside the
+        // shape (the composite is what export ships, so an unobscured leak here is a privacy bug)
+        // ====================================================================
+
+        private static GraphicImage ObscuredFixture(string path, ObscureMode mode)
+        {
+            var img = new GraphicImage(path, new Rect(0, 0, 80, 60), default);
+            img.ObscuredShapes = new[]
+            {
+                new GraphicImage.ObscuredShape(new Point(20, 10), new Point(60, 10), new Point(60, 50), new Point(20, 50), 3,
+                                               mode),
+            };
+            Assert.True((bool)ImgUpdateObscure.Invoke(img, null));
+            return img;
+        }
+
+        [AvaloniaFact]
+        public void ObscureModes_BakeDistinctOverlays_ConfinedToTheShape()
+        {
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var path = Path.Combine(dir.FullName, "seam.png");
+                WriteSeamPng(path, 80, 60, 40);
+
+                var mosaic = ObscuredFixture(path, ObscureMode.Mosaic);
+                var blur = ObscuredFixture(path, ObscureMode.Blur);
+                var solid = ObscuredFixture(path, ObscureMode.Solid);
+
+                // nothing is painted outside the shape, whatever the mode
+                Assert.Equal(0, ObscuredPixel(mosaic, 5, 5).Alpha);
+                Assert.Equal(0, ObscuredPixel(blur, 5, 5).Alpha);
+                Assert.Equal(0, ObscuredPixel(solid, 5, 5).Alpha);
+
+                // solid redacts to opaque black
+                Assert.Equal((byte)0, ObscuredPixel(solid, 40, 30).Value);
+                Assert.Equal((byte)255, ObscuredPixel(solid, 40, 30).Alpha);
+
+                // deep inside the white half both samplers still read white; only at the seam do
+                // they diverge — the blur kernel mixes the two halves, the mosaic cell does not
+                Assert.Equal((byte)255, ObscuredPixel(mosaic, 25, 30).Value);
+                Assert.Equal((byte)255, ObscuredPixel(blur, 25, 30).Value);
+
+                var blurSeam = ObscuredPixel(blur, 40, 30);
+                Assert.Equal((byte)255, blurSeam.Alpha);
+                Assert.InRange(blurSeam.Value, 60, 195);
+                Assert.False(ObscuredPixel(mosaic, 40, 30).Value == blurSeam.Value);
             }
             finally
             {

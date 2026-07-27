@@ -17,8 +17,9 @@ namespace Clowd.Drawing.Tests
     /// value types as single strings — must load through <see cref="DrawingCanvas.RestoreState"/>
     /// into the live document, seed the undo baseline, and never raise StateUpdated during the
     /// load (contract #23). The fixture below is a literal old-format document covering all nine
-    /// concrete graphic types with their full persisted field lists; it must never be regenerated
-    /// from the current serializer (that would test the serializer against itself).
+    /// concrete graphic types that build knew, with their full persisted field lists; it must never
+    /// be regenerated from the current serializer (that would test the serializer against itself),
+    /// and types added since get their own literal fixtures rather than being spliced into it.
     /// </summary>
     public class SessionFileCompatTests
     {
@@ -75,6 +76,9 @@ namespace Clowd.Drawing.Tests
             Assert.Equal(100, rect.Right, 9);
             Assert.Equal(70, rect.Bottom, 9);
             Assert.Equal(15, rect.Angle, 9);
+            // fields absent from an old document take their field-initializer defaults
+            Assert.Equal(0, rect.CornerRadius);
+            Assert.Equal(LineDashStyle.Solid, rect.DashStyle);
 
             var filled = Assert.IsType<GraphicFilledRectangle>(canvas.GraphicsList[1]);
             Assert.Equal(Color.Parse("#80336699"), filled.ObjectColor);
@@ -89,6 +93,9 @@ namespace Clowd.Drawing.Tests
 
             var arrow = Assert.IsType<GraphicArrow>(canvas.GraphicsList[4]);
             Assert.Equal(new Point(50, 25), arrow.LineEnd);
+            // the fixture predates curved arrows and has no "curveOffset" property: an absent field
+            // must fall back to the field initializer, i.e. an unchanged straight arrow
+            Assert.Equal(0, arrow.CurveOffset);
 
             var poly = Assert.IsType<GraphicPolyLine>(canvas.GraphicsList[5]);
             var pointsField = typeof(GraphicPolyLine).GetField("_points", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -117,7 +124,10 @@ namespace Clowd.Drawing.Tests
             Assert.Equal(-1, image.FlipX);
             Assert.Equal(1, image.FlipY);
             Assert.Equal(new Size(300, 200), image.OriginalSize);
-            Assert.Equal(new GraphicImage.ObscuredShape(new Point(1, 2), new Point(3, 4), new Point(5, 6), new Point(7, 8), 12),
+            // the fixture predates ObscuredShape.Mode — an absent mode must load as Mosaic so old
+            // sessions keep rendering exactly as they did
+            Assert.Equal(new GraphicImage.ObscuredShape(new Point(1, 2), new Point(3, 4), new Point(5, 6), new Point(7, 8), 12,
+                                                        ObscureMode.Mosaic),
                          Assert.Single(image.ObscuredShapes));
             Assert.False(image.Editing);
             Assert.False(image.IsSelected); // transient — always resets on load
@@ -131,6 +141,40 @@ namespace Clowd.Drawing.Tests
             canvas.Undo();
             Assert.Equal(Colors.Red, rect.ObjectColor);
             Assert.Equal(9, canvas.GraphicsList.Count);
+        }
+
+        // graphic types added AFTER the pre-rebuild build cannot appear in the frozen fixture above,
+        // so each gets its own literal document here — same on-disk shape, pinned the same way.
+        private const string MeasureGraphicsJson = """
+            {
+              "BackgroundColor": "#FF1E1E1E",
+              "Graphics": [
+                {"$type":"GraphicMeasure","id":"fixture-measure","objectColor":"#FFFFA500","lineWidth":3,"dropShadowEffect":true,"lineStart":"-4.25,8","lineEnd":"120,60.5"}
+              ]
+            }
+            """;
+
+        [AvaloniaFact]
+        public void MeasureGraphicsJson_Restores_WithEndpointsOnly()
+        {
+            var canvas = new DrawingCanvas();
+            int raises = 0;
+            canvas.StateUpdated += (_, _) => raises++;
+
+            canvas.RestoreState((JsonObject)JsonNode.Parse(MeasureGraphicsJson));
+
+            Assert.Equal(0, raises);
+            var measure = Assert.IsType<GraphicMeasure>(Assert.Single(canvas.GraphicsList));
+            Assert.Equal("fixture-measure", measure.Id);
+            Assert.Equal(Color.Parse("#FFFFA500"), measure.ObjectColor);
+            Assert.Equal(3, measure.LineWidth);
+            Assert.Equal(new Point(-4.25, 8), measure.LineStart);
+            Assert.Equal(new Point(120, 60.5), measure.LineEnd);
+
+            // ticks and the label pill are derived, so they must widen the bounds past the bare shaft
+            var shaft = new Rect(measure.LineStart, measure.LineEnd);
+            Assert.True(measure.Bounds.Contains(shaft));
+            Assert.True(measure.Bounds.Height > shaft.Height);
         }
 
         [AvaloniaFact]

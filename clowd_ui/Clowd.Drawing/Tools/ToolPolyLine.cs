@@ -12,7 +12,10 @@ namespace Clowd.Drawing.Tools
 
         protected override void OnMouseDownImpl(DrawingCanvas canvas, Point pt)
         {
-            _newPolyLine = new GraphicPolyLine(canvas.ObjectColor, canvas.LineWidth, pt);
+            _newPolyLine = new GraphicPolyLine(canvas.ObjectColor, canvas.LineWidth, pt)
+            {
+                DashStyle = canvas.DashStyle,
+            };
             canvas.GraphicsList.Add(_newPolyLine);
         }
 

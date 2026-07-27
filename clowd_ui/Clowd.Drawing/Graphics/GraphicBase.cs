@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
@@ -45,6 +46,17 @@ namespace Clowd.Drawing.Graphics
             set => Set(ref _dropShadowEffect, value);
         }
 
+        /// <summary>
+        /// Dash pattern of this graphic's stroke. Declared here rather than on each stroked type
+        /// because five graphics consume it; types that never stroke (text, count, image) simply
+        /// ignore it. Persisted — defaults to Solid so old documents load unchanged.
+        /// </summary>
+        public virtual LineDashStyle DashStyle
+        {
+            get => _dashStyle;
+            set => Set(ref _dashStyle, value);
+        }
+
         public virtual bool IsSelected
         {
             get => _isSelected;
@@ -79,6 +91,7 @@ namespace Clowd.Drawing.Graphics
         private bool _dropShadowEffect;
         private bool _hidden;
         private bool _locked;
+        private LineDashStyle _dashStyle = LineDashStyle.Solid; // absent from JSON → Solid
         [Transient] private bool _isSelected; // not persisted by GraphicsSerializer
 
         /// <summary>
@@ -150,6 +163,13 @@ namespace Clowd.Drawing.Graphics
         /// </summary>
         internal int ShadowRev => RenderCache.ShadowRev;
 
+        /// <summary>
+        /// The shared dash instance for <see cref="DashStyle"/> (null for Solid), to be passed to
+        /// RenderResources.GetPen on INK pens only. Hit-test corridors and bounds pens stay solid —
+        /// a dashed hit corridor would make the gaps unclickable.
+        /// </summary>
+        protected ImmutableDashStyle StrokeDash => RenderResources.GetDash(DashStyle);
+
         internal abstract int HandleCount { get; }
 
         internal const double UnscaledControlSize = 12.0;
@@ -187,6 +207,7 @@ namespace Clowd.Drawing.Graphics
             // so toggling it dirties content bounds (a hidden graphic drops out of the export size).
             map[nameof(ObjectColor)] = InvalidationAspects.None; // ink repaints via the view invalidation; only the ALPHA feeds the shadow silhouette — the setter clears Shadow itself when alpha changes
             map[nameof(LineWidth)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow;
+            map[nameof(DashStyle)] = InvalidationAspects.Bounds | InvalidationAspects.Geometry | InvalidationAspects.Shadow; // the dash gaps change the shadow silhouette
             map[nameof(DropShadowEffect)] = InvalidationAspects.Shadow;
         }
 

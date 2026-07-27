@@ -72,6 +72,17 @@ namespace Clowd.Drawing
         public static readonly StyledProperty<double> BlurRadiusProperty =
             AvaloniaProperty.Register<DrawingCanvas, double>(nameof(BlurRadius), 8d, defaultBindingMode: BindingMode.TwoWay);
 
+        public static readonly StyledProperty<double> CornerRadiusProperty =
+            AvaloniaProperty.Register<DrawingCanvas, double>(nameof(CornerRadius), 0d, defaultBindingMode: BindingMode.TwoWay);
+
+        public static readonly StyledProperty<LineDashStyle> DashStyleProperty =
+            AvaloniaProperty.Register<DrawingCanvas, LineDashStyle>(nameof(DashStyle), LineDashStyle.Solid,
+                                                                    defaultBindingMode: BindingMode.TwoWay);
+
+        public static readonly StyledProperty<ObscureMode> ObscureModeProperty =
+            AvaloniaProperty.Register<DrawingCanvas, ObscureMode>(nameof(ObscureMode), ObscureMode.Mosaic,
+                                                                  defaultBindingMode: BindingMode.TwoWay);
+
         public static readonly StyledProperty<bool> IsPanningProperty =
             AvaloniaProperty.Register<DrawingCanvas, bool>(nameof(IsPanning));
 
@@ -176,6 +187,31 @@ namespace Clowd.Drawing
             get => GetValue(BlurRadiusProperty);
             set => SetValue(BlurRadiusProperty, value);
         }
+
+        public double CornerRadius
+        {
+            get => GetValue(CornerRadiusProperty);
+            set => SetValue(CornerRadiusProperty, value);
+        }
+
+        public LineDashStyle DashStyle
+        {
+            get => GetValue(DashStyleProperty);
+            set => SetValue(DashStyleProperty, value);
+        }
+
+        /// <summary>Item source for the property bar's dash-style picker.</summary>
+        public static readonly LineDashStyle[] DashStyleValues =
+            (LineDashStyle[])Enum.GetValues(typeof(LineDashStyle));
+
+        public ObscureMode ObscureMode
+        {
+            get => GetValue(ObscureModeProperty);
+            set => SetValue(ObscureModeProperty, value);
+        }
+
+        /// <summary>Item source for the property-bar mode selector — XAML cannot enumerate an enum.</summary>
+        public static ObscureMode[] ObscureModeValues { get; } = (ObscureMode[])Enum.GetValues(typeof(ObscureMode));
 
         public bool IsPanning
         {
@@ -342,33 +378,57 @@ namespace Clowd.Drawing
             ToolPointer = new ToolPointer();
             ToolText = new ToolText();
 
+            // the create lambdas close over this canvas, so a new graphic starts out with the
+            // property-bar values for every skill its type declares
             var toolRectangle = new ToolDraggable<GraphicRectangle>(
                 () => CursorResources.Rect,
-                point => new GraphicRectangle(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
+                point => new GraphicRectangle(ObjectColor, LineWidth, new Rect(point, new Size(1, 1)))
+                {
+                    CornerRadius = CornerRadius,
+                    DashStyle = DashStyle,
+                },
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolFilledRectangle = new ToolDraggable<GraphicFilledRectangle>(
                 () => CursorResources.Rect,
-                point => new GraphicFilledRectangle(ObjectColor, new Rect(point, new Size(1, 1))),
+                point => new GraphicFilledRectangle(ObjectColor, new Rect(point, new Size(1, 1)))
+                {
+                    CornerRadius = CornerRadius,
+                },
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolEllipse = new ToolDraggable<GraphicEllipse>(
                 () => CursorResources.Ellipse,
-                point => new GraphicEllipse(ObjectColor, LineWidth, new Rect(point, new Size(1, 1))),
+                point => new GraphicEllipse(ObjectColor, LineWidth, new Rect(point, new Size(1, 1)))
+                {
+                    DashStyle = DashStyle,
+                },
                 (point, g) => g.MoveHandleTo(point, 5),
                 snapMode: SnapMode.Diagonal);
 
             var toolLine = new ToolDraggable<GraphicLine>(
                 () => CursorResources.Line,
-                point => new GraphicLine(ObjectColor, LineWidth, point, point),
+                point => new GraphicLine(ObjectColor, LineWidth, point, point)
+                {
+                    DashStyle = DashStyle,
+                },
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
             var toolArrow = new ToolDraggable<GraphicArrow>(
                 () => CursorResources.Arrow,
-                point => new GraphicArrow(ObjectColor, LineWidth, point, point),
+                point => new GraphicArrow(ObjectColor, LineWidth, point, point)
+                {
+                    DashStyle = DashStyle,
+                },
+                (point, g) => g.MoveHandleTo(point, 2),
+                snapMode: SnapMode.All);
+
+            var toolMeasure = new ToolDraggable<GraphicMeasure>(
+                () => CursorResources.Measure,
+                point => new GraphicMeasure(ObjectColor, LineWidth, point, point),
                 (point, g) => g.MoveHandleTo(point, 2),
                 snapMode: SnapMode.All);
 
@@ -384,7 +444,8 @@ namespace Clowd.Drawing
             _toolStore[ToolType.PolyLine] = new ToolDesc("Pencil", new ToolPolyLine(), ObjectType: typeof(GraphicPolyLine));
             _toolStore[ToolType.Text] = new ToolDesc("Text", ToolText, ObjectType: typeof(GraphicText), Skills: Skill.AutoColor);
             _toolStore[ToolType.Count] = new ToolDesc("Numeric Step", new ToolCount(), ObjectType: typeof(GraphicCount));
-            _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius);
+            _toolStore[ToolType.Pixelate] = new ToolDesc("Pixelate", new ToolPixelate(), Skills: Skill.BlurRadius | Skill.ObscureMode);
+            _toolStore[ToolType.Measure] = new ToolDesc("Measure", toolMeasure, ObjectType: typeof(GraphicMeasure));
 
             _autosaveThrottle = new AutosaveThrottle(this);
             _undoManager = new UndoManager(this);
@@ -1203,6 +1264,9 @@ namespace Clowd.Drawing
                     AddSettingBinding(Skill.Font, TextFontSizeProperty, nameof(SavedToolSettings.FontSize));
                     AddSettingBinding(Skill.Font, TextFontStyleProperty, nameof(SavedToolSettings.FontStyle));
                     AddSettingBinding(Skill.BlurRadius, BlurRadiusProperty, nameof(SavedToolSettings.BlurRadius));
+                    AddSettingBinding(Skill.Radius, CornerRadiusProperty, nameof(SavedToolSettings.CornerRadius));
+                    AddSettingBinding(Skill.DashStyle, DashStyleProperty, nameof(SavedToolSettings.DashStyle));
+                    AddSettingBinding(Skill.ObscureMode, ObscureModeProperty, nameof(SavedToolSettings.ObscureMode));
 
                     SubjectType = "Tool";
                     SubjectName = CurrentTool.Name;
@@ -1231,6 +1295,8 @@ namespace Clowd.Drawing
                     AddObjectBinding<GraphicBase>(Skill.Color, ObjectColorProperty, x => nameof(x.ObjectColor));
                     AddObjectBinding<GraphicBase>(Skill.Stroke, LineWidthProperty, x => nameof(x.LineWidth));
                     AddObjectBinding<GraphicRectangle>(Skill.Angle, ObjectAngleProperty, x => nameof(x.Angle));
+                    AddObjectBinding<GraphicRectangle>(Skill.Radius, CornerRadiusProperty, x => nameof(x.CornerRadius));
+                    AddObjectBinding<GraphicBase>(Skill.DashStyle, DashStyleProperty, x => nameof(x.DashStyle));
                     AddObjectBinding<GraphicText>(Skill.Font, TextFontFamilyNameProperty, x => nameof(x.FontName));
                     AddObjectBinding<GraphicText>(Skill.Font, TextFontWeightProperty, x => nameof(x.FontWeight));
                     AddObjectBinding<GraphicText>(Skill.Font, TextFontStretchProperty, x => nameof(x.FontStretch));

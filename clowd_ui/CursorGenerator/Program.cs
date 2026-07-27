@@ -73,6 +73,7 @@ internal class Program
         DrawSizes(sizes, "Ellipse", DrawBaseCursor, DrawEllipse);
         DrawSizes(sizes, "Line", DrawBaseCursor, DrawLine);
         DrawSizes(sizes, "Arrow", DrawBaseCursor, DrawArrow);
+        DrawSizes(sizes, "Measure", DrawBaseCursor, DrawRuler);
         DrawSizes(sizes, "Text", DrawBaseCursor, DrawT);
         DrawSizes(sizes, "Numerical", DrawBaseCursor, DrawHash);
         DrawSizes(sizes, "Pen", DrawBaseCursor, DrawPen);
@@ -297,6 +298,34 @@ internal class Program
 
         g.DrawLine(pw, p1, p2);
         g.DrawLine(pb, p1, p2);
+    }
+
+    private static void DrawRuler(float scale, int lineWidth, Graphics g)
+    {
+        // every edge here is axis aligned, so the shape is built from fills rather than pens:
+        // a centred pen of width lineWidth*2 leaves a one pixel border on two sides and two on
+        // the others once the interior is filled over it, which is visible at 32px
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+        var left = round(6 * scale);
+        var top = round(18 * scale);
+        var width = round(19 * scale);
+        var height = round(8 * scale);
+
+        g.FillRectangle(Stroke, left, top, width, height);
+        g.FillRectangle(Fill, left + lineWidth, top + lineWidth, width - (lineWidth * 2), height - (lineWidth * 2));
+
+        // graduations hang off the top edge alternating long/short, otherwise the badge is
+        // indistinguishable from the rectangle cursor at 32px
+        var tickLong = round(4 * scale);
+        var tickShort = round(2 * scale);
+
+        for (int i = 0; i < 5; i++)
+        {
+            var x = round((9 + (i * 3)) * scale);
+            var len = (i % 2) == 0 ? tickLong : tickShort;
+            g.FillRectangle(Stroke, x, top + lineWidth, lineWidth, len);
+        }
     }
 
     private static void DrawT(float scale, int lineWidth, Graphics g)

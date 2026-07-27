@@ -9,6 +9,7 @@ internal partial class CursorResources {
     public static Cursor Ellipse => GetCursor("Ellipse.cur");
     public static Cursor Line => GetCursor("Line.cur");
     public static Cursor Arrow => GetCursor("Arrow.cur");
+    public static Cursor Measure => GetCursor("Measure.cur");
     public static Cursor Text => GetCursor("Text.cur");
     public static Cursor Numerical => GetCursor("Numerical.cur");
     public static Cursor Pen => GetCursor("Pen.cur");
