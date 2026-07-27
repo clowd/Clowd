@@ -30,12 +30,6 @@
           "url": "https://github.com/aws/aws-sdk-net/"
         },
         {
-          "name": "B2Net",
-          "version": "0.7.5",
-          "license": "MIT",
-          "url": "https://github.com/coryrwest/B2.NET"
-        },
-        {
           "name": "Clowd.Clipboard.Gdi",
           "version": "1.1.4",
           "license": "MIT",
@@ -52,6 +46,12 @@
           "version": "1.15.1",
           "license": "MIT",
           "url": "https://github.com/irihitech/Ursa.Avalonia"
+        },
+        {
+          "name": "Meziantou.Framework.ResxSourceGenerator",
+          "version": "2.0.0",
+          "license": "MIT",
+          "url": "https://github.com/meziantou/Meziantou.Framework"
         },
         {
           "name": "Microsoft.AspNet.WebApi.Client",
@@ -90,10 +90,22 @@
           "url": "https://github.com/irihitech/Semi.Avalonia"
         },
         {
+          "name": "Sentry",
+          "version": "6.7.0",
+          "license": "MIT",
+          "url": "https://github.com/getsentry/sentry-dotnet"
+        },
+        {
           "name": "SharpHook",
           "version": "7.1.2",
           "license": "MIT",
           "url": "https://github.com/TolikPylypchuk/SharpHook"
+        },
+        {
+          "name": "Velopack",
+          "version": "1.2.0",
+          "license": "MIT",
+          "url": "https://github.com/velopack/velopack"
         },
         {
           "name": "WindowsAzure.Storage",
@@ -250,6 +262,12 @@
           "version": "0.17.2",
           "license": "MIT",
           "url": "https://github.com/PolyMeilex/rfd"
+        },
+        {
+          "name": "sentry",
+          "version": "0.48.5",
+          "license": "MIT",
+          "url": "https://github.com/getsentry/sentry-rust"
         },
         {
           "name": "simplelog",
