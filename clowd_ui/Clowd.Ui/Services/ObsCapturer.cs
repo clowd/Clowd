@@ -49,6 +49,9 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         // synthetic code:-99 stopped_recording normally arrives first and this only fires
         // when the child is wedged hard (blocked kernel I/O, libobs deadlock).
         private static readonly TimeSpan StopTimeout = TimeSpan.FromSeconds(45);
+        // the pumps unblock as soon as the process's stdio handles close, which the shutdown above
+        // has already forced; this is only a backstop against blocking disposal forever.
+        private static readonly TimeSpan PumpDrainTimeout = TimeSpan.FromSeconds(5);
 
         // libobs is chatty on stderr for the life of the process; an hours-long recording
         // must not accumulate unboundedly (§4.2).
@@ -79,6 +82,8 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         private int _logChars;
 
         private Process _proc;
+        private Task _stdoutPump;
+        private Task _stderrPump;
         private volatile bool _disposed;
         private readonly object _disposeLock = new();
         private Task _shutdownTask;
@@ -112,8 +117,8 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             // would sit in the writer's buffer forever (hang → kill → unfinalized mp4).
             _proc.StandardInput.AutoFlush = true;
 
-            _ = Task.Run(PumpStdoutAsync);
-            _ = Task.Run(PumpStderrAsync);
+            _stdoutPump = Task.Run(PumpStdoutAsync);
+            _stderrPump = Task.Run(PumpStderrAsync);
 
             await _initTcs.Task.WaitAsync(InitializeTimeout);
         }
@@ -153,8 +158,11 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                 }
                 catch (Exception ex)
                 {
+                    // a concurrent disposal has already taken the process down and detached it,
+                    // so only a live-object failure is worth reporting.
                     Debug.WriteLine("Failed to kill wedged recording process: " + ex.Message);
-                    SentryConfig.CaptureHandled(ex, "obs.kill-wedged");
+                    if (!_disposed)
+                        SentryConfig.CaptureHandled(ex, "obs.kill-wedged");
                 }
 
                 // bounded in case even Kill could not take the process down; a TimeoutException
@@ -223,14 +231,14 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                 {
                     _disposed = true;
                     var proc = _proc;
-                    _shutdownTask = proc == null ? Task.CompletedTask : Task.Run(() => ShutdownCore(proc));
+                    _shutdownTask = proc == null ? Task.CompletedTask : Task.Run(() => ShutdownCoreAsync(proc));
                 }
 
                 return _shutdownTask;
             }
         }
 
-        private void ShutdownCore(Process proc)
+        private async Task ShutdownCoreAsync(Process proc)
         {
             try
             {
@@ -251,8 +259,26 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             }
             finally
             {
+                await JoinPumpsAsync();
                 try { proc.Dispose(); }
                 catch { }
+            }
+        }
+
+        /// <summary>Waits for both pumps to drain before the <see cref="Process"/> is disposed:
+        /// disposing it closes the stdio streams, which faults a parked <c>ReadLineAsync</c>
+        /// instead of ending it at EOF. The pumps end on their own once the process is gone, so
+        /// the timeout only matters if the child left an inherited handle to its stdout open.</summary>
+        private async Task JoinPumpsAsync()
+        {
+            var pumps = new[] { _stdoutPump, _stderrPump };
+            try
+            {
+                await Task.WhenAll(Array.FindAll(pumps, p => p != null)).WaitAsync(PumpDrainTimeout);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Recording pumps did not drain before disposal: " + ex.Message);
             }
         }
 
@@ -293,6 +319,8 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         private async Task OnProcessEndedAsync()
         {
             try { await _proc.WaitForExitAsync(); }
+            // ShutdownCore may have disposed the Process already; stdout EOF means it is gone anyway.
+            catch (InvalidOperationException) { }
             catch (Exception ex)
             {
                 Debug.WriteLine("WaitForExitAsync failed: " + ex.Message);
@@ -302,11 +330,21 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             // any exit without a preceding stopped_recording is a fatal error, regardless of
             // exit code (§1.4 — never key off the exit code alone).
             var died = new InvalidOperationException("The recording process has exited unexpectedly.");
-            _initTcs.TrySetException(died);
-            _startTcs.TrySetException(died);
-            _configureTcs?.TrySetException(died);
+            FailObserved(_initTcs, died);
+            FailObserved(_startTcs, died);
+            FailObserved(_configureTcs, died);
             if (_stopTcs.TrySetResult(false) && !_disposed)
                 RaiseCriticalError("The recording process has exited unexpectedly.");
+        }
+
+        /// <summary>Faults a lifecycle TCS whose task may never be awaited — cancelling during WAIT
+        /// leaves <c>_startTcs</c> untouched, and a caller whose <c>WaitAsync</c> already timed out
+        /// has walked away from the original task. Reading <see cref="Task.Exception"/> marks it
+        /// observed so it cannot resurface as an <c>UnobservedTaskException</c> at GC time.</summary>
+        private static void FailObserved<T>(TaskCompletionSource<T> tcs, Exception ex)
+        {
+            if (tcs != null && tcs.TrySetException(ex))
+                _ = tcs.Task.Exception;
         }
 
         private void HandleStdoutLine(string line)
@@ -451,9 +489,11 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             }
             catch (Exception ex)
             {
-                // the process may already be dead; commands are best-effort.
+                // the process may already be dead; commands are best-effort. After disposal the
+                // stdin writer is closed by design, so that failure is expected, not a defect.
                 Debug.WriteLine($"Failed to write '{command}' to recording process stdin: {ex.Message}");
-                SentryConfig.CaptureHandled(ex, "obs.write-stdin");
+                if (!_disposed)
+                    SentryConfig.CaptureHandled(ex, "obs.write-stdin");
             }
         }
 
