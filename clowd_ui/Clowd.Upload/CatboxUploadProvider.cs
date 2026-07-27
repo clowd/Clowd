@@ -18,6 +18,8 @@ namespace Clowd.Upload
         public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
         public override Stream Icon => new Resource().CatboxIcon;
 
+        [Description("With expiry set to Never, files are uploaded to catbox.moe, which allows uploads up to 200MB. "
+                    + "Any other expiry uploads to litterbox.catbox.moe instead, which allows uploads up to 1GB.")]
         public CatBoxExpiry ExpireUploads
         {
             get => _expireUploads;
