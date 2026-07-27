@@ -232,55 +232,76 @@ fn write_session_inner(
         .intersection(&buffer.bounds)
         .ok_or_else(|| anyhow!("selection {:?} does not intersect desktop bounds {:?}", selection, buffer.bounds))?;
 
-    // desktop.png — the full virtual-desktop bitmap with the locked peek
-    // window composited (matches Dx GetCombinedBitmap(merge, no crop)),
-    // but never the cursor: the editor toggles cursor visibility itself.
+    // The three image extract+encode jobs are independent; run them on
+    // scoped threads so the wall time is the largest single encode
+    // (desktop.png) rather than the sum. session.json stays strictly
+    // after the join, preserving the "payload appears last" protocol.
     let desktop_path = session_dir.join("desktop.png");
-    {
-        let (rgba, w, h) = extract_region(buffer.bounds, buffer, peek).ok_or_else(|| anyhow!("failed to extract desktop bitmap"))?;
-        save_png(&desktop_path, rgba, w, h)?;
-    }
-
-    // cursor.png — desktop crop at the cursor rect with the cursor
-    // composited over it (matches Dx GetCursorBitmap). Skipped when no
-    // cursor was captured or the OS reported it hidden.
-    let mut cursor_entry: Option<(PathBuf, ScreenRect)> = None;
-    if let Some(cur) = buffer.cursor.as_ref().filter(|c| c.visible) {
-        let (cw, ch) = match &cur.image {
-            CursorImage::AlphaBlended {
-                width,
-                height,
-                ..
-            } => (*width, *height),
-            CursorImage::Masked {
-                width,
-                height,
-                ..
-            } => (*width, *height),
-        };
-        let cursor_rect = ScreenRect::from_xy_size(cur.position.x - cur.hotspot_x, cur.position.y - cur.hotspot_y, cw as i32, ch as i32);
-        if let Some(clamped) = cursor_rect.intersection(&buffer.bounds) {
-            if let Some((mut rgba, w, h)) = extract_selection_rgba(clamped, buffer) {
-                composite_cursor_rgba(&mut rgba, w, h, clamped, cur);
-                let cursor_path = session_dir.join("cursor.png");
-                save_png(&cursor_path, rgba, w, h)?;
-                cursor_entry = Some((cursor_path, clamped));
-            }
-        }
-    }
-
-    // cropped.png — preview of the selection, peek composited, cursor
-    // included only if the user has it visible (Dx `copyCursor`).
     let preview_path = session_dir.join("cropped.png");
-    {
-        let (mut rgba, w, h) = extract_region(selection, buffer, peek).ok_or_else(|| anyhow!("failed to extract selection preview"))?;
-        if cursor_visible {
-            if let Some(cur) = buffer.cursor.as_ref() {
-                composite_cursor_rgba(&mut rgba, w, h, selection, cur);
+    let (desktop_res, cursor_res, preview_res) = std::thread::scope(|s| {
+        // desktop.png — the full virtual-desktop bitmap with the locked
+        // peek window composited (matches Dx GetCombinedBitmap(merge, no
+        // crop)), but never the cursor: the editor toggles cursor
+        // visibility itself.
+        let desktop_job = s.spawn(|| -> anyhow::Result<()> {
+            let (rgba, w, h) = extract_region(buffer.bounds, buffer, peek).ok_or_else(|| anyhow!("failed to extract desktop bitmap"))?;
+            save_png(&desktop_path, rgba, w, h)
+        });
+
+        // cursor.png — desktop crop at the cursor rect with the cursor
+        // composited over it (matches Dx GetCursorBitmap). Skipped when
+        // no cursor was captured or the OS reported it hidden.
+        let cursor_job = s.spawn(|| -> anyhow::Result<Option<(PathBuf, ScreenRect)>> {
+            let Some(cur) = buffer.cursor.as_ref().filter(|c| c.visible) else {
+                return Ok(None);
+            };
+            let (cw, ch) = match &cur.image {
+                CursorImage::AlphaBlended {
+                    width,
+                    height,
+                    ..
+                } => (*width, *height),
+                CursorImage::Masked {
+                    width,
+                    height,
+                    ..
+                } => (*width, *height),
+            };
+            let cursor_rect =
+                ScreenRect::from_xy_size(cur.position.x - cur.hotspot_x, cur.position.y - cur.hotspot_y, cw as i32, ch as i32);
+            let Some(clamped) = cursor_rect.intersection(&buffer.bounds) else {
+                return Ok(None);
+            };
+            let Some((mut rgba, w, h)) = extract_selection_rgba(clamped, buffer) else {
+                return Ok(None);
+            };
+            composite_cursor_rgba(&mut rgba, w, h, clamped, cur);
+            let cursor_path = session_dir.join("cursor.png");
+            save_png(&cursor_path, rgba, w, h)?;
+            Ok(Some((cursor_path, clamped)))
+        });
+
+        // cropped.png — preview of the selection, peek composited, cursor
+        // included only if the user has it visible (Dx `copyCursor`).
+        let preview_job = s.spawn(|| -> anyhow::Result<()> {
+            let (mut rgba, w, h) = extract_region(selection, buffer, peek).ok_or_else(|| anyhow!("failed to extract selection preview"))?;
+            if cursor_visible {
+                if let Some(cur) = buffer.cursor.as_ref() {
+                    composite_cursor_rgba(&mut rgba, w, h, selection, cur);
+                }
             }
-        }
-        save_png(&preview_path, rgba, w, h)?;
-    }
+            save_png(&preview_path, rgba, w, h)
+        });
+
+        (
+            desktop_job.join().expect("desktop.png job panicked"),
+            cursor_job.join().expect("cursor.png job panicked"),
+            preview_job.join().expect("cropped.png job panicked"),
+        )
+    });
+    desktop_res?;
+    preview_res?;
+    let cursor_entry: Option<(PathBuf, ScreenRect)> = cursor_res?;
 
     // action.txt — routing marker, written before session.json so the
     // payload stays the last file to appear. Edit removes any marker a
