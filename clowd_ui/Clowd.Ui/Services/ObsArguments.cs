@@ -45,6 +45,10 @@ namespace Clowd.UI
             if (!settings.ShowMouseCursor)
                 args.Add("--no-cursor");
 
+            // color stays the obs-express default; only the toggle is surfaced
+            if (settings.HighlightClicks)
+                args.Add("--tracker");
+
             // The device args are emitted regardless of the CaptureSpeaker/CaptureMicrophone
             // toggles — those are runtime mutes applied after init; gating the CLI arg on the
             // toggle would make live unmute impossible ("default" is a valid device id).
