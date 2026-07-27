@@ -246,6 +246,10 @@ namespace Clowd.UI.Config
 
                 if (pd.Name == nameof(SettingsCapture.FilenamePattern))
                 {
+                    // captures are saved as png, recordings as mp4 (SettingsRecording carries the
+                    // same-named pattern property, issue #50).
+                    var extension = _obj is SettingsRecording ? "mp4" : "png";
+
                     // live example makes the date-format string self-documenting.
                     var preview = new TextBlock
                     {
@@ -257,7 +261,7 @@ namespace Clowd.UI.Config
                     {
                         Source = _obj,
                         Mode = BindingMode.OneWay,
-                        Converter = new FuncValueConverter<string, string>(FormatFilenamePreview),
+                        Converter = new FuncValueConverter<string, string>(p => FormatFilenamePreview(p, extension)),
                     });
 
                     var panel = new StackPanel { Orientation = Orientation.Vertical };
@@ -423,7 +427,7 @@ namespace Clowd.UI.Config
 
         /// <summary>Renders an example output filename for a date-format pattern (mirrors
         /// UploadManager.GetPatternFileName / NiceDialog.ShowSaveImageDialog).</summary>
-        private static string FormatFilenamePreview(string pattern)
+        private static string FormatFilenamePreview(string pattern, string extension)
         {
             try
             {
@@ -434,7 +438,7 @@ namespace Clowd.UI.Config
                 if (name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
                     return "⚠ The pattern produces characters that are not allowed in file names.";
 
-                return $"Example: {name}.png";
+                return $"Example: {name}.{extension}";
             }
             catch
             {

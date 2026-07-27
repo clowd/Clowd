@@ -183,10 +183,33 @@ namespace Clowd.UI
                 return;
             }
 
-            if (await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning,
-                    "Delete this capture? It cannot be recovered afterwards."))
+            // a recording's mp4 lives in the user's own output folder (issue #50), outside the
+            // session directory this deletes — saying it "cannot be recovered" would be a lie.
+            var videoKept = session.IsVideo
+                            && !String.IsNullOrEmpty(session.VideoPath)
+                            && !IsInsideSessionDirectory(session, session.VideoPath);
+
+            var prompt = videoKept
+                ? $"Remove this recording from Recents? The video file is kept at {session.VideoPath}."
+                : "Delete this capture? It cannot be recovered afterwards.";
+
+            if (await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning, prompt))
             {
                 SessionManager.Current.DeleteSession(session);
+            }
+        }
+
+        private static bool IsInsideSessionDirectory(SessionInfo session, string path)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(session.FilePath);
+                return !String.IsNullOrEmpty(dir)
+                       && Path.GetFullPath(path).StartsWith(Path.GetFullPath(dir), StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return true; // unreadable path: fall back to the original, more cautious wording
             }
         }
 

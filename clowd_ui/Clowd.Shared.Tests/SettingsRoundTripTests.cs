@@ -238,6 +238,31 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void RecordingOutput_DefaultsToTheVideosFolder_AndRoundTrips()
+        {
+            // issue #50: recordings used to land in a non-configurable file inside the session
+            // directory. The folder defaults to Videos so the setting page is truthful before the
+            // first recording, and the pattern matches the capture one.
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(SettingsRecording.DefaultOutputDirectory, loaded.Recording.OutputDirectory);
+            Assert.Equal("yyyy-MM-dd HH-mm-ss", loaded.Recording.FilenamePattern);
+            Assert.Equal(RecordingFinishAction.RecentsPage, loaded.Recording.OpenWhenFinished);
+
+            var original = new SettingsRoot();
+            original.Recording.OutputDirectory = @"C:\Users\test\Recordings";
+            original.Recording.FilenamePattern = "'clowd' yyyy-MM-dd";
+            original.Recording.OpenWhenFinished = RecordingFinishAction.OutputFolder; // enum by name
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(@"C:\Users\test\Recordings", loaded.Recording.OutputDirectory);
+            Assert.Equal("'clowd' yyyy-MM-dd", loaded.Recording.FilenamePattern);
+            Assert.Equal(RecordingFinishAction.OutputFolder, loaded.Recording.OpenWhenFinished);
+        }
+
+        [Fact]
         public void SimpleKeyGesture_SerializedString_RoundTrips()
         {
             // note: Key.Snapshot and Key.PrintScreen share a value — ToString() yields "PrintScreen",

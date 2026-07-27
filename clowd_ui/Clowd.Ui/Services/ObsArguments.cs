@@ -86,7 +86,11 @@ namespace Clowd.UI
             nameof(SettingsRecording.CaptureSpeaker) => false,
             nameof(SettingsRecording.CaptureMicrophone) => false,
             // post-recording UI behavior; the capturer never sees it.
-            nameof(SettingsRecording.OpenRecentsWhenFinished) => false,
+            nameof(SettingsRecording.OpenWhenFinished) => false,
+            // the capturer always writes video.mp4 into the session dir; these only decide where
+            // the finished file is moved to afterwards (issue #50), which happens at stop time.
+            nameof(SettingsRecording.OutputDirectory) => false,
+            nameof(SettingsRecording.FilenamePattern) => false,
             _ => true,
         };
     }

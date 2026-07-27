@@ -63,7 +63,8 @@
                         ToolTip.Tip="Cancel upload"
                         AutomationProperties.Name="Cancel upload">
                     <Viewbox>
-                        <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClose}" />
+                        <!-- 26px canvas; sized for the same reason as the play glyph above -->
+                        <Path Width="26" Height="26" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClose}" />
                     </Viewbox>
                 </Button>
             </StackPanel>
@@ -221,7 +222,12 @@
                                                         ToolTip.Tip="Play video"
                                                         AutomationProperties.Name="Play video">
                                                     <Viewbox>
-                                                        <Path Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconPlay}" />
+                                                        <!-- IconPlay is drawn on a 172px canvas (AppStyles icon table), not the 24px
+                                                             material canvas the other row icons use. Without the explicit canvas size the
+                                                             Path measures to the glyph's right/bottom edge, so its leading padding is kept
+                                                             and its trailing padding is not — the Viewbox then scales a box the triangle
+                                                             sits off-centre in. -->
+                                                        <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconPlay}" />
                                                     </Viewbox>
                                                 </Button>
                                                 <Button Classes="rowAction"
