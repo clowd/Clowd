@@ -151,6 +151,25 @@ namespace Clowd.UI.Config
             var description = GetFirstAttributeOrDefault<DescriptionAttribute>(pd)?.Description;
             var editor = GetRowForProperty(pd);
 
+            // [DisabledWhen] rows stay visible but stop responding (and dim) while the bool they
+            // defer to is set — e.g. the manual accent colour while the OS accent is followed.
+            var disabledWhen = GetFirstAttributeOrDefault<DisabledWhenAttribute>(pd);
+            if (disabledWhen != null)
+            {
+                editor.Bind(InputElement.IsEnabledProperty, new Binding(disabledWhen.PropertyName)
+                {
+                    Source = _obj,
+                    Mode = BindingMode.OneWay,
+                    Converter = new FuncValueConverter<bool, bool>(disabled => !disabled),
+                });
+                editor.Bind(Visual.OpacityProperty, new Binding(disabledWhen.PropertyName)
+                {
+                    Source = _obj,
+                    Mode = BindingMode.OneWay,
+                    Converter = new FuncValueConverter<bool, double>(disabled => disabled ? 0.4 : 1.0),
+                });
+            }
+
             // the caption hugs its own row (2px); rows without one carry the full bottom gap
             // themselves so vertical rhythm stays even either way (12+12 = ~24px between settings).
             var bottom = String.IsNullOrEmpty(description) ? 12d : 2d;

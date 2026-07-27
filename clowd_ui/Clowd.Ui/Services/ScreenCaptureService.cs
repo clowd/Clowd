@@ -140,7 +140,7 @@ namespace Clowd.UI
                     RedirectStandardError = true,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                foreach (var arg in CaptureArguments.Build(sessionDir, AppStyles.AccentColor, SettingsRoot.Current.Capture, mode, video))
+                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video))
                     psi.ArgumentList.Add(arg);
 
                 using var process = Process.Start(psi);
@@ -322,9 +322,13 @@ namespace Clowd.UI
     /// </summary>
     public static class CaptureArguments
     {
-        public static IReadOnlyList<string> Build(string sessionDir, Color accent, SettingsCapture settings, CaptureMode mode,
+        public static IReadOnlyList<string> Build(string sessionDir, SettingsCapture settings, CaptureMode mode,
                                                   bool video = false)
         {
+            // the overlay accent follows the OS (or the user's pick) and is contrast-corrected for
+            // the white text drawn on it — see SettingsCapture.GetEffectiveAccentColor, issue #48.
+            var accent = settings.GetEffectiveAccentColor();
+
             var args = new List<string>
             {
                 "--session-dir", sessionDir,

@@ -103,8 +103,12 @@ pub struct CapturerSettings {
 impl Default for CapturerSettings {
     fn default() -> Self {
         Self {
-            // #3B97D2 — the legacy "clowd blue" accent.
-            accent_color: [0x3B as f32 / 255.0, 0x97 as f32 / 255.0, 0xD2 as f32 / 255.0, 1.0],
+            // #2F7CAE — the legacy "clowd blue" (#3B97D2) darkened to a 4.5:1 contrast ratio
+            // against the white labels drawn on accent-filled buttons (issue #48). The shell
+            // always passes `--accent-color` (the OS accent, or the user's pick, put through
+            // the same correction — see AccentColors in Clowd.Shared), so this is the
+            // standalone default only.
+            accent_color: [0x2F as f32 / 255.0, 0x7C as f32 / 255.0, 0xAE as f32 / 255.0, 1.0],
             tips_mode_at_startup: TipsMode::default(),
             obscured_window_peek_enabled: true,
             obscured_window_detection_threshold: 0.80,
@@ -129,7 +133,7 @@ pub struct CliArgs {
 
     /// Accent colour for the crosshair, selection borders, and UI
     /// highlights, as hex `#RRGGBB` or `#RRGGBBAA` (leading `#` optional).
-    #[arg(long, value_name = "HEX", default_value = "#3B97D2", value_parser = parse_hex_color)]
+    #[arg(long, value_name = "HEX", default_value = "#2F7CAE", value_parser = parse_hex_color)]
     pub accent_color: [f32; 4],
 
     /// Tips/hints overlay mode at startup (cycled at runtime with T).
