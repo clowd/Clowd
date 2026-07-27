@@ -687,6 +687,14 @@ impl ApplicationHandler for App {
             #[cfg(windows)]
             {
                 attrs = attrs.with_no_redirection_bitmap(true);
+                // WS_EX_TOPMOST from creation: without it the overlay loses the z-order
+                // battle against a fullscreen foreground app (e.g. Discord) on that
+                // monitor — only the focused window is ever raised, and SW_SHOWNOACTIVATE
+                // never raises the others. Release only: a topmost overlay while paused
+                // in a debugger locks up the entire desktop.
+                if !cfg!(debug_assertions) {
+                    attrs = attrs.with_window_level(winit::window::WindowLevel::AlwaysOnTop);
+                }
             }
             let window = match event_loop.create_window(attrs) {
                 Ok(w) => Arc::new(w),

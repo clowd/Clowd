@@ -147,6 +147,13 @@ namespace Clowd.UI
                 if (process == null)
                     throw new InvalidOperationException("Failed to start capture process: " + binary);
 
+                // Hand our foreground rights to the capturer: a freshly spawned process is
+                // denied SetForegroundWindow by the foreground lock, and the overlay needs
+                // keyboard focus immediately (Esc / shortcuts). Best-effort — it only works
+                // when we hold foreground permission ourselves (hotkey / tray interaction).
+                if (OperatingSystem.IsWindows())
+                    AllowSetForegroundWindow(process.Id);
+
                 // drain stderr concurrently so a full pipe buffer can never block the
                 // process from exiting (classic redirect deadlock).
                 var stderrTask = process.StandardError.ReadToEndAsync();
@@ -281,6 +288,10 @@ namespace Clowd.UI
                 return null;
             }
         }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
+        private static extern bool AllowSetForegroundWindow(int dwProcessId);
 
         /// <summary>Condenses the capturer's captured stderr (or log file) into the tail few
         /// lines for an error dialog — the failure (a shader error, a panic) is always at the
