@@ -48,7 +48,10 @@ pub fn extract_selection_rgba(selection: ScreenRect, buffer: &CapturedDesktop) -
         let src_start = ((buf_y as usize + row) * stride) + (buf_x as usize * 4);
         let src_row = &buffer.bgra[src_start..src_start + dst_stride];
         let dst_row = &mut rgba[row * dst_stride..(row + 1) * dst_stride];
-        for (d, s) in dst_row.chunks_exact_mut(4).zip(src_row.chunks_exact(4)) {
+        for (d, s) in dst_row
+            .chunks_exact_mut(4)
+            .zip(src_row.chunks_exact(4))
+        {
             d[0] = s[2];
             d[1] = s[1];
             d[2] = s[0];
@@ -79,8 +82,12 @@ pub fn extract_selection_rgba_with_peek(
     // valid part of the peek texture, in virtual-desktop coords. The
     // texture terms mirror the old per-pixel guards: tx = crop_x +
     // (vd_x - win_left) must land in [0, peek.width), and likewise for y.
-    let x0 = sel_left.max(win_left).max(win_left - peek.crop_x);
-    let y0 = sel_top.max(win_top).max(win_top - peek.crop_y);
+    let x0 = sel_left
+        .max(win_left)
+        .max(win_left - peek.crop_x);
+    let y0 = sel_top
+        .max(win_top)
+        .max(win_top - peek.crop_y);
     let x1 = (sel_left + width as i32)
         .min(peek.window_rect.right())
         .min(win_left - peek.crop_x + peek.width as i32);
@@ -101,7 +108,10 @@ pub fn extract_selection_rgba_with_peek(
             continue;
         };
         let dst_row = &mut rgba[dst_start..dst_start + span];
-        for (d, s) in dst_row.chunks_exact_mut(4).zip(src_row.chunks_exact(4)) {
+        for (d, s) in dst_row
+            .chunks_exact_mut(4)
+            .zip(src_row.chunks_exact(4))
+        {
             d[0] = s[2];
             d[1] = s[1];
             d[2] = s[0];
