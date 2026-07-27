@@ -281,7 +281,7 @@ impl App {
             .as_ref()
             .is_some_and(|h| h.obstructed);
 
-        // Compute peek command first so UI state can use peek_active.
+        // Compute peek command first so UI state can use the peeked window bounds.
         // Peek is suppressed in magnifier mode (overlays hidden) and after
         // a selection has been made (peek_suspended).  When captured, keep
         // the locked peek; otherwise follow hover.
@@ -315,7 +315,7 @@ impl App {
             hovered_window_bounds,
             hovered_window_index,
             hovered_window_obstructed,
-            peek_active: new_peek.is_some(),
+            peek_window_bounds: new_peek.as_ref().map(|p| p.window_rect),
             cursor_overlay_visible: self.input.cursor_overlay_visible,
             desktop_buffer: self.desktop_buffer.as_deref(),
             show_scroll_hint: self.input.show_scroll_hint,
