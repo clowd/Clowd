@@ -44,7 +44,8 @@ pub struct Cli {
     #[arg(long)]
     pub hw_accel: bool,
 
-    /// x264 preset ultrafast instead of veryfast.
+    /// x264 preset ultrafast instead of veryfast. No effect with a hardware
+    /// encoder.
     #[arg(long)]
     pub low_cpu: bool,
 

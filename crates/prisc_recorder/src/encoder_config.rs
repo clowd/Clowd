@@ -38,19 +38,45 @@ fn select_hardware_encoder(available: &[String]) -> Option<String> {
 
 #[cfg(target_os = "macos")]
 fn select_hardware_encoder(available: &[String]) -> Option<String> {
-    // Existing VideoToolbox scan, unchanged.
-    available
-        .iter()
-        .find(|t| {
-            let lower = t.to_lowercase();
-            (lower.contains("apple") || lower.contains("videotoolbox"))
-                && (lower.contains("h264") || lower.contains("avc") || lower.contains("264"))
-        })
-        .cloned()
+    select_videotoolbox_encoder(available)
+}
+
+/// VideoToolbox registers one OBS encoder per OS-enumerated VT encoder, id =
+/// the VT EncoderID verbatim — which can include Apple's *software* H.264
+/// encoder. Rank hardware implementations first: "ave" is the Apple Silicon
+/// media engine, "gva" the Intel-era GPU encoder; any other match (e.g. the
+/// plain software id) is a last resort rather than a miss, since it still
+/// beats x264 only when nothing better is registered.
+#[cfg(any(target_os = "macos", test))]
+fn select_videotoolbox_encoder(available: &[String]) -> Option<String> {
+    let is_vt_h264 = |t: &str| {
+        let lower = t.to_lowercase();
+        (lower.contains("apple") || lower.contains("videotoolbox"))
+            && (lower.contains("h264") || lower.contains("avc") || lower.contains("264"))
+    };
+    let matches: Vec<&String> = available.iter().filter(|t| is_vt_h264(t)).collect();
+    for hw_marker in ["ave", "gva"] {
+        if let Some(id) = matches
+            .iter()
+            .find(|t| t.to_lowercase().contains(hw_marker))
+        {
+            return Some((*id).clone());
+        }
+    }
+    matches.first().map(|id| (*id).clone())
+}
+
+/// Maps x264-style CRF (0 best - 51 worst) onto VideoToolbox's quality slider
+/// (0 worst - 100 best; the plugin divides by 100 for
+/// kVTCompressionPropertyKey_Quality). VT ignores the x264 "crf" key entirely,
+/// so without this mapping every recording used the plugin default of 60.
+fn vt_quality_from_crf(crf: u16) -> i64 {
+    ((51u16.saturating_sub(crf) as f64) * 100.0 / 51.0).round() as i64
 }
 
 /// Encoder-specific settings (§2.5 table). The CRF/CQP value is passed through
-/// unmodified — the shell owns quality mapping.
+/// unmodified — the shell owns quality mapping — except VideoToolbox, whose
+/// quality slider uses an inverted 0-100 scale (see [`vt_quality_from_crf`]).
 pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig) -> ObsData {
     let settings = ObsData::new();
     let crf = config.crf as i64;
@@ -87,8 +113,17 @@ pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig) -> ObsData {
             );
             settings.set_string("profile", "high");
         }
+        id if id.to_lowercase().contains("apple") || id.to_lowercase().contains("videotoolbox") => {
+            // CRF rate control needs Apple Silicon; on Intel VT warns and falls
+            // back to ABR at the "bitrate" setting, so give that a sane value
+            // rather than inheriting the plugin default silently.
+            settings.set_string("rate_control", "CRF");
+            settings.set_int("quality", vt_quality_from_crf(config.crf));
+            settings.set_int("bitrate", 8000);
+            settings.set_string("profile", "high");
+        }
         _ => {
-            // macOS VideoToolbox or other: minimal generic quality settings.
+            // Unknown encoder: minimal generic quality settings.
             settings.set_string("rate_control", "CRF");
             settings.set_int("crf", crf);
             settings.set_string("profile", "high");
@@ -166,5 +201,48 @@ mod tests {
     fn hw_falls_back_to_x264_when_none_registered() {
         let available = ids(&["obs_x264", "ffmpeg_aac"]);
         assert_eq!(select_encoder(&available, true), "obs_x264");
+    }
+
+    #[test]
+    fn vt_prefers_ave_hardware_over_software() {
+        let available = ids(&[
+            "com.apple.videotoolbox.videoencoder.h264",
+            "com.apple.videotoolbox.videoencoder.ave.avc",
+        ]);
+        assert_eq!(
+            select_videotoolbox_encoder(&available).unwrap(),
+            "com.apple.videotoolbox.videoencoder.ave.avc"
+        );
+    }
+
+    #[test]
+    fn vt_software_match_still_beats_nothing() {
+        let available = ids(&["com.apple.videotoolbox.videoencoder.h264", "obs_x264"]);
+        assert_eq!(
+            select_videotoolbox_encoder(&available).unwrap(),
+            "com.apple.videotoolbox.videoencoder.h264"
+        );
+    }
+
+    #[test]
+    fn vt_ignores_non_h264_and_non_apple_ids() {
+        let available = ids(&[
+            "com.apple.videotoolbox.videoencoder.hevc.vcp",
+            "obs_x264",
+            "CoreAudio_AAC",
+        ]);
+        assert_eq!(select_videotoolbox_encoder(&available), None);
+    }
+
+    #[test]
+    fn vt_quality_mapping_inverts_crf() {
+        assert_eq!(vt_quality_from_crf(0), 100);
+        assert_eq!(vt_quality_from_crf(51), 0);
+        assert_eq!(vt_quality_from_crf(24), 53);
+        // Clowd presets must be distinguishable: High(16) > Medium(23) > Low(29)
+        assert!(vt_quality_from_crf(16) > vt_quality_from_crf(23));
+        assert!(vt_quality_from_crf(23) > vt_quality_from_crf(29));
+        // out-of-range input saturates instead of wrapping
+        assert_eq!(vt_quality_from_crf(60), 0);
     }
 }
