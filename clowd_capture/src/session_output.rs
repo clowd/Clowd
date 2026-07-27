@@ -294,9 +294,15 @@ fn write_session_inner(
         });
 
         (
-            desktop_job.join().expect("desktop.png job panicked"),
-            cursor_job.join().expect("cursor.png job panicked"),
-            preview_job.join().expect("cropped.png job panicked"),
+            desktop_job
+                .join()
+                .expect("desktop.png job panicked"),
+            cursor_job
+                .join()
+                .expect("cursor.png job panicked"),
+            preview_job
+                .join()
+                .expect("cropped.png job panicked"),
         )
     });
     desktop_res?;
