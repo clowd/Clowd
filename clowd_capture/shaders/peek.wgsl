@@ -52,6 +52,13 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // ── Preserve crosshair and selection border ────────────────────
     // Only when not captured — once captured the desktop shader no
     // longer draws the crosshair, so discarding would punch holes.
+    //
+    // The inner thin cross is NOT discarded here: the desktop shader
+    // picks its black/white contrast colour from the original
+    // screenshot, which is wrong wherever the peeked window covers
+    // that pixel. Thin-cross pixels fall through to the composite
+    // below and are re-drawn from the peek colour actually displayed.
+    var on_thin = false;
     if (!captured) {
         let mouse_x = i32(u.cursor_params.x);
         let mouse_y = i32(u.cursor_params.y);
@@ -66,11 +73,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
 
         let on_v_line = dx == 0;
         let on_h_line = dy == 0;
-        let on_thin = (on_v_line && ady <= chunk) || (on_h_line && adx <= chunk);
+        on_thin = (on_v_line && ady <= chunk) || (on_h_line && adx <= chunk);
         let on_thick_v = adx <= wide_half && ady > chunk && ady <= chunk2;
         let on_thick_h = ady <= wide_half && adx > chunk && adx <= chunk2;
 
-        if (on_thin || on_thick_v || on_thick_h || on_v_line || on_h_line) {
+        if (!on_thin && (on_thick_v || on_thick_h || on_v_line || on_h_line)) {
             discard;
         }
     }
@@ -126,29 +133,34 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // ── Peek composite ─────────────────────────────────────────────
     let window_color = textureSample(window_tex, samp, in.window_uv);
 
-    if (captured) {
-        return vec4(window_color.rgb, 1.0);
-    }
+    var result = window_color.rgb;
+    if (!captured) {
+        let n = i32(u.params.x);
+        var is_obstructed = false;
+        for (var i = 0; i < n; i++) {
+            let r = u.obstruction_rects[i];
+            if (in.local_px.x >= r.x && in.local_px.x < r.z &&
+                in.local_px.y >= r.y && in.local_px.y < r.w) {
+                is_obstructed = true;
+                break;
+            }
+        }
 
-    let n = i32(u.params.x);
-    var is_obstructed = false;
-    for (var i = 0; i < n; i++) {
-        let r = u.obstruction_rects[i];
-        if (in.local_px.x >= r.x && in.local_px.x < r.z &&
-            in.local_px.y >= r.y && in.local_px.y < r.w) {
-            is_obstructed = true;
-            break;
+        if (is_obstructed) {
+            let blur_sum = textureSample(desktop_tex, samp, in.desktop_uv).rgb;
+            let luma = dot(blur_sum, vec3(0.2126, 0.7152, 0.0722));
+            let gray = vec3(luma);
+            result = mix(gray, window_color.rgb, ghost_opacity);
         }
     }
 
-    if (!is_obstructed) {
-        return vec4(window_color.rgb, 1.0);
+    // Inner thin crosshair cross: same geometry and contrast rule as
+    // desktop.wgsl, but the white/black decision is made against the
+    // peek pixel this fragment actually displays, not the screenshot.
+    if (on_thin) {
+        let lum = dot(result, vec3(0.299, 0.587, 0.114));
+        return select(vec4(1.0, 1.0, 1.0, 1.0), vec4(0.0, 0.0, 0.0, 1.0), lum > 0.65);
     }
 
-    let blur_sum = textureSample(desktop_tex, samp, in.desktop_uv).rgb;
-    let luma = dot(blur_sum, vec3(0.2126, 0.7152, 0.0722));
-    let gray = vec3(luma);
-
-    let result = mix(gray, window_color.rgb, ghost_opacity);
     return vec4(result, 1.0);
 }
