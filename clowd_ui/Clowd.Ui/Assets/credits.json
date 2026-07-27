@@ -7,25 +7,25 @@
       "items": [
         {
           "name": "Avalonia",
-          "version": "11.3.13",
+          "version": "12.1.0",
           "license": "MIT",
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
           "name": "Avalonia.Desktop",
-          "version": "11.3.13",
+          "version": "12.1.0",
           "license": "MIT",
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
           "name": "Avalonia.Fonts.Inter",
-          "version": "11.3.13",
+          "version": "12.1.0",
           "license": "MIT",
           "url": "https://github.com/AvaloniaUI/Avalonia/"
         },
         {
           "name": "AWSSDK.S3",
-          "version": "4.0.25.3",
+          "version": "4.0.101.4",
           "license": "Apache-2.0",
           "url": "https://github.com/aws/aws-sdk-net/"
         },
@@ -37,13 +37,13 @@
         },
         {
           "name": "Irihi.Ursa",
-          "version": "1.15.1",
+          "version": "2.1.0",
           "license": "MIT",
           "url": "https://github.com/irihitech/Ursa.Avalonia"
         },
         {
           "name": "Irihi.Ursa.Themes.Semi",
-          "version": "1.15.1",
+          "version": "2.1.0",
           "license": "MIT",
           "url": "https://github.com/irihitech/Ursa.Avalonia"
         },
@@ -55,27 +55,27 @@
         },
         {
           "name": "Microsoft.AspNet.WebApi.Client",
-          "version": "5.2.9",
+          "version": "6.0.0",
           "license": "",
           "url": "https://github.com/aspnet/AspNetWebStack"
         },
         {
           "name": "Microsoft.Extensions.Configuration",
-          "version": "8.0.0",
+          "version": "10.0.10",
           "license": "MIT",
-          "url": "https://github.com/dotnet/runtime"
+          "url": "https://github.com/dotnet/dotnet"
         },
         {
           "name": "Microsoft.Extensions.Configuration.Binder",
-          "version": "8.0.2",
+          "version": "10.0.10",
           "license": "MIT",
-          "url": "https://github.com/dotnet/runtime"
+          "url": "https://github.com/dotnet/dotnet"
         },
         {
           "name": "Microsoft.Extensions.Configuration.Json",
-          "version": "8.0.1",
+          "version": "10.0.10",
           "license": "MIT",
-          "url": "https://github.com/dotnet/runtime"
+          "url": "https://github.com/dotnet/dotnet"
         },
         {
           "name": "NAudio.Wasapi",
@@ -85,19 +85,19 @@
         },
         {
           "name": "Semi.Avalonia",
-          "version": "11.3.7.3",
+          "version": "12.1.0",
           "license": "MIT",
           "url": "https://github.com/irihitech/Semi.Avalonia"
         },
         {
           "name": "Sentry",
-          "version": "6.7.0",
+          "version": "6.8.0",
           "license": "MIT",
           "url": "https://github.com/getsentry/sentry-dotnet"
         },
         {
           "name": "SharpHook",
-          "version": "7.1.2",
+          "version": "7.1.3",
           "license": "MIT",
           "url": "https://github.com/TolikPylypchuk/SharpHook"
         },
@@ -115,9 +115,9 @@
         },
         {
           "name": "YamlDotNet",
-          "version": "12.0.2",
+          "version": "18.1.0",
           "license": "MIT",
-          "url": "https://github.com/aaubry/YamlDotNet.git"
+          "url": "https://github.com/aaubry/YamlDotNet"
         }
       ]
     },
@@ -127,7 +127,7 @@
       "items": [
         {
           "name": "anyhow",
-          "version": "1.0.102",
+          "version": "1.0.104",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/dtolnay/anyhow"
         },
@@ -145,13 +145,13 @@
         },
         {
           "name": "bytemuck",
-          "version": "1.25.0",
+          "version": "1.25.2",
           "license": "Zlib OR Apache-2.0 OR MIT",
           "url": "https://github.com/Lokathor/bytemuck"
         },
         {
           "name": "clap",
-          "version": "4.6.1",
+          "version": "4.6.4",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/clap-rs/clap"
         },
@@ -187,7 +187,7 @@
         },
         {
           "name": "glyphon",
-          "version": "0.11.0",
+          "version": "0.12.0",
           "license": "MIT OR Apache-2.0 OR Zlib",
           "url": "https://github.com/grovesNL/glyphon"
         },
@@ -198,6 +198,12 @@
           "url": "https://github.com/image-rs/image"
         },
         {
+          "name": "libblur",
+          "version": "0.24.0",
+          "license": "Apache-2.0 OR BSD-3-Clause",
+          "url": "https://github.com/awxkee/libblur.git"
+        },
+        {
           "name": "libloading",
           "version": "0.9.0",
           "license": "ISC",
@@ -205,13 +211,13 @@
         },
         {
           "name": "log",
-          "version": "0.4.29",
+          "version": "0.4.33",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/rust-lang/log"
         },
         {
           "name": "naga",
-          "version": "29.0.1",
+          "version": "30.0.0",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/gfx-rs/wgpu"
         },
@@ -247,7 +253,7 @@
         },
         {
           "name": "pollster",
-          "version": "0.4.0",
+          "version": "1.0.1",
           "license": "Apache-2.0/MIT",
           "url": "https://github.com/zesterer/pollster"
         },
@@ -283,7 +289,7 @@
         },
         {
           "name": "wgpu",
-          "version": "29.0.1",
+          "version": "30.0.0",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/gfx-rs/wgpu"
         },
@@ -301,7 +307,7 @@
         },
         {
           "name": "xdialog",
-          "version": "2.1.0",
+          "version": "3.1.0",
           "license": "MIT",
           "url": "https://github.com/velopack/xdialog"
         }

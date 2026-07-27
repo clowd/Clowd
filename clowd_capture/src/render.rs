@@ -156,6 +156,8 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         height: (monitor_bounds.height() as u32).max(1),
         present_mode: wgpu::PresentMode::Fifo,
         alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+        // Auto reproduces wgpu's pre-30 behaviour for our non-HDR surface format.
+        color_space: wgpu::SurfaceColorSpace::Auto,
         view_formats: vec![],
         desired_maximum_frame_latency: 1,
     };

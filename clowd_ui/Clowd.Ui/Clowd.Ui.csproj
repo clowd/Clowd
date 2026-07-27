@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <RootNamespace>Clowd.UI</RootNamespace>
@@ -11,20 +11,24 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <NoWarn>$(NoWarn);CA2007</NoWarn>
+    <!-- Avalonia 12 turns compiled bindings on by default. Our views bind against
+         runtime-assigned DataContexts and untyped DataTemplate items, none of which carry
+         an x:DataType, so keep the 11.x reflection binding behaviour. Annotating the views
+         with x:DataType and flipping this back on is a worthwhile follow-up. -->
+    <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Desktop" Version="11.3.13" />
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="11.3.13" />
-    <PackageReference Include="Semi.Avalonia" Version="11.3.7.3" />
-    <PackageReference Include="Irihi.Ursa" Version="1.15.1" />
-    <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="1.15.1" />
-    <PackageReference Include="Avalonia.Diagnostics" Version="11.3.13" Condition="'$(Configuration)'=='Debug'" />
-    <PackageReference Include="SharpHook" Version="7.1.2" />
+    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <PackageReference Include="Semi.Avalonia" Version="12.1.0" />
+    <PackageReference Include="Irihi.Ursa" Version="2.1.0" />
+    <PackageReference Include="Irihi.Ursa.Themes.Semi" Version="2.1.0" />
+    <PackageReference Include="SharpHook" Version="7.1.3" />
     <!-- WASAPI via built-in COM interop; all call sites are OperatingSystem.IsWindows()-guarded -->
     <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
     <PackageReference Include="Velopack" Version="1.2.0" />
-    <PackageReference Include="Sentry" Version="6.7.0" />
+    <PackageReference Include="Sentry" Version="6.8.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />

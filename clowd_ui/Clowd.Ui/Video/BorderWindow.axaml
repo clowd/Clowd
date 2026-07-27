@@ -3,7 +3,7 @@
         xmlns:controls="using:Clowd.UI.Controls"
         x:Class="Clowd.UI.BorderWindow"
         Title="Clowd Recording Frame"
-        SystemDecorations="None"
+        WindowDecorations="None"
         Background="Transparent"
         Topmost="True"
         ShowInTaskbar="False"

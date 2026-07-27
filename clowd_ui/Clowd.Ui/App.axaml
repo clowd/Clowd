@@ -1,15 +1,16 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:semi="https://irihi.tech/semi"
-             xmlns:u-semi="https://irihi.tech/ursa/themes/semi"
              x:Class="Clowd.App"
              Name="Clowd"
              RequestedThemeVariant="Default">
 
     <Application.Styles>
         <semi:SemiTheme />
-        <!-- Ursa's Semi theme must come after semi:SemiTheme. -->
-        <u-semi:SemiTheme />
+        <!-- Ursa's Semi theme must come after semi:SemiTheme. Ursa 2.0 renamed it from
+             SemiTheme to UrsaSemiTheme and moved it into the https://irihi.tech/semi
+             namespace alongside Semi.Avalonia's own theme. -->
+        <semi:UrsaSemiTheme />
         <StyleInclude Source="avares://Clowd.Ui/Assets/AppResources.axaml" />
     </Application.Styles>
 

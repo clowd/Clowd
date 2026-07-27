@@ -4,7 +4,7 @@
         xmlns:ui="using:Clowd"
         x:Class="Clowd.UI.FloatingToolbarWindow"
         Title="Clowd Recording Toolbar"
-        SystemDecorations="None"
+        WindowDecorations="None"
         SizeToContent="WidthAndHeight"
         Topmost="True"
         ShowInTaskbar="False"

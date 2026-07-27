@@ -122,14 +122,20 @@ impl GpuTimings {
         let mut out = Vec::new();
         for slot in self.slots.iter_mut() {
             if slot.state.load(Ordering::Acquire) == SLOT_READY {
-                let data = slot.readback.slice(..).get_mapped_range();
-                let raw: &[u64] = bytemuck::cast_slice(&data);
-                if raw.len() >= 2 {
-                    let pass_ticks = raw[1].saturating_sub(raw[0]);
-                    let ns = pass_ticks as f64 * self.period_ns;
-                    out.push(Duration::from_nanos(ns as u64));
+                // wgpu 30 returns a Result here. The map callback has fired, so the
+                // range is mapped; if it somehow isn't, drop this sample and recycle
+                // the slot anyway rather than wedging it as permanently busy.
+                match slot.readback.slice(..).get_mapped_range() {
+                    Ok(data) => {
+                        let raw: &[u64] = bytemuck::cast_slice(&data);
+                        if raw.len() >= 2 {
+                            let pass_ticks = raw[1].saturating_sub(raw[0]);
+                            let ns = pass_ticks as f64 * self.period_ns;
+                            out.push(Duration::from_nanos(ns as u64));
+                        }
+                    }
+                    Err(e) => log::warn!("gpu timestamp readback not mapped: {e}"),
                 }
-                drop(data);
                 slot.readback.unmap();
                 slot.state
                     .store(SLOT_IDLE, Ordering::Release);

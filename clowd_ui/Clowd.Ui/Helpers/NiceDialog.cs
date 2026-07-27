@@ -179,7 +179,7 @@ namespace Clowd.UI.Helpers
             {
                 // ShowOverwritePrompt is true so the user will have already been asked if they
                 // are happy to overwrite this file.
-                bitmap.Save(file);
+                bitmap.Save(file, PngBitmapEncoderOptions.Default);
             }
             catch (Exception e)
             {

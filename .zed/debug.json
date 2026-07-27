@@ -3,15 +3,15 @@
     "label": "Debug .NET",
     "adapter": "netcoredbg",
     "request": "launch",
-    "program": "${ZED_WORKTREE_ROOT}/clowd_ui/Clowd.Ui/bin/Debug/net8.0/Clowd.Ui.dll",
-    "cwd": "${ZED_WORKTREE_ROOT}/clowd_ui/Clowd.Ui/bin/Debug/net8.0",
+    "program": "${ZED_WORKTREE_ROOT}/clowd_ui/Clowd.Ui/bin/Debug/net10.0/Clowd.Ui.dll",
+    "cwd": "${ZED_WORKTREE_ROOT}/clowd_ui/Clowd.Ui/bin/Debug/net10.0",
     "build": {
       "command": "dotnet",
       "args": [
         "build",
         "${ZED_WORKTREE_ROOT}/clowd_ui/Clowd.Ui/Clowd.Ui.csproj",
         "-p:Configuration=Debug",
-        "-p:TargetFramework=net8.0",
+        "-p:TargetFramework=net10.0",
       ],
     },
   },

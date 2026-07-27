@@ -1058,7 +1058,7 @@ namespace Clowd.UI
         private string SaveImageToSessionDir(Bitmap src)
         {
             var path = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
-            src.Save(path);
+            src.Save(path, PngBitmapEncoderOptions.Default);
             return path;
         }
 
@@ -1178,7 +1178,7 @@ namespace Clowd.UI
                     // save pasted image into session folder + add to canvas
                     using var bmp = clipBitmap;
                     var imgPath = Path.Combine(Path.GetDirectoryName(_session.FilePath), Guid.NewGuid().ToString() + ".png");
-                    bmp.Save(imgPath);
+                    bmp.Save(imgPath, PngBitmapEncoderOptions.Default);
                     var graphic = new GraphicImage(imgPath, new Size(bmp.PixelSize.Width, bmp.PixelSize.Height));
                     drawingCanvas.AddGraphic(graphic);
                     return;

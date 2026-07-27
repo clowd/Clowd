@@ -20,6 +20,16 @@ public static class ClipboardImpl
     private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
     private const string PNG_CLIPBOARD_FORMAT = "image/png";
 
+    // Avalonia 12 replaced IDataObject/string formats with DataTransfer/DataFormat. "Platform"
+    // (rather than "Application") formats keep the identifier on the wire exactly as the 11.x
+    // DataObject.Set(string, ...) path wrote it — an Application format would prefix it with the
+    // app name and stop matching data written by older builds.
+    private static readonly DataFormat<byte[]> canvasDataFormat =
+        DataFormat.CreateBytesPlatformFormat(CANVAS_CLIPBOARD_FORMAT);
+
+    private static readonly DataFormat<byte[]> pngDataFormat =
+        DataFormat.CreateBytesPlatformFormat(PNG_CLIPBOARD_FORMAT);
+
     [SupportedOSPlatform("windows")]
     private static readonly ClipboardFormat<byte[]> canvasFormat;
 
@@ -44,10 +54,12 @@ public static class ClipboardImpl
             if (clipboard == null)
                 return;
 
-            var data = new DataObject();
-            data.Set(PNG_CLIPBOARD_FORMAT, ms.ToArray());
-            data.Set(CANVAS_CLIPBOARD_FORMAT, canvasData);
-            await clipboard.SetDataObjectAsync(data).ConfigureAwait(false);
+            var item = new DataTransferItem();
+            item.Set(pngDataFormat, ms.ToArray());
+            item.Set(canvasDataFormat, canvasData);
+            using var data = new DataTransfer();
+            data.Add(item);
+            await clipboard.SetDataAsync(data).ConfigureAwait(false);
         }
     }
 
@@ -88,11 +100,13 @@ public static class ClipboardImpl
             byte[] clipImage = null;
 
             try {
-                var formats = await clipboard.GetFormatsAsync().ConfigureAwait(false) ?? Array.Empty<string>();
-                if (formats.Contains(CANVAS_CLIPBOARD_FORMAT))
-                    clipGraphics = await clipboard.GetDataAsync(CANVAS_CLIPBOARD_FORMAT).ConfigureAwait(false) as byte[];
-                if (clipGraphics == null && formats.Contains(PNG_CLIPBOARD_FORMAT))
-                    clipImage = await clipboard.GetDataAsync(PNG_CLIPBOARD_FORMAT).ConfigureAwait(false) as byte[];
+                using var data = await clipboard.TryGetDataAsync().ConfigureAwait(false);
+                if (data != null) {
+                    if (data.Contains(canvasDataFormat))
+                        clipGraphics = await data.TryGetValueAsync(canvasDataFormat).ConfigureAwait(false);
+                    if (clipGraphics == null && data.Contains(pngDataFormat))
+                        clipImage = await data.TryGetValueAsync(pngDataFormat).ConfigureAwait(false);
+                }
             } catch {; }
 
             if (clipImage != null) {
@@ -115,9 +129,9 @@ public static class ClipboardImpl
             if (clipboard == null)
                 return;
 
-            var data = new DataObject();
-            data.Set(PNG_CLIPBOARD_FORMAT, pngBytes);
-            await clipboard.SetDataObjectAsync(data).ConfigureAwait(false);
+            using var data = new DataTransfer();
+            data.Add(DataTransferItem.Create(pngDataFormat, pngBytes));
+            await clipboard.SetDataAsync(data).ConfigureAwait(false);
         }
     }
 
