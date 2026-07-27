@@ -5,7 +5,8 @@ using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("Filled Rectangle", Skills = Skill.Stroke | Skill.Color | Skill.Angle)]
+    // no Stroke/DashStyle skills: this type has no stroke, only a fill (LineWidth is fixed at 0).
+    [GraphicDesc("Filled Rectangle", Skills = Skill.Color | Skill.Angle | Skill.Radius)]
     public class GraphicFilledRectangle : GraphicRectangle
     {
         protected GraphicFilledRectangle()
@@ -19,13 +20,17 @@ namespace Clowd.Drawing.Graphics
         // cached ComputeBounds unchanged.
         internal override void DrawRectangle(DrawingContext drawingContext)
         {
+            var rect = new Rect(UnrotatedBounds.Left,
+                                UnrotatedBounds.Top,
+                                Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left),
+                                Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top));
+            var radius = ClampCornerRadius(rect);
+
             drawingContext.DrawRectangle(
                 RenderResources.GetBrush(ObjectColor),
                 null,
-                new Rect(UnrotatedBounds.Left,
-                         UnrotatedBounds.Top,
-                         Math.Max(1, UnrotatedBounds.Right - UnrotatedBounds.Left),
-                         Math.Max(1, UnrotatedBounds.Bottom - UnrotatedBounds.Top)));
+                rect,
+                radius, radius);
         }
     }
 }

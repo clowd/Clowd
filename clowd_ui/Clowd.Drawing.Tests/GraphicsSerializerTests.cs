@@ -91,6 +91,30 @@ namespace Clowd.Drawing.Tests
             AssertBaseState(g, r);
             Assert.Equal(g.LineStart, r.LineStart);
             Assert.Equal(g.LineEnd, r.LineEnd);
+            Assert.Equal(0, r.CurveOffset); // a new arrow is straight
+        }
+
+        [AvaloniaFact]
+        public void CurvedArrow_RoundTrips()
+        {
+            var g = new GraphicArrow(Colors.Lime, 6, new Point(0, 0), new Point(50, 25)) { CurveOffset = -13.25 };
+            var r = RoundTrip(g);
+            AssertBaseState(g, r);
+            Assert.Equal(g.LineStart, r.LineStart);
+            Assert.Equal(g.LineEnd, r.LineEnd);
+            Assert.Equal(-13.25, r.CurveOffset);
+        }
+
+        [AvaloniaFact]
+        public void Measure_RoundTrips()
+        {
+            // the endpoints are the whole persisted state — the ticks and the length/angle label are
+            // derived at render time, so nothing extra may appear in the payload
+            var g = new GraphicMeasure(Colors.Orange, 3, new Point(-4.25, 8), new Point(120, 60.5));
+            var r = RoundTrip(g);
+            AssertBaseState(g, r);
+            Assert.Equal(g.LineStart, r.LineStart);
+            Assert.Equal(g.LineEnd, r.LineEnd);
         }
 
         [AvaloniaFact]
@@ -166,7 +190,10 @@ namespace Clowd.Drawing.Tests
             g.ObscuredShapes = new[]
             {
                 new GraphicImage.ObscuredShape(new Point(1, 2), new Point(3, 4), new Point(5, 6), new Point(7, 8), 12),
-                new GraphicImage.ObscuredShape(new Point(9, 9), new Point(10, 10), new Point(11, 11), new Point(12, 12), 0),
+                new GraphicImage.ObscuredShape(new Point(9, 9), new Point(10, 10), new Point(11, 11), new Point(12, 12), 0,
+                                               ObscureMode.Blur),
+                new GraphicImage.ObscuredShape(new Point(13, 13), new Point(14, 14), new Point(15, 15), new Point(16, 16), 4,
+                                               ObscureMode.Solid),
             };
 
             var r = RoundTrip(g);
@@ -192,6 +219,7 @@ namespace Clowd.Drawing.Tests
                 new GraphicEllipse(Colors.Green, 3, new Rect(5, 5, 20, 20)),
                 new GraphicLine(Colors.Blue, 1, new Point(0, 0), new Point(9, 9)),
                 new GraphicArrow(Colors.Black, 4, new Point(1, 1), new Point(8, 2)),
+                new GraphicMeasure(Colors.Orange, 3, new Point(2, 3), new Point(40, 12)),
                 new GraphicImage(@"C:\img.png", new Size(64, 64)),
             };
 
@@ -226,7 +254,8 @@ namespace Clowd.Drawing.Tests
             Assert.Equal(new[]
             {
                 "GraphicArrow", "GraphicCount", "GraphicEllipse", "GraphicFilledRectangle",
-                "GraphicImage", "GraphicLine", "GraphicPolyLine", "GraphicRectangle", "GraphicText",
+                "GraphicImage", "GraphicLine", "GraphicMeasure", "GraphicPolyLine", "GraphicRectangle",
+                "GraphicText",
             }, concrete);
         }
     }

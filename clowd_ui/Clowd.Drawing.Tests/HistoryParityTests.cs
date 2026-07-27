@@ -261,7 +261,7 @@ namespace Clowd.Drawing.Tests
             double lw = rng.Next(1, 6);
             double angle = allowAngle && rng.Next(3) == 0 ? rng.Next(-45, 46) : 0;
 
-            switch (rng.Next(8))
+            switch (rng.Next(9))
             {
                 case 0: return new GraphicRectangle(color, lw, RandRect(rng), angle);
                 case 1: return new GraphicFilledRectangle(color, RandRect(rng));
@@ -280,6 +280,7 @@ namespace Clowd.Drawing.Tests
                         poly.AddPoint(RandPoint(rng));
                     poly.EndDrawing(true);
                     return poly;
+                case 7: return new GraphicMeasure(color, lw, RandPoint(rng), RandPoint(rng));
                 default:
                     // never decoded in these tests (nothing renders and no obscure areas are added
                     // through the decode path), so a missing file is fine — paths are just fields
@@ -381,14 +382,20 @@ namespace Clowd.Drawing.Tests
                     {
                         img.ObscuredShapes = shapes
                                              .Append(new GraphicImage.ObscuredShape(RandPoint(rng), RandPoint(rng), RandPoint(rng),
-                                                                                    RandPoint(rng), rng.Next(1, 20)))
+                                                                                    RandPoint(rng), rng.Next(1, 20),
+                                                                                    (ObscureMode)rng.Next(3)))
                                              .ToArray();
                     }
                     else
                     {
                         var clone = (GraphicImage.ObscuredShape[])shapes.Clone();
                         int i = rng.Next(clone.Length);
-                        clone[i] = clone[i] with { P0 = RandPoint(rng), BlurRadius = clone[i].BlurRadius + 1 };
+                        clone[i] = clone[i] with
+                        {
+                            P0 = RandPoint(rng),
+                            BlurRadius = clone[i].BlurRadius + 1,
+                            Mode = (ObscureMode)rng.Next(3),
+                        };
                         img.ObscuredShapes = clone;
                     }
                 }
@@ -553,10 +560,10 @@ namespace Clowd.Drawing.Tests
             {
                 // edit one member of shape 0 and append a second shape
                 var clone = (GraphicImage.ObscuredShape[])img.ObscuredShapes.Clone();
-                clone[0] = clone[0] with { P0 = new Point(2, 2), BlurRadius = 9 };
+                clone[0] = clone[0] with { P0 = new Point(2, 2), BlurRadius = 9, Mode = ObscureMode.Solid };
                 img.ObscuredShapes = clone
                                      .Append(new GraphicImage.ObscuredShape(new Point(5, 5), new Point(6, 5), new Point(6, 6),
-                                                                            new Point(5, 6), 4))
+                                                                            new Point(5, 6), 4, ObscureMode.Blur))
                                      .ToArray();
                 canvas.AddCommandToHistory(false);
             }
@@ -568,6 +575,7 @@ namespace Clowd.Drawing.Tests
             Assert.NotNull(built);
             Assert.Contains($"root/Graphics/{img.Id}/obscuredShapes/item.0/P0", built);
             Assert.Contains($"root/Graphics/{img.Id}/obscuredShapes/item.0/BlurRadius", built);
+            Assert.Contains($"root/Graphics/{img.Id}/obscuredShapes/item.0/Mode", built);
             Assert.Contains($"root/Graphics/{img.Id}/obscuredShapes/item.1", built);
             Assert.DoesNotContain($"root/Graphics/{img.Id}/obscuredShapes/item.0/P1", built);
         }

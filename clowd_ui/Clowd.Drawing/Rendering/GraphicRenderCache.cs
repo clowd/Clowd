@@ -13,9 +13,14 @@ namespace Clowd.Drawing.Rendering
     /// in fields of its own (new fields would leak into the serialization contract unless marked
     /// [Transient]). Slot assignments by type:
     ///   GraphicLine      → Geometry (LineGeometry) + GeometryBounds (stroke-widened bounds)
-    ///   GraphicArrow     → SecondaryGeometry (tip triangle); Geometry = inherited GraphicLine
-    ///                      full-line Contains corridor; GeometryBounds unused (bounds via
-    ///                      CachedBounds; the shaft is scalar math + DrawLine)
+    ///   GraphicArrow     → SecondaryGeometry (tip triangle); Geometry = the full-line Contains
+    ///                      corridor (inherited straight LineGeometry, or the curved bezier when
+    ///                      CurveOffset != 0); TertiaryGeometry = the shortened drawn shaft, curved
+    ///                      arrows only; GeometryBounds unused (bounds via CachedBounds; a straight
+    ///                      shaft is scalar math + DrawLine and needs no slot)
+    ///   GraphicMeasure   → SecondaryGeometry (both end ticks in one open figure) + Text/TextKey
+    ///                      (the length/angle label, keyed on the label string); Geometry =
+    ///                      inherited GraphicLine full-line Contains corridor
     ///   GraphicEllipse   → Geometry (EllipseGeometry for Contains)
     ///   GraphicPolyLine  → GeometryBounds (fitted render bounds) + GeometryTransform (mapping)
     ///   GraphicText/Count→ Text (FormattedText) + TextKey (its input tuple); Count also uses
@@ -40,6 +45,7 @@ namespace Clowd.Drawing.Rendering
         // ---- Geometry aspect ----
         public Geometry Geometry;
         public Geometry SecondaryGeometry;
+        public Geometry TertiaryGeometry;
         public Rect? GeometryBounds;
         public MatrixTransform GeometryTransform;
 
@@ -59,6 +65,7 @@ namespace Clowd.Drawing.Rendering
             {
                 Geometry = null;
                 SecondaryGeometry = null;
+                TertiaryGeometry = null;
                 GeometryBounds = null;
                 GeometryTransform = null;
             }

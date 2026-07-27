@@ -15,6 +15,9 @@ namespace Clowd.Drawing
         Crop = 1 << 6,
         Cursor = 1 << 7,
         BlurRadius = 1 << 8,
+        Radius = 1 << 9,
+        DashStyle = 1 << 10,
+        ObscureMode = 1 << 12,
     }
 
     /// <summary>

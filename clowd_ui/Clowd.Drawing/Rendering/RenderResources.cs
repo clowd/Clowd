@@ -25,6 +25,14 @@ namespace Clowd.Drawing.Rendering
         /// <summary>The 4-on/4-off dash used by DrawDashedBorder and the selection marquee.</summary>
         public static readonly ImmutableDashStyle Dash4x4 = new ImmutableDashStyle(new double[] { 4, 4 }, 0);
 
+        /// <summary>Ink dash for <see cref="LineDashStyle.Dashed"/>. Dash arrays are in units of
+        /// pen thickness, so the pattern scales with the stroke width.</summary>
+        public static readonly ImmutableDashStyle DashStroke = new ImmutableDashStyle(new double[] { 4, 2 }, 0);
+
+        /// <summary>Ink dash for <see cref="LineDashStyle.Dotted"/>. Square dots — pens come from
+        /// this cache with the ImmutablePen default (flat) caps, same as every other stroke.</summary>
+        public static readonly ImmutableDashStyle DotStroke = new ImmutableDashStyle(new double[] { 1, 2 }, 0);
+
         private static readonly ConcurrentDictionary<uint, ImmutableSolidColorBrush> _brushes =
             new ConcurrentDictionary<uint, ImmutableSolidColorBrush>();
 
@@ -43,18 +51,35 @@ namespace Clowd.Drawing.Rendering
             return _brushes.GetOrAdd(key, static k => new ImmutableSolidColorBrush(Color.FromUInt32(k)));
         }
 
-        public static ImmutablePen GetPen(Color color, double thickness, ImmutableDashStyle dashStyle = null)
+        /// <summary>
+        /// The shared dash instance for an ink dash style, or null for Solid. Must return the same
+        /// instance every call — <see cref="GetPen"/> keys on the dash style BY REFERENCE.
+        /// </summary>
+        public static ImmutableDashStyle GetDash(LineDashStyle style) => style switch
         {
-            var key = new PenKey(color.ToUInt32(), thickness, dashStyle);
+            LineDashStyle.Dashed => DashStroke,
+            LineDashStyle.Dotted => DotStroke,
+            _ => null,
+        };
+
+        /// <summary>
+        /// The cap default matches Pen/ImmutablePen (flat) so existing callers are unaffected;
+        /// line-shaped ink (line/arrow/pencil) passes Round, and the matching BOUNDS pen must pass
+        /// the same cap — round caps extend half the stroke width past each endpoint.
+        /// </summary>
+        public static ImmutablePen GetPen(Color color, double thickness, ImmutableDashStyle dashStyle = null,
+                                          PenLineCap lineCap = PenLineCap.Flat)
+        {
+            var key = new PenKey(color.ToUInt32(), thickness, dashStyle, lineCap);
             if (_pens.TryGetValue(key, out var pen))
                 return pen;
 
             if (_pens.Count >= SoftCap)
                 _pens.Clear();
 
-            return _pens.GetOrAdd(key, static k => new ImmutablePen(GetBrush(Color.FromUInt32(k.Color)), k.Thickness, k.Dash));
+            return _pens.GetOrAdd(key, static k => new ImmutablePen(GetBrush(Color.FromUInt32(k.Color)), k.Thickness, k.Dash, k.Cap));
         }
 
-        private readonly record struct PenKey(uint Color, double Thickness, ImmutableDashStyle Dash);
+        private readonly record struct PenKey(uint Color, double Thickness, ImmutableDashStyle Dash, PenLineCap Cap);
     }
 }

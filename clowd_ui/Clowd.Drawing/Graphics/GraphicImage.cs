@@ -124,7 +124,11 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
-        public record struct ObscuredShape(Point P0, Point P1, Point P2, Point P3, double BlurRadius);
+        /// <summary><paramref name="Mode"/> is optional and defaults to
+        /// <see cref="ObscureMode.Mosaic"/>: shapes persisted before the mode existed carry no
+        /// "Mode" property, and the serializer leaves absent members at their default.</summary>
+        public record struct ObscuredShape(Point P0, Point P1, Point P2, Point P3, double BlurRadius,
+                                           ObscureMode Mode = ObscureMode.Mosaic);
 
         private string _cursorFilePath;
         private PixelRect _cursorPosition;
@@ -465,14 +469,14 @@ namespace Clowd.Drawing.Graphics
             base.Normalize();
         }
 
-        internal void AddObscuredArea(Rect rect, double blurRadius)
+        internal void AddObscuredArea(Rect rect, double blurRadius, ObscureMode mode = ObscureMode.Mosaic)
         {
             var pts = new Point[] { rect.TopLeft, rect.TopRight, rect.BottomRight, rect.BottomLeft }.Select(UnapplyRotation).ToArray();
             if (!pts.Any(p => UnrotatedBounds.Contains(p)))
                 return;
 
             pts = pts.Select(TranslateUnrotatedPointToImageSpace).ToArray();
-            ObscuredShapes = ObscuredShapes.Append(new ObscuredShape(pts[0], pts[1], pts[2], pts[3], blurRadius)).ToArray();
+            ObscuredShapes = ObscuredShapes.Append(new ObscuredShape(pts[0], pts[1], pts[2], pts[3], blurRadius, mode)).ToArray();
         }
 
         private Rect GetExtendedImageRect()
@@ -672,6 +676,78 @@ namespace Clowd.Drawing.Graphics
             }
         }
 
+        /// <summary>
+        /// Draws one <see cref="ObscureMode.Blur"/> shape by blurring a copy of the source pixels
+        /// under it. Only the shape's neighbourhood is blurred — a whole-image gaussian would cost
+        /// several passes over a 4K screenshot per cache rebuild — and the cut-out is padded by the
+        /// blur reach so the rim the kernel darkens against the transparent outside lands beyond
+        /// the geometry clip. Returns false when the source pixels cannot be read back.
+        /// </summary>
+        private bool TryDrawBlurred(DrawingContext ctx, ObscuredShape shape, int pixelW, int pixelH)
+        {
+            if (_imageSource.Format is not { BitsPerPixel: 32 })
+                return false;
+
+            var format = _imageSource.Format.Value;
+            var sigma = shape.BlurRadius > 0 ? shape.BlurRadius : 8;
+            var region = ShapeRegion(shape, pixelW, pixelH, (int)Math.Ceiling(sigma * 3) + 1);
+            if (region.Width <= 0 || region.Height <= 0)
+                return true; // entirely off-image: nothing to obscure, but not a failure
+
+            var stride = region.Width * 4;
+            var pixels = new byte[stride * region.Height];
+            var handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+            try
+            {
+                _imageSource.CopyPixels(region, handle.AddrOfPinnedObject(), pixels.Length, stride);
+            }
+            catch (NotSupportedException)
+            {
+                return false;
+            }
+            finally
+            {
+                handle.Free();
+            }
+
+            ShadowRenderer.BoxBlur3(pixels, region.Width, region.Height, sigma, 4);
+
+            handle = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+            try
+            {
+                // the raw-data constructor copies the buffer, so the pin ends with this scope
+                using var blurred = new Bitmap(format, AlphaFormat.Premul, handle.AddrOfPinnedObject(), region.Size,
+                                               new Vector(96, 96), stride);
+                using (ctx.PushGeometryClip(ShapeToGeometry(shape)))
+                    ctx.DrawImage(blurred, region.ToRect());
+            }
+            finally
+            {
+                handle.Free();
+            }
+
+            return true;
+        }
+
+        /// <summary>Shape bounds in image pixel space, inflated by <paramref name="pad"/> and
+        /// clamped to the image.</summary>
+        private static PixelRect ShapeRegion(ObscuredShape shape, int pixelW, int pixelH, int pad)
+        {
+            var minX = Math.Min(Math.Min(shape.P0.X, shape.P1.X), Math.Min(shape.P2.X, shape.P3.X));
+            var maxX = Math.Max(Math.Max(shape.P0.X, shape.P1.X), Math.Max(shape.P2.X, shape.P3.X));
+            var minY = Math.Min(Math.Min(shape.P0.Y, shape.P1.Y), Math.Min(shape.P2.Y, shape.P3.Y));
+            var maxY = Math.Max(Math.Max(shape.P0.Y, shape.P1.Y), Math.Max(shape.P2.Y, shape.P3.Y));
+
+            // clamp before narrowing: the points are unvalidated doubles and may sit far outside
+            // int range (a NaN survives the clamp and narrows to 0, giving an empty region)
+            var x0 = (int)Math.Clamp(Math.Floor(minX) - pad, 0, pixelW);
+            var y0 = (int)Math.Clamp(Math.Floor(minY) - pad, 0, pixelH);
+            var x1 = (int)Math.Clamp(Math.Ceiling(maxX) + pad, 0, pixelW);
+            var y1 = (int)Math.Clamp(Math.Ceiling(maxY) + pad, 0, pixelH);
+
+            return new PixelRect(x0, y0, x1 - x0, y1 - y0);
+        }
+
         private bool UpdateObscureCache()
         {
             if (_imageSource == null) UpdateImageCache();
@@ -695,6 +771,19 @@ namespace Clowd.Drawing.Graphics
             {
                 foreach (var o in _obscuredShapes)
                 {
+                    if (o.Mode == ObscureMode.Solid)
+                    {
+                        using (ctx.PushGeometryClip(ShapeToGeometry(o)))
+                            ctx.DrawRectangle(Brushes.Black, null, new Rect(0, 0, pixelW, pixelH));
+                        continue;
+                    }
+
+                    // Blur needs a pixel read-back, which a Bitmap is allowed not to support; fall
+                    // through to mosaic when it fails, because an obscured region must never render
+                    // unobscured.
+                    if (o.Mode == ObscureMode.Blur && TryDrawBlurred(ctx, o, pixelW, pixelH))
+                        continue;
+
                     var sc = o.BlurRadius > 0 ? 1 / o.BlurRadius : 0.125;
 
                     if (sc != blurScale || blurCache == null)

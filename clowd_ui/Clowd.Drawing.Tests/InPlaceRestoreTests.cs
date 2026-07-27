@@ -85,6 +85,15 @@ namespace Clowd.Drawing.Tests
         }
 
         [AvaloniaFact]
+        public void CurvedArrow_UndoRestoresBoundsAndHitTest()
+        {
+            // the bow lives in its own field and feeds every cached geometry slot (curve, shaft,
+            // tip), so undoing it must leave nothing of the curved shape behind
+            var g = new GraphicArrow(Colors.Teal, 4, new Point(20, 30), new Point(110, 80)) { CurveOffset = 40 };
+            RunTypeParity(g, () => g.CurveOffset = -25, "curved-arrow");
+        }
+
+        [AvaloniaFact]
         public void Text_UndoRestoresBoundsAndHitTest()
         {
             var g = new GraphicText(Colors.Black, 2, new Point(40, 40), 0, "hi");

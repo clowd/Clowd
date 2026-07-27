@@ -1,0 +1,106 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- Rows of the dropdown popup: flat text on #454545, #66FFFFFF hover, #33FFFFFF for the
+         currently-selected item (matching the interactive-surface tints used across the bar). -->
+    <ControlTheme x:Key="ClowdDropDownItem" TargetType="ListBoxItem">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="10,3" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="_ibg" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^ /template/ Border#_ibg">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="^:selected /template/ Border#_ibg">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#_ibg">
+            <Setter Property="Background" Value="#66FFFFFF" />
+        </Style>
+    </ControlTheme>
+
+    <!-- 22px dropdown button: #454545 fill with a #666666 1px border. The label is deliberately
+         NOT drawn as a surface — the text sits flat on the chrome fill; only the 14px full-height
+         ▼ column (the visible width of SpinnerTextBox's spin buttons) reads as a raised button,
+         drawn 1px inside the border with the shared #33FFFFFF→#66FFFFFF hover and top highlight.
+         Clicking anywhere opens the popup; DropDownButton.cs owns open/commit/close. -->
+    <ControlTheme x:Key="{x:Type controls:DropDownButton}" TargetType="controls:DropDownButton">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1">
+                        <Grid Margin="1" ColumnDefinitions="*,1,14">
+                            <ContentPresenter Name="PART_ContentPresenter"
+                                              Padding="{TemplateBinding Padding}"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"
+                                              RenderTransform="translateY(-1px)"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}" />
+                            <Border Name="_arrow" Grid.Column="2">
+                                <Border.Transitions>
+                                    <Transitions>
+                                        <BrushTransition Property="Background" Duration="0:0:0.1" />
+                                    </Transitions>
+                                </Border.Transitions>
+                                <Panel>
+                                    <Rectangle Height="5"
+                                               VerticalAlignment="Top"
+                                               IsHitTestVisible="False">
+                                        <Rectangle.Fill>
+                                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                <GradientStop Offset="0" Color="#30FFFFFF" />
+                                                <GradientStop Offset="1" Color="#00FFFFFF" />
+                                            </LinearGradientBrush>
+                                        </Rectangle.Fill>
+                                    </Rectangle>
+                                    <TextBlock FontSize="6"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Text="&#x25BC;" />
+                                </Panel>
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <Popup Name="PART_Popup"
+                           IsLightDismissEnabled="True"
+                           Placement="BottomEdgeAlignedLeft"
+                           VerticalOffset="2">
+                        <Border Background="#454545"
+                                BorderBrush="#666666"
+                                BorderThickness="1">
+                            <ListBox Name="PART_ListBox"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="0"
+                                     ItemContainerTheme="{StaticResource ClowdDropDownItem}"
+                                     ItemsSource="{TemplateBinding ItemsSource}" />
+                        </Border>
+                    </Popup>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^ /template/ Border#_arrow">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#_arrow">
+            <Setter Property="Background" Value="#66FFFFFF" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

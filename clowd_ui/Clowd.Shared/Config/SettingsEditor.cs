@@ -60,6 +60,24 @@ namespace Clowd.Config
             set => Set(ref _blurRadius, value);
         }
 
+        public double CornerRadius
+        {
+            get => _cornerRadius ?? 0d;
+            set => Set(ref _cornerRadius, value);
+        }
+
+        public LineDashStyle DashStyle
+        {
+            get => _dashStyle ?? LineDashStyle.Solid;
+            set => Set(ref _dashStyle, value);
+        }
+
+        public ObscureMode ObscureMode
+        {
+            get => _obscureMode ?? ObscureMode.Mosaic;
+            set => Set(ref _obscureMode, value);
+        }
+
         private FontStretch? _fontStretch;
         private FontWeight? _fontWeight;
         private FontStyle? _fontStyle;
@@ -69,6 +87,9 @@ namespace Clowd.Config
         private Color? _objectColor;
         private bool? _autoColor;
         private double? _blurRadius;
+        private double? _cornerRadius;
+        private LineDashStyle? _dashStyle;
+        private ObscureMode? _obscureMode;
     }
 
     public class SettingsEditor : SimpleNotifyObject

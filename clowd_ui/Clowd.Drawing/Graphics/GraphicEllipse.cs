@@ -5,7 +5,7 @@ using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("Ellipse", Skills = Skill.Stroke | Skill.Color | Skill.Angle)]
+    [GraphicDesc("Ellipse", Skills = Skill.Stroke | Skill.Color | Skill.Angle | Skill.DashStyle)]
     public class GraphicEllipse : GraphicRectangle
     {
         protected GraphicEllipse()
@@ -25,7 +25,7 @@ namespace Clowd.Drawing.Graphics
 
             drawingContext.DrawEllipse(
                 null,
-                RenderResources.GetPen(ObjectColor, LineWidth),
+                RenderResources.GetPen(ObjectColor, LineWidth, StrokeDash),
                 center,
                 radiusX,
                 radiusY);

@@ -199,7 +199,7 @@ namespace Clowd.Drawing.History
         /// <summary>
         /// GraphicImage._obscuredShapes. Each element serializes as an object (no "id" property →
         /// positional "item.N" key), so DiffChildren recurses per element into the record's
-        /// serialized properties: P0..P3 ("x,y" leaves) and BlurRadius.
+        /// serialized properties: P0..P3 ("x,y" leaves), BlurRadius and Mode (an enum string leaf).
         /// </summary>
         private sealed class ObscuredShapeArrayCodec : IFieldCodec
         {
@@ -239,6 +239,7 @@ namespace Clowd.Drawing.History
                     if (!PointEquals(b[i].P2, a[i].P2)) changes.Add(itemPrefix + "/P2");
                     if (!PointEquals(b[i].P3, a[i].P3)) changes.Add(itemPrefix + "/P3");
                     if (!DoubleEquals(b[i].BlurRadius, a[i].BlurRadius)) changes.Add(itemPrefix + "/BlurRadius");
+                    if (b[i].Mode != a[i].Mode) changes.Add(itemPrefix + "/Mode");
                 }
 
                 for (int i = min; i < max; i++)
@@ -247,7 +248,7 @@ namespace Clowd.Drawing.History
 
             private static bool ShapeEquals(in GraphicImage.ObscuredShape x, in GraphicImage.ObscuredShape y) =>
                 PointEquals(x.P0, y.P0) && PointEquals(x.P1, y.P1) && PointEquals(x.P2, y.P2) &&
-                PointEquals(x.P3, y.P3) && DoubleEquals(x.BlurRadius, y.BlurRadius);
+                PointEquals(x.P3, y.P3) && DoubleEquals(x.BlurRadius, y.BlurRadius) && x.Mode == y.Mode;
         }
     }
 }

@@ -234,7 +234,10 @@ namespace Clowd.Drawing.Tools
                             rotatableGraphic.Right = rotatableDestRect.Value.Right;
                             rotatableGraphic.Top = rotatableDestRect.Value.Top;
                         }
-                        else if (shiftPressed && lineGraphic != null)
+                        // angle snapping is an ENDPOINT gesture (handles 1/2): it re-aims the free end
+                        // around the anchored one. The arrow's curve handle (3) moves no endpoint, so
+                        // it is excluded — snapping it would fling the shaft off the pointer.
+                        else if (shiftPressed && lineGraphic != null && _handleGrabbed <= 2)
                         {
                             var anchor = _handleGrabbed == 1 ? lineGraphic.LineEnd : lineGraphic.LineStart;
                             wpfPt = HelperFunctions.SnapPointToCommonAngle(anchor, wpfPt, false);

@@ -21,40 +21,57 @@
         <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
         <conv:StringToFontFamilyConverter x:Key="convFontFamily" />
 
-        <!--  WPF "InnerToolButtonStyle" (the font preview button)  -->
+        <!--  The font preview button. Same chrome idiom as SpinnerTextBox: #454545 fill with a
+              #666666 1px border, and the interactive surface drawn 1px inside the border
+              (#33FFFFFF fading to #66FFFFFF on hover over 0.1s, like the spin buttons).  -->
         <ControlTheme x:Key="InnerToolButtonTheme" TargetType="Button">
-            <Setter Property="Background" Value="#454545" />
             <Setter Property="Foreground" Value="White" />
-            <Setter Property="BorderBrush" Value="#666666" />
-            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Height" Value="22" />
             <Setter Property="Margin" Value="4,0,0,0" />
-            <Setter Property="Padding" Value="10,2" />
+            <Setter Property="Padding" Value="10,0" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Template">
                 <ControlTemplate>
-                    <Grid>
-                        <Rectangle
-                            Name="_bg"
-                            HorizontalAlignment="Stretch"
-                            VerticalAlignment="Stretch" />
-                        <Border
-                            Padding="{TemplateBinding Padding}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}">
-                            <ContentPresenter
-                                Name="PART_ContentPresenter"
-                                Content="{TemplateBinding Content}"
-                                ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    <Border
+                        Background="#454545"
+                        BorderBrush="#666666"
+                        BorderThickness="1">
+                        <Border Name="_bg" Margin="1">
+                            <Border.Transitions>
+                                <Transitions>
+                                    <BrushTransition Property="Background" Duration="0:0:0.1" />
+                                </Transitions>
+                            </Border.Transitions>
+                            <Panel>
+                                <Rectangle
+                                    Height="5"
+                                    VerticalAlignment="Top"
+                                    IsHitTestVisible="False">
+                                    <Rectangle.Fill>
+                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                            <GradientStop Offset="0" Color="#30FFFFFF" />
+                                            <GradientStop Offset="1" Color="#00FFFFFF" />
+                                        </LinearGradientBrush>
+                                    </Rectangle.Fill>
+                                </Rectangle>
+                                <ContentPresenter
+                                    Name="PART_ContentPresenter"
+                                    Padding="{TemplateBinding Padding}"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    RenderTransform="translateY(-1px)"
+                                    Content="{TemplateBinding Content}"
+                                    ContentTemplate="{TemplateBinding ContentTemplate}" />
+                            </Panel>
                         </Border>
-                    </Grid>
+                    </Border>
                 </ControlTemplate>
             </Setter>
-            <Style Selector="^ /template/ Rectangle#_bg">
-                <Setter Property="Fill" Value="#454545" />
+            <Style Selector="^ /template/ Border#_bg">
+                <Setter Property="Background" Value="#33FFFFFF" />
             </Style>
-            <Style Selector="^:pointerover /template/ Rectangle#_bg">
-                <Setter Property="Fill" Value="#66FFFFFF" />
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="#66FFFFFF" />
             </Style>
         </ControlTheme>
     </Window.Resources>
@@ -203,6 +220,33 @@
                     SpinAmount="1"
                     Suffix="px"
                     Value="{Binding ElementName=drawingCanvas, Path=BlurRadius, Mode=TwoWay}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Radius}">
+                <TextBlock VerticalAlignment="Center" Text="Radius:" />
+                <controls:SpinnerTextBox
+                    Min="0"
+                    SnapToWholeNumber="True"
+                    SpinAmount="1"
+                    Suffix="px"
+                    Value="{Binding ElementName=drawingCanvas, Path=CornerRadius, Mode=TwoWay}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=DashStyle}">
+                <TextBlock VerticalAlignment="Center" Text="Dash:" />
+                <controls:DropDownButton
+                    MinWidth="70"
+                    ItemsSource="{x:Static draw:DrawingCanvas.DashStyleValues}"
+                    SelectedItem="{Binding ElementName=drawingCanvas, Path=DashStyle, Mode=TwoWay}" />
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=ObscureMode}">
+                <TextBlock VerticalAlignment="Center" Text="Mode:" />
+                <controls:DropDownButton
+                    MinWidth="70"
+                    ItemsSource="{x:Static draw:DrawingCanvas.ObscureModeValues}"
+                    SelectedItem="{Binding ElementName=drawingCanvas, Path=ObscureMode, Mode=TwoWay}"
+                    ToolTip.Tip="How obscured regions are rendered" />
             </StackPanel>
 
             <controls:ToolButton

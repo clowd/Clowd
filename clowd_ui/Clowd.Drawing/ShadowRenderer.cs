@@ -158,16 +158,21 @@ namespace Clowd.Drawing
             return shadow;
         }
 
-        /// <summary>3 successive box blurs ≈ gaussian (standard boxesForGauss derivation).</summary>
-        private static void BoxBlur3(byte[] data, int w, int h, double sigma)
+        /// <summary>
+        /// 3 successive box blurs ≈ gaussian (standard boxesForGauss derivation), in place, over
+        /// <paramref name="channels"/> interleaved 8-bit channels: 1 for the shadow alpha plane,
+        /// 4 for a BGRA region (GraphicImage's Blur obscure mode). Channels are blurred
+        /// independently, which is only correct for premultiplied color.
+        /// </summary>
+        internal static void BoxBlur3(byte[] data, int w, int h, double sigma, int channels = 1)
         {
             var tmp = new byte[data.Length];
             foreach (var size in BoxesForGauss(sigma, 3))
             {
                 var r = (size - 1) / 2;
                 if (r <= 0) continue;
-                BoxBlurH(data, tmp, w, h, r);
-                BoxBlurV(tmp, data, w, h, r);
+                BoxBlurH(data, tmp, w, h, r, channels);
+                BoxBlurV(tmp, data, w, h, r, channels);
             }
         }
 
@@ -185,38 +190,45 @@ namespace Clowd.Drawing
             return sizes;
         }
 
-        // sliding-window box blurs; pixels outside the image count as fully transparent
-        private static void BoxBlurH(byte[] src, byte[] dst, int w, int h, int r)
+        // sliding-window box blurs; samples outside the image count as zero (fully transparent for
+        // the shadow plane), so a caller blurring a cut-out region must pad it by the blur reach
+        private static void BoxBlurH(byte[] src, byte[] dst, int w, int h, int r, int channels)
         {
             var div = 2 * r + 1;
-            for (int y = 0; y < h; y++)
+            for (int c = 0; c < channels; c++)
             {
-                var row = y * w;
-                var sum = 0;
-                for (int x = 0; x < Math.Min(r, w); x++)
-                    sum += src[row + x];
-                for (int x = 0; x < w; x++)
+                for (int y = 0; y < h; y++)
                 {
-                    if (x + r < w) sum += src[row + x + r];
-                    dst[row + x] = (byte)(sum / div);
-                    if (x - r >= 0) sum -= src[row + x - r];
+                    var row = y * w;
+                    var sum = 0;
+                    for (int x = 0; x < Math.Min(r, w); x++)
+                        sum += src[(row + x) * channels + c];
+                    for (int x = 0; x < w; x++)
+                    {
+                        if (x + r < w) sum += src[(row + x + r) * channels + c];
+                        dst[(row + x) * channels + c] = (byte)(sum / div);
+                        if (x - r >= 0) sum -= src[(row + x - r) * channels + c];
+                    }
                 }
             }
         }
 
-        private static void BoxBlurV(byte[] src, byte[] dst, int w, int h, int r)
+        private static void BoxBlurV(byte[] src, byte[] dst, int w, int h, int r, int channels)
         {
             var div = 2 * r + 1;
-            for (int x = 0; x < w; x++)
+            for (int c = 0; c < channels; c++)
             {
-                var sum = 0;
-                for (int y = 0; y < Math.Min(r, h); y++)
-                    sum += src[y * w + x];
-                for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
                 {
-                    if (y + r < h) sum += src[(y + r) * w + x];
-                    dst[y * w + x] = (byte)(sum / div);
-                    if (y - r >= 0) sum -= src[(y - r) * w + x];
+                    var sum = 0;
+                    for (int y = 0; y < Math.Min(r, h); y++)
+                        sum += src[(y * w + x) * channels + c];
+                    for (int y = 0; y < h; y++)
+                    {
+                        if (y + r < h) sum += src[((y + r) * w + x) * channels + c];
+                        dst[(y * w + x) * channels + c] = (byte)(sum / div);
+                        if (y - r >= 0) sum -= src[((y - r) * w + x) * channels + c];
+                    }
                 }
             }
         }
