@@ -235,6 +235,13 @@ pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
     }
 }
 
+/// System-audio capture on macOS (ScreenCaptureKit) taps upstream of the
+/// output volume, so the Windows software-master-volume problem does not
+/// exist here — compensation is always unity.
+pub fn speaker_compensation_gain(_device_id: &str) -> f32 {
+    1.0
+}
+
 pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {
     // Base plugin dir. A bundled `obs-plugins` dir next to the executable (the
     // relocatable release layout) wins; otherwise honour the OBS_PLUGIN_PATH

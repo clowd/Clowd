@@ -54,6 +54,12 @@ pub struct Settings {
     pub speakers: Vec<String>,
     #[serde(default)]
     pub microphones: Vec<String>,
+    /// Windows: boost speaker capture to undo the system master volume when
+    /// the endpoint applies it in software (where it lands inside the loopback
+    /// stream, making recordings quieter than the played content). No-op on
+    /// devices with hardware volume and on macOS.
+    #[serde(default)]
+    pub speaker_volume_compensation: bool,
 }
 
 impl Settings {
@@ -72,6 +78,7 @@ impl Settings {
             tracker_color: cli.tracker_color.clone(),
             speakers: cli.speaker.clone(),
             microphones: cli.microphone.clone(),
+            speaker_volume_compensation: cli.speaker_volume_compensation,
         }
     }
 
@@ -133,6 +140,7 @@ mod tests {
         assert_eq!(s.tracker_color, "255,0,0");
         assert!(s.speakers.is_empty());
         assert!(s.microphones.is_empty());
+        assert!(!s.speaker_volume_compensation);
         assert!(s.validate().is_ok());
     }
 
@@ -152,7 +160,8 @@ mod tests {
                 "fps": 30, "crf": 23, "max_width": 1920, "max_height": 1080,
                 "hw_accel": true, "low_cpu": false, "cursor": false,
                 "tracker": true, "tracker_color": "0,128,255",
-                "speakers": ["default"], "microphones": ["mic-id"]
+                "speakers": ["default"], "microphones": ["mic-id"],
+                "speaker_volume_compensation": true
             }"#,
         );
         assert_eq!(s.crf, 23);
@@ -162,6 +171,7 @@ mod tests {
         assert!(s.tracker);
         assert_eq!(s.speakers, vec!["default".to_string()]);
         assert_eq!(s.microphones, vec!["mic-id".to_string()]);
+        assert!(s.speaker_volume_compensation);
         assert!(s.validate().is_ok());
     }
 

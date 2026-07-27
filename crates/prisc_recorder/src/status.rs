@@ -4,10 +4,13 @@
 use std::collections::VecDeque;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
+
+use crate::commands::Command;
+use crate::platform;
 
 /// Writes one JSON line to stdout (protocol channel; stderr carries all
 /// free-form output).
@@ -258,15 +261,25 @@ fn clamp_dbfs(peak: f32) -> f64 {
 pub struct LevelPeaks {
     pub speaker: Vec<Arc<AtomicU32>>,
     pub mic: Vec<Arc<AtomicU32>>,
+    /// Device ids parallel to `speaker`, for the volume-compensation re-check.
+    pub speaker_devices: Vec<String>,
+    /// Current effective `speaker_volume_compensation` setting.
+    pub compensate: bool,
 }
 
 /// Emits a `levels` line every 100 ms: peak dBFS per audio source (speakers
 /// then mics, list order), clamped to -100.0. Runs from initialization —
 /// including the pre-start WAIT phase — until `stop_flag`. Silent while both
 /// lists are empty (matching the historical no-audio behavior).
+///
+/// The same tick drives volume compensation: while enabled, the system volume
+/// of every speaker device is re-read and a changed gain is sent to the run
+/// loop as `SetSpeakerVolume` (the loop owns the source lifetimes), so a
+/// mid-recording volume change stays compensated within ~100 ms.
 pub fn start_levels_thread(
     peaks: Arc<Mutex<LevelPeaks>>,
     stop_flag: Arc<AtomicBool>,
+    cmd_tx: mpsc::Sender<Command>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let read = |peaks: &[Arc<AtomicU32>]| -> Vec<f64> {
@@ -275,6 +288,11 @@ pub fn start_levels_thread(
                 .map(|p| clamp_dbfs(f32::from_bits(p.load(Ordering::Relaxed))))
                 .collect()
         };
+        // Last gain sent per speaker; reset whenever the device list or the
+        // compensation flag changes so a rebuilt source (volume back at the
+        // recorder-applied initial gain) is re-synced from fresh reads.
+        let mut comp_last: Vec<(String, f32)> = Vec::new();
+        let mut comp_on = false;
         while !stop_flag.load(Ordering::Relaxed) {
             std::thread::sleep(Duration::from_millis(100));
             if stop_flag.load(Ordering::Relaxed) {
@@ -282,13 +300,35 @@ pub fn start_levels_thread(
             }
             // Lock only for the atomic reads; emitting (which takes the
             // stdout lock) happens after release.
-            let (speaker, mic) = {
+            let (speaker, mic, devices, compensate) = {
                 let peaks = peaks.lock().unwrap();
                 if peaks.speaker.is_empty() && peaks.mic.is_empty() {
                     continue;
                 }
-                (read(&peaks.speaker), read(&peaks.mic))
+                (
+                    read(&peaks.speaker),
+                    read(&peaks.mic),
+                    peaks.speaker_devices.clone(),
+                    peaks.compensate,
+                )
             };
+
+            let same_devices = devices.len() == comp_last.len()
+                && devices.iter().zip(&comp_last).all(|(d, (last, _))| d == last);
+            if compensate != comp_on || !same_devices {
+                comp_on = compensate;
+                comp_last = devices.into_iter().map(|d| (d, f32::NAN)).collect();
+            }
+            if comp_on {
+                for (idx, (device_id, last)) in comp_last.iter_mut().enumerate() {
+                    let gain = platform::speaker_compensation_gain(device_id);
+                    if last.is_nan() || (gain - *last).abs() > 0.001 {
+                        *last = gain;
+                        let _ = cmd_tx.send(Command::SetSpeakerVolume(idx, gain));
+                    }
+                }
+            }
+
             emit_json(serde_json::json!({
                 "type": "levels",
                 "speaker": speaker,

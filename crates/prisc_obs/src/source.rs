@@ -31,6 +31,12 @@ impl ObsSource {
         unsafe { obs_sys::obs_source_set_muted(self.ptr, muted) };
     }
 
+    /// Linear volume multiplier applied by libobs when mixing this source
+    /// (1.0 = unity). Thread-safe; audible within one audio tick.
+    pub fn set_volume(&self, volume: f32) {
+        unsafe { obs_sys::obs_source_set_volume(self.ptr, volume) };
+    }
+
     /// Attaches `filter` to this source. libobs takes its own reference, so the
     /// caller keeps ownership of the `ObsSource` it passes in.
     pub fn add_filter(&self, filter: &ObsSource) {

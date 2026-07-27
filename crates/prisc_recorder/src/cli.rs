@@ -78,11 +78,21 @@ pub struct Cli {
     #[arg(long)]
     pub microphone: Vec<String>,
 
+    /// Windows: boost speaker capture to undo the system master volume when
+    /// the audio device applies it in software (on such devices the loopback
+    /// stream Windows hands to recorders is already attenuated by the volume
+    /// slider, so recordings sound quieter than the played content). Devices
+    /// with hardware volume are unaffected, as is macOS. Tracks volume changes
+    /// while recording (~100 ms).
+    #[arg(long)]
+    pub speaker_volume_compensation: bool,
+
     /// JSON settings file replacing the individual tuning flags; re-readable at
     /// runtime via the stdin `configure` command.
     #[arg(long, conflicts_with_all = [
         "fps", "crf", "max_width", "max_height", "hw_accel", "low_cpu",
         "no_cursor", "tracker", "tracker_color", "speaker", "microphone",
+        "speaker_volume_compensation",
     ])]
     pub settings: Option<PathBuf>,
 }
@@ -235,6 +245,7 @@ mod tests {
             &["--tracker-color", "0,0,255"],
             &["--speaker", "default"],
             &["--microphone", "default"],
+            &["--speaker-volume-compensation"],
         ] {
             let mut args = vec!["--output", "a.mp4", "--settings", "s.json"];
             args.extend_from_slice(flag);

@@ -75,7 +75,8 @@ obs-express --output clip.mp4 --monitor 0 --hw-accel --speaker default --microph
 | `--pause` | off | Build the pipeline, emit `initialized`, and wait for a stdin `start` before recording. |
 | `--speaker <DEVICE>` | — | Output-capture (system audio) device id, or `default`. Repeatable. On macOS 13+ system audio is captured via ScreenCaptureKit: the device id is ignored (the flag only toggles system-audio capture on) and repeating the flag is rejected. |
 | `--microphone <DEVICE>` | — | Input-capture (microphone) device id, or `default`. Repeatable. |
-| `--settings <FILE.json>` | — | Read the tunables from a JSON file instead of individual flags (see below). Conflicts with every flag it replaces: `--fps`, `--crf`, `--max-width`, `--max-height`, `--hw-accel`, `--low-cpu`, `--no-cursor`, `--tracker`, `--tracker-color`, `--speaker`, `--microphone`. |
+| `--speaker-volume-compensation` | off | Windows: boost speaker capture to undo the system master volume when the audio device applies it in software. On such devices (no hardware volume control — common for USB DACs) the loopback stream Windows hands to recorders is already attenuated by the volume slider, so recordings sound quieter than the played content did. Devices with hardware volume are detected and left untouched; no-op on macOS. Volume changes made while recording are tracked within ~100 ms; the boost is capped at +30 dB. |
+| `--settings <FILE.json>` | — | Read the tunables from a JSON file instead of individual flags (see below). Conflicts with every flag it replaces: `--fps`, `--crf`, `--max-width`, `--max-height`, `--hw-accel`, `--low-cpu`, `--no-cursor`, `--tracker`, `--tracker-color`, `--speaker`, `--microphone`, `--speaker-volume-compensation`. |
 
 Downscaling preserves aspect ratio: the tightest of the two caps is applied once to both dimensions, and the output is never upscaled.
 
@@ -95,7 +96,8 @@ Downscaling preserves aspect ratio: the tightest of the two caps is applied once
   "tracker": false,
   "tracker_color": "255,0,0",
   "speakers": ["default"],
-  "microphones": []
+  "microphones": [],
+  "speaker_volume_compensation": false
 }
 ```
 
@@ -138,7 +140,7 @@ obs-express --output demo.mp4 --tracker --tracker-color 0,128,255
 What a `configure` can change depends on whether recording has started:
 
 - **Before `start`** (the `--pause` wait) — everything applies: fps and the resolution caps rebuild the video pipeline in place, the encoder is recreated for `crf` / `hw_accel` / `low_cpu` changes, audio device lists are rebuilt (the `levels` arrays and mute indices follow the new lists; rebuilt devices come back unmuted), and cursor/tracker/color update directly. Repeatable — any number of `configure`s may precede `start`.
-- **After `start`** — only the live-safe keys apply: `cursor`, `tracker`, and `tracker_color`. Every other key that differs from the active config is left untouched and reported in the ack's `ignored_keys`; the recording is never disturbed.
+- **After `start`** — only the live-safe keys apply: `cursor`, `tracker`, `tracker_color`, and `speaker_volume_compensation`. Every other key that differs from the active config is left untouched and reported in the ack's `ignored_keys`; the recording is never disturbed.
 
 On failure the ack is `configure_error` with a `message` and a `fatal` flag. `fatal:false` means the pipeline still matches the config from before the command (bad file, invalid values, a device that failed to open — all validated before anything is committed); `fatal:true` means a mid-rebuild failure may have left the pipeline unusable and the parent should restart the process. Mute state for *unchanged* devices survives a reconfigure; per-device mutes always address the current lists.
 

@@ -1,7 +1,8 @@
 /// Commands consumed by the recorder's run loop. Most originate from stdin
 /// (§1.2); `OutputStarted` / `OutputStopped` are injected by the OBS output's
-/// start/stop signal handlers and are never parsed from stdin.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// start/stop signal handlers, `SetSpeakerVolume` by the levels thread —
+/// none of those are ever parsed from stdin.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Start,
     Pause,
@@ -19,6 +20,10 @@ pub enum Command {
     /// OBS "stop" signal fired with the given stop code (spontaneous or in
     /// response to our own `obs_output_stop`).
     OutputStopped(i64),
+    /// Levels-thread volume-compensation update: set speaker `idx`'s source
+    /// volume. Routed through the run loop so source pointers are only ever
+    /// touched by the thread that owns their lifetime.
+    SetSpeakerVolume(usize, f32),
 }
 
 /// Whitespace-split, first token dispatched case-insensitively. Unknown lines

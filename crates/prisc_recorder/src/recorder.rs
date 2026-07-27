@@ -72,6 +72,9 @@ fn attach_volmeter(source: &ObsSource) -> Result<(ObsVolmeter, Arc<AtomicU32>), 
 struct BuiltSide {
     sources: Vec<ObsSource>,
     meters: Vec<(ObsVolmeter, Arc<AtomicU32>)>,
+    /// Device ids parallel to `sources` (volume compensation needs them for
+    /// the speaker side).
+    devices: Vec<String>,
 }
 
 enum AudioBuildError {
@@ -105,7 +108,11 @@ fn build_speaker_sources(devices: &[String]) -> Result<BuiltSide, AudioBuildErro
         meters.push(attach_volmeter(&source).map_err(AudioBuildError::Create)?);
         sources.push(source);
     }
-    Ok(BuiltSide { sources, meters })
+    Ok(BuiltSide {
+        sources,
+        meters,
+        devices: devices.to_vec(),
+    })
 }
 
 /// Microphone counterpart of [`build_speaker_sources`].
@@ -128,12 +135,35 @@ fn build_mic_sources(devices: &[String]) -> Result<BuiltSide, AudioBuildError> {
         meters.push(attach_volmeter(&source).map_err(AudioBuildError::Create)?);
         sources.push(source);
     }
-    Ok(BuiltSide { sources, meters })
+    Ok(BuiltSide {
+        sources,
+        meters,
+        devices: devices.to_vec(),
+    })
+}
+
+/// Applies the current compensation gain (system software volume inverse; 1.0
+/// where none applies) to each speaker source. The levels thread keeps the
+/// values current afterwards; this makes the very first captured samples
+/// correct too.
+fn apply_speaker_compensation(sources: &[ObsSource], devices: &[String]) {
+    for (source, device_id) in sources.iter().zip(devices) {
+        let gain = platform::speaker_compensation_gain(device_id);
+        source.set_volume(gain);
+        if (gain - 1.0).abs() > 0.001 {
+            eprintln!(
+                "Speaker volume compensation: device '{device_id}' has a software master \
+                 volume; applying gain {gain:.2}x"
+            );
+        }
+    }
 }
 
 pub struct Recorder {
     output: ObsOutput,
     speakers: Vec<ObsSource>,
+    /// Device ids parallel to `speakers`, for volume compensation.
+    speaker_devices: Vec<String>,
     mics: Vec<ObsSource>,
     /// Volmeter + latest peak dBFS (f32 bits) per source, in list order
     /// (matching the mute indices).
@@ -345,6 +375,9 @@ impl Recorder {
             context.set_output_source(channel, Some(source));
             channel += 1;
         }
+        if settings.speaker_volume_compensation {
+            apply_speaker_compensation(&speakers_built.sources, &speakers_built.devices);
+        }
         let level_peaks = Arc::new(Mutex::new(LevelPeaks {
             speaker: speakers_built
                 .meters
@@ -352,6 +385,8 @@ impl Recorder {
                 .map(|(_, p)| p.clone())
                 .collect(),
             mic: mics_built.meters.iter().map(|(_, p)| p.clone()).collect(),
+            speaker_devices: speakers_built.devices.clone(),
+            compensate: settings.speaker_volume_compensation,
         }));
 
         // 9. Encoders + ffmpeg_muxer output.
@@ -397,6 +432,7 @@ impl Recorder {
         Recorder {
             output,
             speakers: speakers_built.sources,
+            speaker_devices: speakers_built.devices,
             mics: mics_built.sources,
             speaker_meters: speakers_built.meters,
             mic_meters: mics_built.meters,
@@ -442,6 +478,7 @@ impl Recorder {
         let mut levels_handle = Some(status::start_levels_thread(
             self.level_peaks.clone(),
             status_stop.clone(),
+            self.cmd_tx.clone(),
         ));
 
         // Without --pause the output starts immediately; with --pause we sit in
@@ -511,6 +548,15 @@ impl Recorder {
                 }
                 Command::MuteMic(idx) => self.set_muted(&self.mics, "microphone", idx, true),
                 Command::UnmuteMic(idx) => self.set_muted(&self.mics, "microphone", idx, false),
+                Command::SetSpeakerVolume(idx, gain) => {
+                    // From the levels thread; may race a configure that just
+                    // disabled compensation or shrank the list — re-check both.
+                    if self.settings.speaker_volume_compensation {
+                        if let Some(source) = self.speakers.get(idx) {
+                            source.set_volume(gain);
+                        }
+                    }
+                }
                 Command::OutputStopped(code) => {
                     // Spontaneous stop (disk full, encoder error, …): surface it
                     // immediately and exit — do not wait for `quit` (§1.3).
@@ -701,7 +747,7 @@ impl Recorder {
             self.video_encoder = encoder;
         }
         if new_speakers.is_some() || new_mics.is_some() {
-            self.commit_audio(new_speakers, new_mics);
+            self.commit_audio(new_speakers, new_mics, new.speaker_volume_compensation);
         }
         if let Some(t) = new_tracker {
             self.tracker = Some(t);
@@ -757,13 +803,24 @@ impl Recorder {
         self.settings.cursor = new.cursor;
         self.settings.tracker = new.tracker;
         self.settings.tracker_color = new.tracker_color;
+        self.settings.speaker_volume_compensation = new.speaker_volume_compensation;
         status::emit_configure_applied(&ignored);
     }
 
-    /// Applies the always-live keys (cursor, tracker off, tracker color).
-    /// Tracker *creation* is fallible and must already have been done by the
-    /// caller; everything here is infallible.
+    /// Applies the always-live keys (cursor, tracker off, tracker color,
+    /// speaker volume compensation). Tracker *creation* is fallible and must
+    /// already have been done by the caller; everything here is infallible.
     fn apply_live_keys(&mut self, new: &Settings) {
+        if new.speaker_volume_compensation != self.settings.speaker_volume_compensation {
+            if new.speaker_volume_compensation {
+                apply_speaker_compensation(&self.speakers, &self.speaker_devices);
+            } else {
+                for source in &self.speakers {
+                    source.set_volume(1.0);
+                }
+            }
+            self.level_peaks.lock().unwrap().compensate = new.speaker_volume_compensation;
+        }
         if new.cursor != self.settings.cursor {
             let update = platform::cursor_update_settings(new.cursor);
             for source in &self.display_sources {
@@ -795,13 +852,22 @@ impl Recorder {
     /// first, then mics), clears channels the shorter new lists no longer use,
     /// and publishes the new peak stores to the levels thread. Sources on an
     /// unchanged side are kept (mute states persist); new sources start
-    /// unmuted — the parent re-applies mutes after the ack.
-    fn commit_audio(&mut self, new_speakers: Option<BuiltSide>, new_mics: Option<BuiltSide>) {
+    /// unmuted — the parent re-applies mutes after the ack. `compensate` is the
+    /// incoming config's `speaker_volume_compensation`: fresh speaker sources
+    /// are created at unity and need their gain applied here.
+    fn commit_audio(
+        &mut self,
+        new_speakers: Option<BuiltSide>,
+        new_mics: Option<BuiltSide>,
+        compensate: bool,
+    ) {
+        let speakers_replaced = new_speakers.is_some();
         if let Some(built) = new_speakers {
             // Meters before sources: a volmeter must detach before the source
             // it observes is released.
             self.speaker_meters = built.meters;
             self.speakers = built.sources;
+            self.speaker_devices = built.devices;
         }
         if let Some(built) = new_mics {
             self.mic_meters = built.meters;
@@ -817,9 +883,14 @@ impl Recorder {
         for unused in channel..=(MAX_AUDIO_SOURCES as u32) {
             self.context.set_output_source(unused, None);
         }
+        if speakers_replaced && compensate {
+            apply_speaker_compensation(&self.speakers, &self.speaker_devices);
+        }
         let mut peaks = self.level_peaks.lock().unwrap();
         peaks.speaker = self.speaker_meters.iter().map(|(_, p)| p.clone()).collect();
         peaks.mic = self.mic_meters.iter().map(|(_, p)| p.clone()).collect();
+        peaks.speaker_devices = self.speaker_devices.clone();
+        peaks.compensate = compensate;
     }
 
     /// Starts the output; on failure emits `stopped_recording` code -4 with the

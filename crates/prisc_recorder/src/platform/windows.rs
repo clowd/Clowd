@@ -214,6 +214,261 @@ pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {
     }
 }
 
+/// Linear gain that undoes the endpoint's software master volume for a
+/// loopback (speaker) capture. On endpoints without hardware volume, Windows
+/// applies the volume slider in the audio engine *before* the loopback tap, so
+/// every recorder receives pre-attenuated samples; multiplying the source by
+/// the inverse restores the played content's level. Returns `1.0` (no
+/// compensation) when the device has hardware volume, is muted, or cannot be
+/// queried.
+pub fn speaker_compensation_gain(device_id: &str) -> f32 {
+    match endpoint_volume::software_master_volume_db(device_id) {
+        Some(db) => compensation_gain_from_db(db),
+        None => 1.0,
+    }
+}
+
+/// ±30 dB compensation cap: keeps a near-zero volume slider from requesting an
+/// absurd boost (the captured signal is float, so the math is lossless, but a
+/// >30 dB "restoration" of a slider someone parked at 2% is not what they
+/// meant).
+const MAX_COMPENSATION_DB: f32 = 30.0;
+
+fn compensation_gain_from_db(master_db: f32) -> f32 {
+    if !master_db.is_finite() {
+        return 1.0;
+    }
+    let boost_db = (-master_db).clamp(-MAX_COMPENSATION_DB, MAX_COMPENSATION_DB);
+    10f32.powf(boost_db / 20.0)
+}
+
+/// Minimal hand-rolled Core Audio endpoint COM client. windows-sys exposes the
+/// plain-C COM entry points but not interface vtables, and the full `windows`
+/// crate is a heavy dependency for three method calls — so the three vtable
+/// prefixes used here are declared manually.
+mod endpoint_volume {
+    use std::cell::Cell;
+    use std::ffi::c_void;
+    use std::ptr;
+
+    use windows_sys::core::{GUID, HRESULT, PCWSTR};
+    use windows_sys::Win32::System::Com::{
+        CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
+    };
+
+    const CLSID_MM_DEVICE_ENUMERATOR: GUID = GUID {
+        data1: 0xBCDE0395,
+        data2: 0xE52F,
+        data3: 0x467C,
+        data4: [0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E],
+    };
+    const IID_IMM_DEVICE_ENUMERATOR: GUID = GUID {
+        data1: 0xA95664D2,
+        data2: 0x9614,
+        data3: 0x4F35,
+        data4: [0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6],
+    };
+    const IID_IAUDIO_ENDPOINT_VOLUME: GUID = GUID {
+        data1: 0x5CDF2C82,
+        data2: 0x841E,
+        data3: 0x4546,
+        data4: [0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A],
+    };
+
+    const E_RENDER: i32 = 0; // EDataFlow::eRender
+    /// ERole::eConsole — the role win-wasapi resolves "default" with, so both
+    /// sides always talk about the same device.
+    const E_CONSOLE: i32 = 0;
+    const ENDPOINT_HARDWARE_SUPPORT_VOLUME: u32 = 0x1;
+    const RPC_E_CHANGED_MODE: HRESULT = 0x80010106u32 as HRESULT;
+
+    /// Leading vtable entries shared by every COM interface.
+    #[repr(C)]
+    struct IUnknownPrefix {
+        query_interface: usize,
+        add_ref: usize,
+        release: unsafe extern "system" fn(*mut c_void) -> u32,
+    }
+
+    #[repr(C)]
+    struct IMMDeviceEnumeratorVtbl {
+        unknown: IUnknownPrefix,
+        enum_audio_endpoints: usize,
+        get_default_audio_endpoint: unsafe extern "system" fn(
+            *mut c_void,
+            i32,
+            i32,
+            *mut *mut c_void,
+        ) -> HRESULT,
+        get_device: unsafe extern "system" fn(*mut c_void, PCWSTR, *mut *mut c_void) -> HRESULT,
+    }
+
+    #[repr(C)]
+    struct IMMDeviceVtbl {
+        unknown: IUnknownPrefix,
+        activate: unsafe extern "system" fn(
+            *mut c_void,
+            *const GUID,
+            u32,
+            *mut c_void,
+            *mut *mut c_void,
+        ) -> HRESULT,
+    }
+
+    #[repr(C)]
+    struct IAudioEndpointVolumeVtbl {
+        unknown: IUnknownPrefix,
+        register_control_change_notify: usize,
+        unregister_control_change_notify: usize,
+        get_channel_count: usize,
+        set_master_volume_level: usize,
+        set_master_volume_level_scalar: usize,
+        get_master_volume_level: unsafe extern "system" fn(*mut c_void, *mut f32) -> HRESULT,
+        get_master_volume_level_scalar: usize,
+        set_channel_volume_level: usize,
+        set_channel_volume_level_scalar: usize,
+        get_channel_volume_level: usize,
+        get_channel_volume_level_scalar: usize,
+        set_mute: usize,
+        get_mute: unsafe extern "system" fn(*mut c_void, *mut i32) -> HRESULT,
+        get_volume_step_info: usize,
+        volume_step_up: usize,
+        volume_step_down: usize,
+        query_hardware_support: unsafe extern "system" fn(*mut c_void, *mut u32) -> HRESULT,
+    }
+
+    unsafe fn vtbl<T>(obj: *mut c_void) -> *const T {
+        *(obj as *mut *const T)
+    }
+
+    unsafe fn com_release(obj: *mut c_void) {
+        ((*vtbl::<IUnknownPrefix>(obj)).release)(obj);
+    }
+
+    /// Owned COM pointer so every early return releases.
+    struct ComPtr(*mut c_void);
+    impl Drop for ComPtr {
+        fn drop(&mut self) {
+            if !self.0.is_null() {
+                unsafe { com_release(self.0) };
+            }
+        }
+    }
+
+    /// Per-thread one-time CoInitializeEx. `RPC_E_CHANGED_MODE` (already
+    /// initialized STA by someone else) still leaves COM usable. Never
+    /// uninitialized — callers are process-lifetime threads and the process
+    /// exits via `ExitProcess` anyway.
+    fn com_ready() -> bool {
+        thread_local! {
+            static STATE: Cell<Option<bool>> = const { Cell::new(None) };
+        }
+        STATE.with(|state| {
+            if let Some(ready) = state.get() {
+                return ready;
+            }
+            let hr = unsafe { CoInitializeEx(ptr::null(), COINIT_MULTITHREADED as u32) };
+            let ready = hr >= 0 || hr == RPC_E_CHANGED_MODE;
+            state.set(Some(ready));
+            ready
+        })
+    }
+
+    /// The endpoint's master volume in dB — but only when Windows applies that
+    /// volume in software (no `ENDPOINT_HARDWARE_SUPPORT_VOLUME`), which is
+    /// exactly when it lands inside the loopback stream. `None` means "do not
+    /// compensate": hardware volume, muted (the capture is silent anyway),
+    /// unknown device id, or any COM failure.
+    pub fn software_master_volume_db(device_id: &str) -> Option<f32> {
+        if !com_ready() {
+            return None;
+        }
+        unsafe {
+            let mut enumerator: *mut c_void = ptr::null_mut();
+            let hr = CoCreateInstance(
+                &CLSID_MM_DEVICE_ENUMERATOR,
+                ptr::null_mut(),
+                CLSCTX_ALL,
+                &IID_IMM_DEVICE_ENUMERATOR,
+                &mut enumerator,
+            );
+            if hr < 0 || enumerator.is_null() {
+                return None;
+            }
+            let enumerator = ComPtr(enumerator);
+
+            let mut device: *mut c_void = ptr::null_mut();
+            let ev = vtbl::<IMMDeviceEnumeratorVtbl>(enumerator.0);
+            let hr = if device_id == "default" {
+                ((*ev).get_default_audio_endpoint)(enumerator.0, E_RENDER, E_CONSOLE, &mut device)
+            } else {
+                let wide: Vec<u16> = device_id.encode_utf16().chain(Some(0)).collect();
+                ((*ev).get_device)(enumerator.0, wide.as_ptr(), &mut device)
+            };
+            if hr < 0 || device.is_null() {
+                return None;
+            }
+            let device = ComPtr(device);
+
+            let mut volume: *mut c_void = ptr::null_mut();
+            let hr = ((*vtbl::<IMMDeviceVtbl>(device.0)).activate)(
+                device.0,
+                &IID_IAUDIO_ENDPOINT_VOLUME,
+                CLSCTX_ALL,
+                ptr::null_mut(),
+                &mut volume,
+            );
+            if hr < 0 || volume.is_null() {
+                return None;
+            }
+            let volume = ComPtr(volume);
+            let vv = vtbl::<IAudioEndpointVolumeVtbl>(volume.0);
+
+            let mut hw_mask: u32 = 0;
+            if ((*vv).query_hardware_support)(volume.0, &mut hw_mask) < 0
+                || hw_mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME != 0
+            {
+                return None;
+            }
+            let mut muted: i32 = 0;
+            if ((*vv).get_mute)(volume.0, &mut muted) < 0 || muted != 0 {
+                return None;
+            }
+            let mut db: f32 = 0.0;
+            if ((*vv).get_master_volume_level)(volume.0, &mut db) < 0 {
+                return None;
+            }
+            Some(db)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compensation_gain_from_db;
+
+    #[test]
+    fn compensation_inverts_the_master_volume() {
+        // 0 dB (full volume) → unity.
+        assert!((compensation_gain_from_db(0.0) - 1.0).abs() < 1e-6);
+        // -6.02 dB → ×2.
+        assert!((compensation_gain_from_db(-6.0206) - 2.0).abs() < 1e-3);
+        // -12.44 dB (the 44% slider that motivated this) → ×4.18.
+        assert!((compensation_gain_from_db(-12.444) - 4.18).abs() < 0.01);
+        // A boosted endpoint (positive dB) is compensated *down*.
+        assert!((compensation_gain_from_db(6.0206) - 0.5).abs() < 1e-3);
+    }
+
+    #[test]
+    fn compensation_is_capped_at_30_db() {
+        assert!((compensation_gain_from_db(-96.0) - 31.6228).abs() < 1e-3);
+        assert!((compensation_gain_from_db(96.0) - 0.0316228).abs() < 1e-6);
+        // Non-finite input must not produce a NaN gain.
+        assert_eq!(compensation_gain_from_db(f32::NAN), 1.0);
+        assert_eq!(compensation_gain_from_db(f32::NEG_INFINITY), 1.0);
+    }
+}
+
 pub fn exit_process(code: i32) -> ! {
     unsafe {
         ExitProcess(code as u32);

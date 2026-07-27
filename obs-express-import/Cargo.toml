@@ -30,4 +30,7 @@ windows-sys = { version = "0.61", features = [
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_System_Threading",
     "Win32_System_Console",
+    # CoInitializeEx / CoCreateInstance: endpoint-volume query for
+    # --speaker-volume-compensation (the COM vtables are hand-rolled).
+    "Win32_System_Com",
 ] }
