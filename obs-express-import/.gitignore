@@ -3,5 +3,6 @@
 *.dylib
 obs-studio/.deps/
 
-# win-capture compat-updater writes to CWD when obs-express runs from the crate dir (tests)
-/crates/obs-express/win-capture/
+# win-capture compat-updater writes a win-capture/ config dir into whatever
+# CWD obs-express runs from (obs_startup gets a NULL module config path)
+win-capture/
