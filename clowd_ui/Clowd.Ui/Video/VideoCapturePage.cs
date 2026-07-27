@@ -38,16 +38,14 @@ namespace Clowd.UI
         private bool _closing;
         private bool _closedRaised;
 
-        // a CLI-mapped setting changed before recording began, so the pending process was torn
-        // down: the primary button is now RESTART and re-spawns the capturer (§4.2).
-        private bool _restartRequired;
-        // the same change arriving mid-init, applied once InitializeCapturerAsync returns —
-        // killing a process that is still building its pipeline races its own initialization.
-        private bool _settingsChangedDuringInit;
+        // a configure is in flight (only one at a time), and a settings change that arrived while
+        // it — or the initial spawn — was running, coalesced into one follow-up configure (§4.2).
+        private bool _configuring;
+        private bool _configurePending;
 
         private ObsCapturer _obs;
-        // shutdown of the process a settings change invalidated — awaited before the replacement
-        // spawns (both write the same video.mp4).
+        // shutdown of a capturer being replaced (failed configure) — awaited before the
+        // replacement spawns (both write the same video.mp4).
         private Task _pendingShutdown;
         private BorderWindow _border;
         private FloatingToolbarWindow _toolbar;
@@ -56,6 +54,7 @@ namespace Clowd.UI
         private string _binaryPath;
         private string _sessionDir;
         private string _outputMp4;
+        private string _settingsPath;
         // where the finished video actually ended up (§4.5 / issue #50): the user's output folder
         // once MoveToOutputFolderAsync has run, and _outputMp4 while recording or if the move failed.
         private string _savedPath;
@@ -83,6 +82,7 @@ namespace Clowd.UI
                 _settings = SettingsRoot.Current.Recording;
                 _sessionDir = sessionDir;
                 _outputMp4 = Path.Combine(sessionDir, "video.mp4");
+                _settingsPath = Path.Combine(sessionDir, ObsArguments.SettingsFileName);
                 _savedPath = _outputMp4;
 
                 // normalize the configured output folder up-front (creating it, or falling back to
@@ -139,25 +139,23 @@ namespace Clowd.UI
 
         /// <summary>
         /// Spawns obs-express with the current recording settings and waits for it to report
-        /// ready. Also the RESTART path: <see cref="ObsArguments"/> bakes every CLI-mapped setting
-        /// in at spawn time, so a settings change before recording starts tears the process down
-        /// (<see cref="InvalidateCapturer"/>) and this rebuilds it with the new values.
+        /// ready. Also the recovery path after a failed <c>configure</c>: the settings file is
+        /// rewritten here, so the replacement process starts from exactly the values the running
+        /// one refused to take.
         /// </summary>
         private async Task InitializeCapturerAsync()
         {
             _initializing = true;
             _initialized = false;
-            _restartRequired = false;
-            _settingsChangedDuringInit = false;
             SetPrimaryText("WAIT…");
-            // a restarted capturer with audio removed never emits levels again — clear the
+            // a respawned capturer with audio removed never emits levels again — clear the
             // stale meters rather than freezing the last values through the WAIT phase.
             _toolbar?.SetAudioLevels(null, null);
 
             try
             {
-                // the invalidated process holds video.mp4 open until it exits; spawning its
-                // replacement first would race it for the file.
+                // the replaced process holds video.mp4 open until it exits; spawning its
+                // successor first would race it for the file.
                 await AwaitPendingShutdownAsync();
 
                 // Cancel/quit during that wait has already deleted the session directory and
@@ -165,12 +163,18 @@ namespace Clowd.UI
                 if (_closing)
                     return;
 
+                // the recorder reads the file while parsing its command line, so it has to exist
+                // before the spawn. Written here rather than in Open so a change made during a
+                // respawn is picked up by the process it starts (hence the flag reset).
+                _configurePending = false;
+                ObsArguments.WriteSettingsFile(_settingsPath, _settings);
+
                 _obs = new ObsCapturer();
                 _obs.CriticalError += OnCriticalError;
                 _obs.StatusReceived += OnStatusReceived;
                 _obs.LevelsReceived += OnLevelsReceived;
 
-                await _obs.InitializeAsync(ObsArguments.Build(_region, _outputMp4, _settings), _binaryPath);
+                await _obs.InitializeAsync(ObsArguments.Build(_region, _outputMp4, _settingsPath), _binaryPath);
             }
             finally
             {
@@ -183,16 +187,16 @@ namespace Clowd.UI
             _initialized = true;
             SetPrimaryText("START");
 
-            // a change that landed while the pipeline was being built cannot be applied to it —
-            // tear the process back down rather than record with settings the user moved off.
-            if (_settingsChangedDuringInit)
-                InvalidateCapturer();
+            // the settings file carries the devices, never the capture toggles — those are mutes.
+            ApplyCaptureMutes();
+
+            // a change that landed while the pipeline was being built missed the file write above.
+            if (_configurePending)
+                ApplySettingsChange();
         }
 
         /// <summary>Starts the recording. No-op unless initialized and not already recording
-        /// (the WAIT gate, §4.2/F6). In the RESTART state it re-spawns the capturer instead —
-        /// reload and start stay separate clicks (WPF parity), so a mis-click cannot begin
-        /// recording while the user is still adjusting settings.</summary>
+        /// (the WAIT gate, §4.2/F6).</summary>
         public async void StartRecording()
         {
             try
@@ -200,19 +204,13 @@ namespace Clowd.UI
                 if (IsRecording || _starting || _initializing || _closing)
                     return;
 
-                if (_restartRequired)
-                {
-                    await InitializeCapturerAsync();
-                    return;
-                }
-
                 if (!_initialized)
                     return;
                 _starting = true;
 
-                // the CLI always passes the device args; the Capture* toggles are runtime mutes.
-                _obs.SetSpeakerMute(!_settings.CaptureSpeaker);
-                _obs.SetMicrophoneMute(!_settings.CaptureMicrophone);
+                // the settings file always lists the devices; the Capture* toggles are runtime
+                // mutes, re-applied here in case a configure rebuilt the sources.
+                ApplyCaptureMutes();
 
                 // clear the overlay BEFORE writing "start": started_recording means frames are
                 // already flowing — text cleared after would be captured in the first frames.
@@ -350,16 +348,15 @@ namespace Clowd.UI
             }
         }
 
-        /// <summary>Hotkey entry point (Start/Stop Recording): finish if recording, start (or
-        /// re-spawn a capturer invalidated by a settings change) if the button would be
-        /// actionable, ignore during WAIT (§4.2/F6 — WPF parity).</summary>
+        /// <summary>Hotkey entry point (Start/Stop Recording): finish if recording, start if the
+        /// button would be actionable, ignore during WAIT (§4.2/F6 — WPF parity).</summary>
         public void Toggle()
         {
             try
             {
                 if (IsRecording)
                     FinishRecording();
-                else if (_initialized || _restartRequired)
+                else if (_initialized)
                     StartRecording();
             }
             catch (Exception ex)
@@ -444,82 +441,179 @@ namespace Clowd.UI
         /// <summary>
         /// A recording setting changed while this session is open (from the settings page the
         /// OPTIONS button opens, or from the toolbar's own toggles). Mutes are applied live;
-        /// anything that reaches the obs-express command line invalidates the pending process.
+        /// anything the recorder reads from its settings file is pushed to the waiting process
+        /// with a <c>configure</c>.
         /// </summary>
         private void OnRecordingSettingChanged(object sender, PropertyChangedEventArgs e)
         {
-            // once frames are flowing the CLI is fixed for the life of the file — the change
-            // applies to the next recording (the settings page says as much).
+            // once frames are flowing the recorder ignores these — the change applies to the next
+            // recording (the settings page says as much).
             if (_closing || IsRecording || _starting)
                 return;
 
             if (e.PropertyName is nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker))
             {
                 // runtime mutes: the settings page and the toolbar buttons behave identically.
-                _obs?.SetMicrophoneMute(!_settings.CaptureMicrophone);
-                _obs?.SetSpeakerMute(!_settings.CaptureSpeaker);
+                ApplyCaptureMutes();
                 return;
             }
 
-            if (!ObsArguments.RequiresRestart(e.PropertyName))
+            if (!ReachesRecorder(e.PropertyName))
                 return;
 
-            InvalidateCapturer();
+            ApplySettingsChange();
         }
 
         /// <summary>
-        /// Tears the pending (initialized but not recording) capturer down after a CLI-mapped
-        /// setting changed, and turns START into RESTART — obs-express reads fps, quality, scaling,
-        /// hw-accel, cursor and the audio devices once at spawn time, so the live process would
-        /// otherwise record with the values the user just replaced (WPF parity: the old
-        /// ObsViewWrapper.Invalidate/MustReload pair). Nothing has been recorded yet, so the only
-        /// cost is the re-init the user triggers with the next click.
+        /// True when changing <paramref name="propertyName"/> changes the settings file the
+        /// recorder reads. Deliberately a deny-list of the settings that never reach it: a setting
+        /// added to <see cref="ObsArguments.WriteSettingsFile"/> without touching this method costs
+        /// at worst a needless configure, never a recording made with the value the user just
+        /// changed away from — so a null or empty name ("everything changed") counts too.
         /// </summary>
-        private async void InvalidateCapturer()
+        private static bool ReachesRecorder(string propertyName) => propertyName switch
         {
+            // post-recording UI behavior; the capturer never sees it.
+            nameof(SettingsRecording.OpenWhenFinished) => false,
+            // the capturer always writes video.mp4 into the session dir; these only decide where
+            // the finished file is moved to afterwards (issue #50), which happens at stop time.
+            nameof(SettingsRecording.OutputDirectory) => false,
+            nameof(SettingsRecording.FilenamePattern) => false,
+            _ => true,
+        };
+
+        /// <summary>
+        /// Pushes the current settings onto the waiting (initialized but not recording) capturer:
+        /// rewrite the settings file, <c>configure</c>, wait for the ack. Replaces the old
+        /// tear-down-and-RESTART cycle — the user never sees the process being reconfigured.
+        /// A rejected, failed or timed-out configure leaves the recorder in a state we can no
+        /// longer reason about, so it is silently replaced with a fresh one instead.
+        /// Changes arriving while a configure (or the spawn itself) is in flight are coalesced
+        /// into a single follow-up pass.
+        /// </summary>
+        private async void ApplySettingsChange()
+        {
+            if (_closing || IsRecording || _starting)
+                return;
+
+            if (_configuring || _initializing || !_initialized)
+            {
+                _configurePending = true;
+                return;
+            }
+
+            _configuring = true;
             try
             {
-                if (_closing || IsRecording || _starting)
-                    return;
-
-                if (_initializing)
+                while (!_closing && !IsRecording && !_starting && _initialized && _obs != null)
                 {
-                    // the pipeline is still being built; killing it here races its own
-                    // initialization. InitializeCapturerAsync re-enters this on completion.
-                    _settingsChangedDuringInit = true;
-                    return;
-                }
+                    _configurePending = false;
+                    var obs = _obs;
 
-                if (!_initialized)
-                    return; // already torn down — a RESTART is pending
+                    ObsConfigureResult result = null;
+                    try
+                    {
+                        ObsArguments.WriteSettingsFile(_settingsPath, _settings);
+                        result = await obs.ConfigureAsync(_settingsPath);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("Failed to reconfigure the recording process: " + ex.Message);
+                        SentryConfig.CaptureHandled(ex, "video.configure");
+                    }
 
-                _initialized = false;
-                _restartRequired = true;
-                SetPrimaryText("RESTART", restart: true);
+                    // the capturer may have been replaced or shut down while we waited; whoever
+                    // did that owns the new one.
+                    if (_closing || !ReferenceEquals(_obs, obs))
+                        return;
 
-                // detached before disposal: this process's exit must not reach the page's
-                // critical-error path, and its statuses must never drive the replacement's UI.
-                var obs = _obs;
-                _obs = null;
-                if (obs != null)
-                {
-                    obs.CriticalError -= OnCriticalError;
-                    obs.StatusReceived -= OnStatusReceived;
-                    obs.LevelsReceived -= OnLevelsReceived;
-                    _toolbar?.SetAudioLevels(null, null);
-                    _pendingShutdown = obs.DisposeAsync();
-                    await AwaitPendingShutdownAsync();
+                    // START is actionable throughout the (up to 10 s) wait for the ack, and the
+                    // recorder handles commands in order — so "start" is queued behind this
+                    // configure and by now frames may already be flowing. Respawning here would
+                    // quit that process and truncate video.mp4 while the toolbar says FINISH: the
+                    // recording wins, and the settings apply to the next one.
+                    if (IsRecording || _starting)
+                    {
+                        if (result == null || !result.Applied)
+                            Debug.WriteLine("Recorder did not apply the new settings, but a recording has since started; leaving it alone.");
+                        return;
+                    }
+
+                    if (result == null || !result.Applied)
+                    {
+                        Debug.WriteLine("Recorder did not apply the new settings" +
+                            (result == null ? "" : $" (fatal={result.Fatal}): {result.Message}") + "; respawning it.");
+                        await RespawnCapturerAsync();
+                        return;
+                    }
+
+                    // rebuilt audio sources come back unmuted.
+                    ApplyCaptureMutes();
+
+                    // the recorder only ignores keys once recording has started, which is not a
+                    // state this method runs in — worth knowing about, not worth acting on.
+                    if (result.IgnoredKeys.Length > 0)
+                        Debug.WriteLine("Recorder ignored settings: " + String.Join(", ", result.IgnoredKeys));
+
+                    if (!_configurePending)
+                        return;
                 }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("Failed to invalidate the pending recording process: " + ex);
-                SentryConfig.CaptureHandled(ex, "video.invalidate");
+                // in practice the respawn above failing: there is no recorder left to record with,
+                // so this is the same dead end as any other capturer failure.
+                Debug.WriteLine("Failed to apply the new recording settings: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.apply-settings");
+                if (!_closing)
+                    OnCriticalError(this, ex.Message);
+            }
+            finally
+            {
+                _configuring = false;
+
+                // a change that arrived while this pass (or the respawn it triggered) was running
+                // and could not be serviced by the loop above; posted rather than called so it
+                // cannot re-enter through the frame that set the flag.
+                if (_configurePending && !_closing)
+                    Dispatcher.UIThread.Post(ApplySettingsChange);
             }
         }
 
+        /// <summary>
+        /// Replaces the capturer in place after it failed to accept new settings. The old process
+        /// is detached before disposal: its exit must not reach the page's critical-error path,
+        /// and its statuses must never drive the replacement's UI.
+        /// </summary>
+        private async Task RespawnCapturerAsync()
+        {
+            _initialized = false;
+
+            var obs = _obs;
+            _obs = null;
+            if (obs != null)
+            {
+                obs.CriticalError -= OnCriticalError;
+                obs.StatusReceived -= OnStatusReceived;
+                obs.LevelsReceived -= OnLevelsReceived;
+                _toolbar?.SetAudioLevels(null, null);
+                _pendingShutdown = obs.DisposeAsync();
+            }
+
+            await InitializeCapturerAsync();
+        }
+
+        /// <summary>Applies the CaptureSpeaker/CaptureMicrophone toggles as live mutes — the
+        /// settings file lists the devices unconditionally, so these are the only thing deciding
+        /// whether audio is actually recorded.</summary>
+        private void ApplyCaptureMutes()
+        {
+            _obs?.SetSpeakerMute(!_settings.CaptureSpeaker);
+            _obs?.SetMicrophoneMute(!_settings.CaptureMicrophone);
+        }
+
         /// <summary>Shuts the current capturer down AND waits out a process an in-flight
-        /// <see cref="InvalidateCapturer"/> is still killing — both hold the session's video.mp4
+        /// <see cref="RespawnCapturerAsync"/> is still killing — both hold the session's video.mp4
         /// open, so measuring or deleting that file before this completes races a live
         /// obs-express.</summary>
         private async Task ShutdownCapturersAsync()
@@ -530,8 +624,8 @@ namespace Clowd.UI
             await AwaitPendingShutdownAsync();
         }
 
-        /// <summary>Waits for the invalidated process (if any) to exit. Read into a local first:
-        /// <see cref="InvalidateCapturer"/> and <see cref="ShutdownCapturersAsync"/> can both be
+        /// <summary>Waits for the replaced process (if any) to exit. Read into a local first:
+        /// <see cref="RespawnCapturerAsync"/> and <see cref="ShutdownCapturersAsync"/> can both be
         /// in flight, and the loser must not await a field the winner has already cleared.</summary>
         private async Task AwaitPendingShutdownAsync()
         {
@@ -545,12 +639,11 @@ namespace Clowd.UI
                 _pendingShutdown = null;
         }
 
-        /// <summary>Mirrors the primary-button label onto the border overlay ("WAIT…" / "START" /
-        /// "RESTART"); <paramref name="restart"/> also swaps the button's glyph.</summary>
-        private void SetPrimaryText(string text, bool restart = false)
+        /// <summary>Mirrors the primary-button label onto the border overlay ("WAIT…" / "START").</summary>
+        private void SetPrimaryText(string text)
         {
             _border?.SetOverlayText(text);
-            _toolbar?.SetPrimaryText(text, restart);
+            _toolbar?.SetPrimaryText(text);
         }
 
         private void OnStatusReceived(object sender, ObsStatus status)

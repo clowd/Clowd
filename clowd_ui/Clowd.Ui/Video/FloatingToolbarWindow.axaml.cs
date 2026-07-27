@@ -41,13 +41,6 @@ namespace Clowd.UI
         private readonly DispatcherTimer _saveDebounce;
         private readonly SettingsRecording _settings;
 
-        // start-button glyphs: play (declared in XAML) and the reload glyph shown in the RESTART
-        // state. Sizes differ because the two icons have different canvas ratios (see
-        // CaptureToolButton.axaml — IconSize fits the glyph inside the fixed 26px slot).
-        private readonly Geometry _iconPlay;
-        private readonly Geometry _iconReload;
-        private const double PlayIconSize = 16;
-        private const double ReloadIconSize = 20;
         private ScreenRect _region;
         private bool _micEnabled;
         private bool _spkEnabled;
@@ -93,10 +86,6 @@ namespace Clowd.UI
                 SaveSettings();
             };
 
-            _iconPlay = BtnStart.IconPath;
-            if (Application.Current?.TryGetResource("IconUndo", Application.Current.ActualThemeVariant, out var reload) == true)
-                _iconReload = reload as Geometry;
-
             _settings = SettingsRoot.Current.Recording;
             _micEnabled = _settings.CaptureMicrophone;
             _spkEnabled = _settings.CaptureSpeaker;
@@ -118,20 +107,11 @@ namespace Clowd.UI
             ScalingChanged += (s, e) => Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
         }
 
-        /// <summary>
-        /// Sets the start button label ("WAIT…" → "START", or "RESTART" once a settings change has
-        /// invalidated the pending capturer). <paramref name="restart"/> also swaps the play glyph
-        /// for the reload one — WPF parity with the IconUndo/MustReload binding.
-        /// </summary>
-        public void SetPrimaryText(string text, bool restart = false)
+        /// <summary>Sets the start button label ("WAIT…" → "START"). Settings changed during WAIT
+        /// are pushed into the running recorder, so the button never becomes a reload.</summary>
+        public void SetPrimaryText(string text)
         {
             BtnStart.Text = text;
-
-            // keep the play glyph if the reload resource could not be resolved — a missing icon
-            // must not leave the button blank.
-            var showReload = restart && _iconReload != null;
-            BtnStart.IconPath = showReload ? _iconReload : _iconPlay;
-            BtnStart.IconSize = showReload ? ReloadIconSize : PlayIconSize;
         }
 
         /// <summary>Swaps START for FINISH while recording is rolling.</summary>

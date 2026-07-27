@@ -7,7 +7,10 @@ namespace Clowd
     public static class Constants
     {
         public const string ClowdAppName = "Clowd";
-        public const string ClowdNamedPipe = "ClowdNamedPipe:02c1544e-7d60-435a-bce8-f61496bdbabe";
+        /// <summary>Kept short deliberately. On unix .NET backs named pipes with a domain socket at
+        /// <c>$TMPDIR/CoreFxPipe_&lt;name&gt;</c>, and macOS caps that path at 104 chars against a
+        /// ~49 char per-user TMPDIR — a GUID-length name here means the pipe can never be created.</summary>
+        public const string ClowdNamedPipe = "Clowd.02c1544e";
         public const string ClowdMutex = "ClowdMutex:02c1544e-7d60-435a-bce8-f61496bdbabe";
         public const string PublishingCompany = "Caelan Sayler";
     }

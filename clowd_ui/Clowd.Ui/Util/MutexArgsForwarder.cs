@@ -168,6 +168,11 @@ namespace Clowd.Util
                     Debug.WriteLine("MutexArgsForwarder: unable to receive named pipe connection request: " + ex);
                     SentryConfig.CaptureHandled(ex, "mutex.pipe-accept");
 
+                    // the pipe name itself is unusable on this platform (e.g. too long for a unix
+                    // domain socket path) — retrying just reports the same defect five times over.
+                    if (ex is ArgumentException)
+                        return;
+
                     // a crashed previous instance can leave a stale unix domain socket behind which
                     // prevents the server pipe from binding — try removing it once and retrying.
                     if (err == 0)

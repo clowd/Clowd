@@ -43,10 +43,8 @@
 
             <Rectangle Width="3" Height="3" />
 
-            <!-- WAIT… -> START (page swaps the text once obs-express is initialized), and
-                 START -> RESTART with the reload glyph when a settings change tears the pending
-                 capturer down (SetPrimaryText; the icon/size swap is in code-behind because the
-                 two glyphs have different canvas ratios) -->
+            <!-- WAIT… -> START (page swaps the text via SetPrimaryText once obs-express is
+                 initialized) -->
             <controls:CaptureToolButton Name="BtnStart"
                                         Click="StartButtonClicked"
                                         IconPath="{StaticResource IconPlay}"
