@@ -106,6 +106,8 @@ impl WindowHandle {
             }
             #[cfg(not(target_os = "macos"))]
             self.window.set_visible(true);
+            #[cfg(windows)]
+            raise_window_to_top(&self.window);
 
             self.shown.set(true);
         } else {
@@ -135,6 +137,15 @@ impl WindowHandle {
 
     pub fn focus(&self) {
         self.window.focus_window();
+        #[cfg(windows)]
+        {
+            let fg = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() };
+            if win32_hwnd(&self.window) == Some(fg) {
+                info!("overlay window took foreground focus");
+            } else {
+                warn!("overlay window was denied foreground focus; keyboard input may go to the previous app until the overlay is clicked");
+            }
+        }
     }
 
     pub fn save_to_file_with_peek(
@@ -242,19 +253,43 @@ impl WindowSet {
 // ── Platform: window tweaks (private) ──────────────────────────────
 
 #[cfg(windows)]
-fn apply_capture_window_tweaks(window: &Window) {
-    use windows::Win32::Foundation::HWND;
-    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_EXCLUDED_FROM_PEEK, DWMWA_TRANSITIONS_FORCEDISABLED};
+fn win32_hwnd(window: &Window) -> Option<windows::Win32::Foundation::HWND> {
     use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
     let Ok(handle) = window.window_handle() else {
-        return;
+        return None;
     };
     let RawWindowHandle::Win32(h) = handle.as_raw() else {
+        return None;
+    };
+    Some(windows::Win32::Foundation::HWND(isize::from(h.hwnd) as *mut _))
+}
+
+/// Raise the window to the top of its z-band without activating it.
+/// SW_SHOWNOACTIVATE never raises, so on secondary monitors the overlay could
+/// otherwise stay below the current foreground window (e.g. a fullscreen app).
+/// Z-order raises are not subject to the foreground lock — only activation is.
+/// Release builds are additionally WS_EX_TOPMOST, which makes this belt-and-braces
+/// there, but it is the only raise debug builds get.
+#[cfg(windows)]
+fn raise_window_to_top(window: &Window) {
+    use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE};
+
+    let Some(hwnd) = win32_hwnd(window) else {
         return;
     };
+    unsafe {
+        let _ = SetWindowPos(hwnd, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+}
 
-    let hwnd = HWND(isize::from(h.hwnd) as *mut _);
+#[cfg(windows)]
+fn apply_capture_window_tweaks(window: &Window) {
+    use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_EXCLUDED_FROM_PEEK, DWMWA_TRANSITIONS_FORCEDISABLED};
+
+    let Some(hwnd) = win32_hwnd(window) else {
+        return;
+    };
     let enable: i32 = 1;
     let ptr = &enable as *const i32 as *const core::ffi::c_void;
     unsafe {
