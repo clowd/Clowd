@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using Avalonia.Media;
 
 namespace Clowd.Config
 {
@@ -58,6 +59,37 @@ namespace Clowd.Config
             set => Set(ref _obscuredWindowDetectionThreshold, value);
         }
 
+        /// <summary>
+        /// Follow the OS accent colour instead of <see cref="AccentColor"/>. Reads as false wherever
+        /// there is no system accent to read (macOS), so the row it disables cannot get stuck greyed
+        /// out on a platform that hides this checkbox.
+        /// </summary>
+        [Category("Appearance")]
+        [DisplayName("Use system accent color")]
+        [Description("Draw the capture overlay in the accent color chosen in Windows settings")]
+        [HiddenOnMacOS]
+        public bool UseSystemAccentColor
+        {
+            get => _useSystemAccentColor && AccentColors.SystemAccentSupported;
+            set => Set(ref _useSystemAccentColor, value);
+        }
+
+        /// <summary>
+        /// The manually chosen overlay accent. Normalised on assignment so the swatch in the
+        /// settings page shows exactly the colour the overlay will be drawn in — a colour too light
+        /// to carry white text is darkened (issue #48).
+        /// </summary>
+        [Category("Appearance")]
+        [DisplayName("Accent color")]
+        [Description("Color of the crosshair, selection border and primary buttons in the capture overlay. " +
+                     "A color too light to carry the white button labels is darkened until it is readable.")]
+        [DisabledWhen(nameof(UseSystemAccentColor))]
+        public Color AccentColor
+        {
+            get => _accentColor;
+            set => Set(ref _accentColor, AccentColors.EnsureContrastWithWhite(value));
+        }
+
         [Category("Saving")]
         [DisplayName("Open saved files in Explorer")]
         [Description("Reveal the file in Explorer after a capture is saved to disk")]
@@ -76,6 +108,17 @@ namespace Clowd.Config
             set => Set(ref _filenamePattern, value);
         }
 
+        /// <summary>
+        /// The colour the capture overlay is actually launched with (<c>--accent-color</c>): the OS
+        /// accent when the user asked for it and there is one to read, otherwise their own choice —
+        /// in both cases dark enough for the white text drawn on top of it.
+        /// </summary>
+        public Color GetEffectiveAccentColor()
+        {
+            var color = (UseSystemAccentColor ? AccentColors.GetSystemAccent() : null) ?? AccentColor;
+            return AccentColors.EnsureContrastWithWhite(color);
+        }
+
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private bool _screenshotWithCursor = true;
         private bool _detectWindows = true;
@@ -83,5 +126,7 @@ namespace Clowd.Config
         private bool _obscuredWindowPeek = true;
         private double _obscuredWindowDetectionThreshold = 0.80;
         private bool _openSavedInExplorer = true;
+        private bool _useSystemAccentColor = true;
+        private Color _accentColor = AccentColors.Default;
     }
 }
