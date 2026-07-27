@@ -51,6 +51,10 @@ namespace Clowd.UI
 
         [JsonPropertyName("microphones")]
         public string[] Microphones { get; set; }
+
+        /// <summary>Windows only; the recorder ignores it on macOS.</summary>
+        [JsonPropertyName("speaker_volume_compensation")]
+        public bool SpeakerVolumeCompensation { get; set; }
     }
 
     /// <summary>
@@ -106,6 +110,7 @@ namespace Clowd.UI
                 // make a live unmute impossible ("default" is a valid device id).
                 Speakers = DeviceList(settings.SpeakerDeviceId),
                 Microphones = DeviceList(settings.MicrophoneDeviceId),
+                SpeakerVolumeCompensation = settings.SpeakerVolumeCompensation,
             };
 
             File.WriteAllText(path, JsonSerializer.Serialize(model, ClowdUiJsonContext.Default.ObsSettingsJson));
