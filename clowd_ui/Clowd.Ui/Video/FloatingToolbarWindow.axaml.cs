@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -11,6 +12,7 @@ using Avalonia.Media;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.PlatformUtil;
+using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 
 namespace Clowd.UI
@@ -78,6 +80,9 @@ namespace Clowd.UI
             BtnDrag.AddHandler(PointerPressedEvent, DragHandlePressed, RoutingStrategies.Tunnel);
             BtnDrag.AddHandler(PointerMovedEvent, DragHandleMoved, RoutingStrategies.Tunnel);
             BtnDrag.AddHandler(PointerReleasedEvent, DragHandleReleased, RoutingStrategies.Tunnel);
+            BtnDrag.PointerCaptureLost += DragHandleCaptureLost;
+
+            UpdateToolTipPlacement();
 
             // nothing in the settings graph saves itself, and the Recording page's auto-save only
             // attaches when that page is opened — the toolbar persists its own toggles (debounced).
@@ -297,6 +302,39 @@ namespace Clowd.UI
             Position = new PixelPoint(indLeft, indTop);
         }
 
+        /// <summary>
+        /// Anchors the button tooltips to the strip instead of to the pointer, along whichever
+        /// edge the current orientation leaves free.
+        /// </summary>
+        /// <remarks>
+        /// Avalonia's default is <see cref="PlacementMode.Pointer"/> with a 20px vertical offset,
+        /// which parks the tip's own top-level window just below the cursor. Nudging the mouse
+        /// down before clicking — exactly what you do to grab the drag handle — then puts that
+        /// popup under the pointer, so the press lands on the popup rather than on the button.
+        /// ToolTipService closes the tip from its raw-input hook on the same button-down, which
+        /// tears the PopupRoot down mid-dispatch (Avalonia logs "PlatformImpl is null, couldn't
+        /// handle input"), and the click is simply lost: the first drag does nothing and the
+        /// second — with no tip open yet — works. Anchoring to the control keeps the tip clear of
+        /// both the cursor and the neighbouring buttons, which is why the side follows the
+        /// rotation rather than being fixed.
+        /// </remarks>
+        private void UpdateToolTipPlacement()
+        {
+            var placement = MainPanel.Orientation == Orientation.Horizontal
+                ? PlacementMode.Bottom
+                : PlacementMode.Right;
+
+            foreach (var btn in MainPanel.Children.OfType<CaptureToolButton>())
+            {
+                ToolTip.SetPlacement(btn, placement);
+
+                // the default offset only exists to clear the cursor; anchored to the button
+                // there is nothing to clear, and a floating gap reads as a detached label.
+                ToolTip.SetHorizontalOffset(btn, 0);
+                ToolTip.SetVerticalOffset(btn, 0);
+            }
+        }
+
         // -- drag handle: click rotates, drag past 5px (logical) moves; both count as manual --
 
         private void DragHandlePressed(object sender, PointerPressedEventArgs e)
@@ -343,21 +381,44 @@ namespace Clowd.UI
             if (!_mouseDown)
                 return;
 
+            // end the drag before releasing capture: Capture(null) raises PointerCaptureLost
+            // synchronously, and the handler for it would otherwise clear _dragging out from
+            // under the rotate check below, turning every drag into a rotation as well.
+            var wasDragging = _dragging;
+            EndDrag();
             e.Pointer.Capture(null);
-            ToolTip.SetServiceEnabled(BtnDrag, true);
-            _mouseDown = false;
 
-            if (!_dragging)
+            if (!wasDragging)
             {
                 // click without drag: rotate horizontal ⇄ vertical in place (top-left anchored;
                 // SizeToContent re-lays the strip out along the new axis)
                 MainPanel.Orientation = MainPanel.Orientation == Orientation.Horizontal
                     ? Orientation.Vertical
                     : Orientation.Horizontal;
+                UpdateToolTipPlacement();
             }
 
-            _dragging = false;
             e.Handled = true;
+        }
+
+        /// <summary>
+        /// Losing capture without a release (the window hidden mid-drag, another window taking
+        /// the pointer) never runs <see cref="DragHandleReleased"/>: without this the strip stays
+        /// glued to the pointer for the rest of the recording — <see cref="DragHandleMoved"/>
+        /// only tests <c>_mouseDown</c>, not whether the button is still held — and the tooltip
+        /// stays switched off.
+        /// </summary>
+        private void DragHandleCaptureLost(object sender, PointerCaptureLostEventArgs e)
+        {
+            if (_mouseDown)
+                EndDrag();
+        }
+
+        private void EndDrag()
+        {
+            _mouseDown = false;
+            _dragging = false;
+            ToolTip.SetServiceEnabled(BtnDrag, true);
         }
 
         // -- buttons --
