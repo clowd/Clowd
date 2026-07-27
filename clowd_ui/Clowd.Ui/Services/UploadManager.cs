@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
 using Clowd.Config;
 using Clowd.UI;
 using Clowd.UI.Dialogs;
@@ -63,7 +64,7 @@ namespace Clowd
             session.ContentKind = "image";
 
             using var ms = new MemoryStream();
-            image.Save(ms);
+            image.Save(ms, PngBitmapEncoderOptions.Default);
 
             // persist the image into the session dir so the recents list shows a preview.
             try

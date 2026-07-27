@@ -30,7 +30,8 @@ namespace Clowd.UI.Helpers
                 textBox.GotFocus += OnGotFocus;
         }
 
-        private static void OnGotFocus(object sender, GotFocusEventArgs e)
+        // Avalonia 12 unified GotFocusEventArgs/LostFocusEventArgs into FocusChangedEventArgs.
+        private static void OnGotFocus(object sender, FocusChangedEventArgs e)
         {
             (sender as TextBox)?.SelectAll();
         }

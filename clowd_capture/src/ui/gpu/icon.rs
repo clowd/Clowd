@@ -215,7 +215,7 @@ impl IconPipeline {
             vertex: wgpu::VertexState {
                 module: shader.vs(),
                 entry_point: Some("vs_main"),
-                buffers: &[instance_layout],
+                buffers: &[Some(instance_layout)],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {

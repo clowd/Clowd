@@ -20,7 +20,7 @@ pub const TOKEN_BYTES: usize = 32;
 /// url-safe base64 (no padding) of `n` cryptographically-random bytes.
 fn random_token(n: usize) -> String {
     let mut buf = vec![0u8; n];
-    getrandom::getrandom(&mut buf).expect("platform RNG unavailable");
+    getrandom::fill(&mut buf).expect("platform RNG unavailable");
     URL_SAFE_NO_PAD.encode(&buf)
 }
 

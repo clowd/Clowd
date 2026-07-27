@@ -16,7 +16,7 @@
         <TextBox x:Name="FilterBox"
                  Grid.Row="1" Grid.Column="0"
                  Margin="0,0,0,6"
-                 Watermark="Filter fonts…" />
+                 PlaceholderText="Filter fonts…" />
 
         <ListBox x:Name="FontList"
                  Grid.Row="2" Grid.Column="0"

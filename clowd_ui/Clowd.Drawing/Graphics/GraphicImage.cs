@@ -637,7 +637,7 @@ namespace Clowd.Drawing.Graphics
                     return copied;
 
                 using var ms = new MemoryStream();
-                rtb.Save(ms);
+                rtb.Save(ms, PngBitmapEncoderOptions.Default);
                 ms.Position = 0;
                 return new Bitmap(ms);
             }

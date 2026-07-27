@@ -310,7 +310,7 @@ namespace Clowd.Drawing.Tests
         {
             using var wb = new WriteableBitmap(new PixelSize(width, height), new Vector(96, 96),
                                                PixelFormats.Bgra8888, AlphaFormat.Premul);
-            wb.Save(path);
+            wb.Save(path, PngBitmapEncoderOptions.Default);
         }
     }
 }

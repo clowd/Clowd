@@ -218,6 +218,10 @@ fn build_hlsl_options(bindings: &[BindingEntry]) -> naga::back::hlsl::Options {
         restrict_indexing: true,
         force_loop_bounding: true,
         ray_query_initialization_tracking: true,
+        // mesh/task shader knobs (naga 30). None of our shaders are mesh or task
+        // shaders, so these never affect the generated HLSL; keep naga's defaults.
+        task_dispatch_limits: None,
+        mesh_shader_primitive_indices_clamp: true,
     }
 }
 

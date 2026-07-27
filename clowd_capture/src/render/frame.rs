@@ -96,7 +96,7 @@ pub(crate) fn draw_once(
     let draw = t_draw_start.elapsed();
 
     let t_present_start = Instant::now();
-    frame.present();
+    gpu.queue.present(frame);
     let present = t_present_start.elapsed();
 
     *out_sample = Some(PerfSample {

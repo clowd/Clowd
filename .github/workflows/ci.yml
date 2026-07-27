@@ -32,7 +32,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # nbgv (Nerdbank.GitVersioning) needs full history to compute the version height
           fetch-depth: 0
@@ -45,10 +45,14 @@ jobs:
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
 
+      # SDK 10 is required twice over: the projects target net10.0 (current LTS),
+      # and Avalonia 12's XAML source generators are built against Roslyn 4.14,
+      # which older SDKs skip (CS9057) — the generated x:Name fields then go
+      # missing and Clowd.Ui fails to compile.
       - name: Install .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       - name: "Rust gate: format + lint + tests"
         run: |
@@ -70,7 +74,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -84,7 +88,7 @@ jobs:
           echo "$VERSION" | tee version.txt
 
       - name: Upload version artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: version
           path: version.txt
@@ -129,7 +133,7 @@ jobs:
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # nbgv (Nerdbank.GitVersioning) needs full history to compute the version height
           fetch-depth: 0
@@ -144,10 +148,14 @@ jobs:
         with:
           key: ${{ matrix.rid }}
 
+      # SDK 10 is required twice over: the projects target net10.0 (current LTS),
+      # and Avalonia 12's XAML source generators are built against Roslyn 4.14,
+      # which older SDKs skip (CS9057) — the generated x:Name fields then go
+      # missing and Clowd.Ui fails to compile.
       - name: Install .NET SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 8.0.x
+          dotnet-version: 10.0.x
 
       # No PublishSingleFile: Velopack (vpk pack in release.yml) requires a normal
       # multi-file publish directory. Version stamping comes from nbgv automatically.
@@ -237,7 +245,7 @@ jobs:
 
       - name: Upload package (macOS)
         if: runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: clowd-${{ matrix.rid }}
           path: clowd-${{ matrix.rid }}.zip
@@ -245,7 +253,7 @@ jobs:
 
       - name: Upload package (Windows)
         if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: clowd-${{ matrix.rid }}
           path: publish/

@@ -25,7 +25,7 @@ impl CachedBuffer {
     fn new(ts: &mut TextStack, font_px: f32) -> Self {
         let metrics = Metrics::new(font_px, font_px * 1.2);
         let mut buffer = Buffer::new(&mut ts.font_system, metrics);
-        buffer.set_wrap(&mut ts.font_system, Wrap::None);
+        buffer.set_wrap(Wrap::None);
         Self {
             buffer,
             last_text: String::new(),
@@ -41,14 +41,14 @@ impl CachedBuffer {
         }
         if font_changed {
             self.buffer
-                .set_metrics(&mut ts.font_system, Metrics::new(font_px, font_px * 1.2));
+                .set_metrics(Metrics::new(font_px, font_px * 1.2));
             self.last_font_px = font_px;
         }
         let attrs = Attrs::new()
             .family(Family::Name(FAMILY_CODE))
             .weight(Weight::BOLD);
         self.buffer
-            .set_text(&mut ts.font_system, text, &attrs, Shaping::Advanced, None);
+            .set_text(text, &attrs, Shaping::Advanced, None);
         self.buffer
             .shape_until_scroll(&mut ts.font_system, false);
         if text_changed {

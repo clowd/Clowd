@@ -11,6 +11,6 @@
     "e2e": "node e2e/e2e.mjs"
   },
   "devDependencies": {
-    "wrangler": "4.42.0"
+    "wrangler": "4.114.0"
   }
 }

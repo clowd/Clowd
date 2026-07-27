@@ -48,6 +48,9 @@ pub(crate) async fn request_adapter_device(
                     power_preference: wgpu::PowerPreference::HighPerformance,
                     compatible_surface: None,
                     force_fallback_adapter: false,
+                    // limit bucketing only matters when exposing wgpu to untrusted
+                    // content; we want the adapter's real limits.
+                    apply_limit_buckets: false,
                 })
                 .await?
         }
