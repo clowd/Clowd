@@ -4,6 +4,7 @@ mod encoder_config;
 mod platform;
 mod recorder;
 mod region;
+mod settings;
 mod status;
 mod tracker;
 
@@ -16,16 +17,19 @@ fn main() {
     obs::log::install_handlers();
 
     // clap itself exits 2 on invalid arguments; mirror that for the §1.1
-    // validations it cannot express.
+    // validations it cannot express (including a bad --settings file).
     let cli = cli::Cli::parse();
-    if let Err(msg) = cli.validate() {
-        eprintln!("Error: {msg}");
-        platform::exit_process(2);
-    }
+    let settings = match cli.validate() {
+        Ok(s) => s,
+        Err(msg) => {
+            eprintln!("Error: {msg}");
+            platform::exit_process(2);
+        }
+    };
 
     // Recorder::new exits the process itself on any construction failure (it
     // must not unwind — partial OBS state is never torn down, §1.4).
-    let recorder = recorder::Recorder::new(&cli);
+    let mut recorder = recorder::Recorder::new(&cli, settings);
 
     // Never returns: every exit routes through platform::exit_process, which
     // skips libobs teardown intentionally (known OBS shutdown crashes; the C++

@@ -47,6 +47,12 @@ impl ObsSceneItem {
         unsafe { obs_sys::obs_sceneitem_set_visible(self.ptr, visible) };
     }
 
+    /// Detaches the item from its scene (releasing the scene's reference).
+    /// The wrapper's own reference is still released by `Drop`.
+    pub fn remove(&self) {
+        unsafe { obs_sys::obs_sceneitem_remove(self.ptr) };
+    }
+
     pub fn set_pos(&self, x: f32, y: f32) {
         // Local mirror of `struct vec2` — the bindgen output renders vec2 as an
         // opaque type (anonymous-union member), so it cannot be constructed

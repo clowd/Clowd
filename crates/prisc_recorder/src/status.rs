@@ -31,6 +31,26 @@ pub fn emit_stopped_recording(code: i64, error: Option<String>) {
     }));
 }
 
+/// Ack for a successful `configure`. `ignored_keys` is always present (empty
+/// when everything applied): the settings-file field names of post-start
+/// non-live keys whose requested value differed, in schema order.
+pub fn emit_configure_applied(ignored_keys: &[&str]) {
+    emit_json(serde_json::json!({
+        "type": "configure_applied",
+        "ignored_keys": ignored_keys,
+    }));
+}
+
+/// Ack for a failed `configure`. `fatal: true` means the pipeline may match
+/// neither the old nor the new config and the parent should respawn.
+pub fn emit_configure_error(message: &str, fatal: bool) {
+    emit_json(serde_json::json!({
+        "type": "configure_error",
+        "message": message,
+        "fatal": fatal,
+    }));
+}
+
 /// Fixed message per OBS stop code (C++ parity table).
 pub fn stop_code_message(code: i64) -> String {
     match code {
@@ -232,12 +252,20 @@ fn clamp_dbfs(peak: f32) -> f64 {
     }
 }
 
+/// Peak stores read by the levels thread — speakers then mics, current list
+/// order. A `configure` that rebuilds the audio sources swaps the contents
+/// under the lock; the new lists show up on the next 100 ms tick.
+pub struct LevelPeaks {
+    pub speaker: Vec<Arc<AtomicU32>>,
+    pub mic: Vec<Arc<AtomicU32>>,
+}
+
 /// Emits a `levels` line every 100 ms: peak dBFS per audio source (speakers
-/// then mics, CLI order), clamped to -100.0. Runs from initialization —
-/// including the pre-start WAIT phase — until `stop_flag`.
+/// then mics, list order), clamped to -100.0. Runs from initialization —
+/// including the pre-start WAIT phase — until `stop_flag`. Silent while both
+/// lists are empty (matching the historical no-audio behavior).
 pub fn start_levels_thread(
-    speaker_peaks: Vec<Arc<AtomicU32>>,
-    mic_peaks: Vec<Arc<AtomicU32>>,
+    peaks: Arc<Mutex<LevelPeaks>>,
     stop_flag: Arc<AtomicBool>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
@@ -252,10 +280,19 @@ pub fn start_levels_thread(
             if stop_flag.load(Ordering::Relaxed) {
                 break;
             }
+            // Lock only for the atomic reads; emitting (which takes the
+            // stdout lock) happens after release.
+            let (speaker, mic) = {
+                let peaks = peaks.lock().unwrap();
+                if peaks.speaker.is_empty() && peaks.mic.is_empty() {
+                    continue;
+                }
+                (read(&peaks.speaker), read(&peaks.mic))
+            };
             emit_json(serde_json::json!({
                 "type": "levels",
-                "speaker": read(&speaker_peaks),
-                "mic": read(&mic_peaks),
+                "speaker": speaker,
+                "mic": mic,
             }));
         }
     })

@@ -172,6 +172,14 @@ pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
     settings
 }
 
+/// Partial `obs_source_update` payload toggling cursor capture on an existing
+/// display source (win-capture applies it live).
+pub fn cursor_update_settings(show_cursor: bool) -> ObsData {
+    let settings = ObsData::new();
+    settings.set_bool("capture_cursor", show_cursor);
+    settings
+}
+
 /// Source id + settings for a speaker (output) capture source. Must be called
 /// after modules are loaded.
 pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {

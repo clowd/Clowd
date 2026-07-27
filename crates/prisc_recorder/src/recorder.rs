@@ -3,13 +3,15 @@
 //! Failure policy: any error during construction prints to stderr and exits
 //! via `platform::exit_process(1)` directly — the error paths never unwind, so
 //! no destructors of partial OBS state run (libobs teardown is intentionally
-//! skipped, §1.4).
+//! skipped, §1.4). Runtime `configure` failures never exit: they ack with
+//! `configure_error` and let the parent decide.
 
 use std::ffi::CString;
 use std::fmt::Display;
 use std::io::BufRead;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use obs::audio::AudioInfo;
@@ -23,12 +25,13 @@ use obs::source::ObsSource;
 use obs::video::VideoInfo;
 use obs::volmeter::ObsVolmeter;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, MAX_AUDIO_SOURCES};
 use crate::commands::{self, Command};
 use crate::encoder_config::{self, EncoderConfig};
 use crate::platform;
 use crate::region::{self, Rect};
-use crate::status::{self, RecordingClock};
+use crate::settings::Settings;
+use crate::status::{self, LevelPeaks, RecordingClock};
 use crate::tracker::{self, MouseTracker};
 
 /// Overall deadline waiting for the OBS stop signal after `quit` (§1.4).
@@ -50,11 +53,8 @@ fn fail_args(msg: impl Display) -> ! {
 /// Creates a volmeter on `source` whose callback stores the latest
 /// cross-channel max peak (dBFS, f32 bits) in the returned atomic. Silence is
 /// -inf; the levels emitter clamps before serializing.
-fn attach_volmeter(source: &ObsSource) -> (ObsVolmeter, Arc<AtomicU32>) {
-    let mut volmeter = match ObsVolmeter::new() {
-        Ok(v) => v,
-        Err(e) => fail(format_args!("Failed to create volmeter: {e}")),
-    };
+fn attach_volmeter(source: &ObsSource) -> Result<(ObsVolmeter, Arc<AtomicU32>), String> {
+    let mut volmeter = ObsVolmeter::new().map_err(|e| format!("Failed to create volmeter: {e}"))?;
     let peak_store = Arc::new(AtomicU32::new(f32::NEG_INFINITY.to_bits()));
     let store = peak_store.clone();
     volmeter.add_callback(move |_magnitude, peak, _input_peak| {
@@ -62,30 +62,107 @@ fn attach_volmeter(source: &ObsSource) -> (ObsVolmeter, Arc<AtomicU32>) {
         store.store(max.to_bits(), Ordering::Relaxed);
     });
     if !volmeter.attach_source(source) {
-        fail("Failed to attach volmeter to audio source");
+        return Err("Failed to attach volmeter to audio source".to_string());
     }
-    (volmeter, peak_store)
+    Ok((volmeter, peak_store))
+}
+
+/// One side (speakers or mics) of the audio pipeline, built but not yet
+/// assigned to output channels.
+struct BuiltSide {
+    sources: Vec<ObsSource>,
+    meters: Vec<(ObsVolmeter, Arc<AtomicU32>)>,
+}
+
+enum AudioBuildError {
+    /// The request itself is invalid on this platform (exit 2 at startup).
+    Args(String),
+    /// Source/volmeter creation failed (exit 1 at startup).
+    Create(String),
+}
+
+/// Creates speaker sources + volmeters for `devices` without touching output
+/// channels — `configure` needs every fallible step done before any pipeline
+/// mutation, so channel assignment is a separate, infallible commit.
+fn build_speaker_sources(devices: &[String]) -> Result<BuiltSide, AudioBuildError> {
+    let mut sources = Vec::new();
+    let mut meters = Vec::new();
+    for (i, device_id) in devices.iter().enumerate() {
+        let (source_id, settings) = platform::audio_output_capture(device_id);
+        if source_id == "sck_audio_capture" && i > 0 {
+            return Err(AudioBuildError::Args(
+                "repeated speakers are not supported on macOS 13+: \
+                 ScreenCaptureKit captures all system audio as a single stream"
+                    .to_string(),
+            ));
+        }
+        let source = ObsSource::create(source_id, &format!("speaker_{i}"), Some(&settings))
+            .map_err(|e| {
+                AudioBuildError::Create(format!(
+                    "Failed to create speaker source for '{device_id}': {e}"
+                ))
+            })?;
+        meters.push(attach_volmeter(&source).map_err(AudioBuildError::Create)?);
+        sources.push(source);
+    }
+    Ok(BuiltSide { sources, meters })
+}
+
+/// Microphone counterpart of [`build_speaker_sources`].
+fn build_mic_sources(devices: &[String]) -> Result<BuiltSide, AudioBuildError> {
+    let mut sources = Vec::new();
+    let mut meters = Vec::new();
+    for (i, device_id) in devices.iter().enumerate() {
+        let settings = ObsData::new();
+        settings.set_string("device_id", device_id);
+        let source = ObsSource::create(
+            platform::AUDIO_INPUT_CAPTURE_ID,
+            &format!("mic_{i}"),
+            Some(&settings),
+        )
+        .map_err(|e| {
+            AudioBuildError::Create(format!(
+                "Failed to create microphone source for '{device_id}': {e}"
+            ))
+        })?;
+        meters.push(attach_volmeter(&source).map_err(AudioBuildError::Create)?);
+        sources.push(source);
+    }
+    Ok(BuiltSide { sources, meters })
 }
 
 pub struct Recorder {
     output: ObsOutput,
     speakers: Vec<ObsSource>,
     mics: Vec<ObsSource>,
-    /// Volmeter + latest peak dBFS (f32 bits) per source, in CLI order
+    /// Volmeter + latest peak dBFS (f32 bits) per source, in list order
     /// (matching the mute indices).
     speaker_meters: Vec<(ObsVolmeter, Arc<AtomicU32>)>,
     mic_meters: Vec<(ObsVolmeter, Arc<AtomicU32>)>,
-    _display_sources: Vec<ObsSource>,
+    /// Peak stores shared with the levels thread; the contents are swapped
+    /// under the lock when `configure` rebuilds the audio sources.
+    level_peaks: Arc<Mutex<LevelPeaks>>,
+    display_sources: Vec<ObsSource>,
     _scene_items: Vec<ObsSceneItem>,
-    /// Owns the click-highlight item and its libobs tick callback; must outlive
-    /// the scene, hence a field rather than a local (`--tracker` only).
-    _tracker: Option<MouseTracker>,
-    _scene: ObsScene,
-    _video_encoder: ObsEncoder,
+    /// Owns the click-highlight item and its libobs tick callback; created and
+    /// dropped at runtime by `configure` as well as at startup.
+    tracker: Option<MouseTracker>,
+    scene: ObsScene,
+    video_encoder: ObsEncoder,
     _audio_encoder: ObsEncoder,
     _sig_start: SignalConnection,
     _sig_stop: SignalConnection,
-    _context: ObsContext,
+    context: ObsContext,
+    /// Current effective tunable config (defaults overlaid by `--settings`,
+    /// or the individual flags); updated by successful `configure`s.
+    settings: Settings,
+    /// Session-fixed inputs `configure` re-derives the video setup from. The
+    /// canvas and scene items never change (region and monitors are fixed);
+    /// only the fps and the output downscale can.
+    capture_region: Rect,
+    canvas: (u32, u32),
+    canvas_scale: f64,
+    encoder_types: Vec<String>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: mpsc::Receiver<Command>,
 }
@@ -95,7 +172,7 @@ impl Recorder {
     /// be registered before `obs_reset_video` (graphics init loads
     /// `default.effect` etc. through `obs_find_data_file`, whose built-in
     /// fallback is CWD-relative and resolves nowhere in our layout).
-    pub fn new(cli: &Cli) -> Recorder {
+    pub fn new(cli: &Cli, settings: Settings) -> Recorder {
         // 1. Log/crash handlers were installed first thing in main (stdout must
         //    stay protocol-only from the first libobs line).
         platform::init_process();
@@ -153,14 +230,14 @@ impl Recorder {
 
         // 4. Video (canvas = region plan, output = single-pass scaled).
         let (out_w, out_h) =
-            region::compute_output_size(plan.canvas, cli.max_width, cli.max_height);
+            region::compute_output_size(plan.canvas, settings.max_width, settings.max_height);
         let video_info = VideoInfo {
             graphics_module: platform::GRAPHICS_MODULE,
             base_width: plan.canvas.0,
             base_height: plan.canvas.1,
             output_width: out_w,
             output_height: out_h,
-            fps_num: cli.fps,
+            fps_num: settings.fps,
             fps_den: 1,
         };
         if let Err(e) = context.reset_video(&video_info) {
@@ -208,11 +285,11 @@ impl Recorder {
         let mut scene_items = Vec::new();
         for (i, item) in plan.items.iter().enumerate() {
             let m = &monitors[item.monitor_index];
-            let settings = platform::display_capture_settings(m, !cli.no_cursor);
+            let source_settings = platform::display_capture_settings(m, settings.cursor);
             let source = match ObsSource::create(
                 platform::DISPLAY_CAPTURE_ID,
                 &format!("display_{i}"),
-                Some(&settings),
+                Some(&source_settings),
             ) {
                 Ok(s) => s,
                 Err(e) => fail(format_args!(
@@ -230,8 +307,8 @@ impl Recorder {
         // The click highlight is added last so it stacks above every display
         // capture. Its tick callback starts animating immediately — harmless
         // before the output starts, since nothing is being encoded yet.
-        let tracker = if cli.tracker {
-            let color = match tracker::parse_color(&cli.tracker_color) {
+        let tracker = if settings.tracker {
+            let color = match tracker::parse_color(&settings.tracker_color) {
                 Ok(c) => c,
                 Err(e) => fail_args(e),
             };
@@ -248,58 +325,42 @@ impl Recorder {
         context.set_output_source_raw(0, scene.get_source());
 
         // 8. Audio sources on output channels 1..=N (speakers first, then mics,
-        //    in command-line order).
+        //    in list order).
+        let speakers_built = match build_speaker_sources(&settings.speakers) {
+            Ok(b) => b,
+            Err(AudioBuildError::Args(e)) => fail_args(e),
+            Err(AudioBuildError::Create(e)) => fail(e),
+        };
+        let mics_built = match build_mic_sources(&settings.microphones) {
+            Ok(b) => b,
+            Err(AudioBuildError::Args(e)) => fail_args(e),
+            Err(AudioBuildError::Create(e)) => fail(e),
+        };
         let mut channel: u32 = 1;
-        let mut speakers = Vec::new();
-        let mut speaker_meters = Vec::new();
-        for (i, device_id) in cli.speaker.iter().enumerate() {
-            let (source_id, settings) = platform::audio_output_capture(device_id);
-            if source_id == "sck_audio_capture" && i > 0 {
-                fail_args(
-                    "repeated --speaker is not supported on macOS 13+: \
-                     ScreenCaptureKit captures all system audio as a single stream",
-                );
-            }
-            let source =
-                match ObsSource::create(source_id, &format!("speaker_{i}"), Some(&settings)) {
-                    Ok(s) => s,
-                    Err(e) => fail(format_args!(
-                        "Failed to create speaker source for '{device_id}': {e}"
-                    )),
-                };
-            context.set_output_source(channel, Some(&source));
+        for source in speakers_built
+            .sources
+            .iter()
+            .chain(mics_built.sources.iter())
+        {
+            context.set_output_source(channel, Some(source));
             channel += 1;
-            speaker_meters.push(attach_volmeter(&source));
-            speakers.push(source);
         }
-        let mut mics = Vec::new();
-        let mut mic_meters = Vec::new();
-        for (i, device_id) in cli.microphone.iter().enumerate() {
-            let settings = ObsData::new();
-            settings.set_string("device_id", device_id);
-            let source = match ObsSource::create(
-                platform::AUDIO_INPUT_CAPTURE_ID,
-                &format!("mic_{i}"),
-                Some(&settings),
-            ) {
-                Ok(s) => s,
-                Err(e) => fail(format_args!(
-                    "Failed to create microphone source for '{device_id}': {e}"
-                )),
-            };
-            context.set_output_source(channel, Some(&source));
-            channel += 1;
-            mic_meters.push(attach_volmeter(&source));
-            mics.push(source);
-        }
+        let level_peaks = Arc::new(Mutex::new(LevelPeaks {
+            speaker: speakers_built
+                .meters
+                .iter()
+                .map(|(_, p)| p.clone())
+                .collect(),
+            mic: mics_built.meters.iter().map(|(_, p)| p.clone()).collect(),
+        }));
 
         // 9. Encoders + ffmpeg_muxer output.
         let video_encoder = match encoder_config::create_video_encoder(
             &encoder_types,
             &EncoderConfig {
-                hw_accel: cli.hw_accel,
-                crf: cli.crf,
-                low_cpu: cli.low_cpu,
+                hw_accel: settings.hw_accel,
+                crf: settings.crf,
+                low_cpu: settings.low_cpu,
             },
         ) {
             Ok(e) => e,
@@ -335,19 +396,25 @@ impl Recorder {
 
         Recorder {
             output,
-            speakers,
-            mics,
-            speaker_meters,
-            mic_meters,
-            _display_sources: display_sources,
+            speakers: speakers_built.sources,
+            mics: mics_built.sources,
+            speaker_meters: speakers_built.meters,
+            mic_meters: mics_built.meters,
+            level_peaks,
+            display_sources,
             _scene_items: scene_items,
-            _tracker: tracker,
-            _scene: scene,
-            _video_encoder: video_encoder,
+            tracker,
+            scene,
+            video_encoder,
             _audio_encoder: audio_encoder,
             _sig_start: sig_start,
             _sig_stop: sig_stop,
-            _context: context,
+            context,
+            settings,
+            capture_region,
+            canvas: plan.canvas,
+            canvas_scale: plan.canvas_scale,
+            encoder_types,
             cmd_tx,
             cmd_rx,
         }
@@ -355,7 +422,7 @@ impl Recorder {
 
     /// The command loop. Never returns — every path ends in
     /// `platform::exit_process` (§1.4).
-    pub fn run(&self, pause: bool) -> ! {
+    pub fn run(&mut self, pause: bool) -> ! {
         status::emit_simple("initialized");
 
         self.spawn_stdin_thread();
@@ -369,18 +436,13 @@ impl Recorder {
         let mut status_handle: Option<std::thread::JoinHandle<()>> = None;
 
         // Levels flow from initialization on (the pre-start WAIT phase too),
-        // not just while recording.
-        let mut levels_handle: Option<std::thread::JoinHandle<()>> = None;
-        if !self.speaker_meters.is_empty() || !self.mic_meters.is_empty() {
-            let peaks = |meters: &[(ObsVolmeter, Arc<AtomicU32>)]| {
-                meters.iter().map(|(_, p)| p.clone()).collect()
-            };
-            levels_handle = Some(status::start_levels_thread(
-                peaks(&self.speaker_meters),
-                peaks(&self.mic_meters),
-                status_stop.clone(),
-            ));
-        }
+        // not just while recording. Always spawned — the audio lists can go
+        // from empty to non-empty via `configure`; the thread stays silent
+        // while both are empty.
+        let mut levels_handle = Some(status::start_levels_thread(
+            self.level_peaks.clone(),
+            status_stop.clone(),
+        ));
 
         // Without --pause the output starts immediately; with --pause we sit in
         // initialized-wait mode until stdin `start`.
@@ -439,6 +501,10 @@ impl Recorder {
                         clock = Some(c);
                     }
                 }
+                // Live-safe-only once a start has been requested (the window
+                // between requesting and the OBS start signal counts as live:
+                // obs_reset_video must not race an activating output).
+                Command::Configure(path) => self.handle_configure(&path, start_requested),
                 Command::MuteSpeaker(idx) => self.set_muted(&self.speakers, "speaker", idx, true),
                 Command::UnmuteSpeaker(idx) => {
                     self.set_muted(&self.speakers, "speaker", idx, false)
@@ -493,6 +559,13 @@ impl Recorder {
                                     levels_handle.take(),
                                 );
                             }
+                            // An accepted configure still needs its ack (§2.3);
+                            // nothing is applied while tearing down, so the
+                            // pipeline is untouched (fatal:false).
+                            Ok(Command::Configure(_)) => status::emit_configure_error(
+                                "recorder is stopping, configure not applied",
+                                false,
+                            ),
                             Ok(_) => {} // ignore anything else while stopping
                             Err(mpsc::RecvTimeoutError::Timeout) => {
                                 eprintln!("Warning: still waiting for the recording to stop...");
@@ -510,6 +583,243 @@ impl Recorder {
                 }
             }
         }
+    }
+
+    /// stdin `configure <path>` (CONTRACT §6): re-read the settings file and
+    /// apply the diff against the current effective config. Emits exactly one
+    /// `configure_applied` XOR `configure_error` ack.
+    fn handle_configure(&mut self, path: &str, live_only: bool) {
+        let new = match Settings::load(Path::new(path)) {
+            Ok(s) => s,
+            Err(e) => return status::emit_configure_error(&e, false),
+        };
+        if live_only {
+            self.configure_live(new);
+        } else {
+            self.configure_full(new);
+        }
+    }
+
+    /// Pre-start configure: every key is applicable. Fallible work is done
+    /// before any pipeline mutation, so early failures leave the pipeline
+    /// intact (`fatal:false`); once `obs_reset_video` runs, a failure means
+    /// the pipeline may match neither config (`fatal:true`).
+    fn configure_full(&mut self, new: Settings) {
+        let cur = self.settings.clone();
+
+        // -- Fallible preparation (no pipeline mutation on failure).
+        let new_speakers = if new.speakers != cur.speakers {
+            match build_speaker_sources(&new.speakers) {
+                Ok(b) => Some(b),
+                Err(AudioBuildError::Args(e)) | Err(AudioBuildError::Create(e)) => {
+                    return status::emit_configure_error(&e, false)
+                }
+            }
+        } else {
+            None
+        };
+        let new_mics = if new.microphones != cur.microphones {
+            match build_mic_sources(&new.microphones) {
+                Ok(b) => Some(b),
+                Err(AudioBuildError::Args(e)) | Err(AudioBuildError::Create(e)) => {
+                    return status::emit_configure_error(&e, false)
+                }
+            }
+        } else {
+            None
+        };
+
+        let video_changed = new.fps != cur.fps
+            || new.max_width != cur.max_width
+            || new.max_height != cur.max_height;
+        let encoder_changed = video_changed
+            || new.crf != cur.crf
+            || new.hw_accel != cur.hw_accel
+            || new.low_cpu != cur.low_cpu;
+        let new_encoder = if encoder_changed {
+            // Recreating (rather than obs_encoder_update) is the safe route:
+            // the encoder id itself can change with hw_accel.
+            match encoder_config::create_video_encoder(
+                &self.encoder_types,
+                &EncoderConfig {
+                    hw_accel: new.hw_accel,
+                    crf: new.crf,
+                    low_cpu: new.low_cpu,
+                },
+            ) {
+                Ok(e) => Some(e),
+                Err(e) => {
+                    return status::emit_configure_error(
+                        &format!("Failed to create video encoder: {e}"),
+                        false,
+                    )
+                }
+            }
+        } else {
+            None
+        };
+
+        // A failed create rolls itself back (nothing was added to the scene),
+        // and on a later failure the local's drop removes the item again.
+        let new_tracker = if new.tracker && self.tracker.is_none() {
+            match self.create_tracker(&new.tracker_color) {
+                Ok(t) => Some(t),
+                Err(e) => return status::emit_configure_error(&e, false),
+            }
+        } else {
+            None
+        };
+
+        // -- Point of no return: obs_reset_video invalidates the video_t* the
+        // current encoder is bound to.
+        if video_changed {
+            let (out_w, out_h) =
+                region::compute_output_size(self.canvas, new.max_width, new.max_height);
+            let video_info = VideoInfo {
+                graphics_module: platform::GRAPHICS_MODULE,
+                base_width: self.canvas.0,
+                base_height: self.canvas.1,
+                output_width: out_w,
+                output_height: out_h,
+                fps_num: new.fps,
+                fps_den: 1,
+            };
+            if let Err(e) = self.context.reset_video(&video_info) {
+                return status::emit_configure_error(
+                    &format!("Failed to reset OBS video: {e}; the pipeline may be unusable"),
+                    true,
+                );
+            }
+        }
+
+        // -- Infallible commit.
+        if let Some(encoder) = new_encoder {
+            // Bind to the (possibly fresh) video_t and swap into the output;
+            // legal because the output is inactive pre-start.
+            encoder.set_video(self.context.get_video());
+            self.output.set_video_encoder(&encoder);
+            self.video_encoder = encoder;
+        }
+        if new_speakers.is_some() || new_mics.is_some() {
+            self.commit_audio(new_speakers, new_mics);
+        }
+        if let Some(t) = new_tracker {
+            self.tracker = Some(t);
+        }
+        self.apply_live_keys(&new);
+        self.settings = new;
+        status::emit_configure_applied(&[]);
+    }
+
+    /// Post-start configure: apply only the always-live keys and report every
+    /// differing non-live key in `ignored_keys` (schema order). Must never
+    /// stop or degrade the recording — errors are always `fatal:false`.
+    fn configure_live(&mut self, new: Settings) {
+        // Tracker creation is the only fallible live apply; do it before
+        // mutating anything so an error leaves the pipeline untouched.
+        if new.tracker && self.tracker.is_none() {
+            match self.create_tracker(&new.tracker_color) {
+                Ok(t) => self.tracker = Some(t),
+                Err(e) => return status::emit_configure_error(&e, false),
+            }
+        }
+        self.apply_live_keys(&new);
+
+        let cur = &self.settings;
+        let mut ignored: Vec<&str> = Vec::new();
+        if new.fps != cur.fps {
+            ignored.push("fps");
+        }
+        if new.crf != cur.crf {
+            ignored.push("crf");
+        }
+        if new.max_width != cur.max_width {
+            ignored.push("max_width");
+        }
+        if new.max_height != cur.max_height {
+            ignored.push("max_height");
+        }
+        if new.hw_accel != cur.hw_accel {
+            ignored.push("hw_accel");
+        }
+        if new.low_cpu != cur.low_cpu {
+            ignored.push("low_cpu");
+        }
+        if new.speakers != cur.speakers {
+            ignored.push("speakers");
+        }
+        if new.microphones != cur.microphones {
+            ignored.push("microphones");
+        }
+
+        // Ignored keys keep their current values, so re-sending the same file
+        // re-reports the same ignored_keys.
+        self.settings.cursor = new.cursor;
+        self.settings.tracker = new.tracker;
+        self.settings.tracker_color = new.tracker_color;
+        status::emit_configure_applied(&ignored);
+    }
+
+    /// Applies the always-live keys (cursor, tracker off, tracker color).
+    /// Tracker *creation* is fallible and must already have been done by the
+    /// caller; everything here is infallible.
+    fn apply_live_keys(&mut self, new: &Settings) {
+        if new.cursor != self.settings.cursor {
+            let update = platform::cursor_update_settings(new.cursor);
+            for source in &self.display_sources {
+                source.update(&update);
+            }
+        }
+        if !new.tracker {
+            // Dropping deregisters the tick callback and removes the item.
+            self.tracker = None;
+        } else if let Some(ref tracker) = self.tracker {
+            if new.tracker_color != self.settings.tracker_color {
+                if let Ok(color) = tracker::parse_color(&new.tracker_color) {
+                    tracker.set_color(color);
+                }
+            }
+        }
+    }
+
+    /// Creates the click tracker. Adding it to the scene now — with the
+    /// display items long since added and nothing else ever appended — keeps
+    /// it the top scene item.
+    fn create_tracker(&self, color_str: &str) -> Result<MouseTracker, String> {
+        let color = tracker::parse_color(color_str)?;
+        MouseTracker::create(&self.scene, color, self.capture_region, self.canvas_scale)
+            .map_err(|e| format!("Failed to create the mouse click tracker: {e}"))
+    }
+
+    /// Swaps in freshly built audio sides, reassigns output channels (speakers
+    /// first, then mics), clears channels the shorter new lists no longer use,
+    /// and publishes the new peak stores to the levels thread. Sources on an
+    /// unchanged side are kept (mute states persist); new sources start
+    /// unmuted — the parent re-applies mutes after the ack.
+    fn commit_audio(&mut self, new_speakers: Option<BuiltSide>, new_mics: Option<BuiltSide>) {
+        if let Some(built) = new_speakers {
+            // Meters before sources: a volmeter must detach before the source
+            // it observes is released.
+            self.speaker_meters = built.meters;
+            self.speakers = built.sources;
+        }
+        if let Some(built) = new_mics {
+            self.mic_meters = built.meters;
+            self.mics = built.sources;
+        }
+        // The channel slots hold their own source references, so replacing /
+        // clearing them here also releases the outgoing sources' last refs.
+        let mut channel: u32 = 1;
+        for source in self.speakers.iter().chain(self.mics.iter()) {
+            self.context.set_output_source(channel, Some(source));
+            channel += 1;
+        }
+        for unused in channel..=(MAX_AUDIO_SOURCES as u32) {
+            self.context.set_output_source(unused, None);
+        }
+        let mut peaks = self.level_peaks.lock().unwrap();
+        peaks.speaker = self.speaker_meters.iter().map(|(_, p)| p.clone()).collect();
+        peaks.mic = self.mic_meters.iter().map(|(_, p)| p.clone()).collect();
     }
 
     /// Starts the output; on failure emits `stopped_recording` code -4 with the

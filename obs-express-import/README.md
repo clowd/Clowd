@@ -1,6 +1,6 @@
 # obs-express
 
-A minimal, headless screen recorder backed by [libobs](https://github.com/obsproject/obs-studio) (the OBS Studio core). It records a screen region or a whole monitor straight to an MP4, driven entirely by command-line flags and a small line-oriented stdin/stdout protocol — no GUI, no config files, no OBS install required.
+A minimal, headless screen recorder backed by [libobs](https://github.com/obsproject/obs-studio) (the OBS Studio core). It records a screen region or a whole monitor straight to an MP4, driven entirely by command-line flags (plus an optional JSON settings file) and a small line-oriented stdin/stdout protocol — no GUI, no OBS install required.
 
 This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-express) (originally C++). libobs 32.1.2 is built from source from the pinned `obs-studio` submodule and bundled next to the binary, so a release is self-contained.
 
@@ -10,6 +10,7 @@ This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-expre
 - **Hardware or software H.264** — x264 by default; `--hw-accel` prefers a GPU encoder (NVENC → AMF → QSV on Windows, VideoToolbox on macOS) and transparently falls back to x264.
 - **Multi-device audio** — any number of speaker (output) and microphone (input) devices, up to 8 total, mixed into the recording.
 - **Programmatic control** — a parent process drives recording over stdin (`start` / `pause` / `quit`, per-device mute) and reads structured progress as one JSON object per line on stdout.
+- **Live reconfiguration** — all tunables (fps, quality, encoder, resolution cap, cursor, tracker, audio devices) can be supplied as a JSON file via `--settings` and re-applied at runtime with the stdin `configure` command — in `--pause` mode the whole pipeline is rebuilt in place, no process restart needed.
 - **Aspect-preserving downscale** — cap output resolution with `--max-width` / `--max-height` without distorting the picture (never upscales).
 - **Click highlight** — `--tracker` draws an expanding, fading circle at the pointer on every mouse click, in the recording only.
 - **Cursor toggle** and a **paused-start** mode for building the pipeline ahead of time and starting instantly on command.
@@ -74,8 +75,31 @@ obs-express --output clip.mp4 --monitor 0 --hw-accel --speaker default --microph
 | `--pause` | off | Build the pipeline, emit `initialized`, and wait for a stdin `start` before recording. |
 | `--speaker <DEVICE>` | — | Output-capture (system audio) device id, or `default`. Repeatable. On macOS 13+ system audio is captured via ScreenCaptureKit: the device id is ignored (the flag only toggles system-audio capture on) and repeating the flag is rejected. |
 | `--microphone <DEVICE>` | — | Input-capture (microphone) device id, or `default`. Repeatable. |
+| `--settings <FILE.json>` | — | Read the tunables from a JSON file instead of individual flags (see below). Conflicts with every flag it replaces: `--fps`, `--crf`, `--max-width`, `--max-height`, `--hw-accel`, `--low-cpu`, `--no-cursor`, `--tracker`, `--tracker-color`, `--speaker`, `--microphone`. |
 
 Downscaling preserves aspect ratio: the tightest of the two caps is applied once to both dimensions, and the output is never upscaled.
+
+### Settings file
+
+`--settings` points at a JSON object holding the tunable options — everything except the capture target, `--output`, and `--pause`, which stay CLI-only. The same file format is re-read by the runtime `configure` command (see below), which is the point of it: a parent process can rewrite the file and re-apply it without restarting the recorder.
+
+```json
+{
+  "fps": 30,
+  "crf": 24,
+  "max_width": 0,
+  "max_height": 0,
+  "hw_accel": false,
+  "low_cpu": false,
+  "cursor": true,
+  "tracker": false,
+  "tracker_color": "255,0,0",
+  "speakers": ["default"],
+  "microphones": []
+}
+```
+
+Every field is optional and defaults to the corresponding flag's default; note `cursor` has positive polarity ("capture the cursor", default `true`) where the flag is `--no-cursor`. A missing field always means the *default* — never "keep the current value" — so a file resolves to the same effective config whether it is read at startup or by a later `configure`. Unknown fields are ignored. Values are validated like the flags they replace (bad values fail startup with exit 2, or ack `configure_error` at runtime).
 
 ### Capture targets
 
@@ -107,6 +131,16 @@ obs-express --output demo.mp4 --tracker --tracker-color 0,128,255
 | `quit` / `q` | Stop the recording, flush the file, and exit. |
 | `mute-speaker <N>` / `unmute-speaker <N>` | Mute/unmute speaker device `N` (0-based, in `--speaker` order). |
 | `mute-mic <N>` / `unmute-mic <N>` | Mute/unmute microphone device `N` (0-based, in `--microphone` order). |
+| `configure <PATH>` | Re-read a settings file (same format as `--settings`) and apply it. The path is the rest of the line, unquoted — spaces allowed. Always answered with exactly one `configure_applied` or `configure_error` on stdout. |
+
+### `configure`
+
+What a `configure` can change depends on whether recording has started:
+
+- **Before `start`** (the `--pause` wait) — everything applies: fps and the resolution caps rebuild the video pipeline in place, the encoder is recreated for `crf` / `hw_accel` / `low_cpu` changes, audio device lists are rebuilt (the `levels` arrays and mute indices follow the new lists; rebuilt devices come back unmuted), and cursor/tracker/color update directly. Repeatable — any number of `configure`s may precede `start`.
+- **After `start`** — only the live-safe keys apply: `cursor`, `tracker`, and `tracker_color`. Every other key that differs from the active config is left untouched and reported in the ack's `ignored_keys`; the recording is never disturbed.
+
+On failure the ack is `configure_error` with a `message` and a `fatal` flag. `fatal:false` means the pipeline still matches the config from before the command (bad file, invalid values, a device that failed to open — all validated before anything is committed); `fatal:true` means a mid-rebuild failure may have left the pipeline unusable and the parent should restart the process. Mute state for *unchanged* devices survives a reconfigure; per-device mutes always address the current lists.
 
 **EOF on stdin is treated as `quit`** — if the parent process dies, the pipe closes and the recording stops and flushes cleanly. `Ctrl+C` / `Ctrl+Break` / console-close on Windows and `SIGINT` / `SIGTERM` on POSIX behave the same way.
 
@@ -121,6 +155,8 @@ obs-express --output demo.mp4 --tracker --tracker-color 0,128,255
 | `{"type":"recording_paused"}` / `{"type":"recording_resumed"}` | In response to `pause` / `start`. |
 | `{"type":"status","timeMs":..,"fps":..,"dropped":..,"droppedPerc":..}` | Once per second while recording and not paused. |
 | `{"type":"levels","speaker":[..],"mic":[..]}` | Every 100 ms from `initialized` on (including the pre-start `--pause` wait), when at least one audio device is configured. Peak dBFS per device (in `--speaker` / `--microphone` order), floored at `-100.0`. |
+| `{"type":"configure_applied","ignored_keys":[..]}` | A `configure` succeeded. `ignored_keys` lists the non-live keys that differed but were skipped because recording had already started (empty before `start`). |
+| `{"type":"configure_error","message":..,"fatal":..}` | A `configure` failed; nothing applied unless `fatal` is `true`, in which case the pipeline may be broken and the process should be restarted. |
 | `{"type":"stopped_recording","code":..,"message":..,"error":..}` | Final line before exit. |
 
 `status` fields: `timeMs` is elapsed recording time in milliseconds (excluding paused spans), `fps` is the measured frame rate over the trailing 5 seconds of that clock (a lifetime average would read permanently low, since the frame counter trails the clock by the encoder's startup and in-flight frames), and `dropped` / `droppedPerc` report dropped frames. The final `stopped_recording.code` mirrors the OBS output stop code (`0` = success; negative values indicate invalid path, unsupported format, out of disk space, encoder error, etc.), with a human-readable `message`.
@@ -129,10 +165,14 @@ Example session (`--pause` mode), stdin on the left, stdout on the right:
 
 ```
                                 {"type":"initialized"}
+configure /path/to/s.json ->
+                                {"type":"configure_applied","ignored_keys":[]}
 start                     ->
                                 {"type":"started_recording"}
-                                {"type":"status","timeMs":1000,"fps":30.0,"dropped":0,"droppedPerc":0.0}
-                                {"type":"status","timeMs":2000,"fps":30.0,"dropped":0,"droppedPerc":0.0}
+                                {"type":"status","timeMs":1000,"fps":24.0,"dropped":0,"droppedPerc":0.0}
+                                {"type":"status","timeMs":2000,"fps":24.0,"dropped":0,"droppedPerc":0.0}
+configure /path/to/s.json ->
+                                {"type":"configure_applied","ignored_keys":["fps"]}
 quit                      ->
                                 {"type":"stopped_recording","code":0,"message":"Successfully stopped","error":null}
 ```

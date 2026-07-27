@@ -230,12 +230,12 @@ unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
 
 /// Owns the tracker's scene item, sources, and tick-callback registration.
 /// Dropping it deregisters the callback before the state it points at goes
-/// away (in practice the process exits without unwinding, but the ordering
-/// must be correct if that ever changes).
+/// away and removes the item from the scene — a runtime `configure` can turn
+/// the tracker off and the highlight actually disappears.
 pub struct MouseTracker {
     _image: ObsSource,
-    _filter: ObsSource,
-    _item: ObsSceneItem,
+    filter: ObsSource,
+    item: ObsSceneItem,
     /// Boxed so the address handed to libobs stays valid when `self` moves.
     state: Box<TrackerState>,
 }
@@ -300,10 +300,18 @@ impl MouseTracker {
 
         Ok(MouseTracker {
             _image: image,
-            _filter: filter,
-            _item: item,
+            filter,
+            item,
             state,
         })
+    }
+
+    /// Retints the highlight. Only "color" is sent — `obs_source_update`
+    /// merges, so the tick callback's "opacity" writes are untouched.
+    pub fn set_color(&self, color: Rgb) {
+        let settings = ObsData::new();
+        settings.set_int("color", color.to_obs_int());
+        self.filter.update(&settings);
     }
 }
 
@@ -311,6 +319,9 @@ impl Drop for MouseTracker {
     fn drop(&mut self) {
         let param = &mut *self.state as *mut TrackerState as *mut c_void;
         unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
+        // Detach from the scene so a runtime tracker-off stops rendering the
+        // disc; the sources are released by the field drops that follow.
+        self.item.remove();
     }
 }
 

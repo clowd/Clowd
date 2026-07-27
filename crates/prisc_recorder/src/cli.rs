@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::{region, tracker};
+use crate::region;
+use crate::settings::Settings;
 
 /// Maximum total audio sources (speakers + microphones).
 pub const MAX_AUDIO_SOURCES: usize = 8;
@@ -76,11 +77,21 @@ pub struct Cli {
     /// Audio input-capture device id; repeatable.
     #[arg(long)]
     pub microphone: Vec<String>,
+
+    /// JSON settings file replacing the individual tuning flags; re-readable at
+    /// runtime via the stdin `configure` command.
+    #[arg(long, conflicts_with_all = [
+        "fps", "crf", "max_width", "max_height", "hw_accel", "low_cpu",
+        "no_cursor", "tracker", "tracker_color", "speaker", "microphone",
+    ])]
+    pub settings: Option<PathBuf>,
 }
 
 impl Cli {
-    /// §1.1 validations that clap cannot express. Violations → exit 2.
-    pub fn validate(&self) -> Result<(), String> {
+    /// §1.1 validations that clap cannot express, plus resolution of the
+    /// effective tunable settings (`--settings` file, or the individual
+    /// flags). Violations → exit 2.
+    pub fn validate(&self) -> Result<Settings, String> {
         let output_str = self.output.to_string_lossy();
         if !output_str.to_ascii_lowercase().ends_with(".mp4") {
             return Err(format!("--output must end with .mp4: '{output_str}'"));
@@ -109,22 +120,17 @@ impl Cli {
             region::parse_region(r).map_err(|e| e.to_string())?;
         }
 
-        // Validated even without --tracker, so a bad color is never silently
-        // accepted (the original parses it unconditionally too).
-        tracker::parse_color(&self.tracker_color)?;
-
-        if self.fps == 0 {
-            return Err("--fps must be at least 1".to_string());
+        // Both paths run the same value validation (fps/crf/tracker
+        // color/audio caps), so a bad --settings file fails startup exactly
+        // like bad flags.
+        match self.settings {
+            Some(ref path) => Settings::load(path),
+            None => {
+                let settings = Settings::from_cli(self);
+                settings.validate()?;
+                Ok(settings)
+            }
         }
-
-        if self.speaker.len() + self.microphone.len() > MAX_AUDIO_SOURCES {
-            return Err(format!(
-                "Too many audio sources: at most {MAX_AUDIO_SOURCES} total --speaker/--microphone \
-                                devices are supported"
-            ));
-        }
-
-        Ok(())
     }
 }
 
@@ -214,6 +220,65 @@ mod tests {
         assert!(!cli.hw_accel);
         assert!(!cli.tracker);
         assert_eq!(cli.tracker_color, "255,0,0");
+    }
+
+    #[test]
+    fn settings_conflicts_with_the_replaced_flags() {
+        for flag in [
+            &["--fps", "60"][..],
+            &["--crf", "20"],
+            &["--max-width", "1920"],
+            &["--hw-accel"],
+            &["--low-cpu"],
+            &["--no-cursor"],
+            &["--tracker"],
+            &["--tracker-color", "0,0,255"],
+            &["--speaker", "default"],
+            &["--microphone", "default"],
+        ] {
+            let mut args = vec!["--output", "a.mp4", "--settings", "s.json"];
+            args.extend_from_slice(flag);
+            assert!(parse(&args).is_err(), "expected conflict for {flag:?}");
+        }
+        // Session-fixed args are untouched and coexist with --settings.
+        assert!(parse(&[
+            "--output",
+            "a.mp4",
+            "--settings",
+            "s.json",
+            "--region",
+            "0,0,640,480",
+            "--pause",
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn settings_file_resolves_the_effective_config() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!(
+            "obs-express-cli-settings-{}.json",
+            std::process::id()
+        ));
+        std::fs::write(&path, r#"{"fps": 60, "tracker": true}"#).unwrap();
+
+        let path_str = path.to_string_lossy().into_owned();
+        let cli = parse(&["--output", "a.mp4", "--settings", &path_str]).unwrap();
+        let settings = cli.validate().unwrap();
+        assert_eq!(settings.fps, 60);
+        assert!(settings.tracker);
+        assert_eq!(settings.crf, 24); // missing field = default
+
+        std::fs::write(&path, r#"{"fps": 0}"#).unwrap();
+        assert!(cli.validate().is_err());
+        std::fs::remove_file(&path).unwrap();
+        assert!(cli.validate().is_err()); // missing file
+
+        // Without --settings the flags themselves are the effective config.
+        let cli = parse(&["--output", "a.mp4", "--no-cursor", "--speaker", "spk"]).unwrap();
+        let settings = cli.validate().unwrap();
+        assert!(!settings.cursor);
+        assert_eq!(settings.speakers, vec!["spk".to_string()]);
     }
 
     #[test]
