@@ -1,6 +1,7 @@
 //! stdout JSON protocol (§1.3) and the 1 Hz status thread with its
 //! paused-adjusted recording clock.
 
+use std::collections::VecDeque;
 use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -118,6 +119,58 @@ impl Default for RecordingClock {
     }
 }
 
+/// Trailing-window frame rate behind the `fps` status field.
+///
+/// `fps` used to be the lifetime ratio `total_frames / elapsed`, which reads
+/// permanently low: the frame counter trails the recording clock by a fixed
+/// deficit (encoder startup, plus the frames in flight in the encoder), and
+/// that deficit is never repaid, so a healthy 30 fps capture reports ~29 for
+/// the first minute and only crawls towards 30 afterwards. Differencing two
+/// samples cancels the deficit — it is present at both ends — so a trailing
+/// window reports the rate the encoder is actually sustaining *now*, which is
+/// also what a dropped-frame spike should move.
+#[derive(Default)]
+struct FpsWindow {
+    /// `(elapsed_ms, total_frames)` samples, oldest first.
+    samples: VecDeque<(u64, i64)>,
+}
+
+impl FpsWindow {
+    /// Span the rate is averaged over. 5 s is the shortest window that keeps
+    /// the ±1 frame quantisation of a 1 Hz sample (±0.2 fps here) far enough
+    /// inside the rounding a consumer applies to print a whole number.
+    const WINDOW_MS: u64 = 5000;
+
+    /// Records a sample and returns the frame rate over the window ending at
+    /// it. Paused spans need no handling: the caller takes no sample while
+    /// paused and neither endpoint advances during one, so the window sees a
+    /// pause as a gap in sampling rather than a frame rate collapse.
+    fn push(&mut self, time_ms: u64, total: i64) -> f64 {
+        self.samples.push_back((time_ms, total));
+
+        // Keep the newest sample that is already a full window old as the
+        // baseline, so the span stays >= WINDOW_MS rather than collapsing to
+        // whatever is left after trimming.
+        while self.samples.len() > 2 && time_ms.saturating_sub(self.samples[1].0) >= Self::WINDOW_MS
+        {
+            self.samples.pop_front();
+        }
+
+        let (base_ms, base_frames) = self.samples[0];
+        let fps = if time_ms > base_ms {
+            // Before the window has filled this is simply a shorter span: it
+            // is already deficit-free, only noisier.
+            ((total - base_frames) as f64 * 1000.0) / (time_ms - base_ms) as f64
+        } else if time_ms > 0 {
+            // First sample only — nothing to difference against yet.
+            (total as f64 * 1000.0) / time_ms as f64
+        } else {
+            0.0
+        };
+        fps.max(0.0)
+    }
+}
+
 /// Emits a `status` line every 1000 ms while recording and not paused.
 ///
 /// Reads the raw output pointer directly (frame counters are thread-safe);
@@ -131,6 +184,7 @@ pub fn start_status_thread(
     let ptr_addr = output_ptr as usize;
     std::thread::spawn(move || {
         let ptr = ptr_addr as *const obs_sys::obs_output_t;
+        let mut fps_window = FpsWindow::default();
         while !stop_flag.load(Ordering::Relaxed) {
             std::thread::sleep(Duration::from_millis(1000));
             if stop_flag.load(Ordering::Relaxed) {
@@ -143,11 +197,8 @@ pub fn start_status_thread(
             let total = unsafe { obs_sys::obs_output_get_total_frames(ptr) } as i64;
             let dropped = unsafe { obs_sys::obs_output_get_frames_dropped(ptr) } as i64;
             let time_ms = clock.elapsed_ms();
-            let fps = if time_ms > 0 {
-                (total as f64 * 1000.0) / time_ms as f64
-            } else {
-                0.0
-            };
+
+            let fps = fps_window.push(time_ms, total);
             let dropped_perc = if total > 0 {
                 (dropped as f64 / total as f64) * 100.0
             } else {
@@ -259,6 +310,99 @@ mod tests {
             wall >= elapsed + 40,
             "pause not subtracted: elapsed {elapsed} wall {wall}"
         );
+    }
+
+    /// Sample stream of a healthy capture at `fps`: the encoder is `deficit`
+    /// frames behind the clock from the first sample onward and stays there.
+    fn steady(window: &mut FpsWindow, fps: i64, deficit: i64, secs: u64) -> f64 {
+        let mut last = 0.0;
+        for s in 1..=secs {
+            let total = fps * s as i64 - deficit;
+            last = window.push(s * 1000, total.max(0));
+        }
+        last
+    }
+
+    #[test]
+    fn fps_window_cancels_the_encoder_deficit() {
+        // The lifetime ratio this replaced would report 28.5 here (285/10),
+        // which rounds to the "29 FPS" a 30 fps capture used to display.
+        let mut w = FpsWindow::default();
+        let fps = steady(&mut w, 30, 15, 10);
+        assert!((fps - 30.0).abs() < 0.01, "expected ~30, got {fps}");
+
+        // ...and the bias does not shrink with a bigger deficit, only the
+        // lifetime ratio's does.
+        let mut w = FpsWindow::default();
+        let fps = steady(&mut w, 60, 90, 10);
+        assert!((fps - 60.0).abs() < 0.01, "expected ~60, got {fps}");
+    }
+
+    #[test]
+    fn fps_window_smooths_whole_frame_quantisation() {
+        // A 30 fps capture sampled at 1 Hz lands on 29/30/31 frames per tick
+        // depending on where the sample falls between frames. Once the window
+        // has filled, every reading must round to 30 — a single tick still
+        // swings by a whole frame, which is exactly what the window is for, so
+        // the first WINDOW_MS of (deliberately shorter, noisier) spans is not
+        // held to it.
+        let mut w = FpsWindow::default();
+        let mut total = 0;
+        for (i, delta) in [29, 31, 30, 29, 30, 31, 29, 30, 30, 31, 29, 30]
+            .into_iter()
+            .enumerate()
+        {
+            total += delta;
+            let time_ms = (i as u64 + 1) * 1000;
+            let fps = w.push(time_ms, total);
+            if time_ms > FpsWindow::WINDOW_MS {
+                assert!((fps - 30.0).abs() < 0.5, "tick {i}: {fps}");
+            }
+        }
+    }
+
+    #[test]
+    fn fps_window_reports_a_real_drop() {
+        // Smoothing must not hide an actual stall: 5 s at 10 fps after 10 s at
+        // 30 fps has fully aged the good samples out of the window.
+        let mut w = FpsWindow::default();
+        steady(&mut w, 30, 0, 10);
+        let mut total = 300;
+        let mut fps = 0.0;
+        for s in 11..=15 {
+            total += 10;
+            fps = w.push(s * 1000, total);
+        }
+        assert!((fps - 10.0).abs() < 0.5, "expected ~10, got {fps}");
+    }
+
+    #[test]
+    fn fps_window_first_sample_falls_back_to_the_lifetime_ratio() {
+        let mut w = FpsWindow::default();
+        assert_eq!(w.push(1000, 30), 30.0);
+        // A zero clock has nothing to divide by and must not produce NaN/inf.
+        let mut w = FpsWindow::default();
+        assert_eq!(w.push(0, 0), 0.0);
+    }
+
+    #[test]
+    fn fps_window_survives_a_pause() {
+        // No sample is taken while paused, and the clock excludes the paused
+        // span, so resuming must not read as a frame rate collapse.
+        let mut w = FpsWindow::default();
+        steady(&mut w, 30, 0, 6);
+        // 30 s of wall time paused; the clock advanced 1 s, frames by 30.
+        let fps = w.push(7000, 210);
+        assert!((fps - 30.0).abs() < 0.01, "expected ~30, got {fps}");
+    }
+
+    #[test]
+    fn fps_window_never_reports_a_negative_rate() {
+        // The frame counter is monotonic in practice; guard the arithmetic
+        // anyway so a wrapped counter cannot emit a negative fps.
+        let mut w = FpsWindow::default();
+        w.push(1000, 500);
+        assert_eq!(w.push(2000, 10), 0.0);
     }
 
     #[test]

@@ -123,7 +123,7 @@ obs-express --output demo.mp4 --tracker --tracker-color 0,128,255
 | `{"type":"levels","speaker":[..],"mic":[..]}` | Every 100 ms from `initialized` on (including the pre-start `--pause` wait), when at least one audio device is configured. Peak dBFS per device (in `--speaker` / `--microphone` order), floored at `-100.0`. |
 | `{"type":"stopped_recording","code":..,"message":..,"error":..}` | Final line before exit. |
 
-`status` fields: `timeMs` is elapsed recording time in milliseconds (excluding paused spans), `fps` is the measured frame rate over that clock, and `dropped` / `droppedPerc` report dropped frames. The final `stopped_recording.code` mirrors the OBS output stop code (`0` = success; negative values indicate invalid path, unsupported format, out of disk space, encoder error, etc.), with a human-readable `message`.
+`status` fields: `timeMs` is elapsed recording time in milliseconds (excluding paused spans), `fps` is the measured frame rate over the trailing 5 seconds of that clock (a lifetime average would read permanently low, since the frame counter trails the clock by the encoder's startup and in-flight frames), and `dropped` / `droppedPerc` report dropped frames. The final `stopped_recording.code` mirrors the OBS output stop code (`0` = success; negative values indicate invalid path, unsupported format, out of disk space, encoder error, etc.), with a human-readable `message`.
 
 Example session (`--pause` mode), stdin on the left, stdout on the right:
 
