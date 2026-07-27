@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 
@@ -16,6 +17,13 @@ namespace Clowd.UI
     /// onward (including the pre-start WAIT phase) whenever audio sources exist: dBFS per source
     /// in CLI order, always finite, floored at -100.</summary>
     public sealed record ObsLevels(double[] Speaker, double[] Mic);
+
+/// <summary>The recorder's answer to a <c>configure</c> command (DESIGN §1.3): either
+/// <c>configure_applied</c>, whose <see cref="IgnoredKeys"/> names the settings the recorder
+/// refused to change in its current phase (empty before recording starts), or
+/// <c>configure_error</c>, which carries a message and a <see cref="Fatal"/> flag meaning the
+/// pipeline may match neither the old nor the new settings.</summary>
+public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, string Message, bool Fatal);
 
     /// <summary>
     /// Hosts the obs-express recording process and speaks its protocol (DESIGN §1): plain-text
@@ -34,6 +42,9 @@ namespace Clowd.UI
     {
         private static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(30);
         private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(10);
+        // a configure only re-reads a small file and touches the (not yet running) pipeline; if it
+        // has not been acked by now the child is wedged and the page respawns it.
+        private static readonly TimeSpan ConfigureTimeout = TimeSpan.FromSeconds(10);
         // comfortably above obs-express's own in-process 30 s stop deadline (§1.4), so the
         // synthetic code:-99 stopped_recording normally arrives first and this only fires
         // when the child is wedged hard (blocked kernel I/O, libobs deadlock).
@@ -59,6 +70,9 @@ namespace Clowd.UI
         private readonly TaskCompletionSource<bool> _initTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<bool> _startTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<bool> _stopTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // non-null only while a configure is in flight; the recorder acks exactly one event per
+        // accepted command, so the next ack seen belongs to this one.
+        private TaskCompletionSource<ObsConfigureResult> _configureTcs;
 
         private readonly object _logLock = new();
         private readonly Queue<string> _log = new();
@@ -149,11 +163,37 @@ namespace Clowd.UI
             }
         }
 
-        /// <summary>Mutes/unmutes the single <c>--speaker</c> source (index 0 — one device each,
-        /// WPF parity). Safe to call while recording; no-op if no speaker source was configured.</summary>
+        /// <summary>
+        /// Points the recorder at a rewritten settings file and waits for it to apply the change,
+        /// which replaces the old tear-down-and-respawn cycle for settings edited during WAIT.
+        /// Throws <see cref="TimeoutException"/> after 10 s and
+        /// <see cref="InvalidOperationException"/> if the process has already exited; callers
+        /// treat any failure — thrown or a non-applied result — as "respawn the recorder".
+        /// </summary>
+        public async Task<ObsConfigureResult> ConfigureAsync(string settingsPath)
+        {
+            var tcs = new TaskCompletionSource<ObsConfigureResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (Interlocked.CompareExchange(ref _configureTcs, tcs, null) != null)
+                throw new InvalidOperationException("A configure command is already in flight.");
+
+            try
+            {
+                // the path is everything after the command word, verbatim: the recorder trims it
+                // and does no unquoting, so it may contain spaces but must never be quoted.
+                WriteCommand("configure " + settingsPath);
+                return await tcs.Task.WaitAsync(ConfigureTimeout);
+            }
+            finally
+            {
+                Interlocked.CompareExchange(ref _configureTcs, null, tcs);
+            }
+        }
+
+        /// <summary>Mutes/unmutes the first speaker source (index 0 — one device each, WPF
+        /// parity). Safe to call while recording; no-op if no speaker source was configured.</summary>
         public void SetSpeakerMute(bool mute) => WriteCommand(mute ? "mute-speaker 0" : "unmute-speaker 0");
 
-        /// <summary>Mutes/unmutes the single <c>--microphone</c> source (index 0).</summary>
+        /// <summary>Mutes/unmutes the first microphone source (index 0).</summary>
         public void SetMicrophoneMute(bool mute) => WriteCommand(mute ? "mute-mic 0" : "unmute-mic 0");
 
         /// <summary>The most recent non-JSON stdout + stderr output (bounded ring buffer),
@@ -264,6 +304,7 @@ namespace Clowd.UI
             var died = new InvalidOperationException("The recording process has exited unexpectedly.");
             _initTcs.TrySetException(died);
             _startTcs.TrySetException(died);
+            _configureTcs?.TrySetException(died);
             if (_stopTcs.TrySetResult(false) && !_disposed)
                 RaiseCriticalError("The recording process has exited unexpectedly.");
         }
@@ -307,6 +348,18 @@ namespace Clowd.UI
                         Dispatcher.UIThread.Post(() => LevelsReceived?.Invoke(this, levels));
                         break;
 
+                    case "configure_applied":
+                        CompleteConfigure(new ObsConfigureResult(true, ReadStringArray(root, "ignored_keys"), null, false), trimmed);
+                        break;
+
+                    case "configure_error":
+                        var configureError = root.TryGetProperty("message", out var msgEl) && msgEl.ValueKind == JsonValueKind.String
+                            ? msgEl.GetString()
+                            : "The recorder rejected the new settings.";
+                        var fatal = root.TryGetProperty("fatal", out var fatalEl) && fatalEl.ValueKind == JsonValueKind.True;
+                        CompleteConfigure(new ObsConfigureResult(false, Array.Empty<string>(), configureError, fatal), trimmed);
+                        break;
+
                     case "recording_paused":
                     case "recording_resumed":
                         break; // informational; not surfaced in the UI
@@ -337,6 +390,27 @@ namespace Clowd.UI
             for (var i = 0; i < values.Length; i++)
                 values[i] = el[i].GetDouble();
             return values;
+        }
+
+        private static string[] ReadStringArray(JsonElement root, string name)
+        {
+            if (!root.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Array)
+                return Array.Empty<string>();
+
+            var values = new string[el.GetArrayLength()];
+            for (var i = 0; i < values.Length; i++)
+                values[i] = el[i].GetString();
+            return values;
+        }
+
+        /// <summary>Hands an ack to the pending <see cref="ConfigureAsync"/>. The recorder never
+        /// sends one unsolicited, so an ack nobody is waiting for (a timed-out configure being
+        /// answered late) is only logged.</summary>
+        private void CompleteConfigure(ObsConfigureResult result, string line)
+        {
+            var tcs = _configureTcs;
+            if (tcs == null || !tcs.TrySetResult(result))
+                AppendLog(line);
         }
 
         private void HandleStoppedRecording(JsonElement root)
