@@ -29,6 +29,9 @@ namespace Clowd
             0xae, 0x42, 0x60, 0x82,
         };
 
+        private static readonly string _userAgent =
+            "Clowd/" + (typeof(UploadProviderBase).Assembly.GetName().Version?.ToString() ?? "1.0");
+
         [Browsable(false)] public abstract SupportedUploadType SupportedUpload { get; }
 
         [Browsable(false)] public abstract string Name { get; }
@@ -144,6 +147,8 @@ namespace Clowd
 
             var client = new HttpClient(ph);
             client.Timeout = timeout;
+            // catbox.moe drops the connection mid-response when there is no user-agent
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(_userAgent);
             client.DefaultRequestHeaders.Accept.Clear();
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(accept));
             client.DefaultRequestHeaders.Authorization = auth;
