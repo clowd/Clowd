@@ -116,11 +116,23 @@ namespace Clowd
 
                 SessionInfo loaded = null;
 
-                var jsonPath = Path.Combine(path, "session.json");
-                if (File.Exists(jsonPath) && !FileSyncObject.CheckPathInUse(jsonPath))
-                    loaded = new SessionInfo(jsonPath);
-                else if (path.EndsWith("session.json", StringComparison.OrdinalIgnoreCase) && !FileSyncObject.CheckPathInUse(path))
-                    loaded = new SessionInfo(path);
+                try
+                {
+                    var jsonPath = Path.Combine(path, "session.json");
+                    if (File.Exists(jsonPath) && !FileSyncObject.CheckPathInUse(jsonPath))
+                        loaded = new SessionInfo(jsonPath);
+                    else if (path.EndsWith("session.json", StringComparison.OrdinalIgnoreCase) && !FileSyncObject.CheckPathInUse(path))
+                        loaded = new SessionInfo(path);
+                }
+                catch (InvalidDataException e)
+                {
+                    // a corrupt session.json (quarantined to .corrupt by FileSyncObject) is simply
+                    // not shown; callers already handle a null return. Only that deliberate
+                    // outcome is swallowed — a transient failure propagating here is better than
+                    // making a finished capture silently look cancelled.
+                    Debug.WriteLine("Unable to load session: " + path + Environment.NewLine + e);
+                    SentryConfig.CaptureHandled(e, "session.load");
+                }
 
                 if (loaded != null)
                     Sessions.Add(loaded);
