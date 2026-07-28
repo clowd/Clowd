@@ -8,6 +8,7 @@ use crate::chunkplan::plan;
 use crate::consts::{BASE_URL_VAR, DEFAULT_ORIGIN, DEV_ALLOW_DISCARD_VAR, GITHUB_URL, REDIRECT_MAX_AGE_SECS};
 use crate::ids::{bearer, hash_matches, is_valid_id, new_id, new_token};
 use crate::model::{CreateRequest, CreateResponse, SessionState, SessionStatus};
+use crate::paste;
 use crate::relay;
 use crate::wasm_util::{do_request, error_json, json_status, now_ms};
 
@@ -31,6 +32,18 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         (Method::Post, ["api", "v1", "uploads", id, "abort"]) => forward(&env, id, "/abort", req).await,
         (Method::Delete, ["api", "v1", "uploads", id]) => delete_upload(&env, id, req).await,
         (Method::Get, ["u", id]) => download(&env, id).await,
+        // Browsers ask for the favicon at the origin root, not under /p/.
+        (Method::Get, ["favicon.ico"]) => paste::asset_or_index("favicon.ico"),
+        // Pastes: hastebin-compatible API + the vendored frontend. The specific
+        // arms must precede the generic `["p", name]` one, which treats anything
+        // that isn't an embedded asset as a paste key.
+        (Method::Get, ["p"]) => paste::root(&path),
+        (Method::Post, ["p", "documents"]) => paste::create(req, &env).await,
+        (Method::Get, ["p", "documents", id]) => paste::document(&env, id, false).await,
+        (Method::Head, ["p", "documents", id]) => paste::document(&env, id, true).await,
+        (Method::Get, ["p", "raw", id]) => paste::raw(&env, id, false).await,
+        (Method::Head, ["p", "raw", id]) => paste::raw(&env, id, true).await,
+        (Method::Get, ["p", name]) => paste::asset_or_index(name),
         _ => Response::error("not found", 404),
     }
 }
