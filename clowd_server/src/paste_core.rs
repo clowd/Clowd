@@ -20,9 +20,11 @@ pub const MAX_LENGTH: usize = 400_000;
 /// Longest key accepted from a URL (path-safety bound, see [`is_valid_key`]).
 pub const MAX_KEY_LENGTH: usize = 64;
 
-/// `Cache-Control` for a stored paste. Pastes are write-once, so they can be
-/// cached forever.
-pub const IMMUTABLE_CACHE: &str = "public, max-age=31536000, immutable";
+/// `Cache-Control` for a stored paste. Pastes are write-once (hence
+/// `immutable`), but the lifetime is capped at 30 days so that view tracking
+/// sees long-lived readers again and future pruning takes effect for browsers
+/// holding a cached copy.
+pub const PASTE_CACHE: &str = "public, max-age=2592000, immutable";
 
 /// `Cache-Control` for the embedded frontend assets.
 pub const STATIC_CACHE: &str = "public, max-age=3600";
@@ -43,6 +45,12 @@ const CONSONANTS: &[u8] = b"bcdfghjklmnpqrstvwxyz";
 /// character.
 pub const fn key_random_bytes(len: usize) -> usize {
     len + 1
+}
+
+/// Whole days since the Unix epoch for a JS `Date.now()` timestamp — the
+/// resolution stored per paste by the last-access tracking.
+pub fn epoch_day(now_ms: f64) -> u64 {
+    (now_ms / 86_400_000.0) as u64
 }
 
 /// Port of haste `lib/key_generators/phonetic.js`: `len` characters alternating
@@ -221,6 +229,15 @@ pub fn message_json(message: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn epoch_day_boundaries() {
+        assert_eq!(epoch_day(0.0), 0);
+        assert_eq!(epoch_day(86_399_999.0), 0);
+        assert_eq!(epoch_day(86_400_000.0), 1);
+        // 2026-07-28T00:00:00Z is 20_662 days after the epoch
+        assert_eq!(epoch_day(1_785_196_800_000.0), 20_662);
+    }
 
     #[test]
     fn key_has_requested_length_and_charset() {
