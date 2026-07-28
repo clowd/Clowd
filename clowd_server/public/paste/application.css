@@ -70,15 +70,18 @@ textarea {
 
 #key {
 	position: fixed;
-	top: 0px;
-	right: 0px;
+	top: 14px;
+	right: 14px;
 	z-index: +1000; /* watch out */
 }
 
 #box2 {
 	background: #08323c;
 	font-size: 0px;
-	padding: 0px 5px;
+	padding: 0px 12px;
+	border-radius: 18.5px; /* pill: half the 37px button height */
+	position: relative;
+	z-index: 2; /* above #box3 so it can slide out from underneath */
 }
 
 #box2 .function {
@@ -99,15 +102,9 @@ textarea {
 }
 
 #pointer {
-	display: block;
-	height: 5px;
-	width: 10px;
-	background: url(hover-dropdown-tip.png);
-	bottom: 0px;
-	position: absolute;
-	margin: auto;
-	left: 0px;
-	right: 0px;
+	/* the old arrow tip; the description panel now attaches directly under
+	   the pill, so keep it hidden even when the JS shows it */
+	display: none !important;
 }
 
 #box3, #messages li {
@@ -117,6 +114,28 @@ textarea {
 	line-height: 14px;
 	padding: 10px 15px;
 	user-select: none;
+}
+
+/* description panel slides out from underneath the pill: top edge stays
+   tucked under the buttons (square), bottom corners rounded */
+#box3 {
+	position: relative;
+	z-index: 1;
+	margin: -14px 8px 0 8px;
+	padding-top: 24px; /* 10px visible + the 14px hidden under the pill */
+	border-radius: 0 0 12px 12px;
+	animation: box3-slide 0.15s ease-out;
+}
+
+@keyframes box3-slide {
+	from {
+		transform: translateY(-16px);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
 }
 
 #box3 .label, #messages li {
