@@ -25,6 +25,7 @@ const KEY_ATTEMPTS: usize = 5;
 const INDEX_HTML: &str = include_str!("../public/paste/index.html");
 const APPLICATION_CSS: &str = include_str!("../public/paste/application.css");
 const SOLARIZED_DARK_CSS: &str = include_str!("../public/paste/solarized_dark.css");
+const ONE_DARK_PRO_CSS: &str = include_str!("../public/paste/one-dark-pro.css");
 const APPLICATION_JS: &str = include_str!("../public/paste/application.js");
 const HIGHLIGHT_MIN_JS: &str = include_str!("../public/paste/highlight.min.js");
 const CLOWD_WHITE_SVG: &str = include_str!("../public/paste/clowd-white.svg");
@@ -40,6 +41,7 @@ fn asset(name: &str) -> Option<(&'static [u8], &'static str)> {
     let found = match name {
         "application.css" => (APPLICATION_CSS.as_bytes(), "text/css; charset=utf-8"),
         "solarized_dark.css" => (SOLARIZED_DARK_CSS.as_bytes(), "text/css; charset=utf-8"),
+        "one-dark-pro.css" => (ONE_DARK_PRO_CSS.as_bytes(), "text/css; charset=utf-8"),
         "application.js" => (APPLICATION_JS.as_bytes(), "text/javascript; charset=utf-8"),
         "highlight.min.js" => (HIGHLIGHT_MIN_JS.as_bytes(), "text/javascript; charset=utf-8"),
         "clowd-white.svg" => (CLOWD_WHITE_SVG.as_bytes(), "image/svg+xml"),

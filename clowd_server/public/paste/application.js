@@ -32,7 +32,8 @@ haste_document.prototype.load = function(key, callback, lang) {
           high = { value: _this.htmlEscape(res.data) };
         }
         else if (lang) {
-          high = hljs.highlight(lang, res.data);
+          // highlight.js 11 API (the v9-style highlight(lang, code) was removed)
+          high = hljs.highlight(res.data, { language: lang });
         }
         else {
           high = hljs.highlightAuto(res.data);
@@ -117,6 +118,49 @@ var haste = function(appName, options) {
   this.$textarea.on('input', this.updateScrollGutter);
   $(window).on('resize', this.updateScrollGutter);
   this.updateScrollGutter();
+  // Live-persist unsaved edits as a draft so a refresh doesn't lose them;
+  // cleared by New and by a successful Save.
+  this.$textarea.on('input', function() {
+    clearTimeout(_this.draftTimer);
+    _this.draftTimer = setTimeout(function() {
+      _this.saveDraft();
+    }, 300);
+  });
+};
+
+haste.draftKey = 'clowdbin-draft';
+
+// Persist the editor content as the draft (empty content removes it)
+haste.prototype.saveDraft = function() {
+  try {
+    var val = this.$textarea.val();
+    if (val) {
+      window.localStorage.setItem(haste.draftKey, val);
+    } else {
+      window.localStorage.removeItem(haste.draftKey);
+    }
+  } catch (err) { /* storage full or unavailable */ }
+};
+
+// Put a saved draft back into an empty editor (called once on page load)
+haste.prototype.restoreDraft = function() {
+  if (this.doc && this.doc.locked) { return; }
+  var draft = null;
+  try { draft = window.localStorage.getItem(haste.draftKey); } catch (err) { }
+  if (draft && !this.$textarea.val()) {
+    this.$textarea.val(draft);
+    // start at the top: setting the value leaves the caret (and therefore the
+    // scroll position, once focused) at the end of the draft
+    var ta = this.$textarea[0];
+    if (ta.setSelectionRange) { ta.setSelectionRange(0, 0); }
+    ta.scrollTop = 0;
+    this.updateScrollGutter();
+  }
+};
+
+haste.prototype.clearDraft = function() {
+  clearTimeout(this.draftTimer);
+  try { window.localStorage.removeItem(haste.draftKey); } catch (err) { }
 };
 
 // Set the page title - include the appName
@@ -248,7 +292,10 @@ haste.prototype.duplicateDocument = function() {
   if (this.doc.locked) {
     var currentData = this.doc.data;
     this.newDocument();
+    // a programmatic val() fires no input event, so persist explicitly
     this.$textarea.val(currentData);
+    this.saveDraft();
+    this.updateScrollGutter();
   }
 };
 
@@ -267,6 +314,7 @@ haste.prototype.lockDocument = function() {
         file += '.' + _this.lookupExtensionByType(ret.language);
       }
       window.history.pushState(null, _this.appName + '-' + ret.key, file);
+      _this.clearDraft();
       _this.fullKey();
       _this.$textarea.val('').hide();
       _this.updateScrollGutter();
@@ -300,6 +348,7 @@ haste.prototype.configureButtons = function() {
       },
       shortcutDescription: 'control + n',
       action: function() {
+        _this.clearDraft();
         _this.newDocument(!_this.doc.key);
       }
     },
@@ -363,10 +412,14 @@ haste.prototype.configureButton = function(options) {
       options.action();
     }
   });
-  // Update the label; showing/hiding the flyout is handled on #box2
+  // Update the label and align the flyout with this button; showing/hiding
+  // the flyout is handled on #box2
   options.$where.mouseenter(function() {
-    $('#box3 .label').text(options.label);
-    $('#box3 .shortcut').text(options.shortcutDescription || '');
+    var $box3 = $('#box3');
+    $box3.find('.label').text(options.label);
+    $box3.find('.shortcut').text(options.shortcutDescription || '');
+    var rect = this.getBoundingClientRect();
+    $box3.css('top', Math.round(rect.top + rect.height / 2 - $box3.outerHeight() / 2) + 'px');
     $(this).append($('#pointer').remove().show());
   });
   options.$where.mouseleave(function() {

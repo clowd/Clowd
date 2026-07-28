@@ -5,8 +5,10 @@
 		<title>clowdbin</title>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<link rel="stylesheet" type="text/css" href="solarized_dark.css"/>
 		<link rel="stylesheet" type="text/css" href="application.css"/>
+		<!-- theme loads last so it can override base colors; solarized_dark.css
+		     is still served as an alternative -->
+		<link rel="stylesheet" type="text/css" href="one-dark-pro.css"/>
 
 		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
 		<script type="text/javascript" src="highlight.min.js"></script>
@@ -36,6 +38,7 @@
 				baseUrl = baseUrl.slice(0, baseUrl.length - 1).join('/') + '/';
 				app = new haste('clowdbin', { twitter: false, baseUrl: baseUrl });
 				handlePop({ target: window });
+				app.restoreDraft();
 			});
 		</script>
 

@@ -1,0 +1,133 @@
+/* One Dark Pro theme for clowdbin — palette derived from
+   https://github.com/MordFustang21/zed-one-dark-pro (themes/one-dark.json).
+   Loads after application.css: overrides the base colors and styles the
+   highlight.js 11 output. solarized_dark.css remains available as an
+   alternative theme. */
+
+body {
+	background: #23272e;
+}
+
+textarea {
+	color: #c8ceda; /* a step brighter than the viewer's #abb2bf for edit contrast */
+}
+
+#linenos {
+	color: #495162;
+}
+
+/* chrome: elevated surface, clearly lighter than the page background */
+
+#box2 {
+	background: #2c313a;
+}
+
+#box2 .function {
+	background-color: #7a8290;
+}
+
+#box2 .function.enabled {
+	background-color: #dde1e8;
+}
+
+#box2 .function.enabled:hover {
+	background-color: #ffffff;
+}
+
+/* flyout sits darker than the page, distinct from the raised rail */
+#box3, #messages li {
+	background: #1b1f26;
+}
+
+#box3 .shortcut {
+	color: #8b93a1;
+}
+
+/* highlight.js */
+
+.hljs {
+	color: #abb2bf;
+	background: #23272e;
+}
+
+.hljs-comment,
+.hljs-quote {
+	color: #7f838c;
+}
+
+.hljs-doctag,
+.hljs-keyword,
+.hljs-formula,
+.hljs-meta {
+	color: #c678dd;
+}
+
+.hljs-name,
+.hljs-selector-tag,
+.hljs-deletion,
+.hljs-subst,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-property,
+.hljs-regexp {
+	color: #e06c75;
+}
+
+.hljs-literal,
+.hljs-number,
+.hljs-attr,
+.hljs-attribute,
+.hljs-selector-class {
+	color: #d19a66;
+}
+
+.hljs-string,
+.hljs-addition {
+	color: #98c379;
+}
+
+.hljs-char.escape_,
+.hljs-symbol,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+	color: #56b6c2;
+}
+
+.hljs-built_in,
+.hljs-type,
+.hljs-class .hljs-title,
+.hljs-title.class_,
+.hljs-title.class_.inherited__ {
+	color: #e5c07b;
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-selector-id,
+.hljs-link {
+	color: #61afef;
+}
+
+.hljs-params,
+.hljs-operator,
+.hljs-punctuation {
+	color: #abb2bf;
+}
+
+.hljs-section,
+.hljs-bullet {
+	color: #d07277;
+}
+
+.hljs-emphasis {
+	color: #c678dd;
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+
+.hljs-link {
+	text-decoration: underline;
+}
