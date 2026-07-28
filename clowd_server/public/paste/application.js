@@ -333,16 +333,22 @@ haste.prototype.configureButton = function(options) {
       options.action();
     }
   });
+  var _this = this;
   // Show the label
   options.$where.mouseenter(function() {
+    clearTimeout(_this.box3HideTimer);
     $('#box3 .label').text(options.label);
     $('#box3 .shortcut').text(options.shortcutDescription || '');
-    $('#box3').show();
+    $('#box3').removeClass('closing').show();
     $(this).append($('#pointer').remove().show());
   });
-  // Hide the label
+  // Hide the label, letting the slide-out animation play first
   options.$where.mouseleave(function() {
-    $('#box3').hide();
+    clearTimeout(_this.box3HideTimer);
+    $('#box3').addClass('closing');
+    _this.box3HideTimer = setTimeout(function() {
+      $('#box3').hide().removeClass('closing');
+    }, 150);
     $('#pointer').hide();
   });
 };
