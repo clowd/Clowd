@@ -70,16 +70,16 @@ textarea {
 
 #key {
 	position: fixed;
-	top: 14px;
-	right: 14px;
+	top: 8px;
+	right: 8px;
 	z-index: +1000; /* watch out */
 }
 
 #box2 {
 	background: #08323c;
 	font-size: 0px;
-	padding: 0px 12px;
-	border-radius: 18.5px; /* pill: half the 37px button height */
+	padding: 0px 8px;
+	border-radius: 8px;
 	position: relative;
 	z-index: 2; /* above #box3 so it can slide out from underneath */
 }
@@ -121,10 +121,14 @@ textarea {
 #box3 {
 	position: relative;
 	z-index: 1;
-	margin: -14px 8px 0 8px;
-	padding-top: 24px; /* 10px visible + the 14px hidden under the pill */
-	border-radius: 0 0 12px 12px;
+	margin: -14px 0 0 0; /* same width as the button panel, top tucked under it */
+	padding-top: 24px; /* 10px visible + the 14px hidden under the panel */
+	border-radius: 0 0 8px 8px;
 	animation: box3-slide 0.15s ease-out;
+}
+
+#box3.closing {
+	animation: box3-slide-out 0.15s ease-in forwards;
 }
 
 @keyframes box3-slide {
@@ -135,6 +139,17 @@ textarea {
 	to {
 		transform: translateY(0);
 		opacity: 1;
+	}
+}
+
+@keyframes box3-slide-out {
+	from {
+		transform: translateY(0);
+		opacity: 1;
+	}
+	to {
+		transform: translateY(-16px);
+		opacity: 0;
 	}
 }
 
