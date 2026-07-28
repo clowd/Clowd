@@ -66,6 +66,12 @@ namespace Clowd
         Task DeleteAsync(UploadDeleteInfo info, CancellationToken cancelToken);
     }
 
+    /// <summary>Implemented by providers native to Clowd (hosted on clwd.app). These sort to the
+    /// top of the provider list, are enabled by default, and claim the default slot for each of
+    /// their supported upload types when nothing else has claimed it yet.</summary>
+    public interface IBuiltInProvider
+    { }
+
     /// <summary>Implemented by providers that can route uploads through a clwd.app accelerate
     /// server (shareable link available immediately, file relays to the destination in the
     /// background). Lets the UI expose the toggle without knowing concrete provider types.</summary>
