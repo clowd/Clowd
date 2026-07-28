@@ -8,8 +8,8 @@
 use worker::{Env, Headers, Request, Response, ResponseBuilder, Result};
 
 use crate::paste_core::{
-    is_valid_key, message_json, new_key, strip_extension, to_json, BodyAccumulator, DocumentBody, KeyBody, IMMUTABLE_CACHE,
-    NOT_FOUND_MESSAGE, STATIC_CACHE, STORE_ERROR_MESSAGE,
+    epoch_day, is_valid_key, message_json, new_key, strip_extension, to_json, BodyAccumulator, DocumentBody, KeyBody, NOT_FOUND_MESSAGE,
+    PASTE_CACHE, STATIC_CACHE, STORE_ERROR_MESSAGE,
 };
 
 /// R2 binding holding one object per paste (key → raw UTF-8 bytes). Deliberately
@@ -19,6 +19,10 @@ const BUCKET: &str = "PASTES";
 /// Fresh keys tried before giving up on a collision (haste's `chooseKey`
 /// recurses without bound; a 1.3e10 keyspace makes five plenty).
 const KEY_ATTEMPTS: usize = 5;
+
+/// KV binding recording the last day each paste was read (key → epoch day),
+/// for future pruning. Day-granular so a hot paste rewrites at most daily.
+const ACCESS_KV: &str = "PASTE_ACCESS";
 
 // The vendored haste-server frontend, compiled into the wasm binary — Workers
 // has no filesystem, and these total ~130 KB. See `public/paste/`.
@@ -162,7 +166,8 @@ pub async fn document(env: &Env, id: &str, head: bool) -> Result<Response> {
         data: &data,
         key,
     });
-    json(body, 200, Some(IMMUTABLE_CACHE), head)
+    touch_access(env, key).await;
+    json(body, 200, Some(PASTE_CACHE), head)
 }
 
 /// `GET|HEAD /p/raw/{id}` — the paste as `text/plain`, or 404 JSON.
@@ -171,9 +176,10 @@ pub async fn raw(env: &Env, id: &str, head: bool) -> Result<Response> {
     let Some(bytes) = load(env, key).await? else {
         return not_found(head);
     };
+    touch_access(env, key).await;
     let headers = Headers::new();
     headers.set("Content-Type", "text/plain; charset=utf-8")?;
-    headers.set("Cache-Control", IMMUTABLE_CACHE)?;
+    headers.set("Cache-Control", PASTE_CACHE)?;
     // Paste creation is unauthenticated, so this body is attacker-controlled
     // content served from the trusted clwd.app origin. Forbid MIME sniffing and
     // sandbox it into a unique, script-disabled origin (same precedent as the
@@ -181,6 +187,29 @@ pub async fn raw(env: &Env, id: &str, head: bool) -> Result<Response> {
     headers.set("X-Content-Type-Options", "nosniff")?;
     headers.set("Content-Security-Policy", "sandbox; default-src 'none'")?;
     Ok(finish(headers, 200, bytes, head))
+}
+
+/// Record that `key` was read today (epoch-day granularity). Best-effort only:
+/// view tracking must never fail or slow a read, so every error is swallowed.
+/// The KV read is edge-cached for an hour — a stale value can only cause a
+/// redundant rewrite of the same day.
+async fn touch_access(env: &Env, key: &str) {
+    let day = epoch_day(crate::wasm_util::now_ms()).to_string();
+    let Ok(kv) = env.kv(ACCESS_KV) else {
+        return;
+    };
+    let current = kv
+        .get(key)
+        .cache_ttl(3600)
+        .text()
+        .await
+        .unwrap_or_default();
+    if current.as_deref() == Some(day.as_str()) {
+        return;
+    }
+    if let Ok(put) = kv.put(key, day) {
+        let _ = put.execute().await;
+    }
 }
 
 /// Read a paste from R2. An invalid key short-circuits to `None` before any

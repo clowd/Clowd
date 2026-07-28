@@ -24,9 +24,12 @@
 
   "observability": { "enabled": true },
 
-  // Completed-upload redirects (id -> {finalUrl,length,completedUtc}), write-once.
+  // REDIRECTS: completed-upload redirects (id -> {finalUrl,length,completedUtc}), write-once.
+  // PASTE_ACCESS: coarse paste view tracking (key -> epoch day), rewritten at most
+  // once per day per key; consulted by future pruning alongside R2's uploaded time.
   "kv_namespaces": [
-    { "binding": "REDIRECTS", "id": "fcae3d71aa2649d49e0e986298ea4c51" }
+    { "binding": "REDIRECTS", "id": "fcae3d71aa2649d49e0e986298ea4c51" },
+    { "binding": "PASTE_ACCESS", "id": "973b7207e0194d13b7bf4adf4418b590" }
   ],
 
   // STAGING: transient chunk staging, objects {id}/{n:05}. A 2-day lifecycle rule
