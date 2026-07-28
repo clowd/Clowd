@@ -2,14 +2,15 @@
 
 	<head>
 
-		<title>hastebin</title>
+		<title>clowdbin</title>
 		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<link rel="stylesheet" type="text/css" href="solarized_dark.css"/>
 		<link rel="stylesheet" type="text/css" href="application.css"/>
 
 		<script type="text/javascript" src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
 		<script type="text/javascript" src="highlight.min.js"></script>
-		<script type="text/javascript" src="application.min.js"></script>
+		<script type="text/javascript" src="application.js"></script>
 
 		<meta name="robots" content="noindex,nofollow"/>
 
@@ -33,7 +34,7 @@
 			$(function() {
 				var baseUrl = window.location.href.split('/');
 				baseUrl = baseUrl.slice(0, baseUrl.length - 1).join('/') + '/';
-				app = new haste('hastebin', { twitter: false, baseUrl: baseUrl });
+				app = new haste('clowdbin', { twitter: false, baseUrl: baseUrl });
 				handlePop({ target: window });
 			});
 		</script>
@@ -45,8 +46,6 @@
 
 		<div id="key">
 		  <div id="pointer" style="display:none;"></div>
-			<div id="box1">
-			</div>
 			<div id="box2">
 				<button class="save function button-picture">Save</button>
 				<button class="new function button-picture">New</button>

@@ -62,12 +62,6 @@ textarea {
 	z-index: +1000; /* watch out */
 }
 
-#box1 {
-	padding: 5px;
-	text-align: center;
-	background: #00222b;
-}
-
 #box2 {
 	background: #08323c;
 	font-size: 0px;
@@ -185,4 +179,31 @@ textarea {
 	display: block;
 	width: 36px;
 	height: 36px;
+}
+
+@media (max-width: 600px) {
+	body {
+		padding: 15px 15px 15px 40px;
+	}
+
+	/* 16px also stops iOS zooming the page when the textarea is focused;
+	   linenos must match the code font size or the gutter drifts. */
+	textarea, #box, #linenos {
+		font-size: 16px;
+	}
+
+	#linenos {
+		top: 15px;
+	}
+
+	#messages {
+		left: 10px;
+		right: 10px;
+		width: auto;
+	}
+
+	.clowd-logo {
+		bottom: 10px;
+		right: 10px;
+	}
 }
