@@ -40,9 +40,13 @@ namespace Clowd.Shared.Tests
             Assert.Contains("PicsurUploadProvider", names);
             Assert.Contains("VgyMeUploadProvider", names);
             Assert.Contains("S3UploadProvider", names);
+            Assert.Contains("ClowdUploadProvider", names);
 
-            // all providers start disabled with no defaults
-            Assert.All(settings.Providers, p => Assert.False(p.IsEnabled));
+            // third-party providers start disabled with no defaults (built-ins are seeded on —
+            // see BuiltInProviderTests)
+            Assert.All(
+                settings.Providers.Where(p => p.Provider is not IBuiltInProvider),
+                p => Assert.False(p.IsEnabled));
         }
 
         [Fact]

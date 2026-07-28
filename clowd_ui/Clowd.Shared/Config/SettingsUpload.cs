@@ -74,6 +74,15 @@ namespace Clowd.Config
 
         private List<UploadProviderInfo> _providers = new();
 
+        // the individual (non-composite) types a provider can be the default for
+        private static readonly SupportedUploadType[] _defaultableTypes =
+        {
+            SupportedUploadType.Image,
+            SupportedUploadType.Video,
+            SupportedUploadType.Binary,
+            SupportedUploadType.Text,
+        };
+
         public SettingsUpload()
         { }
 
@@ -118,7 +127,9 @@ namespace Clowd.Config
         /// <summary>Discovers IUploadProvider implementations in loaded assemblies, applies any
         /// persisted <see cref="ProviderConfig"/> to them, and starts mirroring further changes
         /// back into <see cref="ProviderConfig"/>. Called explicitly from application startup —
-        /// never as a side effect of settings parsing.</summary>
+        /// never as a side effect of settings parsing. Providers implementing
+        /// <see cref="IBuiltInProvider"/> that have no persisted config yet are seeded on (see
+        /// the seeding block below).</summary>
         public void DiscoverProviders()
         {
             var assembliesToSearch = AppDomain.CurrentDomain.GetAssemblies();
@@ -127,6 +138,8 @@ namespace Clowd.Config
                 .SelectMany(GetLoadableTypes)
                 .Where(p => !p.IsAbstract && !p.IsInterface)
                 .Where(p => type.IsAssignableFrom(p));
+
+            var seeded = new List<UploadProviderInfo>();
 
             foreach (var toAdd in types.Except(_providers.Select(p => p.Provider.GetType())))
             {
@@ -137,6 +150,15 @@ namespace Clowd.Config
                 {
                     ApplyConfig(info, config);
                 }
+                else if (instance is IBuiltInProvider)
+                {
+                    // no persisted entry means this provider has never been seen — the same state
+                    // on a fresh install and on an upgrade that predates the provider — so a
+                    // built-in starts switched on. As soon as the user touches it SyncToConfig
+                    // writes the key and their choice wins from then on.
+                    info.IsEnabled = true;
+                    seeded.Add(info);
+                }
 
                 // subscribe after applying saved state so startup does not look like a user edit
                 info.PropertyChanged += (s, e) => SyncToConfig((UploadProviderInfo)s);
@@ -145,7 +167,29 @@ namespace Clowd.Config
                 _providers.Add(info);
             }
 
-            _providers = _providers.OrderBy(p => p.Provider.Name, StringComparer.Ordinal).ToList();
+            // claiming defaults has to wait until every provider's saved config has been applied:
+            // discovery order is arbitrary, so before the loop finishes a type can look unclaimed
+            // when a provider yet to be constructed owns it. Only fills empty slots — a default
+            // the user picked themselves is never stomped.
+            foreach (var info in seeded)
+            {
+                foreach (var uploadType in _defaultableTypes)
+                {
+                    if (!info.Provider.SupportedUpload.HasFlag(uploadType))
+                        continue;
+
+                    if (_providers.Any(p => p.DefaultFor.HasFlag(uploadType)))
+                        continue;
+
+                    SetDefaultProvider(info, uploadType);
+                }
+            }
+
+            // built-ins first, then alphabetical
+            _providers = _providers
+                .OrderByDescending(p => p.Provider is IBuiltInProvider)
+                .ThenBy(p => p.Provider.Name, StringComparer.Ordinal)
+                .ToList();
         }
 
         private static void ApplyConfig(UploadProviderInfo info, UploadProviderConfig config)
