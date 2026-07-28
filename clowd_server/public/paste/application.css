@@ -1,3 +1,7 @@
+html {
+	color-scheme: dark; /* dark scrollbars, matching the solarized theme */
+}
+
 body {
 	background: #002B36;
 	padding: 20px 50px;
@@ -6,11 +10,20 @@ body {
 
 /* textarea */
 
+/* Fixed full-viewport so the editor scrollbar sits on the window edge like the
+   locked view's page scrollbar; the body padding is carried as own padding so
+   the text keeps the same inset. */
 textarea {
 	background: transparent;
 	border: 0px;
 	color: #fff;
-	padding: 0px;
+	position: fixed;
+	top: 0;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	box-sizing: border-box;
+	padding: 20px 50px;
 	width: 100%;
 	height: 100%;
 	font-family: monospace;
@@ -183,6 +196,10 @@ textarea {
 
 @media (max-width: 600px) {
 	body {
+		padding: 15px 15px 15px 40px;
+	}
+
+	textarea {
 		padding: 15px 15px 15px 40px;
 	}
 
