@@ -190,25 +190,34 @@ pub async fn raw(env: &Env, id: &str, head: bool) -> Result<Response> {
 }
 
 /// Record that `key` was read today (epoch-day granularity). Best-effort only:
-/// view tracking must never fail or slow a read, so every error is swallowed.
+/// view tracking must never fail a read, so errors are logged and dropped.
 /// The KV read is edge-cached for an hour — a stale value can only cause a
 /// redundant rewrite of the same day.
 async fn touch_access(env: &Env, key: &str) {
     let day = epoch_day(crate::wasm_util::now_ms()).to_string();
-    let Ok(kv) = env.kv(ACCESS_KV) else {
-        return;
+    let kv = match env.kv(ACCESS_KV) {
+        Ok(kv) => kv,
+        Err(err) => {
+            worker::console_warn!("paste access: kv binding failed: {err}");
+            return;
+        }
     };
-    let current = kv
-        .get(key)
-        .cache_ttl(3600)
-        .text()
-        .await
-        .unwrap_or_default();
+    let current = match kv.get(key).cache_ttl(3600).text().await {
+        Ok(current) => current,
+        Err(err) => {
+            worker::console_warn!("paste access: get {key} failed: {err}");
+            None
+        }
+    };
     if current.as_deref() == Some(day.as_str()) {
         return;
     }
-    if let Ok(put) = kv.put(key, day) {
-        let _ = put.execute().await;
+    let result = match kv.put(key, day) {
+        Ok(put) => put.execute().await,
+        Err(err) => Err(err),
+    };
+    if let Err(err) = result {
+        worker::console_warn!("paste access: put {key} failed: {err}");
     }
 }
 
