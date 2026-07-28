@@ -29,10 +29,13 @@
     { "binding": "REDIRECTS", "id": "fcae3d71aa2649d49e0e986298ea4c51" }
   ],
 
-  // Transient chunk staging: objects {id}/{n:05}. A 2-day lifecycle rule (set via
-  // the CLI, see README) backstops crashed sessions.
+  // STAGING: transient chunk staging, objects {id}/{n:05}. A 2-day lifecycle rule
+  // (set via the CLI, see README) backstops crashed sessions.
+  // PASTES: `/p/*` paste bodies, key -> raw UTF-8 text. Write-once and permanent,
+  // so it must NOT share STAGING's expiring bucket.
   "r2_buckets": [
-    { "binding": "STAGING", "bucket_name": "clowd-staging" }
+    { "binding": "STAGING", "bucket_name": "clowd-staging" },
+    { "binding": "PASTES", "bucket_name": "clowd-pastes" }
   ],
 
   // One Durable Object class holds per-upload session state + alarms.

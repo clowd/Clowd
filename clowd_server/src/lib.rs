@@ -16,12 +16,15 @@ pub mod consts;
 pub mod ids;
 pub mod manifest;
 pub mod model;
+pub mod paste_core;
 pub mod s3;
 pub mod sanitize;
 
 // Workers runtime glue — wasm only.
 #[cfg(target_arch = "wasm32")]
 mod dest;
+#[cfg(target_arch = "wasm32")]
+mod paste;
 #[cfg(target_arch = "wasm32")]
 mod relay;
 #[cfg(target_arch = "wasm32")]

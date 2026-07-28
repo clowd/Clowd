@@ -55,6 +55,10 @@ full spec.
    # R2 staging bucket
    npx wrangler r2 bucket create clowd-staging
 
+   # R2 paste bucket (/p/* text pastes) — permanent, so NOT the staging bucket
+   # (step 4's lifecycle rule would delete pastes)
+   npx wrangler r2 bucket create clowd-pastes
+
    # KV namespace for completed-upload redirects — copy the printed id
    npx wrangler kv namespace create REDIRECTS
 
