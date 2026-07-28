@@ -29,8 +29,10 @@ const APPLICATION_JS: &str = include_str!("../public/paste/application.js");
 const HIGHLIGHT_MIN_JS: &str = include_str!("../public/paste/highlight.min.js");
 const CLOWD_WHITE_SVG: &str = include_str!("../public/paste/clowd-white.svg");
 const FAVICON_ICO: &[u8] = include_bytes!("../public/paste/favicon.ico");
-const FUNCTION_ICONS_PNG: &[u8] = include_bytes!("../public/paste/function-icons.png");
-const HOVER_DROPDOWN_TIP_PNG: &[u8] = include_bytes!("../public/paste/hover-dropdown-tip.png");
+const ICON_SAVE_SVG: &str = include_str!("../public/paste/icons8-save.svg");
+const ICON_ADD_SVG: &str = include_str!("../public/paste/icons8-add.svg");
+const ICON_EDIT_SVG: &str = include_str!("../public/paste/icons8-edit.svg");
+const ICON_CODE_SVG: &str = include_str!("../public/paste/icons8-code.svg");
 
 /// Asset table: file name → (bytes, content type). A name that misses here is a
 /// paste key, not a file.
@@ -42,8 +44,10 @@ fn asset(name: &str) -> Option<(&'static [u8], &'static str)> {
         "highlight.min.js" => (HIGHLIGHT_MIN_JS.as_bytes(), "text/javascript; charset=utf-8"),
         "clowd-white.svg" => (CLOWD_WHITE_SVG.as_bytes(), "image/svg+xml"),
         "favicon.ico" => (FAVICON_ICO, "image/x-icon"),
-        "function-icons.png" => (FUNCTION_ICONS_PNG, "image/png"),
-        "hover-dropdown-tip.png" => (HOVER_DROPDOWN_TIP_PNG, "image/png"),
+        "icons8-save.svg" => (ICON_SAVE_SVG.as_bytes(), "image/svg+xml"),
+        "icons8-add.svg" => (ICON_ADD_SVG.as_bytes(), "image/svg+xml"),
+        "icons8-edit.svg" => (ICON_EDIT_SVG.as_bytes(), "image/svg+xml"),
+        "icons8-code.svg" => (ICON_CODE_SVG.as_bytes(), "image/svg+xml"),
         _ => return None,
     };
     Some(found)

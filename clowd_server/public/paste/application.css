@@ -85,12 +85,48 @@ textarea {
 	z-index: 2; /* above #box3 so it can slide out from underneath */
 }
 
+/* SVG icons tinted via mask: the background-color is the icon color,
+   one shade per state (idle / enabled / hover) */
 #box2 .function {
-	background: url(function-icons.png);
 	width: 32px;
 	height: 37px;
 	display: inline-block;
 	position: relative;
+	background-color: #33565f;
+	-webkit-mask-position: center;
+	mask-position: center;
+	-webkit-mask-size: 20px 20px;
+	mask-size: 20px 20px;
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+}
+
+#box2 .function.enabled {
+	background-color: #8fb3bc;
+}
+
+#box2 .function.enabled:hover {
+	background-color: #ffffff;
+}
+
+#box2 .function.save {
+	-webkit-mask-image: url(icons8-save.svg);
+	mask-image: url(icons8-save.svg);
+}
+
+#box2 .function.new {
+	-webkit-mask-image: url(icons8-add.svg);
+	mask-image: url(icons8-add.svg);
+}
+
+#box2 .function.duplicate {
+	-webkit-mask-image: url(icons8-edit.svg);
+	mask-image: url(icons8-edit.svg);
+}
+
+#box2 .function.raw {
+	-webkit-mask-image: url(icons8-code.svg);
+	mask-image: url(icons8-code.svg);
 }
 
 #box2 .link embed {
@@ -164,25 +200,6 @@ textarea {
 	font-weight: normal;
 }
 
-#box2 .function.save { background-position: -5px top; }
-#box2 .function.enabled.save { background-position: -5px center; }
-#box2 .function.enabled.save:hover { background-position: -5px bottom; }
-
-#box2 .function.new { background-position: -42px top; }
-#box2 .function.enabled.new { background-position: -42px center; }
-#box2 .function.enabled.new:hover { background-position: -42px bottom; }
-
-#box2 .function.duplicate { background-position: -79px top; }
-#box2 .function.enabled.duplicate { background-position: -79px center; }
-#box2 .function.enabled.duplicate:hover { background-position: -79px bottom; }
-
-#box2 .function.raw { background-position: -116px top; }
-#box2 .function.enabled.raw { background-position: -116px center; }
-#box2 .function.enabled.raw:hover { background-position: -116px bottom; }
-
-#box2 .function.twitter { background-position: -153px top; }
-#box2 .function.enabled.twitter { background-position: -153px center; }
-#box2 .function.enabled.twitter:hover { background-position: -153px bottom; }
 #box2 .button-picture{ border-width: 0; font-size: inherit; }
 
 #messages {
