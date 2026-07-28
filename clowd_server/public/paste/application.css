@@ -71,7 +71,8 @@ textarea {
 #key {
 	position: fixed;
 	top: 8px;
-	right: 8px;
+	right: calc(8px + var(--scrollbar-width, 0px));
+	transition: right 0.15s ease-out;
 	z-index: +1000; /* watch out */
 }
 
@@ -209,13 +210,13 @@ textarea {
 .clowd-logo {
 	position: fixed;
 	bottom: 16px;
-	right: 16px;
+	right: calc(16px + var(--scrollbar-width, 0px));
 	z-index: +1000; /* above the textarea */
 	display: block;
 	width: 36px;
 	height: 36px;
 	opacity: 0.35;
-	transition: opacity 0.2s;
+	transition: opacity 0.2s, right 0.15s ease-out;
 }
 
 .clowd-logo:hover {
@@ -255,6 +256,6 @@ textarea {
 
 	.clowd-logo {
 		bottom: 10px;
-		right: 10px;
+		right: calc(10px + var(--scrollbar-width, 0px));
 	}
 }
