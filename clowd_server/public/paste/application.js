@@ -104,6 +104,19 @@ var haste = function(appName, options) {
     $('#box2 .twitter').hide();
   };
   this.baseUrl = options.baseUrl || '/';
+  // Keep the fixed controls clear of the editor scrollbar: the full-viewport
+  // textarea draws its own scrollbar at the window edge, underneath them. The
+  // locked view's page scrollbar shrinks the viewport instead and measures 0
+  // here, as do overlay scrollbars.
+  var _this = this;
+  this.updateScrollGutter = function() {
+    var ta = _this.$textarea[0];
+    var sbw = ta && ta.offsetWidth > 0 ? ta.offsetWidth - ta.clientWidth : 0;
+    document.documentElement.style.setProperty('--scrollbar-width', sbw + 'px');
+  };
+  this.$textarea.on('input', this.updateScrollGutter);
+  $(window).on('resize', this.updateScrollGutter);
+  this.updateScrollGutter();
 };
 
 // Set the page title - include the appName
@@ -149,6 +162,7 @@ haste.prototype.configureKey = function(enable) {
 // Remove the current document (if there is one)
 // and set up for a new one
 haste.prototype.newDocument = function(hideHistory) {
+  var _this = this;
   this.$box.hide();
   this.doc = new haste_document(this);
   if (!hideHistory) {
@@ -158,6 +172,7 @@ haste.prototype.newDocument = function(hideHistory) {
   this.lightKey();
   this.$textarea.val('').show('fast', function() {
     this.focus();
+    _this.updateScrollGutter();
   });
   this.removeLineNumbers();
 };
@@ -218,6 +233,7 @@ haste.prototype.loadDocument = function(key) {
       _this.setTitle(ret.key);
       _this.fullKey();
       _this.$textarea.val('').hide();
+      _this.updateScrollGutter();
       _this.$box.show().focus();
       _this.addLineNumbers(ret.lineCount);
     }
@@ -253,6 +269,7 @@ haste.prototype.lockDocument = function() {
       window.history.pushState(null, _this.appName + '-' + ret.key, file);
       _this.fullKey();
       _this.$textarea.val('').hide();
+      _this.updateScrollGutter();
       _this.$box.show().focus();
       _this.addLineNumbers(ret.lineCount);
     }
