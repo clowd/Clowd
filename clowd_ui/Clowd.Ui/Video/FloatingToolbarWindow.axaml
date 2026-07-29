@@ -19,19 +19,20 @@
          #373737 the overlay uses for its rects — matches the WPF FloatingButtonWindow
          backdrop), so the 3px gaps read as panel rather than screen. Gap pattern mirrors
          layout.rs (area→3→btn0→3→btn1, rest contiguous): 3px after the drag handle and
-         3px after the first action button — the START/FINISH spacers are visibility-paired
-         with their buttons so exactly one gap exists in either state. Per-button IconSize
-         values scale each glyph by its declared canvas ratio inside the fixed 26px icon
-         slot, reproducing the overlay's canvas-fitted SVG rendering. OUTPUT (GIF) and
-         DRAW are intentionally absent — GIF encoding is deferred scope and Live Draw was
-         removed from clowd-rust. -->
+         3px after the primary button. Per-button IconSize values scale each glyph by its
+         declared canvas ratio inside the fixed 26px icon slot, reproducing the overlay's
+         canvas-fitted SVG rendering. OUTPUT (GIF) and DRAW are intentionally absent —
+         GIF encoding lives on the Recents page and Live Draw was removed from
+         clowd-rust. The primary and trailing buttons are moded by the code-behind:
+         WAIT…/START -> PAUSE/RESUME once recording, CANCEL -> FINISH once recording
+         (a rolling recording can be stopped but not discarded from the strip). -->
     <Border Name="RootBorder" Background="{x:Static ui:AppStyles.IdealBackgroundBrush}">
         <StackPanel Name="MainPanel" Orientation="Horizontal">
 
             <!-- drag handle: click rotates the toolbar, drag past 5px moves it (state machine in
                  code-behind; pointer events are wired as tunnel handlers there because Button's
                  class handler marks bubbling PointerPressed as handled). Shows FPS/timer text
-                 once recording statuses arrive. -->
+                 once recording statuses arrive, or PAUSED while paused. -->
             <controls:CaptureToolButton Name="BtnDrag"
                                         Cursor="SizeAll"
                                         IconPath="{StaticResource IconToolNone}"
@@ -44,7 +45,7 @@
             <Rectangle Width="3" Height="3" />
 
             <!-- WAIT… -> START (page swaps the text via SetPrimaryText once obs-express is
-                 initialized) -->
+                 initialized) -> PAUSE/RESUME while recording (SetRecordingState/SetPausedState) -->
             <controls:CaptureToolButton Name="BtnStart"
                                         Click="StartButtonClicked"
                                         IconPath="{StaticResource IconPlay}"
@@ -52,17 +53,7 @@
                                         Primary="True"
                                         PulseBackground="True"
                                         Text="WAIT…" />
-            <Rectangle Width="3" Height="3" IsVisible="{Binding #BtnStart.IsVisible}" />
-
-            <!-- visible only while recording -->
-            <controls:CaptureToolButton Name="BtnFinish"
-                                        Click="FinishButtonClicked"
-                                        IconPath="{StaticResource IconStop}"
-                                        IconSize="15.2"
-                                        IsVisible="False"
-                                        Primary="True"
-                                        Text="FINISH" />
-            <Rectangle Width="3" Height="3" IsVisible="{Binding #BtnFinish.IsVisible}" />
+            <Rectangle Width="3" Height="3" />
 
             <!-- ShowAlternateIcon (enabled glyph) tracks the capture toggle; the Overlay slot
                  hosts the live audio level bar (code-behind) -->
@@ -89,6 +80,7 @@
                                         Text="OPTIONS"
                                         ToolTip.Tip="Recording settings (changing one before you start reloads the recorder)" />
 
+            <!-- CANCEL until recording starts; FINISH (stop and save) afterwards -->
             <controls:CaptureToolButton Name="BtnCancel"
                                         Click="CancelButtonClicked"
                                         IconPath="{StaticResource IconClose}"

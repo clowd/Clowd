@@ -32,6 +32,7 @@ namespace Clowd.UI
     public partial class FloatingToolbarWindow : Window
     {
         public event EventHandler StartClicked;
+        public event EventHandler PauseToggleClicked;
         public event EventHandler FinishClicked;
         public event EventHandler CancelClicked;
         public event EventHandler SettingsClicked;
@@ -45,6 +46,10 @@ namespace Clowd.UI
         private bool _micEnabled;
         private bool _spkEnabled;
         private bool _hasStatusText;
+        private bool _recording;
+        private bool _paused;
+        // the last timer/FPS text, so the drag label can fall back to it when a pause ends
+        private string _lastStatusText;
 
         // drag handle state machine (WPF FloatingButtonWindow.SetupDragHandle)
         private bool _manuallyPositioned;
@@ -108,28 +113,77 @@ namespace Clowd.UI
         }
 
         /// <summary>Sets the start button label ("WAIT…" → "START"). Settings changed during WAIT
-        /// are pushed into the running recorder, so the button never becomes a reload.</summary>
+        /// are pushed into the running recorder, so the button never becomes a reload. Ignored
+        /// while recording — the button belongs to PAUSE/RESUME then.</summary>
         public void SetPrimaryText(string text)
         {
-            BtnStart.Text = text;
+            if (!_recording)
+                BtnStart.Text = text;
         }
 
-        /// <summary>Swaps START for FINISH while recording is rolling.</summary>
+        /// <summary>Modes the strip for a rolling recording: the primary button becomes
+        /// PAUSE (its pre-start pulse stops) and the trailing CANCEL button becomes FINISH —
+        /// a rolling recording can be stopped and saved, but no longer discarded from here.</summary>
         public void SetRecordingState(bool recording)
         {
-            BtnStart.IsVisible = !recording;
-            BtnFinish.IsVisible = recording;
+            _recording = recording;
 
-            if (!recording)
+            if (recording)
+            {
+                BtnStart.Text = "PAUSE";
+                BtnStart.IconPath = (Geometry)this.FindResource("IconPause");
+                BtnStart.PulseBackground = false;
+
+                BtnCancel.Text = "FINISH";
+                BtnCancel.IconPath = (Geometry)this.FindResource("IconStop");
+                BtnCancel.IconSize = 15.2;
+                ToolTip.SetTip(BtnCancel, "Stop and save the recording");
+            }
+            else
+            {
                 _hasStatusText = false;
+                _paused = false;
+                _lastStatusText = null;
+
+                BtnStart.Text = "START";
+                BtnStart.IconPath = (Geometry)this.FindResource("IconPlay");
+                BtnStart.PulseBackground = true;
+
+                BtnCancel.Text = "CANCEL";
+                BtnCancel.IconPath = (Geometry)this.FindResource("IconClose");
+                BtnCancel.IconSize = 18;
+                ToolTip.SetTip(BtnCancel, "Cancel recording");
+            }
+        }
+
+        /// <summary>Flips the primary button between PAUSE and RESUME and pins the drag label to
+        /// PAUSED for the duration (statuses stop while paused, so nothing else would say so).
+        /// Only meaningful while recording.</summary>
+        public void SetPausedState(bool paused)
+        {
+            if (!_recording)
+                return;
+
+            _paused = paused;
+
+            BtnStart.Text = paused ? "RESUME" : "PAUSE";
+            BtnStart.IconPath = (Geometry)this.FindResource(paused ? "IconPlay" : "IconPause");
+
+            // on resume the next status message (≤1 s away) takes over again; until then show the
+            // last timer text rather than a stale PAUSED.
+            BtnDrag.Text = paused ? "PAUSED" : (_lastStatusText ?? "DRAG ME");
         }
 
         /// <summary>Sets the drag handle's status text (timer / FPS); null or empty restores
-        /// "DRAG ME" (which also remains until the first status arrives — WPF parity).</summary>
+        /// "DRAG ME" (which also remains until the first status arrives — WPF parity). While
+        /// paused the label stays PAUSED and the text is only remembered for the resume.</summary>
         public void SetStatusText(string text)
         {
             _hasStatusText = !String.IsNullOrEmpty(text);
-            BtnDrag.Text = _hasStatusText ? text : "DRAG ME";
+            _lastStatusText = _hasStatusText ? text : null;
+
+            if (!_paused)
+                BtnDrag.Text = _hasStatusText ? text : "DRAG ME";
         }
 
         /// <summary>
@@ -405,12 +459,11 @@ namespace Clowd.UI
 
         private void StartButtonClicked(object sender, RoutedEventArgs e)
         {
-            StartClicked?.Invoke(this, EventArgs.Empty);
-        }
-
-        private void FinishButtonClicked(object sender, RoutedEventArgs e)
-        {
-            FinishClicked?.Invoke(this, EventArgs.Empty);
+            // the same physical button: START before recording, PAUSE/RESUME after.
+            if (_recording)
+                PauseToggleClicked?.Invoke(this, EventArgs.Empty);
+            else
+                StartClicked?.Invoke(this, EventArgs.Empty);
         }
 
         private void SettingsButtonClicked(object sender, RoutedEventArgs e)
@@ -420,7 +473,11 @@ namespace Clowd.UI
 
         private void CancelButtonClicked(object sender, RoutedEventArgs e)
         {
-            CancelClicked?.Invoke(this, EventArgs.Empty);
+            // the same physical button: CANCEL (discard) before recording, FINISH (save) after.
+            if (_recording)
+                FinishClicked?.Invoke(this, EventArgs.Empty);
+            else
+                CancelClicked?.Invoke(this, EventArgs.Empty);
         }
 
         private void MicClicked(object sender, RoutedEventArgs e)
