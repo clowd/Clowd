@@ -26,6 +26,9 @@ namespace Clowd.UI
 
         public bool IsRecording { get; private set; }
 
+        /// <summary>True while the recording is rolling but paused (no frames written).</summary>
+        public bool IsPaused { get; private set; }
+
         public event EventHandler Closed;
 
         // set once obs-express has emitted "initialized" — Start/Toggle are no-ops before that
@@ -35,6 +38,7 @@ namespace Clowd.UI
         private bool _initializing;
         private bool _starting;
         private bool _finishing;
+        private bool _pausing;
         private bool _closing;
         private bool _closedRaised;
 
@@ -114,6 +118,7 @@ namespace Clowd.UI
 
                 _toolbar = new FloatingToolbarWindow();
                 _toolbar.StartClicked += (s, e) => StartRecording();
+                _toolbar.PauseToggleClicked += (s, e) => TogglePauseRecording();
                 _toolbar.FinishClicked += (s, e) => FinishRecording();
                 _toolbar.CancelClicked += (s, e) => Cancel();
                 _toolbar.SettingsClicked += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsRecording);
@@ -236,6 +241,44 @@ namespace Clowd.UI
             finally
             {
                 _starting = false;
+            }
+        }
+
+        /// <summary>Pauses or resumes a rolling recording. Paused time is excluded from the output
+        /// (obs-express pauses the encoder, not the pipeline: levels keep flowing, statuses stop).
+        /// No-op while a start/finish/another toggle is in flight.</summary>
+        public async void TogglePauseRecording()
+        {
+            try
+            {
+                if (!IsRecording || _pausing || _finishing || _closing)
+                    return;
+                _pausing = true;
+
+                if (IsPaused)
+                {
+                    await _obs.ResumeAsync();
+                    IsPaused = false;
+                }
+                else
+                {
+                    await _obs.PauseAsync();
+                    IsPaused = true;
+                }
+
+                _toolbar?.SetPausedState(IsPaused);
+            }
+            catch (Exception ex)
+            {
+                // an unacked pause means a wedged or dead child, exactly like a failed start.
+                Debug.WriteLine("Failed to pause/resume recording: " + ex);
+                SentryConfig.CaptureHandled(ex, "video.pause");
+                if (!_closing)
+                    OnCriticalError(this, ex.Message);
+            }
+            finally
+            {
+                _pausing = false;
             }
         }
 
@@ -650,7 +693,9 @@ namespace Clowd.UI
         {
             _lastStatusElapsed = status.Elapsed;
 
-            // statuses arrive at 1 Hz — alternate elapsed time / FPS every 4 s (§4.2).
+            // statuses arrive at 1 Hz — alternate elapsed time / FPS every 4 s (§4.2). Statuses
+            // stop while paused, but one may already be in flight when the pause lands — the
+            // toolbar (which owns the PAUSED label) drops it rather than letting it overwrite.
             var text = (_statusCount++ / 4) % 2 == 1
                 ? $"{status.Fps:F0} FPS"
                 : $"{(int)status.Elapsed.TotalMinutes:D2}:{status.Elapsed.Seconds:D2}";
