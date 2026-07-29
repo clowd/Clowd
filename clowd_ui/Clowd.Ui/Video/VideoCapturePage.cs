@@ -522,6 +522,11 @@ namespace Clowd.UI
             // the finished file is moved to afterwards (issue #50), which happens at stop time.
             nameof(SettingsRecording.OutputDirectory) => false,
             nameof(SettingsRecording.FilenamePattern) => false,
+            // read by the GIF conversion tool long after a recording has finished; the recorder has
+            // never heard of them.
+            nameof(SettingsRecording.GifQuality) => false,
+            nameof(SettingsRecording.GifMaxWidth) => false,
+            nameof(SettingsRecording.GifMaxHeight) => false,
             _ => true,
         };
 

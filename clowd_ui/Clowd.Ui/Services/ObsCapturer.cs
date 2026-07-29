@@ -70,12 +70,18 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         /// preceding <c>stopped_recording</c>.</summary>
         public event EventHandler<string> CriticalError;
 
+        // a pause/resume only flips the output's pause flag; an unacked one means a wedged child.
+        private static readonly TimeSpan PauseTimeout = TimeSpan.FromSeconds(10);
+
         private readonly TaskCompletionSource<bool> _initTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<bool> _startTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private readonly TaskCompletionSource<bool> _stopTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
         // non-null only while a configure is in flight; the recorder acks exactly one event per
         // accepted command, so the next ack seen belongs to this one.
         private TaskCompletionSource<ObsConfigureResult> _configureTcs;
+        // non-null only while a pause or resume is in flight (same single-ack contract:
+        // recording_paused / recording_resumed).
+        private TaskCompletionSource<bool> _pauseTcs;
 
         private readonly object _logLock = new();
         private readonly Queue<string> _log = new();
@@ -168,6 +174,33 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                 // bounded in case even Kill could not take the process down; a TimeoutException
                 // here surfaces through the caller's catch → CriticalError path.
                 return await _stopTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            }
+        }
+
+        /// <summary>Pauses the recording; resolves on <c>recording_paused</c>. The recorder keeps
+        /// running (levels keep flowing) but no frames are written and <c>status</c> messages stop.
+        /// Throws <see cref="TimeoutException"/> after 10 s.</summary>
+        public Task PauseAsync() => PauseCoreAsync("pause");
+
+        /// <summary>Resumes a paused recording; resolves on <c>recording_resumed</c>. (The wire
+        /// command is <c>start</c>, which the recorder reuses for resume — <c>started_recording</c>
+        /// only ever fires for the initial start.)</summary>
+        public Task ResumeAsync() => PauseCoreAsync("start");
+
+        private async Task PauseCoreAsync(string command)
+        {
+            var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (Interlocked.CompareExchange(ref _pauseTcs, tcs, null) != null)
+                throw new InvalidOperationException("A pause/resume command is already in flight.");
+
+            try
+            {
+                WriteCommand(command);
+                await tcs.Task.WaitAsync(PauseTimeout);
+            }
+            finally
+            {
+                Interlocked.CompareExchange(ref _pauseTcs, null, tcs);
             }
         }
 
@@ -333,6 +366,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             FailObserved(_initTcs, died);
             FailObserved(_startTcs, died);
             FailObserved(_configureTcs, died);
+            FailObserved(_pauseTcs, died);
             if (_stopTcs.TrySetResult(false) && !_disposed)
                 RaiseCriticalError("The recording process has exited unexpectedly.");
         }
@@ -400,7 +434,13 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
                     case "recording_paused":
                     case "recording_resumed":
-                        break; // informational; not surfaced in the UI
+                        // ack for the pending PauseAsync/ResumeAsync; never sent unsolicited, so
+                        // one nobody is waiting for (a timed-out command answered late) is only
+                        // logged — same contract as configure.
+                        var pauseTcs = _pauseTcs;
+                        if (pauseTcs == null || !pauseTcs.TrySetResult(true))
+                            AppendLog(trimmed);
+                        break;
 
                     case "stopped_recording":
                         HandleStoppedRecording(root);
