@@ -29,11 +29,23 @@ namespace Clowd
         public static async Task<UploadResult> UploadSession(SessionInfo session, IUploadProvider provider = null)
         {
             // video sessions upload the recording itself (via the Video provider), not the poster
-            // frame that PreviewImgPath points at (see the video-recording design, §4.4).
-            var isVideo = session.ContentKind == "video"
-                          && !String.IsNullOrEmpty(session.VideoPath) && File.Exists(session.VideoPath);
+            // frame that PreviewImgPath points at (see the video-recording design, §4.4); an
+            // upload-only session with no image sends the payload copy it kept. All three cases are
+            // resolved by UploadSourcePath, which also tells us whether the file is still there.
+            var path = session.UploadSourcePath;
+            if (String.IsNullOrEmpty(path))
+            {
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                    "The file this item was made from could not be found. It may have been moved or deleted.",
+                    "Nothing to upload");
+                return null;
+            }
 
-            provider ??= await GetUploadProvider(isVideo ? SupportedUploadType.Video : SupportedUploadType.Image);
+            var isVideo = String.Equals(path, session.VideoPath, StringComparison.OrdinalIgnoreCase);
+
+            provider ??= await GetUploadProvider(isVideo
+                ? SupportedUploadType.Video
+                : GetSupportedType(Path.GetExtension(path)));
             if (provider == null)
                 return null;
 
@@ -42,7 +54,7 @@ namespace Clowd
                 return null; // an upload is already in flight for this session
             upload.SetStatus("Uploading...");
 
-            var info = new FileInfo(isVideo ? session.VideoPath : session.PreviewImgPath);
+            var info = new FileInfo(path);
 
             UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, info.Length, true);
 
@@ -134,13 +146,7 @@ namespace Clowd
             var extension = Path.GetExtension(filePath);
             var category = _mime.GetCategoryFromExtension(extension);
 
-            var stype = category switch
-            {
-                ContentCategory.Image => SupportedUploadType.Image,
-                ContentCategory.Text => SupportedUploadType.Text,
-                ContentCategory.Video => SupportedUploadType.Video,
-                _ => SupportedUploadType.Binary,
-            };
+            var stype = GetSupportedType(extension);
 
             var provider = await GetUploadProvider(stype);
             if (provider == null)
@@ -387,6 +393,18 @@ namespace Clowd
                 throw new InvalidOperationException("The upload provider for this file is no longer available.");
 
             return provider.DeleteAsync(ToDeleteInfo(record), CancellationToken.None);
+        }
+
+        /// <summary>Which kind of upload destination a file's extension calls for.</summary>
+        private static SupportedUploadType GetSupportedType(string extension)
+        {
+            return _mime.GetCategoryFromExtension(extension) switch
+            {
+                ContentCategory.Image => SupportedUploadType.Image,
+                ContentCategory.Text => SupportedUploadType.Text,
+                ContentCategory.Video => SupportedUploadType.Video,
+                _ => SupportedUploadType.Binary,
+            };
         }
 
         private static async Task<IUploadProvider> GetUploadProvider(SupportedUploadType type)
