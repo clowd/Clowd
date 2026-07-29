@@ -121,6 +121,22 @@ namespace Clowd
 
         [JsonIgnore] public bool IsVideo => String.Equals(ContentKind, "video", StringComparison.OrdinalIgnoreCase);
 
+        // set only on GIF sessions: the recording this session's gif was converted from. It ties the
+        // GIF entry back to its source (so a second conversion finds it instead of starting again)
+        // and marks the entry as already-a-gif.
+        public string SourceVideoPath
+        {
+            get => Get<string>();
+            set
+            {
+                if (Set(value))
+                    OnPropertyChanged(nameof(CanCreateGif));
+            }
+        }
+
+        // a GIF can be made from any video recording except one that is itself a GIF.
+        [JsonIgnore] public bool CanCreateGif => IsVideo && String.IsNullOrEmpty(SourceVideoPath);
+
         public string UploadFileKey
         {
             get => Get<string>();
@@ -166,6 +182,20 @@ namespace Clowd
             }
         }
 
+        // not persisted — the in-flight video→gif conversion filling this session in, set by
+        // GifConversionManager. Non-null only while it runs.
+        [JsonIgnore]
+        public Clowd.UI.Services.GifConversion ActiveGifConversion
+        {
+            get => _activeGifConversion;
+            set
+            {
+                _activeGifConversion = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowNotUploaded));
+            }
+        }
+
         // the full upload history: the persisted list when present, otherwise a single synthesized
         // record from the legacy UploadUrl/UploadFileKey fields (Provider null → not deletable).
         [JsonIgnore]
@@ -184,8 +214,12 @@ namespace Clowd
             }
         }
 
-        [JsonIgnore] public bool ShowNotUploaded => ActiveUpload == null && AllUploads.Length == 0;
+        // a session still being written into has nothing to upload yet, so it says nothing rather
+        // than "Not uploaded" over the top of its own progress row.
+        [JsonIgnore]
+        public bool ShowNotUploaded => ActiveGifConversion == null && ActiveUpload == null && AllUploads.Length == 0;
 
         private Clowd.UI.ActiveUpload _activeUpload;
+        private Clowd.UI.Services.GifConversion _activeGifConversion;
     }
 }

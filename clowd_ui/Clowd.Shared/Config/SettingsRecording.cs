@@ -51,6 +51,23 @@ namespace Clowd.Config
         High = 16,
     }
 
+    /// <summary>
+    /// GIF conversion preset, passed straight through to vid2gif via <c>--quality</c> (the lowercase
+    /// member name is the CLI value). It trades frame rate and dithering fidelity against file size;
+    /// GIFs are palette-limited, so this moves the size far more than a video quality preset does.
+    /// </summary>
+    public enum GifQuality
+    {
+        [Description("Best (20 fps, smoothest dithering, largest file)")]
+        Best,
+
+        [Description("Good (15 fps, balanced)")]
+        Good,
+
+        [Description("Fair (10 fps, smallest file)")]
+        Fair,
+    }
+
     /// <summary>What Clowd shows the user once a recording has been saved.</summary>
     public enum RecordingFinishAction
     {
@@ -217,6 +234,35 @@ namespace Clowd.Config
             set => Set(ref _microphoneDeviceId, value);
         }
 
+        [Category("GIF")]
+        [DisplayName("Quality")]
+        [Description("Quality preset used when converting a recording to a GIF — higher quality means a higher frame rate and finer dithering, and a much larger file")]
+        public GifQuality GifQuality
+        {
+            get => _gifQuality;
+            set => Set(ref _gifQuality, value);
+        }
+
+        [Category("GIF")]
+        [DisplayName("Max width")]
+        [Description("Downscale the GIF so its width does not exceed this many pixels (0 = no limit). Aspect ratio is preserved and a recording is never upscaled; if a max height is set too, whichever limit is more restrictive wins.")]
+        [Range(0, 16384)]
+        public int GifMaxWidth
+        {
+            get => _gifMaxWidth;
+            set => Set(ref _gifMaxWidth, value);
+        }
+
+        [Category("GIF")]
+        [DisplayName("Max height")]
+        [Description("Downscale the GIF so its height does not exceed this many pixels (0 = no limit). Aspect ratio is preserved and a recording is never upscaled; if a max width is set too, whichever limit is more restrictive wins.")]
+        [Range(0, 16384)]
+        public int GifMaxHeight
+        {
+            get => _gifMaxHeight;
+            set => Set(ref _gifMaxHeight, value);
+        }
+
         /// <summary>
         /// Where recordings go until the user picks a folder: the platform Videos/Movies folder,
         /// falling back to ~/Videos on platforms where the shell returns nothing for it (Linux
@@ -251,5 +297,8 @@ namespace Clowd.Config
         private string _outputDirectory = DefaultOutputDirectory;
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private RecordingFinishAction _openWhenFinished = RecordingFinishAction.RecentsPage;
+        private GifQuality _gifQuality = GifQuality.Good;
+        private int _gifMaxWidth = 0;
+        private int _gifMaxHeight = 0;
     }
 }

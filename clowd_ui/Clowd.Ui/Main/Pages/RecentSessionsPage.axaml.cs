@@ -16,7 +16,9 @@ using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Clowd.UI.Helpers;
+using Clowd.UI.Services;
 
 namespace Clowd.UI
 {
@@ -48,6 +50,9 @@ namespace Clowd.UI
         }
 
         private readonly DispatcherTimer _regroupTimer;
+
+        // the row to re-select after a rebuild; see RebuildGroups.
+        private SessionInfo _focusedSession;
 
         public RecentSessionsPage()
         {
@@ -106,6 +111,76 @@ namespace Clowd.UI
 
                 current.Items.Add(session);
             }
+
+            // every group (and so every ListBox, and so every selection) is thrown away here, and
+            // TrulyObservableCollection raises Reset for any session property change — without this
+            // the selected row silently deselects itself moments after the user picked it.
+            if (_focusedSession != null)
+                Dispatcher.UIThread.Post(() => TrySelectSession(_focusedSession, scrollIntoView: false), DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Selects a session's row and scrolls it into view — used to walk the user to the
+        /// entry a gif conversion just created. Safe for a session that is not on the page.</summary>
+        public void FocusSession(SessionInfo session)
+        {
+            if (session == null)
+                return;
+
+            _focusedSession = session;
+
+            // a session created moments ago isn't grouped yet: the rebuild is throttled to 250 ms.
+            if (!Groups.Any(g => g.Items.Contains(session)))
+            {
+                _regroupTimer.Stop();
+                RebuildGroups();
+            }
+
+            // containers for a freshly rebuilt group only exist after the next layout pass.
+            Dispatcher.UIThread.Post(() => TrySelectSession(session, scrollIntoView: true), DispatcherPriority.Loaded);
+        }
+
+        /// <summary>Selects <paramref name="session"/> in whichever group's ListBox holds it. Returns
+        /// false when it is on no list (deleted, or not grouped yet).</summary>
+        private bool TrySelectSession(SessionInfo session, bool scrollIntoView)
+        {
+            if (session == null)
+                return false;
+
+            try
+            {
+                foreach (var listBox in this.GetVisualDescendants().OfType<ListBox>())
+                {
+                    if (listBox.ItemsSource?.OfType<SessionInfo>().Any(s => ReferenceEquals(s, session)) != true)
+                        continue;
+
+                    listBox.SelectedItem = session;
+
+                    if (scrollIntoView)
+                    {
+                        listBox.ScrollIntoView(session);
+                        // the container only exists once the scroll has realized it; bringing it into
+                        // view a second time is what scrolls the *outer* viewer down to its group.
+                        Dispatcher.UIThread.Post(
+                            () => (listBox.ContainerFromItem(session) as Control)?.BringIntoView(),
+                            DispatcherPriority.Loaded);
+                    }
+
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                // purely cosmetic — never let a torn-down list take the page down with it.
+                System.Diagnostics.Debug.WriteLine("Focus session failed: " + ex);
+            }
+
+            return false;
+        }
+
+        private void SessionSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if ((sender as ListBox)?.SelectedItem is SessionInfo session)
+                _focusedSession = session;
         }
 
         // group keys ported from the WPF TimeAgoConverter (PrettyTime approximated locally).
@@ -178,6 +253,15 @@ namespace Clowd.UI
 
         private async System.Threading.Tasks.Task DeleteWithConfirmation(SessionInfo session)
         {
+            // a conversion owns the (incomplete) entry it is writing into: cancelling is what removes
+            // the row, so there is nothing to confirm and nothing finished to lose.
+            var conversion = session.ActiveGifConversion;
+            if (conversion != null)
+            {
+                conversion.Cancel();
+                return;
+            }
+
             if (session.OpenEditor != null)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Information,
@@ -191,9 +275,18 @@ namespace Clowd.UI
                             && !String.IsNullOrEmpty(session.VideoPath)
                             && !IsInsideSessionDirectory(session, session.VideoPath);
 
-            var prompt = videoKept
-                ? $"Remove this recording from Recents? The video file is kept at {session.VideoPath}."
-                : "Delete this capture? It cannot be recovered afterwards.";
+            // a converted gif is written next to the recording it came from, so it takes the same
+            // "kept on disk" wording — just not the word "video".
+            var isGif = !String.IsNullOrEmpty(session.VideoPath)
+                        && session.VideoPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+
+            string prompt;
+            if (!videoKept)
+                prompt = "Delete this capture? It cannot be recovered afterwards.";
+            else if (isGif)
+                prompt = $"Remove this GIF from Recents? The file is kept at {session.VideoPath}.";
+            else
+                prompt = $"Remove this recording from Recents? The video file is kept at {session.VideoPath}.";
 
             if (await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning, prompt))
             {
@@ -218,7 +311,7 @@ namespace Clowd.UI
         private void ViewDoubleClick(object sender, TappedEventArgs e)
         {
             var session = GetSessionFromEvent(sender);
-            if (session == null)
+            if (session == null || session.ActiveGifConversion != null)
                 return;
 
             if (session.IsVideo)
@@ -269,6 +362,9 @@ namespace Clowd.UI
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
+                if (session.ActiveGifConversion != null)
+                    return; // still being written — there is nothing to open yet
+
                 if (session.IsVideo)
                     PlayVideo(session);
                 else if (!session.IsUploadOnly)
@@ -279,6 +375,38 @@ namespace Clowd.UI
                 e.Handled = true;
                 await DeleteWithConfirmation(session);
             }
+        }
+
+        private async void CreateGifClicked(object sender, RoutedEventArgs e)
+        {
+            var session = GetSessionFromEvent(sender);
+            if (session == null)
+                return;
+
+            try
+            {
+                // a recording converts once — asking again just walks the user to the entry it made.
+                var existing = GifConversionManager.FindExisting(session);
+                if (existing != null)
+                {
+                    FocusSession(existing);
+                    return;
+                }
+
+                var created = await GifConversionManager.StartConversionAsync(session);
+                if (created != null)
+                    FocusSession(created);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Create gif failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "recents.create-gif");
+            }
+        }
+
+        private void CancelGifClicked(object sender, RoutedEventArgs e)
+        {
+            ((sender as Control)?.DataContext as GifConversion)?.Cancel();
         }
 
         private void CancelUploadClicked(object sender, RoutedEventArgs e)

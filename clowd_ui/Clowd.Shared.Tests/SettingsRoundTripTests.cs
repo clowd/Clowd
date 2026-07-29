@@ -263,6 +263,33 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void GifOptions_DefaultToBalancedQualityAndNoSizeCap_AndRoundTrip()
+        {
+            // the size caps are passed to vid2gif only when non-zero (its parser rejects 0), so the
+            // default must stay 0 = "no limit" rather than some large sentinel.
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(GifQuality.Good, loaded.Recording.GifQuality);
+            Assert.Equal(0, loaded.Recording.GifMaxWidth);
+            Assert.Equal(0, loaded.Recording.GifMaxHeight);
+
+            var original = new SettingsRoot();
+            original.Recording.GifQuality = GifQuality.Fair; // enum by name
+            original.Recording.GifMaxWidth = 640;
+            original.Recording.GifMaxHeight = 480;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(GifQuality.Fair, loaded.Recording.GifQuality);
+            Assert.Equal(640, loaded.Recording.GifMaxWidth);
+            Assert.Equal(480, loaded.Recording.GifMaxHeight);
+
+            // the lowercase member name is the --quality value vid2gif accepts
+            Assert.Equal("fair", loaded.Recording.GifQuality.ToString().ToLowerInvariant());
+        }
+
+        [Fact]
         public void SimpleKeyGesture_SerializedString_RoundTrips()
         {
             // note: Key.Snapshot and Key.PrintScreen share a value — ToString() yields "PrintScreen",
