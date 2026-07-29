@@ -1,5 +1,6 @@
-//! vid2gif — convert a video (mkv/mp4/…) into an optimized GIF using the
-//! FFmpeg binaries bundled next to obs-express.
+//! vid2gif — convert a video (mkv/mp4/…) into an optimized GIF by linking the
+//! FFmpeg libraries bundled next to obs-express (no subprocesses, no separate
+//! ffmpeg binary).
 //!
 //! Stdout protocol (one message per line, nothing else is ever printed):
 //!
@@ -11,25 +12,20 @@
 //! ```
 //!
 //! Stdin protocol: writing `quit\n` cancels the conversion — the in-flight
-//! ffmpeg stage is killed, temp files and any partial output are removed, and
-//! the final message is `cancelled`.
+//! pass stops within one packet, any partial output is removed, and the final
+//! message is `cancelled`.
 //!
-//! The conversion runs as three ffmpeg passes rather than the classic two so
-//! that progress streams smoothly and the source is decoded only once:
-//!
-//! A. input → small lossless intermediate with fps/scale baked in (progress
-//!    streams; a palette output in the same run would suppress ffmpeg's
-//!    periodic `-progress` reports until its encoder initializes at EOF);
-//! B. intermediate → 256-color palette (cheap: runs at output size);
-//! C. intermediate + palette → GIF (progress streams).
+//! The conversion is the classic two-pass palette pipeline, in process:
+//! pass 1 (`fps[,scale],palettegen`) keeps the single palette frame in
+//! memory; pass 2 re-decodes the input through `paletteuse` into the GIF
+//! encoder. Progress derives from input frame timestamps, so it streams
+//! smoothly through both passes.
 
 mod cancel;
+mod convert;
 mod presets;
-mod probe;
 mod progress;
-mod tools;
 
-use std::ffi::OsString;
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
 
@@ -38,21 +34,12 @@ use clap::Parser;
 
 use cancel::{CancelToken, Cancelled};
 use presets::Quality;
-use progress::StageProgress;
-use tools::Tools;
-
-/// Overall-percent slices per stage: (base, span). Rough wall-time weights
-/// measured on a 1080p input; B reports only on completion either way.
-const STAGE_A: (u32, u32) = (0, 45);
-const STAGE_B: (u32, u32) = (45, 20);
-const STAGE_C: (u32, u32) = (65, 35);
 
 /// Convert a video file to an optimized GIF.
 ///
-/// Uses the ffmpeg/ffprobe bundled next to this executable (override the
-/// directory with the VID2GIF_TOOLS_DIR environment variable). Progress is
-/// reported on stdout as `progress <percent>` lines followed by a final
-/// `done <path> <bytes>` or `error <message>` line.
+/// Progress is reported on stdout as `progress <percent>` lines followed by a
+/// final `done <path> <bytes>` or `error <message>` line. Writing `quit` to
+/// stdin cancels.
 #[derive(Parser)]
 #[command(version)]
 struct Args {
@@ -82,6 +69,7 @@ struct Args {
 
 fn main() {
     let args = Args::parse();
+    convert::silence_info_logging();
     let cancel = CancelToken::new();
     spawn_stdin_watcher(cancel.clone());
     let mut emitter = Emitter::new();
@@ -90,7 +78,7 @@ fn main() {
             println!("done {} {bytes}", path.display());
         }
         Err(e) if e.downcast_ref::<Cancelled>().is_some() => {
-            // Remove any partial output (stage C may have been mid-write).
+            // Remove any partial output (pass 2 may have been mid-write).
             if let Ok(output) = derive_output(&args.input, args.output.as_deref()) {
                 let _ = std::fs::remove_file(output);
             }
@@ -122,10 +110,8 @@ fn run(args: &Args, emitter: &mut Emitter, cancel: &CancelToken) -> Result<(Path
     if !args.input.is_file() {
         bail!("input file not found: {}", args.input.display());
     }
-    let tools = Tools::locate()?;
     let output = derive_output(&args.input, args.output.as_deref())?;
-    let info = tools
-        .probe(&args.input)
+    let info = convert::probe(&args.input)
         .with_context(|| format!("could not read {}", args.input.display()))?;
 
     let fps = args.fps.unwrap_or(args.quality.fps());
@@ -137,100 +123,21 @@ fn run(args: &Args, emitter: &mut Emitter, cancel: &CancelToken) -> Result<(Path
             .with_context(|| format!("could not create {}", parent.display()))?;
     }
 
-    let work = WorkDir::create()?;
-    let mid = work.join("intermediate.mkv");
-    let pal = work.join("palette.png");
-
     emitter.emit(0);
-
-    // Stage A: decode the source once, bake in fps + scale, keep it lossless
-    // (x264 qp 0; 4:4:4 so chroma survives for palette generation).
-    let mut stage = StageProgress::new(STAGE_A.0, STAGE_A.1, info.duration_us);
-    tools
-        .run_ffmpeg(
-            args_a(&args.input, fps, scale_width, &mid),
-            &mut stage,
-            &mut |p| emitter.emit(p),
-            cancel,
-        )
-        .context("transcode stage failed")?;
-    emitter.emit(STAGE_A.0 + STAGE_A.1);
-
-    // Stage B: one global palette from the (small) intermediate.
-    let mut stage = StageProgress::new(STAGE_B.0, STAGE_B.1, info.duration_us);
-    tools
-        .run_ffmpeg(
-            args_b(&mid, &pal),
-            &mut stage,
-            &mut |p| emitter.emit(p),
-            cancel,
-        )
-        .context("palette stage failed")?;
-    emitter.emit(STAGE_B.0 + STAGE_B.1);
-
-    // Stage C: dither the intermediate through the palette into the GIF.
-    let mut stage = StageProgress::new(STAGE_C.0, STAGE_C.1, info.duration_us);
-    tools
-        .run_ffmpeg(
-            args_c(&mid, &pal, args.quality, &output),
-            &mut stage,
-            &mut |p| emitter.emit(p),
-            cancel,
-        )
-        .context("gif stage failed")?;
+    convert::run(
+        &args.input,
+        &output,
+        &presets::pass1_graph(fps, scale_width),
+        &presets::pass2_graph(fps, scale_width, args.quality),
+        cancel,
+        &mut |p| emitter.emit(p),
+    )?;
     emitter.emit(100);
 
     let bytes = std::fs::metadata(&output)
         .with_context(|| format!("output missing after conversion: {}", output.display()))?
         .len();
     Ok((output, bytes))
-}
-
-fn args_a(input: &Path, fps: u32, scale_width: Option<u32>, mid: &Path) -> Vec<OsString> {
-    vec![
-        "-i".into(),
-        input.into(),
-        "-vf".into(),
-        presets::intermediate_vf(fps, scale_width).into(),
-        "-c:v".into(),
-        "libx264".into(),
-        "-preset".into(),
-        "ultrafast".into(),
-        "-qp".into(),
-        "0".into(),
-        "-pix_fmt".into(),
-        "yuv444p".into(),
-        "-y".into(),
-        mid.into(),
-    ]
-}
-
-fn args_b(mid: &Path, pal: &Path) -> Vec<OsString> {
-    vec![
-        "-i".into(),
-        mid.into(),
-        "-vf".into(),
-        presets::palettegen_vf().into(),
-        "-update".into(),
-        "1".into(),
-        "-y".into(),
-        pal.into(),
-    ]
-}
-
-fn args_c(mid: &Path, pal: &Path, quality: Quality, output: &Path) -> Vec<OsString> {
-    vec![
-        "-i".into(),
-        mid.into(),
-        "-i".into(),
-        pal.into(),
-        "-lavfi".into(),
-        presets::paletteuse_lavfi(quality).into(),
-        "-f".into(),
-        "gif".into(),
-        "-y".into(),
-        output.into(),
-    ]
 }
 
 fn derive_output(input: &Path, explicit: Option<&Path>) -> Result<PathBuf> {
@@ -275,8 +182,8 @@ impl Emitter {
     }
 }
 
-/// Collapses a (possibly multi-line ffmpeg stderr) message onto one bounded
-/// line so it can't break the line-oriented stdout protocol.
+/// Collapses a possibly multi-line error message onto one bounded line so it
+/// can't break the line-oriented stdout protocol.
 fn single_line(msg: &str) -> String {
     let mut out = msg.split_whitespace().collect::<Vec<_>>().join(" ");
     const MAX: usize = 500;
@@ -284,29 +191,6 @@ fn single_line(msg: &str) -> String {
         out = out.chars().take(MAX).collect::<String>() + "…";
     }
     out
-}
-
-/// Temp dir for the intermediate + palette; removed on drop (including the
-/// error path, since `run` returns before `main` prints).
-struct WorkDir(PathBuf);
-
-impl WorkDir {
-    fn create() -> Result<WorkDir> {
-        let dir = std::env::temp_dir().join(format!("vid2gif-{}", std::process::id()));
-        std::fs::create_dir_all(&dir)
-            .with_context(|| format!("could not create temp dir {}", dir.display()))?;
-        Ok(WorkDir(dir))
-    }
-
-    fn join(&self, name: &str) -> PathBuf {
-        self.0.join(name)
-    }
-}
-
-impl Drop for WorkDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.0);
-    }
 }
 
 #[cfg(test)]

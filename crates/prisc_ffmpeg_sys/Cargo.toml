@@ -1,0 +1,15 @@
+[package]
+name = "ffmpeg-sys"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+# The bindgen output carries FFmpeg's C header comments; rustdoc would try to
+# run their embedded C examples as doctests.
+doctest = false
+
+[dependencies]
+libc = { workspace = true }
+
+[build-dependencies]
+bindgen = { workspace = true }

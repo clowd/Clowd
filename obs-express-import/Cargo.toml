@@ -1,12 +1,19 @@
 [workspace]
 resolver = "2"
-members = ["crates/obs-sys", "crates/obs", "crates/obs-express", "crates/vid2gif"]
+members = [
+    "crates/obs-sys",
+    "crates/obs",
+    "crates/obs-express",
+    "crates/ffmpeg-sys",
+    "crates/vid2gif",
+]
 
 [workspace.dependencies]
 # Internal crates. Path deps declared once here; members inherit via
 # `{ workspace = true }`. Paths are relative to the workspace root.
 obs-sys = { path = "crates/obs-sys" }
 obs = { path = "crates/obs" }
+ffmpeg-sys = { path = "crates/ffmpeg-sys" }
 
 # External crates. Versions (and shared feature sets) live here only; members
 # declare `{ workspace = true }`.

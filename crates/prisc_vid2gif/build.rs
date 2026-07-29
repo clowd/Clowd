@@ -2,13 +2,31 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// Copies the obs-deps FFmpeg CLI binaries (small shims over the av*.dll
-/// runtime that obs-express already bundles) next to vid2gif.exe.
+/// Runtime plumbing for the FFmpeg libraries vid2gif links (via ffmpeg-sys):
+///
+/// - Windows: copy the FFmpeg DLLs (and their dependency DLLs) from the
+///   obs-deps bundle next to the binary AND into the `deps` dir, so both
+///   `vid2gif.exe` and the cargo test executables load without PATH setup.
+/// - macOS: add rpaths so the dylibs resolve from the obs-deps bundle during
+///   development and from `@executable_path/Frameworks` in the shipped
+///   bundle (the release staging strips the absolute rpath).
 fn main() {
-    if env::var("CARGO_CFG_TARGET_OS").as_deref() != Ok("windows") {
-        return; // macOS bundling is handled by the release packaging, not here
-    }
+    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let repo_root = manifest_dir
+        .ancestors()
+        .find(|p| p.join("obs-studio").exists())
+        .expect("could not find repo root (no obs-studio dir in ancestors)")
+        .to_path_buf();
+    let deps_root = repo_root.join("obs-studio").join(".deps");
 
+    match env::var("CARGO_CFG_TARGET_OS").as_deref() {
+        Ok("windows") => windows(&deps_root),
+        Ok("macos") => macos(&deps_root),
+        _ => {}
+    }
+}
+
+fn windows(deps_root: &Path) {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     // OUT_DIR = target/{debug,release}/build/vid2gif-<hash>/out
     let profile_dir = out_dir
@@ -17,25 +35,33 @@ fn main() {
         .expect("could not resolve the cargo profile dir from OUT_DIR")
         .to_path_buf();
 
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo_root = manifest_dir
-        .ancestors()
-        .find(|p| p.join("obs-studio").exists())
-        .expect("could not find repo root (no obs-studio dir in ancestors)")
-        .to_path_buf();
-
-    let Some(deps_bin) = find_deps_bin(&repo_root.join("obs-studio").join(".deps")) else {
-        println!(
-            "cargo:warning=vid2gif: obs-deps bundle not found; ffmpeg.exe/ffprobe.exe not copied"
-        );
+    let Some(deps_bin) = find_deps_subdir(deps_root, "bin") else {
+        println!("cargo:warning=vid2gif: obs-deps bundle not found; runtime DLLs not copied");
         return;
     };
 
-    for name in ["ffmpeg.exe", "ffprobe.exe"] {
+    // The four linked FFmpeg DLLs plus everything they import.
+    let dlls = [
+        "avcodec-61.dll",
+        "avformat-61.dll",
+        "avutil-59.dll",
+        "avfilter-10.dll",
+        "swscale-8.dll",
+        "swresample-5.dll",
+        "zlib.dll",
+        "libx264-164.dll",
+        "libcurl.dll",
+        "librist.dll",
+        "srt.dll",
+    ];
+    for name in dlls {
         let src = deps_bin.join(name);
+        // A missing path forces a re-run on the next build, self-healing the
+        // fresh-checkout case where the deps download races this script.
         println!("cargo:rerun-if-changed={}", src.display());
         if src.exists() {
             copy_if_newer(&src, &profile_dir.join(name));
+            copy_if_newer(&src, &profile_dir.join("deps").join(name));
         } else {
             println!(
                 "cargo:warning=vid2gif: not found in obs-deps: {}",
@@ -45,13 +71,20 @@ fn main() {
     }
 }
 
-fn find_deps_bin(deps_dir: &Path) -> Option<PathBuf> {
-    for entry in fs::read_dir(deps_dir).ok()?.flatten() {
+fn macos(deps_root: &Path) {
+    if let Some(deps_lib) = find_deps_subdir(deps_root, "lib") {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
+    }
+    println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/Frameworks");
+}
+
+fn find_deps_subdir(deps_root: &Path, sub: &str) -> Option<PathBuf> {
+    for entry in fs::read_dir(deps_root).ok()?.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let bin = entry.path().join("bin");
-            if bin.exists() {
-                return Some(bin);
+            let dir = entry.path().join(sub);
+            if dir.exists() {
+                return Some(dir);
             }
         }
     }
@@ -75,6 +108,9 @@ fn copy_if_newer(src: &Path, dst: &Path) {
     };
 
     if should_copy {
+        if let Some(parent) = dst.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
         if let Err(e) = fs::copy(src, dst) {
             println!(
                 "cargo:warning=vid2gif: failed to copy {} -> {}: {e}",
