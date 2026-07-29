@@ -194,7 +194,7 @@ quit                      ->
 
 ## vid2gif
 
-A companion CLI (`vid2gif.exe`, built from `crates/vid2gif`) that converts a recording (or any video FFmpeg can decode) into an optimized palette-based GIF. It wraps the `ffmpeg.exe`/`ffprobe.exe` shipped in the obs-deps bundle — small shims over the same `av*.dll` runtime already bundled next to `obs-express` — so it adds ~0.5 MB to the distribution.
+A companion CLI (`vid2gif`, built from `crates/vid2gif`) that converts a recording (or any video FFmpeg can decode) into an optimized palette-based GIF. It links the FFmpeg libraries already bundled next to `obs-express` (`avformat`/`avcodec`/`avfilter`/`avutil`, via the bindgen-based `crates/ffmpeg-sys`) and runs the classic two-pass palette pipeline in process — no subprocesses, no separate ffmpeg binary, on **every** supported platform. Bindings are generated from the obs-deps headers at build time, so an FFmpeg version bump that changes the ABI fails the build instead of the runtime. The test suite is self-contained (committed fixtures, generated raw-video inputs, and a GIF byte-stream validator) and the release staging fails hard if `vid2gif` or its libraries are missing from the bundle.
 
 ```sh
 vid2gif input.mkv                          # writes input.gif
@@ -207,7 +207,7 @@ vid2gif input.mkv --max-width 480 --fps 12 # aspect-preserving clamps; never ups
 - Stdout is a line protocol for a parent process: `progress <0-100>` lines (monotonic), then `done <path> <bytes>`, or `error <message>` with exit code 1.
 - Writing `quit\n` to stdin cancels the conversion: the in-flight ffmpeg is killed, temp files and any partial output are removed, and vid2gif prints `cancelled` and exits 0.
 
-The conversion runs as three ffmpeg passes (fps/scale into a lossless intermediate → palette generation → palette-mapped GIF) so the expensive source decode happens once and progress streams smoothly. `ffmpeg`/`ffprobe` are resolved next to `vid2gif` itself (override with `VID2GIF_TOOLS_DIR`).
+The conversion is two in-process passes (fps/scale + `palettegen`, then `paletteuse` into the GIF encoder) with the palette kept in memory — no temp files. Progress derives from input frame timestamps, so it streams smoothly through both passes.
 
 ## Building
 

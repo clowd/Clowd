@@ -1,8 +1,6 @@
-//! Quality presets and the FFmpeg filter strings for each conversion stage.
-//!
-//! The pipeline is three ffmpeg invocations (see main.rs): fps/scale are baked
-//! into a small lossless intermediate first, so the palette stages — which are
-//! the expensive part at full resolution — always run on small frames.
+//! Quality presets, output sizing, and the filter-graph strings for the two
+//! conversion passes. The graph strings use the same syntax as the ffmpeg
+//! CLI — `avfilter_graph_parse_ptr` accepts them verbatim.
 
 use clap::ValueEnum;
 
@@ -36,21 +34,11 @@ impl Quality {
     }
 }
 
-/// Stage A (`-vf`): resample to the target fps, optionally downscale.
-/// `scale` uses `-2` (not `-1`) for the height so the x264 intermediate never
-/// sees an odd dimension.
-pub fn intermediate_vf(fps: u32, scale_width: Option<u32>) -> String {
-    match scale_width {
-        Some(w) => format!("fps={fps},scale={w}:-2:flags=lanczos"),
-        None => format!("fps={fps}"),
-    }
-}
-
 /// Resolves the `--max-width`/`--max-height` clamps against the source size:
 /// aspect is preserved, the more restrictive clamp wins, and the result is
 /// `None` when no downscale is needed (never upscales — same contract as
-/// obs-express's recording resolution cap). The returned width is floored to
-/// even so `scale=W:-2` keeps both output dimensions near the clamp.
+/// obs-express's recording resolution cap). The width is floored to even,
+/// which keeps output dimensions stable and predictable.
 pub fn clamp_width(src_w: u32, src_h: u32, max_w: Option<u32>, max_h: Option<u32>) -> Option<u32> {
     let fw = max_w.map(|m| m as f64 / src_w as f64);
     let fh = max_h.map(|m| m as f64 / src_h as f64);
@@ -67,19 +55,30 @@ pub fn clamp_width(src_w: u32, src_h: u32, max_w: Option<u32>, max_h: Option<u32
     Some(w.max(2))
 }
 
-/// Stage B (`-vf`): build one global 256-color palette. `stats_mode=diff`
-/// weights pixels that change between frames, which favors the moving content
-/// of a screen recording over its static background.
-pub fn palettegen_vf() -> &'static str {
-    "palettegen=stats_mode=diff"
+/// The shared fps/scale front of both passes.
+fn chain(fps: u32, scale_width: Option<u32>) -> String {
+    match scale_width {
+        Some(w) => format!("fps={fps},scale={w}:-1:flags=lanczos"),
+        None => format!("fps={fps}"),
+    }
 }
 
-/// Stage C (`-lavfi`): map frames onto the palette. `diff_mode=rectangle`
-/// re-dithers only the changed region of each frame, which both shrinks the
-/// file and avoids shimmering in static areas.
-pub fn paletteuse_lavfi(quality: Quality) -> String {
+/// Pass 1 (single input → single output, default `in`/`out` labels): resample
+/// and build one global 256-color palette. `stats_mode=diff` weights pixels
+/// that change between frames, which favors the moving content of a screen
+/// recording over its static background.
+pub fn pass1_graph(fps: u32, scale_width: Option<u32>) -> String {
+    format!("{},palettegen=stats_mode=diff", chain(fps, scale_width))
+}
+
+/// Pass 2 (video + palette inputs, labeled `vid`/`pal` → `out`): resample and
+/// map frames onto the palette. `diff_mode=rectangle` re-dithers only the
+/// changed region of each frame, which both shrinks the file and avoids
+/// shimmering in static areas.
+pub fn pass2_graph(fps: u32, scale_width: Option<u32>, quality: Quality) -> String {
     format!(
-        "[0:v][1:v]paletteuse=dither={}:diff_mode=rectangle",
+        "[vid]{}[x];[x][pal]paletteuse=dither={}:diff_mode=rectangle[out]",
+        chain(fps, scale_width),
         quality.dither()
     )
 }
@@ -95,16 +94,29 @@ mod tests {
     }
 
     #[test]
-    fn intermediate_vf_without_scale() {
-        assert_eq!(intermediate_vf(15, None), "fps=15");
+    fn pass1_graph_without_scale() {
+        assert_eq!(pass1_graph(15, None), "fps=15,palettegen=stats_mode=diff");
     }
 
     #[test]
-    fn intermediate_vf_with_scale() {
+    fn pass1_graph_with_scale() {
         assert_eq!(
-            intermediate_vf(20, Some(480)),
-            "fps=20,scale=480:-2:flags=lanczos"
+            pass1_graph(20, Some(480)),
+            "fps=20,scale=480:-1:flags=lanczos,palettegen=stats_mode=diff"
         );
+    }
+
+    #[test]
+    fn pass2_graph_per_quality() {
+        assert_eq!(
+            pass2_graph(15, None, Quality::Good),
+            "[vid]fps=15[x];[x][pal]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle[out]"
+        );
+        assert_eq!(
+            pass2_graph(20, Some(480), Quality::Best),
+            "[vid]fps=20,scale=480:-1:flags=lanczos[x];[x][pal]paletteuse=dither=sierra2_4a:diff_mode=rectangle[out]"
+        );
+        assert!(pass2_graph(10, None, Quality::Fair).contains("bayer_scale=5"));
     }
 
     #[test]
@@ -143,21 +155,5 @@ mod tests {
         // 1920 * (500/1080) = 888.9 -> floored to even 888
         assert_eq!(clamp_width(1920, 1080, None, Some(500)), Some(888));
         assert_eq!(clamp_width(100, 100, Some(1), None), Some(2));
-    }
-
-    #[test]
-    fn paletteuse_per_quality() {
-        assert_eq!(
-            paletteuse_lavfi(Quality::Best),
-            "[0:v][1:v]paletteuse=dither=sierra2_4a:diff_mode=rectangle"
-        );
-        assert_eq!(
-            paletteuse_lavfi(Quality::Good),
-            "[0:v][1:v]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle"
-        );
-        assert_eq!(
-            paletteuse_lavfi(Quality::Fair),
-            "[0:v][1:v]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle"
-        );
     }
 }

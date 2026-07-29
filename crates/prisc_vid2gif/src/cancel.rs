@@ -1,11 +1,9 @@
-//! Cooperative cancellation. The stdin watcher trips the token; each ffmpeg
-//! stage checks it on entry and registers its child as the kill target, so a
-//! cancel unblocks the stage's stdout read immediately instead of waiting for
-//! the stage to finish.
+//! Cooperative cancellation: the stdin watcher trips the token and the
+//! conversion loops check it between packets, so a cancel takes effect within
+//! one packet's worth of work.
 
-use std::process::Child;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 /// Sentinel error carried through anyhow when the user cancelled; `main`
 /// downcasts to it to distinguish cancellation from real failures.
@@ -21,49 +19,19 @@ impl std::fmt::Display for Cancelled {
 impl std::error::Error for Cancelled {}
 
 #[derive(Clone)]
-pub struct CancelToken(Arc<Inner>);
-
-struct Inner {
-    requested: AtomicBool,
-    active: Mutex<Option<Child>>,
-}
+pub struct CancelToken(Arc<AtomicBool>);
 
 impl CancelToken {
     pub fn new() -> CancelToken {
-        CancelToken(Arc::new(Inner {
-            requested: AtomicBool::new(false),
-            active: Mutex::new(None),
-        }))
+        CancelToken(Arc::new(AtomicBool::new(false)))
     }
 
-    /// Trips the token and kills the active ffmpeg child, if any.
     pub fn cancel(&self) {
-        self.0.requested.store(true, Ordering::SeqCst);
-        self.kill_active();
+        self.0.store(true, Ordering::SeqCst);
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.0.requested.load(Ordering::SeqCst)
-    }
-
-    /// Makes `child` the kill target. A cancel that landed between spawn and
-    /// registration is applied here, closing that race.
-    pub fn register(&self, child: Child) {
-        *self.0.active.lock().unwrap() = Some(child);
-        if self.is_cancelled() {
-            self.kill_active();
-        }
-    }
-
-    /// Takes the child back for waiting; the token no longer kills it.
-    pub fn take(&self) -> Option<Child> {
-        self.0.active.lock().unwrap().take()
-    }
-
-    fn kill_active(&self) {
-        if let Some(child) = self.0.active.lock().unwrap().as_mut() {
-            let _ = child.kill();
-        }
+        self.0.load(Ordering::SeqCst)
     }
 }
 
@@ -77,7 +45,7 @@ mod tests {
         assert!(!token.is_cancelled());
         token.cancel();
         assert!(token.is_cancelled());
-        token.cancel(); // idempotent, no active child to kill
+        token.cancel(); // idempotent
         assert!(token.is_cancelled());
     }
 
@@ -87,10 +55,5 @@ mod tests {
         let clone = token.clone();
         clone.cancel();
         assert!(token.is_cancelled());
-    }
-
-    #[test]
-    fn take_without_register_is_none() {
-        assert!(CancelToken::new().take().is_none());
     }
 }

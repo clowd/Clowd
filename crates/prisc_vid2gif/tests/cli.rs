@@ -1,8 +1,8 @@
-//! End-to-end CLI tests: run the real vid2gif binary against the real FFmpeg
-//! from the obs-deps bundle (`obs-studio/.deps`), pointed at via
-//! VID2GIF_TOOLS_DIR so no assembled profile dir is required. On a checkout
-//! where the deps bundle has not been downloaded yet, each test skips with a
-//! note instead of failing.
+//! End-to-end CLI tests. vid2gif links the bundled FFmpeg libraries directly,
+//! so these tests are fully self-contained: container inputs come from small
+//! committed fixtures (tests/fixtures/), raw inputs are generated on the fly
+//! as Y4M, and outputs are validated by parsing the GIF byte stream — no
+//! external tools involved.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -12,42 +12,11 @@ use std::process::{Command, Stdio};
 // Harness
 // ---------------------------------------------------------------------------
 
-fn exe(name: &str) -> String {
-    format!("{name}{}", std::env::consts::EXE_SUFFIX)
-}
-
-/// Locates `obs-studio/.deps/obs-deps-*/bin` by walking up from this crate.
-fn deps_bin() -> Option<PathBuf> {
-    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    loop {
-        let deps = dir.join("obs-studio").join(".deps");
-        if deps.is_dir() {
-            for entry in std::fs::read_dir(&deps).ok()?.flatten() {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if name.starts_with("obs-deps-") && !name.contains("qt6") {
-                    let bin = entry.path().join("bin");
-                    if bin.join(exe("ffmpeg")).is_file() && bin.join(exe("ffprobe")).is_file() {
-                        return Some(bin);
-                    }
-                }
-            }
-        }
-        if !dir.pop() {
-            return None;
-        }
-    }
-}
-
-macro_rules! require_tools {
-    () => {
-        match deps_bin() {
-            Some(b) => b,
-            None => {
-                eprintln!("skipping: obs-deps FFmpeg bundle not found");
-                return;
-            }
-        }
-    };
+fn fixture(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests")
+        .join("fixtures")
+        .join(name)
 }
 
 /// Fresh per-test temp dir (removed up-front so reruns start clean).
@@ -58,39 +27,38 @@ fn test_dir(name: &str) -> PathBuf {
     dir
 }
 
-/// Generates a short H.264 clip with the bundled ffmpeg. The container is
-/// inferred from `out`'s extension (.mp4 / .mkv).
-fn gen_clip(tools: &Path, out: &Path, size: &str, seconds: u32) {
-    let status = Command::new(tools.join(exe("ffmpeg")))
-        .args([
-            "-hide_banner",
-            "-v",
-            "error",
-            "-nostdin",
-            "-f",
-            "lavfi",
-            "-i",
-        ])
-        .arg(format!("testsrc2=duration={seconds}:size={size}:rate=30"))
-        .args([
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-pix_fmt",
-            "yuv420p",
-            "-y",
-        ])
-        .arg(out)
-        .status()
-        .expect("spawn ffmpeg");
-    assert!(status.success(), "failed to generate test clip {out:?}");
+/// Writes a raw Y4M clip (moving gradient bands) — decodable by FFmpeg on
+/// every platform with no codec involved.
+fn write_y4m(path: &Path, w: usize, h: usize, fps: u32, seconds: u32) {
+    use std::io::BufWriter;
+    let mut f = BufWriter::new(std::fs::File::create(path).unwrap());
+    write!(f, "YUV4MPEG2 W{w} H{h} F{fps}:1 Ip A1:1 C420mpeg2\n").unwrap();
+    let (cw, ch) = (w / 2, h / 2);
+    let mut y_plane = vec![0u8; w * h];
+    let mut u_plane = vec![0u8; cw * ch];
+    let mut v_plane = vec![0u8; cw * ch];
+    for t in 0..(fps as usize * seconds as usize) {
+        for yy in 0..h {
+            for xx in 0..w {
+                y_plane[yy * w + xx] = ((xx / 2 + yy / 2 + t * 7) & 0xFF) as u8;
+            }
+        }
+        for yy in 0..ch {
+            for xx in 0..cw {
+                u_plane[yy * cw + xx] = ((xx * 2 + t * 5) & 0xFF) as u8;
+                v_plane[yy * cw + xx] = ((yy * 2 + t * 3) & 0xFF) as u8;
+            }
+        }
+        f.write_all(b"FRAME\n").unwrap();
+        f.write_all(&y_plane).unwrap();
+        f.write_all(&u_plane).unwrap();
+        f.write_all(&v_plane).unwrap();
+    }
 }
 
 /// Runs vid2gif and returns (success, parsed stdout protocol messages).
-fn run_vid2gif(tools: &Path, args: &[&std::ffi::OsStr]) -> (bool, Vec<Msg>) {
+fn run_vid2gif(args: &[&std::ffi::OsStr]) -> (bool, Vec<Msg>) {
     let out = Command::new(env!("CARGO_BIN_EXE_vid2gif"))
-        .env("VID2GIF_TOOLS_DIR", tools)
         .args(args)
         .output()
         .expect("spawn vid2gif");
@@ -138,7 +106,7 @@ fn parse_protocol(stdout: &str) -> Vec<Msg> {
 
 /// Asserts the happy-path protocol shape and returns the `done` payload:
 /// progress lines strictly increasing from 0 to exactly 100, then one final
-/// `done`, and no `error` lines anywhere.
+/// `done`, and no `error`/`cancelled` lines anywhere.
 fn expect_success(msgs: &[Msg]) -> (PathBuf, u64) {
     let mut progress = Vec::new();
     for (i, m) in msgs.iter().enumerate() {
@@ -173,9 +141,13 @@ fn expect_success(msgs: &[Msg]) -> (PathBuf, u64) {
     }
 }
 
-/// Minimal GIF header validation: magic + logical screen dimensions.
+// ---------------------------------------------------------------------------
+// GIF validation (byte-level, no external tools)
+// ---------------------------------------------------------------------------
+
+/// GIF header magic + logical screen dimensions.
 fn gif_dims(data: &[u8]) -> (u16, u16) {
-    assert!(data.len() > 10, "gif too small: {} bytes", data.len());
+    assert!(data.len() > 13, "gif too small: {} bytes", data.len());
     assert_eq!(&data[..6], b"GIF89a", "bad gif magic");
     (
         u16::from_le_bytes([data[6], data[7]]),
@@ -183,30 +155,47 @@ fn gif_dims(data: &[u8]) -> (u16, u16) {
     )
 }
 
-/// Decodes the GIF with the bundled ffprobe and counts its frames.
-fn gif_frames(tools: &Path, gif: &Path) -> u64 {
-    let out = Command::new(tools.join(exe("ffprobe")))
-        .args([
-            "-v",
-            "error",
-            "-count_frames",
-            "-select_streams",
-            "v:0",
-            "-show_entries",
-            "stream=nb_read_frames",
-            "-of",
-            "json",
-        ])
-        .arg(gif)
-        .output()
-        .expect("spawn ffprobe");
-    assert!(out.status.success(), "ffprobe failed on {gif:?}");
-    let v: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
-    v["streams"][0]["nb_read_frames"]
-        .as_str()
-        .expect("nb_read_frames")
-        .parse()
-        .unwrap()
+/// Walks the GIF block structure and counts image frames. Panics on any
+/// malformed block, so it doubles as a structural integrity check down to the
+/// trailer byte.
+fn gif_frame_count(data: &[u8]) -> usize {
+    gif_dims(data);
+    let mut pos = 6;
+    let flags = data[pos + 4];
+    pos += 7; // logical screen descriptor
+    if flags & 0x80 != 0 {
+        pos += 3 << ((flags & 0x07) as usize + 1); // global color table
+    }
+    let mut frames = 0;
+    loop {
+        match data[pos] {
+            0x21 => {
+                // extension: introducer + label, then length-prefixed sub-blocks
+                pos += 2;
+                while data[pos] != 0 {
+                    pos += data[pos] as usize + 1;
+                }
+                pos += 1;
+            }
+            0x2C => {
+                // image descriptor
+                let f = data[pos + 9];
+                pos += 10;
+                if f & 0x80 != 0 {
+                    pos += 3 << ((f & 0x07) as usize + 1); // local color table
+                }
+                pos += 1; // LZW minimum code size
+                while data[pos] != 0 {
+                    pos += data[pos] as usize + 1;
+                }
+                pos += 1;
+                frames += 1;
+            }
+            0x3B => break, // trailer
+            other => panic!("unexpected GIF block 0x{other:02X} at offset {pos}"),
+        }
+    }
+    frames
 }
 
 // ---------------------------------------------------------------------------
@@ -215,15 +204,11 @@ fn gif_frames(tools: &Path, gif: &Path) -> u64 {
 
 #[test]
 fn converts_mp4_with_valid_protocol_and_output() {
-    let tools = require_tools!();
     let dir = test_dir("mp4");
     let clip = dir.join("clip.mp4");
-    gen_clip(&tools, &clip, "160x120", 2);
+    std::fs::copy(fixture("clip.mp4"), &clip).unwrap();
 
-    let (ok, msgs) = run_vid2gif(
-        &tools,
-        &[clip.as_os_str(), "--quality".as_ref(), "fair".as_ref()],
-    );
+    let (ok, msgs) = run_vid2gif(&[clip.as_os_str(), "--quality".as_ref(), "fair".as_ref()]);
     assert!(ok, "vid2gif failed: {msgs:?}");
     let (path, bytes) = expect_success(&msgs);
 
@@ -238,7 +223,7 @@ fn converts_mp4_with_valid_protocol_and_output() {
     assert_eq!(gif_dims(&data), (160, 120), "no scaling requested");
 
     // 2 s at the `fair` preset's 10 fps ≈ 20 frames.
-    let frames = gif_frames(&tools, &path);
+    let frames = gif_frame_count(&data);
     assert!(
         (15..=25).contains(&frames),
         "unexpected frame count {frames}"
@@ -246,17 +231,43 @@ fn converts_mp4_with_valid_protocol_and_output() {
 }
 
 #[test]
+fn mkv_input_explicit_output_with_spaces_best_quality() {
+    let dir = test_dir("mkv");
+
+    // Exercise the done-line parsing with a space in the output path.
+    let out = dir.join("my clips").join("out put.gif");
+    let input = fixture("clip.mkv");
+    let (ok, msgs) = run_vid2gif(&[
+        input.as_os_str(),
+        out.as_os_str(),
+        "--quality".as_ref(),
+        "best".as_ref(),
+    ]);
+    assert!(ok, "vid2gif failed: {msgs:?}");
+    let (path, bytes) = expect_success(&msgs);
+    assert_eq!(path, out);
+    assert_eq!(bytes, std::fs::metadata(&out).unwrap().len());
+
+    // 2 s at the `best` preset's 20 fps ≈ 40 frames.
+    let data = std::fs::read(&out).unwrap();
+    let frames = gif_frame_count(&data);
+    assert!(
+        (30..=50).contains(&frames),
+        "unexpected frame count {frames}"
+    );
+}
+
+#[test]
 fn max_width_and_height_clamp_most_restrictive() {
-    let tools = require_tools!();
     let dir = test_dir("clamp");
-    let clip = dir.join("clip.mp4");
-    gen_clip(&tools, &clip, "320x240", 1);
+    let clip = dir.join("clip.y4m");
+    write_y4m(&clip, 320, 240, 15, 1);
 
     let convert = |extra: &[&str], out: &str| -> (u16, u16) {
         let out_path = dir.join(out);
         let mut args: Vec<&std::ffi::OsStr> = vec![clip.as_os_str(), out_path.as_os_str()];
         args.extend(extra.iter().map(|s| -> &std::ffi::OsStr { s.as_ref() }));
-        let (ok, msgs) = run_vid2gif(&tools, &args);
+        let (ok, msgs) = run_vid2gif(&args);
         assert!(ok, "vid2gif failed: {msgs:?}");
         let (path, _) = expect_success(&msgs);
         gif_dims(&std::fs::read(path).unwrap())
@@ -279,48 +290,19 @@ fn max_width_and_height_clamp_most_restrictive() {
 }
 
 #[test]
-fn mkv_input_explicit_output_with_spaces_best_quality() {
-    let tools = require_tools!();
-    let dir = test_dir("mkv");
-    let clip = dir.join("clip.mkv");
-    gen_clip(&tools, &clip, "160x120", 2);
-
-    // Exercise the done-line parsing with a space in the output path.
-    let out = dir.join("my clips").join("out put.gif");
-    let (ok, msgs) = run_vid2gif(
-        &tools,
-        &[
-            clip.as_os_str(),
-            out.as_os_str(),
-            "--quality".as_ref(),
-            "best".as_ref(),
-        ],
-    );
-    assert!(ok, "vid2gif failed: {msgs:?}");
-    let (path, bytes) = expect_success(&msgs);
-    assert_eq!(path, out);
-    assert_eq!(bytes, std::fs::metadata(&out).unwrap().len());
-    gif_dims(&std::fs::read(&out).unwrap());
-
-    // 2 s at the `best` preset's 20 fps ≈ 40 frames.
-    let frames = gif_frames(&tools, &out);
-    assert!(
-        (30..=50).contains(&frames),
-        "unexpected frame count {frames}"
-    );
-}
-
-#[test]
 fn fps_override_changes_frame_count() {
-    let tools = require_tools!();
     let dir = test_dir("fps");
-    let clip = dir.join("clip.mp4");
-    gen_clip(&tools, &clip, "160x120", 2);
-
-    let (ok, msgs) = run_vid2gif(&tools, &[clip.as_os_str(), "--fps".as_ref(), "5".as_ref()]);
+    let out = dir.join("out.gif");
+    let input = fixture("clip.mp4");
+    let (ok, msgs) = run_vid2gif(&[
+        input.as_os_str(),
+        out.as_os_str(),
+        "--fps".as_ref(),
+        "5".as_ref(),
+    ]);
     assert!(ok, "vid2gif failed: {msgs:?}");
-    let (path, _) = expect_success(&msgs);
-    let frames = gif_frames(&tools, &path);
+    expect_success(&msgs);
+    let frames = gif_frame_count(&std::fs::read(&out).unwrap());
     assert!(
         (8..=12).contains(&frames),
         "unexpected frame count {frames}"
@@ -329,8 +311,7 @@ fn fps_override_changes_frame_count() {
 
 #[test]
 fn missing_input_prints_error_line_and_fails() {
-    let tools = require_tools!();
-    let (ok, msgs) = run_vid2gif(&tools, &["C:/definitely/not/here.mp4".as_ref()]);
+    let (ok, msgs) = run_vid2gif(&["C:/definitely/not/here.mp4".as_ref()]);
     assert!(!ok, "must exit non-zero");
     match msgs.as_slice() {
         [Msg::Error(e)] => assert!(e.contains("not found"), "unexpected message: {e}"),
@@ -340,12 +321,11 @@ fn missing_input_prints_error_line_and_fails() {
 
 #[test]
 fn corrupt_input_prints_error_line_and_fails() {
-    let tools = require_tools!();
     let dir = test_dir("corrupt");
     let clip = dir.join("clip.mp4");
     std::fs::write(&clip, b"this is not a video file").unwrap();
 
-    let (ok, msgs) = run_vid2gif(&tools, &[clip.as_os_str()]);
+    let (ok, msgs) = run_vid2gif(&[clip.as_os_str()]);
     assert!(!ok, "must exit non-zero");
     match msgs.as_slice() {
         [Msg::Error(e)] => assert!(e.contains("could not read"), "unexpected message: {e}"),
@@ -354,60 +334,30 @@ fn corrupt_input_prints_error_line_and_fails() {
 }
 
 #[test]
-fn quit_on_stdin_cancels_and_cleans_up() {
-    let tools = require_tools!();
-    let dir = test_dir("cancel");
-    let clip = dir.join("clip.mp4");
-    // Long enough that the conversion cannot finish before `quit` arrives
-    // (the pipeline alone spawns three ffmpeg processes).
-    gen_clip(&tools, &clip, "1280x720", 60);
+fn gif_input_without_explicit_output_is_rejected() {
+    let dir = test_dir("gifin");
+    let input = dir.join("clip.gif");
+    std::fs::write(&input, b"GIF89a").unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_vid2gif"))
-        .env("VID2GIF_TOOLS_DIR", &tools)
-        .arg(&clip)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .spawn()
-        .expect("spawn vid2gif");
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(b"quit\n")
-        .expect("write quit");
-
-    let out = child.wait_with_output().expect("wait for vid2gif");
-    assert!(out.status.success(), "cancellation must exit 0");
-
-    let msgs = parse_protocol(&String::from_utf8_lossy(&out.stdout));
-    assert!(
-        matches!(msgs.last(), Some(Msg::Cancelled)),
-        "cancelled must be the final message: {msgs:?}"
-    );
-    assert!(
-        !msgs
-            .iter()
-            .any(|m| matches!(m, Msg::Done(..) | Msg::Error(_))),
-        "no done/error after cancellation: {msgs:?}"
-    );
-    assert!(
-        !dir.join("clip.gif").exists(),
-        "partial output must be removed"
-    );
+    let (ok, msgs) = run_vid2gif(&[input.as_os_str()]);
+    assert!(!ok, "must exit non-zero");
+    match msgs.as_slice() {
+        [Msg::Error(e)] => assert!(e.contains("equals input"), "unexpected message: {e}"),
+        other => panic!("expected a single error message, got {other:?}"),
+    }
 }
 
 #[test]
-fn quit_mid_stage_kills_active_ffmpeg() {
+fn quit_mid_conversion_cancels_promptly_and_cleans_up() {
     use std::io::{BufRead, BufReader};
     use std::time::Instant;
 
-    let tools = require_tools!();
-    let dir = test_dir("cancel-mid");
-    let clip = dir.join("clip.mp4");
-    gen_clip(&tools, &clip, "1280x720", 60);
+    let dir = test_dir("cancel");
+    let clip = dir.join("clip.y4m");
+    // Long enough that the conversion cannot finish before `quit` lands.
+    write_y4m(&clip, 320, 240, 15, 90);
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_vid2gif"))
-        .env("VID2GIF_TOOLS_DIR", &tools)
         .arg(&clip)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -416,8 +366,8 @@ fn quit_mid_stage_kills_active_ffmpeg() {
     let mut stdin = child.stdin.take().unwrap();
     let stdout = BufReader::new(child.stdout.take().unwrap());
 
-    // Wait until a stage is demonstrably in flight (progress strictly between
-    // 0 and 100), then cancel and require a prompt exit.
+    // Wait until the conversion is demonstrably in flight (progress strictly
+    // between 0 and 100), then cancel and require a prompt exit.
     let mut lines = Vec::new();
     let mut sent_at = None;
     for line in stdout.lines() {
@@ -434,7 +384,9 @@ fn quit_mid_stage_kills_active_ffmpeg() {
         }
         lines.push(line);
     }
-    let latency = sent_at.expect("never saw mid-conversion progress").elapsed();
+    let latency = sent_at
+        .expect("never saw mid-conversion progress")
+        .elapsed();
 
     let status = child.wait().expect("wait for vid2gif");
     assert!(status.success(), "cancellation must exit 0");
@@ -444,26 +396,17 @@ fn quit_mid_stage_kills_active_ffmpeg() {
         "cancelled must be the final message: {msgs:?}"
     );
     assert!(
+        !msgs
+            .iter()
+            .any(|m| matches!(m, Msg::Done(..) | Msg::Error(_))),
+        "no done/error after cancellation: {msgs:?}"
+    );
+    assert!(
         latency.as_secs() < 5,
-        "cancel must kill the active stage promptly, took {latency:?}"
+        "cancel must stop the conversion promptly, took {latency:?}"
     );
     assert!(
         !dir.join("clip.gif").exists(),
         "partial output must be removed"
     );
-}
-
-#[test]
-fn gif_input_without_explicit_output_is_rejected() {
-    let tools = require_tools!();
-    let dir = test_dir("gifin");
-    let input = dir.join("clip.gif");
-    std::fs::write(&input, b"GIF89a").unwrap();
-
-    let (ok, msgs) = run_vid2gif(&tools, &[input.as_os_str()]);
-    assert!(!ok, "must exit non-zero");
-    match msgs.as_slice() {
-        [Msg::Error(e)] => assert!(e.contains("equals input"), "unexpected message: {e}"),
-        other => panic!("expected a single error message, got {other:?}"),
-    }
 }

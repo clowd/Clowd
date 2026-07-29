@@ -115,8 +115,11 @@ jobs:
           # target/release) on PATH.
           $env:PATH = "$(Resolve-Path target/release);$env:PATH"
           cargo test --release -p obs-express
-          # vid2gif's integration tests run the real FFmpeg from obs-studio/.deps.
+          # vid2gif links the bundled FFmpeg DLLs; its tests are fully
+          # self-contained (repo fixtures + generated raw inputs + a GIF
+          # byte-stream validator). ffmpeg-sys verifies linkage + ABI version.
           cargo test --release -p vid2gif
+          cargo test --release -p ffmpeg-sys
 
       - name: Stage artifact
         run: |
@@ -129,6 +132,14 @@ jobs:
           Copy-Item target/release/*.dll $dist
           if (Test-Path target/release/obs-plugins) { Copy-Item -Recurse target/release/obs-plugins $dist }
           if (Test-Path target/release/data)        { Copy-Item -Recurse target/release/data $dist }
+          # vid2gif links the FFmpeg DLLs directly; it is a hard shipping
+          # requirement on every platform (no separate ffmpeg.exe needed).
+          foreach ($required in @("obs-express.exe","obs.dll","vid2gif.exe","avcodec-61.dll","avfilter-10.dll")) {
+            if (-not (Test-Path "$dist/$required")) {
+              Write-Host "::error::required binary missing from dist: $required"
+              exit 1
+            }
+          }
           Write-Host "Staged contents:"
           Get-ChildItem $dist | Select-Object Name
           $mb = (Get-ChildItem -Recurse $dist | Measure-Object -Property Length -Sum).Sum / 1MB
@@ -248,9 +259,10 @@ jobs:
         if: matrix.arch == 'arm64'
         run: |
           cargo test --release -p obs-express ${{ matrix.target_flag }}
-          # vid2gif unit tests are cross-platform; its integration tests
-          # self-skip when the deps bundle has no ffmpeg CLI.
+          # vid2gif links the FFmpeg dylibs directly — its integration tests
+          # are self-contained (repo fixtures + generated raw video inputs).
           cargo test --release -p vid2gif ${{ matrix.target_flag }}
+          cargo test --release -p ffmpeg-sys ${{ matrix.target_flag }}
 
       - name: Stage artifact (self-contained bundle)
         run: |
@@ -275,6 +287,7 @@ jobs:
           # 1. Executables
           cp "$outdir/obs-express" "$dist/"
           [ -f "$outdir/obs-ffmpeg-mux" ] && cp "$outdir/obs-ffmpeg-mux" "$dist/" || true
+          cp "$outdir/vid2gif" "$dist/"
 
           # 2. libobs.framework + Metal/OpenGL graphics modules
           cp -R "$obs_build/libobs/$config/libobs.framework" "$dist/Frameworks/"
@@ -314,6 +327,7 @@ jobs:
           }
           relocate "$dist/obs-express"
           [ -f "$dist/obs-ffmpeg-mux" ] && relocate "$dist/obs-ffmpeg-mux" || true
+          relocate "$dist/vid2gif"
           # Plugin binaries are dlopen'd by obs-express; @executable_path in them
           # resolves to obs-express, so the same rpath reaches the app Frameworks.
           find "$dist/obs-plugins" -type f -path '*/Contents/MacOS/*' | while read -r pb; do
@@ -342,6 +356,16 @@ jobs:
             otool -l "$dist/obs-express" | grep -E "/Users/runner|obs-build|/\.deps/" || true
             exit 1
           fi
+          # 7. Verify vid2gif (links the bundled FFmpeg dylibs). The arm64
+          #    slice runs a real conversion against a repo fixture; the
+          #    cross-compiled x64 slice can only be checked for presence.
+          test -f "$dist/vid2gif" || { echo "::error::vid2gif missing from dist"; exit 1; }
+          if [ "$arch" = "arm64" ]; then
+            "$dist/vid2gif" crates/vid2gif/tests/fixtures/clip.mp4 /tmp/vid2gif-smoke.gif --quality fair
+            [ "$(head -c 6 /tmp/vid2gif-smoke.gif)" = "GIF89a" ]
+            echo "vid2gif GIF toolchain OK"
+          fi
+
           echo "Frameworks:"; ls "$dist/Frameworks"
           echo "Plugins:";    ls "$dist/obs-plugins"
           echo "Bundle size:"; du -sh "$dist"
