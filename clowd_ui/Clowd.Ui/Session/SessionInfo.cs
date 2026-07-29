@@ -1,4 +1,6 @@
 using System;
+using System.IO;
+using System.Linq;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Clowd.PlatformUtil;
@@ -43,7 +45,14 @@ namespace Clowd
         public string PreviewImgPath
         {
             get => Get<string>();
-            set => Set(value);
+            set
+            {
+                if (Set(value))
+                {
+                    OnPropertyChanged(nameof(CanCopy));
+                    OnPropertyChanged(nameof(CanUpload));
+                }
+            }
         }
 
         public string DesktopImgPath
@@ -109,7 +118,11 @@ namespace Clowd
         public string VideoPath
         {
             get => Get<string>();
-            set => Set(value);
+            set
+            {
+                if (Set(value))
+                    OnPropertyChanged(nameof(CanUpload));
+            }
         }
 
         // recorded duration in milliseconds (from the last obs-express status line).
@@ -120,6 +133,56 @@ namespace Clowd
         }
 
         [JsonIgnore] public bool IsVideo => String.Equals(ContentKind, "video", StringComparison.OrdinalIgnoreCase);
+
+        // a recording (and a converted GIF) carries a poster frame in PreviewImgPath, but putting
+        // that single still on the clipboard is never what the user meant by copying a video, so
+        // video entries offer no Copy at all.
+        [JsonIgnore] public bool CanCopy => !IsVideo && !String.IsNullOrEmpty(PreviewImgPath);
+
+        // every entry can be (re-)uploaded as long as it isn't busy and owns some content to send.
+        // Whether the file is still on disk is settled by UploadSourcePath at the point of use —
+        // this one is evaluated by a binding on every row.
+        [JsonIgnore]
+        public bool CanUpload => ActiveUpload == null
+                                 && ActiveGifConversion == null
+                                 && (!String.IsNullOrEmpty(VideoPath) || !String.IsNullOrEmpty(PreviewImgPath) || IsUploadOnly);
+
+        /// <summary>The file an upload of this session sends: the recording itself for a video entry
+        /// (not the poster frame PreviewImgPath points at), otherwise the image, otherwise the copy of
+        /// the payload an upload-only session keeps beside its session.json. Null when none of them is
+        /// on disk any more.</summary>
+        [JsonIgnore]
+        public string UploadSourcePath
+        {
+            get
+            {
+                if (IsVideo && Exists(VideoPath))
+                    return VideoPath;
+
+                if (Exists(PreviewImgPath))
+                    return PreviewImgPath;
+
+                // a text / file upload-only session has no preview: UploadManager wrote the payload
+                // next to session.json as "content.<ext>" when it created the session.
+                try
+                {
+                    var dir = Path.GetDirectoryName(FilePath);
+                    if (!String.IsNullOrEmpty(dir))
+                        return Directory.EnumerateFiles(dir, "content.*").FirstOrDefault();
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // an unreadable session directory simply has nothing to upload.
+                }
+
+                return null;
+            }
+        }
+
+        private static bool Exists(string path)
+        {
+            return !String.IsNullOrEmpty(path) && File.Exists(path);
+        }
 
         // set only on GIF sessions: the recording this session's gif was converted from. It ties the
         // GIF entry back to its source (so a second conversion finds it instead of starting again)
@@ -179,6 +242,7 @@ namespace Clowd
                 _activeUpload = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ShowNotUploaded));
+                OnPropertyChanged(nameof(CanUpload));
             }
         }
 
@@ -193,6 +257,7 @@ namespace Clowd
                 _activeGifConversion = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ShowNotUploaded));
+                OnPropertyChanged(nameof(CanUpload));
             }
         }
 

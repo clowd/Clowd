@@ -12,9 +12,11 @@
         <local:UiDateTimeConverter x:Key="ConvUiDateTime" />
         <local:ContentKindToIconConverter x:Key="ConvContentKindIcon" />
 
-        <!-- one finished upload: link (click copies) + launch/delete, shared by the standalone list and session rows -->
+        <!-- one finished upload: link (click copies) + launch/delete, shared by the standalone list and
+             session rows. The buttons sit right beside the link; the link is the row's flexible child,
+             so when the row runs short the URL ellipsizes rather than the buttons being pushed out. -->
         <DataTemplate x:Key="UploadRecordTemplate" DataType="clowd:UploadRecord">
-            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <controls:ShrinkingRowPanel Spacing="6" VerticalAlignment="Center">
                 <Path Height="10"
                       VerticalAlignment="Center"
                       Stretch="Uniform"
@@ -22,32 +24,37 @@
                       Data="{StaticResource IconLightning}"
                       IsVisible="{Binding Accelerated}"
                       ToolTip.Tip="Accelerated upload" />
-                <HyperlinkButton Padding="0"
+                <HyperlinkButton controls:ShrinkingRowPanel.Shrink="True"
+                                 Padding="0"
                                  MinHeight="0"
-                                 MaxWidth="360"
                                  VerticalAlignment="Center"
                                  Click="CopyUrlClicked"
                                  ToolTip.Tip="{Binding Url, StringFormat='Copy \'{0}\''}">
                     <TextBlock Text="{Binding Url}" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap" />
                 </HyperlinkButton>
-                <Button Classes="rowActionSmall"
-                        Click="OpenUrlClicked"
-                        ToolTip.Tip="Open in browser"
-                        AutomationProperties.Name="Open in browser">
-                    <Viewbox>
-                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
-                    </Viewbox>
-                </Button>
-                <Button Classes="rowActionSmall"
-                        Click="DeleteUploadClicked"
-                        IsVisible="{Binding CanDelete}"
-                        ToolTip.Tip="Delete upload"
-                        AutomationProperties.Name="Delete upload">
-                    <Viewbox>
-                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconDelete}" />
-                    </Viewbox>
-                </Button>
-            </StackPanel>
+                <StackPanel Classes="rowActions"
+                            Orientation="Horizontal"
+                            Spacing="2"
+                            VerticalAlignment="Center">
+                    <Button Classes="rowActionSmall"
+                            Click="OpenUrlClicked"
+                            ToolTip.Tip="Open in browser"
+                            AutomationProperties.Name="Open in browser">
+                        <Viewbox>
+                            <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
+                        </Viewbox>
+                    </Button>
+                    <Button Classes="rowActionSmall"
+                            Click="DeleteUploadClicked"
+                            IsVisible="{Binding CanDelete}"
+                            ToolTip.Tip="Delete upload"
+                            AutomationProperties.Name="Delete upload">
+                        <Viewbox>
+                            <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconDelete}" />
+                        </Viewbox>
+                    </Button>
+                </StackPanel>
+            </controls:ShrinkingRowPanel>
         </DataTemplate>
 
         <!-- one in-flight upload: progress + status + cancel -->
@@ -79,7 +86,14 @@
                              Maximum="100"
                              VerticalAlignment="Center"
                              Value="{Binding Progress, Mode=OneWay}" />
-                <TextBlock VerticalAlignment="Center" Opacity="0.6" Text="{Binding Status}" />
+                <!-- fixed width: the status carries a percentage that changes width as it counts up,
+                     which would otherwise walk the cancel button left and right underneath the cursor. -->
+                <TextBlock Width="120"
+                           VerticalAlignment="Center"
+                           Opacity="0.6"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap"
+                           Text="{Binding Status}" />
                 <Button Classes="rowActionSmall"
                         Click="CancelGifClicked"
                         ToolTip.Tip="Cancel conversion"
@@ -104,13 +118,23 @@
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         </Style>
-        <!-- row actions appear on hover / selection; hidden but layout-stable otherwise -->
+        <!-- row actions appear on hover / selection; hidden but layout-stable otherwise. Applies to
+             both the card's own action bar and the per-upload buttons on the link rows. -->
         <Style Selector="ListBox.sessions ListBoxItem StackPanel.rowActions">
             <Setter Property="Opacity" Value="0" />
             <Setter Property="IsHitTestVisible" Value="False" />
         </Style>
         <Style Selector="ListBox.sessions ListBoxItem:pointerover StackPanel.rowActions,
                          ListBox.sessions ListBoxItem:selected StackPanel.rowActions">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <Style Selector="ListBox.sessions ListBoxItem controls|CollapsingButtonBar.rowActions">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="ListBox.sessions ListBoxItem:pointerover controls|CollapsingButtonBar.rowActions,
+                         ListBox.sessions ListBoxItem:selected controls|CollapsingButtonBar.rowActions">
             <Setter Property="Opacity" Value="1" />
             <Setter Property="IsHitTestVisible" Value="True" />
         </Style>
@@ -169,24 +193,37 @@
                                     <DataTemplate>
                                         <Grid Background="Transparent"
                                               DoubleTapped="ViewDoubleClick"
-                                              ColumnDefinitions="Auto,12,*,Auto">
+                                              ColumnDefinitions="Auto,12,*">
                                             <Grid.ContextMenu>
                                                 <ContextMenu>
                                                     <!-- a converting gif entry has no usable file yet: everything but Delete
                                                          (which cancels, see DeleteWithConfirmation) is disabled until it lands. -->
-                                                    <MenuItem Header="Open" Click="OpenItemClicked" IsVisible="{Binding !IsUploadOnly}"
+                                                    <!-- same order as the row's action bar, so the ⋮ overflow menu (which is
+                                                         generated from those buttons) and this one agree. -->
+                                                    <MenuItem Header="Copy" Click="CopyItemClicked" IsVisible="{Binding CanCopy}"
                                                               IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
                                                     <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding IsVideo}"
                                                               IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
                                                     <MenuItem Header="Create GIF" Click="CreateGifClicked" IsVisible="{Binding CanCreateGif}" />
                                                     <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding IsVideo}"
                                                               IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
-                                                    <MenuItem Header="Copy" Click="CopyItemClicked"
-                                                              IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                    <MenuItem Header="Open" Click="OpenItemClicked" IsVisible="{Binding !IsUploadOnly}"
                                                               IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
+                                                    <MenuItem Header="Upload" Click="UploadItemClicked" IsVisible="{Binding CanUpload}" />
                                                     <MenuItem Header="Delete" Click="DeleteItemClicked" />
                                                 </ContextMenu>
                                             </Grid.ContextMenu>
+                                            <!-- what PulseSelection animates to point out a row the app selected on the
+                                                 user's behalf. First child, so it washes over the selection colour but
+                                                 stays behind the row's own content; -4 cancels the ListBoxItem padding so
+                                                 it covers the whole card. Carries no content, so it adds no height. -->
+                                            <Border Name="PulseOverlay"
+                                                    Grid.ColumnSpan="3"
+                                                    Margin="-4"
+                                                    CornerRadius="6"
+                                                    Opacity="0"
+                                                    IsHitTestVisible="False"
+                                                    Background="{DynamicResource SemiColorWarning}" />
                                             <Border Width="110"
                                                     Height="75"
                                                     Margin="4"
@@ -209,18 +246,124 @@
                                                     </Viewbox>
                                                 </Panel>
                                             </Border>
-                                            <!-- three tight lines (name / date / uploads) regardless of the
-                                                 thumbnail height — a row-spanned grid would inflate the rows -->
+                                            <!-- two stacked rows: the header line (name / date, with the card's
+                                                 actions docked right) and the uploads block underneath it. Keeping
+                                                 the uploads on their own line is what stops a long link — or its
+                                                 buttons — from ever running into the action bar. -->
                                             <StackPanel Grid.Column="2"
                                                         VerticalAlignment="Center"
                                                         Spacing="2">
-                                                <TextBlock Classes="Base"
-                                                           TextTrimming="CharacterEllipsis"
-                                                           TextWrapping="NoWrap"
-                                                           ToolTip.Tip="{Binding Name}"
-                                                           Text="{Binding Name}" />
-                                                <TextBlock Classes="Body"
-                                                           Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
+                                                <!-- a DockPanel, not a Grid: a Grid measures an Auto column with an
+                                                     infinite width, so the action bar would never find out that the row
+                                                     is too narrow for all of its buttons. Docked first so it is measured
+                                                     against the full row width, of which it leaves ReservedWidth to the
+                                                     name beside it. -->
+                                                <DockPanel LastChildFill="True">
+                                                    <!-- while a gif is being written the row owns no finished file — its only
+                                                         action is the cancel button in the progress row below. -->
+                                                    <controls:CollapsingButtonBar DockPanel.Dock="Right"
+                                                                                  Classes="rowActions"
+                                                                                  ButtonClasses="rowAction"
+                                                                                  ReservedWidth="140"
+                                                                                  IsVisible="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}"
+                                                                                  Margin="8,0,4,0"
+                                                                                  Spacing="2"
+                                                                                  VerticalAlignment="Center">
+                                                        <!-- Copy leads and Open sits last of the content actions so that the
+                                                             open-in-new glyph lands in the same slot — just left of upload and
+                                                             delete — as a recording's "Show in folder" does. -->
+                                                        <!-- a recording or gif has a poster frame, but putting that still on the
+                                                             clipboard is never what "copy" meant for a video — so it has no Copy. -->
+                                                        <Button Classes="rowAction"
+                                                                Click="CopyItemClicked"
+                                                                IsVisible="{Binding CanCopy}"
+                                                                ToolTip.Tip="Copy image to clipboard"
+                                                                AutomationProperties.Name="Copy image to clipboard">
+                                                            <Viewbox>
+                                                                <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <Button Classes="rowAction"
+                                                                Click="PlayItemClicked"
+                                                                IsVisible="{Binding IsVideo}"
+                                                                ToolTip.Tip="Play video"
+                                                                AutomationProperties.Name="Play video">
+                                                            <Viewbox>
+                                                                <!-- IconPlay is drawn on a 172px canvas (AppStyles icon table), not the 24px
+                                                                     material canvas the other row icons use. Without the explicit canvas size the
+                                                                     Path measures to the glyph's right/bottom edge, so its leading padding is kept
+                                                                     and its trailing padding is not — the Viewbox then scales a box the triangle
+                                                                     sits off-centre in. -->
+                                                                <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconPlay}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <Button Classes="rowAction"
+                                                                Click="CreateGifClicked"
+                                                                IsVisible="{Binding CanCreateGif}"
+                                                                ToolTip.Tip="Create GIF"
+                                                                AutomationProperties.Name="Create GIF">
+                                                            <Viewbox>
+                                                                <!-- IconVideoGIF is a 36x24 wordmark canvas (AppStyles icon table) rather
+                                                                     than the 24px material canvas, so it needs its size stated for the same
+                                                                     reason as the play glyph above. -->
+                                                                <Path Width="36" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconVideoGIF}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <Button Classes="rowAction"
+                                                                Click="ShowInFolderClicked"
+                                                                IsVisible="{Binding IsVideo}"
+                                                                ToolTip.Tip="Show in folder"
+                                                                AutomationProperties.Name="Show in folder">
+                                                            <Viewbox>
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <Button Classes="rowAction"
+                                                                Click="OpenItemClicked"
+                                                                IsVisible="{Binding !IsUploadOnly}"
+                                                                ToolTip.Tip="Open in editor"
+                                                                AutomationProperties.Name="Open in editor">
+                                                            <Viewbox>
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <Button Classes="rowAction"
+                                                                Click="UploadItemClicked"
+                                                                IsVisible="{Binding CanUpload}"
+                                                                ToolTip.Tip="Upload"
+                                                                AutomationProperties.Name="Upload">
+                                                            <Viewbox>
+                                                                <!-- the Clowd mark, the same "upload" affordance the editor's toolbar
+                                                                     uses; a 16px canvas (AppStyles icon table). -->
+                                                                <Path Width="16" Height="16" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClowd}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <Button Classes="rowAction"
+                                                                Click="DeleteItemClicked"
+                                                                ToolTip.Tip="Delete"
+                                                                AutomationProperties.Name="Delete">
+                                                            <Viewbox>
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconDelete}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                    </controls:CollapsingButtonBar>
+
+                                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                        <TextBlock Classes="Base"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   TextWrapping="NoWrap"
+                                                                   ToolTip.Tip="{Binding Name}"
+                                                                   Text="{Binding Name}" />
+                                                        <TextBlock Classes="Body"
+                                                                   Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
+                                                    </StackPanel>
+                                                </DockPanel>
+
+                                                <!-- separates the card's own line from everything to do with its uploads -->
+                                                <Border Height="1"
+                                                        Margin="0,3,4,1"
+                                                        Background="{DynamicResource SemiColorBorder}" />
+
                                                 <TextBlock Opacity="0.6"
                                                            Text="Not uploaded"
                                                            IsVisible="{Binding ShowNotUploaded}" />
@@ -232,78 +375,6 @@
                                                 <ContentControl Content="{Binding ActiveGifConversion}"
                                                                 ContentTemplate="{StaticResource GifConversionTemplate}"
                                                                 IsVisible="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNotNull}}" />
-                                            </StackPanel>
-
-                                            <!-- while a gif is being written the row owns no finished file — its only
-                                                 action is the cancel button in the progress row above. -->
-                                            <StackPanel Grid.Column="3"
-                                                        Classes="rowActions"
-                                                        IsVisible="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}"
-                                                        Margin="8,0,4,0"
-                                                        Orientation="Horizontal"
-                                                        Spacing="2"
-                                                        VerticalAlignment="Center">
-                                                <Button Classes="rowAction"
-                                                        Click="OpenItemClicked"
-                                                        IsVisible="{Binding !IsUploadOnly}"
-                                                        ToolTip.Tip="Open in editor"
-                                                        AutomationProperties.Name="Open in editor">
-                                                    <Viewbox>
-                                                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
-                                                    </Viewbox>
-                                                </Button>
-                                                <Button Classes="rowAction"
-                                                        Click="PlayItemClicked"
-                                                        IsVisible="{Binding IsVideo}"
-                                                        ToolTip.Tip="Play video"
-                                                        AutomationProperties.Name="Play video">
-                                                    <Viewbox>
-                                                        <!-- IconPlay is drawn on a 172px canvas (AppStyles icon table), not the 24px
-                                                             material canvas the other row icons use. Without the explicit canvas size the
-                                                             Path measures to the glyph's right/bottom edge, so its leading padding is kept
-                                                             and its trailing padding is not — the Viewbox then scales a box the triangle
-                                                             sits off-centre in. -->
-                                                        <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconPlay}" />
-                                                    </Viewbox>
-                                                </Button>
-                                                <Button Classes="rowAction"
-                                                        Click="CreateGifClicked"
-                                                        IsVisible="{Binding CanCreateGif}"
-                                                        ToolTip.Tip="Create GIF"
-                                                        AutomationProperties.Name="Create GIF">
-                                                    <Viewbox>
-                                                        <!-- IconVideoGIF is a 36x24 wordmark canvas (AppStyles icon table) rather
-                                                             than the 24px material canvas, so it needs its size stated for the same
-                                                             reason as the play glyph above. -->
-                                                        <Path Width="36" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconVideoGIF}" />
-                                                    </Viewbox>
-                                                </Button>
-                                                <Button Classes="rowAction"
-                                                        Click="ShowInFolderClicked"
-                                                        IsVisible="{Binding IsVideo}"
-                                                        ToolTip.Tip="Show in folder"
-                                                        AutomationProperties.Name="Show in folder">
-                                                    <Viewbox>
-                                                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
-                                                    </Viewbox>
-                                                </Button>
-                                                <Button Classes="rowAction"
-                                                        Click="CopyItemClicked"
-                                                        IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                                        ToolTip.Tip="Copy image to clipboard"
-                                                        AutomationProperties.Name="Copy image to clipboard">
-                                                    <Viewbox>
-                                                        <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
-                                                    </Viewbox>
-                                                </Button>
-                                                <Button Classes="rowAction"
-                                                        Click="DeleteItemClicked"
-                                                        ToolTip.Tip="Delete capture"
-                                                        AutomationProperties.Name="Delete capture">
-                                                    <Viewbox>
-                                                        <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconDelete}" />
-                                                    </Viewbox>
-                                                </Button>
                                             </StackPanel>
                                         </Grid>
                                     </DataTemplate>

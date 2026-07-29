@@ -20,6 +20,17 @@ namespace Clowd
 
         public static SessionManager Current { get; }
 
+        /// <summary>The session this app instance created most recently, or null once it has been
+        /// deleted. The Recent page selects it, so a capture, recording or upload that opens the page
+        /// lands on the entry it just made. Always assigned after the session is in
+        /// <see cref="Sessions"/>, so a listener reacting to the change can already find it there —
+        /// which is why this, and not the collection's own Add, is the signal the page listens to.</summary>
+        public SessionInfo LastCreated
+        {
+            get => _lastCreated;
+            private set => Set(ref _lastCreated, value);
+        }
+
         private static readonly object _lock = new object();
 
         static SessionManager()
@@ -30,6 +41,7 @@ namespace Clowd
         private FileSystemWatcher _fsw;
         private IDisposable _cleanupTimer;
         private TrulyObservableCollection<SessionInfo> _sessions;
+        private SessionInfo _lastCreated;
 
         private SessionManager()
         {
@@ -154,6 +166,8 @@ namespace Clowd
             lock (_lock)
             {
                 Sessions.Remove(session);
+                if (ReferenceEquals(LastCreated, session))
+                    LastCreated = null;
                 session.Dispose();
                 Directory.Delete(Path.GetDirectoryName(session.FilePath), true);
             }
@@ -182,6 +196,7 @@ namespace Clowd
             session.Name = "Document";
             session.CreatedUtc = DateTime.UtcNow;
             Sessions.Add(session);
+            LastCreated = session;
             return session;
         }
 
@@ -198,12 +213,17 @@ namespace Clowd
 
                 var existing = Sessions.FirstOrDefault(s => s.FilePath.Equals(jsonPath, StringComparison.OrdinalIgnoreCase));
                 if (existing != null)
+                {
+                    // the watcher got here first — this is still the session the caller is creating.
+                    LastCreated = existing;
                     return existing;
+                }
 
                 var session = new SessionInfo(jsonPath);
                 session.Name = "Document";
                 session.CreatedUtc = DateTime.UtcNow;
                 Sessions.Add(session);
+                LastCreated = session;
                 return session;
             }
         }

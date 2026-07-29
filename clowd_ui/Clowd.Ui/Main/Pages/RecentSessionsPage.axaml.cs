@@ -2,10 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
@@ -15,6 +18,7 @@ using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Clowd.UI.Helpers;
@@ -54,6 +58,18 @@ namespace Clowd.UI
         // the row to re-select after a rebuild; see RebuildGroups.
         private SessionInfo _focusedSession;
 
+        // guards the fan-out in SessionSelectionChanged, which clears every other group's ListBox
+        // and so re-enters this handler once per group.
+        private bool _syncingSelection;
+
+        // the newest session already auto-selected, so that only happens once per created session
+        // (static: the page is rebuilt whenever the Recent tab is re-created).
+        private static SessionInfo _autoSelected;
+
+        // the row waiting for its attention pulse. Only ever set for a selection the app made on the
+        // user's behalf — a row the user clicked is not pulsed at them.
+        private SessionInfo _pulseSession;
+
         public RecentSessionsPage()
         {
             InitializeComponent();
@@ -75,13 +91,21 @@ namespace Clowd.UI
         {
             base.OnAttachedToVisualTree(e);
             SessionManager.Current.Sessions.CollectionChanged += OnSessionsChanged;
+            SessionManager.Current.PropertyChanged += OnSessionManagerPropertyChanged;
             RebuildGroups();
+
+            // a capture, recording or upload creates its session and then opens this page — so by the
+            // time we get here the entry the user just made already exists, and is what they came to
+            // see. This covers the page not existing yet when it was created; if it did already exist,
+            // OnSessionManagerPropertyChanged got there first.
+            SelectNewSession();
         }
 
         protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnDetachedFromVisualTree(e);
             SessionManager.Current.Sessions.CollectionChanged -= OnSessionsChanged;
+            SessionManager.Current.PropertyChanged -= OnSessionManagerPropertyChanged;
             _regroupTimer.Stop();
         }
 
@@ -89,6 +113,36 @@ namespace Clowd.UI
         {
             _regroupTimer.Stop();
             _regroupTimer.Start();
+        }
+
+        /// <summary>A session created while the page is already open — a recording finishing, a tray
+        /// upload — selects itself here.</summary>
+        private void OnSessionManagerPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(SessionManager.LastCreated))
+                return;
+
+            // the clipboard / file upload paths create their session off the UI thread.
+            if (Dispatcher.UIThread.CheckAccess())
+                SelectNewSession();
+            else
+                Dispatcher.UIThread.Post(SelectNewSession);
+        }
+
+        /// <summary>Selects the session most recently created by this app instance, once. Does nothing
+        /// when there is none, when it has already been selected, or when it has since been
+        /// deleted.</summary>
+        private void SelectNewSession()
+        {
+            var created = SessionManager.Current.LastCreated;
+            if (created == null || ReferenceEquals(created, _autoSelected))
+                return;
+
+            if (!SessionManager.Current.Sessions.Contains(created))
+                return;
+
+            _autoSelected = created;
+            FocusSession(created);
         }
 
         private void RebuildGroups()
@@ -120,13 +174,16 @@ namespace Clowd.UI
         }
 
         /// <summary>Selects a session's row and scrolls it into view — used to walk the user to the
-        /// entry a gif conversion just created. Safe for a session that is not on the page.</summary>
+        /// entry a gif conversion just created. Safe for a session that is not on the page. The row
+        /// pulses once it settles, because the user did not ask for this selection and needs pointing
+        /// at it.</summary>
         public void FocusSession(SessionInfo session)
         {
             if (session == null)
                 return;
 
             _focusedSession = session;
+            _pulseSession = session;
 
             // a session created moments ago isn't grouped yet: the rebuild is throttled to 250 ms.
             if (!Groups.Any(g => g.Items.Contains(session)))
@@ -155,6 +212,14 @@ namespace Clowd.UI
 
                     listBox.SelectedItem = session;
 
+                    // a rebuild is pending: it throws these containers away, and with them any
+                    // animation running on one. Its own re-select lands here again once it is done.
+                    if (ReferenceEquals(_pulseSession, session) && !_regroupTimer.IsEnabled)
+                    {
+                        _pulseSession = null;
+                        PulseSelection(listBox, session);
+                    }
+
                     if (scrollIntoView)
                     {
                         listBox.ScrollIntoView(session);
@@ -177,10 +242,74 @@ namespace Clowd.UI
             return false;
         }
 
+        /// <summary>Washes the row's overlay orange and back twice, to point out a selection the user
+        /// did not make. Cosmetic throughout: a row whose container or overlay cannot be found (or an
+        /// animation that is interrupted) just means no pulse.</summary>
+        private static void PulseSelection(ListBox listBox, SessionInfo session)
+        {
+            // one hop, so the container exists even when the list was only just given its items.
+            Dispatcher.UIThread.Post(() =>
+            {
+                try
+                {
+                    if (listBox.ContainerFromItem(session) is not Control container)
+                        return;
+
+                    var overlay = container.GetVisualDescendants()
+                                           .OfType<Border>()
+                                           .FirstOrDefault(b => b.Name == "PulseOverlay");
+                    if (overlay == null)
+                        return;
+
+                    var pulse = new Animation
+                    {
+                        Duration = TimeSpan.FromMilliseconds(450),
+                        IterationCount = new IterationCount(2),
+                        Easing = new SineEaseInOut(),
+                        Children =
+                        {
+                            new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0d) } },
+                            // a tint, not a flash: the wash reads as the selection warming up rather
+                            // than the row changing colour.
+                            new KeyFrame { Cue = new Cue(0.5d), Setters = { new Setter(OpacityProperty, 0.2d) } },
+                            new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 0d) } },
+                        },
+                    };
+
+                    _ = pulse.RunAsync(overlay);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("Pulse selection failed: " + ex);
+                }
+            }, DispatcherPriority.Loaded);
+        }
+
         private void SessionSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if ((sender as ListBox)?.SelectedItem is SessionInfo session)
-                _focusedSession = session;
+            if (sender is not ListBox list || list.SelectedItem is not SessionInfo session)
+                return;
+
+            _focusedSession = session;
+
+            // each date group is its own ListBox, so "SelectionMode=Single" is only single *within* a
+            // group — the page has to clear the others itself to keep one selected row overall.
+            if (_syncingSelection)
+                return;
+
+            _syncingSelection = true;
+            try
+            {
+                foreach (var other in this.GetVisualDescendants().OfType<ListBox>())
+                {
+                    if (!ReferenceEquals(other, list))
+                        other.SelectedItem = null;
+                }
+            }
+            finally
+            {
+                _syncingSelection = false;
+            }
         }
 
         // group keys ported from the WPF TimeAgoConverter (PrettyTime approximated locally).
@@ -242,6 +371,25 @@ namespace Clowd.UI
             var session = GetSessionFromEvent(sender);
             if (session != null)
                 SessionManager.Current.CopySession(session);
+        }
+
+        private async void UploadItemClicked(object sender, RoutedEventArgs e)
+        {
+            var session = GetSessionFromEvent(sender);
+            if (session == null)
+                return;
+
+            try
+            {
+                // reports its own failures (provider selection, transfer, missing file) — the row's
+                // progress and resulting link come back through the session.
+                await UploadManager.UploadSession(session);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Upload session failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "recents.upload");
+            }
         }
 
         private async void DeleteItemClicked(object sender, RoutedEventArgs e)
