@@ -115,6 +115,8 @@ jobs:
           # target/release) on PATH.
           $env:PATH = "$(Resolve-Path target/release);$env:PATH"
           cargo test --release -p obs-express
+          # vid2gif's integration tests run the real FFmpeg from obs-studio/.deps.
+          cargo test --release -p vid2gif
 
       - name: Stage artifact
         run: |
@@ -244,7 +246,11 @@ jobs:
         # tests run on the arm64 mac and on both Windows arches, so coverage is
         # preserved.
         if: matrix.arch == 'arm64'
-        run: cargo test --release -p obs-express ${{ matrix.target_flag }}
+        run: |
+          cargo test --release -p obs-express ${{ matrix.target_flag }}
+          # vid2gif unit tests are cross-platform; its integration tests
+          # self-skip when the deps bundle has no ffmpeg CLI.
+          cargo test --release -p vid2gif ${{ matrix.target_flag }}
 
       - name: Stage artifact (self-contained bundle)
         run: |

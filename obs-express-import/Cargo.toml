@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/obs-sys", "crates/obs", "crates/obs-express"]
+members = ["crates/obs-sys", "crates/obs", "crates/obs-express", "crates/vid2gif"]
 
 [workspace.dependencies]
 # Internal crates. Path deps declared once here; members inherit via

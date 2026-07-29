@@ -192,6 +192,23 @@ quit                      ->
 - **Video** — H.264 into an MP4 (`ffmpeg_muxer`). Software x264 by default (`veryfast`, or `ultrafast` with `--low-cpu`); `--hw-accel` selects the first available hardware encoder (Windows priority NVENC → AMF → QSV; macOS VideoToolbox) and falls back to x264 otherwise. `--crf` is passed through as the CRF (x264) or CQP (hardware) value.
 - **Audio** — AAC at 128 kbps (`CoreAudio_AAC` on macOS when available, otherwise `ffmpeg_aac`), 44.1 kHz.
 
+## vid2gif
+
+A companion CLI (`vid2gif.exe`, built from `crates/vid2gif`) that converts a recording (or any video FFmpeg can decode) into an optimized palette-based GIF. It wraps the `ffmpeg.exe`/`ffprobe.exe` shipped in the obs-deps bundle — small shims over the same `av*.dll` runtime already bundled next to `obs-express` — so it adds ~0.5 MB to the distribution.
+
+```sh
+vid2gif input.mkv                          # writes input.gif
+vid2gif input.mp4 out.gif --quality best   # quality: best | good | fair (default good)
+vid2gif input.mkv --max-width 480 --fps 12 # aspect-preserving clamps; never upscales
+```
+
+- `--quality` sets frame rate and dithering: `best` (20 fps, sierra2_4a), `good` (15 fps, bayer), `fair` (10 fps, coarse bayer). `--fps` overrides the preset.
+- `--max-width` / `--max-height` cap the output size like obs-express's recording clamps: aspect preserved, the more restrictive wins, never upscales.
+- Stdout is a line protocol for a parent process: `progress <0-100>` lines (monotonic), then `done <path> <bytes>`, or `error <message>` with exit code 1.
+- Writing `quit\n` to stdin cancels the conversion: the in-flight ffmpeg is killed, temp files and any partial output are removed, and vid2gif prints `cancelled` and exits 0.
+
+The conversion runs as three ffmpeg passes (fps/scale into a lossless intermediate → palette generation → palette-mapped GIF) so the expensive source decode happens once and progress streams smoothly. `ffmpeg`/`ffprobe` are resolved next to `vid2gif` itself (override with `VID2GIF_TOOLS_DIR`).
+
 ## Building
 
 ### Requirements
