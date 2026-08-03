@@ -151,7 +151,7 @@
         },
         {
           "name": "clap",
-          "version": "4.6.4",
+          "version": "4.6.5",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/clap-rs/clap"
         },
@@ -307,7 +307,7 @@
         },
         {
           "name": "xdialog",
-          "version": "3.1.0",
+          "version": "3.1.1",
           "license": "MIT",
           "url": "https://github.com/velopack/xdialog"
         }
