@@ -97,6 +97,8 @@ namespace Clowd.UI
         /// Position first (capture space), then size at the given scaling. The border width is
         /// inflated outward in whole capture-space units plus 1 extra of slack, so logical→capture
         /// size rounding can never place a border pixel inside the recorded region (risk §6.4).
+        /// macOS constrains windows to the screen containing them, so frame edges that cannot fit
+        /// outside a single-screen capture are suppressed rather than shifted into the recording.
         /// </summary>
         private void ApplyGeometry(double scaling)
         {
@@ -105,9 +107,56 @@ namespace Clowd.UI
             var toCapture = OperatingSystem.IsMacOS() ? 1.0 : scaling;
             var inflate = (int)Math.Ceiling(BorderLogicalWidth * toCapture) + 1;
 
-            Position = new PixelPoint(_region.X - inflate, _region.Y - inflate);
-            Width = (_region.Width + inflate * 2) / toCapture;
-            Height = (_region.Height + inflate * 2) / toCapture;
+            var left = _region.Left - inflate;
+            var top = _region.Top - inflate;
+            var right = _region.Right + inflate;
+            var bottom = _region.Bottom + inflate;
+            var drawLeft = true;
+            var drawTop = true;
+            var drawRight = true;
+            var drawBottom = true;
+
+            if (OperatingSystem.IsMacOS())
+            {
+                PixelRect? bounds = null;
+                try
+                {
+                    bounds = Screens.ScreenFromPoint(new PixelPoint(_region.Center.X, _region.Center.Y))?.Bounds;
+                }
+                catch
+                {
+                    // Screens is best-effort pre-show; leaving the frame inflated matches the
+                    // previous behavior and OnOpened will retry with the native window available.
+                }
+
+                // Only clamp regions wholly contained by one display. A capture spanning multiple
+                // displays must retain its complete virtual-desktop geometry.
+                if (bounds is { } b && _region.Left >= b.X && _region.Top >= b.Y &&
+                    _region.Right <= b.Right && _region.Bottom <= b.Bottom)
+                {
+                    left = Math.Max(left, b.X);
+                    top = Math.Max(top, b.Y);
+                    right = Math.Min(right, b.Right);
+                    bottom = Math.Min(bottom, b.Bottom);
+
+                    drawLeft = _region.Left - left >= BorderLogicalWidth;
+                    drawTop = _region.Top - top >= BorderLogicalWidth;
+                    drawRight = right - _region.Right >= BorderLogicalWidth;
+                    drawBottom = bottom - _region.Bottom >= BorderLogicalWidth;
+                }
+            }
+
+            AccentBorder.BorderThickness = CreateBorderThickness(2, drawLeft, drawTop, drawRight, drawBottom);
+            InnerBorder.BorderThickness = CreateBorderThickness(1, drawLeft, drawTop, drawRight, drawBottom);
+
+            Position = new PixelPoint(left, top);
+            Width = (right - left) / toCapture;
+            Height = (bottom - top) / toCapture;
+        }
+
+        private static Thickness CreateBorderThickness(double width, bool left, bool top, bool right, bool bottom)
+        {
+            return new Thickness(left ? width : 0, top ? width : 0, right ? width : 0, bottom ? width : 0);
         }
     }
 }
