@@ -47,7 +47,7 @@ jobs:
           vpk pack --packId ClowdSignTest --packTitle ClowdSignTest
           --packAuthors "Caelan Sayler" --packVersion 0.0.1
           --packDir publish --mainExe HelloSign.exe
-          --runtime win-x64 -o releases
+          --runtime win-x64 -o releases --skipVeloAppCheck
           --azureTrustedSignFile .github/azure-trusted-sign.json
         shell: bash
 
