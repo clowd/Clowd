@@ -1,0 +1,5 @@
+{
+  "Endpoint": "https://neu.codesigning.azure.net/",
+  "CodeSigningAccountName": "tidewater-signing",
+  "CertificateProfileName": "Clowd"
+}

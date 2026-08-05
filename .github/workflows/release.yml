@@ -37,6 +37,8 @@ on:
 permissions:
   contents: write
   actions: read
+  # OIDC token for azure/login (Azure Trusted Signing on the Windows rids)
+  id-token: write
 
 jobs:
   # creates the draft release the matrix jobs upload into, so that no two vpk
@@ -143,6 +145,17 @@ jobs:
           || echo "No previous release found for channel $CHANNEL (first release?)"
         shell: bash
 
+      # vpk authenticates to Trusted Signing via DefaultAzureCredential, which picks
+      # up the CLI session azure/login establishes. The metadata file only names the
+      # signing endpoint/account/profile — nothing sensitive.
+      - name: Azure login (Trusted Signing)
+        if: runner.os == 'Windows'
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
       - name: Pack (Windows)
         if: runner.os == 'Windows'
         run: >
@@ -150,6 +163,7 @@ jobs:
           --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui.exe
           --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
           --icon clowd_ui/Clowd.Ui/Assets/clowd-default.ico
+          --azureTrustedSignFile .github/azure-trusted-sign.json
         shell: bash
 
       # velopack signs + notarizes the .app and .pkg during pack (codesign/notarytool)

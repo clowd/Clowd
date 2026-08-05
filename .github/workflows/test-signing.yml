@@ -1,0 +1,59 @@
+name: Test Signing
+
+# Scratch workflow to validate Azure Trusted Signing end-to-end before it gates
+# a real release: packs a trivial console app through the exact same vpk
+# --azureTrustedSignFile flow release.yml uses, and uploads the output so the
+# signature can be verified locally with Get-AuthenticodeSignature.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # OIDC token for azure/login
+  id-token: write
+
+jobs:
+  sign:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install vpk
+        run: dotnet tool install -g vpk
+        shell: bash
+
+      - name: Build dummy app
+        run: |
+          dotnet new console -o hello -n HelloSign
+          dotnet publish hello -c Release -r win-x64 --self-contained false -o publish
+        shell: bash
+
+      - name: Azure login (Trusted Signing)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Pack + sign
+        run: >
+          vpk pack --packId ClowdSignTest --packTitle ClowdSignTest
+          --packAuthors "Caelan Sayler" --packVersion 0.0.1
+          --packDir publish --mainExe HelloSign.exe
+          --runtime win-x64 -o releases
+          --azureTrustedSignFile .github/azure-trusted-sign.json
+        shell: bash
+
+      - name: Upload signed output
+        uses: actions/upload-artifact@v7
+        with:
+          name: signed-test
+          path: releases/
+          if-no-files-found: error
