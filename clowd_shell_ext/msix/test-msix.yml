@@ -124,9 +124,19 @@ jobs:
           $pkg | Format-List Name, Version, InstallLocation, PackageFullName, SignatureKind, IsPartiallyStaged, Status
           $expected = "$env:CLOWD_VERSION.0"
           if ($pkg.Version -ne $expected) { Write-Error "version mismatch: expected $expected, got $($pkg.Version)"; exit 1 }
+          # InstallLocation is the WindowsApps staging dir (manifest+logos only); the external
+          # content dir surfaces as Package.EffectiveExternalPath, which needs the WinRT
+          # projection — available in Windows PowerShell, not pwsh.
           $root = (Resolve-Path root).Path
-          if ($pkg.InstallLocation.TrimEnd('\') -ne $root.TrimEnd('\')) {
-            Write-Error "InstallLocation mismatch: expected $root, got $($pkg.InstallLocation)"; exit 1
+          $ext = powershell.exe -NoProfile -NonInteractive -Command @"
+          `$null = [Windows.Management.Deployment.PackageManager, Windows.Management.Deployment, ContentType=WindowsRuntime]
+          `$pm = New-Object Windows.Management.Deployment.PackageManager
+          `$p = `$pm.FindPackageForUser('', '$($pkg.PackageFullName)')
+          `$p.EffectiveExternalPath
+          "@
+          Write-Output "EffectiveExternalPath: $ext"
+          if ("$ext".TrimEnd('\') -ne $root.TrimEnd('\')) {
+            Write-Error "EffectiveExternalPath mismatch: expected $root, got '$ext'"; exit 1
           }
 
       # informational only: packaged COM classes land in the per-user
@@ -144,6 +154,16 @@ jobs:
               Get-ChildItem $key -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }
             } else {
               Write-Output "--- $key (not present)"
+            }
+          }
+          # the packaged-COM server registration carries the DLL path resolved against the
+          # external location — the definitive proof the sparse wiring is intact end to end
+          $pkg = Get-AppxPackage -Name Clowd.ShellExtension
+          $classKey = "Registry::HKEY_CLASSES_ROOT\PackagedCom\Package\$($pkg.PackageFullName)"
+          if (Test-Path $classKey) {
+            Get-ChildItem $classKey -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Output $_.Name
+              foreach ($v in $_.Property) { Write-Output ("    {0} = {1}" -f $v, $_.GetValue($v)) }
             }
           }
 
