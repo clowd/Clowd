@@ -21,6 +21,7 @@ use windows::Win32::System::Threading::{CreateProcessW, DETACHED_PROCESS, PROCES
 use windows::Win32::UI::Shell::{
     IEnumExplorerCommand, IExplorerCommand, IExplorerCommand_Impl, IShellItemArray, ECF_DEFAULT, ECS_ENABLED, SIGDN_FILESYSPATH,
 };
+use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
 
 use crate::invoke;
 
@@ -135,6 +136,10 @@ fn spawn_detached(exe: &Path, paths: &[String]) -> windows::core::Result<()> {
             &startup,
             &mut process,
         )?;
+        // hand the child our foreground rights so its window (or the one the running
+        // instance raises for these paths) can come to the front; best-effort, it only
+        // works while Explorer still counts us as the foreground interaction
+        let _ = AllowSetForegroundWindow(process.dwProcessId);
         let _ = CloseHandle(process.hProcess);
         let _ = CloseHandle(process.hThread);
     }
@@ -193,7 +198,20 @@ impl IExplorerCommand_Impl for ExplorerCommand_Impl {
                 return Ok(());
             }
             let exe = resolve_exe().ok_or_else(|| windows::core::Error::from_hresult(E_FAIL))?;
-            spawn_detached(&exe, &paths)
+            // a selection can outgrow a single command line, so it may take several
+            // launches; the app debounces them back into one batch
+            let mut spawned = false;
+            let mut first_error = None;
+            for chunk in invoke::chunk_paths(&exe.to_string_lossy(), &paths) {
+                match spawn_detached(&exe, &chunk) {
+                    Ok(()) => spawned = true,
+                    Err(error) => first_error = first_error.or(Some(error)),
+                }
+            }
+            match first_error {
+                Some(error) if !spawned => Err(error),
+                _ => Ok(()),
+            }
         })
     }
 

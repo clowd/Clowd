@@ -73,7 +73,7 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void DangerousFile_WithWrappingOn_ZipsUnderOriginalName()
         {
-            var decision = Decide(new[] { @"C:\downloads\tool.exe" }, wrapDangerous: true);
+            var decision = Decide(new[] { Path.Combine("downloads", "tool.exe") }, wrapDangerous: true);
 
             Assert.True(decision.Zip);
             Assert.Equal("tool.exe.zip", decision.ArchiveName);
@@ -94,7 +94,7 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void DangerousFile_CaseInsensitive_StillWrapped()
         {
-            var decision = Decide(new[] { @"C:\SETUP.MSI" }, wrapDangerous: true);
+            var decision = Decide(new[] { Path.Combine("downloads", "SETUP.MSI") }, wrapDangerous: true);
 
             Assert.True(decision.Zip);
             Assert.Equal("SETUP.MSI.zip", decision.ArchiveName);

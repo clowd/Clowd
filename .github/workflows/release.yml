@@ -164,6 +164,12 @@ jobs:
       - name: Sign shell extension MSIX (Windows)
         if: runner.os == 'Windows'
         run: |
+          # a restored build cache from before the shell extension existed has no msix;
+          # there is simply nothing to sign in that case, and the pack below still works.
+          if (-not (Test-Path publish/ClowdShellExt.msix)) {
+            Write-Warning "publish/ClowdShellExt.msix not found - skipping shell extension signing."
+            exit 0
+          }
           $tools = Split-Path (Get-Command vpk).Source
           $signing = (Resolve-Path "$tools/.store/vpk/*/vpk/*/vendor/signing" | Select-Object -Last 1).Path
           & (Join-Path $signing signtool.exe) sign /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 `
