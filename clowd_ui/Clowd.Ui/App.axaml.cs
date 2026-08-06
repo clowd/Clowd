@@ -82,6 +82,10 @@ namespace Clowd
                 AutoStartManager.Sync(SettingsRoot.Current.General.RegisterAutoStart);
                 ExplorerContextMenuManager.Sync(SettingsRoot.Current.General.RegisterExplorerContextMenu);
 
+                // the sparse package sync shells out to PowerShell (seconds, not milliseconds), so
+                // unlike the registry-backed managers above it stays off the UI thread.
+                _ = Task.Run(() => SparsePackageManager.Sync(SettingsRoot.Current.General.RegisterExplorerContextMenu));
+
                 SettingsRoot.Current.General.PropertyChanged += (s, e) =>
                 {
                     if (e.PropertyName == nameof(SettingsGeneral.Theme))
@@ -91,7 +95,11 @@ namespace Clowd
                     else if (e.PropertyName == nameof(SettingsGeneral.RegisterAutoStart))
                         AutoStartManager.TrySetEnabled(SettingsRoot.Current.General.RegisterAutoStart);
                     else if (e.PropertyName == nameof(SettingsGeneral.RegisterExplorerContextMenu))
-                        ExplorerContextMenuManager.TrySetEnabled(SettingsRoot.Current.General.RegisterExplorerContextMenu);
+                    {
+                        var enabled = SettingsRoot.Current.General.RegisterExplorerContextMenu;
+                        ExplorerContextMenuManager.TrySetEnabled(enabled);
+                        _ = Task.Run(() => SparsePackageManager.TrySetEnabled(enabled));
+                    }
                 };
 
                 SetupTrayIcon();

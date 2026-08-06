@@ -2,8 +2,10 @@
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Core.Util;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Clowd.Upload.Accelerate;
@@ -31,6 +33,7 @@ namespace Clowd.Upload
         public override string Description => "Uploads any file as a BlockBlob to a public container";
         public override SupportedUploadType SupportedUpload => SupportedUploadType.All;
         public override Stream Icon => new Resource().AzureIcon;
+        public override bool SupportsUnseekableUpload => true;
 
         public string ConnectionString
         {
@@ -103,6 +106,9 @@ namespace Clowd.Upload
         public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
             CancellationToken cancelToken)
         {
+            if (!fileStream.CanSeek)
+                return await UploadUnseekableAsync(fileStream, progress, uploadName, cancelToken);
+
             var key = GetNewBlobKey();
             var blob = await CreateBlobAsync(key);
 
@@ -118,11 +124,65 @@ namespace Clowd.Upload
             return await SetPropertiesAndGetResult(blob, uploadName, false);
         }
 
+        // the accelerate protocol needs the ContentLength up front, so non-seekable streams skip
+        // acceleration and go direct via the block-upload path instead.
         public override Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable,
             string uploadName, CancellationToken cancelToken)
-            => AccelerateUploads
+            => AccelerateUploads && fileStream.CanSeek
                 ? UploadAcceleratedAsync(fileStream, progress, urlAvailable, uploadName, cancelToken)
                 : UploadAsync(fileStream, progress, uploadName, cancelToken);
+
+        /// <summary>Streams a payload of unknown length as a sequence of 8 MiB blocks committed
+        /// with a final block list, so nothing is ever spooled to disk.</summary>
+        private async Task<UploadResult> UploadUnseekableAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
+            CancellationToken cancelToken)
+        {
+            const int blockBufferSize = 8 * 1024 * 1024;
+
+            var key = GetNewBlobKey();
+            var blob = await CreateBlobAsync(key);
+
+            var blockIds = new List<string>();
+            var buffer = new byte[blockBufferSize];
+            long uploaded = 0;
+
+            while (true)
+            {
+                var filled = await FillBufferAsync(fileStream, buffer, cancelToken);
+                if (filled == 0)
+                    break;
+
+                // block ids must be base64 strings of equal pre-encoding length
+                var blockId = Convert.ToBase64String(Encoding.ASCII.GetBytes(blockIds.Count.ToString("d6")));
+                await blob.PutBlockAsync(blockId, new MemoryStream(buffer, 0, filled, false), null,
+                    null, new BlobRequestOptions { }, new OperationContext { }, cancelToken);
+
+                blockIds.Add(blockId);
+                uploaded += filled;
+                progress?.Invoke(uploaded);
+
+                if (filled < buffer.Length)
+                    break;
+            }
+
+            await blob.PutBlockListAsync(blockIds, null, new BlobRequestOptions { }, new OperationContext { }, cancelToken);
+
+            return await SetPropertiesAndGetResult(blob, uploadName, false);
+        }
+
+        private static async Task<int> FillBufferAsync(Stream stream, byte[] buffer, CancellationToken cancelToken)
+        {
+            int filled = 0;
+            while (filled < buffer.Length)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(filled, buffer.Length - filled), cancelToken);
+                if (read == 0)
+                    break;
+                filled += read;
+            }
+
+            return filled;
+        }
 
         private async Task<UploadResult> UploadAcceleratedAsync(Stream fileStream, UploadProgressHandler progress,
             UploadUrlHandler urlAvailable, string uploadName, CancellationToken cancelToken)

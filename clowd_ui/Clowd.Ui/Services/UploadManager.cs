@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.IO.Pipelines;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
@@ -190,26 +191,15 @@ namespace Clowd
 
         public static async Task<UploadResult> UploadSeveralFiles(params string[] filePaths)
         {
-            if (filePaths.Length == 1 && File.Exists(filePaths[0]))
-            {
-                var path = Path.GetFullPath(filePaths[0]);
-                var info = new FileInfo(path);
-                var ext = Path.GetExtension(path);
-                var mime = _mime.GetMimeFromExtension(ext);
-                var category = _mime.GetCategoryFromExtension(ext);
+            // the zip-or-direct decision (including dangerous-file wrapping) lives in
+            // UploadRouting so it is unit testable away from the UI.
+            var decision = UploadRouting.ShouldZip(filePaths, SettingsRoot.Current.Uploads.WrapDangerousUploadsInZip,
+                _mime, File.Exists, p => new FileInfo(p).Length);
 
-                // zip the single file if:
-                // - the file type is unknown / is not a special type like image (can not be rendered nicely in browser)
-                // - we think the mime type might be compressible
-                // - the file size is > 5mb
-                var compress = category == ContentCategory.Unknown && mime.Compressible != false && info.Length > 1024 * 1024 * 5;
-                if (!compress)
-                {
-                    return await UploadFile(path);
-                }
-            }
+            if (!decision.Zip)
+                return await UploadFile(Path.GetFullPath(filePaths[0]));
 
-            return await ZipUpload(filePaths);
+            return await ZipUpload(filePaths, decision.ArchiveName);
         }
 
         /// <summary>Prompts the user to pick an upload destination for the given content type
@@ -240,7 +230,7 @@ namespace Clowd
             return selection.Info.Provider;
         }
 
-        private static async Task<UploadResult> ZipUpload(string[] filePaths)
+        private static async Task<UploadResult> ZipUpload(string[] filePaths, string archiveName = null)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Binary);
             if (provider == null)
@@ -249,6 +239,11 @@ namespace Clowd
             var session = SessionManager.Current.CreateNewSession();
             session.Name = "File Upload";
             session.ContentKind = "file";
+
+            // providers that accept a non-seekable stream get the zip piped straight into the
+            // upload; the rest spool it to a temp file first (below).
+            if (provider is UploadProviderBase { SupportsUnseekableUpload: true } streamable)
+                return await StreamingZipUpload(streamable, filePaths, session, archiveName);
 
             var tmpFolder = Directory.CreateTempSubdirectory("clowd-zip").FullName;
             var zipPath = Path.Combine(tmpFolder, GetRandomName(8) + ".zip");
@@ -309,7 +304,7 @@ namespace Clowd
 
                 UploadProgressHandler handler = (bytesUploaded) => upload.SetProgress(bytesUploaded, size, true);
 
-                var archiveName = GetRandomName(10) + ".zip";
+                archiveName ??= GetRandomName(10) + ".zip";
                 var uploadTask = Upload(provider, zipPath, handler, upload, archiveName);
                 return await HandleUploadResult(upload, uploadTask);
             }
@@ -323,6 +318,89 @@ namespace Clowd
             finally
             {
                 try { Directory.Delete(tmpFolder, true); } catch {; }
+            }
+        }
+
+        private static async Task<UploadResult> StreamingZipUpload(UploadProviderBase provider, string[] filePaths, SessionInfo session,
+            string archiveName)
+        {
+            ActiveUpload upload = null;
+            try
+            {
+                upload = _uploads.StartUpload("Archive", session);
+                if (upload == null)
+                {
+                    // no in-flight upload is possible on a fresh session; bail and clean up.
+                    TryDeleteSession(session);
+                    return null;
+                }
+
+                var composer = await Task.Run(() => ZipStreamComposer.Create(filePaths), upload.CancelToken);
+
+                // no files behind the given paths; there is nothing to upload
+                if (!composer.HasEntries)
+                {
+                    _uploads.DiscardUpload(upload);
+                    return null;
+                }
+
+                // progress is the source bytes consumed by the compressor — the compressed size
+                // isn't known up front, but the input size is.
+                upload.SetStatus("Uploading...");
+                upload.SetProgress(0, composer.TotalSourceBytes, true);
+
+                archiveName ??= GetRandomName(10) + ".zip";
+                return await HandleUploadResult(upload, RunStreamingZip(provider, composer, upload, archiveName));
+            }
+            catch (OperationCanceledException)
+            {
+                if (upload != null)
+                    _uploads.DiscardUpload(upload);
+                return null;
+            }
+        }
+
+        private static async Task<UploadResult> RunStreamingZip(UploadProviderBase provider, ZipStreamComposer composer, ActiveUpload upload,
+            string archiveName)
+        {
+            // the producer writes the zip into the pipe while the provider consumes it; ~8 MiB of
+            // backpressure keeps memory bounded when the network is slower than the disk.
+            var pipe = new Pipe(new PipeOptions(
+                pauseWriterThreshold: 8 * 1024 * 1024, resumeWriterThreshold: 4 * 1024 * 1024, useSynchronizationContext: false));
+
+            using var producerCts = CancellationTokenSource.CreateLinkedTokenSource(upload.CancelToken);
+            var producer = Task.Run(async () =>
+            {
+                try
+                {
+                    var dest = pipe.Writer.AsStream(leaveOpen: true);
+                    await composer.WriteAsync(dest, (consumed, total) => upload.SetProgress(consumed, total, true), producerCts.Token);
+                    await pipe.Writer.CompleteAsync();
+                }
+                catch (Exception ex)
+                {
+                    // faulting the writer resurfaces this exception from the consumer's reads,
+                    // so a compression failure aborts the transfer with the original error.
+                    await pipe.Writer.CompleteAsync(ex);
+                    throw;
+                }
+            });
+
+            try
+            {
+                // provider progress callbacks are discarded — the producer drives the progress bar
+                var result = await Upload(provider, pipe.Reader.AsStream(), _ => { }, upload, archiveName);
+                await producer;
+                return result;
+            }
+            catch
+            {
+                // the consumer failed (or was cancelled) first — stop and drain the producer so
+                // the exception that reaches HandleUploadResult is the one that struck first.
+                producerCts.Cancel();
+                await pipe.Reader.CompleteAsync();
+                try { await producer; } catch {; }
+                throw;
             }
         }
 

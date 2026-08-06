@@ -140,10 +140,15 @@ namespace Clowd.UI.Pages
             AttachedToVisualTree += (s, e) =>
             {
                 ExplorerContextMenuManager.StateChanged += OnContextMenuStateChanged;
+                SparsePackageManager.StateChanged += OnContextMenuStateChanged;
                 ShowContextMenuCaption();
             };
 
-            DetachedFromVisualTree += (s, e) => ExplorerContextMenuManager.StateChanged -= OnContextMenuStateChanged;
+            DetachedFromVisualTree += (s, e) =>
+            {
+                ExplorerContextMenuManager.StateChanged -= OnContextMenuStateChanged;
+                SparsePackageManager.StateChanged -= OnContextMenuStateChanged;
+            };
         }
 
         private void OnContextMenuStateChanged(object sender, EventArgs e) =>
@@ -151,9 +156,20 @@ namespace Clowd.UI.Pages
 
         private void ShowContextMenuCaption()
         {
-            if (ExplorerContextMenuManager.LastError is { } err)
+            // either half failing wins over any hint: a stale checkbox that silently does nothing
+            // is worse than no checkbox.
+            if ((ExplorerContextMenuManager.LastError ?? SparsePackageManager.LastError) is { } err)
             {
                 ContextMenuCaption.Text = "Could not change the context menu setting: " + err;
+                return;
+            }
+
+            // on Win11 the sparse MSIX package puts the entry in the compact menu; LastKnownIsEnabled
+            // is the cached registration state (reading the real one shells out to PowerShell, which
+            // has no place on the UI thread) and StateChanged re-renders this when it settles.
+            if (SparsePackageManager.LastKnownIsEnabled)
+            {
+                ContextMenuCaption.Text = "Appears in the right-click menu. On older Windows versions it's under \"Show more options\".";
                 return;
             }
 

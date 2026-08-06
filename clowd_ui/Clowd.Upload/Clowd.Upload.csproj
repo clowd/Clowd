@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Clowd.Shared.Tests" />
+    <!-- UploadManager drives the internal zip-streaming/routing types directly -->
+    <InternalsVisibleTo Include="Clowd.Ui" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Embed\azure.png" />
