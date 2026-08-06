@@ -23,6 +23,9 @@ namespace Clowd.Upload
 
         public override Stream Icon => new Resource().BackBlazeIcon;
 
+        // uploads delegate to S3UploadProvider, which handles non-seekable streams via multipart
+        public override bool SupportsUnseekableUpload => true;
+
         [Description("The keyID of a B2 application key. The account master key does not work with "
                     + "the S3-compatible API — create an application key instead.")]
         public string KeyId

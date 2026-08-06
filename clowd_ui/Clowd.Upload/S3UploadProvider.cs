@@ -30,6 +30,8 @@ namespace Clowd.Upload
 
         public override Stream Icon => new Resource().S3Icon;
 
+        public override bool SupportsUnseekableUpload => true;
+
         [Description("Your AWS access key ID (or the equivalent key for your S3-compatible provider).")]
         public string AccessKeyId
         {
@@ -151,6 +153,9 @@ namespace Clowd.Upload
         public override async Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
             CancellationToken cancelToken)
         {
+            if (!fileStream.CanSeek)
+                return await UploadUnseekableAsync(fileStream, progress, uploadName, cancelToken);
+
             var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(uploadName)).ContentType;
             var key = GetObjectKey(uploadName);
 
@@ -174,11 +179,133 @@ namespace Clowd.Upload
             };
         }
 
+        // the accelerate protocol needs the ContentLength up front, so non-seekable streams skip
+        // acceleration and go direct via the multipart path instead.
         public override Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable,
             string uploadName, CancellationToken cancelToken)
-            => AccelerateUploads
+            => AccelerateUploads && fileStream.CanSeek
                 ? UploadAcceleratedAsync(fileStream, progress, urlAvailable, uploadName, cancelToken)
                 : UploadAsync(fileStream, progress, uploadName, cancelToken);
+
+        /// <summary>Streams a payload of unknown length through the low-level multipart API:
+        /// 16 MiB is buffered at a time (comfortably above the 5 MiB part minimum) and uploaded
+        /// as one part, so nothing is ever spooled to disk.</summary>
+        private async Task<UploadResult> UploadUnseekableAsync(Stream fileStream, UploadProgressHandler progress, string uploadName,
+            CancellationToken cancelToken)
+        {
+            const int partBufferSize = 16 * 1024 * 1024;
+
+            var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(uploadName)).ContentType;
+            var bucket = _bucketName.Trim();
+            var key = GetObjectKey(uploadName);
+
+            using var client = CreateClient();
+
+            var init = new InitiateMultipartUploadRequest
+            {
+                BucketName = bucket,
+                Key = key,
+                ContentType = mimeType,
+                CannedACL = _makeObjectsPublic ? S3CannedACL.PublicRead : null,
+            };
+            init.Headers.ContentDisposition = $"inline; filename=\"{uploadName}\"";
+
+            var initiated = await client.InitiateMultipartUploadAsync(init, cancelToken);
+
+            try
+            {
+                var partETags = new List<PartETag>();
+                var buffer = new byte[partBufferSize];
+                long uploaded = 0;
+
+                for (int partNumber = 1;; partNumber++)
+                {
+                    var filled = await FillBufferAsync(fileStream, buffer, cancelToken);
+
+                    // an empty first part is still sent — completing a multipart upload with
+                    // zero parts is rejected.
+                    if (filled == 0 && partNumber > 1)
+                        break;
+
+                    var part = new UploadPartRequest
+                    {
+                        BucketName = bucket,
+                        Key = key,
+                        UploadId = initiated.UploadId,
+                        PartNumber = partNumber,
+                        PartSize = filled,
+                        InputStream = new MemoryStream(buffer, 0, filled, false),
+                        IsLastPart = filled < buffer.Length,
+                        // same compatibility toggles as CreatePutObjectRequest
+                        DisablePayloadSigning = _disableChecksumValidation ? true : (bool?)null,
+                        DisableDefaultChecksumValidation = _disableChecksumValidation ? true : (bool?)null,
+                    };
+
+                    if (progress != null)
+                    {
+                        var before = uploaded;
+                        part.StreamTransferProgress += (_, e) => progress(before + e.TransferredBytes);
+                    }
+
+                    var resp = await client.UploadPartAsync(part, cancelToken);
+                    partETags.Add(new PartETag { PartNumber = partNumber, ETag = resp.ETag });
+                    uploaded += filled;
+
+                    if (filled < buffer.Length)
+                        break;
+                }
+
+                await client.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest
+                {
+                    BucketName = bucket,
+                    Key = key,
+                    UploadId = initiated.UploadId,
+                    PartETags = partETags,
+                }, cancelToken);
+            }
+            catch
+            {
+                // abort (not cancellable — cleanup should run even when the upload was cancelled)
+                // so the parts don't linger as billable orphans.
+                try
+                {
+                    await client.AbortMultipartUploadAsync(new AbortMultipartUploadRequest
+                    {
+                        BucketName = bucket,
+                        Key = key,
+                        UploadId = initiated.UploadId,
+                    }, CancellationToken.None);
+                }
+                catch
+                { }
+
+                throw;
+            }
+
+            return new UploadResult
+            {
+                Provider = this,
+                PublicUrl = BuildPublicUrl(client, bucket, key),
+                FileName = uploadName,
+                ContentType = mimeType,
+                UploadKey = key,
+                UploadTime = DateTimeOffset.UtcNow,
+            };
+        }
+
+        private static async Task<int> FillBufferAsync(Stream stream, byte[] buffer, CancellationToken cancelToken)
+        {
+            int filled = 0;
+            while (filled < buffer.Length)
+            {
+                var read = await stream.ReadAsync(buffer.AsMemory(filled, buffer.Length - filled), cancelToken);
+                if (read == 0)
+                    break;
+                filled += read;
+            }
+
+            return filled;
+        }
 
         internal PutObjectRequest CreatePutObjectRequest(Stream fileStream, string mimeType, string key, string uploadName)
         {

@@ -156,6 +156,22 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
+      # vpk Trusted-Signs the loose exes/dlls during pack, but the sparse msix
+      # must be signed as a package beforehand — vpk just bundles it as-is. Reuse
+      # vpk's vendored signtool + Azure dlib so the msix carries the same
+      # certificate as the binaries. pwsh rather than bash: git-bash mangles
+      # signtool's /flag arguments into paths.
+      - name: Sign shell extension MSIX (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $tools = Split-Path (Get-Command vpk).Source
+          $signing = (Resolve-Path "$tools/.store/vpk/*/vpk/*/vendor/signing" | Select-Object -Last 1).Path
+          & (Join-Path $signing signtool.exe) sign /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 `
+            /dlib (Join-Path $signing Azure.CodeSigning.Dlib.dll) /dmdf .github/azure-trusted-sign.json `
+            publish/ClowdShellExt.msix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        shell: pwsh
+
       - name: Pack (Windows)
         if: runner.os == 'Windows'
         run: >

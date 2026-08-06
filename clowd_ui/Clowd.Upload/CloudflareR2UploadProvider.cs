@@ -22,6 +22,9 @@ namespace Clowd.Upload
 
         public override Stream Icon => new Resource().CloudflareIcon;
 
+        // uploads delegate to S3UploadProvider, which handles non-seekable streams via multipart
+        public override bool SupportsUnseekableUpload => true;
+
         [Description("Your Cloudflare account ID (the 32-character hex string shown in the R2 dashboard). "
                     + "You can also paste the bucket's full S3 endpoint, e.g. <account>.r2.cloudflarestorage.com.")]
         public string AccountId

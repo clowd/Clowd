@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Avalonia;
+using Clowd.Config;
 using Clowd.UI;
 using Velopack;
 
@@ -49,13 +50,30 @@ namespace Clowd
                     {
                         AutoStartManager.TrySetEnabled(true);
                         ExplorerContextMenuManager.TrySetEnabled(true);
+                        SparsePackageManager.TrySetEnabled(true);
                     })
-                    // the settings file outlives an uninstall, so both registrations have to be torn
+                    // the sparse package embeds the app version, so every update has to re-register
+                    // the bumped MSIX (which also retro-installs the Win11 menu on installs that
+                    // predate it). Hooks run in a fresh process before App ever loads settings, so
+                    // read the file directly — unlike install, an update must respect a user who
+                    // turned these off (a corrupt file falls back to the same defaults install uses).
+                    .OnAfterUpdateFastCallback(_ =>
+                    {
+                        SettingsGeneral general;
+                        try { general = SettingsService.Load().General; }
+                        catch { general = new SettingsGeneral(); }
+
+                        AutoStartManager.Sync(general.RegisterAutoStart);
+                        ExplorerContextMenuManager.Sync(general.RegisterExplorerContextMenu);
+                        SparsePackageManager.Sync(general.RegisterExplorerContextMenu);
+                    })
+                    // the settings file outlives an uninstall, so all registrations have to be torn
                     // down explicitly here or they linger pointing at a deleted executable.
                     .OnBeforeUninstallFastCallback(_ =>
                     {
                         AutoStartManager.TrySetEnabled(false);
                         ExplorerContextMenuManager.TrySetEnabled(false);
+                        SparsePackageManager.TrySetEnabled(false);
                     });
             }
 
