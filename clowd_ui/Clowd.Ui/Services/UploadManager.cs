@@ -241,8 +241,11 @@ namespace Clowd
             session.ContentKind = "file";
 
             // providers that accept a non-seekable stream get the zip piped straight into the
-            // upload; the rest spool it to a temp file first (below).
-            if (provider is UploadProviderBase { SupportsUnseekableUpload: true } streamable)
+            // upload; the rest spool it to a temp file first (below). Accelerated configs spool
+            // as well: acceleration needs a seekable stream, so streaming would silently drop it
+            // along with the share link it hands back before the transfer even starts.
+            if (provider is UploadProviderBase { SupportsUnseekableUpload: true } streamable
+                && provider is not IAccelerateProvider { AccelerateUploads: true })
                 return await StreamingZipUpload(streamable, filePaths, session, archiveName);
 
             var tmpFolder = Directory.CreateTempSubdirectory("clowd-zip").FullName;
@@ -358,6 +361,19 @@ namespace Clowd
                     _uploads.DiscardUpload(upload);
                 return null;
             }
+            catch (Exception ex)
+            {
+                // enumerating the selection can fail outright (an ACL-protected folder, a file
+                // that vanished): report it the same way a failed transfer is reported, or the
+                // row would sit there forever with the exception unobserved.
+                if (upload != null)
+                    await _uploads.FailUpload(upload, ex);
+                else
+                    TryDeleteSession(session);
+
+                SentryConfig.CaptureHandled(ex, "upload.zip-stream");
+                return null;
+            }
         }
 
         private static async Task<UploadResult> RunStreamingZip(UploadProviderBase provider, ZipStreamComposer composer, ActiveUpload upload,
@@ -368,13 +384,21 @@ namespace Clowd
             var pipe = new Pipe(new PipeOptions(
                 pauseWriterThreshold: 8 * 1024 * 1024, resumeWriterThreshold: 4 * 1024 * 1024, useSynchronizationContext: false));
 
+            // The composer counts source bytes it has read, which runs ahead of the wire by the
+            // pipe plus the provider's staging buffer — on a small archive that reads as a row
+            // stuck at 100% for the entire real transfer. There is no wire-accurate alternative
+            // (the compressed total isn't known until the last byte), so hold the bar just short
+            // of full and let the finished upload below fill it in.
+            void ReportSourceProgress(long consumed, long total)
+                => upload.SetProgress(Math.Min(consumed, (long)(total * 0.95)), total, true);
+
             using var producerCts = CancellationTokenSource.CreateLinkedTokenSource(upload.CancelToken);
             var producer = Task.Run(async () =>
             {
                 try
                 {
                     var dest = pipe.Writer.AsStream(leaveOpen: true);
-                    await composer.WriteAsync(dest, (consumed, total) => upload.SetProgress(consumed, total, true), producerCts.Token);
+                    await composer.WriteAsync(dest, ReportSourceProgress, producerCts.Token);
                     await pipe.Writer.CompleteAsync();
                 }
                 catch (Exception ex)
@@ -391,6 +415,7 @@ namespace Clowd
                 // provider progress callbacks are discarded — the producer drives the progress bar
                 var result = await Upload(provider, pipe.Reader.AsStream(), _ => { }, upload, archiveName);
                 await producer;
+                upload.SetProgress(composer.TotalSourceBytes, composer.TotalSourceBytes, true);
                 return result;
             }
             catch
