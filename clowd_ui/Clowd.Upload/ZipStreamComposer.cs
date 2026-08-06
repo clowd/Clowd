@@ -34,6 +34,17 @@ namespace Clowd.Upload
             TotalSourceBytes = totalSourceBytes;
         }
 
+        /// <summary>A recursive walk that steps over what it is not allowed to read instead of
+        /// throwing, so one ACL-protected subfolder cannot sink the whole archive. AttributesToSkip
+        /// is cleared because the default hides hidden/system files, which the temp-file zip path
+        /// (SearchOption.AllDirectories) includes.</summary>
+        private static readonly EnumerationOptions _walkOptions = new EnumerationOptions
+        {
+            IgnoreInaccessible = true,
+            RecurseSubdirectories = true,
+            AttributesToSkip = 0,
+        };
+
         public static ZipStreamComposer Create(string[] paths)
         {
             var entries = new List<(string, string)>();
@@ -41,8 +52,19 @@ namespace Clowd.Upload
 
             void add(string file, string entryName)
             {
+                long length;
+                try
+                {
+                    length = new FileInfo(file).Length;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // unreadable or already gone — leave it out rather than fail the archive
+                    return;
+                }
+
                 entries.Add((file, entryName));
-                total += new FileInfo(file).Length;
+                total += length;
             }
 
             foreach (var path in paths)
@@ -51,7 +73,7 @@ namespace Clowd.Upload
                 {
                     var root = Path.GetFullPath(path);
                     var rootName = Path.GetFileName(root);
-                    foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+                    foreach (var file in Directory.EnumerateFiles(root, "*", _walkOptions))
                         add(file, Path.Combine(rootName, Path.GetRelativePath(root, file)).Replace('\\', '/'));
                 }
                 else if (File.Exists(path))

@@ -115,6 +115,29 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public async Task Compose_IncludesHiddenFiles()
+        {
+            // the walk is driven by EnumerationOptions so an unreadable subfolder is skipped
+            // rather than fatal; its default also hides hidden/system files, which the temp-file
+            // zip path includes — this pins that difference down.
+            WriteFile(Path.Combine("mydir", "visible.txt"), Encoding.UTF8.GetBytes("visible"));
+            var hidden = WriteFile(Path.Combine("mydir", ".hidden.txt"), Encoding.UTF8.GetBytes("hidden"));
+
+            // a leading dot is enough on unix; windows needs the attribute set explicitly
+            if (OperatingSystem.IsWindows())
+                File.SetAttributes(hidden, FileAttributes.Hidden);
+
+            var composer = ZipStreamComposer.Create(new[] { Path.Combine(_root, "mydir") });
+
+            var output = new MemoryStream();
+            await composer.WriteAsync(new ThrowOnSeekStream(output), null, CancellationToken.None);
+
+            using var zip = new ZipArchive(new MemoryStream(output.ToArray()), ZipArchiveMode.Read);
+            var names = zip.Entries.Select(e => e.FullName).OrderBy(n => n, StringComparer.Ordinal).ToArray();
+            Assert.Equal(new[] { "mydir/.hidden.txt", "mydir/visible.txt" }, names);
+        }
+
+        [Fact]
         public async Task Compose_CancellationMidZip_Propagates()
         {
             var filePath = WriteFile("big.bin", RandomBytes(2_000_000));
