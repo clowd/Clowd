@@ -8,7 +8,9 @@ name: CI
 # obs-express recording distribution in an obs-express/ subdirectory — the
 # layout expected by ScreenCaptureService/ObsBinaryLocator. obs-express is
 # pulled from the latest clowd/obs-express-rs GitHub release (public repo,
-# so the default workflow token suffices).
+# so the default workflow token suffices). Windows packages additionally carry
+# the shell-extension dll (clowd_shell_ext) and its sparse MSIX
+# (ClowdShellExt.msix) for the Win11 modern context menu.
 
 on:
   push:
@@ -61,6 +63,15 @@ jobs:
           cargo test -p clowd_capture_wgpu
         shell: bash
 
+      # the shell extension is a Windows COM dll (empty crate elsewhere), so its
+      # lint/test gate only means anything on the Windows leg.
+      - name: "Rust gate: shell extension (Windows)"
+        if: runner.os == 'Windows'
+        run: |
+          cargo clippy -p clowd_shell_ext -- -D warnings
+          cargo test -p clowd_shell_ext
+        shell: bash
+
       - name: "UI gate: dotnet tests"
         run: |
           dotnet test clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj -c Release --nologo
@@ -105,11 +116,13 @@ jobs:
             target: x86_64-pc-windows-msvc
             obs-asset: obs-express-windows-x64.zip
             exe: .exe
+            msix-arch: x64
           - rid: win-arm64
             os: windows-latest
             target: aarch64-pc-windows-msvc
             obs-asset: obs-express-windows-arm64.zip
             exe: .exe
+            msix-arch: arm64
           - rid: osx-x64
             os: macos-15
             target: x86_64-apple-darwin
@@ -177,6 +190,10 @@ jobs:
       - name: Build capture binary
         run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
 
+      - name: Build shell extension (Windows)
+        if: runner.os == 'Windows'
+        run: cargo build --release -p clowd_shell_ext --target ${{ matrix.target }}
+
       # Sentry symbolicates the capturer's stack traces server-side from these. Without
       # them an LTO'd release build reports mangled frames with no file or line, which is
       # most of the value of reporting the panic at all. Matched by debug ID, so there is
@@ -201,10 +218,39 @@ jobs:
             DIF="$OUT/clowd_capture_wgpu.dSYM"
           fi
           sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
+          # the shell extension dll (Windows-only) gets the same treatment
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            sentry-cli debug-files upload "$OUT/clowd_shell_ext.pdb" "$OUT/clowd_shell_ext.dll"
+          fi
 
       - name: Copy capture binary into package
         run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
         shell: bash
+
+      - name: Copy shell extension into package (Windows)
+        if: runner.os == 'Windows'
+        run: cp "target/${{ matrix.target }}/release/clowd_shell_ext.dll" publish/
+        shell: bash
+
+      # The Win11 modern context menu ships as a sparse package: the msix holds
+      # only the manifest + logos, while the COM dll and exe stay outside it in
+      # the install root (uap10:AllowExternalContent). SparsePackageManager
+      # registers it at install time with Add-AppxPackage -ExternalLocation.
+      # /nv skips payload validation, which would otherwise reject the manifest's
+      # references to that external content. release.yml signs the msix.
+      - name: Build shell extension MSIX (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          $staging = Join-Path $env:RUNNER_TEMP msix-staging
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item -Recurse clowd_shell_ext/msix/Assets (Join-Path $staging Assets)
+          $manifest = (Get-Content clowd_shell_ext/msix/AppxManifest.template.xml -Raw)
+          $manifest = $manifest.Replace('{{VERSION}}', "$env:CLOWD_VERSION.0").Replace('{{ARCH}}', '${{ matrix.msix-arch }}')
+          Set-Content -Path (Join-Path $staging AppxManifest.xml) -Value $manifest -Encoding utf8
+          $makeappx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe' | Select-Object -Last 1
+          & $makeappx.FullName pack /d $staging /p publish/ClowdShellExt.msix /nv /o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        shell: pwsh
 
       - name: Download obs-express (latest release)
         env:

@@ -777,6 +777,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "clowd_shell_ext"
+version = "0.0.0-local"
+dependencies = [
+ "windows",
+ "windows-core",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.58"
 source = "registry+https://github.com/rust-lang/crates.io-index"

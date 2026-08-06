@@ -72,6 +72,17 @@ namespace Clowd.Config
         [Browsable(false)]
         public Dictionary<string, UploadProviderConfig> ProviderConfig { get; set; } = new(StringComparer.Ordinal);
 
+        [DisplayName("Zip risky file types before uploading")]
+        [Description("Wraps executables, scripts and similar files in a zip archive before uploading, "
+                    + "because browsers block direct downloads of these types.")]
+        public bool WrapDangerousUploadsInZip
+        {
+            get => _wrapDangerousUploadsInZip;
+            set => Set(ref _wrapDangerousUploadsInZip, value);
+        }
+
+        private bool _wrapDangerousUploadsInZip = true;
+
         private List<UploadProviderInfo> _providers = new();
 
         // the individual (non-composite) types a provider can be the default for
