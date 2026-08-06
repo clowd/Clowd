@@ -29,6 +29,9 @@ namespace Clowd.Util
 
         private const int MaxMessageSize = 1024 * 1024;
 
+        // AllowSetForegroundWindow(ASFW_ANY): any process may take the foreground
+        private const int ASFW_ANY = -1;
+
         private bool _ready;
         private List<string> _batch;
         private System.Timers.Timer _notifyTimer;
@@ -110,6 +113,16 @@ namespace Clowd.Util
             var prefix = new byte[4];
             BinaryPrimitives.WriteInt32LittleEndian(prefix, payload.Length);
 
+            // Pass our foreground rights on to the instance that will handle these args: we
+            // were just launched (from the shell extension or a shortcut) so we hold them,
+            // and it needs them to raise its window. Best-effort — it only works while we
+            // are still the foreground interaction.
+            if (OperatingSystem.IsWindows())
+            {
+                try { AllowSetForegroundWindow(ASFW_ANY); }
+                catch { }
+            }
+
             try
             {
                 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -185,6 +198,10 @@ namespace Clowd.Util
                 }
             }
         }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
+        private static extern bool AllowSetForegroundWindow(int dwProcessId);
 
         private static void TryDeleteStalePipe()
         {

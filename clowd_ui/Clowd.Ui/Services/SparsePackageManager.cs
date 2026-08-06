@@ -36,6 +36,12 @@ namespace Clowd.UI
         // checkbox, startup sync) can afford to wait out a slow deployment service.
         private const int PowerShellTimeoutMs = 90_000;
 
+        // Deployment refuses concurrent operations on one package, and the settings checkbox can
+        // be toggled faster than a registration takes: serialize the work behind this lock and
+        // let whichever state was requested last be the one that ends up applied.
+        private static readonly object _packageLock = new object();
+        private static volatile bool _requestedEnabled;
+
         /// <summary>Raised after every <see cref="TrySetEnabled"/> (and whenever a read changes
         /// <see cref="LastKnownIsEnabled"/>), so the settings page can show <see cref="LastError"/>
         /// or update its caption.</summary>
@@ -106,8 +112,17 @@ namespace Clowd.UI
                 if (!IsSupported)
                     return false;
 
-                SetEnabledWindows(enabled);
-                UpdateLastKnown(enabled);
+                // publish the request before queueing so a caller that overtakes us in the lock
+                // can see it, and re-read it inside: an older request must not undo a newer one.
+                _requestedEnabled = enabled;
+                bool applied;
+                lock (_packageLock)
+                {
+                    applied = _requestedEnabled;
+                    SetEnabledWindows(applied);
+                }
+
+                UpdateLastKnown(applied);
                 LastError = null;
                 return true;
             }
@@ -133,16 +148,22 @@ namespace Clowd.UI
             if (!IsSupported)
                 return;
 
-            var registered = GetRegisteredVersion();
+            // hold the gate across the read and the apply so a toggle cannot land between them
+            // and get reverted by a decision made from the older state (the lock is reentrant,
+            // so the TrySetEnabled calls below re-enter it on this thread).
+            lock (_packageLock)
+            {
+                var registered = GetRegisteredVersion();
 
-            if (enabled)
-            {
-                if (registered == null || registered != ExpectedPackageVersion())
-                    TrySetEnabled(true);
-            }
-            else if (registered != null)
-            {
-                TrySetEnabled(false);
+                if (enabled)
+                {
+                    if (registered == null || registered != ExpectedPackageVersion())
+                        TrySetEnabled(true);
+                }
+                else if (registered != null)
+                {
+                    TrySetEnabled(false);
+                }
             }
         }
 
@@ -173,13 +194,25 @@ namespace Clowd.UI
 
             CopyExtensionDll(Path.Combine(AppContext.BaseDirectory, SourceDllFileName), installedDll);
 
+            // the copy tolerates a locked target because the DLL already there still works, but
+            // with no DLL at all the registration would only produce a menu entry that does
+            // nothing — fail loudly instead, so the settings page reports it.
+            if (!File.Exists(installedDll))
+                throw new FileNotFoundException("The shell extension could not be copied to " + installedDll
+                                                + ", so the context menu was not registered.", installedDll);
+
             // Add-AppxPackage updates in place when the version went up, but re-adding the same
             // version is an error — and the DLL refresh above is all a same-version apply needs.
-            if (GetRegisteredVersionWindows() == ExpectedPackageVersion())
+            var registered = GetRegisteredVersionWindows();
+            if (registered == ExpectedPackageVersion())
                 return;
 
+            // a channel switch can move the app *down* a version, which a plain Add-AppxPackage
+            // refuses; sideloaded packages take this in either direction.
+            var force = registered == null ? "" : " -ForceUpdateFromAnyVersion";
+
             RunPowerShell("Add-AppxPackage -Path '" + EscapePowerShellLiteral(Path.Combine(AppContext.BaseDirectory, MsixFileName))
-                          + "' -ExternalLocation '" + EscapePowerShellLiteral(root) + "'");
+                          + "' -ExternalLocation '" + EscapePowerShellLiteral(root) + "'" + force);
         }
 
         [SupportedOSPlatform("windows")]
