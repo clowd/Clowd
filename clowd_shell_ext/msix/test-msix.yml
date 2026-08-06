@@ -1,0 +1,175 @@
+name: Test MSIX
+
+# Throwaway diagnostic workflow for the win11-context-menu work: builds the
+# shell extension, packs and Trusted-Signs the sparse MSIX exactly the way
+# ci.yml + release.yml will, then registers it against a fake install root and
+# asserts the registration took. Lives on master because the Azure OIDC
+# federated credential is pinned to refs/heads/master — the branch under test
+# is only checked out for content. Delete after the feature ships.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch/ref to check out and test"
+        required: true
+        type: string
+        default: win11-context-menu
+
+permissions:
+  contents: read
+  # OIDC token for azure/login (Azure Trusted Signing)
+  id-token: write
+
+jobs:
+  test-msix:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          # nbgv (Nerdbank.GitVersioning) needs full history to compute the version height
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Resolve version
+        shell: bash
+        run: |
+          dotnet tool update -g nbgv
+          echo "CLOWD_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
+
+      - name: Build shell extension
+        run: cargo build --release -p clowd_shell_ext --target x86_64-pc-windows-msvc
+
+      # mirrors the installed layout: dll copied out to the root, app exe under
+      # current\. The exe is never executed by this test, only resolved by the
+      # manifest, so a dummy file is enough.
+      - name: Stage fake install root
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path root/current | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/clowd_shell_ext.dll root/ClowdShellExt.dll
+          Set-Content -Path root/current/Clowd.Ui.exe -Value 'dummy'
+
+      # same recipe as the "Build shell extension MSIX" step in ci.yml
+      - name: Build MSIX
+        shell: pwsh
+        run: |
+          $staging = Join-Path $env:RUNNER_TEMP msix-staging
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item -Recurse clowd_shell_ext/msix/Assets (Join-Path $staging Assets)
+          $manifest = (Get-Content clowd_shell_ext/msix/AppxManifest.template.xml -Raw)
+          $manifest = $manifest.Replace('{{VERSION}}', "$env:CLOWD_VERSION.0").Replace('{{ARCH}}', 'x64')
+          Set-Content -Path (Join-Path $staging AppxManifest.xml) -Value $manifest -Encoding utf8
+          Get-Content (Join-Path $staging AppxManifest.xml)
+          $makeappx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe' | Select-Object -Last 1
+          & $makeappx.FullName pack /d $staging /p ClowdShellExt.msix /nv /o
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      # only wanted for its vendored signtool + Azure Trusted Signing dlib
+      - name: Install vpk
+        run: dotnet tool install -g vpk
+        shell: bash
+
+      - name: Azure login (Trusted Signing)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # same recipe as the "Sign shell extension MSIX" step in release.yml
+      - name: Sign MSIX
+        shell: pwsh
+        run: |
+          $tools = Split-Path (Get-Command vpk).Source
+          $signing = (Resolve-Path "$tools/.store/vpk/*/vpk/*/vendor/signing" | Select-Object -Last 1).Path
+          & (Join-Path $signing signtool.exe) sign /fd SHA256 /tr http://timestamp.acs.microsoft.com /td SHA256 `
+            /dlib (Join-Path $signing Azure.CodeSigning.Dlib.dll) /dmdf .github/azure-trusted-sign.json `
+            ClowdShellExt.msix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify signature
+        shell: pwsh
+        run: |
+          $tools = Split-Path (Get-Command vpk).Source
+          $signing = (Resolve-Path "$tools/.store/vpk/*/vpk/*/vendor/signing" | Select-Object -Last 1).Path
+          & (Join-Path $signing signtool.exe) verify /pa /v ClowdShellExt.msix
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Register sparse package
+        shell: pwsh
+        run: |
+          $root = (Resolve-Path root).Path
+          Add-AppxPackage -Path ClowdShellExt.msix -ExternalLocation $root
+
+      - name: Assert registration
+        shell: pwsh
+        run: |
+          $pkg = Get-AppxPackage -Name Clowd.ShellExtension
+          if (-not $pkg) { Write-Error 'package not registered'; exit 1 }
+          $pkg | Format-List Name, Version, InstallLocation, PackageFullName, SignatureKind, IsPartiallyStaged, Status
+          $expected = "$env:CLOWD_VERSION.0"
+          if ($pkg.Version -ne $expected) { Write-Error "version mismatch: expected $expected, got $($pkg.Version)"; exit 1 }
+          # InstallLocation is the WindowsApps staging dir (manifest+logos only); the external
+          # content dir surfaces as Package.EffectiveExternalPath, which needs the WinRT
+          # projection — available in Windows PowerShell, not pwsh.
+          $root = (Resolve-Path root).Path
+          $ext = powershell.exe -NoProfile -NonInteractive -Command @"
+          `$null = [Windows.Management.Deployment.PackageManager, Windows.Management.Deployment, ContentType=WindowsRuntime]
+          `$pm = New-Object Windows.Management.Deployment.PackageManager
+          `$p = `$pm.FindPackageForUser('', '$($pkg.PackageFullName)')
+          `$p.EffectiveExternalPath
+          "@
+          Write-Output "EffectiveExternalPath: $ext"
+          if ("$ext".TrimEnd('\') -ne $root.TrimEnd('\')) {
+            Write-Error "EffectiveExternalPath mismatch: expected $root, got '$ext'"; exit 1
+          }
+
+      # informational only: packaged COM classes land in the per-user
+      # packaged-COM catalog rather than plain HKCR\CLSID, so print whichever
+      # views exist rather than failing on their absence.
+      - name: Probe CLSID registration
+        shell: pwsh
+        run: |
+          $clsid = '{45849D5C-078C-4209-A377-DCF731E5124C}'
+          foreach ($key in "Registry::HKEY_CLASSES_ROOT\CLSID\$clsid",
+                           "Registry::HKEY_CLASSES_ROOT\PackagedCom\ClassIndex\$clsid",
+                           'Registry::HKEY_CLASSES_ROOT\PackagedCom\Package') {
+            if (Test-Path $key) {
+              Write-Output "--- $key"
+              Get-ChildItem $key -Recurse -ErrorAction SilentlyContinue | ForEach-Object { $_.Name }
+            } else {
+              Write-Output "--- $key (not present)"
+            }
+          }
+          # the packaged-COM server registration carries the DLL path resolved against the
+          # external location — the definitive proof the sparse wiring is intact end to end
+          $pkg = Get-AppxPackage -Name Clowd.ShellExtension
+          $classKey = "Registry::HKEY_CLASSES_ROOT\PackagedCom\Package\$($pkg.PackageFullName)"
+          if (Test-Path $classKey) {
+            Get-ChildItem $classKey -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+              Write-Output $_.Name
+              foreach ($v in $_.Property) { Write-Output ("    {0} = {1}" -f $v, $_.GetValue($v)) }
+            }
+          }
+
+      - name: Cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          Get-AppxPackage -Name Clowd.ShellExtension | Remove-AppxPackage
+          Write-Output 'cleanup done'

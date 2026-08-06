@@ -11,6 +11,18 @@
     </UserControl.Resources>
 
     <UserControl.Styles>
+        <!-- setting/caption rhythm copied from GeneralSettingsPage so the checkbox block above
+             the provider list matches the rest of the settings pages -->
+        <Style Selector="StackPanel.Setting">
+            <Setter Property="Spacing" Value="2" />
+        </Style>
+        <Style Selector="TextBlock.Caption">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="MaxWidth" Value="560" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
         <Style Selector="Border.providerItem">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="CornerRadius" Value="6" />
@@ -78,6 +90,14 @@
 
     <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16" Spacing="4">
+            <StackPanel Classes="Setting" Margin="8,0,8,12">
+                <CheckBox IsChecked="{Binding WrapDangerousUploadsInZip}">
+                    <TextBlock Text="Zip risky file types before uploading" TextWrapping="Wrap" />
+                </CheckBox>
+                <TextBlock Classes="Caption"
+                           Text="Executables, scripts and similar files (.exe, .msi, .bat, …) are wrapped in a zip archive first, because browsers block direct downloads of these types." />
+            </StackPanel>
+
             <TextBlock Classes="Body"
                        IsVisible="{Binding !Providers.Length}"
                        Text="No upload providers available." />

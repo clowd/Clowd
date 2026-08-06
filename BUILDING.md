@@ -15,10 +15,13 @@ dotnet build clowd_ui/Clowd.Ui/Clowd.Ui.csproj
 
 The screen capture overlay is a separate Rust binary (`clowd_capture_wgpu`); the tray app / editor is the Avalonia project `Clowd.Ui`. For video recording, Clowd looks for an [obs-express](https://github.com/clowd/obs-express-rs) distribution in an `obs-express/` directory alongside the Clowd.Ui binary — see `.github/workflows/ci.yml` for how release packages are assembled.
 
+On Windows there is also `clowd_shell_ext`, a small COM dll (`IExplorerCommand`) that adds the "Upload with Clowd" entry to the Windows 11 context menu. It is registered as a *sparse* MSIX package: CI substitutes version/arch into `clowd_shell_ext/msix/AppxManifest.template.xml`, packs it with `makeappx` into `ClowdShellExt.msix` (manifest + logos only — the dll stays outside the package as external content), and release.yml signs the msix with Azure Trusted Signing before Velopack bundles it. At install time the app copies the dll to the install root and registers the msix with `Add-AppxPackage -ExternalLocation` (see `SparsePackageManager`). The crate compiles to an empty library on non-Windows so workspace-wide builds still work on macOS.
+
 ## Tests
 
 ```cmd
 cargo test -p clowd_capture_wgpu
+cargo test -p clowd_shell_ext
 dotnet test clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj
 dotnet test clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj
 ```

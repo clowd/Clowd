@@ -40,6 +40,11 @@ namespace Clowd
 
         [Browsable(false)] public abstract Stream Icon { get; }
 
+        /// <summary>True when <see cref="UploadAsync(Stream, UploadProgressHandler, string, CancellationToken)"/>
+        /// accepts a non-seekable stream of unknown length (a zip composed on the fly can be piped
+        /// straight in); providers without it need the payload spooled to a seekable source first.</summary>
+        [Browsable(false)] public virtual bool SupportsUnseekableUpload => false;
+
         protected UploadProviderBase()
         { }
 
