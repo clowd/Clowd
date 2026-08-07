@@ -265,6 +265,20 @@ pub const EXIT_NO_SCREEN_PERMISSION: i32 = 3;
 /// reason from stderr/capture.log rather than a stack trace.
 pub const EXIT_CAPTURE_FAILED: i32 = 4;
 
+/// Exit code for "the monitor topology changed while running as a persistent
+/// host". Not a failure: the warm state (per-monitor workers, hidden windows,
+/// configured surfaces) was built for a topology that no longer exists, and a
+/// fresh start is cheaper and safer than in-process re-init. The shell
+/// respawns immediately with no backoff penalty — keep in sync with
+/// `CaptureProcessHost.cs`'s `ExitCodeDisplayChanged`.
+pub const EXIT_DISPLAY_CHANGED: i32 = 5;
+
+/// Exit code for "a render worker's wgpu device was lost while warm" (driver
+/// reset/update, GPU removed). Same contract as [`EXIT_DISPLAY_CHANGED`] —
+/// clean, respawn me — but distinct so the two causes can be told apart in
+/// logs. Keep in sync with `CaptureProcessHost.cs`'s `ExitCodeGpuLost`.
+pub const EXIT_GPU_LOST: i32 = 6;
+
 #[cfg(windows)]
 impl SystemInterop {
     /// Windows has no screen-capture permission to ask for.

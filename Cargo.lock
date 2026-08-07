@@ -768,6 +768,8 @@ dependencies = [
  "resvg",
  "rfd",
  "sentry",
+ "serde",
+ "serde_json",
  "simplelog",
  "usvg",
  "wgpu",

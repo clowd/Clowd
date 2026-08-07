@@ -27,6 +27,8 @@ log = "0.4"
 simplelog = "0.12"
 winit = "0.30"
 wgpu = { version = "30.0", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 pollster = "1.0"
 bytemuck = "1"
 usvg = { version = "0.47", default-features = false }

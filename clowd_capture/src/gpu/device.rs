@@ -3,13 +3,15 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::telemetry::startup::WorkerTimings;
+use crate::settings::MemoryHintsMode;
+use crate::telemetry::startup::WarmupWorkerTimings;
 
 pub(crate) async fn request_adapter_device(
     instance: &Arc<wgpu::Instance>,
     adapter_hint: Option<(u32, u32)>,
+    memory_hints: MemoryHintsMode,
     t_start: Instant,
-    timings: &WorkerTimings,
+    timings: &WarmupWorkerTimings,
 ) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue, String)> {
     #[cfg(windows)]
     let backends = wgpu::Backends::DX12;
@@ -87,7 +89,17 @@ pub(crate) async fn request_adapter_device(
             label: Some("clowd_capture_wgpu device"),
             required_features,
             required_limits,
-            memory_hints: wgpu::MemoryHints::Performance,
+            // MemoryUsage keeps gpu-allocator's retained-forever memblocks at
+            // 8/4 MB instead of Performance's 128/64 MB — which measured as
+            // the bulk of the persistent host's idle footprint, per display.
+            // Deliberately the default for one-shot mode too: the measured
+            // latency difference is negligible (heap creation is lazy and
+            // sub-ms) and the large snapshot texture takes the allocator's
+            // dedicated path either way, so the modes stay consistent.
+            memory_hints: match memory_hints {
+                MemoryHintsMode::LowerMemoryUsage => wgpu::MemoryHints::MemoryUsage,
+                MemoryHintsMode::MaxPerformance => wgpu::MemoryHints::Performance,
+            },
             trace: wgpu::Trace::Off,
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
         })

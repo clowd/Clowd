@@ -3,7 +3,8 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::telemetry::startup::WorkerTimings;
+use crate::settings::MemoryHintsMode;
+use crate::telemetry::startup::WarmupWorkerTimings;
 
 pub mod desktop;
 pub mod device;
@@ -38,14 +39,18 @@ pub struct DeviceBundle {
     pub peek_bgl: wgpu::BindGroupLayout,
 }
 
-/// GPU state used during the render loop. Built from `DeviceBundle` after
-/// surface and snapshot are available.
+/// GPU state used during the render loop. Built from `DeviceBundle` once
+/// the surface is available. Pipelines, bind-group layouts and the sampler
+/// persist across capture cycles; `snapshot` (the whole-desktop texture) is
+/// set at the start of each cycle and dropped at its end.
 pub struct WindowGpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub pipeline: wgpu::RenderPipeline,
     pub peek_pipeline: wgpu::RenderPipeline,
     pub peek_bgl: wgpu::BindGroupLayout,
+    pub desktop_bgl: wgpu::BindGroupLayout,
+    pub desktop_sampler: wgpu::Sampler,
     #[allow(dead_code)]
     pub surface_format: wgpu::TextureFormat,
     #[allow(dead_code)]
@@ -58,15 +63,16 @@ pub struct WindowGpu {
 pub fn stage_a_create_device(
     instance: Arc<wgpu::Instance>,
     adapter_hint: Option<(u32, u32)>,
+    memory_hints: MemoryHintsMode,
     t_start: Instant,
-    timings: &WorkerTimings,
+    timings: &WarmupWorkerTimings,
 ) -> Result<DeviceBundle> {
     timings
         .prep_start
         .set_once(t_start.elapsed());
 
     pollster::block_on(async {
-        let (adapter, device, queue, adapter_name) = device::request_adapter_device(&instance, adapter_hint, t_start, timings).await?;
+        let (adapter, device, queue, adapter_name) = device::request_adapter_device(&instance, adapter_hint, memory_hints, t_start, timings).await?;
 
         let desktop_bgl = pipeline::create_desktop_bind_group_layout(&device);
         let desktop_sampler = pipeline::create_desktop_sampler(&device);
@@ -99,15 +105,17 @@ pub fn stage_a_create_device(
 
 // ── Assemble final WindowGpu ────────────────────────────────────────
 
-pub fn finalise_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<desktop::DesktopSnapshot>>) -> WindowGpu {
+pub fn finalise_window_gpu(bundle: DeviceBundle) -> WindowGpu {
     WindowGpu {
         device: bundle.device,
         queue: bundle.queue,
         pipeline: bundle.desktop_pipeline,
         peek_pipeline: bundle.peek_pipeline,
         peek_bgl: bundle.peek_bgl,
+        desktop_bgl: bundle.desktop_bgl,
+        desktop_sampler: bundle.desktop_sampler,
         surface_format: SURFACE_FORMAT,
         adapter_name: bundle.adapter_name,
-        snapshot,
+        snapshot: None,
     }
 }

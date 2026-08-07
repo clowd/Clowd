@@ -1,25 +1,38 @@
 use std::sync::atomic::AtomicUsize;
-use std::sync::{mpsc, Arc, OnceLock};
+use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
 
-use crate::geometry::{ScreenPointF, ScreenRect};
+use winit::event_loop::EventLoopProxy;
+
+use crate::geometry::ScreenRect;
+use crate::host::AppEvent;
 use crate::render::protocol::{RenderMsg, WorkerInput};
-use crate::settings::CapturerSettings;
-use crate::sync::VisibleLatch;
+use crate::settings::MemoryHintsMode;
 use crate::system::MonitorInfo;
-use crate::telemetry::startup::StartupTimings;
+use crate::telemetry::startup::WarmupTimings;
 
 pub struct RenderWorkerParams {
     pub monitor: MonitorInfo,
     pub monitor_index: usize,
-    pub settings: Arc<CapturerSettings>,
     pub instance: Arc<wgpu::Instance>,
-    pub initial_mouse: ScreenPointF,
-    pub startup: Arc<StartupTimings>,
-    pub shown_time: Arc<OnceLock<Duration>>,
-    pub ready_count: Arc<AtomicUsize>,
-    pub visible_latch: Arc<VisibleLatch>,
+    pub warmup: Arc<WarmupTimings>,
+    /// GPU allocator strategy for this worker's device (`--memory-hints`).
+    pub memory_hints: MemoryHintsMode,
+    /// Incremented (once, via `ReadyGuard`) when this worker dies without a
+    /// clean shutdown, so the app's show gate (`ready + failed >= expected`)
+    /// can never deadlock on a dead worker.
+    pub failed_count: Arc<AtomicUsize>,
+    /// Incremented once when this worker first reaches the parked state
+    /// (device + pipelines built, surface configured, waiting for a
+    /// `BeginCycle`). The persistent host emits `ready` once
+    /// `parked + failed` covers every worker.
+    pub parked_count: Arc<AtomicUsize>,
+    /// `Some` only in persistent mode: the wgpu device-lost callback
+    /// registered in Stage A signals the main thread through this so the
+    /// host restarts (`EXIT_GPU_LOST`) instead of sitting warm with a
+    /// dead device. `None` in one-shot mode — its device-loss behaviour
+    /// stays unchanged.
+    pub gpu_lost_proxy: Option<EventLoopProxy<AppEvent>>,
 }
 
 pub struct WorkerSetup {

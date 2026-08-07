@@ -20,9 +20,9 @@ pub mod protocol;
 pub mod window;
 pub mod worker;
 use desktop::{FrameState, SnapshotState};
-use frame::draw_once;
+use frame::{draw_once, DrawOutcome};
 use peek::PeekTextureEntry;
-use protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput};
+use protocol::{CycleParams, PeekCommand, RenderMsg, WorkerInput};
 use worker::RenderWorkerParams;
 
 /// Duration of the colour → grayscale fade after the window first becomes
@@ -46,16 +46,18 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let RenderWorkerParams {
         monitor,
         monitor_index,
-        settings,
         instance,
-        initial_mouse,
-        startup,
-        shown_time,
-        ready_count,
-        visible_latch,
+        warmup,
+        memory_hints,
+        failed_count,
+        parked_count,
+        gpu_lost_proxy,
     } = params;
 
-    let mut guard = ReadyGuard::new(ready_count.clone());
+    // Armed for the worker's whole life: any exit that isn't a clean
+    // shutdown bumps `failed_count`, so the app's show gate
+    // (ready + failed >= expected) is never deadlocked by a dead worker.
+    let mut fail_guard = ReadyGuard::new(failed_count);
     let monitor_bounds = monitor.bounds;
     let scale_factor = monitor.scale_factor;
     let refresh_hz = monitor.refresh_hz;
@@ -69,8 +71,8 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
     // ── Stage A: eager GPU prep (no window/surface/screenshot) ──────
 
-    let worker_timings = &startup.background.workers[monitor_index];
-    let bundle = match gpu::stage_a_create_device(instance, adapter_hint, startup.t_start, worker_timings) {
+    let worker_timings = &warmup.workers[monitor_index];
+    let bundle = match gpu::stage_a_create_device(instance, adapter_hint, memory_hints, warmup.t_start, worker_timings) {
         Ok(b) => b,
         Err(e) => {
             error!("render worker {monitor_index}: GPU init failed: {e:?}");
@@ -78,6 +80,23 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         }
     };
     let adapter_name = bundle.adapter_name.clone();
+
+    // Persistent mode: a device lost while parked would otherwise go
+    // unnoticed until the next `show` failed on a dead device — signal
+    // the main thread, which emits `display_changed` and exits with
+    // EXIT_GPU_LOST so the shell respawns a fresh host. Complements (does
+    // not replace) the uncaptured-error handler installed at device
+    // creation.
+    if let Some(proxy) = gpu_lost_proxy {
+        bundle.device.set_device_lost_callback(move |reason, message| {
+            // Destroyed = we tore the device down ourselves (shutdown);
+            // only an unexpected loss should restart the host.
+            if matches!(reason, wgpu::DeviceLostReason::Unknown) {
+                error!("render worker {monitor_index}: GPU device lost: {message}");
+                let _ = proxy.send_event(crate::host::AppEvent::GpuLost);
+            }
+        });
+    }
 
     let mut ui_renderer = UiRenderer::new(
         &bundle.device,
@@ -87,53 +106,38 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         monitor_index,
         monitor_name,
         adapter_name,
-        startup.clone(),
-        shown_time.clone(),
+        warmup.clone(),
     );
 
     worker_timings
         .render_prep
-        .set_once(startup.t_start.elapsed());
+        .set_once(warmup.t_start.elapsed());
 
-    // ── Event-driven wait for Screenshot + Handoff ──────────────────
+    // ── Handoff: wait for the window + surface from the main thread ─
+    // A BeginCycle can legitimately arrive first (the screenshot job races
+    // window creation) — stash it for the cycle loop below.
 
-    let mut snapshot: Option<Arc<gpu::desktop::DesktopSnapshot>> = None;
-    let mut handoff: Option<WindowHandoff> = None;
-
-    while snapshot.is_none() || handoff.is_none() {
+    let mut pending_cycle: Option<Arc<CycleParams>> = None;
+    let handoff = loop {
         match input_rx.recv() {
-            Ok(WorkerInput::Screenshot(captured)) => {
-                startup.background.workers[monitor_index]
-                    .upload_start
-                    .set_once(startup.t_start.elapsed());
-                snapshot = gpu::desktop::upload_snapshot(
-                    &bundle.device,
-                    &bundle.queue,
-                    &captured,
-                    &bundle.desktop_bgl,
-                    &bundle.desktop_sampler,
-                );
-                startup.background.workers[monitor_index]
-                    .upload
-                    .set_once(startup.t_start.elapsed());
-            }
-            Ok(WorkerInput::Handoff(h)) => {
-                handoff = Some(h);
+            Ok(WorkerInput::Handoff(h)) => break h,
+            Ok(WorkerInput::BeginCycle(p)) => pending_cycle = Some(p),
+            Ok(WorkerInput::Shutdown) => {
+                fail_guard.disarm();
+                return;
             }
             Err(_) => {
-                error!("render worker {monitor_index}: input channel closed");
+                error!("render worker {monitor_index}: input channel closed before handoff");
                 return;
             }
         }
-    }
-
-    let handoff = handoff.unwrap();
+    };
     let _window = handoff.window;
     let surface = handoff.surface;
 
-    startup.background.workers[monitor_index]
-        .first_render_start
-        .set_once(startup.t_start.elapsed());
+    worker_timings
+        .handoff
+        .set_once(warmup.t_start.elapsed());
 
     // Verify surface format.
     let caps = surface.get_capabilities(&bundle.adapter);
@@ -145,9 +149,11 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         .unwrap_or(caps.formats[0]);
     assert_eq!(actual_format, SURFACE_FORMAT, "surface format mismatch on monitor {monitor_index}");
 
-    // ── Stage C: assemble final state, configure surface, draw frame 0 ─
+    // ── Assemble persistent GPU state, configure the surface once ────
+    // Pipelines/layouts/sampler live for the worker's lifetime; only the
+    // desktop snapshot (and blur/peek textures) are per capture cycle.
 
-    let gpu = gpu::finalise_window_gpu(bundle, snapshot);
+    let mut gpu = gpu::finalise_window_gpu(bundle);
 
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -161,122 +167,19 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         view_formats: vec![],
         desired_maximum_frame_latency: 1,
     };
-    surface.configure(&gpu.device, &config);
-
-    let mut snapshot_state: Option<SnapshotState> = gpu.snapshot.as_ref().map(|snap| {
-        let mf = monitor_bounds.to_f32();
-        let vd_x = snap.vdesktop_origin[0];
-        let vd_y = snap.vdesktop_origin[1];
-        let vd_w = snap.vdesktop_size[0];
-        let vd_h = snap.vdesktop_size[1];
-        let base_uv_offset_scale = [
-            (mf.left() - vd_x) / vd_w,
-            (mf.top() - vd_y) / vd_h,
-            mf.width() / vd_w,
-            mf.height() / vd_h,
-        ];
-
-        let init_local = screen_to_window(monitor_bounds, initial_mouse);
-
-        let uniforms = WindowUniforms {
-            uv_offset_scale: base_uv_offset_scale,
-            params: [0.0, init_local.x, init_local.y, scale_factor],
-            accent_color: settings.accent_color,
-            selection_rect: [0.0, 0.0, -1.0, -1.0],
-            selection_params: [0.0, 0.0, 0.0, 0.0],
-            cursor_rect: [0.0, 0.0, -1.0, -1.0],
-            cursor_params: [0.0, 0.0, 0.0, 0.0],
-        };
-
-        let ubo = gpu
-            .device
-            .create_buffer(&wgpu::BufferDescriptor {
-                label: Some("window uniforms"),
-                size: WINDOW_UNIFORMS_SIZE,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
-        gpu.queue
-            .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
-
-        let placeholder_cursor = create_placeholder_cursor_view(&gpu.device, &gpu.queue);
-        let (cursor_color_view, cursor_mask_view) = match &snap.cursor {
-            Some(ct) => (&ct.color_view, &ct.mask_view),
-            None => (&placeholder_cursor, &placeholder_cursor),
-        };
-
-        let bind_group = gpu
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("window snapshot bind group"),
-                layout: &snap.bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: ubo.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&snap.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&snap.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::TextureView(cursor_color_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(cursor_mask_view),
-                    },
-                ],
-            });
-
-        SnapshotState {
-            ubo,
-            bind_group,
-            uniforms,
-            base_uv_offset_scale,
-        }
-    });
+    // A hidden (parked) window must not pin full-screen backbuffers — on a
+    // 4K monitor that is tens of MB of VRAM per display doing nothing. The
+    // surface sits at 1×1 between cycles and is configured to monitor size
+    // for the duration of each cycle.
+    let parked_config = wgpu::SurfaceConfiguration {
+        width: 1,
+        height: 1,
+        ..config.clone()
+    };
+    surface.configure(&gpu.device, &parked_config);
 
     let mut perf = PerfTracker::new_with_refresh(refresh_hz);
     let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
-
-    draw_once(
-        &surface,
-        &gpu,
-        &config,
-        snapshot_state.as_ref(),
-        None,
-        &mut ui_renderer,
-        &perf,
-        None,
-        &mut None,
-    );
-    let _ = gpu.device.poll(wgpu::PollType::Wait {
-        submission_index: None,
-        timeout: Some(Duration::from_secs(5)),
-    });
-
-    ui_renderer.mark_first_visible_frame();
-
-    startup.background.workers[monitor_index]
-        .first_render
-        .set_once(startup.t_start.elapsed());
-
-    ready_count.fetch_add(1, Ordering::Release);
-    guard.disarm();
-
-    visible_latch.wait();
-
-    // ── Peek state ───────────────────────────────────────────────────
-
-    let mut peek_textures: HashMap<usize, PeekTextureEntry> = HashMap::new();
-    let mut active_peek: Option<PeekCommand> = None;
-    let mut blurred_desktop: Option<(wgpu::Texture, wgpu::TextureView)> = None;
 
     let peek_ubo = gpu
         .device
@@ -287,287 +190,534 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             mapped_at_creation: false,
         });
 
-    // ── Render loop ─────────────────────────────────────────────────
+    // ── Cycle loop: park → BeginCycle → render until EndCycle ───────
 
-    let start = Instant::now();
-    let mut mouse_pos: ScreenPointF = initial_mouse;
-    let mut zoom: f32 = 1.0;
-    let mut selection: Option<ScreenRect> = None;
-    let mut captured: bool = false;
-    let mut overlays_visible: bool = true;
-    let mut cursor_overlay_visible: bool = true;
-    let mut last_iter = Instant::now();
+    // Fully warm: everything from here on is per-cycle work.
+    parked_count.fetch_add(1, Ordering::Release);
 
-    loop {
-        loop {
-            match msg_rx.try_recv() {
-                Ok(RenderMsg::MouseState {
-                    pos,
-                    zoom: z,
-                    selection: sel,
-                    captured: cap,
-                }) => {
-                    mouse_pos = pos;
-                    zoom = z;
-                    selection = sel;
-                    captured = cap;
-                }
-                Ok(RenderMsg::UiState(state)) => {
-                    overlays_visible = state.overlays_visible;
-                    cursor_overlay_visible = state.cursor_overlay_visible;
-                    ui_renderer.set_state(state);
-                }
-                Ok(RenderMsg::BlurredDesktop(bd)) => {
-                    let max_dim = gpu.device.limits().max_texture_dimension_2d;
-                    if bd.width > max_dim || bd.height > max_dim || bd.width == 0 || bd.height == 0 {
-                        continue;
+    'cycles: loop {
+        let cycle = match pending_cycle.take() {
+            Some(p) => p,
+            None => loop {
+                // Parked between cycles: a blocking recv keeps idle CPU at ~0.
+                match input_rx.recv() {
+                    Ok(WorkerInput::BeginCycle(p)) => break p,
+                    Ok(WorkerInput::Handoff(_)) => {
+                        warn!("render worker {monitor_index}: unexpected handoff ignored");
                     }
-                    let size = wgpu::Extent3d {
-                        width: bd.width,
-                        height: bd.height,
-                        depth_or_array_layers: 1,
-                    };
-                    let texture = gpu
-                        .device
-                        .create_texture(&wgpu::TextureDescriptor {
-                            label: Some("blurred desktop texture"),
-                            size,
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2,
-                            format: wgpu::TextureFormat::Bgra8Unorm,
-                            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                            view_formats: &[],
-                        });
-                    gpu.queue.write_texture(
-                        wgpu::TexelCopyTextureInfo {
-                            texture: &texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        &bd.bgra,
-                        wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(4 * bd.width),
-                            rows_per_image: Some(bd.height),
-                        },
-                        size,
-                    );
-                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    blurred_desktop = Some((texture, view));
-                }
-                Ok(RenderMsg::PeekImage(peek)) => {
-                    let max_dim = gpu.device.limits().max_texture_dimension_2d;
-                    if peek.width > max_dim || peek.height > max_dim || peek.width == 0 || peek.height == 0 {
-                        continue;
+                    Ok(WorkerInput::Shutdown) => {
+                        // WindowHandle::drop — clean shutdown. (Channel
+                        // disconnection can't be relied on here: a still-
+                        // running screenshot/blur job holds sender clones.)
+                        fail_guard.disarm();
+                        return;
                     }
-                    let size = wgpu::Extent3d {
-                        width: peek.width,
-                        height: peek.height,
-                        depth_or_array_layers: 1,
-                    };
-                    let texture = gpu
-                        .device
-                        .create_texture(&wgpu::TextureDescriptor {
-                            label: Some("peek window texture"),
-                            size,
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2,
-                            format: wgpu::TextureFormat::Bgra8Unorm,
-                            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                            view_formats: &[],
-                        });
-                    gpu.queue.write_texture(
-                        wgpu::TexelCopyTextureInfo {
-                            texture: &texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
-                        },
-                        &peek.bgra,
-                        wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(4 * peek.width),
-                            rows_per_image: Some(peek.height),
-                        },
-                        size,
-                    );
-                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    peek_textures.insert(
-                        peek.window_index,
-                        PeekTextureEntry {
-                            _texture: texture,
-                            view,
-                            window_rect: peek.window_rect,
-                            obstruction_rects: peek.obstruction_rects.clone(),
-                            width: peek.width,
-                            height: peek.height,
-                            crop_x: peek.crop_x,
-                            crop_y: peek.crop_y,
-                        },
-                    );
+                    Err(_) => {
+                        // Main thread dropped its senders — clean shutdown.
+                        fail_guard.disarm();
+                        return;
+                    }
                 }
-                Ok(RenderMsg::ShowPeek(cmd)) => {
-                    active_peek = cmd;
-                }
-                Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => return,
-                Err(mpsc::TryRecvError::Empty) => break,
+            },
+        };
+
+        // The cycle may have finished already (cancel / screenshot timeout
+        // before the capture landed) — its windows are hidden and the app
+        // has dropped it, so render nothing and go straight back to
+        // parking. Its stale RenderMsgs are discarded by the cycle_gen
+        // checks below.
+        if cycle.cancelled.load(Ordering::Acquire) {
+            info!("render worker {monitor_index}: discarding BeginCycle for an already-finished cycle");
+            continue 'cycles;
+        }
+
+        // Frame 0 must not composite the previous cycle's UI (action
+        // panel, tips, hovered-window title): this cycle's fresh
+        // UiSharedState is only broadcast after the show gate, which is
+        // after frame 0 is drawn.
+        ui_renderer.begin_cycle(cycle.timings.clone());
+        perf.begin_session();
+
+        // `.get()` so a worker-count mismatch (impossible today — both
+        // construction sites size by the monitor list) degrades to missing
+        // debug rows instead of panicking the render worker.
+        let cycle_timings = cycle.timings.workers.get(monitor_index);
+        let mark = |field: fn(&crate::telemetry::startup::CaptureWorkerTimings) -> &crate::telemetry::startup::AtomicDuration| {
+            if let Some(t) = cycle_timings {
+                field(t).set_once(cycle.timings.t_start.elapsed());
             }
-        }
+        };
 
-        if let Some(state) = snapshot_state.as_mut() {
-            let cursor_textures = gpu
-                .snapshot
-                .as_ref()
-                .and_then(|s| s.cursor.as_ref());
-            state.update_uniforms(
-                &gpu.queue,
-                &FrameState {
-                    monitor_bounds,
-                    mouse_pos,
-                    zoom,
-                    selection,
-                    captured,
-                    overlays_visible,
-                    cursor_overlay_visible,
-                    elapsed: start.elapsed().as_secs_f32(),
-                    surface_size: (config.width, config.height),
-                },
-                cursor_textures,
-            );
-        }
+        mark(|t| &t.configure_start);
+        surface.configure(&gpu.device, &config);
+        mark(|t| &t.configure);
 
-        // Build per-frame peek draw state if active + texture available.
-        let peek_bind_group = active_peek.as_ref().and_then(|cmd| {
-            let pt = peek_textures.get(&cmd.window_index)?;
-            let snap = gpu.snapshot.as_ref()?;
-            let (_, ref blurred_view) = *blurred_desktop.as_ref()?;
+        // ── Stage B: upload this cycle's desktop snapshot ───────────
 
-            // Compute peek uniforms in monitor-local coords.
-            let sel = selection?;
-            let cx = mouse_pos.x;
-            let cy = mouse_pos.y;
-            let local_cursor = screen_to_window(monitor_bounds, ScreenPointF::new(cx, cy));
-            let mon_f = monitor_bounds.to_f32();
+        mark(|t| &t.upload_start);
+        gpu.snapshot = gpu::desktop::upload_snapshot(&gpu.device, &gpu.queue, &cycle.snapshot, &gpu.desktop_bgl, &gpu.desktop_sampler);
+        mark(|t| &t.upload);
 
-            let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
-                if zoom <= 1.0 {
-                    (vd_x - mon_f.left(), vd_y - mon_f.top())
-                } else {
-                    ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y)
-                }
+        // ── Stage C: per-cycle uniforms + bind group, draw frame 0 ──
+        // Accent colour and initial mouse come from CycleParams, not from
+        // settings baked in at worker spawn.
+
+        let mut snapshot_state: Option<SnapshotState> = gpu.snapshot.as_ref().map(|snap| {
+            let mf = monitor_bounds.to_f32();
+            let vd_x = snap.vdesktop_origin[0];
+            let vd_y = snap.vdesktop_origin[1];
+            let vd_w = snap.vdesktop_size[0];
+            let vd_h = snap.vdesktop_size[1];
+            let base_uv_offset_scale = [
+                (mf.left() - vd_x) / vd_w,
+                (mf.top() - vd_y) / vd_h,
+                mf.width() / vd_w,
+                mf.height() / vd_h,
+            ];
+
+            let init_local = screen_to_window(monitor_bounds, cycle.initial_mouse);
+
+            let uniforms = WindowUniforms {
+                uv_offset_scale: base_uv_offset_scale,
+                params: [0.0, init_local.x, init_local.y, scale_factor],
+                accent_color: cycle.accent_color,
+                selection_rect: [0.0, 0.0, -1.0, -1.0],
+                selection_params: [0.0, 0.0, 0.0, 0.0],
+                cursor_rect: [0.0, 0.0, -1.0, -1.0],
+                cursor_params: [0.0, 0.0, 0.0, 0.0],
             };
 
-            let sel_f = sel.to_f32();
-            let (sl, st) = to_local(sel_f.left(), sel_f.top());
-            let (sr, sb) = to_local(sel_f.right(), sel_f.bottom());
-
-            let wr = pt.window_rect.to_f32();
-
-            // Window texture UV: map selection area to portion of window texture.
-            // Use un-zoomed virtual-desktop coordinates so the UV range stays
-            // within [0,1] regardless of zoom level.
-            let tw = pt.width as f32;
-            let th = pt.height as f32;
-            let crop_x = pt.crop_x as f32;
-            let crop_y = pt.crop_y as f32;
-            let raw_sl = sel_f.left() - wr.left();
-            let raw_st = sel_f.top() - wr.top();
-            let raw_sw = sel_f.width();
-            let raw_sh = sel_f.height();
-            let window_uv = [(crop_x + raw_sl) / tw, (crop_y + raw_st) / th, raw_sw / tw, raw_sh / th];
-
-            let desktop_uv = snapshot_state
-                .as_ref()
-                .map(|s| s.uniforms.uv_offset_scale)
-                .unwrap_or([0.0; 4]);
-
-            let mut peek_uniforms = PeekUniforms::zeroed();
-            peek_uniforms.selection_rect = [sl, st, sr, sb];
-            peek_uniforms.window_uv = window_uv;
-            peek_uniforms.desktop_uv = desktop_uv;
-
-            let n = pt.obstruction_rects.len().min(16);
-            peek_uniforms.params = [
-                n as f32,
-                if cmd.captured { 0.0 } else { 0.45 },
-                config.width as f32,
-                config.height as f32,
-            ];
-            peek_uniforms.cursor_params = [local_cursor.x, local_cursor.y, scale_factor, 0.0];
-            for (i, r) in pt
-                .obstruction_rects
-                .iter()
-                .take(16)
-                .enumerate()
-            {
-                let rf = r.to_f32();
-                let (rl, rt) = to_local(rf.left(), rf.top());
-                let (rr, rb) = to_local(rf.right(), rf.bottom());
-                peek_uniforms.obstruction_rects[i] = [rl, rt, rr, rb];
-            }
-
+            let ubo = gpu
+                .device
+                .create_buffer(&wgpu::BufferDescriptor {
+                    label: Some("window uniforms"),
+                    size: WINDOW_UNIFORMS_SIZE,
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    mapped_at_creation: false,
+                });
             gpu.queue
-                .write_buffer(&peek_ubo, 0, bytemuck::bytes_of(&peek_uniforms));
+                .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
+
+            let placeholder_cursor = create_placeholder_cursor_view(&gpu.device, &gpu.queue);
+            let (cursor_color_view, cursor_mask_view) = match &snap.cursor {
+                Some(ct) => (&ct.color_view, &ct.mask_view),
+                None => (&placeholder_cursor, &placeholder_cursor),
+            };
 
             let bind_group = gpu
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("peek bind group"),
-                    layout: &gpu.peek_bgl,
+                    label: Some("window snapshot bind group"),
+                    layout: &snap.bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
-                            resource: peek_ubo.as_entire_binding(),
+                            resource: ubo.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
                             binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&pt.view),
+                            resource: wgpu::BindingResource::TextureView(&snap.view),
                         },
                         wgpu::BindGroupEntry {
                             binding: 2,
-                            resource: wgpu::BindingResource::TextureView(blurred_view),
+                            resource: wgpu::BindingResource::Sampler(&snap.sampler),
                         },
                         wgpu::BindGroupEntry {
                             binding: 3,
-                            resource: wgpu::BindingResource::Sampler(&snap.sampler),
+                            resource: wgpu::BindingResource::TextureView(cursor_color_view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::TextureView(cursor_mask_view),
                         },
                     ],
                 });
-            Some(bind_group)
+
+            SnapshotState {
+                ubo,
+                bind_group,
+                uniforms,
+                base_uv_offset_scale,
+            }
         });
 
-        if gpu_timing.is_some() {
-            let _ = gpu.device.poll(wgpu::PollType::Poll);
-        }
-
-        if let Some(gt) = gpu_timing.as_mut() {
-            for gpu_dur in gt.poll_completed() {
-                perf.backfill_next_gpu(gpu_dur);
-            }
-        }
-
-        let now = Instant::now();
-        let overall = now.duration_since(last_iter);
-        last_iter = now;
-
-        let mut sample: Option<PerfSample> = None;
-        draw_once(
+        // A surface that sat hidden for hours can come back Outdated/Lost;
+        // draw_once then only reconfigures without presenting, and showing
+        // the window would flash the previous cycle's final frame. One
+        // bounded retry after the reconfigure so frame 0 really presents
+        // before ready_count is bumped.
+        mark(|t| &t.first_render_start);
+        let outcome = draw_once(
             &surface,
             &gpu,
             &config,
             snapshot_state.as_ref(),
-            peek_bind_group.as_ref(),
+            None,
             &mut ui_renderer,
             &perf,
-            gpu_timing.as_ref(),
-            &mut sample,
+            None,
+            &mut None,
         );
-        if let Some(mut s) = sample {
-            s.overall = overall;
-            perf.record(s);
+        if outcome == DrawOutcome::Reconfigured {
+            draw_once(
+                &surface,
+                &gpu,
+                &config,
+                snapshot_state.as_ref(),
+                None,
+                &mut ui_renderer,
+                &perf,
+                None,
+                &mut None,
+            );
+        }
+        let _ = gpu.device.poll(wgpu::PollType::Wait {
+            submission_index: None,
+            timeout: Some(Duration::from_secs(5)),
+        });
+
+        mark(|t| &t.first_render);
+
+        cycle
+            .ready_count
+            .fetch_add(1, Ordering::Release);
+
+        cycle.visible_latch.wait();
+
+        // finish_cycle sets `cancelled` and then signals the latch, so a
+        // cycle that ended before the overlay was shown releases us here —
+        // park instead of rendering the dead cycle.
+        if cycle.cancelled.load(Ordering::Acquire) {
+            gpu.snapshot = None;
+            surface.configure(&gpu.device, &parked_config);
+            continue 'cycles;
+        }
+
+        // ── Per-cycle peek state ────────────────────────────────────
+
+        let mut peek_textures: HashMap<usize, PeekTextureEntry> = HashMap::new();
+        let mut active_peek: Option<PeekCommand> = None;
+        let mut blurred_desktop: Option<(wgpu::Texture, wgpu::TextureView)> = None;
+
+        // ── Render loop ─────────────────────────────────────────────
+
+        let start = Instant::now();
+        let mut mouse_pos: ScreenPointF = cycle.initial_mouse;
+        let mut zoom: f32 = 1.0;
+        let mut selection: Option<ScreenRect> = None;
+        let mut captured: bool = false;
+        let mut overlays_visible: bool = true;
+        let mut cursor_overlay_visible: bool = true;
+        let mut last_iter = Instant::now();
+
+        loop {
+            loop {
+                match msg_rx.try_recv() {
+                    Ok(RenderMsg::MouseState {
+                        pos,
+                        zoom: z,
+                        selection: sel,
+                        captured: cap,
+                    }) => {
+                        mouse_pos = pos;
+                        zoom = z;
+                        selection = sel;
+                        captured = cap;
+                    }
+                    Ok(RenderMsg::UiState(state)) => {
+                        overlays_visible = state.overlays_visible;
+                        cursor_overlay_visible = state.cursor_overlay_visible;
+                        ui_renderer.set_state(state);
+                    }
+                    Ok(RenderMsg::BlurredDesktop {
+                        cycle_gen,
+                        image: bd,
+                    }) => {
+                        if cycle_gen != cycle.cycle_gen {
+                            // Late output of a previous cycle's blur job.
+                            continue;
+                        }
+                        let max_dim = gpu.device.limits().max_texture_dimension_2d;
+                        if bd.width > max_dim || bd.height > max_dim || bd.width == 0 || bd.height == 0 {
+                            continue;
+                        }
+                        let size = wgpu::Extent3d {
+                            width: bd.width,
+                            height: bd.height,
+                            depth_or_array_layers: 1,
+                        };
+                        let texture = gpu
+                            .device
+                            .create_texture(&wgpu::TextureDescriptor {
+                                label: Some("blurred desktop texture"),
+                                size,
+                                mip_level_count: 1,
+                                sample_count: 1,
+                                dimension: wgpu::TextureDimension::D2,
+                                format: wgpu::TextureFormat::Bgra8Unorm,
+                                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                                view_formats: &[],
+                            });
+                        gpu.queue.write_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            &bd.bgra,
+                            wgpu::TexelCopyBufferLayout {
+                                offset: 0,
+                                bytes_per_row: Some(4 * bd.width),
+                                rows_per_image: Some(bd.height),
+                            },
+                            size,
+                        );
+                        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                        blurred_desktop = Some((texture, view));
+                    }
+                    Ok(RenderMsg::PeekImage {
+                        cycle_gen,
+                        image: peek,
+                    }) => {
+                        if cycle_gen != cycle.cycle_gen {
+                            // Late output of a previous cycle's walker job —
+                            // its window_index would denote a different
+                            // window in this cycle's snapshot.
+                            continue;
+                        }
+                        let max_dim = gpu.device.limits().max_texture_dimension_2d;
+                        if peek.width > max_dim || peek.height > max_dim || peek.width == 0 || peek.height == 0 {
+                            continue;
+                        }
+                        let size = wgpu::Extent3d {
+                            width: peek.width,
+                            height: peek.height,
+                            depth_or_array_layers: 1,
+                        };
+                        let texture = gpu
+                            .device
+                            .create_texture(&wgpu::TextureDescriptor {
+                                label: Some("peek window texture"),
+                                size,
+                                mip_level_count: 1,
+                                sample_count: 1,
+                                dimension: wgpu::TextureDimension::D2,
+                                format: wgpu::TextureFormat::Bgra8Unorm,
+                                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                                view_formats: &[],
+                            });
+                        gpu.queue.write_texture(
+                            wgpu::TexelCopyTextureInfo {
+                                texture: &texture,
+                                mip_level: 0,
+                                origin: wgpu::Origin3d::ZERO,
+                                aspect: wgpu::TextureAspect::All,
+                            },
+                            &peek.bgra,
+                            wgpu::TexelCopyBufferLayout {
+                                offset: 0,
+                                bytes_per_row: Some(4 * peek.width),
+                                rows_per_image: Some(peek.height),
+                            },
+                            size,
+                        );
+                        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                        peek_textures.insert(
+                            peek.window_index,
+                            PeekTextureEntry {
+                                _texture: texture,
+                                view,
+                                window_rect: peek.window_rect,
+                                obstruction_rects: peek.obstruction_rects.clone(),
+                                width: peek.width,
+                                height: peek.height,
+                                crop_x: peek.crop_x,
+                                crop_y: peek.crop_y,
+                            },
+                        );
+                    }
+                    Ok(RenderMsg::ShowPeek(cmd)) => {
+                        active_peek = cmd;
+                    }
+                    Ok(RenderMsg::EndCycle {
+                        cycle_gen,
+                    }) => {
+                        if cycle_gen != cycle.cycle_gen {
+                            // EndCycle of an earlier cycle whose BeginCycle
+                            // was discarded (see the `cancelled` check
+                            // above) — not ours to act on.
+                            continue;
+                        }
+                        // Drop the whole-desktop snapshot; the blur/peek
+                        // textures and snapshot state fall out of scope with
+                        // this cycle iteration. Frees the per-device VRAM
+                        // (including the swapchain backbuffers, via the 1×1
+                        // parked surface), then park for the next BeginCycle.
+                        gpu.snapshot = None;
+                        surface.configure(&gpu.device, &parked_config);
+                        continue 'cycles;
+                    }
+                    Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => {
+                        fail_guard.disarm();
+                        return;
+                    }
+                    Err(mpsc::TryRecvError::Empty) => break,
+                }
+            }
+
+            if let Some(state) = snapshot_state.as_mut() {
+                let cursor_textures = gpu
+                    .snapshot
+                    .as_ref()
+                    .and_then(|s| s.cursor.as_ref());
+                state.update_uniforms(
+                    &gpu.queue,
+                    &FrameState {
+                        monitor_bounds,
+                        mouse_pos,
+                        zoom,
+                        selection,
+                        captured,
+                        overlays_visible,
+                        cursor_overlay_visible,
+                        elapsed: start.elapsed().as_secs_f32(),
+                        surface_size: (config.width, config.height),
+                    },
+                    cursor_textures,
+                );
+            }
+
+            // Build per-frame peek draw state if active + texture available.
+            let peek_bind_group = active_peek.as_ref().and_then(|cmd| {
+                let pt = peek_textures.get(&cmd.window_index)?;
+                let snap = gpu.snapshot.as_ref()?;
+                let (_, ref blurred_view) = *blurred_desktop.as_ref()?;
+
+                // Compute peek uniforms in monitor-local coords.
+                let sel = selection?;
+                let cx = mouse_pos.x;
+                let cy = mouse_pos.y;
+                let local_cursor = screen_to_window(monitor_bounds, ScreenPointF::new(cx, cy));
+                let mon_f = monitor_bounds.to_f32();
+
+                let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
+                    if zoom <= 1.0 {
+                        (vd_x - mon_f.left(), vd_y - mon_f.top())
+                    } else {
+                        ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y)
+                    }
+                };
+
+                let sel_f = sel.to_f32();
+                let (sl, st) = to_local(sel_f.left(), sel_f.top());
+                let (sr, sb) = to_local(sel_f.right(), sel_f.bottom());
+
+                let wr = pt.window_rect.to_f32();
+
+                // Window texture UV: map selection area to portion of window texture.
+                // Use un-zoomed virtual-desktop coordinates so the UV range stays
+                // within [0,1] regardless of zoom level.
+                let tw = pt.width as f32;
+                let th = pt.height as f32;
+                let crop_x = pt.crop_x as f32;
+                let crop_y = pt.crop_y as f32;
+                let raw_sl = sel_f.left() - wr.left();
+                let raw_st = sel_f.top() - wr.top();
+                let raw_sw = sel_f.width();
+                let raw_sh = sel_f.height();
+                let window_uv = [(crop_x + raw_sl) / tw, (crop_y + raw_st) / th, raw_sw / tw, raw_sh / th];
+
+                let desktop_uv = snapshot_state
+                    .as_ref()
+                    .map(|s| s.uniforms.uv_offset_scale)
+                    .unwrap_or([0.0; 4]);
+
+                let mut peek_uniforms = PeekUniforms::zeroed();
+                peek_uniforms.selection_rect = [sl, st, sr, sb];
+                peek_uniforms.window_uv = window_uv;
+                peek_uniforms.desktop_uv = desktop_uv;
+
+                let n = pt.obstruction_rects.len().min(16);
+                peek_uniforms.params = [
+                    n as f32,
+                    if cmd.captured { 0.0 } else { 0.45 },
+                    config.width as f32,
+                    config.height as f32,
+                ];
+                peek_uniforms.cursor_params = [local_cursor.x, local_cursor.y, scale_factor, 0.0];
+                for (i, r) in pt
+                    .obstruction_rects
+                    .iter()
+                    .take(16)
+                    .enumerate()
+                {
+                    let rf = r.to_f32();
+                    let (rl, rt) = to_local(rf.left(), rf.top());
+                    let (rr, rb) = to_local(rf.right(), rf.bottom());
+                    peek_uniforms.obstruction_rects[i] = [rl, rt, rr, rb];
+                }
+
+                gpu.queue
+                    .write_buffer(&peek_ubo, 0, bytemuck::bytes_of(&peek_uniforms));
+
+                let bind_group = gpu
+                    .device
+                    .create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("peek bind group"),
+                        layout: &gpu.peek_bgl,
+                        entries: &[
+                            wgpu::BindGroupEntry {
+                                binding: 0,
+                                resource: peek_ubo.as_entire_binding(),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 1,
+                                resource: wgpu::BindingResource::TextureView(&pt.view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 2,
+                                resource: wgpu::BindingResource::TextureView(blurred_view),
+                            },
+                            wgpu::BindGroupEntry {
+                                binding: 3,
+                                resource: wgpu::BindingResource::Sampler(&snap.sampler),
+                            },
+                        ],
+                    });
+                Some(bind_group)
+            });
+
+            if gpu_timing.is_some() {
+                let _ = gpu.device.poll(wgpu::PollType::Poll);
+            }
+
+            if let Some(gt) = gpu_timing.as_mut() {
+                for gpu_dur in gt.poll_completed() {
+                    perf.backfill_next_gpu(gpu_dur);
+                }
+            }
+
+            let now = Instant::now();
+            let overall = now.duration_since(last_iter);
+            last_iter = now;
+
+            let mut sample: Option<PerfSample> = None;
+            draw_once(
+                &surface,
+                &gpu,
+                &config,
+                snapshot_state.as_ref(),
+                peek_bind_group.as_ref(),
+                &mut ui_renderer,
+                &perf,
+                gpu_timing.as_ref(),
+                &mut sample,
+            );
+            if let Some(mut s) = sample {
+                s.overall = overall;
+                perf.record(s);
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ mod capture;
 mod capture_output;
 mod geometry;
 mod gpu;
+mod host;
 mod image_extract;
 mod interaction;
 mod render;
@@ -34,20 +35,37 @@ fn main() -> anyhow::Result<()> {
     // only read back after a non-zero exit, so the file is the only diagnostics that
     // survive a hang. LineWriter flushes each record, so the log is current even if
     // the process dies without unwinding.
+    //
+    // Persistent mode differs on both counts: stdout is the protocol channel
+    // (host::emit), so terminal logging goes to stderr only, and the file
+    // mirror is one long-lived --log-dir/capture-host.log (previous run kept
+    // as .1) instead of a per-session capture.log.
     let mut loggers: Vec<Box<dyn simplelog::SharedLogger>> = vec![simplelog::TermLogger::new(
         log::LevelFilter::Info,
         simplelog::Config::default(),
-        simplelog::TerminalMode::Mixed,
+        if args.persistent { simplelog::TerminalMode::Stderr } else { simplelog::TerminalMode::Mixed },
         simplelog::ColorChoice::Auto,
     )];
-    if let Some(dir) = &args.session_dir {
-        if let Ok(file) = std::fs::File::create(dir.join("capture.log")) {
-            loggers.push(simplelog::WriteLogger::new(
-                log::LevelFilter::Info,
-                simplelog::Config::default(),
-                std::io::LineWriter::new(file),
-            ));
-        }
+    let log_file = if args.persistent {
+        args.log_dir.as_ref().and_then(|dir| {
+            let _ = std::fs::create_dir_all(dir);
+            let path = dir.join("capture-host.log");
+            // Keep exactly one previous generation (std::fs::rename
+            // replaces an existing .1 on every platform we ship).
+            let _ = std::fs::rename(&path, dir.join("capture-host.log.1"));
+            std::fs::File::create(path).ok()
+        })
+    } else {
+        args.session_dir
+            .as_ref()
+            .and_then(|dir| std::fs::File::create(dir.join("capture.log")).ok())
+    };
+    if let Some(file) = log_file {
+        loggers.push(simplelog::WriteLogger::new(
+            log::LevelFilter::Info,
+            simplelog::Config::default(),
+            std::io::LineWriter::new(file),
+        ));
     }
     telemetry::crash::install_logger(simplelog::CombinedLogger::new(loggers));
 
@@ -78,12 +96,6 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
         std::process::exit(system::EXIT_NO_SCREEN_PERMISSION);
     }
 
-    let settings = Arc::new(args.into_settings());
-    if let Some(dir) = &settings.session_dir {
-        info!("session mode: payload will be written to {:?}", dir);
-    }
-    let session = capture::session::CaptureSession::new(settings)?;
-
     // Accessory keeps us out of the dock and stops the overlay stealing activation
     // before it is shown; focus is taken explicitly once every window is ready.
     // Do NOT "harden" this to NSApplicationActivationPolicy::Prohibited: when the
@@ -94,16 +106,48 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     #[cfg(target_os = "macos")]
     let event_loop = {
         use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
-        winit::event_loop::EventLoop::builder()
+        winit::event_loop::EventLoop::<host::AppEvent>::with_user_event()
             .with_activation_policy(ActivationPolicy::Accessory)
             .with_activate_ignoring_other_apps(false)
             .build()?
     };
     #[cfg(not(target_os = "macos"))]
-    let event_loop = winit::event_loop::EventLoop::new()?;
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    let event_loop = {
+        #[allow(unused_mut)]
+        let mut builder = winit::event_loop::EventLoop::<host::AppEvent>::with_user_event();
+        // Posted-message observer for display changes; the sent-message
+        // hook (the delivery path WM_DISPLAYCHANGE actually takes) is
+        // installed by host::display::install below. Persistent only —
+        // one-shot mode has no restart contract.
+        #[cfg(windows)]
+        if args.persistent {
+            use winit::platform::windows::EventLoopBuilderExtWindows;
+            builder.with_msg_hook(host::display::win_msg_hook);
+        }
+        builder.build()?
+    };
 
-    let mut app = session.into_app();
+    let memory_hints = args.memory_hints;
+    let mut app = if args.persistent {
+        // Persistent host: warm up only — every capture's settings arrive
+        // with its `show` command (protocol lines on stdin, fed into the
+        // event loop by the reader thread). Wait (not Poll) while idle;
+        // the app flips to Poll for the duration of each cycle.
+        info!("persistent host mode: warming up");
+        host::stdin::spawn_stdin_reader(event_loop.create_proxy());
+        // Restart-on-topology-change observers (WM_DISPLAYCHANGE hook /
+        // CGDisplayRegisterReconfigurationCallback) — persistent only.
+        host::display::install(event_loop.create_proxy());
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
+        capture::session::WarmSession::new(event_loop.create_proxy(), memory_hints)?.into_app()
+    } else {
+        let settings = Arc::new(args.into_settings());
+        if let Some(dir) = &settings.session_dir {
+            info!("session mode: payload will be written to {:?}", dir);
+        }
+        event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+        capture::session::CaptureSession::new(settings, memory_hints)?.into_app()
+    };
     event_loop.run_app(&mut app)?;
     Ok(())
 }
