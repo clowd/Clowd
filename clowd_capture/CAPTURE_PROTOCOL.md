@@ -82,7 +82,7 @@ macOS — passed verbatim to obs-express `--region`. W and H are always >= 2.
 
 ### 1.3 `session.json` schema
 
-Hand-written fixed-schema JSON, shared with `Clowd.Ui`'s `SessionInfo`.
+Fixed-schema JSON, shared with `Clowd.Ui`'s `SessionInfo`.
 Rects serialize as `{ "X": …, "Y": …, "Width": …, "Height": … }`
 (`Clowd.PlatformUtil.ScreenRect` casing).
 
