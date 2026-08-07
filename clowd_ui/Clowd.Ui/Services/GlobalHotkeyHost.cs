@@ -203,6 +203,17 @@ namespace Clowd.UI
             {
                 hook.Dispose();
             }
+            catch (HookException ex)
+            {
+                // "Failed stopping the global hook" (CLOWD-G) means uiohook_stop() was called on an
+                // event loop that had already exited: SharpHook gates the stop on a plain
+                // non-volatile IsRunning that the hook thread only clears *after* its loop returns,
+                // so the disposing thread can still read true. The hook is then already in the state
+                // this method wanted it in, and both callers — app exit, and OnHookFailed after the
+                // hook has died — are abandoning it permanently, so there is nothing left to leak.
+                // (EnsureHookStarted never retries once _hookError is set, so no restart path either.)
+                Debug.WriteLine("[GlobalHotkeyHost] hook was already stopped: " + ex.Message);
+            }
             catch (Exception ex)
             {
                 Debug.WriteLine("[GlobalHotkeyHost] hook dispose threw: " + ex);
