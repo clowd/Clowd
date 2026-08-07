@@ -8,13 +8,14 @@ name: Release
 #
 # Runs as a matrix over the four rids; Velopack supports multiple jobs uploading
 # to the same GitHub release (--merge). Each rid maps to a Velopack channel
-# (win-x64, osx-arm64, ...), with a "-pre" suffix when publishing a pre-release.
-# The app (UpdateService) follows whichever channel it was installed from.
+# (win-x64, osx-arm64, ...). The app (UpdateService) always follows the newest
+# release on its channel; users who opt in to experimental builds also see
+# releases still flagged pre-release.
 #
-# A pre-release gets the same "-pre" suffix on its git tag and release title, so
-# the same build can go out as e.g. 4.0.123-pre and later as stable 4.0.123
-# without the two colliding on the tag. The packaged version is unsuffixed either
-# way; the channel is what keeps the two apart for updates.
+# A pre-release differs from a stable release ONLY by the pre-release flag on
+# the GitHub release itself — same channel, same tag, same version. That means a
+# pre-release is promoted to stable simply by unticking the flag on github.com,
+# with no re-publish needed.
 #
 # The draft release is created up-front by a single job rather than by whichever
 # vpk job gets there first: concurrent jobs would each fail to see the others'
@@ -30,7 +31,7 @@ on:
         required: true
         type: string
       prerelease:
-        description: "Publish as a pre-release (uses -pre channels)"
+        description: "Mark as pre-release (opt-in users only)"
         type: boolean
         default: false
 
@@ -58,7 +59,6 @@ jobs:
           gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n version -D version-artifact
           VERSION=$(tr -d '[:space:]' < version-artifact/version.txt)
           TAG="$VERSION"
-          if [ "${{ inputs.prerelease }}" = "true" ]; then TAG="$VERSION-pre"; fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
@@ -123,7 +123,6 @@ jobs:
       - name: Download build artifacts
         run: |
           CHANNEL="${{ matrix.rid }}"
-          if [ "${{ inputs.prerelease }}" = "true" ]; then CHANNEL="$CHANNEL-pre"; fi
           echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
 
           if [ "${{ runner.os }}" = "macOS" ]; then
@@ -137,11 +136,14 @@ jobs:
         shell: bash
 
       # fetch the previous release for this channel so vpk can build delta packages;
-      # fails harmlessly on the very first release of a channel.
+      # always --pre false so deltas are built against the newest *stable* release —
+      # the base most installs are actually on. Pre-release opt-ins may fall back to
+      # a full download; stable users always get the delta path. Fails harmlessly on
+      # the very first release of a channel.
       - name: Download previous release (deltas)
         run: >
           vpk download github --repoUrl "$REPO_URL" --token "$GH_TOKEN"
-          --channel "$CHANNEL" --pre ${{ inputs.prerelease }} -o releases
+          --channel "$CHANNEL" --pre false -o releases
           || echo "No previous release found for channel $CHANNEL (first release?)"
         shell: bash
 

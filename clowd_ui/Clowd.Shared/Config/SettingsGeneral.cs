@@ -155,19 +155,16 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// The Velopack channel to fetch updates from, overriding the channel this build was
-        /// installed from (see UpdateService). Null means "follow the installed channel", which is
-        /// the state of every install until the user switches between stable and pre-release.
-        ///
-        /// Once written this is never set back to null: SettingsService.Load binds through
-        /// ConfigurationBuilder, which skips null values, so a null would let the previously saved
-        /// channel resurrect on the next launch. The effective channel is always stored in full.
+        /// Opt-in to installing pre-release builds. Everyone follows the same release channel;
+        /// this only widens the update feed to also include releases still flagged as
+        /// pre-releases on GitHub (see UpdateService), so the newest release wins either way.
         /// </summary>
-        [Browsable(false)]
-        public string UpdateChannel
+        [DisplayName("Opt-in to experimental builds")]
+        [Description("Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases.")]
+        public bool IncludePrereleaseUpdates
         {
-            get => _updateChannel;
-            set => Set(ref _updateChannel, value);
+            get => _includePrereleaseUpdates;
+            set => Set(ref _includePrereleaseUpdates, value);
         }
 
         /// <summary>
@@ -229,7 +226,7 @@ namespace Clowd.Config
         // minutes (IdleMonitor), so in practice the user finds Clowd already up to date rather than
         // ever seeing it happen.
         private bool _autoApplyUpdates = true;
-        private string _updateChannel;
+        private bool _includePrereleaseUpdates;
         private List<Color> _recentColors = new List<Color>();
     }
 }

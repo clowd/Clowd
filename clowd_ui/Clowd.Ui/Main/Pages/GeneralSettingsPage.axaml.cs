@@ -220,19 +220,11 @@ namespace Clowd.UI.Pages
 
         // ---- Updates group ----
 
-        private const string StableChannelLabel = "Stable";
-        private const string PrereleaseChannelLabel = "Pre-release";
-
-        // set while the channel combo is being populated, so seeding the selection doesn't look like
-        // the user picking a channel (which would kick off a switch + check).
-        private bool _settingChannelSelection;
-
         /// <summary>The update group renders <see cref="UpdateService"/>'s state rather than owning
         /// any of its own: the background scheduler can check, download and stage an update while
         /// this page is closed, or while it is open and untouched.</summary>
         private void InitializeUpdateGroup()
         {
-            InitializeChannelCombo();
             RenderUpdateState();
 
             // UpdateService outlives the settings window (PageManager evicts the window on close), so
@@ -253,8 +245,7 @@ namespace Clowd.UI.Pages
         {
             var update = UpdateService.Default;
 
-            VersionText.Text = "Current version: " + update.CurrentVersion
-                               + (update.IsPrereleaseChannel ? " (pre-release)" : "");
+            VersionText.Text = "Current version: " + update.CurrentVersion;
 
             UpdateStatusText.Text = update.StatusMessage;
             UpdateStatusText.IsVisible = !String.IsNullOrEmpty(update.StatusMessage);
@@ -273,54 +264,12 @@ namespace Clowd.UI.Pages
                                      && update.State != UpdateState.Checking
                                      && update.State != UpdateState.Downloading;
 
-            // shown even where it cannot be used (a loose build has no installed channel to switch
-            // away from) — a missing control reads as a missing feature.
-            ChannelSection.IsEnabled = update.CanSwitchChannel;
-            ChannelHelpText.Text = !update.CanSwitchChannel
-                ? "The update channel can only be changed in an installed build."
-                : update.IsPrereleaseChannel
-                    ? "Pre-release builds get new features first, and are more likely to contain bugs."
-                    : "Stable builds only. Switching channel checks for a new version straight away.";
-
-            SetChannelSelection(update.IsPrereleaseChannel);
-        }
-
-        private void InitializeChannelCombo()
-        {
-            _settingChannelSelection = true;
-            try
-            {
-                ChannelCombo.ItemsSource = new[] { StableChannelLabel, PrereleaseChannelLabel };
-            }
-            finally
-            {
-                _settingChannelSelection = false;
-            }
-        }
-
-        private void SetChannelSelection(bool prerelease)
-        {
-            var index = prerelease ? 1 : 0;
-            if (ChannelCombo.SelectedIndex == index)
-                return;
-
-            _settingChannelSelection = true;
-            try
-            {
-                ChannelCombo.SelectedIndex = index;
-            }
-            finally
-            {
-                _settingChannelSelection = false;
-            }
-        }
-
-        private async void OnChannelChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (_settingChannelSelection)
-                return;
-
-            await UpdateService.Default.SetPrereleaseChannelAsync(ChannelCombo.SelectedIndex == 1);
+            // shown even where it cannot be used (a loose build cannot update at all) — a missing
+            // control reads as a missing feature.
+            PrereleaseSection.IsEnabled = update.IsSupported;
+            PrereleaseHelpText.Text = update.IsSupported
+                ? "Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases."
+                : "Experimental builds can only be opted into in an installed build.";
         }
 
         private async void OnUpdateButtonClick(object sender, RoutedEventArgs e)

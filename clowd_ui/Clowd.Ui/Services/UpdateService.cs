@@ -33,12 +33,15 @@ namespace Clowd.UI
     }
 
     /// <summary>
-    /// Velopack automatic updates from GitHub Releases. Packages are published per-platform channels
-    /// (win-x64, osx-arm64, ...) with a "-pre" suffix for the pre-release channels; the installed
-    /// channel is baked into the package manifest at pack time, so an install keeps following the
-    /// channel it came from unless the user switches (<see cref="SetPrereleaseChannelAsync"/>), which
-    /// is persisted as <see cref="Clowd.Config.SettingsGeneral.UpdateChannel"/> and applied as an
-    /// explicit channel override on every subsequent check.
+    /// Velopack automatic updates from GitHub Releases. Packages are published to one channel per
+    /// platform (win-x64, osx-arm64, ...); a pre-release differs from a stable release only by the
+    /// pre-release flag on the GitHub release itself, so a build is promoted to stable by flipping
+    /// that flag on github.com. Everyone follows the newest release on their platform channel;
+    /// opting in to experimental builds (<see cref="Clowd.Config.SettingsGeneral.IncludePrereleaseUpdates"/>)
+    /// merely widens the feed to also include releases still flagged pre-release.
+    ///
+    /// Installs from the retired "-pre" channels are steered back onto the stable channel via an
+    /// explicit channel override (see <see cref="TryCreateManager"/>).
     ///
     /// <see cref="Start"/> installs a one-minute heartbeat that owns the whole background policy:
     /// checking on the configured interval, downloading when the user has opted into automatic
@@ -105,23 +108,6 @@ namespace Clowd.UI
 
         /// <summary>The channel this build was installed from; null in a dev build.</summary>
         public string InstalledChannel => TryGetInstalledChannel();
-
-        /// <summary>The channel updates are actually fetched from — the user's override if they have
-        /// switched, otherwise the installed channel.</summary>
-        public string Channel
-        {
-            get
-            {
-                var over = SettingsRoot.Current?.General?.UpdateChannel;
-                return String.IsNullOrWhiteSpace(over) ? InstalledChannel : over;
-            }
-        }
-
-        public bool IsPrereleaseChannel => IsPrerelease(Channel);
-
-        /// <summary>Switching channels is only meaningful when we know which channel we are on, i.e.
-        /// on a real install.</summary>
-        public bool CanSwitchChannel => IsSupported && !String.IsNullOrWhiteSpace(InstalledChannel);
 
         private TimeSpan CheckInterval =>
             TimeSpan.FromMinutes((int)(SettingsRoot.Current?.General?.UpdateCheckInterval ?? UpdateInterval.ThreeHourly));
@@ -197,6 +183,22 @@ namespace Clowd.UI
 
                 case nameof(SettingsGeneral.AutoApplyUpdates):
                     _ = TickAsync();
+                    break;
+
+                case nameof(SettingsGeneral.IncludePrereleaseUpdates):
+                    // the flag is baked into the manager's GithubSource, so it has to be rebuilt,
+                    // and anything found or staged under the old setting can no longer be trusted.
+                    // Re-check straight away so the toggle feels immediate on the settings page.
+                    lock (_lock)
+                    {
+                        _managerCreated = false;
+                        _manager = null;
+                    }
+
+                    _available = null;
+                    _staged = null;
+                    _nextCheckUtc = DateTime.MinValue;
+                    _ = CheckForUpdatesAsync(userInitiated: true);
                     break;
             }
         }
@@ -373,67 +375,38 @@ namespace Clowd.UI
             Dispatcher.UIThread.Post(() => App.Current?.ExitApp());
         }
 
-        // ---- channel ----
-
-        /// <summary>
-        /// Switches between the stable and pre-release channel for this platform (win-x64 &lt;-&gt;
-        /// win-x64-pre) and immediately re-checks. The switch is persisted and applied as an explicit
-        /// channel override until an update from the new channel is installed, at which point the
-        /// installed channel matches and the override becomes a no-op.
-        /// </summary>
-        public async Task SetPrereleaseChannelAsync(bool usePrerelease)
-        {
-            var installed = InstalledChannel;
-            if (String.IsNullOrWhiteSpace(installed) || SettingsRoot.Current?.General is not { } general)
-                return;
-
-            var stable = IsPrerelease(installed) ? installed.Substring(0, installed.Length - PrereleaseSuffix.Length) : installed;
-            var target = usePrerelease ? stable + PrereleaseSuffix : stable;
-
-            if (String.Equals(target, Channel, StringComparison.OrdinalIgnoreCase))
-                return;
-
-            general.UpdateChannel = target;
-
-            lock (_lock)
-            {
-                _managerCreated = false;
-                _manager = null;
-            }
-
-            _available = null;
-            _staged = null;
-            _nextCheckUtc = DateTime.MinValue;
-
-            await CheckForUpdatesAsync(userInitiated: true);
-        }
+        // ---- manager ----
 
         private UpdateManager TryCreateManager()
         {
             try
             {
+                // installs from the retired "-pre" channels are steered onto the stable channel —
+                // new releases only publish {rid} feeds, so a "-pre" manifest channel would never
+                // see another update. For everyone else ExplicitChannel stays null, which keeps
+                // Velopack on the manifest channel.
                 var installed = TryGetInstalledChannel();
-                var over = SettingsRoot.Current?.General?.UpdateChannel;
-                var effective = String.IsNullOrWhiteSpace(over) ? installed : over;
-
-                // "explicit" only when it actually differs — leaving ExplicitChannel null keeps
-                // Velopack on the manifest channel, which is what an un-switched install wants.
-                var explicitChannel = String.Equals(effective, installed, StringComparison.OrdinalIgnoreCase) ? null : effective;
+                var explicitChannel = IsPrerelease(installed)
+                    ? installed.Substring(0, installed.Length - PrereleaseSuffix.Length)
+                    : null;
 
                 var options = new UpdateOptions
                 {
                     ExplicitChannel = explicitChannel,
 
-                    // switching pre-release -> stable usually means the newest release on the target
-                    // channel is *older* than what is installed; without this Velopack reports no
-                    // update and the user is stuck on the pre-release forever.
-                    AllowVersionDowngrade = explicitChannel != null,
+                    // opting back out of experimental builds usually means the newest stable
+                    // release is *older* than the installed pre-release; without this Velopack
+                    // reports no update and the install is stuck on the pre-release until stable
+                    // overtakes it. (Same story for leaving a retired "-pre" channel.)
+                    AllowVersionDowngrade = true,
                 };
 
-                // pre-release channels live on GitHub pre-releases, which GithubSource skips unless
-                // asked; stable channels are unaffected by prerelease: true because pre-releases
-                // never contain a stable releases.{channel}.json feed.
-                return new UpdateManager(new GithubSource(RepoUrl, null, IsPrerelease(effective)), options);
+                // GithubSource skips GitHub pre-releases unless asked. Opting in widens the feed
+                // to pre-releases as well; the newest release wins either way, so the opt-in only
+                // ever moves the user forward earlier.
+                var includePrerelease = SettingsRoot.Current?.General?.IncludePrereleaseUpdates == true;
+
+                return new UpdateManager(new GithubSource(RepoUrl, null, includePrerelease), options);
             }
             catch (Exception ex)
             {

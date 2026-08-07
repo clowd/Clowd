@@ -114,12 +114,12 @@
                                    Text="The restart happens only once you have been away from the computer for 10 minutes, and never while a capture, recording or upload is running." />
                     </StackPanel>
 
-                    <StackPanel x:Name="ChannelSection" Classes="Setting">
-                        <StackPanel Classes="SettingRow">
-                            <TextBlock VerticalAlignment="Center" Text="Update channel" />
-                            <ComboBox x:Name="ChannelCombo" MinWidth="160" SelectionChanged="OnChannelChanged" />
-                        </StackPanel>
-                        <TextBlock x:Name="ChannelHelpText" Classes="Caption" />
+                    <StackPanel x:Name="PrereleaseSection" Classes="Setting">
+                        <CheckBox x:Name="PrereleaseCheck" IsChecked="{Binding IncludePrereleaseUpdates}">
+                            <TextBlock Text="Opt-in to experimental builds" TextWrapping="Wrap" />
+                        </CheckBox>
+                        <TextBlock x:Name="PrereleaseHelpText" Classes="Caption"
+                                   Text="Bleeding edge releases may have newer preview features, but also may have more bugs than stable releases." />
                     </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>

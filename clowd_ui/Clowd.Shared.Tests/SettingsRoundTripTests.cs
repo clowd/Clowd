@@ -170,14 +170,14 @@ namespace Clowd.Shared.Tests
             Assert.Equal(UpdateInterval.ThreeHourly, loaded.General.UpdateCheckInterval);
             Assert.True(loaded.General.AutoApplyUpdates);
 
-            // no override until the user switches channel: updates follow the installed channel.
-            Assert.Null(loaded.General.UpdateChannel);
+            // experimental builds are opt-in: stable-only until the user ticks the box.
+            Assert.False(loaded.General.IncludePrereleaseUpdates);
 
             var original = new SettingsRoot();
             original.General.AutoDownloadUpdates = false;
             original.General.UpdateCheckInterval = UpdateInterval.Daily;
             original.General.AutoApplyUpdates = false;
-            original.General.UpdateChannel = "win-x64-pre";
+            original.General.IncludePrereleaseUpdates = true;
 
             SettingsService.Save(original, _path);
             loaded = SettingsService.Load(_path);
@@ -185,7 +185,7 @@ namespace Clowd.Shared.Tests
             Assert.False(loaded.General.AutoDownloadUpdates);
             Assert.Equal(UpdateInterval.Daily, loaded.General.UpdateCheckInterval);
             Assert.False(loaded.General.AutoApplyUpdates);
-            Assert.Equal("win-x64-pre", loaded.General.UpdateChannel);
+            Assert.True(loaded.General.IncludePrereleaseUpdates);
         }
 
         [Fact]
