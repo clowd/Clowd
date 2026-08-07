@@ -459,7 +459,12 @@ namespace Clowd
             catch (Exception ex)
             {
                 await _uploads.FailUpload(upload, ex);
-                SentryConfig.CaptureHandled(ex, "upload.transfer");
+                // FailUpload has already put the reason on the row, so a transfer that died
+                // because the connection did is the user's news, not ours. Only the transport
+                // failures are dropped: a provider that got a response and rejected it, an SDK
+                // exception, or anything a provider raised itself all still report, because a
+                // bug in provider code lands there and not in a dead socket.
+                SentryConfig.CaptureHandledNetwork(ex, "upload.transfer");
                 return null;
             }
 

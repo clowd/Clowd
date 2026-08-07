@@ -1,5 +1,11 @@
 using System;
+using System.IO;
+using System.Net;
+using System.Net.Http;
+using System.Net.Sockets;
 using System.Reflection;
+using System.Security.Authentication;
+using System.Threading.Tasks;
 using Sentry;
 
 namespace Clowd
@@ -100,6 +106,105 @@ namespace Clowd
             });
 #endif
         }
+
+        /// <summary>
+        /// <see cref="CaptureHandled"/> for a call site whose failure mode includes "the network
+        /// didn't work": transient faults (see <see cref="IsTransientNetworkFailure"/>) are dropped,
+        /// everything else — including our own bugs on the same code path — still reports.
+        /// </summary>
+        /// <param name="alsoDropErrorStatuses">
+        /// Also drop a response that arrived carrying an error status code. Only correct for an
+        /// endpoint we do not own and do not control the request shape of — the GitHub release
+        /// feed, where a 403 is a rate limit or an interposed proxy. Leave this off for anything
+        /// speaking to our own services: there, a 4xx is usually us sending the wrong request.
+        /// </param>
+        /// <remarks>
+        /// Only for operations where a failed transfer is already handled gracefully — the update
+        /// check retries on its own schedule, an upload surfaces the error on the row. A network
+        /// call whose failure would leave the app in a bad state should keep using
+        /// <see cref="CaptureHandled"/>.
+        /// </remarks>
+        public static void CaptureHandledNetwork(Exception ex, string operation, bool alsoDropErrorStatuses = false)
+        {
+            if (IsTransientNetworkFailure(ex, alsoDropErrorStatuses))
+                return;
+
+            CaptureHandled(ex, operation);
+        }
+
+        /// <summary>
+        /// True when <paramref name="ex"/> is a network fault that says nothing about Clowd: DNS
+        /// failure, refused or reset connection, a captive portal or corporate proxy interposing
+        /// itself, a TLS handshake that didn't complete.
+        /// </summary>
+        /// <remarks>
+        /// <para>Every one of these is a property of the user's network or the far end on that
+        /// particular day, and none of them is actionable here. They also arrive in enormous
+        /// volume — a single machine behind an expired proxy token retried the update check
+        /// hundreds of times a day (CLOWD-5, CLOWD-6) — which buries the real defects.</para>
+        ///
+        /// <para>The line drawn is <b>did anything answer us</b>. Nothing did: the request died in
+        /// the transport, so no judgement was ever passed on it and none of it can be our fault.
+        /// Something did: the remote read our request and rejected it — which is exactly the shape
+        /// of a bug in provider code (wrong endpoint, stale auth header, malformed multipart), so
+        /// it keeps reporting unless <paramref name="alsoDropErrorStatuses"/> says otherwise.</para>
+        ///
+        /// <para>Only the outermost exception is classified, deliberately. If our code caught a
+        /// network fault and wrapped it in something of its own, that wrapper is a decision our
+        /// code made, and the decision is ours to get wrong — an <c>AmazonS3Exception</c> around a
+        /// dead socket must not be filtered just because a socket is somewhere underneath it.</para>
+        ///
+        /// <para>Typed rather than message-matched: the OS messages are localised into the user's
+        /// system language, so "No such host is known" and "O nome solicitado é válido, mas..."
+        /// are the same fault filed under two Sentry issues.</para>
+        ///
+        /// <para>Not listed, and deliberately: <see cref="TaskCanceledException"/> (an
+        /// <c>HttpClient.Timeout</c> is indistinguishable from a request our own code wedged — a
+        /// deadlocked streaming-zip pipe would time out exactly like a slow uplink), and plain
+        /// <see cref="TimeoutException"/>, which in this codebase mostly means a child process
+        /// never answered rather than a network fault. Note <see cref="CaptureHandled"/> already
+        /// drops every <see cref="OperationCanceledException"/>, so a client-side timeout is
+        /// filtered upstream of here regardless.</para>
+        /// </remarks>
+        public static bool IsTransientNetworkFailure(Exception ex, bool alsoDropErrorStatuses = false)
+        {
+            return Unwrap(ex) switch
+            {
+                // StatusCode is non-null only when a response came back and something called
+                // EnsureSuccessStatusCode on it; null means the exception was raised below that,
+                // in name resolution, connect, TLS, or the proxy tunnel.
+                HttpRequestException http => http.StatusCode is null
+                    ? !IsRequestSideError(http.HttpRequestError)
+                    : alsoDropErrorStatuses,
+
+                SocketException or WebException => true,
+                AuthenticationException => true, // TLS handshake / certificate rejection
+
+                // a connection dropped mid-body surfaces as a plain IOException wrapping the
+                // socket error; a bare IOException on its own is a disk fault, not this.
+                IOException io => io.InnerException is SocketException,
+
+                _ => false,
+            };
+        }
+
+        /// <summary>The handful of <see cref="HttpRequestError"/> values that indict the request we
+        /// sent rather than the network it was sent over — a protocol violation we put on the wire,
+        /// or a limit configured on our own <see cref="HttpClient"/>. Rare, and worth reporting.</summary>
+        private static bool IsRequestSideError(HttpRequestError error) =>
+            error is HttpRequestError.HttpProtocolError
+                  or HttpRequestError.ConfigurationLimitExceeded
+                  or HttpRequestError.ExtendedConnectNotSupported;
+
+        /// <summary>Strips the plumbing wrappers that carry no information of their own, so the
+        /// classification above sees the exception the failing code actually raised.</summary>
+        private static Exception Unwrap(Exception ex) =>
+            ex switch
+            {
+                AggregateException { InnerExceptions.Count: 1 } agg => Unwrap(agg.InnerExceptions[0]),
+                TargetInvocationException { InnerException: { } inner } => Unwrap(inner),
+                _ => ex,
+            };
 
         /// <summary>Reports an exception that escaped to a global handler and was only stopped
         /// there. No-ops in debug builds.</summary>
