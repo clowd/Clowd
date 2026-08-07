@@ -236,7 +236,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("UpdateService: background update tick failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "update.tick");
+                SentryConfig.CaptureHandledNetwork(ex, "update.tick", alsoDropErrorStatuses: true);
             }
         }
 
@@ -276,7 +276,12 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("UpdateService: update check failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "update.check");
+                // the feed lives on github.com, which a good share of installs reach through a
+                // captive portal, a corporate proxy or a filtered DNS resolver — an unreachable
+                // feed is not a defect, and the next tick retries anyway. alsoDropErrorStatuses
+                // because we don't own the far end either: the error statuses this sees in
+                // practice are GitHub rate limits and proxy interception, not a malformed request.
+                SentryConfig.CaptureHandledNetwork(ex, "update.check", alsoDropErrorStatuses: true);
                 _lastCheckUtc = DateTime.UtcNow;
                 _nextCheckUtc = _lastCheckUtc + (RetryInterval < CheckInterval ? RetryInterval : CheckInterval);
                 SetState(UpdateState.Failed, userInitiated
@@ -317,7 +322,7 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("UpdateService: update download failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "update.download");
+                SentryConfig.CaptureHandledNetwork(ex, "update.download", alsoDropErrorStatuses: true);
                 SetState(UpdateState.Failed, "Download failed: " + ex.Message);
                 return false;
             }
