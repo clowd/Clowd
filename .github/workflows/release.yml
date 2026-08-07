@@ -139,11 +139,8 @@ jobs:
       # always --pre false so deltas are built against the newest *stable* release —
       # the base most installs are actually on. Pre-release opt-ins may fall back to
       # a full download; stable users always get the delta path. Fails harmlessly on
-      # the very first release of a channel. Pre-releases skip this step: with no
-      # previous release on disk, vpk has nothing to delta against and just builds
-      # the full package — pre-releases reach only opt-in users, not worth deltas.
+      # the very first release of a channel.
       - name: Download previous release (deltas)
-        if: ${{ !inputs.prerelease }}
         run: >
           vpk download github --repoUrl "$REPO_URL" --token "$GH_TOKEN"
           --channel "$CHANNEL" --pre false -o releases
