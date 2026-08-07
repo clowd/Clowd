@@ -17,11 +17,11 @@ Clowd is a minimalist screen capture / screen recording tool. It sits out of you
  - Fully keyboard accessible
  - Global hotkeys, configurable in settings
  - Lives in the system tray and stays out of your way
- - Automatic updates, with an opt-in pre-release channel
+ - Automatic updates, with opt-in experimental builds
 
 ## Downloads
 
-The latest stable release can always be downloaded below. Installed builds keep themselves up to date automatically; pre-release builds can be opted into via the app settings.
+The latest stable release can always be downloaded below. Installed builds keep themselves up to date automatically; experimental (pre-release) builds can be opted into via the app settings.
 
 | Platform | Installer | Portable |
 | --- | --- | --- |

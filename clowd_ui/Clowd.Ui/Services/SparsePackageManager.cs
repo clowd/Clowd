@@ -208,8 +208,8 @@ namespace Clowd.UI
             var registered = GetRegisteredVersionWindows();
             if (registered != ExpectedPackageVersion())
             {
-                // a channel switch can move the app *down* a version, which a plain Add-AppxPackage
-                // refuses; sideloaded packages take this in either direction.
+                // opting out of experimental builds can move the app *down* a version, which a
+                // plain Add-AppxPackage refuses; sideloaded packages take this in either direction.
                 var force = registered == null ? "" : " -ForceUpdateFromAnyVersion";
 
                 RunPowerShell("Add-AppxPackage -Path '" + EscapePowerShellLiteral(Path.Combine(AppContext.BaseDirectory, MsixFileName))
