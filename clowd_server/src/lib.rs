@@ -19,6 +19,7 @@ pub mod model;
 pub mod paste_core;
 pub mod s3;
 pub mod sanitize;
+pub mod telemetry_core;
 
 // Workers runtime glue — wasm only.
 #[cfg(target_arch = "wasm32")]
@@ -31,6 +32,8 @@ mod relay;
 mod router;
 #[cfg(target_arch = "wasm32")]
 mod session;
+#[cfg(target_arch = "wasm32")]
+mod telemetry;
 #[cfg(target_arch = "wasm32")]
 mod wasm_util;
 

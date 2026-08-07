@@ -23,6 +23,8 @@ use crate::chunkplan::{expected_chunk_len, ChunkPlan, MAX_CHUNK_COUNT};
 use crate::consts::{IDLE_TIMEOUT_MS, LINGER_MS, PART_URL_HEADER, REDIRECT_MAX_AGE_SECS};
 use crate::model::{is_https, CompleteResponse, Destination, SessionState, SessionStatus};
 use crate::sanitize;
+use crate::telemetry::{self, Report};
+use crate::telemetry_core::session_transaction;
 use crate::wasm_util::{error_json, now_ms};
 use crate::{dest, ids, manifest};
 
@@ -178,15 +180,51 @@ impl DurableObject for UploadSession {
             .filter(|s| !s.is_empty())
             .collect();
 
-        match (&method, segments.as_slice()) {
-            (Method::Post, ["init"]) => self.init(&mut req).await,
+        let result = self
+            .dispatch(&mut req, &method, &segments)
+            .await;
+        // Report only the routes the *queue* drives. Every other route is reached
+        // through `router::forward`, whose own funnel reports the very same error
+        // with the public URL attached — capturing here too would file each
+        // failure twice, as two unrelated issues.
+        //
+        // `/relay/{n}` is retried up to five times per chunk, so a broken
+        // destination reports repeatedly. That is the price of recording *why* the
+        // relay failed — the dead-letter event in relay.rs knows only that it did —
+        // and the per-isolate cap in telemetry.rs bounds the storm.
+        if let Err(err) = &result {
+            if matches!(segments.as_slice(), ["relay", _] | ["fail"]) {
+                self.report(Report::error("session.relay", err.to_string()).transaction(session_transaction(method.as_ref(), &segments)))
+                    .await;
+            }
+        }
+        result
+    }
+
+    async fn alarm(&self) -> Result<Response> {
+        let result = self.alarm_inner().await;
+        if let Err(err) = &result {
+            // A failed alarm means the idle timeout or the linger cleanup did not
+            // run: staged chunks leak (until the R2 lifecycle rule) and a dead
+            // session can sit in `Uploading` forever.
+            self.report(Report::fatal("session.alarm", err.to_string()).transaction("DO alarm".to_string()))
+                .await;
+        }
+        result
+    }
+}
+
+impl UploadSession {
+    async fn dispatch(&self, req: &mut Request, method: &Method, segments: &[&str]) -> Result<Response> {
+        match (method, segments) {
+            (Method::Post, ["init"]) => self.init(req).await,
             (Method::Put, ["chunk", n]) => match n.parse::<u64>() {
-                Ok(n) => self.chunk(&mut req, n).await,
+                Ok(n) => self.chunk(req, n).await,
                 Err(_) => error_json("bad chunk number", 400),
             },
-            (Method::Post, ["complete"]) => self.complete(&req).await,
-            (Method::Post, ["abort"]) => self.abort(&req).await,
-            (Method::Delete, ["del"]) => self.delete(&req).await,
+            (Method::Post, ["complete"]) => self.complete(req).await,
+            (Method::Post, ["abort"]) => self.abort(req).await,
+            (Method::Delete, ["del"]) => self.delete(req).await,
             (Method::Post, ["relay", n]) => match n.parse::<u64>() {
                 Ok(n) => self.relay(n).await,
                 Err(_) => error_json("bad chunk number", 400),
@@ -197,7 +235,7 @@ impl DurableObject for UploadSession {
         }
     }
 
-    async fn alarm(&self) -> Result<Response> {
+    async fn alarm_inner(&self) -> Result<Response> {
         let Some(state) = self.load().await? else {
             return Response::empty();
         };
@@ -231,9 +269,26 @@ impl DurableObject for UploadSession {
         }
         Response::empty()
     }
-}
 
-impl UploadSession {
+    // --- telemetry --------------------------------------------------------
+
+    /// Report a failure, tagged with the upload id when the session state is
+    /// loaded. Borrowing the cache is kept out of the `await` (a `RefCell`
+    /// borrow held across one would be observable by the interleaved events the
+    /// DO input gate lets through).
+    async fn report(&self, report: Report) {
+        let upload_id = self
+            .cache
+            .borrow()
+            .as_ref()
+            .map(|s| s.id.clone());
+        let report = match upload_id {
+            Some(id) => report.extra("upload_id", id),
+            None => report,
+        };
+        telemetry::capture(&self.env, report).await;
+    }
+
     // --- state helpers ----------------------------------------------------
 
     async fn load(&self) -> Result<Option<SessionState>> {
@@ -657,6 +712,26 @@ impl UploadSession {
         )
         .await
         {
+            // The upload is lost at the last step — every byte relayed, then the
+            // destination refused the commit. The most valuable event this Worker
+            // emits, and the one place a destination's own error text is carried
+            // through (`ensure_success` caps it at 300 chars and it is the
+            // provider's response, not user content).
+            self.report(
+                Report::error("session.commit", format!("destination commit failed: {e}"))
+                    .transaction(session_transaction("POST", &["complete"]))
+                    .extra("destination", state.destination.kind())
+                    .extra("chunk_count", state.chunk_count.to_string())
+                    .extra(
+                        "content_length",
+                        state
+                            .content_length
+                            .map(|l| l.to_string())
+                            .unwrap_or_else(|| "unknown".into()),
+                    ),
+            )
+            .await;
+
             // Re-load before failing: never downgrade a Complete session (a winner
             // may have finished under us) back to Failed.
             let mut fresh = self

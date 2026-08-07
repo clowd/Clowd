@@ -10,9 +10,10 @@ use worker::{Env, MessageBatch, MessageExt, Method, Result};
 
 use crate::ids::is_valid_id;
 use crate::model::RelayMessage;
+use crate::telemetry::{self, Report};
 use crate::wasm_util::{do_request, is_success};
 
-pub async fn handle(batch: MessageBatch<RelayMessage>, env: Env) -> Result<()> {
+pub async fn handle(batch: MessageBatch<RelayMessage>, env: &Env) -> Result<()> {
     let is_dlq = batch.queue().ends_with("-dlq");
 
     for msg in batch.messages()? {
@@ -42,6 +43,23 @@ pub async fn handle(batch: MessageBatch<RelayMessage>, env: Env) -> Result<()> {
                 continue;
             }
         };
+
+        if is_dlq {
+            // A chunk that reached the dead-letter queue exhausted its retries:
+            // the upload is about to be marked failed and every tail severed.
+            // Exactly one event per chunk, after 5 attempts, so it cannot become a
+            // hot path — and it fires even when the failure was reaching the DO at
+            // all, which is the one case `session.relay` cannot report. It carries
+            // no cause; pair it with the `session.relay` events for that.
+            telemetry::capture(
+                env,
+                Report::error("relay.dead_letter", format!("chunk {n} exhausted its relay retries"))
+                    .transaction("queue clowd-relay-dlq".to_string())
+                    .extra("upload_id", id.clone())
+                    .extra("chunk_no", n.to_string()),
+            )
+            .await;
+        }
 
         let path = if is_dlq { "/fail".to_string() } else { format!("/relay/{n}") };
         let outcome = do_request(&stub, &path, Method::Post, None, &[]).await;
