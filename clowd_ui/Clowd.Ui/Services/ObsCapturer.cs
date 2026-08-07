@@ -126,7 +126,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             _stdoutPump = Task.Run(PumpStdoutAsync);
             _stderrPump = Task.Run(PumpStderrAsync);
 
-            await _initTcs.Task.WaitAsync(InitializeTimeout);
+            await WaitForAckAsync(_initTcs.Task, InitializeTimeout, "initialized");
         }
 
         /// <summary>Starts (or would resume) the recording; resolves on <c>started_recording</c>,
@@ -134,7 +134,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         public async Task StartAsync()
         {
             WriteCommand("start");
-            await _startTcs.Task.WaitAsync(StartTimeout);
+            await WaitForAckAsync(_startTcs.Task, StartTimeout, "started_recording");
         }
 
         /// <summary>Stops the recording and flushes the mp4. Returns true on a clean stop
@@ -149,7 +149,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
             try
             {
-                return await _stopTcs.Task.WaitAsync(StopTimeout);
+                return await WaitForAckAsync(_stopTcs.Task, StopTimeout, "stopped_recording");
             }
             catch (TimeoutException)
             {
@@ -168,12 +168,12 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                     // so only a live-object failure is worth reporting.
                     Debug.WriteLine("Failed to kill wedged recording process: " + ex.Message);
                     if (!_disposed)
-                        SentryConfig.CaptureHandled(ex, "obs.kill-wedged");
+                        SentryConfig.CaptureHandled(AttachProcessLog(ex), "obs.kill-wedged");
                 }
 
                 // bounded in case even Kill could not take the process down; a TimeoutException
                 // here surfaces through the caller's catch → CriticalError path.
-                return await _stopTcs.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                return await WaitForAckAsync(_stopTcs.Task, TimeSpan.FromSeconds(10), "stopped_recording");
             }
         }
 
@@ -196,7 +196,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             try
             {
                 WriteCommand(command);
-                await tcs.Task.WaitAsync(PauseTimeout);
+                await WaitForAckAsync(tcs.Task, PauseTimeout, command == "pause" ? "recording_paused" : "recording_resumed");
             }
             finally
             {
@@ -222,7 +222,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                 // the path is everything after the command word, verbatim: the recorder trims it
                 // and does no unquoting, so it may contain spaces but must never be quoted.
                 WriteCommand("configure " + settingsPath);
-                return await tcs.Task.WaitAsync(ConfigureTimeout);
+                return await WaitForAckAsync(tcs.Task, ConfigureTimeout, "configure_applied");
             }
             finally
             {
@@ -243,6 +243,48 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         {
             lock (_logLock)
                 return String.Join(Environment.NewLine, _log);
+        }
+
+        /// <summary>Stows the recent recorder output on <paramref name="ex"/> (under
+        /// <see cref="SentryConfig.ProcessLogKey"/>) so whichever layer ultimately reports it —
+        /// usually a <c>video.*</c> catch several frames up the page — attaches the log to the
+        /// Sentry event. A bare "exited unexpectedly" or "timed out" is undiagnosable without
+        /// libobs's stderr (CLOWD-Z, CLOWD-C).</summary>
+        private Exception AttachProcessLog(Exception ex)
+        {
+            try
+            {
+                var log = GetLog();
+                if (log.Length > 0 && !ex.Data.Contains(SentryConfig.ProcessLogKey))
+                    ex.Data[SentryConfig.ProcessLogKey] = log;
+            }
+            catch
+            {
+                // Exception.Data may be read-only for exotic exception types
+            }
+
+            return ex;
+        }
+
+        /// <summary>Awaits a protocol ack, replacing the bare <c>WaitAsync</c> timeout with one
+        /// that names the message that never came, and attaching the recorder's recent output to
+        /// whatever failure surfaces.</summary>
+        private async Task<T> WaitForAckAsync<T>(Task<T> task, TimeSpan timeout, string expected)
+        {
+            try
+            {
+                return await task.WaitAsync(timeout);
+            }
+            catch (TimeoutException)
+            {
+                throw AttachProcessLog(new TimeoutException(
+                    $"The recording process did not send '{expected}' within {timeout.TotalSeconds:0} s."));
+            }
+            catch (Exception ex)
+            {
+                AttachProcessLog(ex);
+                throw;
+            }
         }
 
         /// <summary>Non-blocking best-effort shutdown for safety-net callers; UI-thread code
@@ -288,7 +330,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             catch (Exception ex)
             {
                 Debug.WriteLine("Error shutting down recording process: " + ex.Message);
-                SentryConfig.CaptureHandled(ex, "obs.shutdown");
+                SentryConfig.CaptureHandled(AttachProcessLog(ex), "obs.shutdown");
             }
             finally
             {
@@ -326,7 +368,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             catch (Exception ex)
             {
                 Debug.WriteLine("Recording stdout pump failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "obs.stdout-pump");
+                SentryConfig.CaptureHandled(AttachProcessLog(ex), "obs.stdout-pump");
             }
 
             // stdout EOF: the process is gone (or going). EOF is only reached after every
@@ -345,7 +387,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             catch (Exception ex)
             {
                 Debug.WriteLine("Recording stderr pump failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "obs.stderr-pump");
+                SentryConfig.CaptureHandled(AttachProcessLog(ex), "obs.stderr-pump");
             }
         }
 
@@ -361,8 +403,21 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             }
 
             // any exit without a preceding stopped_recording is a fatal error, regardless of
-            // exit code (§1.4 — never key off the exit code alone).
-            var died = new InvalidOperationException("The recording process has exited unexpectedly.");
+            // exit code (§1.4 — never key off the exit code alone; it is still worth reporting,
+            // e.g. an NTSTATUS like 0xC0000005 names the crash where the log may not).
+            string exitCode = null;
+            try
+            {
+                var code = _proc.ExitCode;
+                exitCode = code + " (0x" + unchecked((uint)code).ToString("X8") + ")";
+            }
+            catch
+            {
+                // disposal may have taken the Process object already
+            }
+
+            var died = AttachProcessLog(new InvalidOperationException(
+                "The recording process has exited unexpectedly" + (exitCode == null ? "" : " with code " + exitCode) + "."));
             FailObserved(_initTcs, died);
             FailObserved(_startTcs, died);
             FailObserved(_configureTcs, died);
@@ -454,8 +509,9 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             catch (Exception ex)
             {
                 Debug.WriteLine("Unparseable recording protocol line: " + trimmed + " (" + ex.Message + ")");
-                SentryConfig.CaptureHandled(ex, "obs.protocol-parse");
+                // logged first so the offending line is part of the attached log
                 AppendLog(trimmed);
+                SentryConfig.CaptureHandled(AttachProcessLog(ex), "obs.protocol-parse");
             }
         }
 
@@ -533,7 +589,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                 // stdin writer is closed by design, so that failure is expected, not a defect.
                 Debug.WriteLine($"Failed to write '{command}' to recording process stdin: {ex.Message}");
                 if (!_disposed)
-                    SentryConfig.CaptureHandled(ex, "obs.write-stdin");
+                    SentryConfig.CaptureHandled(AttachProcessLog(ex), "obs.write-stdin");
             }
         }
 
