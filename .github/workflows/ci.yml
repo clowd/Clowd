@@ -227,9 +227,16 @@ jobs:
         run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
         shell: bash
 
+      # The dll ships under a name carrying the crate's own version (independent of the app
+      # version): SparsePackageManager copies it to the install root under that same name, so
+      # an unchanged extension needs no copy at all across app updates, and a changed one
+      # arrives under a fresh filename that a lock on the old copy can never block.
       - name: Copy shell extension into package (Windows)
         if: runner.os == 'Windows'
-        run: cp "target/${{ matrix.target }}/release/clowd_shell_ext.dll" publish/
+        run: |
+          EXT_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "clowd_shell_ext") | .version')
+          echo "CLOWD_EXT_VERSION=$EXT_VERSION" >> "$GITHUB_ENV"
+          cp "target/${{ matrix.target }}/release/clowd_shell_ext.dll" "publish/ClowdShellExt_${EXT_VERSION}.dll"
         shell: bash
 
       # The Win11 modern context menu ships as a sparse package: the msix holds
@@ -245,7 +252,7 @@ jobs:
           New-Item -ItemType Directory -Path $staging | Out-Null
           Copy-Item -Recurse clowd_shell_ext/msix/Assets (Join-Path $staging Assets)
           $manifest = (Get-Content clowd_shell_ext/msix/AppxManifest.template.xml -Raw)
-          $manifest = $manifest.Replace('{{VERSION}}', "$env:CLOWD_VERSION.0").Replace('{{ARCH}}', '${{ matrix.msix-arch }}')
+          $manifest = $manifest.Replace('{{VERSION}}', "$env:CLOWD_VERSION.0").Replace('{{ARCH}}', '${{ matrix.msix-arch }}').Replace('{{EXTVERSION}}', $env:CLOWD_EXT_VERSION)
           Set-Content -Path (Join-Path $staging AppxManifest.xml) -Value $manifest -Encoding utf8
           $makeappx = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe' | Select-Object -Last 1
           & $makeappx.FullName pack /d $staging /p publish/ClowdShellExt.msix /nv /o

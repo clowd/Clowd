@@ -21,16 +21,22 @@ namespace Clowd.UI
     ///
     /// Registration goes through <c>powershell.exe</c> (Add-AppxPackage/Get-AppxPackage): the
     /// plain net10.0 TFM has no WinRT projection for the PackageManager API, and shelling out
-    /// keeps it that way. The DLL is copied out of <c>current\</c> to the install root first so
-    /// Explorer's file lock on the loaded extension can never block Velopack's directory swap on
-    /// update.
+    /// keeps it that way. The DLL ships named for the extension crate's own version
+    /// (<c>ClowdShellExt_1.0.0.dll</c>, independent of the app version) and is copied out of
+    /// <c>current\</c> to the install root under that same name: Explorer's file lock can never
+    /// block Velopack's directory swap, an unchanged extension needs no copy at all across app
+    /// updates, and a changed one arrives under a fresh filename that a lock on the old copy
+    /// cannot block. Stale copies are swept opportunistically once nothing references them.
     /// </summary>
     internal static class SparsePackageManager
     {
         private const string PackageName = "Clowd.ShellExtension";
         private const string MsixFileName = "ClowdShellExt.msix";
-        private const string SourceDllFileName = "clowd_shell_ext.dll";
-        private const string InstalledDllFileName = "ClowdShellExt.dll";
+
+        // CI names the shipped dll ClowdShellExt_<crate version>.dll and stamps the same name
+        // into the manifest's com:Class Path; this pattern must match both (it also catches the
+        // unversioned name from pre-1.0 development builds, so those get swept too).
+        private const string DllSearchPattern = "ClowdShellExt*.dll";
 
         // Velopack fast-callback hooks are killed after 15s, but the interactive paths (settings
         // checkbox, startup sync) can afford to wait out a slow deployment service.
@@ -171,28 +177,24 @@ namespace Clowd.UI
         private static void SetEnabledWindows(bool enabled)
         {
             var root = VelopackLocator.Current.RootAppDir;
-            var installedDll = Path.Combine(root, InstalledDllFileName);
 
             if (!enabled)
             {
                 RunPowerShell("Get-AppxPackage -Name '" + PackageName + "' | Remove-AppxPackage");
 
                 // best-effort: Explorer/dllhost may still have the extension loaded; a leftover
-                // DLL is inert once the package is gone and is overwritten on the next enable.
-                try
-                {
-                    if (File.Exists(installedDll))
-                        File.Delete(installedDll);
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("SparsePackageManager: could not delete " + installedDll + ": " + ex.Message);
-                }
-
+                // DLL is inert once the package is gone and is swept again on the next apply.
+                SweepStaleDllsWindows(root, null);
                 return;
             }
 
-            CopyExtensionDll(Path.Combine(AppContext.BaseDirectory, SourceDllFileName), installedDll);
+            var sourceDll = FindShippedDllWindows();
+            var installedDll = Path.Combine(root, Path.GetFileName(sourceDll));
+
+            // same filename = same extension version = same bytes in any real install, so app
+            // updates that don't touch the extension never write (or fight a lock on) the root
+            // copy at all; the hash check only matters for dev builds rebuilt without a bump.
+            CopyExtensionDll(sourceDll, installedDll);
 
             // the copy tolerates a locked target because the DLL already there still works, but
             // with no DLL at all the registration would only produce a menu entry that does
@@ -204,15 +206,62 @@ namespace Clowd.UI
             // Add-AppxPackage updates in place when the version went up, but re-adding the same
             // version is an error — and the DLL refresh above is all a same-version apply needs.
             var registered = GetRegisteredVersionWindows();
-            if (registered == ExpectedPackageVersion())
-                return;
+            if (registered != ExpectedPackageVersion())
+            {
+                // a channel switch can move the app *down* a version, which a plain Add-AppxPackage
+                // refuses; sideloaded packages take this in either direction.
+                var force = registered == null ? "" : " -ForceUpdateFromAnyVersion";
 
-            // a channel switch can move the app *down* a version, which a plain Add-AppxPackage
-            // refuses; sideloaded packages take this in either direction.
-            var force = registered == null ? "" : " -ForceUpdateFromAnyVersion";
+                RunPowerShell("Add-AppxPackage -Path '" + EscapePowerShellLiteral(Path.Combine(AppContext.BaseDirectory, MsixFileName))
+                              + "' -ExternalLocation '" + EscapePowerShellLiteral(root) + "'" + force);
+            }
 
-            RunPowerShell("Add-AppxPackage -Path '" + EscapePowerShellLiteral(Path.Combine(AppContext.BaseDirectory, MsixFileName))
-                          + "' -ExternalLocation '" + EscapePowerShellLiteral(root) + "'" + force);
+            // only sweep once the fresh registration is in force, so a failed apply never
+            // deletes the copy an older still-active registration is pointing at
+            SweepStaleDllsWindows(root, Path.GetFileName(installedDll));
+        }
+
+        /// <summary>The version-named extension DLL shipped in <c>current\</c> next to the app
+        /// (e.g. <c>ClowdShellExt_1.0.0.dll</c>). Its filename doubles as the install-root target
+        /// name and matches the manifest's <c>com:Class Path</c>, both stamped by CI from the
+        /// crate version.</summary>
+        [SupportedOSPlatform("windows")]
+        private static string FindShippedDllWindows()
+        {
+            string best = null;
+            foreach (var candidate in Directory.EnumerateFiles(AppContext.BaseDirectory, DllSearchPattern))
+            {
+                if (best == null || String.CompareOrdinal(candidate, best) > 0)
+                    best = candidate;
+            }
+
+            if (best == null)
+                throw new FileNotFoundException("No " + DllSearchPattern + " found next to the app; the package ships one per build.");
+
+            return best;
+        }
+
+        /// <summary>Best-effort removal of extension DLLs at the install root other than
+        /// <paramref name="keepFileName"/> (null keeps nothing). Locked files — an old copy still
+        /// loaded in Explorer's surrogate — simply survive until a later sweep; once nothing
+        /// references them they are inert.</summary>
+        [SupportedOSPlatform("windows")]
+        private static void SweepStaleDllsWindows(string root, string keepFileName)
+        {
+            foreach (var dll in Directory.EnumerateFiles(root, DllSearchPattern))
+            {
+                if (keepFileName != null && String.Equals(Path.GetFileName(dll), keepFileName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                try
+                {
+                    File.Delete(dll);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("SparsePackageManager: could not delete " + dll + ": " + ex.Message);
+                }
+            }
         }
 
         [SupportedOSPlatform("windows")]
