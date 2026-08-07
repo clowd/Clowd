@@ -14,11 +14,11 @@
 //!   2. `svg` pipeline: button icons (lyon-tessellated meshes).
 //!   3. glyphon text: labels, tips body, area-indicator digits.
 
-use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Instant;
 
 use crate::telemetry::perf::PerfTracker;
-use crate::telemetry::startup::StartupTimings;
+use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
 use crate::ui::gpu::area::AreaRenderer;
 use crate::ui::gpu::debug::DebugRenderer;
 use crate::ui::gpu::hints::HintsRenderer;
@@ -42,21 +42,15 @@ pub struct UiRenderer {
     state: Option<Arc<UiSharedState>>,
     this_monitor: UiMonitor,
     /// Stable per-render-thread context for the debug panel — values that
-    /// never change after startup (monitor name, adapter, startup
+    /// never change after startup (monitor name, adapter, warm-up
     /// timings). `perf` is the only live source; see `render()`.
     monitor_name: String,
     adapter_name: String,
-    startup: Arc<StartupTimings>,
-    /// Shared one-shot holding the "all windows visible" timestamp
-    /// (offset from `startup.t_start`). The main thread sets it the
-    /// instant all windows are shown; every render thread's debug panel
-    /// reads it. Remains `None` until that moment.
-    shown_time: Arc<OnceLock<Duration>>,
-    /// Offset from `startup.t_start` at which THIS display rendered its
-    /// first visible (post-barrier) frame. Captured in
-    /// `mark_first_visible_frame` on the render thread, after the
-    /// visible barrier releases. `None` until then.
-    time_to_first_render: Option<Duration>,
+    warmup: Arc<WarmupTimings>,
+    /// The active cycle's timings, installed by [`begin_cycle`](Self::begin_cycle)
+    /// (fresh `Arc` per cycle). The debug panel reads its capture section
+    /// from here; `None` only before this worker's first cycle.
+    capture: Option<Arc<CaptureTimings>>,
     /// Set by `prepare()`, consumed by `draw()`. `false` when there's
     /// nothing to render (no state yet), so `draw()` becomes a no-op.
     has_prepared: bool,
@@ -77,18 +71,17 @@ impl UiRenderer {
         monitor_index: usize,
         monitor_name: String,
         adapter_name: String,
-        startup: Arc<StartupTimings>,
-        shown_time: Arc<OnceLock<Duration>>,
+        warmup: Arc<WarmupTimings>,
     ) -> Self {
         let rect = RectPipeline::new(device, surface_format);
         let icon = IconPipeline::new(device, surface_format);
-        startup.background.workers[monitor_index]
+        warmup.workers[monitor_index]
             .prep_ui_pipelines
-            .set_once(startup.t_start.elapsed());
+            .set_once(warmup.t_start.elapsed());
         let mut text = TextStack::new(device, queue, surface_format);
-        startup.background.workers[monitor_index]
+        warmup.workers[monitor_index]
             .prep_fonts
-            .set_once(startup.t_start.elapsed());
+            .set_once(warmup.t_start.elapsed());
         let area = AreaRenderer::new(&mut text);
         let hints = HintsRenderer::new(&mut text);
         let tips = TipsRenderer::new(&mut text);
@@ -108,9 +101,8 @@ impl UiRenderer {
             this_monitor,
             monitor_name,
             adapter_name,
-            startup,
-            shown_time,
-            time_to_first_render: None,
+            warmup,
+            capture: None,
             has_prepared: false,
             any_text: false,
             start_time: Instant::now(),
@@ -121,13 +113,21 @@ impl UiRenderer {
         self.state = Some(state);
     }
 
-    /// Record the wall-clock offset (from `startup.t_start`) at which
-    /// this display rendered its first visible frame. Call exactly once
-    /// per render thread, after the visible barrier releases. Subsequent
-    /// calls are no-ops so the first-frame time stays captured.
-    pub fn mark_first_visible_frame(&mut self) {
-        self.time_to_first_render
-            .get_or_insert_with(|| self.startup.t_start.elapsed());
+    /// Reset per-cycle leftovers at `BeginCycle`, before frame 0 is drawn.
+    /// `state` is warm (it survives the worker's parked gap between
+    /// cycles); without this, frame 0 of the next cycle composites the
+    /// previous cycle's UI over the new screenshot — the fresh
+    /// `UiSharedState` is only broadcast after the show gate. With no
+    /// state, `prepare` stages nothing and frame 0 is the clean initial
+    /// overlay. Installs the cycle's fresh timings and re-anchors the
+    /// animation clock — an `f32` seconds value that has been running
+    /// since warm-up loses enough precision after hours of idling to
+    /// visibly quantize the border-trail animation.
+    pub fn begin_cycle(&mut self, timings: Arc<CaptureTimings>) {
+        self.state = None;
+        self.last_frame_time = None;
+        self.capture = Some(timings);
+        self.start_time = Instant::now();
     }
 
     /// Stage all per-frame work: component visibility decisions,
@@ -189,9 +189,8 @@ impl UiRenderer {
             &self.monitor_name,
             &self.adapter_name,
             perf,
-            &self.startup,
-            self.shown_time.get().copied(),
-            self.time_to_first_render,
+            &self.warmup,
+            self.capture.as_deref(),
             &mut rect_instances,
         );
 

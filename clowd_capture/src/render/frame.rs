@@ -6,6 +6,20 @@ use crate::telemetry::perf::{PerfSample, PerfTracker};
 use crate::ui::gpu::gpu_timing::GpuTimings;
 use crate::ui::gpu::UiRenderer;
 
+/// What a [`draw_once`] call actually did. The steady-state render loop
+/// can ignore it (the next iteration retries naturally); the per-cycle
+/// frame 0 must know, because it presents exactly once before signaling
+/// ready.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DrawOutcome {
+    Presented,
+    /// The surface was Outdated/Lost: it has been reconfigured but
+    /// nothing was presented — the caller may retry.
+    Reconfigured,
+    /// Timeout/Occluded/Validation: nothing was presented.
+    Skipped,
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_once(
     surface: &wgpu::Surface<'static>,
@@ -17,16 +31,16 @@ pub(crate) fn draw_once(
     perf: &PerfTracker,
     gpu_timing: Option<&GpuTimings>,
     out_sample: &mut Option<PerfSample>,
-) {
+) -> DrawOutcome {
     let t_wait_start = Instant::now();
     let frame = match surface.get_current_texture() {
         wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
-        wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return,
+        wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return DrawOutcome::Skipped,
         wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
             surface.configure(&gpu.device, config);
-            return;
+            return DrawOutcome::Reconfigured;
         }
-        wgpu::CurrentSurfaceTexture::Validation => return,
+        wgpu::CurrentSurfaceTexture::Validation => return DrawOutcome::Skipped,
     };
     let wait = t_wait_start.elapsed();
 
@@ -106,4 +120,5 @@ pub(crate) fn draw_once(
         overall: Duration::ZERO,
         gpu: None,
     });
+    DrawOutcome::Presented
 }

@@ -1,43 +1,149 @@
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
-use winit::event_loop::ActiveEventLoop;
+use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::keyboard::{Key, NamedKey};
 #[cfg(windows)]
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
+use crate::capture::session::{spawn_screenshot_job, spawn_walker_job, ScreenshotJobParams};
 use crate::capture_output::{copy_to_clipboard_with_peek, ActionResult};
 use crate::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectExt, ScreenRectRounded, WindowPoint};
+use crate::host::{
+    self,
+    protocol::{HostCommand, HostEvent, ShowParams},
+    AppEvent,
+};
 use crate::interaction::{InteractionController, InteractionEffects, InteractionState, MouseVelocityTracker};
-use crate::render::protocol::PeekCommand;
-use crate::render::window::{WindowHandle, WindowSet};
+use crate::render::protocol::{next_cycle_gen, PeekCommand, RenderMsg, WorkerInput};
+use crate::render::window::{set_hardware_cursor_visible, WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::session_output::{write_color_action, write_session, write_video_action, SessionAction};
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
-use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
-use crate::telemetry::startup::StartupTimings;
+use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker, EXIT_DISPLAY_CHANGED, EXIT_GPU_LOST};
+use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
 use crate::ui::command::Command;
 use crate::ui::components::panel;
+use crate::ui::shared::UiMonitor;
 use crate::ui_state::{build_ui_shared_state, sample_bgra, UiStateBuildInput};
 
 const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
 const MOMENTUM_GAP: Duration = Duration::from_millis(50);
+/// How long to coalesce OS display-change notifications before restarting
+/// the persistent host: one topology change fans out into several messages
+/// (Windows sends one per top-level window; macOS one callback per
+/// display), and restarting on the first would race the rest.
+const DISPLAY_CHANGE_DEBOUNCE: Duration = Duration::from_millis(500);
 
+/// State that survives across capture cycles ("warm" state): the wgpu
+/// instance, monitors, windows and the render-worker channels. Everything
+/// specific to a single capture lives in [`CaptureCycle`].
 pub struct App {
-    settings: Arc<CapturerSettings>,
+    /// Retained clones of the per-worker channel senders, usable across
+    /// cycles (the `WorkerSetup`s themselves are consumed by the window
+    /// handoff in `resumed()`). Declared before `windows`: fields drop in
+    /// declaration order, and dropping these senders first disconnects the
+    /// input channel so a parked worker wakes up before `WindowHandle::drop`
+    /// joins its thread.
+    ///
+    /// `None` marks a worker torn down after its window creation failed
+    /// (`resumed()`): its slot stays so the gate arithmetic
+    /// (`ready`/`parked` + `worker_failed` >= `workers.len()`) keeps
+    /// covering it, but nothing is ever queued to it again — a worker
+    /// stuck before its handoff never drains `render_msg_rx`, so retained
+    /// senders would grow its queue by a full blur + peek set per capture.
+    workers: Vec<Option<WorkerChannels>>,
     windows: WindowSet,
     monitors: Vec<MonitorInfo>,
     /// `monitors` mapped to the UI-state shape, built once — cloned into
     /// every `UiSharedState` instead of re-collected per mouse event.
-    ui_monitors: Arc<[crate::ui::shared::UiMonitor]>,
+    ui_monitors: Arc<[UiMonitor]>,
+    vd_bounds: ScreenRect,
+    warmup: Arc<WarmupTimings>,
+    pinch_monitor: Option<crate::system::PinchMonitor>,
+    instance: Arc<wgpu::Instance>,
+    /// Consumed in resumed() — each one gets a window + surface handoff.
+    worker_setups: Option<Vec<WorkerSetup>>,
+    /// Incremented by workers that die without a clean shutdown (and by
+    /// window-creation failures here), so the show gate
+    /// (`ready + failed >= expected`) can never deadlock on a dead worker.
+    worker_failed: Arc<AtomicUsize>,
+    /// Whether the process should keep running after a cycle finishes.
+    /// False in one-shot mode; `--persistent` host mode flips it (via
+    /// [`enable_persistent`](Self::enable_persistent)) so `finish_cycle`
+    /// parks instead of exiting.
+    persistent: bool,
+    /// Persistent-host bookkeeping; `Some` iff `persistent`.
+    host: Option<HostState>,
+    cycle: Option<CaptureCycle>,
+}
+
+/// Warm-state bookkeeping that only exists in `--persistent` mode.
+struct HostState {
+    /// Incremented by each render worker when it first parks (see
+    /// `render_worker_main`); `ready` is emitted once `parked + failed`
+    /// covers every worker.
+    parked_count: Arc<AtomicUsize>,
+    ready_emitted: bool,
+    /// Debounce deadline armed by [`AppEvent::DisplayChange`]; when it
+    /// expires (`check_display_change`) the host emits `display_changed`
+    /// and exits with `EXIT_DISPLAY_CHANGED` for the shell to respawn.
+    display_change_deadline: Option<Instant>,
+}
+
+struct WorkerChannels {
+    /// Retained so cycles after the first can be started without the
+    /// consumed `WorkerSetup`s (the screenshot job broadcasts `BeginCycle`
+    /// over these) — and so dropping `App.workers` closes the channel,
+    /// waking any parked worker for shutdown.
+    input_tx: mpsc::Sender<WorkerInput>,
+    render_msg_tx: mpsc::Sender<RenderMsg>,
+}
+
+/// All one-shot state for a single capture. Created at cycle start
+/// ([`App::start_cycle`]) and dropped at cycle end ([`App::finish_cycle`]) —
+/// dropping it *is* the reset.
+pub struct CaptureCycle {
+    settings: Arc<CapturerSettings>,
+    /// This cycle's generation (`next_cycle_gen`), stamped on the per-cycle
+    /// `RenderMsg`s so workers can discard messages from other cycles.
+    cycle_gen: u64,
+    /// Shared with `CycleParams`; set in `finish_cycle` so a worker that
+    /// receives this cycle's `BeginCycle` after the cycle already ended
+    /// discards it instead of wedging on the dead `visible_latch`.
+    cancelled: Arc<AtomicBool>,
+    /// This cycle's t=0 (`timings.t_start`): when its per-capture jobs were
+    /// spawned. The persistent host reports the show-to-visible time as
+    /// `shown.elapsed_ms` from here.
+    started: Instant,
+    /// This cycle's debug timings — allocated fresh per cycle (which is
+    /// what keeps the `set_once` fields correct across cycles) and shared
+    /// with the screenshot/walker jobs and every render worker.
+    timings: Arc<CaptureTimings>,
+    desktop_buffer: Option<Arc<CapturedDesktop>>,
+    /// This cycle's screenshot job result. One-shot mode resolves it
+    /// before `start_cycle`; the persistent host picks it up
+    /// non-blockingly in `about_to_wait`, bounded by
+    /// `screenshot_deadline`.
+    screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
+    /// Non-blocking replacement for one-shot mode's 30s screenshot wait:
+    /// if the desktop bitmap hasn't arrived by this deadline the cycle is
+    /// cancelled with a `fatal_error` event.
+    screenshot_deadline: Instant,
+    walker: Option<Arc<WindowWalker>>,
+    walker_latch: Arc<Latch<Arc<WindowWalker>>>,
+    peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
+    /// Peek images collected from the walker thread, keyed by window_index.
+    /// Used to composite the peeked window into the final copy/save image.
+    peek_images: HashMap<usize, Arc<WindowPeekImage>>,
     /// Last cursor icon set per window, to skip redundant `set_cursor`
     /// calls on every mouse move.
     last_cursor: HashMap<WindowId, CursorIcon>,
@@ -46,13 +152,7 @@ pub struct App {
     /// Peek command locked at capture time — persists through resize,
     /// cleared on reset.
     locked_peek: Option<PeekCommand>,
-    vd_bounds: ScreenRect,
     input: InteractionState,
-    desktop_buffer: Option<Arc<CapturedDesktop>>,
-    walker: Option<Arc<WindowWalker>>,
-    /// Peek images collected from the walker thread, keyed by window_index.
-    /// Used to composite the peeked window into the final copy/save image.
-    peek_images: HashMap<usize, Arc<WindowPeekImage>>,
     pending_show: Option<PendingShow>,
     /// When launched with `--capture-mode screen|window`, the mode to
     /// pre-select once the overlay is up. Consumed (set to `None`) after the
@@ -63,15 +163,6 @@ pub struct App {
     /// once, regardless of which capture path (drag / keyboard / preselect)
     /// fired (DESIGN §3.3).
     video_dispatched: bool,
-    startup: Arc<StartupTimings>,
-    shown_time: Arc<OnceLock<Duration>>,
-    pinch_monitor: Option<crate::system::PinchMonitor>,
-
-    // Parallel bootstrap state — consumed in resumed().
-    instance: Arc<wgpu::Instance>,
-    worker_setups: Option<Vec<WorkerSetup>>,
-    walker_latch: Arc<Latch<Arc<WindowWalker>>>,
-    peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
 }
 
 struct PendingShow {
@@ -80,29 +171,179 @@ struct PendingShow {
     visible_latch: Arc<VisibleLatch>,
 }
 
+/// How a capture cycle ended. Logged always; the persistent host also
+/// reports it to the parent process as the `finished` event's `action`
+/// (serialized snake_case: `select_color` etc.).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CycleAction {
+    Edit,
+    Upload,
+    SelectColor,
+    Video,
+    Copy,
+    Save,
+    Cancelled,
+}
+
+/// Everything [`App::start_cycle`] needs to arm a new capture cycle.
+pub struct CycleSetup {
+    pub settings: Arc<CapturerSettings>,
+    pub initial_mouse: ScreenPointF,
+    /// The in-flight screenshot job. Already resolved in one-shot mode;
+    /// still pending when the persistent host arms a cycle.
+    pub screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
+    pub walker_latch: Arc<Latch<Arc<WindowWalker>>>,
+    pub peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
+    pub ready_count: Arc<AtomicUsize>,
+    pub visible_latch: Arc<VisibleLatch>,
+    /// See [`CaptureCycle::cycle_gen`].
+    pub cycle_gen: u64,
+    /// See [`CaptureCycle::cancelled`]; shared with this cycle's
+    /// `CycleParams`.
+    pub cancelled: Arc<AtomicBool>,
+    /// See [`CaptureCycle::timings`]. Must be the same instance the
+    /// screenshot/walker jobs were spawned with.
+    pub timings: Arc<CaptureTimings>,
+}
+
+// ── Free helpers over (warm, cycle) state ───────────────────────────
+// Plain functions (not methods) so callers holding a `&mut CaptureCycle`
+// split off `self.cycle` can still use them alongside the warm fields.
+
+fn broadcast_mouse_state(windows: &WindowSet, input: &InteractionState) {
+    for h in windows.values() {
+        h.update_mouse_state(input.virtual_cursor, input.zoom, input.selection, input.captured);
+    }
+}
+
+fn update_cursor_visibility(windows: &WindowSet, input: &InteractionState) {
+    if input.captured || input.debug_visible {
+        windows.show_cursors();
+    } else {
+        windows.hide_cursors();
+    }
+}
+
+fn set_cursor_if_changed(windows: &WindowSet, last_cursor: &mut HashMap<WindowId, CursorIcon>, id: WindowId, cursor: CursorIcon) {
+    if last_cursor.get(&id) == Some(&cursor) {
+        return;
+    }
+    if let Some(window) = windows.get(&id) {
+        window.set_cursor(cursor);
+        last_cursor.insert(id, cursor);
+    }
+}
+
+fn current_panel_layout(cycle: &CaptureCycle, monitors: &[MonitorInfo]) -> Option<crate::ui::components::panel::layout::PanelLayout> {
+    if !cycle.input.captured {
+        return None;
+    }
+    let sel = cycle.input.selection?;
+    let cx = sel.center_x();
+    let cy = sel.center_y();
+    let mon = monitors.iter().find(|m| {
+        let b = m.bounds;
+        cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+    })?;
+    crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor)
+}
+
+fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors: &Arc<[UiMonitor]>, cycle: &mut CaptureCycle) {
+    let cursor_pt = to_screen_point(cycle.input.virtual_cursor);
+
+    let hovered_monitor_name = monitors
+        .iter()
+        .find(|m| m.bounds.contains(cursor_pt))
+        .map(|m| m.name.clone());
+
+    let hovered_full = cycle
+        .walker
+        .as_ref()
+        .and_then(|w| w.hit_test_full(cursor_pt));
+    cycle.cached_hovered_title = hovered_full
+        .as_ref()
+        .map(|h| h.title.clone());
+    let hovered_window_bounds = hovered_full.as_ref().map(|h| h.rect);
+    let hovered_window_index = hovered_full.as_ref().map(|h| h.window_index);
+    let hovered_window_obstructed = hovered_full
+        .as_ref()
+        .is_some_and(|h| h.obstructed);
+
+    // Compute peek command first so UI state can use the peeked window bounds.
+    // Peek is suppressed in magnifier mode (overlays hidden) and after
+    // a selection has been made (peek_suspended).  When captured, keep
+    // the locked peek; otherwise follow hover.
+    let new_peek = if !cycle.input.overlays_visible || cycle.input.peek_suspended || cycle.input.dragging {
+        cycle.locked_peek.clone()
+    } else {
+        hovered_full
+            .as_ref()
+            .filter(|hw| hw.obstructed && cycle.settings.obscured_window_peek_enabled)
+            .map(|hw| PeekCommand {
+                window_index: hw.window_index,
+                window_rect: hw.rect,
+                captured: false,
+            })
+    };
+
+    let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
+        monitors: ui_monitors.clone(),
+        selection: cycle.input.selection,
+        captured: cycle.input.captured,
+        mouse_down: cycle.input.mouse_down,
+        dragging: cycle.input.dragging,
+        zoom: cycle.input.zoom,
+        virtual_cursor: cycle.input.virtual_cursor,
+        accent_color: cycle.settings.accent_color,
+        tips_mode: cycle.input.tips_mode,
+        debug_visible: cycle.input.debug_visible,
+        overlays_visible: cycle.input.overlays_visible,
+        hovered_monitor_name,
+        hovered_window_title: cycle.cached_hovered_title.clone(),
+        hovered_window_bounds,
+        hovered_window_index,
+        hovered_window_obstructed,
+        peek_window_bounds: new_peek.as_ref().map(|p| p.window_rect),
+        cursor_overlay_visible: cycle.input.cursor_overlay_visible,
+        desktop_buffer: cycle.desktop_buffer.as_deref(),
+        show_scroll_hint: cycle.input.show_scroll_hint,
+        has_used_magnifier: cycle.input.has_used_magnifier,
+    }));
+
+    for h in windows.values() {
+        h.update_ui_state(state.clone());
+    }
+
+    if new_peek != cycle.cached_peek_command {
+        for h in windows.values() {
+            h.update_peek_state(new_peek.clone());
+        }
+        cycle.cached_peek_command = new_peek;
+    }
+}
+
+/// Whether the warm-up monitor topology still matches a fresh enumeration.
+/// Order-insensitive (enumeration order is not contractual): the counts
+/// must agree and every warm monitor needs an exact counterpart in bounds,
+/// scale, primary flag and driving adapter.
+fn topology_matches(warm: &[MonitorInfo], fresh: &[MonitorInfo]) -> bool {
+    warm.len() == fresh.len()
+        && warm.iter().all(|w| {
+            fresh
+                .iter()
+                .any(|f| f.bounds == w.bounds && f.scale_factor == w.scale_factor && f.is_primary == w.is_primary && f.adapter_id == w.adapter_id)
+        })
+}
+
 impl App {
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        settings: Arc<CapturerSettings>,
-        startup: Arc<StartupTimings>,
+        warmup: Arc<WarmupTimings>,
         instance: Arc<wgpu::Instance>,
         monitors: Vec<MonitorInfo>,
-        initial_mouse: ScreenPointF,
         worker_setups: Vec<WorkerSetup>,
-        desktop_buffer: Arc<CapturedDesktop>,
-        walker_latch: Arc<Latch<Arc<WindowWalker>>>,
-        peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
-        ready_count: Arc<AtomicUsize>,
-        visible_latch: Arc<VisibleLatch>,
-        shown_time: Arc<OnceLock<Duration>>,
+        worker_failed: Arc<AtomicUsize>,
     ) -> Self {
-        let primary = monitors
-            .iter()
-            .find(|m| m.is_primary)
-            .or_else(|| monitors.first())
-            .expect("at least one monitor present");
-        let anchor = ScreenPoint::new(primary.bounds.center_x(), primary.bounds.center_y());
-
         let vd_bounds = {
             let mut min_x = i32::MAX;
             let mut min_y = i32::MAX;
@@ -117,52 +358,132 @@ impl App {
             ScreenRect::from_exact(min_x, min_y, max_x, max_y)
         };
 
-        let ui_monitors: Arc<[crate::ui::shared::UiMonitor]> = monitors
+        let ui_monitors: Arc<[UiMonitor]> = monitors
             .iter()
-            .map(|m| crate::ui::shared::UiMonitor {
+            .map(|m| UiMonitor {
                 bounds: m.bounds,
                 dpi_scale: m.scale_factor,
                 is_primary: m.is_primary,
             })
             .collect();
 
-        let expected = worker_setups.len();
-        let tips_mode = settings.tips_mode_at_startup;
-        let cursor_overlay_visible = settings.cursor_visible_at_startup;
-        let pending_preselect = settings
-            .capture_mode
-            .is_preselect()
-            .then_some(settings.capture_mode);
+        let workers = worker_setups
+            .iter()
+            .map(|s| {
+                Some(WorkerChannels {
+                    input_tx: s.input_tx.clone(),
+                    render_msg_tx: s.render_msg_tx.clone(),
+                })
+            })
+            .collect();
 
         Self {
-            settings,
+            workers,
             windows: WindowSet::new(),
             monitors,
             ui_monitors,
+            vd_bounds,
+            warmup,
+            pinch_monitor: None,
+            instance,
+            worker_setups: Some(worker_setups),
+            worker_failed,
+            persistent: false,
+            host: None,
+            cycle: None,
+        }
+    }
+
+    /// Switch this app into persistent-host mode: cycles park instead of
+    /// exiting, and protocol events are emitted on stdout. `parked_count`
+    /// is the counter the render workers bump when they first park, used
+    /// to detect warm-up completion (`ready`).
+    pub fn enable_persistent(&mut self, parked_count: Arc<AtomicUsize>) {
+        self.persistent = true;
+        self.host = Some(HostState {
+            parked_count,
+            ready_emitted: false,
+            display_change_deadline: None,
+        });
+    }
+
+    /// Window creation for monitor `i` failed, so its worker will never
+    /// receive a handoff: tell the thread to shut down (it disarms its
+    /// fail guard and exits its pre-handoff loop, dropping any stashed
+    /// `BeginCycle`) and drop our retained senders so no future cycle
+    /// queues messages it would never drain. The slot stays in `workers`
+    /// (as `None`) and the failure is counted, keeping the show/ready
+    /// gates (`ready`/`parked` + `failed` >= `workers.len()`) balanced.
+    fn teardown_failed_worker(&mut self, i: usize) {
+        self.worker_failed.fetch_add(1, Ordering::Release);
+        if let Some(w) = self.workers[i].take() {
+            let _ = w.input_tx.send(WorkerInput::Shutdown);
+        }
+    }
+
+    /// Arm a new capture cycle: hide the hardware cursor, re-arm each
+    /// window's first-show path, install the per-cycle state. All slow
+    /// warm-up (adapters, devices, pipelines) has already happened; the
+    /// screenshot/walker jobs for this cycle are already in flight.
+    pub fn start_cycle(&mut self, setup: CycleSetup) {
+        let primary = self
+            .monitors
+            .iter()
+            .find(|m| m.is_primary)
+            .or_else(|| self.monitors.first())
+            .expect("at least one monitor present");
+        let anchor = ScreenPoint::new(primary.bounds.center_x(), primary.bounds.center_y());
+
+        // Every spawned worker, including torn-down (`None`) slots — those
+        // are covered by `worker_failed` in the show gate.
+        let expected = self.workers.len();
+        let tips_mode = setup.settings.tips_mode_at_startup;
+        let cursor_overlay_visible = setup.settings.cursor_visible_at_startup;
+        let pending_preselect = setup
+            .settings
+            .capture_mode
+            .is_preselect()
+            .then_some(setup.settings.capture_mode);
+
+        // Hidden per cycle, not at window creation: on macOS the hide is
+        // global, and a warm (parked) process must not blank the user's
+        // cursor.
+        set_hardware_cursor_visible(false);
+        // Resolved already in one-shot mode; usually still pending in
+        // persistent mode (picked up in about_to_wait).
+        let desktop_buffer = setup.screenshot_latch.try_get();
+        for h in self.windows.values() {
+            h.reassert_geometry();
+            h.reset_shown();
+            h.set_background_image(desktop_buffer.as_deref());
+        }
+
+        self.cycle = Some(CaptureCycle {
+            settings: setup.settings,
+            cycle_gen: setup.cycle_gen,
+            cancelled: setup.cancelled,
+            started: setup.timings.t_start,
+            timings: setup.timings,
+            desktop_buffer,
+            screenshot_latch: setup.screenshot_latch,
+            screenshot_deadline: Instant::now() + Duration::from_secs(30),
+            walker: None,
+            walker_latch: setup.walker_latch,
+            peek_images_latch: setup.peek_images_latch,
+            peek_images: HashMap::new(),
             last_cursor: HashMap::new(),
             cached_hovered_title: None,
             cached_peek_command: None,
             locked_peek: None,
-            vd_bounds,
-            desktop_buffer: Some(desktop_buffer),
-            walker: None,
-            peek_images: HashMap::new(),
             pending_show: Some(PendingShow {
-                ready_count,
+                ready_count: setup.ready_count,
                 expected,
-                visible_latch,
+                visible_latch: setup.visible_latch,
             }),
             pending_preselect,
             video_dispatched: false,
-            startup,
-            shown_time,
-            pinch_monitor: None,
-            instance,
-            worker_setups: Some(worker_setups),
-            walker_latch,
-            peek_images_latch,
             input: InteractionState {
-                virtual_cursor: initial_mouse,
+                virtual_cursor: setup.initial_mouse,
                 zoom: 1.0,
                 anchored: false,
                 anchor_just_engaged: false,
@@ -188,149 +509,338 @@ impl App {
                 velocity_tracker: MouseVelocityTracker::new(),
                 has_used_magnifier: false,
             },
+        });
+    }
+
+    /// Tear down the current capture cycle: hide every window, restore the
+    /// hardware cursor, return the workers to their parked state and drop
+    /// the per-cycle state. Exits the event loop unless `persistent`,
+    /// where it instead reports `finished` and parks the event loop.
+    fn finish_cycle(&mut self, event_loop: &ActiveEventLoop, action: CycleAction) {
+        log::info!("capture cycle finished: {:?}", action);
+        self.windows.hide_all();
+        // Idempotent (guarded by a static in window.rs) even when cursors
+        // were already restored via update_cursor_visibility.
+        set_hardware_cursor_visible(true);
+        if let Some(cycle) = self.cycle.take() {
+            // A worker may not have consumed this cycle's BeginCycle yet
+            // (the screenshot job broadcasts it from its own thread — e.g.
+            // cancel/timeout before the capture landed), or may still be
+            // blocked in visible_latch.wait(). Mark the cycle cancelled
+            // *before* releasing the latch so no worker can wedge on the
+            // dead cycle; workers re-check the flag after the wait.
+            cycle.cancelled.store(true, Ordering::Release);
+            if let Some(pending) = &cycle.pending_show {
+                pending.visible_latch.signal_all();
+            }
+            for w in self.workers.iter().flatten() {
+                let _ = w.render_msg_tx.send(RenderMsg::EndCycle {
+                    cycle_gen: cycle.cycle_gen,
+                });
+            }
+        }
+        for h in self.windows.values() {
+            h.set_background_image(None);
+        }
+        if self.persistent {
+            host::emit(&HostEvent::Finished {
+                action,
+            });
+            // Nothing animates between cycles — sleep until the next
+            // command (or other event) arrives.
+            event_loop.set_control_flow(ControlFlow::Wait);
+        } else {
+            event_loop.exit();
         }
     }
 
+    /// Non-blocking pickup of this cycle's desktop screenshot, with the
+    /// 30s bound one-shot mode applies before `start_cycle`. Persistent
+    /// mode arms the cycle before the screenshot exists, so it lands here:
+    /// no-op once picked up (and always in one-shot mode, where the latch
+    /// resolved before the cycle started).
+    fn try_pick_up_screenshot(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        if cycle.desktop_buffer.is_some() {
+            return;
+        }
+        if let Some(buf) = cycle.screenshot_latch.try_get() {
+            for h in self.windows.values() {
+                h.set_background_image(Some(&buf));
+            }
+            cycle.desktop_buffer = Some(buf);
+        } else if Instant::now() >= cycle.screenshot_deadline {
+            error!("timed out waiting for the desktop screenshot; cancelling the capture cycle");
+            if self.persistent {
+                host::emit(&HostEvent::FatalError {
+                    message: "timed out waiting for the desktop screenshot".into(),
+                });
+            }
+            self.finish_cycle(event_loop, CycleAction::Cancelled);
+        }
+    }
+
+    /// Dispatch one parsed stdin command (persistent mode only — the
+    /// stdin reader is the sole producer of these).
+    fn handle_host_command(&mut self, event_loop: &ActiveEventLoop, cmd: HostCommand) {
+        match cmd {
+            HostCommand::Show(params) => self.handle_show(event_loop, params),
+            HostCommand::Cancel => {
+                // Acts like Escape.
+                if self.cycle.is_some() {
+                    self.finish_cycle(event_loop, CycleAction::Cancelled);
+                } else {
+                    info!("cancel command ignored: no capture cycle active");
+                }
+            }
+            HostCommand::Ping => host::emit(&HostEvent::Pong),
+            HostCommand::Shutdown => {
+                info!("shutdown command received; exiting");
+                if self.cycle.is_some() {
+                    self.finish_cycle(event_loop, CycleAction::Cancelled);
+                }
+                // Graceful: unwinds the event loop, drops the workers'
+                // channels and joins their threads on the way out.
+                event_loop.exit();
+            }
+        }
+    }
+
+    /// An OS display-topology notification arrived (`host::display`).
+    /// One change produces a burst of messages, so arm/extend a
+    /// coalescing deadline instead of restarting immediately;
+    /// [`check_display_change`](Self::check_display_change) acts once it
+    /// expires.
+    fn handle_display_change(&mut self, event_loop: &ActiveEventLoop) {
+        // One-shot mode installs no observers, but guard anyway — its
+        // display-change behaviour must stay untouched.
+        let Some(hs) = self.host.as_mut() else {
+            return;
+        };
+        if hs.display_change_deadline.is_none() {
+            info!("display topology change reported; restarting after a {DISPLAY_CHANGE_DEBOUNCE:?} debounce");
+        }
+        let deadline = Instant::now() + DISPLAY_CHANGE_DEBOUNCE;
+        hs.display_change_deadline = Some(deadline);
+        if self.cycle.is_none() {
+            // Idle: the loop is parked in Wait — make sure it wakes to
+            // act on the deadline. A running cycle Polls and gets there
+            // on its own.
+            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+        }
+    }
+
+    /// Act on an expired display-change debounce (armed by
+    /// [`handle_display_change`](Self::handle_display_change)); called
+    /// every `about_to_wait` pass.
+    fn check_display_change(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(deadline) = self.host.as_ref().and_then(|hs| hs.display_change_deadline) else {
+            return;
+        };
+        if Instant::now() < deadline {
+            // Still coalescing: keep the idle loop ticking toward the
+            // deadline (re-asserted here because earlier control-flow
+            // writes in about_to_wait may have parked the loop).
+            if self.cycle.is_none() {
+                event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+            }
+            return;
+        }
+        // Debounce expired — but fullscreen-exclusive transitions, RDP and
+        // mode-setting screensavers broadcast display-change notifications
+        // whose *final* topology is unchanged. Re-verify before killing a
+        // healthy warm host (off the hot path, so the enumeration cost is
+        // irrelevant); handle_show applies the same guard.
+        let fresh = SystemInterop::all_monitors();
+        if topology_matches(&self.monitors, &fresh) {
+            info!("display-change debounce expired but the topology still matches; staying warm");
+            if let Some(hs) = self.host.as_mut() {
+                hs.display_change_deadline = None;
+                // Idle again: replace the (now past) WaitUntil so the loop
+                // doesn't spin on an expired deadline. During warm-up the
+                // ready gate's own WaitUntil tick must survive.
+                if self.cycle.is_none() && hs.ready_emitted {
+                    event_loop.set_control_flow(ControlFlow::Wait);
+                }
+            }
+            return;
+        }
+        self.restart_for_topology_change(event_loop, EXIT_DISPLAY_CHANGED, "the display topology changed");
+    }
+
+    /// A render worker's wgpu device died (driver reset/update). That
+    /// worker can never serve another cycle, so restart the whole host.
+    /// No debounce — a single lost device is already fatal to the warm
+    /// state.
+    fn handle_gpu_lost(&mut self, event_loop: &ActiveEventLoop) {
+        // Never signalled in one-shot mode (no callback registered), but
+        // guard anyway — its device-loss behaviour must stay untouched.
+        if self.host.is_none() {
+            return;
+        }
+        self.restart_for_topology_change(event_loop, EXIT_GPU_LOST, "a render worker's GPU device was lost");
+    }
+
+    /// Common exit path for "the warm state no longer matches the world":
+    /// finish any active cycle as cancelled (hides windows, restores the
+    /// cursor, reports `finished` to the parent), emit `display_changed`
+    /// and exit with `code` (`EXIT_DISPLAY_CHANGED` / `EXIT_GPU_LOST`).
+    /// The shell respawns us immediately — no backoff — and cold-spawns
+    /// any capture requested before the fresh host is ready.
+    fn restart_for_topology_change(&mut self, event_loop: &ActiveEventLoop, code: i32, why: &str) -> ! {
+        warn!("{why}; exiting for respawn (exit code {code})");
+        if self.cycle.is_some() {
+            self.finish_cycle(event_loop, CycleAction::Cancelled);
+        }
+        host::emit(&HostEvent::DisplayChanged);
+        std::process::exit(code);
+    }
+
+    /// Persistent-mode `show`: run the per-capture fast path — everything
+    /// `CaptureSession::new` does *after* its warm-up — and arm a cycle.
+    /// The screenshot is not waited for here (see
+    /// [`try_pick_up_screenshot`](Self::try_pick_up_screenshot)).
+    fn handle_show(&mut self, event_loop: &ActiveEventLoop, params: ShowParams) {
+        if self.cycle.is_some() {
+            warn!("show command ignored: a capture cycle is already active");
+            return;
+        }
+
+        // Belt-and-braces topology verify: the OS notifications can lag
+        // (or be missed outright), and an overlay laid out for monitors
+        // that no longer exist must never reach the screen. Exiting
+        // *before* any window shows makes the parent cold-spawn this
+        // capture and respawn the host against the new topology.
+        let fresh = SystemInterop::all_monitors();
+        if !topology_matches(&self.monitors, &fresh) {
+            warn!("monitor topology changed since warm-up ({} monitors -> {})", self.monitors.len(), fresh.len());
+            self.restart_for_topology_change(event_loop, EXIT_DISPLAY_CHANGED, "the show-time topology check failed");
+        } else if let Some(hs) = self.host.as_mut() {
+            // A pending debounced notification whose enumeration still
+            // matches was a no-op change (or a change-and-revert): drop
+            // it rather than tearing down a healthy host mid-capture.
+            if hs.display_change_deadline.take().is_some() {
+                info!("show-time topology check passed; dropping the pending display-change restart");
+            }
+        }
+
+        let settings = Arc::new(params.into_settings());
+        if let Some(dir) = &settings.session_dir {
+            info!("show: session payload will be written to {:?}", dir);
+        }
+
+        let initial_mouse = SystemInterop::get_mouse_position(&self.monitors);
+        let initial_mouse_f = ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
+        let captured_cursor = SystemInterop::capture_cursor(&self.monitors);
+
+        // Fresh gate + latch per cycle — nothing ever needs re-arming. The
+        // cycle's debug timings anchor here (the `show` command), so the
+        // idle gap since warm-up never leaks into a per-cycle metric.
+        let timings = Arc::new(CaptureTimings::new(self.monitors.len()));
+        let ready_count = Arc::new(AtomicUsize::new(0));
+        let visible_latch = Arc::new(VisibleLatch::new());
+        let cycle_gen = next_cycle_gen();
+        let cancelled = Arc::new(AtomicBool::new(false));
+        let input_txs: Vec<_> = self
+            .workers
+            .iter()
+            .flatten()
+            .map(|w| w.input_tx.clone())
+            .collect();
+        let render_msg_txs: Vec<_> = self
+            .workers
+            .iter()
+            .flatten()
+            .map(|w| w.render_msg_tx.clone())
+            .collect();
+
+        let screenshot_latch = spawn_screenshot_job(ScreenshotJobParams {
+            monitors: self.monitors.clone(),
+            cursor: captured_cursor,
+            input_txs,
+            render_msg_txs: render_msg_txs.clone(),
+            peek_enabled: settings.obscured_window_peek_enabled,
+            accent_color: settings.accent_color,
+            initial_mouse: initial_mouse_f,
+            ready_count: ready_count.clone(),
+            visible_latch: visible_latch.clone(),
+            cycle_gen,
+            cancelled: cancelled.clone(),
+            timings: timings.clone(),
+        });
+        let (walker_latch, peek_images_latch) = spawn_walker_job(
+            self.monitors.clone(),
+            render_msg_txs,
+            cycle_gen,
+            settings.obscured_window_peek_enabled,
+            settings.obscured_window_detection_threshold,
+            timings.clone(),
+        );
+
+        self.start_cycle(CycleSetup {
+            settings,
+            initial_mouse: initial_mouse_f,
+            screenshot_latch,
+            walker_latch,
+            peek_images_latch,
+            ready_count,
+            visible_latch,
+            cycle_gen,
+            cancelled,
+            timings,
+        });
+
+        // A cycle renders/polls continuously; finish_cycle restores Wait.
+        event_loop.set_control_flow(ControlFlow::Poll);
+    }
+
     fn ensure_peek_images(&mut self) {
-        if self.peek_images.is_empty() {
-            if let Some(images) = self.peek_images_latch.try_get() {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        if cycle.peek_images.is_empty() {
+            if let Some(images) = cycle.peek_images_latch.try_get() {
                 for img in images.iter() {
-                    self.peek_images
+                    cycle
+                        .peek_images
                         .insert(img.window_index, img.clone());
                 }
             }
         }
     }
 
-    fn broadcast_mouse_state(&self) {
-        for h in self.windows.values() {
-            h.update_mouse_state(
-                self.input.virtual_cursor,
-                self.input.zoom,
-                self.input.selection,
-                self.input.captured,
-            );
-        }
-    }
-
     fn apply_zoom_factor(&mut self, factor: f32) {
-        let effects = InteractionController::apply_zoom_factor(&mut self.input, factor);
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        let effects = InteractionController::apply_zoom_factor(&mut cycle.input, factor);
         self.apply_interaction_effects(effects, None);
-    }
-
-    fn hide_all_windows(&self) {
-        self.windows.hide_all();
     }
 
     fn show_all_windows(&self) {
         self.windows.show_all();
-        self.update_cursor_visibility();
+        if let Some(cycle) = self.cycle.as_ref() {
+            update_cursor_visibility(&self.windows, &cycle.input);
+        }
     }
 
-    fn set_cursor_if_changed(&mut self, id: WindowId, cursor: CursorIcon) {
-        if self.last_cursor.get(&id) == Some(&cursor) {
+    /// Try to pick up the walker result (non-blocking). If not ready yet,
+    /// selection stays `None` and updates on first cursor move.
+    fn try_pick_up_walker(&mut self) {
+        let Some(cycle) = self.cycle.as_mut() else {
             return;
-        }
-        if let Some(window) = self.windows.get(&id) {
-            window.set_cursor(cursor);
-            self.last_cursor.insert(id, cursor);
-        }
-    }
-
-    fn update_cursor_visibility(&self) {
-        if self.input.captured || self.input.debug_visible {
-            self.windows.show_cursors();
-        } else {
-            self.windows.hide_cursors();
-        }
-    }
-
-    fn current_panel_layout(&self) -> Option<crate::ui::components::panel::layout::PanelLayout> {
-        if !self.input.captured {
-            return None;
-        }
-        let sel = self.input.selection?;
-        let cx = sel.center_x();
-        let cy = sel.center_y();
-        let mon = self.monitors.iter().find(|m| {
-            let b = m.bounds;
-            cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
-        })?;
-        crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor)
-    }
-
-    fn broadcast_ui_state(&mut self) {
-        let cursor_pt = to_screen_point(self.input.virtual_cursor);
-
-        let hovered_monitor_name = self
-            .monitors
-            .iter()
-            .find(|m| m.bounds.contains(cursor_pt))
-            .map(|m| m.name.clone());
-
-        let hovered_full = self
-            .walker
-            .as_ref()
-            .and_then(|w| w.hit_test_full(cursor_pt));
-        self.cached_hovered_title = hovered_full
-            .as_ref()
-            .map(|h| h.title.clone());
-        let hovered_window_bounds = hovered_full.as_ref().map(|h| h.rect);
-        let hovered_window_index = hovered_full.as_ref().map(|h| h.window_index);
-        let hovered_window_obstructed = hovered_full
-            .as_ref()
-            .is_some_and(|h| h.obstructed);
-
-        // Compute peek command first so UI state can use the peeked window bounds.
-        // Peek is suppressed in magnifier mode (overlays hidden) and after
-        // a selection has been made (peek_suspended).  When captured, keep
-        // the locked peek; otherwise follow hover.
-        let new_peek = if !self.input.overlays_visible || self.input.peek_suspended || self.input.dragging {
-            self.locked_peek.clone()
-        } else {
-            hovered_full
-                .as_ref()
-                .filter(|hw| hw.obstructed && self.settings.obscured_window_peek_enabled)
-                .map(|hw| PeekCommand {
-                    window_index: hw.window_index,
-                    window_rect: hw.rect,
-                    captured: false,
-                })
         };
-
-        let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
-            monitors: self.ui_monitors.clone(),
-            selection: self.input.selection,
-            captured: self.input.captured,
-            mouse_down: self.input.mouse_down,
-            dragging: self.input.dragging,
-            zoom: self.input.zoom,
-            virtual_cursor: self.input.virtual_cursor,
-            accent_color: self.settings.accent_color,
-            tips_mode: self.input.tips_mode,
-            debug_visible: self.input.debug_visible,
-            overlays_visible: self.input.overlays_visible,
-            hovered_monitor_name,
-            hovered_window_title: self.cached_hovered_title.clone(),
-            hovered_window_bounds,
-            hovered_window_index,
-            hovered_window_obstructed,
-            peek_window_bounds: new_peek.as_ref().map(|p| p.window_rect),
-            cursor_overlay_visible: self.input.cursor_overlay_visible,
-            desktop_buffer: self.desktop_buffer.as_deref(),
-            show_scroll_hint: self.input.show_scroll_hint,
-            has_used_magnifier: self.input.has_used_magnifier,
-        }));
-
-        for h in self.windows.values() {
-            h.update_ui_state(state.clone());
-        }
-
-        if new_peek != self.cached_peek_command {
-            for h in self.windows.values() {
-                h.update_peek_state(new_peek.clone());
+        if cycle.walker.is_none() {
+            if let Some(w) = cycle.walker_latch.try_get() {
+                let pt = ScreenPoint::new(
+                    cycle.input.virtual_cursor.x.round() as i32,
+                    cycle.input.virtual_cursor.y.round() as i32,
+                );
+                cycle.input.selection = w.hit_test(pt);
+                cycle.walker = Some(w);
             }
-            self.cached_peek_command = new_peek;
         }
     }
 
@@ -343,8 +853,11 @@ impl App {
     }
 
     fn finalise_selection_inner(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId, lock_peek: bool) {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
         if lock_peek {
-            self.locked_peek = self
+            cycle.locked_peek = cycle
                 .cached_peek_command
                 .as_ref()
                 .map(|cmd| PeekCommand {
@@ -353,11 +866,11 @@ impl App {
                     captured: true,
                 });
         } else {
-            self.locked_peek = None;
+            cycle.locked_peek = None;
         }
-        self.input.peek_suspended = true;
+        cycle.input.peek_suspended = true;
 
-        let effects = InteractionController::finalize_selection(&mut self.input, rect, &self.monitors);
+        let effects = InteractionController::finalize_selection(&mut cycle.input, rect, &self.monitors);
         self.apply_interaction_effects(effects, Some(window_id));
 
         // Keyboard / preselect captured-transition site (DESIGN §3.3).
@@ -370,8 +883,11 @@ impl App {
     /// keyboard/preselect `finalise_selection` path) so video mode works
     /// for every entry path (DESIGN §3.3).
     fn on_captured(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId) {
-        if self.settings.video_mode && !self.video_dispatched {
-            self.video_dispatched = true;
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        if cycle.settings.video_mode && !cycle.video_dispatched {
+            cycle.video_dispatched = true;
             self.dispatch_command(Command::Video, event_loop, window_id);
         }
     }
@@ -381,8 +897,9 @@ impl App {
     /// window, falling back to the active screen when no foreground window is
     /// available. `Region` never pre-selects.
     fn preselect_rect(&self, mode: CaptureMode) -> Option<ScreenRect> {
+        let cycle = self.cycle.as_ref()?;
         let active_screen = || {
-            let pt = to_screen_point(self.input.virtual_cursor);
+            let pt = to_screen_point(cycle.input.virtual_cursor);
             self.monitors
                 .iter()
                 .find(|m| m.bounds.contains(pt))
@@ -391,7 +908,7 @@ impl App {
         match mode {
             CaptureMode::Region => None,
             CaptureMode::Screen => active_screen(),
-            CaptureMode::Window => self
+            CaptureMode::Window => cycle
                 .walker
                 .as_ref()
                 .and_then(|w| w.foreground_capture_rect())
@@ -404,15 +921,18 @@ impl App {
     /// the captured state with the target rect so the action panel is shown for
     /// the user to confirm or adjust — the same state pressing `F` / `W` yields.
     fn try_preselect(&mut self, event_loop: &ActiveEventLoop) {
-        let Some(mode) = self.pending_preselect else {
+        let Some(cycle) = self.cycle.as_ref() else {
+            return;
+        };
+        let Some(mode) = cycle.pending_preselect else {
             return;
         };
         // Wait until the overlay is up (panel needs a shown window to render).
-        if self.pending_show.is_some() {
+        if cycle.pending_show.is_some() {
             return;
         }
         // Window mode targets the foreground window, which comes from the walker.
-        if matches!(mode, CaptureMode::Window) && self.walker.is_none() {
+        if matches!(mode, CaptureMode::Window) && cycle.walker.is_none() {
             return;
         }
         let Some(window_id) = self.windows.first().map(|h| h.window_id()) else {
@@ -426,44 +946,56 @@ impl App {
             }
             None => log::info!("--capture-mode {:?}: no target found; leaving free selection", mode),
         }
-        self.pending_preselect = None;
+        // finalise_selection may have ended the cycle (--video auto-dispatch).
+        if let Some(cycle) = self.cycle.as_mut() {
+            cycle.pending_preselect = None;
+        }
     }
 
     fn handle_reset(&mut self, window_id: WindowId) {
-        self.locked_peek = None;
-        self.input.peek_suspended = false;
-        let effects = InteractionController::reset(&mut self.input);
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        cycle.locked_peek = None;
+        cycle.input.peek_suspended = false;
+        let effects = InteractionController::reset(&mut cycle.input);
         self.apply_interaction_effects(effects, Some(window_id));
 
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
         let pt = ScreenPoint::new(
-            self.input.virtual_cursor.x.round() as i32,
-            self.input.virtual_cursor.y.round() as i32,
+            cycle.input.virtual_cursor.x.round() as i32,
+            cycle.input.virtual_cursor.y.round() as i32,
         );
-        self.input.selection = self
+        cycle.input.selection = cycle
             .walker
             .as_ref()
             .and_then(|w| w.hit_test(pt));
 
-        self.broadcast_mouse_state();
+        broadcast_mouse_state(&self.windows, &cycle.input);
 
         log::info!("selection reset");
     }
 
     fn apply_interaction_effects(&mut self, effects: InteractionEffects, window_id: Option<WindowId>) {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
         if effects.update_cursor_visibility {
-            self.update_cursor_visibility();
+            update_cursor_visibility(&self.windows, &cycle.input);
         }
         if let Some(pos) = effects.restore_mouse {
             SystemInterop::set_mouse_position(pos, &self.monitors);
         }
         if let (Some(window_id), Some(cursor)) = (window_id, effects.set_cursor) {
-            self.set_cursor_if_changed(window_id, cursor);
+            set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, cursor);
         }
         if effects.broadcast_ui {
-            self.broadcast_ui_state();
+            broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
         }
         if effects.broadcast_mouse {
-            self.broadcast_mouse_state();
+            broadcast_mouse_state(&self.windows, &cycle.input);
         }
     }
 
@@ -472,41 +1004,45 @@ impl App {
         log::info!("dispatch command: {:?}", command);
 
         self.ensure_peek_images();
-        let active_peek_image = self.locked_peek.as_ref().and_then(|cmd| {
-            self.peek_images
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        let active_peek_image = cycle.locked_peek.as_ref().and_then(|cmd| {
+            cycle
+                .peek_images
                 .get(&cmd.window_index)
                 .map(|img| img.as_ref())
         });
 
-        let cursor = self
+        let cursor = cycle
             .desktop_buffer
             .as_ref()
             .and_then(|buf| buf.cursor.as_ref());
-        let cursor_visible = self.input.cursor_overlay_visible;
+        let cursor_visible = cycle.input.cursor_overlay_visible;
 
         match command {
             Command::Copy => {
-                self.hide_all_windows();
-                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                self.windows.hide_all();
+                let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => copy_to_clipboard_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
-                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Copy),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
                         {
                             self.show_all_windows();
                         } else {
-                            event_loop.exit();
+                            self.finish_cycle(event_loop, CycleAction::Cancelled);
                         }
                     }
                 }
             }
             Command::Save => {
-                self.hide_all_windows();
-                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                self.windows.hide_all();
+                let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => match self.windows.get(&window_id) {
                         Some(handle) => handle.save_to_file_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
                         None => ActionResult::Failed("No active window".into()),
@@ -514,13 +1050,13 @@ impl App {
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
-                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Save),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            event_loop.exit();
+                            self.finish_cycle(event_loop, CycleAction::Cancelled);
                         }
                     }
                 }
@@ -531,28 +1067,28 @@ impl App {
                 // marker so the shell uploads instead of opening the
                 // editor. Without a --session-dir there is no shell
                 // listening — ignore.
-                let Some(session_dir) = self.settings.session_dir.clone() else {
+                let Some(session_dir) = cycle.settings.session_dir.clone() else {
                     log::info!("command {:?} ignored: no --session-dir provided", command);
                     return;
                 };
-                let action = if command == Command::Upload {
-                    SessionAction::Upload
+                let (action, cycle_action) = if command == Command::Upload {
+                    (SessionAction::Upload, CycleAction::Upload)
                 } else {
-                    SessionAction::Edit
+                    (SessionAction::Edit, CycleAction::Edit)
                 };
-                self.hide_all_windows();
-                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                self.windows.hide_all();
+                let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => write_session(&session_dir, sel, buf, active_peek_image, cursor_visible, action),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
-                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Success => self.finish_cycle(event_loop, cycle_action),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Session Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            event_loop.exit();
+                            self.finish_cycle(event_loop, CycleAction::Cancelled);
                         }
                     }
                 }
@@ -562,58 +1098,57 @@ impl App {
                 // the pixel under the cursor to the shell — it opens its
                 // color viewer. Without a shell there is nothing to show
                 // the color in — ignore.
-                let Some(session_dir) = self.settings.session_dir.clone() else {
+                let Some(session_dir) = cycle.settings.session_dir.clone() else {
                     log::info!("command SelectColor ignored: no --session-dir provided");
                     return;
                 };
-                let sampled = self
+                let sampled = cycle
                     .desktop_buffer
                     .as_deref()
-                    .and_then(|buf| sample_bgra(buf, to_screen_point(self.input.virtual_cursor)));
+                    .and_then(|buf| sample_bgra(buf, to_screen_point(cycle.input.virtual_cursor)));
                 let Some(bgra) = sampled else {
                     log::warn!("command SelectColor ignored: cursor is not over the desktop bitmap");
                     return;
                 };
-                self.hide_all_windows();
+                self.windows.hide_all();
                 match write_color_action(&session_dir, bgra[2], bgra[1], bgra[0]) {
-                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SelectColor),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Color Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            event_loop.exit();
+                            self.finish_cycle(event_loop, CycleAction::Cancelled);
                         }
                     }
                 }
             }
             Command::Reset => self.handle_reset(window_id),
             Command::Exit => {
-                self.hide_all_windows();
-                event_loop.exit();
+                self.finish_cycle(event_loop, CycleAction::Cancelled);
             }
             Command::Video => {
                 // Mirrors Edit|Upload: writes the video action payload
                 // (poster + `action.txt`) for the shell to start recording.
                 // Without a --session-dir there is no shell listening —
                 // ignore. (DESIGN §3.2/§3.3.)
-                let Some(session_dir) = self.settings.session_dir.clone() else {
+                let Some(session_dir) = cycle.settings.session_dir.clone() else {
                     log::info!("command Video ignored: no --session-dir provided");
                     return;
                 };
-                self.hide_all_windows();
-                let result = match (self.input.selection, self.desktop_buffer.as_deref()) {
+                self.windows.hide_all();
+                let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => write_video_action(&session_dir, sel, buf, cursor_visible, &self.monitors),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
-                    ActionResult::Success => event_loop.exit(),
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Video),
                     ActionResult::Cancelled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Video Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            event_loop.exit();
+                            self.finish_cycle(event_loop, CycleAction::Cancelled);
                         }
                     }
                 }
@@ -622,7 +1157,27 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<AppEvent> for App {
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
+        match event {
+            AppEvent::Command(cmd) => self.handle_host_command(event_loop, cmd),
+            AppEvent::ParentGone => {
+                warn!("parent process is gone (stdin EOF); exiting");
+                // Hide the overlay / restore the cursor before dying so the
+                // user isn't left staring at a frozen screenshot.
+                if self.cycle.is_some() {
+                    self.finish_cycle(event_loop, CycleAction::Cancelled);
+                }
+                // Prompt exit rather than unwinding the event loop: with
+                // the parent dead nobody reads our events, and orphaned
+                // overlay processes must never linger.
+                std::process::exit(0);
+            }
+            AppEvent::DisplayChange => self.handle_display_change(event_loop),
+            AppEvent::GpuLost => self.handle_gpu_lost(event_loop),
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if !self.windows.is_empty() {
             return;
@@ -638,21 +1193,10 @@ impl ApplicationHandler for App {
             None => return,
         };
 
-        // Try to pick up the walker result (non-blocking). If not ready
-        // yet, selection will start as None and update on first cursor move.
-        if self.walker.is_none() {
-            if let Some(w) = self.walker_latch.try_get() {
-                let pt = ScreenPoint::new(
-                    self.input.virtual_cursor.x.round() as i32,
-                    self.input.virtual_cursor.y.round() as i32,
-                );
-                self.input.selection = w.hit_test(pt);
-                self.walker = Some(w);
-            }
-        }
+        self.try_pick_up_walker();
 
         let mut windows = WindowSet::new();
-        self.startup.mark_window_create_start();
+        self.warmup.mark_window_create_start();
 
         for (i, setup) in worker_setups.into_iter().enumerate() {
             let m = &self.monitors[i];
@@ -700,29 +1244,25 @@ impl ApplicationHandler for App {
                 Ok(w) => Arc::new(w),
                 Err(e) => {
                     error!("failed to create window for monitor {i}: {e:?}");
+                    self.teardown_failed_worker(i);
                     continue;
                 }
             };
 
-            self.startup.background.workers[i]
+            self.warmup.workers[i]
                 .surface_start
-                .set_once(self.startup.t_start.elapsed());
-            let handle = match WindowHandle::new(
-                window,
-                setup,
-                &self.instance,
-                #[cfg(target_os = "macos")]
-                self.desktop_buffer.as_deref(),
-            ) {
+                .set_once(self.warmup.t_start.elapsed());
+            let handle = match WindowHandle::new(window, setup, &self.instance) {
                 Ok(h) => h,
                 Err(e) => {
                     error!("failed to create window handle for monitor {i}: {e:?}");
+                    self.teardown_failed_worker(i);
                     continue;
                 }
             };
-            self.startup.background.workers[i]
+            self.warmup.workers[i]
                 .surface_bind
-                .set_once(self.startup.t_start.elapsed());
+                .set_once(self.warmup.t_start.elapsed());
 
             windows.insert(handle);
         }
@@ -733,51 +1273,107 @@ impl ApplicationHandler for App {
             return;
         }
 
-        self.startup.mark_window_create();
+        self.warmup.mark_window_create();
         self.windows = windows;
+
+        // Freshly created windows start un-shown, but still need this
+        // cycle's per-window state (macOS background screenshot layer).
+        if let Some(cycle) = self.cycle.as_ref() {
+            if let Some(buf) = cycle.desktop_buffer.as_deref() {
+                for h in self.windows.values() {
+                    h.set_background_image(Some(buf));
+                }
+            }
+        }
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        // Persistent warm-up gate: emit `ready` once every worker has
+        // parked (or failed — a dead worker must not hold `ready` hostage
+        // any more than it may hold the show gate).
+        if let Some(hs) = self.host.as_mut() {
+            if !hs.ready_emitted {
+                let parked = hs.parked_count.load(Ordering::Acquire);
+                let failed = self.worker_failed.load(Ordering::Acquire);
+                if parked + failed >= self.workers.len() {
+                    hs.ready_emitted = true;
+                    self.warmup.mark_ready();
+                    let warmup_ms = self.warmup.t_start.elapsed().as_millis() as u64;
+                    info!("persistent host ready: warmed up in {warmup_ms} ms ({} monitors)", self.monitors.len());
+                    host::emit(&HostEvent::Ready {
+                        warmup_ms,
+                        monitors: self.monitors.len(),
+                    });
+                    // Leave the warm-up WaitUntil ticking behind — idle is
+                    // a pure Wait until a command arrives (unless a `show`
+                    // beat us here and already wants Poll).
+                    if self.cycle.is_none() {
+                        event_loop.set_control_flow(ControlFlow::Wait);
+                    }
+                } else if self.cycle.is_none() {
+                    // Workers have no way to wake the loop, so tick until
+                    // they're all parked; after `ready` the loop settles
+                    // into ControlFlow::Wait until a command arrives. (An
+                    // early `show` sets Poll — don't override it.)
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(25)));
+                }
+            }
+        }
+
         if let Some(ref m) = self.pinch_monitor {
             let delta = m.drain();
-            if delta != 0.0 && !self.input.captured {
+            if delta != 0.0
+                && self
+                    .cycle
+                    .as_ref()
+                    .is_some_and(|c| !c.input.captured)
+            {
                 self.apply_zoom_factor(1.0 + delta as f32);
             }
         }
 
-        // Try to pick up the walker if it wasn't ready during resumed().
-        if self.walker.is_none() {
-            if let Some(w) = self.walker_latch.try_get() {
-                let pt = ScreenPoint::new(
-                    self.input.virtual_cursor.x.round() as i32,
-                    self.input.virtual_cursor.y.round() as i32,
-                );
-                self.input.selection = w.hit_test(pt);
-                self.walker = Some(w);
-            }
-        }
+        // Try to pick up the walker if it wasn't ready during resumed(),
+        // and (persistent mode) this cycle's screenshot.
+        self.try_pick_up_walker();
+        self.try_pick_up_screenshot(event_loop);
 
-        if let Some(ref pending) = self.pending_show {
-            if pending.ready_count.load(Ordering::Acquire) >= pending.expected {
-                self.startup.mark_show_start();
-                self.windows.show_all();
-                let _ = self
-                    .shown_time
-                    .set(self.startup.t_start.elapsed());
-                if let Some(h) = self.windows.first() {
-                    h.focus();
+        if let Some(cycle) = self.cycle.as_mut() {
+            if let Some(ref pending) = cycle.pending_show {
+                // Failed workers count toward the gate so a dead worker can
+                // never hold the overlay hostage.
+                let ready = pending.ready_count.load(Ordering::Acquire);
+                let failed = self.worker_failed.load(Ordering::Acquire);
+                if ready + failed >= pending.expected {
+                    cycle.timings.mark_show_start();
+                    self.windows.show_all();
+                    cycle.timings.mark_shown();
+                    if let Some(h) = self.windows.first() {
+                        h.focus();
+                    }
+                    update_cursor_visibility(&self.windows, &cycle.input);
+                    pending.visible_latch.signal_all();
+                    cycle.pending_show = None;
+                    broadcast_mouse_state(&self.windows, &cycle.input);
+                    broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                    if self.persistent {
+                        let elapsed_ms = cycle.started.elapsed().as_millis() as u64;
+                        info!("overlay shown {elapsed_ms} ms after the show command");
+                        host::emit(&HostEvent::Shown {
+                            elapsed_ms,
+                        });
+                    }
                 }
-                self.update_cursor_visibility();
-                pending.visible_latch.signal_all();
-                self.pending_show = None;
-                self.broadcast_mouse_state();
-                self.broadcast_ui_state();
             }
         }
 
         // Pre-select the active screen / foreground window when launched with
         // `--capture-mode screen|window` (no-op in free-region mode).
         self.try_preselect(event_loop);
+
+        // Last so its WaitUntil (idle debounce in progress) survives the
+        // control-flow writes above; exits the process once the display-
+        // change debounce expires.
+        self.check_display_change(event_loop);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
@@ -787,10 +1383,35 @@ impl ApplicationHandler for App {
         };
         let handle_monitor_bounds = this_monitor_bounds;
 
+        // Geometry maintenance must run even with no cycle in flight: a warm
+        // host creates its windows on the primary monitor and moves them into
+        // place during warm-up, so the DPI change that move provokes arrives
+        // between cycles. Without this override winit resizes the window by
+        // new_scale/old_scale, permanently shrinking any overlay whose monitor
+        // has a different DPI than the primary.
+        #[cfg(windows)]
+        let mut event = event;
+        #[cfg(windows)]
+        if let WindowEvent::ScaleFactorChanged {
+            ref mut inner_size_writer,
+            ..
+        } = event
+        {
+            let _ = inner_size_writer.request_inner_size(winit::dpi::PhysicalSize::new(
+                handle_monitor_bounds.width() as u32,
+                handle_monitor_bounds.height() as u32,
+            ));
+            return;
+        }
+
+        // No active cycle (finishing / between cycles): nothing to do.
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+
         match event {
             WindowEvent::CloseRequested => {
-                self.hide_all_windows();
-                event_loop.exit();
+                self.finish_cycle(event_loop, CycleAction::Cancelled);
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -801,8 +1422,7 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                self.hide_all_windows();
-                event_loop.exit();
+                self.finish_cycle(event_loop, CycleAction::Cancelled);
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -815,7 +1435,7 @@ impl ApplicationHandler for App {
             }
                 // Mirrors the Dx capturer: Return acts as the default
                 // accept ("open in editor") once a selection is made.
-                if self.input.captured => {
+                if cycle.input.captured => {
                     self.dispatch_command(Command::Edit, event_loop, id);
                 }
             WindowEvent::KeyboardInput {
@@ -831,38 +1451,38 @@ impl ApplicationHandler for App {
                 if let Some(c) = ch.chars().next() {
                     let c_lower = c.to_ascii_lowercase();
                     if c_lower == 'd' {
-                        self.input.debug_visible = !self.input.debug_visible;
-                        self.update_cursor_visibility();
-                        self.broadcast_ui_state();
+                        cycle.input.debug_visible = !cycle.input.debug_visible;
+                        update_cursor_visibility(&self.windows, &cycle.input);
+                        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     } else if c_lower == 'm' {
-                        self.input.cursor_overlay_visible = !self.input.cursor_overlay_visible;
-                        self.broadcast_ui_state();
-                    } else if self.input.captured {
+                        cycle.input.cursor_overlay_visible = !cycle.input.cursor_overlay_visible;
+                        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                    } else if cycle.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
                             self.dispatch_command(cmd, event_loop, id);
                         }
-                    } else if self.input.mouse_down {
+                    } else if cycle.input.mouse_down {
                         // Mid-drag: swallow keys.
                     } else {
                         match c_lower {
                             't' => {
-                                self.input.tips_mode = self.input.tips_mode.next();
-                                self.broadcast_ui_state();
+                                cycle.input.tips_mode = cycle.input.tips_mode.next();
+                                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                             }
                             'q' => {
-                                self.input.overlays_visible = !self.input.overlays_visible;
-                                if !self.input.overlays_visible && self.input.zoom > 1.0 {
-                                    self.input.has_used_magnifier = true;
+                                cycle.input.overlays_visible = !cycle.input.overlays_visible;
+                                if !cycle.input.overlays_visible && cycle.input.zoom > 1.0 {
+                                    cycle.input.has_used_magnifier = true;
                                 }
-                                self.broadcast_ui_state();
-                                self.broadcast_mouse_state();
+                                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                                broadcast_mouse_state(&self.windows, &cycle.input);
                             }
                             'w' => {
                                 let pt = ScreenPoint::new(
-                                    self.input.virtual_cursor.x.round() as i32,
-                                    self.input.virtual_cursor.y.round() as i32,
+                                    cycle.input.virtual_cursor.x.round() as i32,
+                                    cycle.input.virtual_cursor.y.round() as i32,
                                 );
-                                if let Some(rect) = self
+                                if let Some(rect) = cycle
                                     .walker
                                     .as_ref()
                                     .and_then(|w| w.hit_test(pt))
@@ -872,8 +1492,8 @@ impl ApplicationHandler for App {
                             }
                             'f' => {
                                 let pt = ScreenPoint::new(
-                                    self.input.virtual_cursor.x.round() as i32,
-                                    self.input.virtual_cursor.y.round() as i32,
+                                    cycle.input.virtual_cursor.x.round() as i32,
+                                    cycle.input.virtual_cursor.y.round() as i32,
                                 );
                                 if let Some(bounds) = self
                                     .monitors
@@ -896,16 +1516,6 @@ impl ApplicationHandler for App {
                     }
                 }
             }
-            #[cfg(windows)]
-            WindowEvent::ScaleFactorChanged {
-                mut inner_size_writer,
-                ..
-            } => {
-                let _ = inner_size_writer.request_inner_size(winit::dpi::PhysicalSize::new(
-                    handle_monitor_bounds.width() as u32,
-                    handle_monitor_bounds.height() as u32,
-                ));
-            }
             WindowEvent::CursorMoved {
                 position,
                 ..
@@ -914,167 +1524,167 @@ impl ApplicationHandler for App {
                 let win_pt = WindowPoint::new(position.x as f32, position.y as f32);
                 let os_vd = ScreenPoint::new(bounds.min_x() + win_pt.x.round() as i32, bounds.min_y() + win_pt.y.round() as i32);
 
-                if self.input.anchored {
-                    if os_vd == self.input.anchor {
+                if cycle.input.anchored {
+                    if os_vd == cycle.input.anchor {
                         return;
                     }
-                    if self.input.anchor_just_engaged {
+                    if cycle.input.anchor_just_engaged {
                         const STALE_THRESHOLD: f32 = 75.0;
-                        let raw_dx = (os_vd.x - self.input.anchor.x) as f32;
-                        let raw_dy = (os_vd.y - self.input.anchor.y) as f32;
+                        let raw_dx = (os_vd.x - cycle.input.anchor.x) as f32;
+                        let raw_dy = (os_vd.y - cycle.input.anchor.y) as f32;
                         if raw_dx * raw_dx + raw_dy * raw_dy > STALE_THRESHOLD * STALE_THRESHOLD {
-                            SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
+                            SystemInterop::set_mouse_position(cycle.input.anchor, &self.monitors);
                             return;
                         }
-                        self.input.anchor_just_engaged = false;
+                        cycle.input.anchor_just_engaged = false;
                     }
-                    let zoom = self.input.zoom;
-                    let dx = (os_vd.x - self.input.anchor.x) as f32 / zoom;
-                    let dy = (os_vd.y - self.input.anchor.y) as f32 / zoom;
-                    self.input.virtual_cursor.x += dx;
-                    self.input.virtual_cursor.y += dy;
-                    clamp_to_nearest_monitor(&mut self.input.virtual_cursor, &self.monitors);
-                    SystemInterop::set_mouse_position(self.input.anchor, &self.monitors);
+                    let zoom = cycle.input.zoom;
+                    let dx = (os_vd.x - cycle.input.anchor.x) as f32 / zoom;
+                    let dy = (os_vd.y - cycle.input.anchor.y) as f32 / zoom;
+                    cycle.input.virtual_cursor.x += dx;
+                    cycle.input.virtual_cursor.y += dy;
+                    clamp_to_nearest_monitor(&mut cycle.input.virtual_cursor, &self.monitors);
+                    SystemInterop::set_mouse_position(cycle.input.anchor, &self.monitors);
                 } else {
-                    self.input.virtual_cursor = ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
+                    cycle.input.virtual_cursor = ScreenPointF::new(os_vd.x as f32, os_vd.y as f32);
                 }
 
-                if !self.input.mouse_down && !self.input.captured {
+                if !cycle.input.mouse_down && !cycle.input.captured {
                     let pt = ScreenPoint::new(
-                        self.input.virtual_cursor.x.round() as i32,
-                        self.input.virtual_cursor.y.round() as i32,
+                        cycle.input.virtual_cursor.x.round() as i32,
+                        cycle.input.virtual_cursor.y.round() as i32,
                     );
-                    self.input.selection = self
+                    cycle.input.selection = cycle
                         .walker
                         .as_ref()
                         .and_then(|w| w.hit_test(pt));
                 }
 
-                if self.input.mouse_down && !self.input.captured {
-                    if let Some(start) = self.input.mouse_down_pt {
+                if cycle.input.mouse_down && !cycle.input.captured {
+                    if let Some(start) = cycle.input.mouse_down_pt {
                         let psel =
-                            ScreenRect::from_rounded_threshold(start.x, start.y, self.input.virtual_cursor.x, self.input.virtual_cursor.y);
-                        if !self.input.dragging {
-                            let threshold = 6.0 / (self.input.mouse_down_dpi * self.input.zoom);
+                            ScreenRect::from_rounded_threshold(start.x, start.y, cycle.input.virtual_cursor.x, cycle.input.virtual_cursor.y);
+                        if !cycle.input.dragging {
+                            let threshold = 6.0 / (cycle.input.mouse_down_dpi * cycle.input.zoom);
                             let crossed = psel.is_some_and(|r| (r.width() as f32) > threshold || (r.height() as f32) > threshold);
                             if crossed {
-                                self.input.dragging = true;
+                                cycle.input.dragging = true;
                             }
                         }
-                        if self.input.dragging {
-                            self.input.selection = psel;
+                        if cycle.input.dragging {
+                            cycle.input.selection = psel;
                         }
                     }
                 }
 
-                if self.input.captured {
+                if cycle.input.captured {
                     if let (Some(mode), Some(anchor), Some(start)) =
-                        (self.input.drag_mode, self.input.drag_anchor_selection, self.input.mouse_down_pt)
+                        (cycle.input.drag_mode, cycle.input.drag_anchor_selection, cycle.input.mouse_down_pt)
                     {
-                        let cur_x = self.input.virtual_cursor.x.floor() as i32;
-                        let cur_y = self.input.virtual_cursor.y.floor() as i32;
+                        let cur_x = cycle.input.virtual_cursor.x.floor() as i32;
+                        let cur_y = cycle.input.virtual_cursor.y.floor() as i32;
                         let new_sel = match mode {
                             DragMode::Move => {
-                                let dx = (self.input.virtual_cursor.x - start.x).round() as i32;
-                                let dy = (self.input.virtual_cursor.y - start.y).round() as i32;
+                                let dx = (cycle.input.virtual_cursor.x - start.x).round() as i32;
+                                let dy = (cycle.input.virtual_cursor.y - start.y).round() as i32;
                                 move_and_crop(anchor, dx, dy, self.vd_bounds)
                             }
                             DragMode::Resize(handle) => Some(resize_with_clamp(anchor, handle, cur_x, cur_y, self.vd_bounds)),
                         };
-                        self.input.selection = new_sel;
+                        cycle.input.selection = new_sel;
                         // No broadcast here — the unconditional
                         // broadcast_ui_state at the end of CursorMoved
                         // covers this path.
-                    } else if let Some(sel) = self.input.selection {
-                        let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
-                        self.input.hittest = hit_test(self.input.virtual_cursor, sel, dpi);
+                    } else if let Some(sel) = cycle.input.selection {
+                        let dpi = dpi_at_point(cycle.input.virtual_cursor, &self.monitors);
+                        cycle.input.hittest = hit_test(cycle.input.virtual_cursor, sel, dpi);
 
-                        let pos = self.input.virtual_cursor;
-                        let over_button = self
-                            .current_panel_layout()
+                        let pos = cycle.input.virtual_cursor;
+                        let over_button = current_panel_layout(cycle, &self.monitors)
                             .and_then(|l| l.hit_test(pos.x, pos.y))
                             .is_some();
                         let cursor = if over_button {
                             CursorIcon::Pointer
                         } else {
-                            self.input.hittest.cursor()
+                            cycle.input.hittest.cursor()
                         };
-                        self.set_cursor_if_changed(id, cursor);
+                        set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, cursor);
                     }
                 }
 
-                if !self.input.has_ever_scrolled && !self.input.captured {
+                if !cycle.input.has_ever_scrolled && !cycle.input.captured {
                     let now = Instant::now();
-                    self.input
-                        .velocity_tracker
-                        .record(now, self.input.virtual_cursor);
-                    self.input.show_scroll_hint = self
+                    cycle
                         .input
                         .velocity_tracker
-                        .evaluate(now, self.input.show_scroll_hint);
+                        .record(now, cycle.input.virtual_cursor);
+                    cycle.input.show_scroll_hint = cycle
+                        .input
+                        .velocity_tracker
+                        .evaluate(now, cycle.input.show_scroll_hint);
                 }
 
-                self.broadcast_ui_state();
-                self.broadcast_mouse_state();
+                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                broadcast_mouse_state(&self.windows, &cycle.input);
             }
             WindowEvent::MouseInput {
                 state,
                 button: MouseButton::Left,
                 ..
             } => {
-                if !self.input.overlays_visible {
+                if !cycle.input.overlays_visible {
                     return;
                 }
                 match state {
                     ElementState::Pressed => {
-                        if self.input.captured {
-                            let pos = self.input.virtual_cursor;
-                            if let Some(layout) = self.current_panel_layout() {
+                        if cycle.input.captured {
+                            let pos = cycle.input.virtual_cursor;
+                            if let Some(layout) = current_panel_layout(cycle, &self.monitors) {
                                 if let Some(idx) = layout.hit_test(pos.x, pos.y) {
                                     let cmd = panel::model::button_defs()[idx].command;
                                     self.dispatch_command(cmd, event_loop, id);
                                     return;
                                 }
                             }
-                            let drag_mode = match self.input.hittest {
+                            let drag_mode = match cycle.input.hittest {
                                 Hittest::Inside => Some(DragMode::Move),
                                 Hittest::Outside => None,
                                 handle => Some(DragMode::Resize(handle)),
                             };
                             if drag_mode.is_some() {
-                                self.input.mouse_down = true;
-                                self.input.mouse_down_pt = Some(self.input.virtual_cursor);
-                                self.input.drag_mode = drag_mode;
-                                self.input.drag_anchor_selection = self.input.selection;
+                                cycle.input.mouse_down = true;
+                                cycle.input.mouse_down_pt = Some(cycle.input.virtual_cursor);
+                                cycle.input.drag_mode = drag_mode;
+                                cycle.input.drag_anchor_selection = cycle.input.selection;
                             }
                             return;
                         }
-                        self.input.mouse_down = true;
-                        self.input.mouse_down_pt = Some(self.input.virtual_cursor);
-                        self.input.mouse_down_dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
-                        self.input.dragging = false;
-                        self.broadcast_ui_state();
+                        cycle.input.mouse_down = true;
+                        cycle.input.mouse_down_pt = Some(cycle.input.virtual_cursor);
+                        cycle.input.mouse_down_dpi = dpi_at_point(cycle.input.virtual_cursor, &self.monitors);
+                        cycle.input.dragging = false;
+                        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     }
                     ElementState::Released => {
-                        let finalising = self.input.mouse_down && !self.input.captured && self.input.selection.is_some();
-                        let was_dragging = self.input.dragging;
-                        let was_move_drag = matches!(self.input.drag_mode, Some(DragMode::Move));
-                        self.input.mouse_down = false;
-                        self.input.mouse_down_pt = None;
-                        self.input.dragging = false;
-                        self.input.drag_mode = None;
-                        self.input.drag_anchor_selection = None;
-                        if was_move_drag && self.input.captured && self.input.selection.is_none() {
-                            self.input.captured = false;
-                            self.input.hittest = Hittest::Outside;
-                            self.update_cursor_visibility();
-                            self.set_cursor_if_changed(id, CursorIcon::Default);
-                            self.broadcast_ui_state();
+                        let finalising = cycle.input.mouse_down && !cycle.input.captured && cycle.input.selection.is_some();
+                        let was_dragging = cycle.input.dragging;
+                        let was_move_drag = matches!(cycle.input.drag_mode, Some(DragMode::Move));
+                        cycle.input.mouse_down = false;
+                        cycle.input.mouse_down_pt = None;
+                        cycle.input.dragging = false;
+                        cycle.input.drag_mode = None;
+                        cycle.input.drag_anchor_selection = None;
+                        if was_move_drag && cycle.input.captured && cycle.input.selection.is_none() {
+                            cycle.input.captured = false;
+                            cycle.input.hittest = Hittest::Outside;
+                            update_cursor_visibility(&self.windows, &cycle.input);
+                            set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, CursorIcon::Default);
+                            broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                         }
                         if finalising {
                             if !was_dragging {
                                 // Click (no drag) on a peeked window → lock it permanently.
-                                self.locked_peek = self
+                                cycle.locked_peek = cycle
                                     .cached_peek_command
                                     .as_ref()
                                     .map(|cmd| PeekCommand {
@@ -1084,33 +1694,38 @@ impl ApplicationHandler for App {
                                     });
                             } else {
                                 // Drag-to-select → clear peek entirely.
-                                self.locked_peek = None;
+                                cycle.locked_peek = None;
                             }
-                            self.input.peek_suspended = true;
-                            self.input.captured = true;
-                            self.update_cursor_visibility();
-                            if self.input.anchored {
-                                self.input.anchored = false;
-                                self.input.anchor_just_engaged = false;
+                            cycle.input.peek_suspended = true;
+                            cycle.input.captured = true;
+                            update_cursor_visibility(&self.windows, &cycle.input);
+                            if cycle.input.anchored {
+                                cycle.input.anchored = false;
+                                cycle.input.anchor_just_engaged = false;
                                 let restore = ScreenPoint::new(
-                                    self.input.virtual_cursor.x.floor() as i32,
-                                    self.input.virtual_cursor.y.floor() as i32,
+                                    cycle.input.virtual_cursor.x.floor() as i32,
+                                    cycle.input.virtual_cursor.y.floor() as i32,
                                 );
                                 SystemInterop::set_mouse_position(restore, &self.monitors);
                             }
-                            self.input.zoom = 1.0;
-                            if let Some(sel) = self.input.selection {
-                                let dpi = dpi_at_point(self.input.virtual_cursor, &self.monitors);
-                                let ht = hit_test(self.input.virtual_cursor, sel, dpi);
-                                self.input.hittest = ht;
-                                self.set_cursor_if_changed(id, ht.cursor());
+                            cycle.input.zoom = 1.0;
+                            if let Some(sel) = cycle.input.selection {
+                                let dpi = dpi_at_point(cycle.input.virtual_cursor, &self.monitors);
+                                let ht = hit_test(cycle.input.virtual_cursor, sel, dpi);
+                                cycle.input.hittest = ht;
+                                set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, ht.cursor());
                             }
                             // Mouse-release drag-select captured-transition
                             // site (DESIGN §3.3).
                             self.on_captured(event_loop, id);
                         }
-                        self.broadcast_ui_state();
-                        self.broadcast_mouse_state();
+                        // on_captured may have finished the cycle (--video);
+                        // re-borrow instead of assuming it is still alive.
+                        let Some(cycle) = self.cycle.as_mut() else {
+                            return;
+                        };
+                        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                        broadcast_mouse_state(&self.windows, &cycle.input);
                     }
                 }
             }
@@ -1119,7 +1734,7 @@ impl ApplicationHandler for App {
                 phase,
                 ..
             } => {
-                if self.input.captured {
+                if cycle.input.captured {
                     return;
                 }
                 let factor = match delta {
@@ -1135,17 +1750,17 @@ impl ApplicationHandler for App {
                     MouseScrollDelta::PixelDelta(p) => {
                         match phase {
                             TouchPhase::Started => {
-                                self.input.scroll_momentum = self
+                                cycle.input.scroll_momentum = cycle
                                     .input
                                     .last_scroll_end
                                     .is_some_and(|t| t.elapsed() < MOMENTUM_GAP);
                             }
                             TouchPhase::Ended | TouchPhase::Cancelled => {
-                                self.input.last_scroll_end = Some(Instant::now());
+                                cycle.input.last_scroll_end = Some(Instant::now());
                             }
                             _ => {}
                         }
-                        if self.input.scroll_momentum {
+                        if cycle.input.scroll_momentum {
                             return;
                         }
                         let dy = p.y as f32;
@@ -1155,24 +1770,24 @@ impl ApplicationHandler for App {
                         2_f32.powf(dy / TOUCHPAD_PIXELS_PER_DOUBLING)
                     }
                 };
-                self.input.has_ever_scrolled = true;
-                self.input.show_scroll_hint = false;
-                self.input.velocity_tracker.dismiss_hint();
+                cycle.input.has_ever_scrolled = true;
+                cycle.input.show_scroll_hint = false;
+                cycle.input.velocity_tracker.dismiss_hint();
                 self.apply_zoom_factor(factor);
             }
             WindowEvent::PinchGesture {
                 delta,
                 ..
             } => {
-                if self.input.captured {
+                if cycle.input.captured {
                     return;
                 }
                 if delta == 0.0 {
                     return;
                 }
-                self.input.has_ever_scrolled = true;
-                self.input.show_scroll_hint = false;
-                self.input.velocity_tracker.dismiss_hint();
+                cycle.input.has_ever_scrolled = true;
+                cycle.input.show_scroll_hint = false;
+                cycle.input.velocity_tracker.dismiss_hint();
                 self.apply_zoom_factor(1.0 + delta as f32);
             }
             _ => {}

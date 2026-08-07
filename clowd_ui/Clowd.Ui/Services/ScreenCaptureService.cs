@@ -132,72 +132,113 @@ namespace Clowd.UI
                 var sessionDir = SessionManager.Current.GetNextSessionDirectory();
                 Directory.CreateDirectory(sessionDir);
 
-                var psi = new ProcessStartInfo(binary)
+                // The warm host (if it is up) already holds an initialized GPU and hidden overlay
+                // windows, so this is a few milliseconds instead of the 500-1000 ms a cold spawn
+                // pays for wgpu init. Anything it cannot handle falls through to that cold spawn
+                // below, with the same session directory.
+                var host = CaptureProcessHost.Current;
+                var warmHandled = false;
+                if (host.IsReady)
                 {
-                    UseShellExecute = false,
-                    // capture the capturer's log output (simplelog writes errors and any
-                    // Rust panic to stderr) so a crash can be reported to the user.
-                    RedirectStandardError = true,
-                    WorkingDirectory = Path.GetDirectoryName(binary),
-                };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video))
-                    psi.ArgumentList.Add(arg);
+                    // Hand our foreground rights to the capturer, once per show: the grant is
+                    // consumed by a single SetForegroundWindow, and it only works while we hold
+                    // foreground permission ourselves — which is exactly what the hotkey / tray
+                    // interaction that got us here gives us.
+                    if (OperatingSystem.IsWindows())
+                        AllowSetForegroundWindow(host.Pid);
 
-                using var process = Process.Start(psi);
-                if (process == null)
-                    throw new InvalidOperationException("Failed to start capture process: " + binary);
-
-                // Hand our foreground rights to the capturer: a freshly spawned process is
-                // denied SetForegroundWindow by the foreground lock, and the overlay needs
-                // keyboard focus immediately (Esc / shortcuts). Best-effort — it only works
-                // when we hold foreground permission ourselves (hotkey / tray interaction).
-                if (OperatingSystem.IsWindows())
-                    AllowSetForegroundWindow(process.Id);
-
-                // drain stderr concurrently so a full pipe buffer can never block the
-                // process from exiting (classic redirect deadlock).
-                var stderrTask = process.StandardError.ReadToEndAsync();
-                await process.WaitForExitAsync();
-                var stderr = await stderrTask;
-
-                // Every normal outcome (edit / upload / colour / video / cancel) exits 0.
-                // A non-zero exit means the capturer crashed or aborted — e.g. a GPU shader
-                // that failed to load — so surface it instead of silently treating the empty
-                // session directory as a user cancellation (which produced no error at all).
-                if (process.ExitCode != 0)
-                {
-                    Debug.WriteLine($"Capture process exited with code {process.ExitCode}:\n{stderr}");
-
-                    // the capturer mirrors its log into the session dir (stdout is lost when
-                    // launched from an .app bundle); grab it before the dir is deleted.
-                    var captureLog = TryReadCaptureLog(sessionDir);
-                    CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
-
-                    // permission revoked between our preflight and the capturer's own check, or the
-                    // capturer's TCC verdict differs from ours — either way it is not a crash.
-                    if (process.ExitCode == ExitCodeNoScreenPermission)
+                    try
                     {
-                        await PromptForScreenRecordingPermissionAsync();
+                        warmHandled = await host.RunCaptureAsync(sessionDir, mode, video, SettingsRoot.Current.Capture);
+                    }
+                    catch (CaptureHostStoppedException)
+                    {
+                        // the host was taken down on purpose (app exit, an OS session ending, the
+                        // feature switched off) with this capture in flight — cancel quietly, the
+                        // same as an Escape out of the overlay. Not a crash to report.
+                        Debug.WriteLine("Capture host was shut down while a capture was in flight; cancelling.");
+                        CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
                         return;
                     }
+                    catch (CaptureHostCrashException crash)
+                    {
+                        // died with the overlay already on screen — the user has seen (and possibly
+                        // used) a capture, so re-running it from cold would be worse than saying so.
+                        await ReportWarmCaptureCrashAsync(sessionDir, crash);
+                        return;
+                    }
+                }
 
-                    // The capturer reports its own panics, but it cannot report the ways it dies
-                    // without running Rust code — a native fault in a GPU driver, an abort out of
-                    // an FFI frame, or a kill. Its exit code and stderr are all that survives
-                    // those, so report from this side. Keep the message free of the exit code so
-                    // Sentry groups every capturer death into one issue; the specifics ride along
-                    // in Data.
-                    var crash = new InvalidOperationException("Capture process exited unexpectedly");
-                    crash.Data["exit_code"] = process.ExitCode;
-                    crash.Data["stderr"] = SummarizeTail(stderr);
-                    if (captureLog != null)
-                        crash.Data["capture_log"] = SummarizeTail(captureLog);
-                    SentryConfig.CaptureHandled(crash, "capture.process-crash");
+                if (!warmHandled)
+                {
+                    var psi = new ProcessStartInfo(binary)
+                    {
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        // capture the capturer's log output (simplelog writes errors and any
+                        // Rust panic to stderr) so a crash can be reported to the user.
+                        RedirectStandardError = true,
+                        WorkingDirectory = Path.GetDirectoryName(binary),
+                    };
+                    foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video))
+                        psi.ArgumentList.Add(arg);
 
-                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeTail(stderr)}",
-                        "Screen capture failed");
-                    return;
+                    using var process = Process.Start(psi);
+                    if (process == null)
+                        throw new InvalidOperationException("Failed to start capture process: " + binary);
+
+                    // Hand our foreground rights to the capturer: a freshly spawned process is
+                    // denied SetForegroundWindow by the foreground lock, and the overlay needs
+                    // keyboard focus immediately (Esc / shortcuts). Best-effort — it only works
+                    // when we hold foreground permission ourselves (hotkey / tray interaction).
+                    if (OperatingSystem.IsWindows())
+                        AllowSetForegroundWindow(process.Id);
+
+                    // drain stderr concurrently so a full pipe buffer can never block the
+                    // process from exiting (classic redirect deadlock).
+                    var stderrTask = process.StandardError.ReadToEndAsync();
+                    await process.WaitForExitAsync();
+                    var stderr = await stderrTask;
+
+                    // Every normal outcome (edit / upload / colour / video / cancel) exits 0.
+                    // A non-zero exit means the capturer crashed or aborted — e.g. a GPU shader
+                    // that failed to load — so surface it instead of silently treating the empty
+                    // session directory as a user cancellation (which produced no error at all).
+                    if (process.ExitCode != 0)
+                    {
+                        Debug.WriteLine($"Capture process exited with code {process.ExitCode}:\n{stderr}");
+
+                        // the capturer mirrors its log into the session dir (stdout is lost when
+                        // launched from an .app bundle); grab it before the dir is deleted.
+                        var captureLog = TryReadCaptureLog(sessionDir);
+                        CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
+
+                        // permission revoked between our preflight and the capturer's own check, or the
+                        // capturer's TCC verdict differs from ours — either way it is not a crash.
+                        if (process.ExitCode == ExitCodeNoScreenPermission)
+                        {
+                            await PromptForScreenRecordingPermissionAsync();
+                            return;
+                        }
+
+                        // The capturer reports its own panics, but it cannot report the ways it dies
+                        // without running Rust code — a native fault in a GPU driver, an abort out of
+                        // an FFI frame, or a kill. Its exit code and stderr are all that survives
+                        // those, so report from this side. Keep the message free of the exit code so
+                        // Sentry groups every capturer death into one issue; the specifics ride along
+                        // in Data.
+                        var crash = new InvalidOperationException("Capture process exited unexpectedly");
+                        crash.Data["exit_code"] = process.ExitCode;
+                        crash.Data["stderr"] = SummarizeTail(stderr);
+                        if (captureLog != null)
+                            crash.Data["capture_log"] = SummarizeTail(captureLog);
+                        SentryConfig.CaptureHandled(crash, "capture.process-crash");
+
+                        await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                            $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeTail(stderr)}",
+                            "Screen capture failed");
+                        return;
+                    }
                 }
 
                 var result = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
@@ -271,6 +312,32 @@ namespace Clowd.UI
 
             if (openSettings)
                 MacPermissions.OpenSettings(MacPermission.ScreenRecording);
+        }
+
+        /// <summary>
+        /// The warm capture host died mid-capture. Reported exactly like a non-zero one-shot exit
+        /// (same Sentry issue, same dialog, same discarded session directory) — the difference is
+        /// only where the diagnostics come from: the host's chatter buffer instead of a one-shot
+        /// stderr, and its rolling capture-host.log instead of the per-session capture.log.
+        /// </summary>
+        private static async Task ReportWarmCaptureCrashAsync(string sessionDir, CaptureHostCrashException crash)
+        {
+            Debug.WriteLine($"Capture host died mid-capture (code {crash.ExitCode}):\n{crash.Log}");
+
+            var chatter = SummarizeTail(crash.Log);
+            var hostLog = CaptureProcessHost.TryReadHostLog();
+            CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
+
+            var reported = new InvalidOperationException("Capture process exited unexpectedly");
+            reported.Data["exit_code"] = crash.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
+            reported.Data["stderr"] = chatter;
+            if (hostLog != null)
+                reported.Data["capture_log"] = SummarizeTail(hostLog);
+            SentryConfig.CaptureHandled(reported, "capture.process-crash");
+
+            await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
+                $"The screen capture tool exited unexpectedly.\n\n{chatter}",
+                "Screen capture failed");
         }
 
         /// <summary>Reads the capturer's session-dir log file, if it wrote one. Null when absent
@@ -361,6 +428,12 @@ namespace Clowd.UI
 
             if (!settings.ScreenshotWithCursor)
                 args.Add("--no-cursor");
+
+            if (settings.MemoryHints == CapturerMemoryHints.MaxPerformance)
+            {
+                args.Add("--memory-hints");
+                args.Add("max-performance");
+            }
 
             // the overlay was launched specifically to pick a recording region: a confirmed
             // selection immediately dispatches the video action (DESIGN §3.1).

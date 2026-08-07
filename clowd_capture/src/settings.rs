@@ -10,7 +10,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TipsMode {
     #[default]
     Hints,
@@ -36,12 +37,27 @@ impl TipsMode {
     }
 }
 
+/// GPU allocator sizing strategy, mirrored from the shell's capture
+/// settings. `LowerMemoryUsage` (default) keeps gpu-allocator's retained
+/// heap blocks small — the right trade for a host that idles in the
+/// background; `MaxPerformance` restores wgpu's large-block default.
+/// Process-level: read once at device creation, so the persistent host
+/// must be relaunched for a change to take effect.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryHintsMode {
+    #[default]
+    LowerMemoryUsage,
+    MaxPerformance,
+}
+
 /// What the capturer should have selected when it opens. `Region` is the
 /// default free-selection crosshair; `Screen` and `Window` pre-select the
 /// active monitor / foreground window and show the action panel so the
 /// user can confirm or adjust (mirrors pressing `F` / `W` at startup).
 /// Chosen by the shell from which capture hotkey fired.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum CaptureMode {
     #[default]
     Region,
@@ -165,6 +181,29 @@ pub struct CliArgs {
     /// Requires `--session-dir`.
     #[arg(long)]
     pub video: bool,
+
+    /// GPU allocator strategy. `lower-memory-usage` (the default) keeps the
+    /// allocator's retained heap blocks small so an idle background host
+    /// holds minimal memory; `max-performance` restores wgpu's large-block
+    /// allocator. Read once at GPU device creation — applies to one-shot
+    /// and persistent mode alike, but a running persistent host must be
+    /// relaunched for a change to take effect.
+    #[arg(long, value_enum, default_value_t = MemoryHintsMode::LowerMemoryUsage)]
+    pub memory_hints: MemoryHintsMode,
+
+    /// Run as a persistent capture host: warm up (workers, hidden windows),
+    /// then stay resident reading NDJSON commands on stdin and emitting
+    /// events on stdout (see `host::protocol`). The per-capture flags above
+    /// are ignored — every capture's settings ride in with its `show`
+    /// command.
+    #[arg(long)]
+    pub persistent: bool,
+
+    /// Directory for the persistent host's log file (`capture-host.log`,
+    /// truncated on start; the previous run is kept as `.1`). Only used
+    /// with `--persistent` — one-shot mode logs into `--session-dir`.
+    #[arg(long, value_name = "PATH")]
+    pub log_dir: Option<PathBuf>,
 }
 
 impl CliArgs {
@@ -182,7 +221,7 @@ impl CliArgs {
     }
 }
 
-fn parse_hex_color(s: &str) -> Result<[f32; 4], String> {
+pub(crate) fn parse_hex_color(s: &str) -> Result<[f32; 4], String> {
     let hex = s.trim_start_matches('#');
     if !matches!(hex.len(), 6 | 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(format!("'{s}' is not a #RRGGBB or #RRGGBBAA colour"));

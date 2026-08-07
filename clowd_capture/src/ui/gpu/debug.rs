@@ -11,10 +11,9 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 use crate::geometry::{RectExt, ScreenRect};
 use crate::ui::components::debug::layout::{compute_layout, DebugPanelLayout, PanelAnchor, BODY_FONT_PX};
 use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
-use std::time::Duration;
 
 use crate::telemetry::perf::{PerfSample, PerfTracker};
-use crate::telemetry::startup::StartupTimings;
+use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_MONO};
 use crate::ui::shared::{debug_monitor_visibility, debug_primary_visibility, UiMonitor, UiSharedState};
@@ -130,9 +129,8 @@ impl DebugRenderer {
         monitor_name: &str,
         adapter_name: &str,
         perf: &PerfTracker,
-        startup: &StartupTimings,
-        shown_time: Option<Duration>,
-        time_to_first_render: Option<Duration>,
+        warmup: &WarmupTimings,
+        capture: Option<&CaptureTimings>,
         rects: &mut Vec<RectInstance>,
     ) {
         self.positions.clear();
@@ -153,7 +151,8 @@ impl DebugRenderer {
                 adapter: adapter_name,
                 dpi: (dpi * 96.0).round() as u32,
                 bounds: this_monitor.bounds,
-                time_to_first_render,
+                // Show-command-to-first-frame for THIS display, this cycle.
+                time_to_first_render: capture.and_then(|c| c.workers.get(self.monitor_index)).and_then(|w| w.first_render.get()),
                 perf,
                 target_period: perf.target_period(),
             };
@@ -179,8 +178,8 @@ impl DebugRenderer {
         // --- Primary panel (cursor monitor only) ---
         if debug_primary_visibility(state, this_monitor) {
             let data = PrimaryPanelData {
-                startup,
-                shown_time,
+                warmup,
+                capture,
                 zoom: state.zoom,
                 cursor: state.virtual_cursor,
                 color_bgra: state.hovered_pixel_bgra,

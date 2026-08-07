@@ -11,6 +11,8 @@ libblur.workspace = true
 euclid.workspace = true
 log.workspace = true
 simplelog.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 winit.workspace = true
 # "wgsl" enables the runtime WGSL frontend: the only shader path on macOS, and the
 # fallback on Windows when a precompiled dxbc shader fails to load — see gpu/shaders.rs.
@@ -37,6 +39,7 @@ windows = { workspace = true, features = [
     "Win32_Storage_Xps",
     "Win32_System_Com",
     "Win32_System_SystemInformation",
+    "Win32_System_Threading",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]

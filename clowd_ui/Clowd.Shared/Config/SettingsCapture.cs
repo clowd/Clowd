@@ -12,6 +12,13 @@ namespace Clowd.Config
         Off,
     }
 
+    /// <summary>Mirrors the capturer's --memory-hints flag (clowd_capture_wgpu, see CAPTURE_PROTOCOL.md).</summary>
+    public enum CapturerMemoryHints
+    {
+        LowerMemoryUsage,
+        MaxPerformance,
+    }
+
     public class SettingsCapture : SimpleNotifyObject
     {
         [Category("Behavior")]
@@ -29,6 +36,39 @@ namespace Clowd.Config
         {
             get => _detectWindows;
             set => Set(ref _detectWindows, value);
+        }
+
+        /// <summary>
+        /// Keep a fully warmed-up capture process resident so the overlay appears the moment the
+        /// hotkey is pressed instead of paying for GPU initialization every time. Turning it off is
+        /// the escape hatch for the idle memory/VRAM cost it buys that with; captures then take the
+        /// original one-process-per-capture path (see ScreenCaptureService).
+        /// </summary>
+        [Category("Performance")]
+        [DisplayName("Fast capture startup")]
+        [Description("Keep the capture tool warmed up in the background so the capture overlay opens instantly. " +
+                     "Costs a small amount of memory while idle.")]
+        public bool KeepCaptureReady
+        {
+            get => _keepCaptureReady;
+            set => Set(ref _keepCaptureReady, value);
+        }
+
+        /// <summary>
+        /// The capture tool's GPU allocator strategy (<c>--memory-hints</c>). LowerMemoryUsage is
+        /// the right trade for nearly everyone — it is what keeps the warmed-up background process
+        /// small while idle. Read once at process launch, so CaptureProcessHost relaunches the
+        /// warm host when this changes.
+        /// </summary>
+        [Category("Performance")]
+        [DisplayName("GPU memory usage")]
+        [Description("How the capture tool budgets GPU memory. Lower memory usage is recommended; " +
+                     "Max performance uses larger GPU memory blocks, which costs extra idle memory " +
+                     "when the capture tool runs in the background.")]
+        public CapturerMemoryHints MemoryHints
+        {
+            get => _memoryHints;
+            set => Set(ref _memoryHints, value);
         }
 
         [Category("Behavior")]
@@ -121,6 +161,8 @@ namespace Clowd.Config
 
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private bool _screenshotWithCursor = true;
+        private bool _keepCaptureReady = true;
+        private CapturerMemoryHints _memoryHints = CapturerMemoryHints.LowerMemoryUsage;
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
