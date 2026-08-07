@@ -11,6 +11,9 @@
     "e2e": "node e2e/e2e.mjs"
   },
   "devDependencies": {
-    "wrangler": "4.114.0"
+    "wrangler": "4.119.0"
+  },
+  "overrides": {
+    "undici": "7.29.0"
   }
 }
