@@ -172,10 +172,12 @@
     <controls:FadeEdgeScrollViewer>
         <StackPanel Margin="0,0,16,16">
 
-            <!-- zero state: shown until the first capture exists -->
+            <!-- zero state: shown until the first capture exists, and again whenever the header's
+                 filter matches nothing. Its wording is set by UpdateEmptyState, which knows which of
+                 the two it is. -->
             <StackPanel IsVisible="{Binding !Groups.Count}" Margin="0,24,0,0" Spacing="6">
-                <TextBlock Classes="Base" Text="No captures yet" />
-                <TextBlock Opacity="0.7" TextWrapping="Wrap" Text="{Binding EmptyHint}" />
+                <TextBlock x:Name="EmptyTitle" Classes="Base" />
+                <TextBlock x:Name="EmptyDetail" Opacity="0.7" TextWrapping="Wrap" />
             </StackPanel>
 
             <!-- VM-side grouping replaces the WPF CollectionViewSource (decision table #52). -->

@@ -91,7 +91,13 @@ namespace Clowd.UI
             _selectedTab = tab;
             PageTitle.Text = item.Header as string ?? tab.ToString();
             SetPageIntro(tab);
-            PageHost.Content = GetPageForTab(tab);
+
+            var page = GetPageForTab(tab);
+            PageHost.Content = page;
+
+            // a page that carries its own header control (the Recent filter) hands the same instance
+            // over every time it is selected; the slot is emptied for the pages that carry none.
+            PageHeaderContent.Content = (page as IPageHeaderContent)?.HeaderContent;
         }
 
         private void SetPageIntro(SettingsPageTab tab)

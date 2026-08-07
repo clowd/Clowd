@@ -10,17 +10,20 @@ using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
 // Avalonia 12 moved SetTextAsync and friends off IClipboard into extension methods here.
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Clowd.UI.Controls;
 using Clowd.UI.Helpers;
 using Clowd.UI.Services;
 
@@ -37,7 +40,18 @@ namespace Clowd.UI
         }
     }
 
-    public partial class RecentSessionsPage : UserControl
+    /// <summary>What the Recent list can be narrowed to (issue #62). Not a partition of the list: a
+    /// screenshot that has been uploaded is both an <see cref="Image"/> and an <see cref="Upload"/>,
+    /// and a text or file upload is only ever the latter.</summary>
+    public enum RecentFilter
+    {
+        All,
+        Image,
+        Recording,
+        Upload,
+    }
+
+    public partial class RecentSessionsPage : UserControl, IPageHeaderContent
     {
         public ObservableCollection<SessionGroupVm> Groups { get; } = new();
 
@@ -54,6 +68,11 @@ namespace Clowd.UI
         }
 
         private readonly DispatcherTimer _regroupTimer;
+
+        // the filter strip shown beside the page title, and what it currently says. The page owns
+        // the control but does not host it — the window's header does (see IPageHeaderContent).
+        private readonly CollapsingSegmentedBar _filterBar;
+        private RecentFilter _filter = RecentFilter.All;
 
         // the row to re-select after a rebuild; see RebuildGroups.
         private SessionInfo _focusedSession;
@@ -75,6 +94,8 @@ namespace Clowd.UI
             InitializeComponent();
             DataContext = this;
 
+            _filterBar = BuildFilterBar();
+
             // regrouping is throttled to 250 ms (decision table #52 / §6) because
             // TrulyObservableCollection raises Reset for every item property change.
             _regroupTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -85,6 +106,101 @@ namespace Clowd.UI
             };
 
             RebuildGroups();
+        }
+
+        /// <summary>The filter strip, shown by the window to the right of the "Recent" title.</summary>
+        public Control HeaderContent => _filterBar;
+
+        private CollapsingSegmentedBar BuildFilterBar()
+        {
+            var bar = new CollapsingSegmentedBar
+            {
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                Children =
+                {
+                    // the labels are what the strip has to fit side by side, and what the collapsed
+                    // dropdown carries as its own label.
+                    Segment("All", RecentFilter.All, "Show everything"),
+                    Segment("Images", RecentFilter.Image, "Screenshots and images"),
+                    Segment("Recordings", RecentFilter.Recording, "Recordings and GIFs"),
+                    Segment("Uploads", RecentFilter.Upload, "Anything uploaded, or waiting to be"),
+                },
+            };
+
+            // hooked after the segments are in, so the strip settling on its first segment is not
+            // reported as the user changing the filter.
+            bar.SelectionChanged += FilterChanged;
+            return bar;
+
+            static ToggleButton Segment(string label, RecentFilter filter, string tip)
+            {
+                var segment = new ToggleButton { Content = label, Tag = filter };
+                ToolTip.SetTip(segment, tip);
+                return segment;
+            }
+        }
+
+        private void FilterChanged(object sender, EventArgs e)
+        {
+            var selected = _filterBar.SelectedValue is RecentFilter filter ? filter : RecentFilter.All;
+            if (selected == _filter)
+                return;
+
+            _filter = selected;
+
+            // the user is waiting on this one: regroup now rather than on the throttle.
+            _regroupTimer.Stop();
+            RebuildGroups();
+        }
+
+        /// <summary>Moves the filter, keeping the strip and the list in step. A no-op when it is
+        /// already there.</summary>
+        private void SetFilter(RecentFilter filter)
+        {
+            if (_filter == filter)
+                return;
+
+            // _filter first, so the strip's own change notification finds nothing left to do.
+            _filter = filter;
+            _filterBar.SelectedValue = filter;
+
+            _regroupTimer.Stop();
+            RebuildGroups();
+        }
+
+        private bool MatchesFilter(SessionInfo session)
+        {
+            return _filter switch
+            {
+                // a capture or editor session carries no ContentKind at all; an entry the upload
+                // path created names what it holds, and only "image" is one.
+                RecentFilter.Image => !session.IsVideo
+                                      && (!session.IsUploadOnly
+                                          || String.Equals(session.ContentKind, "image", StringComparison.OrdinalIgnoreCase)),
+                RecentFilter.Recording => IsRecording(session),
+                // anything with a link, plus everything the upload path started even if it has no
+                // link (yet, or ever — a failed or cancelled upload still belongs here).
+                RecentFilter.Upload => session.ActiveUpload != null
+                                       || session.AllUploads.Length > 0
+                                       || IsUploadEntry(session),
+                _ => true,
+            };
+        }
+
+        /// <summary>A recording Clowd made — or the GIF converted from one. Both are "video" entries
+        /// carrying the file they wrote; a video *file* someone uploaded is one too, but has no
+        /// VideoPath of its own, which is what tells the two apart.</summary>
+        private static bool IsRecording(SessionInfo session)
+        {
+            return session.IsVideo && !String.IsNullOrEmpty(session.VideoPath);
+        }
+
+        /// <summary>An entry started by uploading something rather than by capturing it: the upload
+        /// path is the only one that sets ContentKind without also writing a VideoPath.</summary>
+        private static bool IsUploadEntry(SessionInfo session)
+        {
+            return session.IsUploadOnly && String.IsNullOrEmpty(session.VideoPath);
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -148,10 +264,12 @@ namespace Clowd.UI
         private void RebuildGroups()
         {
             var sessions = SessionManager.Current.Sessions
+                                         .Where(MatchesFilter)
                                          .OrderByDescending(s => s.CreatedUtc)
                                          .ToArray();
 
             Groups.Clear();
+            UpdateEmptyState(sessions.Length);
 
             SessionGroupVm current = null;
             foreach (var session in sessions)
@@ -173,6 +291,32 @@ namespace Clowd.UI
                 Dispatcher.UIThread.Post(() => TrySelectSession(_focusedSession, scrollIntoView: false), DispatcherPriority.Loaded);
         }
 
+        /// <summary>Words the zero state for whichever kind of empty this is: nothing captured yet
+        /// (where the call to action belongs) or a filter that happens to match nothing.</summary>
+        private void UpdateEmptyState(int matched)
+        {
+            // the zero state is bound to Groups being empty, so there is nothing to say otherwise.
+            if (matched > 0)
+                return;
+
+            if (_filter == RecentFilter.All || SessionManager.Current.Sessions.Count == 0)
+            {
+                EmptyTitle.Text = "No captures yet";
+                EmptyDetail.Text = EmptyHint;
+                return;
+            }
+
+            EmptyTitle.Text = _filter switch
+            {
+                RecentFilter.Image => "No images",
+                RecentFilter.Recording => "No recordings",
+                RecentFilter.Upload => "No uploads",
+                _ => "Nothing to show",
+            };
+
+            EmptyDetail.Text = "Nothing in your recent captures matches this filter — choose \"All\" to see everything.";
+        }
+
         /// <summary>Selects a session's row and scrolls it into view — used to walk the user to the
         /// entry a gif conversion just created. Safe for a session that is not on the page. The row
         /// pulses once it settles, because the user did not ask for this selection and needs pointing
@@ -184,6 +328,11 @@ namespace Clowd.UI
 
             _focusedSession = session;
             _pulseSession = session;
+
+            // the app is walking the user to this entry, so a filter that hides it has to give way —
+            // otherwise a screenshot taken while the list shows Recordings lands on an empty page.
+            if (!MatchesFilter(session))
+                SetFilter(RecentFilter.All);
 
             // a session created moments ago isn't grouped yet: the rebuild is throttled to 250 ms.
             if (!Groups.Any(g => g.Items.Contains(session)))
