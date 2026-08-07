@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using Clowd.Drawing;
 
 namespace Clowd.UI.Converters
 {
@@ -17,19 +18,7 @@ namespace Clowd.UI.Converters
             if (value is FontFamily family)
                 return family;
 
-            if (value is string name && !string.IsNullOrWhiteSpace(name))
-            {
-                try
-                {
-                    return new FontFamily(name);
-                }
-                catch
-                {
-                    return FontFamily.Default;
-                }
-            }
-
-            return FontFamily.Default;
+            return FontUtil.CreateSafe(value as string);
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)

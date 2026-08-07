@@ -3,6 +3,7 @@ using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Clowd.Drawing;
 using Clowd.UI.Helpers;
 
 namespace Clowd.UI.Dialogs
@@ -27,9 +28,11 @@ namespace Clowd.UI.Dialogs
             InitializeComponent();
             Icon = AppStyles.AppIcon;
 
+            // a third-party font with broken metadata can carry a name Avalonia's typeface
+            // parser rejects at render time (CLOWD-10) — drop those rather than list them
             _allFamilies = FontManager.Current.SystemFonts
-                                      .Select(f => f.Name)
-                                      .Where(n => !string.IsNullOrWhiteSpace(n))
+                                      .Select(f => f.Name?.Trim())
+                                      .Where(FontUtil.IsSafeFamilyName)
                                       .Distinct(StringComparer.OrdinalIgnoreCase)
                                       .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
                                       .ToList();
@@ -39,7 +42,7 @@ namespace Clowd.UI.Dialogs
                 new TextBlock
                 {
                     Text = name,
-                    FontFamily = string.IsNullOrWhiteSpace(name) ? FontFamily.Default : new FontFamily(name),
+                    FontFamily = FontUtil.CreateSafe(name),
                 });
 
             FontList.ItemsSource = _allFamilies;
@@ -115,7 +118,7 @@ namespace Clowd.UI.Dialogs
         private void UpdatePreview()
         {
             if (FontList.SelectedItem is string family && !string.IsNullOrWhiteSpace(family))
-                PreviewText.FontFamily = new FontFamily(family);
+                PreviewText.FontFamily = FontUtil.CreateSafe(family);
 
             PreviewText.FontSize = CurrentSize;
             PreviewText.FontWeight = CurrentWeight;

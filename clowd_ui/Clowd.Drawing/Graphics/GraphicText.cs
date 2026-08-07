@@ -205,7 +205,7 @@ namespace Clowd.Drawing.Graphics
                 txt,
                 System.Globalization.CultureInfo.InvariantCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(new FontFamily(FontName), FontStyle, FontWeight, FontStretch),
+                new Typeface(FontUtil.CreateSafe(FontName), FontStyle, FontWeight, FontStretch),
                 FontSize,
                 RenderResources.GetBrush(Color.FromArgb(255, 0, 0, 0)));
             RenderCache.Text = form;

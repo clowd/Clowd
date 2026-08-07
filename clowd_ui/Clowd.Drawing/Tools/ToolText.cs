@@ -74,7 +74,7 @@ namespace Clowd.Drawing.Tools
             _txtBox = new TextBox();
             // decision #40: WPF "Style = null" → minimal local ControlTheme (transparent chrome, Padding 0)
             _txtBox.Theme = GetEditTextBoxTheme();
-            _txtBox.FontFamily = new FontFamily(graphicsText.FontName);
+            _txtBox.FontFamily = FontUtil.CreateSafe(graphicsText.FontName);
             _txtBox.FontSize = graphicsText.FontSize;
             _txtBox.FontStretch = graphicsText.FontStretch;
             _txtBox.FontStyle = graphicsText.FontStyle;
