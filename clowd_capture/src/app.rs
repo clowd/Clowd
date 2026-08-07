@@ -330,9 +330,9 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
 fn topology_matches(warm: &[MonitorInfo], fresh: &[MonitorInfo]) -> bool {
     warm.len() == fresh.len()
         && warm.iter().all(|w| {
-            fresh
-                .iter()
-                .any(|f| f.bounds == w.bounds && f.scale_factor == w.scale_factor && f.is_primary == w.is_primary && f.adapter_id == w.adapter_id)
+            fresh.iter().any(|f| {
+                f.bounds == w.bounds && f.scale_factor == w.scale_factor && f.is_primary == w.is_primary && f.adapter_id == w.adapter_id
+            })
         })
 }
 
@@ -415,7 +415,8 @@ impl App {
     /// (as `None`) and the failure is counted, keeping the show/ready
     /// gates (`ready`/`parked` + `failed` >= `workers.len()`) balanced.
     fn teardown_failed_worker(&mut self, i: usize) {
-        self.worker_failed.fetch_add(1, Ordering::Release);
+        self.worker_failed
+            .fetch_add(1, Ordering::Release);
         if let Some(w) = self.workers[i].take() {
             let _ = w.input_tx.send(WorkerInput::Shutdown);
         }
@@ -529,7 +530,9 @@ impl App {
             // blocked in visible_latch.wait(). Mark the cycle cancelled
             // *before* releasing the latch so no worker can wedge on the
             // dead cycle; workers re-check the flag after the wait.
-            cycle.cancelled.store(true, Ordering::Release);
+            cycle
+                .cancelled
+                .store(true, Ordering::Release);
             if let Some(pending) = &cycle.pending_show {
                 pending.visible_latch.signal_all();
             }
@@ -636,7 +639,11 @@ impl App {
     /// [`handle_display_change`](Self::handle_display_change)); called
     /// every `about_to_wait` pass.
     fn check_display_change(&mut self, event_loop: &ActiveEventLoop) {
-        let Some(deadline) = self.host.as_ref().and_then(|hs| hs.display_change_deadline) else {
+        let Some(deadline) = self
+            .host
+            .as_ref()
+            .and_then(|hs| hs.display_change_deadline)
+        else {
             return;
         };
         if Instant::now() < deadline {
@@ -715,7 +722,11 @@ impl App {
         // capture and respawn the host against the new topology.
         let fresh = SystemInterop::all_monitors();
         if !topology_matches(&self.monitors, &fresh) {
-            warn!("monitor topology changed since warm-up ({} monitors -> {})", self.monitors.len(), fresh.len());
+            warn!(
+                "monitor topology changed since warm-up ({} monitors -> {})",
+                self.monitors.len(),
+                fresh.len()
+            );
             self.restart_for_topology_change(event_loop, EXIT_DISPLAY_CHANGED, "the show-time topology check failed");
         } else if let Some(hs) = self.host.as_mut() {
             // A pending debounced notification whose enumeration still
@@ -1299,7 +1310,10 @@ impl ApplicationHandler<AppEvent> for App {
                     hs.ready_emitted = true;
                     self.warmup.mark_ready();
                     let warmup_ms = self.warmup.t_start.elapsed().as_millis() as u64;
-                    info!("persistent host ready: warmed up in {warmup_ms} ms ({} monitors)", self.monitors.len());
+                    info!(
+                        "persistent host ready: warmed up in {warmup_ms} ms ({} monitors)",
+                        self.monitors.len()
+                    );
                     host::emit(&HostEvent::Ready {
                         warmup_ms,
                         monitors: self.monitors.len(),

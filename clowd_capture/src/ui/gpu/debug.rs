@@ -152,7 +152,9 @@ impl DebugRenderer {
                 dpi: (dpi * 96.0).round() as u32,
                 bounds: this_monitor.bounds,
                 // Show-command-to-first-frame for THIS display, this cycle.
-                time_to_first_render: capture.and_then(|c| c.workers.get(self.monitor_index)).and_then(|w| w.first_render.get()),
+                time_to_first_render: capture
+                    .and_then(|c| c.workers.get(self.monitor_index))
+                    .and_then(|w| w.first_render.get()),
                 perf,
                 target_period: perf.target_period(),
             };

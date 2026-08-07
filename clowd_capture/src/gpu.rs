@@ -72,7 +72,8 @@ pub fn stage_a_create_device(
         .set_once(t_start.elapsed());
 
     pollster::block_on(async {
-        let (adapter, device, queue, adapter_name) = device::request_adapter_device(&instance, adapter_hint, memory_hints, t_start, timings).await?;
+        let (adapter, device, queue, adapter_name) =
+            device::request_adapter_device(&instance, adapter_hint, memory_hints, t_start, timings).await?;
 
         let desktop_bgl = pipeline::create_desktop_bind_group_layout(&device);
         let desktop_sampler = pipeline::create_desktop_sampler(&device);

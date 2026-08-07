@@ -88,14 +88,16 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // not replace) the uncaptured-error handler installed at device
     // creation.
     if let Some(proxy) = gpu_lost_proxy {
-        bundle.device.set_device_lost_callback(move |reason, message| {
-            // Destroyed = we tore the device down ourselves (shutdown);
-            // only an unexpected loss should restart the host.
-            if matches!(reason, wgpu::DeviceLostReason::Unknown) {
-                error!("render worker {monitor_index}: GPU device lost: {message}");
-                let _ = proxy.send_event(crate::host::AppEvent::GpuLost);
-            }
-        });
+        bundle
+            .device
+            .set_device_lost_callback(move |reason, message| {
+                // Destroyed = we tore the device down ourselves (shutdown);
+                // only an unexpected loss should restart the host.
+                if matches!(reason, wgpu::DeviceLostReason::Unknown) {
+                    error!("render worker {monitor_index}: GPU device lost: {message}");
+                    let _ = proxy.send_event(crate::host::AppEvent::GpuLost);
+                }
+            });
     }
 
     let mut ui_renderer = UiRenderer::new(

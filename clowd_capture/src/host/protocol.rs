@@ -101,14 +101,21 @@ where
 pub enum HostEvent {
     /// Warm-up is complete: every render worker is parked (device,
     /// pipelines and surface ready) and a `show` will be fast.
-    Ready { warmup_ms: u64, monitors: usize },
+    Ready {
+        warmup_ms: u64,
+        monitors: usize,
+    },
     /// The overlay windows are on screen; `elapsed_ms` measured from the
     /// `show` command.
-    Shown { elapsed_ms: u64 },
+    Shown {
+        elapsed_ms: u64,
+    },
     /// The capture cycle ended. `action` is the snake_case `CycleAction`
     /// (`edit|upload|select_color|video|copy|save|cancelled`); any session
     /// payload is already on disk when this is emitted.
-    Finished { action: CycleAction },
+    Finished {
+        action: CycleAction,
+    },
     Pong,
     /// The monitor topology changed (or a GPU device was lost) under the
     /// warm state; we exit right after emitting this — with
@@ -118,7 +125,9 @@ pub enum HostEvent {
     DisplayChanged,
     /// Something went unrecoverably wrong with the active cycle (e.g. the
     /// desktop screenshot never arrived). The cycle is cancelled.
-    FatalError { message: String },
+    FatalError {
+        message: String,
+    },
 }
 
 #[cfg(test)]
