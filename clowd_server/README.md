@@ -214,6 +214,10 @@ Tail production logs with `npm run tail`.
 | `wrangler.jsonc` | `limits.cpu_ms` | `300000` | 5-min CPU cap (I/O wait is free; live tails aren't CPU-bound). |
 | `wrangler.jsonc` | queue `max_batch_size` / `max_batch_timeout` / `max_retries` | 5 / 1s / 5 | Relay batching + retries before the DLQ. |
 | `.dev.vars` | `DEV_ALLOW_DISCARD` | `true` (dev only) | Enables the `discard` destination. Never set in production. |
+| var / `.dev.vars` | `CLOWD_DISABLE_TELEMETRY` | unset (dev: `1`) | Any non-empty value turns Sentry reporting off. |
+| var / secret | `SENTRY_DSN` | shared Clowd project | Report elsewhere; empty string turns reporting off. |
+| var | `SENTRY_RELEASE` | `clowd-server@<crate version>` | CI injects `clowd-server@<short sha>`. |
+| var | `SENTRY_ENVIRONMENT` | `production` | |
 | `src/consts.rs` | `IDLE_TIMEOUT_MS` | 10 min | No chunk received → session failed (DO alarm). |
 | `src/consts.rs` | `LINGER_MS` | 60 s | Post-complete/abort staging + DO-storage cleanup delay. |
 | `src/consts.rs` | `REDIRECT_MAX_AGE_SECS` | 3600 | `Cache-Control` on the completed-upload 301. |
@@ -233,6 +237,39 @@ The server only ever receives **capability URLs**, never account keys (unauthent
 - **`discard`** — dev/local only (see `DEV_ALLOW_DISCARD`).
 
 All destination URLs must be `https`.
+
+### Error reporting (Sentry)
+
+The Worker reports into the same Sentry project as the desktop app, tagged `app=clowd_server`
+(the capturer uses `clowd_capture`, the shell `clowd_ui`). `src/telemetry.rs` speaks the ingest
+protocol directly instead of using the `sentry` crate — that crate timestamps events with
+`SystemTime::now()`, which panics on `wasm32-unknown-unknown`, and its transports are
+synchronous. `src/telemetry_core.rs` holds the pure half (DSN parsing, event/envelope
+construction, route normalisation) and is covered by `cargo test`.
+
+One incident produces one event: each failure is reported at the outermost layer that can see
+it, and nowhere else. An `Err` escaping the `fetch` handler covers everything reachable over
+HTTP — *including* errors raised inside the session Durable Object and propagated back through
+`forward`, which is why the DO stays quiet about those. The DO reports only what has no router
+above it: its `alarm`, and the queue-driven `/relay/{n}` / `/fail` routes. On top of that sit
+three specific reports that carry context a generic funnel lacks — destination-commit failure,
+a chunk that exhausted its relay retries into the DLQ, and failed session init.
+
+**Not** reported: 4xx client errors, best-effort bookkeeping like the paste view counter
+(`console_warn!`), and panics — the release profile is `panic = "abort"`, so a hook could only
+queue an async fetch the aborting isolate would never run. Panics still show up in
+`npm run tail`.
+
+Issues group on an explicit `[op, transaction]` fingerprint, where the transaction is a
+normalised route (`PUT /api/v1/uploads/{id}/chunks/{n}`) taken from a closed table — upload
+ids and paste keys never reach the grouping key. Request query strings, headers, and bodies
+are never attached; capability tokens live in those.
+
+There is no debug-file upload for this Worker, unlike `clowd_capture` in `ci.yml`: nothing it
+reports carries a stack trace, and `worker-build`'s wasm-opt pass strips DWARF from the
+deployed module anyway. `deploy-server.yml` instead registers each deploy as a Sentry release
+(`clowd-server@<short sha>`, with commits and a production deploy marker) and injects that
+name into the Worker with `wrangler deploy --var`.
 
 ---
 

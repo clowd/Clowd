@@ -10,39 +10,64 @@ use crate::ids::{bearer, hash_matches, is_valid_id, new_id, new_token};
 use crate::model::{CreateRequest, CreateResponse, SessionState, SessionStatus};
 use crate::paste;
 use crate::relay;
+use crate::telemetry::{self, Report};
+use crate::telemetry_core::{path_id, worker_transaction};
 use crate::wasm_util::{do_request, error_json, json_status, now_ms};
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
     let path = req.path();
     let method = req.method();
-    let seg: Vec<String> = path
+    let owned: Vec<String> = path
         .split('/')
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string())
         .collect();
-    let seg: Vec<&str> = seg.iter().map(|s| s.as_str()).collect();
+    let seg: Vec<&str> = owned.iter().map(|s| s.as_str()).collect();
 
-    match (&method, seg.as_slice()) {
+    // Read the url before `route` consumes the request.
+    let url = telemetry::request_url(&req);
+    let result = route(req, &env, &method, &path, &seg).await;
+    // An `Err` out of the router is an unhandled failure — workerd turns it into
+    // a bare 500 and the client sees nothing useful. Report it before it leaves.
+    //
+    // This is the single funnel for everything reachable over HTTP, *including*
+    // errors raised inside the session DO and propagated back through `forward`.
+    // The DO deliberately does not report those itself (see `UploadSession::fetch`)
+    // — one incident, one event.
+    if let Err(err) = &result {
+        let mut report = Report::fatal("worker.fetch", err.to_string())
+            .transaction(worker_transaction(method.as_ref(), &seg))
+            .request(&method, url);
+        if let Some(id) = path_id(&seg) {
+            report = report.extra("upload_id", id);
+        }
+        telemetry::capture(&env, report).await;
+    }
+    result
+}
+
+async fn route(req: Request, env: &Env, method: &Method, path: &str, seg: &[&str]) -> Result<Response> {
+    match (method, seg) {
         (Method::Get, []) => redirect_301(GITHUB_URL, None),
         (Method::Get, ["healthz"]) => healthz(),
-        (Method::Post, ["api", "v1", "uploads"]) => create(req, &env).await,
-        (Method::Put, ["api", "v1", "uploads", id, "chunks", n]) => forward(&env, id, &format!("/chunk/{n}"), req).await,
-        (Method::Post, ["api", "v1", "uploads", id, "complete"]) => forward(&env, id, "/complete", req).await,
-        (Method::Post, ["api", "v1", "uploads", id, "abort"]) => forward(&env, id, "/abort", req).await,
-        (Method::Delete, ["api", "v1", "uploads", id]) => delete_upload(&env, id, req).await,
-        (Method::Get, ["u", id]) => download(&env, id).await,
+        (Method::Post, ["api", "v1", "uploads"]) => create(req, env).await,
+        (Method::Put, ["api", "v1", "uploads", id, "chunks", n]) => forward(env, id, &format!("/chunk/{n}"), req).await,
+        (Method::Post, ["api", "v1", "uploads", id, "complete"]) => forward(env, id, "/complete", req).await,
+        (Method::Post, ["api", "v1", "uploads", id, "abort"]) => forward(env, id, "/abort", req).await,
+        (Method::Delete, ["api", "v1", "uploads", id]) => delete_upload(env, id, req).await,
+        (Method::Get, ["u", id]) => download(env, id).await,
         // Browsers ask for the favicon at the origin root, not under /p/.
         (Method::Get, ["favicon.ico"]) => paste::asset_or_index("favicon.ico"),
         // Pastes: hastebin-compatible API + the vendored frontend. The specific
         // arms must precede the generic `["p", name]` one, which treats anything
         // that isn't an embedded asset as a paste key.
-        (Method::Get, ["p"]) => paste::root(&path),
-        (Method::Post, ["p", "documents"]) => paste::create(req, &env).await,
-        (Method::Get, ["p", "documents", id]) => paste::document(&env, id, false).await,
-        (Method::Head, ["p", "documents", id]) => paste::document(&env, id, true).await,
-        (Method::Get, ["p", "raw", id]) => paste::raw(&env, id, false).await,
-        (Method::Head, ["p", "raw", id]) => paste::raw(&env, id, true).await,
+        (Method::Get, ["p"]) => paste::root(path),
+        (Method::Post, ["p", "documents"]) => paste::create(req, env).await,
+        (Method::Get, ["p", "documents", id]) => paste::document(env, id, false).await,
+        (Method::Head, ["p", "documents", id]) => paste::document(env, id, true).await,
+        (Method::Get, ["p", "raw", id]) => paste::raw(env, id, false).await,
+        (Method::Head, ["p", "raw", id]) => paste::raw(env, id, true).await,
         (Method::Get, ["p", name]) => paste::asset_or_index(name),
         _ => Response::error("not found", 404),
     }
@@ -50,7 +75,13 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
 
 #[event(queue)]
 async fn queue(batch: MessageBatch<crate::model::RelayMessage>, env: Env, _ctx: Context) -> Result<()> {
-    relay::handle(batch, env).await
+    let result = relay::handle(batch, &env).await;
+    if let Err(err) = &result {
+        // The whole batch is retried, so this is not silent data loss — but it is
+        // still a bug (the per-message paths handle their own failures).
+        telemetry::capture(&env, Report::fatal("worker.queue", err.to_string())).await;
+    }
+    result
 }
 
 fn healthz() -> Result<Response> {
@@ -178,6 +209,16 @@ async fn create(mut req: Request, env: &Env) -> Result<Response> {
     )
     .await?;
     if !crate::wasm_util::is_success(&resp) {
+        // The DO rejected its own initial state — the client cannot upload at all.
+        telemetry::capture(
+            env,
+            Report::error("uploads.create", format!("session init returned HTTP {}", resp.status_code()))
+                .transaction(worker_transaction("POST", &["api", "v1", "uploads"]))
+                .extra("upload_id", id.clone())
+                .extra("destination", state.destination.kind())
+                .extra("chunk_count", chunk_count.to_string()),
+        )
+        .await;
         return Response::error("failed to initialize session", 500);
     }
 

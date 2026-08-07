@@ -12,6 +12,11 @@ name: Deploy server
 #   CLOUDFLARE_API_TOKEN  — "Edit Cloudflare Workers" template scoped to the
 #                           account + clwd.app zone, PLUS Account→Queues:Edit
 #                           and Zone→DNS:Edit (custom-domain route).
+#
+# Optional (shared with ci.yml — the deploy still succeeds without them, it just
+# skips the Sentry release bookkeeping):
+#   SENTRY_AUTH_TOKEN (secret) — organization auth token (sntrys_…)
+#   SENTRY_PROJECT    (var)    — project slug the Worker reports into
 on:
   workflow_dispatch:
     inputs:
@@ -32,9 +37,19 @@ defaults:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    # Lifted to the job so the Sentry steps can test for the token in an `if:`
+    # — the secrets context is not available there, but env is. No SENTRY_ORG:
+    # an org auth token carries the slug in its payload (see ci.yml).
+    env:
+      SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+      SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # `sentry-cli releases set-commits --auto` needs the history to work
+          # out which commits are new since the previous release.
+          fetch-depth: 0
 
       - name: Install Rust toolchain (wasm32)
         uses: dtolnay/rust-toolchain@stable
@@ -101,11 +116,43 @@ jobs:
         if: ${{ failure() && !inputs.skip_tests }}
         run: cat wrangler-dev.log || true
 
+      # The Worker's Sentry events are stamped with this (src/telemetry.rs reads
+      # SENTRY_RELEASE, falling back to the crate version). Deriving it from the
+      # commit — rather than from Cargo.toml, which rarely changes — is what makes
+      # "first seen in", regressions, and suspect commits meaningful in Sentry.
+      - name: Resolve Sentry release name
+        run: echo "SENTRY_RELEASE=clowd-server@$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+
+      # `--var` injects a plain-text binding without touching wrangler.jsonc, so
+      # the deployed script and the release registered below always agree.
       - name: Deploy to Cloudflare
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: npx wrangler deploy
+        run: npx wrangler deploy --var SENTRY_RELEASE:"$SENTRY_RELEASE"
+
+      # The desktop side uploads pdb/dSYM debug files here (ci.yml) because its
+      # Sentry events carry native stack traces to symbolicate. There is
+      # deliberately no equivalent upload for the Worker, and it is not an
+      # oversight: nothing it reports has a stack to resolve. `worker::Error`
+      # carries none, panics abort the isolate before any handler runs
+      # (`panic = "abort"`), and worker-build's wasm-opt pass strips DWARF from
+      # the deployed module regardless. Uploading debug files would produce a
+      # bucket of artefacts no event ever references. Grouping instead comes from
+      # the explicit fingerprint in telemetry_core.rs.
+      #
+      # What *is* worth registering is the release itself, so events land against
+      # a known deploy with commits attached.
+      - name: Register the Sentry release
+        if: env.SENTRY_AUTH_TOKEN != ''
+        run: |
+          npm install -g @sentry/cli
+          sentry-cli releases new "$SENTRY_RELEASE"
+          # --auto reads the git history checked out above; --ignore-missing keeps
+          # a shallow/force-pushed history from failing an otherwise good deploy.
+          sentry-cli releases set-commits "$SENTRY_RELEASE" --auto --ignore-missing
+          sentry-cli releases finalize "$SENTRY_RELEASE"
+          sentry-cli releases deploys new -r "$SENTRY_RELEASE" -e production
 
       - name: Verify production health
         run: |

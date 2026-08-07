@@ -24,6 +24,18 @@
 
   "observability": { "enabled": true },
 
+  // TELEMETRY (src/telemetry.rs). No `vars` block is needed for the defaults —
+  // the Worker reports to the shared Clowd Sentry project, tagged app=clowd_server,
+  // environment "production", release "clowd-server@<crate version>". Override any
+  // of it by adding vars here or with `wrangler deploy --var K:V`:
+  //   SENTRY_DSN               a different project (empty string = reporting off)
+  //   SENTRY_RELEASE           release name; deploy-server.yml injects
+  //                            clowd-server@<short sha> and registers it with Sentry
+  //   SENTRY_ENVIRONMENT       e.g. "staging"
+  //   CLOWD_DISABLE_TELEMETRY  any non-empty value turns reporting off; set in
+  //                            .dev.vars so `wrangler dev` never reports
+
+
   // REDIRECTS: completed-upload redirects (id -> {finalUrl,length,completedUtc}), write-once.
   // PASTE_ACCESS: coarse paste view tracking (key -> epoch day), rewritten at most
   // once per day per key; consulted by future pruning alongside R2's uploaded time.
