@@ -48,7 +48,15 @@ impl WarmSession {
 
         let worker_failed = Arc::new(AtomicUsize::new(0));
         let worker_parked = Arc::new(AtomicUsize::new(0));
-        let worker_setups = spawn_render_workers(&monitors, &instance, &warmup, memory_hints, &worker_failed, &worker_parked, Some(&proxy));
+        let worker_setups = spawn_render_workers(
+            &monitors,
+            &instance,
+            &warmup,
+            memory_hints,
+            &worker_failed,
+            &worker_parked,
+            Some(&proxy),
+        );
 
         let mut app = App::new(warmup, instance, monitors, worker_setups, worker_failed);
         app.enable_persistent(worker_parked);

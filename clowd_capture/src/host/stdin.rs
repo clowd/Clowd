@@ -45,12 +45,18 @@ pub fn spawn_stdin_reader(proxy: EventLoopProxy<AppEvent>) {
                         continue;
                     }
                 };
-                if proxy.send_event(AppEvent::Command(cmd)).is_err() {
+                if proxy
+                    .send_event(AppEvent::Command(cmd))
+                    .is_err()
+                {
                     std::process::exit(0);
                 }
             }
             info!("stdin closed; notifying event loop that the parent is gone");
-            if proxy.send_event(AppEvent::ParentGone).is_err() {
+            if proxy
+                .send_event(AppEvent::ParentGone)
+                .is_err()
+            {
                 std::process::exit(0);
             }
         })

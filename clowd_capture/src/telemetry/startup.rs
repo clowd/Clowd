@@ -137,8 +137,7 @@ impl WarmupTimings {
     }
 
     pub fn mark_ready(&self) {
-        self.t_ready
-            .set_once(self.t_start.elapsed());
+        self.t_ready.set_once(self.t_start.elapsed());
     }
 
     /// Total warm-up time: the latest recorded phase.
@@ -248,8 +247,7 @@ impl CaptureTimings {
     }
 
     pub fn mark_shown(&self) {
-        self.t_shown
-            .set_once(self.t_start.elapsed());
+        self.t_shown.set_once(self.t_start.elapsed());
     }
 
     /// Total capture time so far: the latest recorded phase.

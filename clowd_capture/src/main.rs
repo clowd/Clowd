@@ -43,7 +43,11 @@ fn main() -> anyhow::Result<()> {
     let mut loggers: Vec<Box<dyn simplelog::SharedLogger>> = vec![simplelog::TermLogger::new(
         log::LevelFilter::Info,
         simplelog::Config::default(),
-        if args.persistent { simplelog::TerminalMode::Stderr } else { simplelog::TerminalMode::Mixed },
+        if args.persistent {
+            simplelog::TerminalMode::Stderr
+        } else {
+            simplelog::TerminalMode::Mixed
+        },
         simplelog::ColorChoice::Auto,
     )];
     let log_file = if args.persistent {
