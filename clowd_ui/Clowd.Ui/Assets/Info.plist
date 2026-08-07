@@ -3,7 +3,8 @@
 <plist version="1.0">
   <dict>
     <!-- Identity keys mirror what vpk generates by default (verified against a shipped
-         Clowd.app) — only the *UsageDescription keys below are additions. TCC KILLS a
+         Clowd.app) — the additions are the commented keys below (LSUIElement, NSServices)
+         and the *UsageDescription strings. TCC KILLS a
          bundled process that touches the mic or a system-audio tap without them.
          {{VERSION}} / {{SHORT_VERSION}} are substituted by release.yml before vpk pack. -->
     <key>CFBundleName</key>
@@ -30,6 +31,28 @@
          runtime activation-policy toggle (MacDockIcon) hides the live icon. -->
     <key>LSUIElement</key>
     <true />
+    <!-- Finder right-click → "Upload with Clowd". Delivered to the in-process provider
+         registered by MacServicesProvider (NSMessage → uploadFiles:userData:error:);
+         NSPortName must match CFBundleName. Living in the bundle's own plist means the
+         entry is registered and unregistered with the app itself — no install hooks. -->
+    <key>NSServices</key>
+    <array>
+      <dict>
+        <key>NSMenuItem</key>
+        <dict>
+          <key>default</key>
+          <string>Upload with Clowd</string>
+        </dict>
+        <key>NSMessage</key>
+        <string>uploadFiles</string>
+        <key>NSPortName</key>
+        <string>Clowd</string>
+        <key>NSSendFileTypes</key>
+        <array>
+          <string>public.item</string>
+        </array>
+      </dict>
+    </array>
     <key>NSMicrophoneUsageDescription</key>
     <string>Clowd records your microphone when you enable it for a screen recording, and shows a live level meter so you can check the right device is selected.</string>
     <key>NSAudioCaptureUsageDescription</key>
