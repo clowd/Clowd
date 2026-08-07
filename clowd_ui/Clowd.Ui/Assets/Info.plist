@@ -45,6 +45,14 @@
         </dict>
         <key>NSMessage</key>
         <string>uploadFiles</string>
+        <!-- marks the service as contextual (file selections), which macOS enables BY
+             DEFAULT — without it the service arrives unchecked in System Settings →
+             Keyboard → Services and never shows in any menu. -->
+        <key>NSRequiredContext</key>
+        <dict>
+          <key>NSTextContent</key>
+          <string>FilePath</string>
+        </dict>
         <key>NSPortName</key>
         <string>Clowd</string>
         <key>NSSendFileTypes</key>

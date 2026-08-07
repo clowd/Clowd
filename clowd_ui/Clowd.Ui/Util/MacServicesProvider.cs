@@ -16,6 +16,9 @@ namespace Clowd.Util
     /// </summary>
     internal static class MacServicesProvider
     {
+        // must match the Info.plist NSServices entry's NSPortName
+        private const string PortName = "Clowd";
+
         private static Action<string[]> _callback;
 
         // both must stay rooted for the lifetime of the process: the delegate backs the
@@ -43,8 +46,12 @@ namespace Clowd.Util
             objc_registerClassPair(cls);
 
             _provider = SendMessage(SendMessage(cls, GetSelector("alloc")), GetSelector("init"));
-            var nsApp = SendMessage(GetClass("NSApplication"), GetSelector("sharedApplication"));
-            SendMessage(nsApp, GetSelector("setServicesProvider:"), _provider);
+
+            // not -[NSApp setServicesProvider:]: that registers the listening port under the
+            // process name ("Clowd.Ui", the executable), but delivery looks the port up by the
+            // plist's NSPortName ("Clowd") — register under the advertised name explicitly.
+            var portName = SendMessage(GetClass("NSString"), GetSelector("stringWithUTF8String:"), PortName);
+            NSRegisterServicesProvider(_provider, portName);
 
             // flush the pasteboard server's services cache so a freshly updated bundle's
             // menu entry shows up without waiting for a re-login.
@@ -117,7 +124,13 @@ namespace Clowd.Util
         [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
         private static extern IntPtr SendMessage(IntPtr receiver, IntPtr selector, IntPtr arg1, IntPtr arg2);
 
+        [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
+        private static extern IntPtr SendMessage(IntPtr receiver, IntPtr selector, string utf8Arg);
+
         [DllImport("/System/Library/Frameworks/AppKit.framework/AppKit")]
         private static extern void NSUpdateDynamicServices();
+
+        [DllImport("/System/Library/Frameworks/AppKit.framework/AppKit")]
+        private static extern void NSRegisterServicesProvider(IntPtr provider, IntPtr portName);
     }
 }
