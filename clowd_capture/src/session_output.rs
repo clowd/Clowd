@@ -13,12 +13,11 @@
 //! sidecar in the same directory: `upload` (session payload present,
 //! upload instead of edit) or `select-color #RRGGBB` (no session
 //! payload). No file means edit — the historical default.
-//!
-//! The repo intentionally has no serde; the fixed-schema JSON is written
-//! by hand below.
 
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use serde::Serialize;
 
 use crate::capture_output::ActionResult;
 use crate::geometry::{RectExt, ScreenRect};
@@ -326,33 +325,66 @@ fn write_session_inner(
     let origin = buffer.bounds.origin;
     let cropped_rect = selection.translate(euclid::Vector2D::new(-origin.x, -origin.y));
 
-    let mut json = String::new();
-    json.push_str("{\n");
-    json.push_str(&format!("    \"CreatedUtc\": \"{}\",\n", created_utc_now()));
-    json.push_str("    \"Name\": \"Screenshot\",\n");
-    json.push_str(&format!(
-        "    \"DesktopImgPath\": \"{}\",\n",
-        json_escape(&desktop_path.to_string_lossy())
-    ));
-    json.push_str(&format!(
-        "    \"PreviewImgPath\": \"{}\",\n",
-        json_escape(&preview_path.to_string_lossy())
-    ));
-    if let Some((cursor_path, cursor_rect)) = &cursor_entry {
-        let pos = cursor_rect.translate(euclid::Vector2D::new(-origin.x, -origin.y));
-        json.push_str(&format!(
-            "    \"CursorImgPath\": \"{}\",\n",
-            json_escape(&cursor_path.to_string_lossy())
-        ));
-        json.push_str(&format!("    \"CursorPosition\": {},\n", rect_json(pos)));
-    }
-    json.push_str(&format!("    \"CroppedRect\": {},\n", rect_json(cropped_rect)));
-    json.push_str(&format!("    \"OriginalBounds\": {}\n", rect_json(selection)));
-    json.push_str("}\n");
+    let info = SessionJson {
+        created_utc: created_utc_now(),
+        name: "Screenshot",
+        desktop_img_path: desktop_path.to_string_lossy().into_owned(),
+        preview_img_path: preview_path.to_string_lossy().into_owned(),
+        cursor_img_path: cursor_entry
+            .as_ref()
+            .map(|(p, _)| p.to_string_lossy().into_owned()),
+        cursor_position: cursor_entry.as_ref().map(|(_, r)| {
+            r.translate(euclid::Vector2D::new(-origin.x, -origin.y))
+                .into()
+        }),
+        cropped_rect: cropped_rect.into(),
+        original_bounds: selection.into(),
+    };
 
     let json_path = session_dir.join("session.json");
-    std::fs::write(&json_path, json)?;
+    std::fs::write(&json_path, serde_json::to_string_pretty(&info)?)?;
     Ok(json_path)
+}
+
+/// Serialized shape of `session.json`, shared with `Clowd.Ui`
+/// (`SessionInfo`, MIGRATION.md §2.11) and documented in
+/// CAPTURE_PROTOCOL.md — keys are PascalCase to match what
+/// Newtonsoft.Json expects there.
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct SessionJson {
+    created_utc: String,
+    name: &'static str,
+    desktop_img_path: String,
+    preview_img_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cursor_img_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cursor_position: Option<RectJson>,
+    cropped_rect: RectJson,
+    original_bounds: RectJson,
+}
+
+/// Serialized shape of `Clowd.PlatformUtil.ScreenRect` (exact key
+/// casing, §2.11).
+#[derive(Serialize)]
+#[serde(rename_all = "PascalCase")]
+struct RectJson {
+    x: i32,
+    y: i32,
+    width: i32,
+    height: i32,
+}
+
+impl From<ScreenRect> for RectJson {
+    fn from(r: ScreenRect) -> Self {
+        Self {
+            x: r.min_x(),
+            y: r.min_y(),
+            width: r.width(),
+            height: r.height(),
+        }
+    }
 }
 
 /// Extract a region of the desktop bitmap as RGBA, compositing the
@@ -380,36 +412,6 @@ fn absolute_path(p: &Path) -> PathBuf {
             .map(|d| d.join(p))
             .unwrap_or_else(|_| p.to_path_buf())
     }
-}
-
-/// `{ "X": …, "Y": …, "Width": …, "Height": … }` — the serialized shape
-/// of `Clowd.PlatformUtil.ScreenRect` (exact key casing, §2.11).
-fn rect_json(r: ScreenRect) -> String {
-    format!(
-        "{{ \"X\": {}, \"Y\": {}, \"Width\": {}, \"Height\": {} }}",
-        r.min_x(),
-        r.min_y(),
-        r.width(),
-        r.height()
-    )
-}
-
-/// Escape a string for embedding in a JSON string literal (backslashes
-/// in Windows paths, quotes, control characters).
-fn json_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 8);
-    for c in s.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out
 }
 
 fn created_utc_now() -> String {
@@ -463,17 +465,27 @@ mod tests {
     }
 
     #[test]
-    fn json_escape_windows_path() {
-        assert_eq!(
-            json_escape("C:\\Users\\me\\session \"1\""),
-            "C:\\\\Users\\\\me\\\\session \\\"1\\\""
-        );
+    fn rect_json_shape() {
+        let r: RectJson = ScreenRect::from_xy_size(-10, 20, 300, 400).into();
+        assert_eq!(serde_json::to_string(&r).unwrap(), r#"{"X":-10,"Y":20,"Width":300,"Height":400}"#);
     }
 
     #[test]
-    fn rect_json_shape() {
-        let r = ScreenRect::from_xy_size(-10, 20, 300, 400);
-        assert_eq!(rect_json(r), "{ \"X\": -10, \"Y\": 20, \"Width\": 300, \"Height\": 400 }");
+    fn session_json_omits_cursor_when_absent() {
+        let info = SessionJson {
+            created_utc: "2026-01-01T00:00:00Z".to_string(),
+            name: "Screenshot",
+            desktop_img_path: "C:\\s\\desktop.png".to_string(),
+            preview_img_path: "C:\\s\\cropped.png".to_string(),
+            cursor_img_path: None,
+            cursor_position: None,
+            cropped_rect: ScreenRect::from_xy_size(0, 0, 10, 10).into(),
+            original_bounds: ScreenRect::from_xy_size(5, 5, 10, 10).into(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(!json.contains("CursorImgPath"));
+        assert!(!json.contains("CursorPosition"));
+        assert!(json.contains(r#""DesktopImgPath":"C:\\s\\desktop.png""#));
     }
 
     #[test]
