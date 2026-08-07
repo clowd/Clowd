@@ -179,11 +179,9 @@ namespace Clowd.Upload
             };
         }
 
-        // the accelerate protocol needs the ContentLength up front, so non-seekable streams skip
-        // acceleration and go direct via the multipart path instead.
         public override Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable,
             string uploadName, CancellationToken cancelToken)
-            => AccelerateUploads && fileStream.CanSeek
+            => AccelerateUploads
                 ? UploadAcceleratedAsync(fileStream, progress, urlAvailable, uploadName, cancelToken)
                 : UploadAsync(fileStream, progress, uploadName, cancelToken);
 
@@ -336,12 +334,12 @@ namespace Clowd.Upload
             var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(uploadName)).ContentType;
             var bucket = _bucketName.Trim();
             var key = GetObjectKey(uploadName);
-            var contentLength = fileStream.Length;
+            long? contentLength = fileStream.CanSeek ? fileStream.Length : null;
 
-            // the client owns the chunk plan; partUrls below are minted one-per-chunk for it. 16 MiB
-            // is inside the server's [5,32] MiB clamp so the plan survives the round-trip unchanged.
+            // the client owns the chunk plan; any partUrls below are minted one-per-chunk for it.
+            // 16 MiB is inside the server's [5,32] MiB clamp so the plan survives the round-trip
+            // unchanged.
             var chunkSize = AcceleratedUploadClient.ClampChunkSize(AcceleratedUploadClient.DefaultChunkSize);
-            var chunkCount = AcceleratedUploadClient.ComputeChunkCount(contentLength, chunkSize);
 
             using var client = CreateClient();
 
@@ -357,19 +355,51 @@ namespace Clowd.Upload
             var initiated = await client.InitiateMultipartUploadAsync(init, cancelToken);
             var uploadId = initiated.UploadId;
 
-            var descriptor = BuildS3Descriptor(client, bucket, key, uploadId, chunkCount);
+            var signer = CreateDescriptorSigner(client, bucket, key, uploadId);
+
+            // known length: every UploadPart URL is minted up front and travels in the create
+            // request. Unknown length: the protocol requires partUrls to be EMPTY at create; each
+            // part URL is instead presigned lazily just before its chunk is PUT and travels in the
+            // x-clowd-part-url request header.
+            string[] partUrls;
+            if (contentLength.HasValue)
+            {
+                var chunkCount = AcceleratedUploadClient.ComputeChunkCount(contentLength.Value, chunkSize);
+                partUrls = new string[chunkCount];
+                for (int n = 0; n < chunkCount; n++)
+                    partUrls[n] = signer.PresignPart(n);
+            }
+            else
+            {
+                partUrls = Array.Empty<string>();
+            }
+
+            var descriptor = new DestinationDescriptor
+            {
+                Type = "s3-multipart",
+                PartUrls = partUrls,
+                CompleteUrl = signer.PresignComplete(),
+                AbortUrl = signer.PresignAbort(),
+                FinalUrl = BuildPublicUrl(client, bucket, key),
+            };
+
+            Func<int, string> lazyPartUrl = contentLength.HasValue ? null : signer.PresignPart;
 
             return await AcceleratedUploadRunner.RunAsync(
                 AccelerateServerUrl, descriptor, fileStream, mimeType, contentLength, uploadName, key,
-                chunkSize, this, progress, urlAvailable, cancelToken);
+                chunkSize, this, lazyPartUrl, progress, urlAvailable, cancelToken,
+                // if the session create itself fails, no AbortUrl ever reaches the server, so the
+                // just-initiated multipart would linger on the bucket forever (mirrors the cleanup
+                // in UploadUnseekableAsync). Post-create failures abort via the session instead.
+                onCreateFailed: () => client.AbortMultipartUploadAsync(bucket, key, uploadId, CancellationToken.None));
         }
 
-        /// <summary>Builds the s3-multipart destination descriptor: a presigned UploadPart URL for
-        /// every chunk plus presigned Complete/Abort URLs, all SigV4 query-signed with
-        /// UNSIGNED-PAYLOAD. All URLs are derived from the SDK's own endpoint resolution (via a
-        /// stripped presigned GET) so path-style / virtual-hosted / custom-endpoint / region choices
-        /// match exactly what the SDK would use.</summary>
-        private DestinationDescriptor BuildS3Descriptor(AmazonS3Client client, string bucket, string key, string uploadId, int chunkCount)
+        /// <summary>Builds the presigner for one initiated multipart upload's capability URLs
+        /// (UploadPart / Complete / Abort), all SigV4 query-signed with UNSIGNED-PAYLOAD. All URLs
+        /// are derived from the SDK's own endpoint resolution (via a stripped presigned GET) so
+        /// path-style / virtual-hosted / custom-endpoint / region choices match exactly what the
+        /// SDK would use.</summary>
+        private S3DescriptorSigner CreateDescriptorSigner(AmazonS3Client client, string bucket, string key, string uploadId)
         {
             // the real S3 object URL (host + path), independent of any CustomDomain override.
             var signedGet = client.GetPreSignedURL(new GetPreSignedUrlRequest
@@ -384,35 +414,45 @@ namespace Clowd.Upload
             // match the SDK's signing scope: the configured region, defaulting to us-east-1 when a
             // custom endpoint is used without one (the AWS SDK's own default signing region).
             var region = String.IsNullOrWhiteSpace(_region) ? "us-east-1" : _region.Trim();
-            var accessKey = _accessKeyId.Trim();
-            var secretKey = _secretAccessKey.Trim();
-            var expires = TimeSpan.FromHours(48);
-            var now = DateTimeOffset.UtcNow;
 
-            var partUrls = new string[chunkCount];
-            for (int n = 0; n < chunkCount; n++)
+            return new S3DescriptorSigner(baseUri, uploadId, _accessKeyId.Trim(), _secretAccessKey.Trim(), region);
+        }
+
+        /// <summary>Presigns the s3-multipart capability URLs for a single multipart upload. One
+        /// signing timestamp is captured at construction so a batch of part URLs (or a lazy
+        /// sequence of them) shares the same 48-hour validity window.</summary>
+        private sealed class S3DescriptorSigner
+        {
+            private static readonly TimeSpan Expires = TimeSpan.FromHours(48);
+
+            private readonly Uri _baseUri;
+            private readonly string _uploadId;
+            private readonly string _accessKey;
+            private readonly string _secretKey;
+            private readonly string _region;
+            private readonly DateTimeOffset _signTime = DateTimeOffset.UtcNow;
+
+            public S3DescriptorSigner(Uri baseUri, string uploadId, string accessKey, string secretKey, string region)
             {
-                partUrls[n] = SigV4Presigner.Presign("PUT", baseUri,
-                    new Dictionary<string, string> { ["partNumber"] = (n + 1).ToString(), ["uploadId"] = uploadId },
-                    accessKey, secretKey, region, "s3", expires, now);
+                _baseUri = baseUri;
+                _uploadId = uploadId;
+                _accessKey = accessKey;
+                _secretKey = secretKey;
+                _region = region;
             }
 
-            var completeUrl = SigV4Presigner.Presign("POST", baseUri,
-                new Dictionary<string, string> { ["uploadId"] = uploadId },
-                accessKey, secretKey, region, "s3", expires, now);
+            /// <summary>Presigned UploadPart PUT for a 0-based chunk index (S3 part numbers are 1-based).</summary>
+            public string PresignPart(int chunkIndex)
+                => Presign("PUT", new Dictionary<string, string> { ["partNumber"] = (chunkIndex + 1).ToString(), ["uploadId"] = _uploadId });
 
-            var abortUrl = SigV4Presigner.Presign("DELETE", baseUri,
-                new Dictionary<string, string> { ["uploadId"] = uploadId },
-                accessKey, secretKey, region, "s3", expires, now);
+            public string PresignComplete()
+                => Presign("POST", new Dictionary<string, string> { ["uploadId"] = _uploadId });
 
-            return new DestinationDescriptor
-            {
-                Type = "s3-multipart",
-                PartUrls = partUrls,
-                CompleteUrl = completeUrl,
-                AbortUrl = abortUrl,
-                FinalUrl = BuildPublicUrl(client, bucket, key),
-            };
+            public string PresignAbort()
+                => Presign("DELETE", new Dictionary<string, string> { ["uploadId"] = _uploadId });
+
+            private string Presign(string method, Dictionary<string, string> query)
+                => SigV4Presigner.Presign(method, _baseUri, query, _accessKey, _secretKey, _region, "s3", Expires, _signTime);
         }
 
         public override bool CanDelete(UploadDeleteInfo info)

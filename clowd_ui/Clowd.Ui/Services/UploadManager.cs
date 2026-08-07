@@ -241,11 +241,10 @@ namespace Clowd
             session.ContentKind = "file";
 
             // providers that accept a non-seekable stream get the zip piped straight into the
-            // upload; the rest spool it to a temp file first (below). Accelerated configs spool
-            // as well: acceleration needs a seekable stream, so streaming would silently drop it
-            // along with the share link it hands back before the transfer even starts.
-            if (provider is UploadProviderBase { SupportsUnseekableUpload: true } streamable
-                && provider is not IAccelerateProvider { AccelerateUploads: true })
+            // upload; the rest spool it to a temp file first (below). Accelerated configs stream
+            // too: the protocol takes unknown-length sources, so the zip pipes straight through
+            // and the early share link still fires the moment the session is created.
+            if (provider is UploadProviderBase { SupportsUnseekableUpload: true } streamable)
                 return await StreamingZipUpload(streamable, filePaths, session, archiveName);
 
             var tmpFolder = Directory.CreateTempSubdirectory("clowd-zip").FullName;

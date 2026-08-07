@@ -15,8 +15,10 @@ use crate::azure;
 pub struct CreateRequest {
     pub file_name: Option<String>,
     pub content_type: Option<String>,
-    /// REQUIRED in v2 (client always knows it; enables Content-Length on tails).
-    pub content_length: i64,
+    /// Optional since the unknown-length extension: absent or `null` means the
+    /// client cannot seek the source (accelerated pipe upload). Clients keep
+    /// sending it whenever they know it — it enables Content-Length on tails.
+    pub content_length: Option<i64>,
     pub chunk_size: Option<u64>,
     pub destination: Destination,
 }
@@ -86,7 +88,9 @@ fn discard_default_final() -> String {
     "https://clwd.app/discard".into()
 }
 
-fn is_https(url: &str) -> bool {
+/// The https-only check applied to every capability URL — create-time
+/// destinations and the lazily-arriving `x-clowd-part-url` values alike.
+pub fn is_https(url: &str) -> bool {
     url.starts_with("https://")
 }
 
@@ -215,6 +219,33 @@ impl Destination {
             }
         }
     }
+
+    /// Destination validation for unknown-length uploads: `s3-multipart` must
+    /// have an EMPTY `partUrls` (part URLs arrive per-chunk via
+    /// `x-clowd-part-url`) while the control URLs are still https-checked;
+    /// azure/discard follow the same rules as known-length (count-free).
+    pub fn validate_unknown(&self) -> Result<(), String> {
+        match self {
+            Destination::S3Multipart {
+                part_urls,
+                complete_url,
+                abort_url,
+                final_url,
+            } => {
+                if !part_urls.is_empty() {
+                    return Err("s3 partUrls must be empty when contentLength is unknown".into());
+                }
+                for (name, u) in [("completeUrl", complete_url), ("abortUrl", abort_url), ("finalUrl", final_url)] {
+                    if !is_https(u) {
+                        return Err(format!("s3 {name} must be https"));
+                    }
+                }
+                Ok(())
+            }
+            // azure/discard validation does not depend on the chunk count.
+            _ => self.validate(0),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -239,18 +270,37 @@ pub struct SessionState {
     pub id: String,
     pub file_name: String,
     pub content_type: String,
-    pub content_length: u64,
+    /// Total upload bytes. `None` while an unknown-length session is in flight;
+    /// `/complete` computes and stores the true total. Records persisted before
+    /// the unknown-length extension always carry a number here.
+    #[serde(default)]
+    pub content_length: Option<u64>,
     pub chunk_size: u64,
+    /// Planned chunk count. 0 while an unknown-length session is in flight; set
+    /// to `final_index + 1` when `/complete` fixes the total.
     pub chunk_count: u64,
     pub upload_token: String,
     pub delete_token: String,
     pub destination: Destination,
     pub final_url: String,
     pub status: SessionStatus,
-    /// Which chunks have been staged to R2.
+    /// Which chunks have been staged to R2 (grows on demand for unknown-length
+    /// sessions, hard-bounded by `MAX_CHUNK_COUNT`).
     pub staged: Vec<bool>,
     /// Per-chunk relay result: block id (azure) / ETag (s3) / marker (discard).
     pub relayed: Vec<Option<String>>,
+    /// Unknown-length sessions: index of the chunk the client marked `?final=1`.
+    /// Set once, immutable — conflicting final markers are rejected.
+    #[serde(default)]
+    pub final_index: Option<u64>,
+    /// Byte length of that final chunk (with `final_index`, fixes the total).
+    #[serde(default)]
+    pub final_chunk_len: Option<u64>,
+    /// Per-chunk presigned S3 UploadPart URLs arriving lazily via the
+    /// `x-clowd-part-url` header (unknown-length s3 sessions only; known-length
+    /// sessions carry all part URLs in the destination from create).
+    #[serde(default)]
+    pub lazy_part_urls: Vec<Option<String>>,
     /// Last chunk-received time (ms since epoch) — drives the idle alarm.
     pub last_activity_ms: f64,
     pub created_ms: f64,
@@ -268,6 +318,77 @@ impl SessionState {
     /// ETags/ids in chunk order, if every chunk has relayed.
     pub fn ordered_relay_results(&self) -> Option<Vec<String>> {
         self.relayed.iter().cloned().collect()
+    }
+
+    /// True while the session's total length is still unknown (created without
+    /// `contentLength` and not yet completed).
+    pub fn is_unknown_length(&self) -> bool {
+        self.content_length.is_none()
+    }
+
+    /// Presigned S3 UploadPart URL for chunk `n` — create-time for known-length
+    /// sessions, lazily stored (`x-clowd-part-url`) for unknown-length ones.
+    /// `None` for azure/discard or when no URL has arrived yet.
+    pub fn part_url(&self, n: u64) -> Option<String> {
+        if let Destination::S3Multipart {
+            part_urls,
+            ..
+        } = &self.destination
+        {
+            if let Some(u) = part_urls.get(n as usize) {
+                return Some(u.clone());
+            }
+        }
+        self.lazy_part_urls
+            .get(n as usize)
+            .cloned()
+            .flatten()
+    }
+
+    /// Grow the per-chunk tracking vectors to cover chunk `n` (unknown-length
+    /// sessions grow on demand; the caller bounds `n` by `MAX_CHUNK_COUNT`).
+    pub fn ensure_chunk_slot(&mut self, n: u64) {
+        let need = n as usize + 1;
+        if self.staged.len() < need {
+            self.staged.resize(need, false);
+        }
+        if self.relayed.len() < need {
+            self.relayed.resize(need, None);
+        }
+        if self.lazy_part_urls.len() < need {
+            self.lazy_part_urls.resize(need, None);
+        }
+    }
+
+    /// Highest staged chunk index, if any chunk has been staged.
+    pub fn highest_staged(&self) -> Option<u64> {
+        self.staged
+            .iter()
+            .rposition(|s| *s)
+            .map(|i| i as u64)
+    }
+
+    /// The true total of an unknown-length upload once the final chunk is known:
+    /// `F * chunkSize + final chunk length`.
+    pub fn computed_total(&self) -> Option<u64> {
+        let f = self.final_index?;
+        let flen = self.final_chunk_len?;
+        Some(
+            f.saturating_mul(self.chunk_size)
+                .saturating_add(flen),
+        )
+    }
+
+    /// Index one past the last chunk a tail must stream, if known yet:
+    /// the fixed plan count for known-length sessions, `final_index + 1` once an
+    /// unknown-length session's final chunk is marked, `None` before that (the
+    /// tail parks on the notifier exactly like for a missing middle chunk).
+    pub fn stream_end(&self) -> Option<u64> {
+        if self.content_length.is_some() {
+            Some(self.chunk_count)
+        } else {
+            self.final_index.map(|f| f + 1)
+        }
     }
 }
 
@@ -291,7 +412,7 @@ mod tests {
             "destination":{"type":"discard","finalUrl":"https://example.com/x"}
         }"#;
         let req: CreateRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(req.content_length, 100);
+        assert_eq!(req.content_length, Some(100));
         assert_eq!(req.chunk_size, Some(16777216));
         assert!(req.destination.is_discard());
     }
@@ -379,15 +500,15 @@ mod tests {
         .is_err());
     }
 
-    #[test]
-    fn ordered_relay_results_gated_on_completeness() {
-        let mut s = SessionState {
+    /// A minimal session for state-helper tests (discard destination).
+    fn session(content_length: Option<u64>, chunk_size: u64, chunk_count: u64) -> SessionState {
+        SessionState {
             id: "id".into(),
             file_name: "f".into(),
             content_type: "text/plain".into(),
-            content_length: 3,
-            chunk_size: 1,
-            chunk_count: 3,
+            content_length,
+            chunk_size,
+            chunk_count,
             upload_token: "u".into(),
             delete_token: "d".into(),
             destination: Destination::Discard {
@@ -395,14 +516,170 @@ mod tests {
             },
             final_url: "https://x/y".into(),
             status: SessionStatus::Uploading,
-            staged: vec![false, false, false],
-            relayed: vec![None, None, None],
+            staged: vec![false; chunk_count as usize],
+            relayed: vec![None; chunk_count as usize],
+            final_index: None,
+            final_chunk_len: None,
+            lazy_part_urls: Vec::new(),
             last_activity_ms: 0.0,
             created_ms: 0.0,
-        };
+        }
+    }
+
+    #[test]
+    fn ordered_relay_results_gated_on_completeness() {
+        let mut s = session(Some(3), 1, 3);
         assert!(s.ordered_relay_results().is_none());
         s.relayed = vec![Some("a".into()), Some("b".into()), Some("c".into())];
         assert_eq!(s.ordered_relay_results(), Some(vec!["a".into(), "b".into(), "c".into()]));
         assert!(s.all_relayed());
+    }
+
+    #[test]
+    fn create_request_content_length_is_optional() {
+        // absent → unknown length
+        let json = r#"{"destination":{"type":"discard","finalUrl":"https://example.com/x"}}"#;
+        let req: CreateRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.content_length, None);
+        // explicit null → unknown length
+        let json = r#"{"contentLength":null,"destination":{"type":"discard","finalUrl":"https://example.com/x"}}"#;
+        let req: CreateRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.content_length, None);
+        // present → known length, unchanged
+        let json = r#"{"contentLength":7,"destination":{"type":"discard","finalUrl":"https://example.com/x"}}"#;
+        let req: CreateRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.content_length, Some(7));
+    }
+
+    fn s3(part_urls: Vec<String>, complete: &str) -> Destination {
+        Destination::S3Multipart {
+            part_urls,
+            complete_url: complete.into(),
+            abort_url: "https://s3/abort".into(),
+            final_url: "https://s3/final".into(),
+        }
+    }
+
+    #[test]
+    fn validate_unknown_s3_requires_empty_part_urls() {
+        assert!(s3(vec![], "https://s3/complete")
+            .validate_unknown()
+            .is_ok());
+        assert!(s3(vec!["https://s3/p1".into()], "https://s3/complete")
+            .validate_unknown()
+            .is_err());
+        // control URLs are still https-checked
+        assert!(s3(vec![], "http://s3/complete")
+            .validate_unknown()
+            .is_err());
+    }
+
+    #[test]
+    fn validate_unknown_azure_and_discard_unchanged() {
+        assert!(azure("https://a.blob.core.windows.net/c/b?sv=1&sig=x")
+            .validate_unknown()
+            .is_ok());
+        assert!(azure("https://a.blob.core.windows.net/c/b")
+            .validate_unknown()
+            .is_err());
+        assert!(azure("http://a.blob.core.windows.net/c/b?sv=1")
+            .validate_unknown()
+            .is_err());
+        assert!(Destination::Discard {
+            final_url: "https://x/y".into()
+        }
+        .validate_unknown()
+        .is_ok());
+        assert!(Destination::Discard {
+            final_url: "ftp://x/y".into()
+        }
+        .validate_unknown()
+        .is_err());
+    }
+
+    #[test]
+    fn part_url_prefers_create_time_then_lazy() {
+        // known-length: create-time part URLs
+        let mut s = session(Some(2), 1, 2);
+        s.destination = s3(vec!["https://s3/p1".into(), "https://s3/p2".into()], "https://s3/complete");
+        assert_eq!(s.part_url(1), Some("https://s3/p2".into()));
+        // unknown-length: create-time list is empty → lazily stored URLs win
+        let mut s = session(None, 1, 0);
+        s.destination = s3(vec![], "https://s3/complete");
+        assert_eq!(s.part_url(0), None);
+        s.ensure_chunk_slot(1);
+        s.lazy_part_urls[1] = Some("https://s3/lazy2".into());
+        assert_eq!(s.part_url(1), Some("https://s3/lazy2".into()));
+        assert_eq!(s.part_url(0), None);
+    }
+
+    #[test]
+    fn chunk_slots_grow_on_demand() {
+        let mut s = session(None, 4, 0);
+        assert!(s.staged.is_empty());
+        s.ensure_chunk_slot(4);
+        assert_eq!(s.staged.len(), 5);
+        assert_eq!(s.relayed.len(), 5);
+        assert_eq!(s.lazy_part_urls.len(), 5);
+        assert_eq!(s.highest_staged(), None);
+        s.staged[2] = true;
+        s.staged[4] = true;
+        assert_eq!(s.highest_staged(), Some(4));
+        // never shrinks
+        s.ensure_chunk_slot(1);
+        assert_eq!(s.staged.len(), 5);
+    }
+
+    #[test]
+    fn computed_total_is_final_index_times_chunk_size_plus_final_len() {
+        let mut s = session(None, 16, 0);
+        assert_eq!(s.computed_total(), None);
+        s.final_index = Some(4);
+        assert_eq!(s.computed_total(), None); // final length not recorded yet
+        s.final_chunk_len = Some(3);
+        assert_eq!(s.computed_total(), Some(4 * 16 + 3));
+        // a single final chunk (F = 0) is just its own length
+        s.final_index = Some(0);
+        s.final_chunk_len = Some(7);
+        assert_eq!(s.computed_total(), Some(7));
+    }
+
+    #[test]
+    fn stream_end_by_session_kind() {
+        // known-length: always the fixed plan count
+        let s = session(Some(48), 16, 3);
+        assert_eq!(s.stream_end(), Some(3));
+        // unknown-length: unknown until the final chunk is marked
+        let mut s = session(None, 16, 0);
+        assert_eq!(s.stream_end(), None);
+        s.final_index = Some(2);
+        assert_eq!(s.stream_end(), Some(3));
+        // after /complete fixes the total, the count takes over
+        s.content_length = Some(40);
+        s.chunk_count = 3;
+        assert_eq!(s.stream_end(), Some(3));
+    }
+
+    #[test]
+    fn state_deserializes_records_from_previous_code() {
+        // A record persisted by the pre-unknown-length build (no finalIndex /
+        // finalChunkLen / lazyPartUrls) must load with defaults — a deploy can
+        // land mid-session.
+        let json = r#"{
+            "id":"abcdefgh","fileName":"a.bin","contentType":"application/octet-stream",
+            "contentLength":100,"chunkSize":50,"chunkCount":2,
+            "uploadToken":"u","deleteToken":"d",
+            "destination":{"type":"discard","finalUrl":"https://x/y"},
+            "finalUrl":"https://x/y","status":"uploading",
+            "staged":[true,false],"relayed":[null,null],
+            "lastActivityMs":1.0,"createdMs":1.0
+        }"#;
+        let s: SessionState = serde_json::from_str(json).unwrap();
+        assert_eq!(s.content_length, Some(100));
+        assert!(!s.is_unknown_length());
+        assert_eq!(s.final_index, None);
+        assert_eq!(s.final_chunk_len, None);
+        assert!(s.lazy_part_urls.is_empty());
+        assert_eq!(s.stream_end(), Some(2));
     }
 }

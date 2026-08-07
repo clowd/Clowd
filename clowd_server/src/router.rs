@@ -4,7 +4,7 @@
 
 use worker::{event, web_sys, Context, Env, Headers, MessageBatch, Method, Request, Response, ResponseBuilder, Result};
 
-use crate::chunkplan::plan;
+use crate::chunkplan::{plan_request, PlanKind};
 use crate::consts::{BASE_URL_VAR, DEFAULT_ORIGIN, DEV_ALLOW_DISCARD_VAR, GITHUB_URL, REDIRECT_MAX_AGE_SECS};
 use crate::ids::{bearer, hash_matches, is_valid_id, new_id, new_token};
 use crate::model::{CreateRequest, CreateResponse, SessionState, SessionStatus};
@@ -95,7 +95,10 @@ async fn create(mut req: Request, env: &Env) -> Result<Response> {
         Err(_) => return error_json("invalid JSON body", 400),
     };
 
-    let chunk_plan = match plan(body.content_length, body.chunk_size) {
+    // `contentLength` present → the fixed chunk plan (byte-identical to v1);
+    // absent/null → unknown length: chunkCount is discovered from the final
+    // chunk marker and the 10 GiB cap is enforced cumulatively as chunks arrive.
+    let plan_kind = match plan_request(body.content_length, body.chunk_size) {
         Ok(p) => p,
         Err(e) => return error_json(&e, 400),
     };
@@ -112,12 +115,27 @@ async fn create(mut req: Request, env: &Env) -> Result<Response> {
         }
     }
 
-    if let Err(e) = body
-        .destination
-        .validate(chunk_plan.chunk_count)
-    {
+    // Known-length cross-checks the presigned part count; unknown-length
+    // requires s3 partUrls to be EMPTY (they arrive per-chunk via the
+    // x-clowd-part-url header).
+    let validation = match &plan_kind {
+        PlanKind::Known(p) => body.destination.validate(p.chunk_count),
+        PlanKind::Unknown {
+            ..
+        } => body.destination.validate_unknown(),
+    };
+    if let Err(e) = validation {
         return error_json(&e, 400);
     }
+
+    let (content_length, chunk_size, chunk_count) = match &plan_kind {
+        PlanKind::Known(p) => (Some(p.content_length), p.chunk_size, p.chunk_count),
+        // chunkCount 0 signals "unknown" in CreateResponse; clients that sent a
+        // null contentLength ignore it.
+        PlanKind::Unknown {
+            chunk_size,
+        } => (None, *chunk_size, 0),
+    };
 
     let id = new_id();
     let upload_token = new_token();
@@ -129,16 +147,19 @@ async fn create(mut req: Request, env: &Env) -> Result<Response> {
         id: id.clone(),
         file_name: crate::sanitize::sanitize_filename(body.file_name.as_deref()),
         content_type: crate::sanitize::header_safe_content_type(body.content_type.as_deref().unwrap_or("")),
-        content_length: chunk_plan.content_length,
-        chunk_size: chunk_plan.chunk_size,
-        chunk_count: chunk_plan.chunk_count,
+        content_length,
+        chunk_size,
+        chunk_count,
         upload_token: upload_token.clone(),
         delete_token: delete_token.clone(),
         destination: body.destination,
         final_url: final_url.clone(),
         status: SessionStatus::Uploading,
-        staged: vec![false; chunk_plan.chunk_count as usize],
-        relayed: vec![None; chunk_plan.chunk_count as usize],
+        staged: vec![false; chunk_count as usize],
+        relayed: vec![None; chunk_count as usize],
+        final_index: None,
+        final_chunk_len: None,
+        lazy_part_urls: Vec::new(),
         last_activity_ms: now,
         created_ms: now,
     };
@@ -165,8 +186,8 @@ async fn create(mut req: Request, env: &Env) -> Result<Response> {
         download_url: format!("{origin}/u/{id}"),
         upload_token,
         delete_token,
-        chunk_size: chunk_plan.chunk_size,
-        chunk_count: chunk_plan.chunk_count,
+        chunk_size,
+        chunk_count,
         final_url,
     };
     json_status(&out, 201)
