@@ -105,13 +105,24 @@
         <Grid Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Margin="24,0,0,0" RowDefinitions="Auto,*">
             <!-- The page header lives outside PageHost, so both the title and introduction stay
                  visible while the settings page scrolls underneath them. -->
-            <StackPanel Margin="0,8,16,16" Spacing="8">
-                <TextBlock x:Name="PageTitle" Classes="Subtitle" />
+            <!-- The title keeps only the width it needs (Auto) and the slot beside it takes the
+                 rest, so it is the page's header control — not the title — that has to give way
+                 when the window is narrow. -->
+            <Grid Margin="0,8,16,16" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*">
+                <TextBlock x:Name="PageTitle" Classes="Subtitle" VerticalAlignment="Center" />
+                <ContentControl x:Name="PageHeaderContent"
+                                Grid.Column="1"
+                                Margin="16,0,0,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Center" />
                 <TextBlock x:Name="PageIntro"
+                           Grid.Row="1"
+                           Grid.ColumnSpan="2"
+                           Margin="0,8,0,0"
                            Classes="Body"
                            Opacity="0.7"
                            TextWrapping="Wrap" />
-            </StackPanel>
+            </Grid>
             <TransitioningContentControl x:Name="PageHost" Grid.Row="1">
                 <TransitioningContentControl.PageTransition>
                     <CrossFade Duration="0:0:0.12" />
