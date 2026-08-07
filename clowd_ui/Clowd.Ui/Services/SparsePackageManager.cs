@@ -212,8 +212,12 @@ namespace Clowd.UI
                 // plain Add-AppxPackage refuses; sideloaded packages take this in either direction.
                 var force = registered == null ? "" : " -ForceUpdateFromAnyVersion";
 
+                // Explorer's dllhost surrogate keeps the extension loaded long after a
+                // right-click, and an update of an in-use package either fails (0x80073D02) or
+                // waits on it indefinitely; shutting the surrogate down is harmless — the menu
+                // handler just reloads on the next right-click.
                 RunPowerShell("Add-AppxPackage -Path '" + EscapePowerShellLiteral(Path.Combine(AppContext.BaseDirectory, MsixFileName))
-                              + "' -ExternalLocation '" + EscapePowerShellLiteral(root) + "'" + force);
+                              + "' -ExternalLocation '" + EscapePowerShellLiteral(root) + "' -ForceApplicationShutdown" + force);
             }
 
             // only sweep once the fresh registration is in force, so a failed apply never
