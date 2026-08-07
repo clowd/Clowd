@@ -132,8 +132,13 @@ namespace Clowd.UI.Pages
         {
             if (!ExplorerContextMenuManager.IsSupported)
             {
-                ContextMenuCheck.IsEnabled = false;
-                ContextMenuCaption.Text = "The Explorer context menu is only available on Windows.";
+                // macOS: the Finder service is declared in Info.plist and enabled by the OS by
+                // default (NSRequiredContext); its on/off switch is system-managed, so there is
+                // nothing for a checkbox here to do — just say where the entry lives.
+                ContextMenuCheck.IsVisible = false;
+                ContextMenuCaption.Text = "'Upload with Clowd' appears when right-clicking files in Finder, under Services. "
+                    + "It can be turned off in System Settings → Keyboard → Keyboard Shortcuts → Services.";
+                ContextMenuSettingsButton.IsVisible = true;
                 return;
             }
 
@@ -149,6 +154,22 @@ namespace Clowd.UI.Pages
                 ExplorerContextMenuManager.StateChanged -= OnContextMenuStateChanged;
                 SparsePackageManager.StateChanged -= OnContextMenuStateChanged;
             };
+        }
+
+        /// <summary>Opens System Settings → Keyboard, the pane hosting the Keyboard Shortcuts →
+        /// Services list where the Finder service can be toggled. The Shortcuts sheet itself is
+        /// not deep-linkable, so the caption spells out the remaining clicks.</summary>
+        private void OnContextMenuSettingsClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start("open", new[] { "x-apple.systempreferences:com.apple.Keyboard-Settings.extension?Shortcuts" });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Failed to open System Settings: " + ex);
+                SentryConfig.CaptureHandled(ex, "settings.open-keyboard-pane");
+            }
         }
 
         private void OnContextMenuStateChanged(object sender, EventArgs e) =>
