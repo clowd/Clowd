@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Net.Sockets;
 using System.Reflection;
 using System.Security.Authentication;
+using System.Text;
 using System.Threading.Tasks;
 using Sentry;
 
@@ -37,6 +38,14 @@ namespace Clowd
         /// <summary>Sentry release identifier, <c>clowd@&lt;version&gt;</c>. Kept in the same shape as
         /// the capturer's so both processes report against one release.</summary>
         public static string Release { get; } = "clowd@" + GetVersion();
+
+        /// <summary>Key under which an exception carries the recent output of the child process it
+        /// relates to (a string in <see cref="Exception.Data"/>). <see cref="CaptureHandled"/>
+        /// extracts it and uploads it as a <c>process-log.txt</c> attachment on the event, so the
+        /// log reaches Sentry no matter how many layers up the exception is finally reported —
+        /// "exited unexpectedly" / "timed out" events are undiagnosable without it (CLOWD-Z,
+        /// CLOWD-C).</summary>
+        public const string ProcessLogKey = "clowd.process-log";
 
         public static bool IsOptedOut =>
             !String.IsNullOrEmpty(Environment.GetEnvironmentVariable(OptOutVariable));
@@ -97,14 +106,50 @@ namespace Clowd
                 return;
 
             ex.SetSentryMechanism("Clowd.Handled", handled: true);
+            var processLog = TakeProcessLog(ex);
 
             SentrySdk.CaptureException(ex, scope =>
             {
                 scope.SetTag("operation", operation);
                 // the app kept running, so this is not fatal — but it is still a real defect
                 scope.Level = SentryLevel.Error;
+
+                if (!String.IsNullOrEmpty(processLog))
+                {
+                    scope.AddAttachment(Encoding.UTF8.GetBytes(processLog), "process-log.txt");
+                    // the tail inline as well — most triage should not need the attachment
+                    scope.SetExtra("process_log_tail",
+                        processLog.Length <= 4096 ? processLog : processLog.Substring(processLog.Length - 4096));
+                }
             });
 #endif
+        }
+
+        /// <summary>Removes and returns the <see cref="ProcessLogKey"/> entry from
+        /// <paramref name="ex"/> or the nearest inner exception carrying one. Removed rather than
+        /// read: the SDK serializes <see cref="Exception.Data"/> into the event body, and a
+        /// quarter-megabyte log inline would blow the event payload — as an attachment it rides
+        /// in the same envelope without that limit.</summary>
+        private static string TakeProcessLog(Exception ex)
+        {
+            for (var e = ex; e != null; e = e.InnerException)
+            {
+                try
+                {
+                    if (e.Data[ProcessLogKey] is string log)
+                    {
+                        e.Data.Remove(ProcessLogKey);
+                        return log;
+                    }
+                }
+                catch
+                {
+                    // Exception.Data may be read-only or reject lookups for exotic exception
+                    // types; losing the log must never lose the event itself.
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
