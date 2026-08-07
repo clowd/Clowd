@@ -78,11 +78,6 @@ pub(crate) async fn request_adapter_device(
     if crate::ui::gpu::gpu_timing::GPU_TIMING_ENABLED && adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY) {
         required_features |= wgpu::Features::TIMESTAMP_QUERY;
     }
-    // Only Windows ships precompiled (DXBC) shaders; macOS compiles the WGSL at runtime.
-    #[cfg(windows)]
-    {
-        required_features |= wgpu::Features::PASSTHROUGH_SHADERS;
-    }
 
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
@@ -105,9 +100,8 @@ pub(crate) async fn request_adapter_device(
         })
         .await?;
 
-    // Make wgpu shader/pipeline errors non-fatal: on Windows so a bad precompiled
-    // passthrough shader can fall back to runtime WGSL, elsewhere so a validation
-    // error is reported instead of silently killing the render worker.
+    // Make wgpu shader/pipeline errors non-fatal so a validation error is
+    // reported instead of silently killing the render worker.
     crate::gpu::shaders::install_error_handler(&device);
 
     timings
