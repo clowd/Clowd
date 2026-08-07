@@ -26,6 +26,10 @@
     <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>
     <true />
+    <!-- Agent app: keeps Clowd out of the Dock's "recent applications" section after the
+         runtime activation-policy toggle (MacDockIcon) hides the live icon. -->
+    <key>LSUIElement</key>
+    <true />
     <key>NSMicrophoneUsageDescription</key>
     <string>Clowd records your microphone when you enable it for a screen recording, and shows a live level meter so you can check the right device is selected.</string>
     <key>NSAudioCaptureUsageDescription</key>
