@@ -115,6 +115,10 @@ namespace Clowd
 
                 SetupGlobalHotkeys();
 
+                // macOS: Finder right-click → "Upload with Clowd" (NSServices) delivers the
+                // selection here in-process — background handoff, same as forwarded CLI args.
+                MacServicesProvider.Initialize(files => Dispatcher.UIThread.Post(() => OnFilesReceived(files)));
+
                 // macOS: relaunching a running app (Dock click, Launchpad, Spotlight, `open -a`)
                 // does not start a second process — LaunchServices sends the existing instance a
                 // reopen event instead, surfaced by Avalonia as ActivationKind.Reopen. This is
