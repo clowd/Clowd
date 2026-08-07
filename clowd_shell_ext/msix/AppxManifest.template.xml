@@ -53,7 +53,7 @@
         <com:Extension Category="windows.comServer">
           <com:ComServer>
             <com:SurrogateServer DisplayName="Clowd Shell Extension">
-              <com:Class Id="45849D5C-078C-4209-A377-DCF731E5124C" Path="ClowdShellExt.dll" ThreadingModel="STA" />
+              <com:Class Id="45849D5C-078C-4209-A377-DCF731E5124C" Path="ClowdShellExt_{{EXTVERSION}}.dll" ThreadingModel="STA" />
             </com:SurrogateServer>
           </com:ComServer>
         </com:Extension>

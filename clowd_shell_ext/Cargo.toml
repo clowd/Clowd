@@ -1,6 +1,9 @@
 [package]
 name = "clowd_shell_ext"
-version.workspace = true
+# The installed DLL is named ClowdShellExt_<this version>.dll, so bump this whenever the
+# extension's behavior changes: a new version lands under a fresh filename, which is what
+# keeps Explorer's lock on the old copy from ever blocking an update.
+version = "1.0.0"
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
