@@ -14,8 +14,6 @@ simplelog.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 winit.workspace = true
-# "wgsl" enables the runtime WGSL frontend: the only shader path on macOS, and the
-# fallback on Windows when a precompiled dxbc shader fails to load — see gpu/shaders.rs.
 wgpu = { workspace = true, features = ["dx12", "metal", "wgsl"] }
 pollster.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
@@ -52,8 +50,3 @@ objc2-app-kit.workspace = true
 objc2-foundation.workspace = true
 objc2-quartz-core = { workspace = true, features = ["CALayer", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "objc2-core-foundation"] }
 block2.workspace = true
-
-# naga version must match what wgpu 30.0 uses internally
-[target.'cfg(windows)'.build-dependencies]
-naga = { workspace = true, features = ["wgsl-in", "hlsl-out"] }
-libloading.workspace = true
