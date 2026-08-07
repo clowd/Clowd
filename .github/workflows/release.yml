@@ -187,6 +187,7 @@ jobs:
           --packVersion "$VERSION" --packDir publish --mainExe Clowd.Ui.exe
           --runtime ${{ matrix.rid }} --channel "$CHANNEL" -o releases
           --icon clowd_ui/Clowd.Ui/Assets/clowd-default.ico
+          --shortcuts Desktop,StartMenuRoot
           --azureTrustedSignFile .github/azure-trusted-sign.json
         shell: bash
 
