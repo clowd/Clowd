@@ -18,8 +18,9 @@ namespace Clowd
         public const string SilentUpdateRestartArg = "--applied-background-update";
 
         /// <summary>True when this process was relaunched by the updater after a background update.
-        /// The argument is stripped before Avalonia sees it — every other command line argument is
-        /// treated as a file to upload (MutexArgsForwarder).</summary>
+        /// The argument is stripped before Avalonia sees it — the rest of the command line is the
+        /// app's CLI surface, <c>upload "path" ...</c> or legacy bare paths (see
+        /// <see cref="CliArgs"/> / MutexArgsForwarder).</summary>
         public static bool IsSilentUpdateRestart { get; private set; }
 
         // Initialization code. Don't use any Avalonia, third-party APIs or any

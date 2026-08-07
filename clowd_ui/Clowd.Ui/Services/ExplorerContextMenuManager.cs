@@ -17,7 +17,7 @@ namespace Clowd.UI
     /// menu; appearing in the compact menu additionally requires package identity via a sparse MSIX
     /// package, which is deliberately not implemented here.
     ///
-    /// The verb is <c>"&lt;exe&gt;" "%1"</c>, so selecting N files makes Explorer launch N processes.
+    /// The verb is <c>"&lt;exe&gt;" upload "%1"</c>, so selecting N files makes Explorer launch N processes.
     /// That is intentional and matches the WPF build: <see cref="MutexArgsForwarder"/> forwards each
     /// one's arguments to the already-running instance over a named pipe and coalesces them on a 1s
     /// debounce, so the N paths arrive as a single batch and upload as one archive.
@@ -134,7 +134,7 @@ namespace Clowd.UI
                 verb.SetValue("Icon", "\"" + AppLaunchPath.Current + "\"", RegistryValueKind.String);
 
                 using var command = verb.CreateSubKey("command", true);
-                command.SetValue("", "\"" + AppLaunchPath.Current + "\" \"%1\"", RegistryValueKind.String);
+                command.SetValue("", "\"" + AppLaunchPath.Current + "\" " + CliArgs.UploadCommand + " \"%1\"", RegistryValueKind.String);
             }
         }
     }
