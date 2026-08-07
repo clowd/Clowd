@@ -6,6 +6,11 @@ use std::path::{Path, PathBuf};
 
 pub const EXE_NAME: &str = "Clowd.Ui.exe";
 
+/// The app's explicit CLI command for uploads (`Clowd.Ui.exe upload "path" ...`).
+/// Bare paths still work over there as a legacy fallback, but every launch from
+/// here names the command so the surface can grow more commands and options.
+pub const UPLOAD_COMMAND: &str = "upload";
+
 /// CreateProcessW rejects a command line of 32,767 UTF-16 units or more, so a big
 /// enough selection has to be spread over several launches. Leave headroom below
 /// the hard cap rather than sitting on it.
@@ -32,7 +37,7 @@ pub fn resolve_exe(dll_path: &Path, exists: &dyn Fn(&Path) -> bool) -> Option<Pa
 /// only visible effect is that a huge selection still works. A path so long that it
 /// cannot fit on a command line of its own is dropped — nothing can carry it.
 pub fn chunk_paths(exe: &str, paths: &[String]) -> Vec<Vec<String>> {
-    let base = quoted_len_utf16(exe);
+    let base = quoted_len_utf16(exe) + 1 + quoted_len_utf16(UPLOAD_COMMAND);
     let mut chunks = Vec::new();
     let mut current: Vec<String> = Vec::new();
     let mut used = base;
@@ -64,11 +69,14 @@ fn quoted_len_utf16(arg: &str) -> usize {
     quoted.encode_utf16().count()
 }
 
-/// Build a CreateProcessW command line: the exe followed by one argument per path,
-/// each quoted so that CommandLineToArgvW reproduces the argument exactly.
+/// Build a CreateProcessW command line: the exe, the `upload` command, then one
+/// argument per path, each quoted so that CommandLineToArgvW reproduces the
+/// argument exactly.
 pub fn build_command_line(exe: &str, args: &[String]) -> String {
     let mut line = String::new();
     append_quoted(exe, &mut line);
+    line.push(' ');
+    append_quoted(UPLOAD_COMMAND, &mut line);
     for arg in args {
         line.push(' ');
         append_quoted(arg, &mut line);
@@ -111,45 +119,45 @@ mod tests {
     }
 
     #[test]
-    fn quotes_plain_paths() {
+    fn names_the_upload_command_first() {
         let line = build_command_line(r"C:\app\Clowd.Ui.exe", &args(&[r"C:\files\a.txt"]));
-        assert_eq!(line, r#""C:\app\Clowd.Ui.exe" "C:\files\a.txt""#);
+        assert_eq!(line, r#""C:\app\Clowd.Ui.exe" "upload" "C:\files\a.txt""#);
     }
 
     #[test]
     fn quotes_paths_with_spaces() {
         let line = build_command_line(r"C:\my apps\Clowd.Ui.exe", &args(&[r"C:\my files\a b.txt", r"C:\other\c.png"]));
-        assert_eq!(line, r#""C:\my apps\Clowd.Ui.exe" "C:\my files\a b.txt" "C:\other\c.png""#);
+        assert_eq!(line, r#""C:\my apps\Clowd.Ui.exe" "upload" "C:\my files\a b.txt" "C:\other\c.png""#);
     }
 
     #[test]
     fn doubles_trailing_backslashes() {
         let line = build_command_line("exe", &args(&[r"C:\dir\"]));
-        assert_eq!(line, r#""exe" "C:\dir\\""#);
+        assert_eq!(line, r#""exe" "upload" "C:\dir\\""#);
         let line = build_command_line("exe", &args(&[r"C:\dir\\"]));
-        assert_eq!(line, r#""exe" "C:\dir\\\\""#);
+        assert_eq!(line, r#""exe" "upload" "C:\dir\\\\""#);
     }
 
     #[test]
     fn escapes_embedded_quotes() {
         let line = build_command_line("exe", &args(&[r#"he"llo"#]));
-        assert_eq!(line, r#""exe" "he\"llo""#);
+        assert_eq!(line, r#""exe" "upload" "he\"llo""#);
     }
 
     #[test]
     fn escapes_backslashes_before_quotes() {
         // one backslash + quote -> 2n+1 = 3 backslashes + quote
         let line = build_command_line("exe", &args(&[r#"a\"b"#]));
-        assert_eq!(line, r#""exe" "a\\\"b""#);
+        assert_eq!(line, r#""exe" "upload" "a\\\"b""#);
         // two backslashes + quote -> 5 backslashes + quote
         let line = build_command_line("exe", &args(&[r#"a\\"b"#]));
-        assert_eq!(line, r#""exe" "a\\\\\"b""#);
+        assert_eq!(line, r#""exe" "upload" "a\\\\\"b""#);
     }
 
     #[test]
     fn quotes_empty_argument() {
         let line = build_command_line("exe", &args(&[""]));
-        assert_eq!(line, r#""exe" """#);
+        assert_eq!(line, r#""exe" "upload" """#);
     }
 
     const EXE: &str = r"C:\Program Files\Clowd\current\Clowd.Ui.exe";

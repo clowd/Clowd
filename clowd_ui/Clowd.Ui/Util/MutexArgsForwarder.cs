@@ -252,7 +252,9 @@ namespace Clowd.Util
 
             _notifyTimer.Enabled = false;
 
-            foreach (var f in args)
+            // each launch's command word is stripped here, per message — chunked launches
+            // (the shell extension splits huge selections) merge into one flat path batch
+            foreach (var f in CliArgs.ExtractUploadPaths(args))
                 _batch.Add(f);
 
             if (_ready)
