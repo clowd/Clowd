@@ -1,0 +1,105 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- The bar adds this file to its own Styles collection, so everything here is scoped to the
+         bar and its children — a caller usually hosts the bar outside its own styles (the Recent
+         page's filter lives in the window's page header), which is why the chrome travels with the
+         control rather than with the page that declares the segments. -->
+    <Styles.Resources>
+
+        <!-- One joined pill: the segments touch, so only the outer corners are rounded (the bar puts
+             the first/last classes on them) and only the first segment draws a left border — every
+             other one lets its neighbour's right border be the divider, which is what keeps the
+             seam 1px rather than 2. Accent-filled while active.
+
+             Templated rather than styled on top of Semi's ToggleButton so the resting / hover /
+             checked backgrounds are settled by this one Background property instead of by whichever
+             of the two themes wins. -->
+        <ControlTheme x:Key="ClowdSegmentedItem" TargetType="ToggleButton">
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <!-- the resting / hover fills the window's own buttons (New Editor, Screen Capture) use,
+                 so an inactive segment reads as a button rather than as a label in a box. -->
+            <Setter Property="Background" Value="{DynamicResource ButtonDefaultBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+            <Setter Property="BorderThickness" Value="0,1,1,1" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^.first">
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="12,0,0,12" />
+            </Style>
+            <Style Selector="^.last">
+                <Setter Property="CornerRadius" Value="0,12,12,0" />
+            </Style>
+            <!-- a strip of one is both ends at once, and CornerRadius can only be set by one of the
+                 two styles above — so it says the whole thing here. -->
+            <Style Selector="^.first.last">
+                <Setter Property="CornerRadius" Value="12" />
+            </Style>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource ButtonDefaultPointeroverBackground}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorWhite}" />
+            </Style>
+        </ControlTheme>
+
+        <!-- The collapsed strip: one pill wearing the resting segment chrome, carrying the selected
+             label and a chevron. Never drawn in the checked colours — it stands for the whole
+             strip, not for the option that happens to be active. -->
+        <ControlTheme x:Key="ClowdSegmentedDropDown" TargetType="Button">
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Background" Value="{DynamicResource ButtonDefaultBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1"
+                            CornerRadius="12"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="Center"
+                                          VerticalAlignment="Center" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource ButtonDefaultPointeroverBackground}" />
+            </Style>
+        </ControlTheme>
+
+    </Styles.Resources>
+
+    <Style Selector="controls|CollapsingSegmentedBar > ToggleButton">
+        <Setter Property="Theme" Value="{StaticResource ClowdSegmentedItem}" />
+    </Style>
+
+    <Style Selector="controls|CollapsingSegmentedBar > Button">
+        <Setter Property="Theme" Value="{StaticResource ClowdSegmentedDropDown}" />
+    </Style>
+
+</Styles>
