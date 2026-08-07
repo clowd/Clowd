@@ -87,6 +87,31 @@ namespace Clowd.UI.Helpers
                 objc_msgSend(mac.NSWindow, sel_registerName("setIgnoresMouseEvents:"), true);
         }
 
+        // NSStatusWindowLevel — one above NSMainMenuWindowLevel (24), same level the Rust
+        // capturer overlay uses.
+        private const nint NSStatusWindowLevel = 25;
+
+        // CanJoinAllSpaces | Stationary | IgnoresCycle | FullScreenAuxiliary
+        private const nuint OverlayCollectionBehavior = (1 << 0) | (1 << 4) | (1 << 6) | (1 << 8);
+
+        /// <summary>
+        /// macOS: lets an overlay window cover the menu bar and fullscreen apps, matching the
+        /// capturer overlay. AppKit constrains the frame of any window below
+        /// NSMainMenuWindowLevel so it can never overlap the menu bar (issue #56) — raising to
+        /// NSStatusWindowLevel lifts that constraint. Call from Opened, before (re)positioning.
+        /// </summary>
+        public static void SetCanCoverMenuBar(Window window)
+        {
+            if (!OperatingSystem.IsMacOS())
+                return;
+
+            if (window.TryGetPlatformHandle() is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
+            {
+                objc_msgSend(mac.NSWindow, sel_registerName("setLevel:"), NSStatusWindowLevel);
+                objc_msgSend(mac.NSWindow, sel_registerName("setCollectionBehavior:"), OverlayCollectionBehavior);
+            }
+        }
+
         [DllImport("user32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
@@ -99,5 +124,11 @@ namespace Clowd.UI.Helpers
         // ObjC BOOL is a signed char — marshal as I1, not the 4-byte Win32 BOOL default.
         [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
         private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, [MarshalAs(UnmanagedType.I1)] bool arg1);
+
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, nint arg1);
+
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector, nuint arg1);
     }
 }
