@@ -27,12 +27,17 @@ namespace Clowd.Util
     {
         public event EventHandler<CommandLineEventArgs> ArgsReceived;
 
+        /// <summary>A second instance was launched with no arguments — the user clicked the app
+        /// icon while Clowd was already running and expects a window, not silence.</summary>
+        public event EventHandler ShowMainWindowRequested;
+
         private const int MaxMessageSize = 1024 * 1024;
 
         // AllowSetForegroundWindow(ASFW_ANY): any process may take the foreground
         private const int ASFW_ANY = -1;
 
         private bool _ready;
+        private bool _showPending;
         private List<string> _batch;
         private System.Timers.Timer _notifyTimer;
         private Mutex _mutex;
@@ -74,8 +79,9 @@ namespace Clowd.Util
             {
                 try
                 {
-                    if (args != null && args.Length > 0)
-                        await SendArgsToRemote(args);
+                    // an empty launch is still sent: it tells the running instance to
+                    // surface its main window (ShowMainWindowRequested on the other side).
+                    await SendArgsToRemote(args ?? Array.Empty<string>());
                 }
                 finally
                 {
@@ -92,7 +98,7 @@ namespace Clowd.Util
                 _hostThread.IsBackground = true;
                 _hostThread.Priority = ThreadPriority.BelowNormal;
                 _hostThread.Start();
-                ProcessArgs(Process.GetCurrentProcess().Id, args);
+                ProcessArgs(Process.GetCurrentProcess().Id, args, remote: false);
                 return true;
             }
         }
@@ -104,6 +110,21 @@ namespace Clowd.Util
         {
             _ready = true;
             OnCommandLineBatchTimerTick(this, new EventArgs());
+
+            if (_showPending)
+            {
+                _showPending = false;
+                ShowMainWindowRequested?.Invoke(this, EventArgs.Empty);
+            }
+        }
+
+        private void RequestShowMainWindow()
+        {
+            // no batching timer here — showing a window a second late feels broken.
+            if (_ready)
+                ShowMainWindowRequested?.Invoke(this, EventArgs.Empty);
+            else
+                _showPending = true;
         }
 
         private async Task SendArgsToRemote(string[] args)
@@ -161,7 +182,7 @@ namespace Clowd.Util
 
                 var req = JsonSerializer.Deserialize(Encoding.UTF8.GetString(payload), ClowdUiJsonContext.Default.SendArgsRequestModel);
                 if (req != null)
-                    ProcessArgs(req.pid, req.args);
+                    ProcessArgs(req.pid, req.args, remote: true);
             }
 
             int err = 0;
@@ -245,10 +266,16 @@ namespace Clowd.Util
             }
         }
 
-        private void ProcessArgs(int pid, string[] args)
+        private void ProcessArgs(int pid, string[] args, bool remote)
         {
             if (args == null || args.Length < 1)
+            {
+                // only meaningful from a second instance — our own argless startup already
+                // decides window visibility (StartMinimized / first-run) in App.Startup.
+                if (remote)
+                    RequestShowMainWindow();
                 return;
+            }
 
             _notifyTimer.Enabled = false;
 
