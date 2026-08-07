@@ -85,6 +85,10 @@ namespace Clowd.UI
             // SetLayeredWindowAttributes call is never repainted (design §4.2).
             WindowNativeExtensions.SetLayeredFullyOpaque(this);
             WindowNativeExtensions.SetIgnoresMouseEvents(this);
+            // Raise above the menu bar BEFORE re-applying geometry: at the default level AppKit
+            // constrains the frame away from the menu bar at Show(), so the position set below
+            // only sticks once the level is lifted (issue #56).
+            WindowNativeExtensions.SetCanCoverMenuBar(this);
             ApplyGeometry(RenderScaling);
         }
 
@@ -97,6 +101,9 @@ namespace Clowd.UI
         /// Position first (capture space), then size at the given scaling. The border width is
         /// inflated outward in whole capture-space units plus 1 extra of slack, so logical→capture
         /// size rounding can never place a border pixel inside the recorded region (risk §6.4).
+        /// Edges within ~2 logical px of a monitor edge are not rendered (or inflated) at all —
+        /// the frame there would land under the macOS menu bar or on a neighboring display
+        /// rather than visibly around the recording (issue #56).
         /// </summary>
         private void ApplyGeometry(double scaling)
         {
@@ -105,9 +112,38 @@ namespace Clowd.UI
             var toCapture = OperatingSystem.IsMacOS() ? 1.0 : scaling;
             var inflate = (int)Math.Ceiling(BorderLogicalWidth * toCapture) + 1;
 
-            Position = new PixelPoint(_region.X - inflate, _region.Y - inflate);
-            Width = (_region.Width + inflate * 2) / toCapture;
-            Height = (_region.Height + inflate * 2) / toCapture;
+            var threshold = 2 * toCapture;
+            bool left = true, top = true, right = true, bottom = true;
+            try
+            {
+                // Screen bounds are in the same capture space as _region (see field comment).
+                // Perpendicular-overlap guard: only a monitor the region actually spans against
+                // can suppress an edge.
+                foreach (var screen in Screens.All)
+                {
+                    var b = screen.Bounds;
+                    var overlapsX = _region.Left < b.Right && b.X < _region.Right;
+                    var overlapsY = _region.Top < b.Bottom && b.Y < _region.Bottom;
+                    if (overlapsY && Math.Abs(_region.Left - b.X) <= threshold) left = false;
+                    if (overlapsY && Math.Abs(_region.Right - b.Right) <= threshold) right = false;
+                    if (overlapsX && Math.Abs(_region.Top - b.Y) <= threshold) top = false;
+                    if (overlapsX && Math.Abs(_region.Bottom - b.Bottom) <= threshold) bottom = false;
+                }
+            }
+            catch
+            {
+                // Screens is best-effort; without it every edge renders, as before.
+            }
+
+            int l = left ? inflate : 0, t = top ? inflate : 0;
+            int r = right ? inflate : 0, b2 = bottom ? inflate : 0;
+
+            Position = new PixelPoint(_region.X - l, _region.Y - t);
+            Width = (_region.Width + l + r) / toCapture;
+            Height = (_region.Height + t + b2) / toCapture;
+
+            AccentBorder.BorderThickness = new Thickness(left ? 2 : 0, top ? 2 : 0, right ? 2 : 0, bottom ? 2 : 0);
+            InnerBorder.BorderThickness = new Thickness(left ? 1 : 0, top ? 1 : 0, right ? 1 : 0, bottom ? 1 : 0);
         }
     }
 }

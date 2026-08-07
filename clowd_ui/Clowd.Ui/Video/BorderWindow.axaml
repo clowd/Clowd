@@ -16,9 +16,11 @@
     <Grid IsHitTestVisible="False">
 
         <!-- 2px accent frame with a 1px white inner line. The window is positioned/sized so both
-             lines (plus >=1 physical px of slack) sit entirely OUTSIDE the recorded region. -->
+             lines (plus >=1 physical px of slack) sit entirely OUTSIDE the recorded region.
+             Thicknesses are set per-edge in code-behind: edges flush with a monitor edge are
+             suppressed entirely (issue #56). -->
         <Border Name="AccentBorder" BorderThickness="2">
-            <Border BorderThickness="1" BorderBrush="White" Background="Transparent" />
+            <Border Name="InnerBorder" BorderThickness="1" BorderBrush="White" Background="Transparent" />
         </Border>
 
         <!-- 48pt overlay text ("WAIT…"/"START"): white glyphs with a real vector accent outline.
