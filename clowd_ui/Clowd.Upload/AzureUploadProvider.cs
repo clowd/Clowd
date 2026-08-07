@@ -124,11 +124,9 @@ namespace Clowd.Upload
             return await SetPropertiesAndGetResult(blob, uploadName, false);
         }
 
-        // the accelerate protocol needs the ContentLength up front, so non-seekable streams skip
-        // acceleration and go direct via the block-upload path instead.
         public override Task<UploadResult> UploadAsync(Stream fileStream, UploadProgressHandler progress, UploadUrlHandler urlAvailable,
             string uploadName, CancellationToken cancelToken)
-            => AccelerateUploads && fileStream.CanSeek
+            => AccelerateUploads
                 ? UploadAcceleratedAsync(fileStream, progress, urlAvailable, uploadName, cancelToken)
                 : UploadAsync(fileStream, progress, uploadName, cancelToken);
 
@@ -188,7 +186,10 @@ namespace Clowd.Upload
             UploadUrlHandler urlAvailable, string uploadName, CancellationToken cancelToken)
         {
             var mimeType = _mimeDb.GetMimeFromExtension(Path.GetExtension(uploadName)).ContentType;
-            var contentLength = fileStream.Length;
+
+            // null for a non-seekable source: the SAS destination is count-free, so unknown-length
+            // sessions differ only in the create request and the ?final=1 marking of the last chunk.
+            long? contentLength = fileStream.CanSeek ? fileStream.Length : null;
 
             var key = GetNewBlobKey();
             var account = CloudStorageAccount.Parse(ConnectionString);
@@ -215,7 +216,7 @@ namespace Clowd.Upload
 
             return await AcceleratedUploadRunner.RunAsync(
                 AccelerateServerUrl, descriptor, fileStream, mimeType, contentLength, uploadName, blob.Name,
-                AcceleratedUploadClient.DefaultChunkSize, this, progress, urlAvailable, cancelToken);
+                AcceleratedUploadClient.DefaultChunkSize, this, null, progress, urlAvailable, cancelToken);
         }
 
         public override bool CanDelete(UploadDeleteInfo info)

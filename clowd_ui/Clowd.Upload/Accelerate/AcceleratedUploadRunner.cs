@@ -18,39 +18,71 @@ namespace Clowd.Upload.Accelerate
             DestinationDescriptor descriptor,
             Stream fileStream,
             string contentType,
-            long contentLength,
+            long? contentLength,
             string uploadName,
             string uploadKey,
             long chunkSize,
             IUploadProvider provider,
+            Func<int, string> lazyPartUrl,
             UploadProgressHandler progress,
             UploadUrlHandler urlAvailable,
-            CancellationToken cancelToken)
+            CancellationToken cancelToken,
+            Func<Task> onCreateFailed = null)
         {
-            if (contentLength > AcceleratedUploadClient.MaxUploadBytes)
+            // unknown-length sources (contentLength == null) can't be pre-checked; the server
+            // enforces the cap cumulatively as their chunks arrive.
+            if (contentLength.HasValue && contentLength.Value > AcceleratedUploadClient.MaxUploadBytes)
                 throw new InvalidOperationException(
                     $"The file is larger than the {AcceleratedUploadClient.MaxUploadBytes / (1024 * 1024 * 1024)} GiB accelerated-upload limit.");
 
             chunkSize = AcceleratedUploadClient.ClampChunkSize(chunkSize);
-            var chunkCount = AcceleratedUploadClient.ComputeChunkCount(contentLength, chunkSize);
 
             var client = new AcceleratedUploadClient(serverUrl);
 
-            var create = await client.CreateAsync(new CreateUploadRequest
+            CreateUploadResponse create;
+            try
             {
-                FileName = uploadName,
-                ContentType = contentType,
-                ContentLength = contentLength,
-                ChunkSize = chunkSize,
-                Destination = descriptor,
-            }, cancelToken);
+                create = await client.CreateAsync(new CreateUploadRequest
+                {
+                    FileName = uploadName,
+                    ContentType = contentType,
+                    ContentLength = contentLength,
+                    ChunkSize = chunkSize,
+                    Destination = descriptor,
+                }, cancelToken);
+            }
+            catch
+            {
+                // no server session exists yet, so nothing else can ever release resources the
+                // caller staged for this upload (an initiated S3 multipart) — give it the chance.
+                if (onCreateFailed != null)
+                {
+                    try { await onCreateFailed(); }
+                    catch { }
+                }
+
+                throw;
+            }
 
             // the whole point of the feature: the link is shareable now, before any bytes transfer.
             urlAvailable?.Invoke(create.DownloadUrl);
 
             try
             {
-                await client.UploadChunksAsync(create.Id, create.UploadToken, fileStream, chunkSize, chunkCount, progress, cancelToken);
+                if (contentLength.HasValue)
+                {
+                    var chunkCount = AcceleratedUploadClient.ComputeChunkCount(contentLength.Value, chunkSize);
+                    await client.UploadChunksAsync(create.Id, create.UploadToken, fileStream, chunkSize, chunkCount, progress, cancelToken);
+                }
+                else
+                {
+                    // unknown length: the server's clamped chunkSize is authoritative here (there
+                    // is no create-time part-URL plan it has to agree with), and the last chunk is
+                    // marked ?final=1 when the source hits EOF.
+                    var serverChunkSize = create.ChunkSize > 0 ? create.ChunkSize : chunkSize;
+                    await client.UploadUnknownLengthChunksAsync(
+                        create.Id, create.UploadToken, fileStream, serverChunkSize, lazyPartUrl, progress, cancelToken);
+                }
             }
             catch
             {

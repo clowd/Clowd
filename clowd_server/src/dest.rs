@@ -15,7 +15,12 @@ use crate::{azure, s3};
 /// Relay one chunk to its destination. Returns the per-chunk relay result:
 /// azure block id / s3 ETag / a marker for discard. Idempotent by construction
 /// (fixed block ids / part numbers).
-pub async fn relay_chunk(dest: &Destination, n: u64, bytes: Vec<u8>) -> Result<String> {
+///
+/// `part_url` is the presigned S3 UploadPart URL for chunk `n`, resolved by the
+/// caller via `SessionState::part_url` — create-time for known-length sessions,
+/// lazily collected (`x-clowd-part-url`) for unknown-length ones. Ignored for
+/// azure/discard.
+pub async fn relay_chunk(dest: &Destination, n: u64, bytes: Vec<u8>, part_url: Option<&str>) -> Result<String> {
     match dest {
         Destination::AzureBlob {
             sas_url,
@@ -27,12 +32,9 @@ pub async fn relay_chunk(dest: &Destination, n: u64, bytes: Vec<u8>) -> Result<S
             Ok(azure::block_id(n))
         }
         Destination::S3Multipart {
-            part_urls,
             ..
         } => {
-            let url = part_urls
-                .get(n as usize)
-                .ok_or_else(|| worker::Error::RustError(format!("no presigned part url for chunk {n}")))?;
+            let url = part_url.ok_or_else(|| worker::Error::RustError(format!("no presigned part url for chunk {n}")))?;
             let resp = send(url, Method::Put, Some(bytes), &[]).await?;
             let resp = ensure_success(resp, "s3 UploadPart").await?;
             let etag = resp

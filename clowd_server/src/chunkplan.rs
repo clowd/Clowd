@@ -30,6 +30,16 @@ pub struct ChunkPlan {
     pub content_length: u64,
 }
 
+/// A validated create-time plan: a full chunk plan when `contentLength` is
+/// known, or just the chunk size when it isn't (v2 additive — the total is
+/// enforced cumulatively as chunks arrive and the count is discovered when the
+/// client marks the final chunk with `?final=1`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PlanKind {
+    Known(ChunkPlan),
+    Unknown { chunk_size: u64 },
+}
+
 /// Clamp a (possibly client-requested) chunk size into the allowed band, applying
 /// the large-file floor. `requested == None` uses the default.
 pub fn clamp_chunk_size(requested: Option<u64>, content_length: u64) -> u64 {
@@ -39,6 +49,24 @@ pub fn clamp_chunk_size(requested: Option<u64>, content_length: u64) -> u64 {
         size = DEFAULT_CHUNK;
     }
     size
+}
+
+/// Chunk size for an unknown-length upload: clamped into [5, 32] MiB with the
+/// 16 MiB default. The >5 GiB large-file floor cannot apply — the total is
+/// unknown at create time.
+pub fn clamp_chunk_size_unknown(requested: Option<u64>) -> u64 {
+    requested
+        .unwrap_or(DEFAULT_CHUNK)
+        .clamp(MIN_CHUNK, MAX_CHUNK)
+}
+
+/// Total upload size implied by accepting chunk `n` with `len` bytes on an
+/// unknown-length session (chunks 0..n are each exactly `chunk_size` — the
+/// non-final exact-size rule guarantees it). Saturating so hostile indices
+/// cannot overflow past the cap check.
+pub fn implied_total(n: u64, chunk_size: u64, len: u64) -> u64 {
+    n.saturating_mul(chunk_size)
+        .saturating_add(len)
 }
 
 /// Number of chunks for `content_length` at `chunk_size` (ceil division).
@@ -79,6 +107,18 @@ pub fn plan(content_length: i64, requested_chunk_size: Option<u64>) -> Result<Ch
         chunk_count,
         content_length,
     })
+}
+
+/// Validate a create request for either session kind. A request WITH
+/// `contentLength` behaves byte-identically to `plan`; absent/null means an
+/// unknown-length session (`Err(msg)` still maps to HTTP 400).
+pub fn plan_request(content_length: Option<i64>, requested_chunk_size: Option<u64>) -> Result<PlanKind, String> {
+    match content_length {
+        Some(len) => Ok(PlanKind::Known(plan(len, requested_chunk_size)?)),
+        None => Ok(PlanKind::Unknown {
+            chunk_size: clamp_chunk_size_unknown(requested_chunk_size),
+        }),
+    }
 }
 
 #[cfg(test)]
@@ -136,5 +176,51 @@ mod tests {
         let p = plan(MAX_UPLOAD_BYTES as i64, None).unwrap();
         assert_eq!(p.chunk_size, DEFAULT_CHUNK);
         assert_eq!(p.chunk_count, 640);
+    }
+
+    #[test]
+    fn unknown_clamp_has_no_large_file_floor() {
+        assert_eq!(clamp_chunk_size_unknown(None), DEFAULT_CHUNK);
+        assert_eq!(clamp_chunk_size_unknown(Some(1 * MIB)), MIN_CHUNK);
+        assert_eq!(clamp_chunk_size_unknown(Some(64 * MIB)), MAX_CHUNK);
+        // the >5 GiB floor cannot apply when the total is unknown — a small
+        // explicit chunk size within the band is preserved.
+        assert_eq!(clamp_chunk_size_unknown(Some(5 * MIB)), 5 * MIB);
+    }
+
+    #[test]
+    fn plan_request_known_matches_plan() {
+        let known = plan_request(Some(100 * MIB as i64), Some(20 * MIB)).unwrap();
+        assert_eq!(known, PlanKind::Known(plan(100 * MIB as i64, Some(20 * MIB)).unwrap()));
+        // known-length errors pass through unchanged
+        assert!(plan_request(Some(-1), None).is_err());
+        assert!(plan_request(Some((MAX_UPLOAD_BYTES + 1) as i64), None).is_err());
+    }
+
+    #[test]
+    fn plan_request_unknown_length() {
+        assert_eq!(
+            plan_request(None, None).unwrap(),
+            PlanKind::Unknown {
+                chunk_size: DEFAULT_CHUNK
+            }
+        );
+        assert_eq!(
+            plan_request(None, Some(1 * MIB)).unwrap(),
+            PlanKind::Unknown {
+                chunk_size: MIN_CHUNK
+            }
+        );
+    }
+
+    #[test]
+    fn implied_total_math() {
+        assert_eq!(implied_total(0, DEFAULT_CHUNK, 5), 5);
+        assert_eq!(implied_total(3, DEFAULT_CHUNK, 100), 3 * DEFAULT_CHUNK + 100);
+        // 640 full 16 MiB chunks is exactly the 10 GiB cap
+        assert_eq!(implied_total(639, DEFAULT_CHUNK, DEFAULT_CHUNK), MAX_UPLOAD_BYTES);
+        assert!(implied_total(640, DEFAULT_CHUNK, 1) > MAX_UPLOAD_BYTES);
+        // saturates instead of overflowing on hostile indices
+        assert_eq!(implied_total(u64::MAX, MAX_CHUNK, 1), u64::MAX);
     }
 }

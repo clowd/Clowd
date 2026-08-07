@@ -1,5 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Clowd.Upload.Accelerate;
 using Xunit;
 
@@ -99,6 +104,190 @@ namespace Clowd.Shared.Tests
             // (and any S3 part URLs minted for it) stays consistent with what the server relays.
             Assert.Equal(AcceleratedUploadClient.DefaultChunkSize,
                          AcceleratedUploadClient.ClampChunkSize(AcceleratedUploadClient.DefaultChunkSize));
+        }
+    }
+
+    public class UnknownLengthChunkerTests
+    {
+        // a stream that hides its length and dribbles data out a few bytes per read, like a
+        // pipe fed by a live zip compressor.
+        private sealed class DribbleStream : Stream
+        {
+            private readonly byte[] _data;
+            private readonly int _maxRead;
+            private int _pos;
+
+            public DribbleStream(byte[] data, int maxRead)
+            {
+                _data = data;
+                _maxRead = maxRead;
+            }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                var n = Math.Min(Math.Min(count, _maxRead), _data.Length - _pos);
+                Array.Copy(_data, _pos, buffer, offset, n);
+                _pos += n;
+                return n;
+            }
+        }
+
+        private static byte[] Sequence(int length)
+            => Enumerable.Range(0, length).Select(i => (byte)(i % 251)).ToArray();
+
+        private static async Task<List<(byte[] Bytes, bool IsFinal)>> ReadAll(byte[] data, long chunkSize, int maxRead = 3)
+        {
+            var chunker = new UnknownLengthChunker(new DribbleStream(data, maxRead), chunkSize);
+            var chunks = new List<(byte[], bool)>();
+            while (true)
+            {
+                var (length, isFinal) = await chunker.ReadNextAsync(CancellationToken.None).ConfigureAwait(false);
+                chunks.Add((chunker.Buffer.Take(length).ToArray(), isFinal));
+                if (isFinal)
+                    return chunks;
+            }
+        }
+
+        [Theory]
+        [InlineData(1)]        // single short final chunk
+        [InlineData(7)]        // just under the boundary
+        [InlineData(8)]        // exactly one chunk -> full-size final is legal
+        [InlineData(9)]        // one byte over -> (8, false) + (1, true)
+        [InlineData(16)]       // exact multiple -> full-size final chunk, no empty tail
+        [InlineData(17)]
+        [InlineData(24)]
+        [InlineData(100)]
+        public async Task ChunksAreExactSize_ExceptFinal_AndOnlyLastIsFinal(int total)
+        {
+            const long chunkSize = 8;
+            var chunks = await ReadAll(Sequence(total), chunkSize).ConfigureAwait(true);
+
+            var expectedCount = (total + (int)chunkSize - 1) / (int)chunkSize;
+            Assert.Equal(expectedCount, chunks.Count);
+
+            // every chunk except the last is exactly chunkSize and not final
+            foreach (var (bytes, isFinal) in chunks.Take(chunks.Count - 1))
+            {
+                Assert.Equal(chunkSize, bytes.Length);
+                Assert.False(isFinal);
+            }
+
+            // the final chunk is marked, and is 1..=chunkSize bytes
+            var last = chunks[^1];
+            Assert.True(last.IsFinal);
+            Assert.InRange(last.Bytes.Length, 1, (int)chunkSize);
+
+            // reassembling the chunks yields the original bytes (the lookahead byte carried
+            // across every chunk boundary must not be lost or duplicated)
+            Assert.Equal(Sequence(total), chunks.SelectMany(c => c.Bytes).ToArray());
+        }
+
+        [Fact]
+        public async Task EmptyStream_ReportsZeroLengthFinal()
+        {
+            var chunker = new UnknownLengthChunker(new DribbleStream(Array.Empty<byte>(), 3), 8);
+            var (length, isFinal) = await chunker.ReadNextAsync(CancellationToken.None).ConfigureAwait(true);
+
+            // no valid chunk exists (the protocol rejects zero-byte chunks); the caller turns
+            // this into an error rather than sending it.
+            Assert.Equal(0, length);
+            Assert.True(isFinal);
+        }
+
+        [Fact]
+        public async Task ReadingPastFinal_Throws()
+        {
+            var chunker = new UnknownLengthChunker(new DribbleStream(Sequence(5), 3), 8);
+            var (_, isFinal) = await chunker.ReadNextAsync(CancellationToken.None).ConfigureAwait(true);
+            Assert.True(isFinal);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => chunker.ReadNextAsync(CancellationToken.None)).ConfigureAwait(true);
+        }
+
+        [Fact]
+        public async Task BufferContents_StableForRetry_UntilNextRead()
+        {
+            // a failed PUT retries from the same buffer; the chunk bytes must still be there.
+            var data = Sequence(20);
+            var chunker = new UnknownLengthChunker(new DribbleStream(data, 3), 8);
+
+            var (length, _) = await chunker.ReadNextAsync(CancellationToken.None).ConfigureAwait(true);
+            Assert.Equal(8, length);
+            Assert.Equal(data.Take(8), chunker.Buffer.Take(8));
+            // read again ("retry") without advancing — same bytes
+            Assert.Equal(data.Take(8), chunker.Buffer.Take(8));
+
+            var (length2, _) = await chunker.ReadNextAsync(CancellationToken.None).ConfigureAwait(true);
+            Assert.Equal(8, length2);
+            Assert.Equal(data.Skip(8).Take(8), chunker.Buffer.Take(8));
+        }
+    }
+
+    public class AccelerateJsonSerializationTests
+    {
+        [Fact]
+        public void CreateRequest_KnownLength_SendsCamelCaseContentLength()
+        {
+            var json = JsonSerializer.Serialize(new CreateUploadRequest
+            {
+                FileName = "file.zip",
+                ContentType = "application/zip",
+                ContentLength = 12345,
+                ChunkSize = 16 * 1024 * 1024,
+                Destination = new DestinationDescriptor { Type = "discard" },
+            }, AccelerateJsonContext.Default.CreateUploadRequest);
+
+            using var doc = JsonDocument.Parse(json);
+            Assert.Equal(12345, doc.RootElement.GetProperty("contentLength").GetInt64());
+            Assert.Equal(16 * 1024 * 1024, doc.RootElement.GetProperty("chunkSize").GetInt64());
+        }
+
+        [Fact]
+        public void CreateRequest_UnknownLength_OmitsContentLength()
+        {
+            var json = JsonSerializer.Serialize(new CreateUploadRequest
+            {
+                FileName = "file.zip",
+                ContentType = "application/zip",
+                ContentLength = null,
+                ChunkSize = 16 * 1024 * 1024,
+                Destination = new DestinationDescriptor { Type = "discard" },
+            }, AccelerateJsonContext.Default.CreateUploadRequest);
+
+            // absent and null are equivalent on the wire (both mean "unknown length"); the
+            // context's WhenWritingNull emits the absent form.
+            using var doc = JsonDocument.Parse(json);
+            Assert.False(doc.RootElement.TryGetProperty("contentLength", out _));
+        }
+
+        [Fact]
+        public void S3Descriptor_UnknownLength_SendsEmptyPartUrlsArray()
+        {
+            // the spec requires partUrls to be present-and-empty (not omitted) for an
+            // unknown-length s3-multipart create.
+            var json = JsonSerializer.Serialize(new DestinationDescriptor
+            {
+                Type = "s3-multipart",
+                PartUrls = Array.Empty<string>(),
+                CompleteUrl = "https://example.com/complete",
+                AbortUrl = "https://example.com/abort",
+                FinalUrl = "https://example.com/final",
+            }, AccelerateJsonContext.Default.DestinationDescriptor);
+
+            using var doc = JsonDocument.Parse(json);
+            var partUrls = doc.RootElement.GetProperty("partUrls");
+            Assert.Equal(JsonValueKind.Array, partUrls.ValueKind);
+            Assert.Equal(0, partUrls.GetArrayLength());
         }
     }
 

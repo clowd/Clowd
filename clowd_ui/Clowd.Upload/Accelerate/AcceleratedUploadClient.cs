@@ -108,16 +108,60 @@ namespace Clowd.Upload.Accelerate
                     throw new IOException("The upload stream ended before all chunks were read.");
 
                 baseOffset = n * chunkSize;
-                await PutChunkWithRetryAsync(http, id, uploadToken, n, buffer, read, ct);
+                await PutChunkWithRetryAsync(http, id, uploadToken, n, buffer, read, false, null, ct);
 
                 // ensure progress lands on the exact boundary even if the handler under-reports.
                 progress?.Invoke(baseOffset + read);
             }
         }
 
-        private async Task PutChunkWithRetryAsync(
-            HttpClient http, string id, string uploadToken, int n, byte[] buffer, int length, CancellationToken ct)
+        /// <summary>
+        /// Streams a source of unknown length to the server in sequential chunks, marking the last
+        /// one with <c>?final=1</c> so the server learns the total only when EOF is reached. For
+        /// s3-multipart destinations the create request carried no part URLs, so each chunk's
+        /// presigned UploadPart URL is minted lazily via <paramref name="partUrl"/> and travels in
+        /// the <c>x-clowd-part-url</c> header (null for count-free destinations such as azure-blob).
+        /// Returns the total number of bytes sent.
+        /// </summary>
+        public async Task<long> UploadUnknownLengthChunksAsync(
+            string id, string uploadToken, Stream source, long chunkSize, Func<int, string> partUrl,
+            UploadProgressHandler progress, CancellationToken ct)
         {
+            long baseOffset = 0;
+
+            using var http = NewClient(ChunkTimeout, args => progress?.Invoke(baseOffset + args));
+
+            var chunker = new UnknownLengthChunker(source, chunkSize);
+            for (int n = 0; ; n++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var (length, isFinal) = await chunker.ReadNextAsync(ct);
+
+                // the server rejects zero-byte chunks, so an empty source has no valid final
+                // chunk to mark; the caller never produces one (a streamed zip is never empty).
+                if (length == 0)
+                    throw new IOException("The upload stream ended before producing any data.");
+
+                baseOffset = n * chunkSize;
+                await PutChunkWithRetryAsync(http, id, uploadToken, n, chunker.Buffer, length, isFinal, partUrl?.Invoke(n), ct);
+
+                // ensure progress lands on the exact boundary even if the handler under-reports.
+                progress?.Invoke(baseOffset + length);
+
+                if (isFinal)
+                    return baseOffset + length;
+            }
+        }
+
+        private async Task PutChunkWithRetryAsync(
+            HttpClient http, string id, string uploadToken, int n, byte[] buffer, int length, bool final, string partUrl,
+            CancellationToken ct)
+        {
+            var url = $"{_baseUrl}/api/v1/uploads/{id}/chunks/{n}";
+            if (final)
+                url += "?final=1";
+
             Exception last = null;
             for (int attempt = 0; attempt < 2; attempt++)
             {
@@ -127,11 +171,13 @@ namespace Clowd.Upload.Accelerate
                     using var content = new ByteArrayContent(buffer, 0, length);
                     content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
 
-                    using var msg = new HttpRequestMessage(HttpMethod.Put, $"{_baseUrl}/api/v1/uploads/{id}/chunks/{n}")
+                    using var msg = new HttpRequestMessage(HttpMethod.Put, url)
                     {
                         Content = content,
                     };
                     msg.Headers.Authorization = new AuthenticationHeaderValue("Bearer", uploadToken);
+                    if (partUrl != null)
+                        msg.Headers.TryAddWithoutValidation("x-clowd-part-url", partUrl);
 
                     using var resp = await http.SendAsync(msg, ct);
                     if (resp.IsSuccessStatusCode)
@@ -258,7 +304,11 @@ namespace Clowd.Upload.Accelerate
     {
         public string FileName { get; set; }
         public string ContentType { get; set; }
-        public long ContentLength { get; set; }
+
+        // null for an unknown-length (non-seekable) source; WhenWritingNull omits it on the wire,
+        // which the server treats identically to an explicit null. Always sent when known so
+        // seekable uploads stay byte-identical to the fixed-plan protocol.
+        public long? ContentLength { get; set; }
         public long ChunkSize { get; set; }
         public DestinationDescriptor Destination { get; set; }
     }

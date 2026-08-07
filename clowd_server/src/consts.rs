@@ -29,3 +29,9 @@ pub const DEFAULT_ORIGIN: &str = "https://clwd.app";
 /// DO reads its route from here, falling back to the URL path for `do_request`
 /// calls that build a fresh URL.
 pub const DO_ROUTE_HEADER: &str = "X-DO-Route";
+
+/// Request header carrying the presigned S3 UploadPart URL on each chunk PUT of
+/// an unknown-length upload (part URLs cannot be presigned up front when the
+/// part count is unknown). Ignored for azure-blob/discard destinations and for
+/// known-length sessions.
+pub const PART_URL_HEADER: &str = "x-clowd-part-url";
