@@ -1,3 +1,6 @@
+use std::thread;
+use std::time::Duration;
+
 use winit::window::Window;
 
 use crate::geometry::ScreenRect;
@@ -36,26 +39,90 @@ pub fn copy_to_clipboard_with_peek(
         }
     }
 
-    match arboard::Clipboard::new() {
-        Ok(mut clipboard) => {
-            let img = arboard::ImageData {
-                width: width as usize,
-                height: height as usize,
-                bytes: std::borrow::Cow::Owned(rgba),
-            };
-            if let Err(e) = clipboard.set_image(img) {
-                log::error!("copy: clipboard set_image failed: {e}");
-                ActionResult::Failed(format!("Failed to copy to clipboard: {e}"))
-            } else {
-                log::info!("copied {}x{} image to clipboard", width, height);
-                ActionResult::Success
-            }
+    match set_clipboard_image(&rgba, width as usize, height as usize) {
+        Ok(()) => {
+            log::info!("copied {}x{} image to clipboard", width, height);
+            ActionResult::Success
         }
         Err(e) => {
-            log::error!("copy: failed to open clipboard: {e}");
-            ActionResult::Failed(format!("Failed to open clipboard: {e}"))
+            log::error!("copy: clipboard write failed after {CLIPBOARD_SET_ATTEMPTS} attempts: {e}");
+            ActionResult::Failed(format!("Failed to copy to clipboard: {e}"))
         }
     }
+}
+
+/// How many times the whole clipboard write is attempted before giving up.
+const CLIPBOARD_SET_ATTEMPTS: u32 = 5;
+
+/// Delay before the first retry; doubles each time. 15/30/60/120ms is ~225ms in the worst case,
+/// which stays under what reads as a lag on a copy the user explicitly asked for.
+const CLIPBOARD_RETRY_BACKOFF: Duration = Duration::from_millis(15);
+
+/// Puts an image on the clipboard, re-running the whole write if it loses a race for it.
+///
+/// Windows lets exactly one process hold the clipboard open at a time, and a write is not one
+/// atomic step — it opens, empties, then hands over each format. Anything else reacting to the
+/// copy can take the clipboard away between those steps: clipboard managers, and Windows' own
+/// clipboard-history service, which wakes up on precisely the `EmptyClipboard` we just issued.
+///
+/// `arboard` retries its `OpenClipboard` internally, so that half is already covered — but the
+/// failure we actually saw (CLOWD-Y) was error 1418 `ERROR_CLIPBOARD_NOT_OPEN` coming out of
+/// `SetClipboardData`, i.e. the open had *succeeded* and the clipboard was gone by the time the
+/// pixels were handed over. Nothing short of re-running open/empty/set recovers from that.
+///
+/// The window is small but real, and it is widened by `arboard` opening the clipboard with a null
+/// owner: `EmptyClipboard` then sets the clipboard owner to NULL, which Windows documents as a
+/// cause of `SetClipboardData` failing. Fixing that properly means owning the Win32 image path
+/// ourselves rather than calling `arboard`, so retrying is the proportionate fix — but it is a
+/// mitigation, and if this starts failing with retries exhausted, that is the thread to pull.
+fn set_clipboard_image(rgba: &[u8], width: usize, height: usize) -> Result<(), String> {
+    retry_clipboard_write(|| {
+        // a fresh Clipboard per attempt: on Windows the open happens inside the write and is what
+        // has to be redone, and on the other backends this re-establishes the connection.
+        arboard::Clipboard::new()
+            .and_then(|mut clipboard| {
+                clipboard.set_image(arboard::ImageData {
+                    width,
+                    height,
+                    bytes: std::borrow::Cow::Borrowed(rgba),
+                })
+            })
+            .map_err(|e| e.to_string())
+    })
+}
+
+/// Runs `write` until it succeeds or [`CLIPBOARD_SET_ATTEMPTS`] is exhausted, backing off between
+/// tries and returning the last failure. Split out from [`set_clipboard_image`] so the retry
+/// policy is exercised by tests without needing a real clipboard.
+fn retry_clipboard_write<F>(mut write: F) -> Result<(), String>
+where
+    F: FnMut() -> Result<(), String>,
+{
+    let mut backoff = CLIPBOARD_RETRY_BACKOFF;
+
+    for attempt in 1..=CLIPBOARD_SET_ATTEMPTS {
+        match write() {
+            Ok(()) => {
+                if attempt > 1 {
+                    log::info!("copy: clipboard write succeeded on attempt {attempt}");
+                }
+                return Ok(());
+            }
+            // the last attempt's error is the one that gets reported, so don't sleep past it
+            Err(e) if attempt == CLIPBOARD_SET_ATTEMPTS => return Err(e),
+            Err(e) => {
+                // warn!, not error!: an attempt a later one recovers from is a breadcrumb.
+                // Logging it at error! would file a Sentry issue per lost race — the exact
+                // noise this is meant to remove.
+                log::warn!("copy: clipboard write attempt {attempt} failed: {e}");
+                thread::sleep(backoff);
+                backoff *= 2;
+            }
+        }
+    }
+
+    // unreachable while CLIPBOARD_SET_ATTEMPTS >= 1: the loop either returns or exhausts.
+    Err(String::from("clipboard unavailable"))
 }
 
 /// Save the selected region to a file via save dialog.
@@ -114,5 +181,69 @@ pub fn save_to_file_with_peek(
     } else {
         log::info!("saved {}x{} image to {:?}", width, height, path);
         ActionResult::Success
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::Cell;
+
+    /// A write that never loses the race is attempted exactly once.
+    #[test]
+    fn retry_clipboard_write_succeeds_without_retrying() {
+        let calls = Cell::new(0);
+        let result = retry_clipboard_write(|| {
+            calls.set(calls.get() + 1);
+            Ok(())
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(calls.get(), 1);
+    }
+
+    /// The CLOWD-Y case: the clipboard is taken away for the first couple of tries and then
+    /// available. This must report success, because the image did reach the clipboard.
+    #[test]
+    fn retry_clipboard_write_recovers_after_transient_failures() {
+        let calls = Cell::new(0);
+        let result = retry_clipboard_write(|| {
+            calls.set(calls.get() + 1);
+            if calls.get() < 3 {
+                Err(String::from("SetClipboardData failed with error: (os error 1418)"))
+            } else {
+                Ok(())
+            }
+        });
+
+        assert!(result.is_ok());
+        assert_eq!(calls.get(), 3);
+    }
+
+    /// A clipboard that is never available gives up after the full budget and surfaces the last
+    /// error — this is the only path that reaches `error!`, and so Sentry.
+    #[test]
+    fn retry_clipboard_write_gives_up_and_reports_the_last_error() {
+        let calls = Cell::new(0);
+        let result = retry_clipboard_write(|| {
+            calls.set(calls.get() + 1);
+            Err(format!("failure {}", calls.get()))
+        });
+
+        assert_eq!(calls.get(), CLIPBOARD_SET_ATTEMPTS);
+        assert_eq!(result, Err(format!("failure {CLIPBOARD_SET_ATTEMPTS}")));
+    }
+
+    /// The retry budget must not stall a copy the user is waiting on. Worst case is the sum of
+    /// the backoffs, and the final attempt must not be followed by one.
+    #[test]
+    fn retry_clipboard_write_stays_within_its_time_budget() {
+        let started = std::time::Instant::now();
+        let _ = retry_clipboard_write(|| Err(String::from("nope")));
+        let elapsed = started.elapsed();
+
+        // 15 + 30 + 60 + 120 = 225ms of backoff across 5 attempts, with no sleep after the last.
+        assert!(elapsed >= Duration::from_millis(225), "backed off too little: {elapsed:?}");
+        assert!(elapsed < Duration::from_millis(600), "backed off too much: {elapsed:?}");
     }
 }
