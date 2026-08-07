@@ -115,6 +115,19 @@ namespace Clowd
 
                 SetupGlobalHotkeys();
 
+                // macOS: relaunching a running app (Dock click, Launchpad, Spotlight, `open -a`)
+                // does not start a second process — LaunchServices sends the existing instance a
+                // reopen event instead, surfaced by Avalonia as ActivationKind.Reopen. This is
+                // the mac counterpart of MutexArgsForwarder.ShowMainWindowRequested.
+                if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
+                {
+                    activatable.Activated += (s, e) =>
+                    {
+                        if (e.Kind == ActivationKind.Reopen)
+                            Dispatcher.UIThread.Post(ShowMainWindowForAppActivation);
+                    };
+                }
+
                 // periodic update checks, and (opt-in) downloading + applying them while idle.
                 UpdateService.Default.Start();
 
@@ -200,6 +213,7 @@ namespace Clowd
         {
             _processor = new MutexArgsForwarder();
             _processor.ArgsReceived += (s, e) => Dispatcher.UIThread.Post(() => OnFilesReceived(e.Args));
+            _processor.ShowMainWindowRequested += (s, e) => Dispatcher.UIThread.Post(ShowMainWindowForAppActivation);
 
             try
             {
@@ -483,6 +497,17 @@ namespace Clowd
                 try { window.Close(); }
                 catch { }
             }
+        }
+
+        /// <summary>The user "launched" Clowd while it was already running (Windows second
+        /// instance with no args, macOS reopen). Surface the main window on Recents; if it is
+        /// already visible just bring it forward without yanking the user off their tab.</summary>
+        private void ShowMainWindowForAppActivation()
+        {
+            bool alreadyVisible = ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
+                                  && desktop.Windows.OfType<MainWindow>().Any(w => w.IsVisible);
+
+            PageManager.Current.GetSettingsPage().Open(alreadyVisible ? null : SettingsPageTab.RecentSessions);
         }
 
         private async void OnFilesReceived(string[] filePaths)
