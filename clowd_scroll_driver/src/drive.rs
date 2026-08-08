@@ -23,15 +23,21 @@
 //! `fatal_error`, and it still exits 0: the shell reads the event, not the
 //! code.
 //!
-//! Three things end a run early, and all three keep the partial capture:
-//! the user pressing Esc (level-sampled every 50ms throughout the waits
-//! and latched, because the *target* owns the keyboard focus, not us, and
-//! a tap only lasts ~100ms — one sample per step would miss most of them),
-//! the user moving the mouse off the parked scroll point, and a `stop`
-//! from the shell's HUD. The drift stop alone finalizes through a short
-//! grace window in which a `cancel` still wins: the HUD's buttons can only
-//! be reached by moving the cursor, so the drift always fires just before
-//! the click lands.
+//! Two things end a run early, and both keep the partial capture: the user
+//! pressing Esc (level-sampled every 50ms throughout the waits and latched,
+//! because the *target* owns the keyboard focus, not us, and a tap only
+//! lasts ~100ms — one sample per step would miss most of them), and a
+//! `stop` from the shell's HUD.
+//!
+//! Taking the mouse back does *not* end the run — it pauses it. The driver
+//! parks the cursor on the scroll point because that is what aims the
+//! wheel, so a user who moves the pointer is both scrolling something else
+//! and dragging the picture out from under the capture. Past
+//! [`CURSOR_DRIFT_PX`] the loop stops wheeling, says so on the status
+//! channel, and waits; once the pointer has been still for
+//! [`RESUME_STILL_FOR`] it is parked back on the scroll point and the
+//! capture carries on where it left off. Paused time is excluded from the
+//! wall-clock cap, so an interruption cannot silently truncate a run.
 
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
@@ -83,20 +89,60 @@ const SETTLE_MIN: Duration = Duration::from_millis(150);
 /// every frame after it.
 const START_DELAY: Duration = Duration::from_millis(350);
 
-/// How far the cursor may drift from the parked scroll point before we read
-/// it as the user taking the mouse back. Generous enough to survive a
-/// nudged desk, small enough that an intentional move always registers.
-const CURSOR_DRIFT_PX: i32 = 8;
+/// How far the cursor may drift from the parked scroll point before the run
+/// pauses. Generous enough to survive a nudged desk, small enough that an
+/// intentional move always registers.
+const CURSOR_DRIFT_PX: i32 = 10;
 
-/// How long a drift-triggered stop keeps listening for a `cancel` before
-/// finalizing. The HUD's FINISH and CANCEL buttons can only be reached by
-/// moving the cursor off the parked point, so the drift stop always fires
-/// first and the click lands a beat later — and finalizing immediately
-/// would turn a CANCEL into a kept session with an editor window on top of
-/// it. Long enough for a click already in flight, short enough that a
-/// plain mouse-grab stop still feels instant. Only drift gets this grace;
-/// Esc and a stdin `stop` finalize immediately.
-const DRIFT_CANCEL_GRACE: Duration = Duration::from_millis(400);
+/// How long the cursor must hold still before a paused run parks it back on
+/// the scroll point and resumes. Long enough that it never fires while
+/// someone is still moving the mouse — including the pauses in the middle
+/// of a deliberate movement — and short enough that letting go of the mouse
+/// visibly restarts the capture.
+const RESUME_STILL_FOR: Duration = Duration::from_secs(3);
+
+/// How far the cursor may wander between two polls and still count as
+/// "still". A hand resting on a mouse nudges it a pixel at a time, and
+/// without a little slop the resume timer would never elapse; measured from
+/// where the still period *began*, not from the last poll, so a slow
+/// continuous creep still counts as movement.
+const PAUSE_STILL_SLOP_PX: i32 = 2;
+
+/// How often a paused run re-reads the cursor.
+const PAUSE_POLL: Duration = Duration::from_millis(50);
+
+/// How long the cursor must be still before the HUD starts counting down to
+/// the resume. Short enough that letting go of the mouse is acknowledged
+/// almost at once, long enough that drawing breath mid-movement does not
+/// start a countdown that immediately reverts — which reads as a flicker,
+/// not as feedback.
+const COUNTDOWN_AFTER: Duration = Duration::from_secs(1);
+
+/// How long one pause may last before the run gives up and finalizes what
+/// it has. Only reachable by a cursor that keeps *moving* for this long —
+/// stillness resumes after [`RESUME_STILL_FOR`] — which means the user is
+/// doing something else entirely and is not coming back to a capture that
+/// would otherwise sit there holding a border window on their screen
+/// forever.
+const PAUSE_MAX: Duration = Duration::from_secs(60);
+
+// The pause's shape, enforced where it is defined rather than in a test.
+const _: () = {
+    // A resume has to be reachable: the run must be able to sit still for
+    // the resume delay without tripping the give-up cap first.
+    assert!(RESUME_STILL_FOR.as_secs() < PAUSE_MAX.as_secs());
+    // Polling has to be fine-grained enough to see movement inside the
+    // window it is measuring stillness over.
+    assert!(PAUSE_POLL.as_millis() < RESUME_STILL_FOR.as_millis());
+    // The countdown has to have something left to count: it starts once the
+    // cursor has been still this long and ticks down whole seconds from
+    // there, so it must begin at least a second before the resume.
+    assert!(COUNTDOWN_AFTER.as_millis() + 1_000 <= RESUME_STILL_FOR.as_millis());
+    // Slop strictly under the drift threshold: at or above it, a cursor
+    // sitting just past the threshold would read as moving forever and the
+    // run would never resume.
+    assert!(PAUSE_STILL_SLOP_PX < CURSOR_DRIFT_PX);
+};
 
 /// Hard caps. Infinite-scroll feeds never end, so something has to; each
 /// one produces `max_reached` with the partial composite kept, and the
@@ -160,7 +206,18 @@ enum DriveEvent {
     Ready,
     /// Progress. Emitted at each phase change of every step, so the shell's
     /// HUD can show both a frame count and what the driver is waiting on.
-    Status { frames: u32, height_px: u32, state: DriveState },
+    ///
+    /// `resume_in_s` rides along only on the `resuming` state — the whole
+    /// seconds left before a paused run takes the cursor back. Omitted
+    /// everywhere else so every other status line keeps the exact shape it
+    /// has always had.
+    Status {
+        frames: u32,
+        height_px: u32,
+        state: DriveState,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        resume_in_s: Option<u64>,
+    },
     /// The run ended. Unless `result` is `failed`, `session.json` is
     /// already on disk.
     Done { result: DriveResult, frames: u32, height_px: u32 },
@@ -176,6 +233,15 @@ enum DriveState {
     /// when the rewind is enabled, and always before any other state — the
     /// HUD needs it or the pause reads as a hang.
     Rewinding,
+    /// The user has the mouse; nothing is being scrolled or captured until
+    /// they put it down. Emitted the moment the cursor leaves the scroll
+    /// point, so the HUD's readout matches the fact that the frame count has
+    /// stopped advancing — and again if a countdown gets interrupted.
+    Paused,
+    /// The cursor has gone still and the run is about to take it back.
+    /// Carries `resume_in_s`, and is re-emitted on each whole second so the
+    /// HUD can count down; movement drops straight back to [`Paused`].
+    Resuming,
     Scrolling,
     Settling,
     Stitching,
@@ -186,8 +252,8 @@ enum DriveState {
 enum DriveResult {
     /// Reached the bottom of the document.
     Complete,
-    /// Esc, mouse movement, a `stop` command, or the target window going
-    /// away. Partial capture kept.
+    /// Esc, a `stop` command, the target window going away, or a pause the
+    /// user never came back from. Partial capture kept.
     Stopped,
     /// Hit one of the hard caps. Partial capture kept.
     MaxReached,
@@ -318,14 +384,34 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     // signalling.
     let esc_latch = AtomicBool::new(false);
 
+    let run = Run {
+        cfg: &cfg,
+        signals: &signals,
+        esc_latch: &esc_latch,
+        target,
+        target_rect,
+    };
+
     emit(&DriveEvent::Ready);
 
-    input::focus(target);
+    // Before anything is photographed: the target has to actually be the
+    // window at the scroll point. The wheel is routed by cursor position and
+    // the capture is a BitBlt of the screen, so a window covering the point
+    // would receive every scroll *and* be the thing in every frame — a tall,
+    // plausible-looking picture of entirely the wrong window. Refusing is the
+    // only honest outcome.
+    if !input::raise_over_point(target, cfg.point) {
+        bail!(
+            "the window you selected could not be brought in front of the scroll point (window {} is over it). \
+             Move whatever is covering it, or pick a scroll point on a visible part of the window.",
+            input::describe_window_at(cfg.point)
+        );
+    }
     input::park_cursor(cfg.point);
     wait_latching_escape(START_DELAY, &esc_latch);
 
     if cfg.rewind {
-        match rewind_to_top(&cfg, &signals, &esc_latch, target, target_rect)? {
+        match rewind_to_top(&run)? {
             // The user asked to abandon the run while it was still winding
             // back; there is nothing captured to keep.
             Rewind::Cancelled => {
@@ -344,7 +430,12 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     let mut zero_streak = 0u32;
     let mut total_dy = 0u32;
     let mut holds = 0u32;
-    // Set when the stitcher holds a frame: the next iteration re-captures
+    // Time spent waiting for the user to give the mouse back. Subtracted
+    // from the wall-clock cap: that cap is there to bound how long we
+    // scroll someone's window for, and a pause is not scrolling it.
+    let mut paused_for = Duration::ZERO;
+    // Set when the stitcher holds a frame, or when the user moved the mouse
+    // while a frame was being captured: the next iteration re-captures
     // without wheeling, because the page is already displaced by an amount
     // that could not be measured and wheeling again would compound it.
     let mut skip_wheel = false;
@@ -355,22 +446,41 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             info!("cancelled after {} frames; writing nothing", stitcher.frames());
             return Ok(());
         }
-        if let Some(stop) = stop_requested(&signals, &esc_latch, &cfg, target, target_rect) {
-            info!("stopping: {}", stop.reason);
-            // A drift stop is as likely the user reaching for the HUD as it
-            // is a grab of the mouse; hold finalization briefly so a CANCEL
-            // click already in flight still means "write nothing".
-            if stop.cursor_drift && cancel_within(&signals, DRIFT_CANCEL_GRACE) {
-                info!("cancel arrived within the drift grace window; writing nothing");
-                return Ok(());
-            }
+        if let Some(reason) = stop_requested(&run) {
+            info!("stopping: {reason}");
             break DriveResult::Stopped;
         }
-        if let Some(cap) = cap_reached(&stitcher, started) {
+        // The user has the mouse: hold everything until they put it down,
+        // then park it back on the scroll point and carry on. Deliberately
+        // ahead of the wheel injection — a scroll sent while they are
+        // pointing at something else lands in whatever they are pointing at.
+        match pause_while_drifting(&run, stitcher.frames(), stitcher.height(), DriveState::Scrolling) {
+            Paused::Ready {
+                waited,
+            } => {
+                paused_for += waited;
+                if !waited.is_zero() {
+                    // The page may have moved while they had the mouse, and
+                    // by an amount no wheel of ours accounts for. Photograph
+                    // where it actually is before scrolling it further.
+                    skip_wheel = true;
+                }
+            }
+            Paused::Cancelled => {
+                info!("cancelled while paused; writing nothing");
+                return Ok(());
+            }
+            Paused::Stopped(reason) => {
+                info!("stopping: {reason}");
+                break DriveResult::Stopped;
+            }
+        }
+        if let Some(cap) = cap_reached(&stitcher, started, paused_for) {
             info!("stopping: {cap}");
             break DriveResult::MaxReached;
         }
 
+        let wheeled = !skip_wheel;
         if skip_wheel {
             // The page has not moved since the last look; a frame caught
             // mid-repaint is clean a moment later, so look again from the
@@ -402,6 +512,20 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             }
         };
 
+        // The mouse moved while that frame was being taken, so it may hold a
+        // hover highlight, a drag, or a page the user scrolled themselves —
+        // and once appended, none of that comes back out. Drop it, and let
+        // the pause at the top of the loop deal with the mouse; the re-capture
+        // afterwards still carries the displacement of the wheel burst above.
+        if input::cursor_drift(cfg.point) > CURSOR_DRIFT_PX {
+            info!(
+                "the cursor moved while frame {} was being captured; discarding it",
+                stitcher.frames()
+            );
+            skip_wheel = true;
+            continue;
+        }
+
         status(&stitcher, DriveState::Stitching);
         let dy = match stitcher.append(frame) {
             AppendResult::Appended {
@@ -432,6 +556,14 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
             zero_streak = 0;
             total_dy = total_dy.saturating_add(dy);
             ticks = adapt_ticks(ticks, dy, cfg.region.height().max(0) as u32);
+            continue;
+        }
+
+        // A step that never injected a wheel — the retry after a held frame,
+        // or the re-capture after a pause — proves nothing about where the
+        // document ends. Counting it would let a user jiggling the mouse
+        // twice in a row declare a half-read page "complete".
+        if !wheeled {
             continue;
         }
 
@@ -515,41 +647,42 @@ enum Rewind {
 /// same "end this phase, keep going with what you have" they mean during
 /// the capture, where what you have is the current scroll position. Only
 /// `cancel` abandons the run.
-fn rewind_to_top(
-    cfg: &DriveArgs,
-    signals: &Signals,
-    esc_latch: &AtomicBool,
-    target: HWND,
-    target_rect: Option<ScreenRect>,
-) -> anyhow::Result<Rewind> {
-    let started = Instant::now();
+fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
+    // Pushed forward by however long each pause lasted, so `REWIND_MAX_ELAPSED`
+    // measures time spent winding rather than time spent waiting for the user.
+    let mut started = Instant::now();
     let mut still_streak = 0u32;
-    let mut previous = frame::capture_region(cfg.region)?;
+    let mut previous = frame::capture_region(run.cfg.region)?;
 
     for burst in 1..=REWIND_MAX_BURSTS {
-        if signals.cancelled() {
+        if run.signals.cancelled() {
             return Ok(Rewind::Cancelled);
         }
         // Same stop conditions as the capture loop — Esc, a `stop`, the
-        // cursor being taken back, the target window going away. Drift gets
-        // the same grace as it does there: the HUD's buttons can only be
-        // reached by moving the cursor, so a CANCEL click is always a beat
-        // behind the drift it caused.
-        if let Some(stop) = stop_requested(signals, esc_latch, cfg, target, target_rect) {
-            if stop.cursor_drift && cancel_within(signals, DRIFT_CANCEL_GRACE) {
-                return Ok(Rewind::Cancelled);
-            }
-            return Ok(Rewind::Finished(format!("{}; capturing from here", stop.reason)));
+        // target window going away — and the same pause when the user takes
+        // the mouse back. The elapsed cap below is measured against the
+        // clock, not against the pause, for the same reason it is during the
+        // capture: waiting for the user is not winding their document.
+        if let Some(reason) = stop_requested(run) {
+            return Ok(Rewind::Finished(format!("{reason}; capturing from here")));
+        }
+        match pause_while_drifting(run, 0, 0, DriveState::Rewinding) {
+            Paused::Ready {
+                waited,
+            } => started += waited,
+            Paused::Cancelled => return Ok(Rewind::Cancelled),
+            Paused::Stopped(reason) => return Ok(Rewind::Finished(format!("{reason}; capturing from here"))),
         }
 
         emit(&DriveEvent::Status {
             frames: 0,
             height_px: 0,
             state: DriveState::Rewinding,
+            resume_in_s: None,
         });
 
         input::wheel_burst(REWIND_TICKS, input::WheelDir::Up);
-        let current = settle(cfg.region, esc_latch)?;
+        let current = settle(run.cfg.region, run.esc_latch)?;
 
         if band_equal(&previous, &current) {
             still_streak += 1;
@@ -579,76 +712,168 @@ fn status(stitcher: &Stitcher, state: DriveState) {
         frames: stitcher.frames(),
         height_px: stitcher.height(),
         state,
+        resume_in_s: None,
     });
 }
 
-/// Why the run should stop now, if it should. Everything here keeps the
-/// partial capture; only `cursor_drift` distinguishes the one reason the
-/// shell's own HUD buttons trigger as a side effect, which finalizes
-/// through [`DRIFT_CANCEL_GRACE`] instead of immediately.
-struct StopReason {
-    reason: String,
-    cursor_drift: bool,
-}
-
-impl StopReason {
-    fn immediate(reason: impl Into<String>) -> Self {
-        Self {
-            reason: reason.into(),
-            cursor_drift: false,
-        }
-    }
-}
-
-fn stop_requested(
-    signals: &Signals,
-    esc_latch: &AtomicBool,
-    cfg: &DriveArgs,
+/// Everything about a run that is fixed once it starts: what to scroll and
+/// where, and the two channels the user can interrupt it through. Bundled
+/// because every polling helper below needs all of it and none of it moves
+/// — `target_rect` in particular is sampled once, since a window that has
+/// been moved or resized has invalidated the rect we are photographing.
+struct Run<'a> {
+    cfg: &'a DriveArgs,
+    signals: &'a Signals,
+    esc_latch: &'a AtomicBool,
     target: HWND,
     target_rect: Option<ScreenRect>,
-) -> Option<StopReason> {
-    if signals.stop.load(Ordering::Acquire) {
-        return Some(StopReason::immediate("stop command from the shell"));
+}
+
+/// Why the run should stop now, if it should. Everything here keeps the
+/// partial capture. The cursor is deliberately not one of them — see
+/// [`pause_while_drifting`].
+fn stop_requested(run: &Run) -> Option<String> {
+    if run.signals.stop.load(Ordering::Acquire) {
+        return Some("stop command from the shell".into());
     }
     // The latch catches taps that landed inside a wait; the direct read
     // covers a key held down right now.
-    if esc_latch.swap(false, Ordering::AcqRel) || input::escape_pressed() {
-        return Some(StopReason::immediate("Esc pressed"));
+    if run.esc_latch.swap(false, Ordering::AcqRel) || input::escape_pressed() {
+        return Some("Esc pressed".into());
     }
-    let drift = input::cursor_drift(cfg.point);
-    if drift > CURSOR_DRIFT_PX {
-        return Some(StopReason {
-            reason: format!("cursor moved {drift}px off the scroll point"),
-            cursor_drift: true,
-        });
+    if !input::is_window(run.target) {
+        return Some("target window closed".into());
     }
-    if !input::is_window(target) {
-        return Some(StopReason::immediate("target window closed"));
-    }
-    if target_rect.is_some() && input::window_rect(target) != target_rect {
-        return Some(StopReason::immediate("target window moved or resized"));
+    if run.target_rect.is_some() && input::window_rect(run.target) != run.target_rect {
+        return Some("target window moved or resized".into());
     }
     None
 }
 
-/// Wait up to `grace` for a `cancel` to arrive on stdin after a
-/// cursor-drift stop. A cancel wins — the caller writes nothing, which is
-/// the outcome the user was reaching for. A `stop` merely confirms what is
-/// already happening (stopping is idempotent) and ends the wait early.
-fn cancel_within(signals: &Signals, grace: Duration) -> bool {
-    let deadline = Instant::now() + grace;
+/// How a pause ended.
+enum Paused {
+    /// The cursor is on the scroll point and the run may carry on. `waited`
+    /// is `ZERO` when there was never anything to wait for, which is the
+    /// overwhelmingly common case.
+    Ready { waited: Duration },
+    /// The user ended the run while it was paused. Keep what we have.
+    Stopped(String),
+    /// The user abandoned the run while it was paused. Write nothing.
+    Cancelled,
+}
+
+/// Hold the run for as long as the user has the mouse.
+///
+/// The driver parks the cursor on the scroll point because that is what
+/// aims the wheel, so the moment the user moves the pointer two things go
+/// wrong at once: our scrolls land wherever they are now pointing, and the
+/// frames we photograph pick up whatever they are doing — a hover
+/// highlight, a text selection, a menu. Stopping the run over it (which is
+/// what this used to do) throws away a capture the user never asked to end.
+///
+/// So: past [`CURSOR_DRIFT_PX`] this waits. Every poll that finds the
+/// cursor somewhere new restarts the clock, so a user who keeps moving
+/// stays paused; [`RESUME_STILL_FOR`] of stillness parks the cursor back on
+/// the scroll point and hands the run back. `stop`, `cancel`, Esc and the
+/// target window going away are all still honoured while paused — a paused
+/// run is not an unresponsive one.
+///
+/// `resume_state` is what the run goes back to doing: the rewind and the
+/// capture loop pause identically but resume into different phases, and a
+/// HUD left saying the wrong one is worse than one left saying "paused".
+fn pause_while_drifting(run: &Run, frames: u32, height_px: u32, resume_state: DriveState) -> Paused {
+    if input::cursor_drift(run.cfg.point) <= CURSOR_DRIFT_PX {
+        return Paused::Ready {
+            waited: Duration::ZERO,
+        };
+    }
+
+    let began = Instant::now();
+    info!("the cursor left the scroll point; pausing");
+    let paused = |resume_in_s: Option<u64>| {
+        emit(&DriveEvent::Status {
+            frames,
+            height_px,
+            state: if resume_in_s.is_some() {
+                DriveState::Resuming
+            } else {
+                DriveState::Paused
+            },
+            resume_in_s,
+        })
+    };
+    paused(None);
+
+    // Where the current still period started, and when. Both restart on any
+    // movement past the slop, so this measures "still since", not "moved
+    // since the last poll" — a slow continuous creep never resumes.
+    let mut still_at = input::cursor_pos();
+    let mut still_since = Instant::now();
+    // The countdown currently on the HUD, so it is re-emitted once per whole
+    // second rather than at every 50ms poll.
+    let mut counting_down: Option<u64> = None;
+
     loop {
-        if signals.cancelled() {
-            return true;
+        if run.signals.cancelled() {
+            return Paused::Cancelled;
         }
-        if signals.stop.load(Ordering::Acquire) {
-            return false;
+        if let Some(reason) = stop_requested(run) {
+            return Paused::Stopped(reason);
         }
-        let left = deadline.saturating_duration_since(Instant::now());
-        if left.is_zero() {
-            return false;
+        if began.elapsed() >= PAUSE_MAX {
+            return Paused::Stopped(format!(
+                "the mouse was in use for {}s; keeping the capture so far",
+                PAUSE_MAX.as_secs()
+            ));
         }
-        std::thread::sleep(left.min(SETTLE_POLL));
+
+        wait_latching_escape(PAUSE_POLL, run.esc_latch);
+
+        let Some(now_at) = input::cursor_pos() else {
+            // No cursor reading is not evidence of stillness; wait for one.
+            continue;
+        };
+        if still_at.is_none_or(|was| input::chebyshev(now_at, was) > PAUSE_STILL_SLOP_PX) {
+            still_at = Some(now_at);
+            still_since = Instant::now();
+            // Moving again — take back the promise, don't just freeze the
+            // number where it stood.
+            if counting_down.take().is_some() {
+                paused(None);
+            }
+            continue;
+        }
+
+        let still_for = still_since.elapsed();
+        if still_for < RESUME_STILL_FOR {
+            // Whole seconds left, rounded up, so the last tick shown is "1"
+            // and the resume lands as it would have hit zero.
+            if still_for >= COUNTDOWN_AFTER {
+                let left = RESUME_STILL_FOR.saturating_sub(still_for);
+                let secs = left.as_secs() + u64::from(left.subsec_nanos() > 0);
+                if counting_down != Some(secs) {
+                    counting_down = Some(secs);
+                    paused(Some(secs));
+                }
+            }
+            continue;
+        }
+
+        // They have let go. Take the pointer back and carry on — the wheel
+        // has to be aimed from the point the user picked, and every frame
+        // from here has to look like every frame before the pause.
+        input::park_cursor(run.cfg.point);
+        let waited = began.elapsed();
+        info!("the cursor has been still for {RESUME_STILL_FOR:?}; re-parked and resuming after {waited:?}");
+        emit(&DriveEvent::Status {
+            frames,
+            height_px,
+            state: resume_state,
+            resume_in_s: None,
+        });
+        return Paused::Ready {
+            waited,
+        };
     }
 }
 
@@ -679,14 +904,19 @@ fn wait_latching_escape(total: Duration, latch: &AtomicBool) {
     }
 }
 
-fn cap_reached(stitcher: &Stitcher, started: Instant) -> Option<String> {
+/// Has the run hit one of its hard caps? `paused_for` is subtracted from
+/// the wall clock: [`MAX_ELAPSED`] bounds how long we spend scrolling
+/// someone's window, and time spent waiting for them to put the mouse down
+/// is not that — without this, one interruption silently truncates a
+/// capture that was going fine.
+fn cap_reached(stitcher: &Stitcher, started: Instant, paused_for: Duration) -> Option<String> {
     if stitcher.frames() >= MAX_FRAMES {
         return Some(format!("frame cap ({MAX_FRAMES})"));
     }
     if stitcher.height() >= MAX_HEIGHT_PX {
         return Some(format!("height cap ({MAX_HEIGHT_PX}px)"));
     }
-    let elapsed = started.elapsed();
+    let elapsed = started.elapsed().saturating_sub(paused_for);
     if elapsed >= MAX_ELAPSED {
         return Some(format!("time cap ({}s)", elapsed.as_secs()));
     }
@@ -886,9 +1116,22 @@ mod tests {
                 frames: 12,
                 height_px: 4180,
                 state: DriveState::Scrolling,
+                resume_in_s: None,
             })
             .unwrap(),
             r#"{"type":"status","frames":12,"height_px":4180,"state":"scrolling"}"#
+        );
+        // The countdown field appears only where it means something, so
+        // every other status line keeps the shape shells already parse.
+        assert_eq!(
+            serde_json::to_string(&DriveEvent::Status {
+                frames: 12,
+                height_px: 4180,
+                state: DriveState::Resuming,
+                resume_in_s: Some(2),
+            })
+            .unwrap(),
+            r#"{"type":"status","frames":12,"height_px":4180,"state":"resuming","resume_in_s":2}"#
         );
         assert_eq!(
             serde_json::to_string(&DriveEvent::Done {
@@ -912,6 +1155,8 @@ mod tests {
     fn every_state_and_result_is_snake_case() {
         let states = [
             (DriveState::Rewinding, "rewinding"),
+            (DriveState::Paused, "paused"),
+            (DriveState::Resuming, "resuming"),
             (DriveState::Scrolling, "scrolling"),
             (DriveState::Settling, "settling"),
             (DriveState::Stitching, "stitching"),
@@ -1083,43 +1328,13 @@ mod tests {
     }
 
     #[test]
-    fn drift_grace_lets_a_cancel_win() {
-        let signals = Signals::default();
-        signals.cancel.store(true, Ordering::Release);
-        assert!(cancel_within(&signals, DRIFT_CANCEL_GRACE));
-    }
-
-    #[test]
-    fn drift_grace_treats_a_stop_as_already_stopping() {
-        // FINISH clicked after the drift already decided to stop: the stop
-        // is idempotent, and the wait must end early rather than sit out
-        // the full grace.
-        let signals = Signals::default();
-        signals.stop.store(true, Ordering::Release);
-        let started = Instant::now();
-        assert!(!cancel_within(&signals, Duration::from_secs(5)));
-        assert!(started.elapsed() < Duration::from_secs(1));
-    }
-
-    #[test]
-    fn drift_grace_expires_quietly_without_signals() {
-        let signals = Signals::default();
-        assert!(!cancel_within(&signals, Duration::ZERO));
-    }
-
-    #[test]
-    fn drift_grace_catches_a_cancel_that_arrives_mid_wait() {
-        // The race the grace window exists for: the CANCEL click lands a
-        // beat after the drift stop fired.
-        let signals = Arc::new(Signals::default());
-        let clicker = {
-            let signals = Arc::clone(&signals);
-            std::thread::spawn(move || {
-                std::thread::sleep(Duration::from_millis(80));
-                signals.cancel.store(true, Ordering::Release);
-            })
-        };
-        assert!(cancel_within(&signals, Duration::from_secs(5)));
-        clicker.join().unwrap();
+    fn paused_time_does_not_count_against_the_wall_clock_cap() {
+        // The point of excluding it: a user who takes the mouse for a minute
+        // must not come back to a capture that quietly gave up at its time
+        // cap while it was waiting for them.
+        let stitcher = Stitcher::new(test_frame(200, 100, 0));
+        let started = Instant::now() - (MAX_ELAPSED + Duration::from_secs(5));
+        assert!(cap_reached(&stitcher, started, Duration::ZERO).is_some());
+        assert!(cap_reached(&stitcher, started, MAX_ELAPSED + Duration::from_secs(5)).is_none());
     }
 }

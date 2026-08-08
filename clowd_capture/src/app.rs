@@ -220,6 +220,25 @@ fn broadcast_mouse_state(windows: &WindowSet, input: &InteractionState) {
     }
 }
 
+/// Take the overlay off screen on the way out of a cycle, handing our
+/// foreground rights back to the shell on the way.
+///
+/// Every action dispatch hides before it writes its payload, and
+/// `finish_cycle` hides again behind it — so this is where the capturer
+/// stops owning a foreground window, and therefore the last moment
+/// `AllowSetForegroundWindow` can succeed. The shell almost always opens
+/// something straight afterwards (an editor, the recorder, the scrolling
+/// capture driver) and cannot raise any of it without rights it no longer
+/// holds. Handing them back costs nothing when nobody needs them: the grant
+/// is consumed by a single `SetForegroundWindow` and otherwise expires.
+///
+/// Deliberately not folded into [`WindowSet::hide_all`], which also serves
+/// the transient hides that a retry dialog re-shows from.
+fn hide_overlay_for_action(windows: &WindowSet) {
+    SystemInterop::hand_foreground_to_shell();
+    windows.hide_all();
+}
+
 fn update_cursor_visibility(windows: &WindowSet, input: &InteractionState) {
     // Picking a scroll point draws its own scope reticle at the cursor, so
     // the OS pointer has to go — it would sit on top of the reticle it is
@@ -552,7 +571,12 @@ impl App {
     /// where it instead reports `finished` and parks the event loop.
     fn finish_cycle(&mut self, event_loop: &ActiveEventLoop, action: CycleAction) {
         log::info!("capture cycle finished: {:?}", action);
-        self.windows.hide_all();
+        // Every exit path the capturer has — a shutdown command, the parent
+        // dying, a display-topology respawn — comes through here with a live
+        // cycle, so this is also the last hide before the process itself
+        // goes away. Hence the foreground handback rather than a bare hide,
+        // even though the action dispatches have usually done it already.
+        hide_overlay_for_action(&self.windows);
         // Idempotent (guarded by a static in window.rs) even when cursors
         // were already restored via update_cursor_visibility.
         set_hardware_cursor_visible(true);
@@ -1071,17 +1095,41 @@ impl App {
             log::info!("scroll pick ignored: click outside the selection");
             return;
         }
-        // No walker (snapshot still in flight, or macOS) is not an error:
-        // `0` tells the driver to resolve the target itself with
-        // WindowFromPoint once the overlay is out of the way — which it
-        // has to do regardless, since this handle predates the overlay.
+        // A locked peek *is* the answer to "which window did the user mean?".
+        // It is only ever set when they selected a window that something else
+        // is covering — the peek is what draws that window's real content in
+        // the overlay — so it names a window that is not topmost at every
+        // point of its own bounds. Asking what is at the scroll point instead
+        // would name the obstruction, and the driver raises, scrolls and
+        // photographs whatever it is told: a tall, plausible picture of the
+        // wrong window.
+        //
+        // Without a peek, whatever is under the point is exactly what the
+        // user saw when they clicked, and it is the right target. No walker
+        // (snapshot still in flight, or macOS) is not an error either: `0`
+        // tells the driver to resolve the target itself with WindowFromPoint
+        // once the overlay is out of the way.
         let hwnd = cycle
             .walker
             .as_ref()
-            .and_then(|w| w.top_level_hwnd_at(point))
+            .and_then(|w| {
+                cycle
+                    .locked_peek
+                    .as_ref()
+                    // Outside the peeked window the user has aimed at
+                    // something else entirely — a selection wider than the
+                    // window, say — and the point is the only intent there is.
+                    .filter(|peek| peek.window_rect.contains(point))
+                    .and_then(|peek| w.hwnd_at_index(peek.window_index))
+                    .or_else(|| w.top_level_hwnd_at(point))
+            })
             .unwrap_or(0);
 
-        self.windows.hide_all();
+        // The foreground handback in here matters most on exactly this
+        // action: the shell passes those rights straight to the scrolling
+        // capture driver, which needs them to raise the window the user
+        // picked over whatever is covering it.
+        hide_overlay_for_action(&self.windows);
         match write_scroll_action(&session_dir, selection, point, hwnd, &self.monitors) {
             ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Scroll),
             ActionResult::Cancelled => self.show_all_windows(),
@@ -1120,7 +1168,7 @@ impl App {
 
         match command {
             Command::Copy => {
-                self.windows.hide_all();
+                hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => copy_to_clipboard_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
                     _ => ActionResult::Failed("No selection or buffer".into()),
@@ -1139,7 +1187,7 @@ impl App {
                 }
             }
             Command::Save => {
-                self.windows.hide_all();
+                hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => match self.windows.get(&window_id) {
                         Some(handle) => handle.save_to_file_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
@@ -1174,7 +1222,7 @@ impl App {
                 } else {
                     (SessionAction::Edit, CycleAction::Edit)
                 };
-                self.windows.hide_all();
+                hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => write_session(&session_dir, sel, buf, active_peek_image, cursor_visible, action),
                     _ => ActionResult::Failed("No selection or buffer".into()),
@@ -1208,7 +1256,7 @@ impl App {
                     log::warn!("command SelectColor ignored: cursor is not over the desktop bitmap");
                     return;
                 };
-                self.windows.hide_all();
+                hide_overlay_for_action(&self.windows);
                 match write_color_action(&session_dir, bgra[2], bgra[1], bgra[0]) {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SelectColor),
                     ActionResult::Cancelled => self.show_all_windows(),
@@ -1234,7 +1282,7 @@ impl App {
                     log::info!("command Video ignored: no --session-dir provided");
                     return;
                 };
-                self.windows.hide_all();
+                hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => write_video_action(&session_dir, sel, buf, cursor_visible, &self.monitors),
                     _ => ActionResult::Failed("No selection or buffer".into()),

@@ -24,12 +24,21 @@ namespace Clowd.UI
         [JsonPropertyName("height_px")]
         public int HeightPx { get; init; }
 
-        /// <summary>What the driver is doing right now: <c>rewinding</c>, <c>scrolling</c>,
-        /// <c>settling</c> or <c>stitching</c> (<c>status</c> only). <c>rewinding</c> only
-        /// appears when the rewind is enabled, and only before the first frame — its
-        /// <see cref="Frames"/> and <see cref="HeightPx"/> are both 0.</summary>
+        /// <summary>What the driver is doing right now: <c>rewinding</c>, <c>paused</c>,
+        /// <c>resuming</c>, <c>scrolling</c>, <c>settling</c> or <c>stitching</c>
+        /// (<c>status</c> only). <c>rewinding</c> only appears when the rewind is enabled, and
+        /// only before the first frame — its <see cref="Frames"/> and <see cref="HeightPx"/> are
+        /// both 0. <c>paused</c> means the user has the mouse: nothing advances until they leave
+        /// it still, at which point <c>resuming</c> counts down (see <see cref="ResumeInS"/>) and
+        /// the driver parks the cursor back on the scroll point.</summary>
         [JsonPropertyName("state")]
         public string State { get; init; }
+
+        /// <summary>Whole seconds until a paused run resumes (<c>resuming</c> only; absent, and
+        /// therefore 0, on every other state). Re-sent on each tick, and the driver drops back to
+        /// <c>paused</c> if the mouse moves again.</summary>
+        [JsonPropertyName("resume_in_s")]
+        public int ResumeInS { get; init; }
 
         /// <summary>How the run ended (<c>done</c> only) — see <see cref="ScrollDriverResult"/>.
         /// Anything but <see cref="ScrollDriverResult.Failed"/> means session.json is on disk.</summary>
@@ -57,8 +66,9 @@ namespace Clowd.UI
         /// <summary>Reached the bottom of the document.</summary>
         public const string Complete = "complete";
 
-        /// <summary>Esc, the user moving the mouse, a <c>stop</c> command, or the target window
-        /// going away. The partial capture is kept.</summary>
+        /// <summary>Esc, a <c>stop</c> command, the target window going away, or a pause the user
+        /// never came back from. The partial capture is kept. Note that moving the mouse only
+        /// pauses a run — it does not end one.</summary>
         public const string Stopped = "stopped";
 
         /// <summary>Hit one of the driver's hard caps (frames / height / wall clock).</summary>

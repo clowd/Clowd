@@ -11,8 +11,10 @@ using Clowd.Util;
 
 namespace Clowd.UI
 {
-    /// <summary>Progress from the driver, one per phase change of every scroll step.</summary>
-    internal sealed record ScrollProgress(int Frames, int HeightPx, string State);
+    /// <summary>Progress from the driver, one per phase change of every scroll step.
+    /// <paramref name="ResumeInS"/> is meaningful only while <paramref name="State"/> is
+    /// <c>resuming</c>, where it counts whole seconds down to the run restarting.</summary>
+    internal sealed record ScrollProgress(int Frames, int HeightPx, string State, int ResumeInS);
 
     /// <summary>
     /// How a driver run ended, assembled from the terminal event (if one arrived) and the
@@ -315,7 +317,7 @@ namespace Clowd.UI
                     case ScrollDriverEventType.Status:
                         _frames = evt.Frames;
                         _heightPx = evt.HeightPx;
-                        var progress = new ScrollProgress(evt.Frames, evt.HeightPx, evt.State);
+                        var progress = new ScrollProgress(evt.Frames, evt.HeightPx, evt.State, evt.ResumeInS);
                         Dispatcher.UIThread.Post(() => StatusReceived?.Invoke(this, progress));
                         break;
 

@@ -177,10 +177,11 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Honours a cancel that arrived while the run was already finishing. Pressing CANCEL
-        /// means moving the cursor onto the HUD, which the driver reads as a stop gesture — so a
-        /// cancel routinely lands after the driver has written a perfectly good session. It still
-        /// wins: nothing the run produced is shown or kept. A session that
+        /// Honours a cancel that arrived while the run was already finishing. Reaching CANCEL
+        /// means moving the cursor onto the HUD, which pauses the driver rather than ending it —
+        /// but a cancel can still land in the window between the driver deciding it is done and
+        /// this page hearing about it. It wins whenever it does: nothing the run produced is shown
+        /// or kept. A session that
         /// <see cref="CaptureSessionDispatcher.ProcessFinishedSession"/> already loaded is
         /// unregistered along with its directory, or the directory alone when there is none.
         /// </summary>
@@ -331,7 +332,7 @@ namespace Clowd.UI
 
             _status?.SetStatus(
                 $"Frame {progress.Frames.ToString("N0", CultureInfo.CurrentCulture)} · {progress.HeightPx.ToString("N0", CultureInfo.CurrentCulture)} px",
-                DescribeState(progress.State));
+                DescribeState(progress));
         }
 
         /// <summary>True for the outcomes that leave a finished session on disk. Everything the
@@ -343,12 +344,22 @@ namespace Clowd.UI
             ScrollDriverResult.MaxReached or
             ScrollDriverResult.NoMovement;
 
-        private static string DescribeState(string state) => state switch
+        private static string DescribeState(ScrollProgress progress) => progress.State switch
         {
             // Says what it is doing, not just that it is busy: the rewind can
             // run for several seconds before the first frame is captured, and
             // an unexplained pause with a frame count of zero reads as a hang.
             "rewinding" => "Scrolling to the top…",
+            // The driver pauses whenever the cursor leaves the scroll point, so
+            // this is the one state the user is holding in place themselves —
+            // it has to say what ends it, or a frame counter that has stopped
+            // advancing reads as a hang.
+            "paused" => "Paused — stop moving the mouse to resume",
+            // …and once they have stopped, the driver counts down rather than
+            // yanking the cursor back unannounced. Moving again reverts to
+            // "paused" above, so the readout always matches what the mouse is
+            // actually doing.
+            "resuming" => $"Resuming in {progress.ResumeInS.ToString(CultureInfo.CurrentCulture)}…",
             "scrolling" => "Scrolling…",
             "settling" => "Waiting for the page…",
             "stitching" => "Stitching…",

@@ -24,6 +24,8 @@
 //! editors and zoomed pages all disagree — the driver measures the
 //! displacement it actually got and adapts the burst size.
 
+use std::time::{Duration, Instant};
+
 use windows::Win32::{
     Foundation::{LPARAM, POINT, RECT, WPARAM},
     Graphics::Gdi::ScreenToClient,
@@ -31,7 +33,8 @@ use windows::Win32::{
         Input::KeyboardAndMouse::{GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_WHEEL, MOUSEINPUT, VK_ESCAPE},
         WindowsAndMessaging::{
             ChildWindowFromPointEx, GetAncestor, GetCursorPos, GetWindowRect, IsWindow, SendMessageTimeoutW, SetCursorPos,
-            SetForegroundWindow, WindowFromPoint, CWP_SKIPINVISIBLE, CWP_SKIPTRANSPARENT, GA_ROOT, SMTO_ABORTIFHUNG, WM_MOUSEWHEEL,
+            SetForegroundWindow, SetWindowPos, WindowFromPoint, CWP_SKIPINVISIBLE, CWP_SKIPTRANSPARENT, GA_ROOT, GA_ROOTOWNER, HWND_TOP,
+            SMTO_ABORTIFHUNG, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WM_MOUSEWHEEL,
         },
     },
 };
@@ -55,26 +58,39 @@ const MESSAGE_TIMEOUT_MS: u32 = 1_000;
 /// somehow points back at itself must not spin.
 const MAX_CHILD_DEPTH: usize = 10;
 
+/// How long [`raise_over_point`] keeps re-checking after asking for the
+/// target to come forward. A raise is asynchronous — the window has to
+/// process the activation and the compositor has to restack — and an app
+/// restoring from a minimised or background state can take a beat longer
+/// than one that was already visible.
+const RAISE_TIMEOUT: Duration = Duration::from_millis(1_200);
+
+/// How often [`raise_over_point`] re-asks who owns the scroll point.
+const RAISE_POLL: Duration = Duration::from_millis(40);
+
 /// Settle on the window the wheel should be aimed at.
 ///
-/// Wheel routing is positional — whatever window is topmost at the point is
-/// what a wheel event there will reach — so the live `WindowFromPoint` root
-/// is the authority. The marker `hwnd` the overlay resolved is only a hint:
-/// its snapshot filters out untitled and mostly-obscured windows, so it can
-/// name a window *behind* the real target, and foregrounding that one would
-/// raise the wrong window over the scroll point and photograph it all run.
-/// The marker is still validated (the window may have closed since the
+/// The marker `hwnd` wins. It names the window the *user* picked out of the
+/// overlay's frozen desktop — the one whose region they selected — and that
+/// intent is the only thing that survives the overlay closing. The live
+/// `WindowFromPoint` answer cannot stand in for it: whatever is topmost at
+/// the point right now may be a window sitting *over* the target, and
+/// scrolling that one photographs the obstruction for the whole run. This is
+/// exactly what happened when the user aimed the scroll point at a covered
+/// part of their window.
+///
+/// The marker is validated first (the window may have closed since the
 /// overlay ran, and Windows recycles handle values; the overlay is also
-/// allowed to give up and send `0`) so it can stand in on the rare occasion
-/// `WindowFromPoint` itself comes up empty.
+/// allowed to give up and send `0`), and `WindowFromPoint` stands in when it
+/// does not hold up. Whichever wins, [`raise_over_point`] then has to get it
+/// on top of the point before a single frame is captured.
 pub fn resolve_target(hwnd: i64, point: ScreenPoint) -> Option<HWND> {
-    let under = unsafe { WindowFromPoint(as_point(point)) };
-    let live = (!under.is_invalid()).then(|| root_of(under));
+    let live = live_root_at(point);
     let marker = validated_marker(hwnd, point);
     if let (Some(live), Some(marker)) = (live, marker) {
         if live != marker {
             info!(
-                "marker hwnd {hwnd} is behind the live window {:?} at the scroll point; scrolling the live one",
+                "the window at the scroll point right now is {:?}, but the user picked marker hwnd {hwnd}; raising theirs",
                 live.0
             );
         }
@@ -82,10 +98,17 @@ pub fn resolve_target(hwnd: i64, point: ScreenPoint) -> Option<HWND> {
     choose_target(live, marker)
 }
 
-/// The live window wins whenever there is one; the validated marker only
-/// stands in when `WindowFromPoint` found nothing at the point at all.
+/// The user's marker wins whenever it is still valid; the live window only
+/// stands in when the marker is missing or no longer holds up.
 fn choose_target(live: Option<HWND>, marker: Option<HWND>) -> Option<HWND> {
-    live.or(marker)
+    marker.or(live)
+}
+
+/// Top-level window under `point` as of right now, or `None` over bare
+/// desktop.
+fn live_root_at(point: ScreenPoint) -> Option<HWND> {
+    let under = unsafe { WindowFromPoint(as_point(point)) };
+    (!under.is_invalid()).then(|| root_of(under))
 }
 
 /// The overlay's marker hwnd as a top-level window, or `None` when it does
@@ -107,38 +130,121 @@ fn validated_marker(hwnd: i64, point: ScreenPoint) -> Option<HWND> {
     Some(root)
 }
 
-/// Bring the target to the foreground. Best-effort: the shell calls
-/// `AllowSetForegroundWindow` for us before spawning, but the foreground
-/// lock can still refuse, and it does not matter much — with "scroll
-/// inactive windows" on (the Win10+ default) the wheel follows the cursor
-/// regardless. Focus is insurance for the machines where that is off.
-pub fn focus(hwnd: HWND) {
-    if !unsafe { SetForegroundWindow(hwnd) }.as_bool() {
-        warn!("SetForegroundWindow refused; relying on scroll-inactive-windows routing");
+/// Get the target on top of the scroll point, and report whether it worked.
+///
+/// Two things depend on this, and the second is the one that bites. Wheel
+/// routing is positional, so a window covering the point eats the scroll;
+/// and the capture is a `BitBlt` of the screen, so a window covering the
+/// point is *also* what gets photographed. A target that cannot be raised
+/// produces a tall picture of the wrong window with nothing about it looking
+/// wrong, which is why the caller treats a `false` here as fatal rather than
+/// pressing on.
+///
+/// Two rungs, least invasive first, each verified before the next is tried.
+/// `SetForegroundWindow` is the honest one — it activates as well as
+/// restacks, so the target behaves as though the user clicked it.
+/// `SetWindowPos(HWND_TOP, SWP_NOACTIVATE)` follows: Z-order without focus,
+/// which is all the capture strictly needs.
+///
+/// The second rung carries the common case on its own: restacking a window
+/// that is *not* the foreground one is not gated by the foreground lock, so
+/// a target buried under an inactive window comes up even when
+/// `SetForegroundWindow` was refused (measured — a fully covered target
+/// captured all 400 lines of the test page after the first rung failed).
+/// What neither rung can do without foreground rights is get past a window
+/// that holds the foreground itself. Those rights come from
+/// `AllowSetForegroundWindow`: the shell grants them to the driver at spawn,
+/// and the chain that keeps the shell entitled to hand them on is documented
+/// in `CAPTURE_PROTOCOL.md` §3.5.
+///
+/// There is deliberately no third rung. `AttachThreadInput` would defeat the
+/// lock by borrowing the foreground thread's input queue, and a driver
+/// wedged attached to a hung foreground thread is a far worse failure than a
+/// capture that declines to run.
+///
+/// Verification is by asking the same question the wheel and the `BitBlt`
+/// will: who is at the point? An owned window of the target counts — a
+/// tooltip or a dropdown of the app we are scrolling belongs to it.
+pub fn raise_over_point(target: HWND, point: ScreenPoint) -> bool {
+    if !unsafe { SetForegroundWindow(target) }.as_bool() {
+        warn!("SetForegroundWindow refused; the shell's AllowSetForegroundWindow grant did not land");
+    }
+    if wait_until_owns_point(target, point, RAISE_TIMEOUT / 2) {
+        return true;
+    }
+
+    if let Err(e) = unsafe { SetWindowPos(target, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) } {
+        warn!("SetWindowPos(HWND_TOP) failed: {e}");
+    }
+    wait_until_owns_point(target, point, RAISE_TIMEOUT / 2)
+}
+
+/// Poll [`owns_point`] until it holds or `timeout` runs out.
+fn wait_until_owns_point(target: HWND, point: ScreenPoint, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if owns_point(target, point) {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        std::thread::sleep(RAISE_POLL);
     }
 }
 
-/// Move the real cursor to the scroll point. Called once, before the run:
-/// every later reading of the cursor is a question about the *user*, so we
-/// must not keep re-parking it.
+/// Is `target` (or something it owns) the window a click at `point` would
+/// hit? `GA_ROOTOWNER` is checked alongside `GA_ROOT` so an app's own popup
+/// — a dropdown, a tooltip, an owned tool window — is not mistaken for a
+/// foreign window covering the target.
+pub fn owns_point(target: HWND, point: ScreenPoint) -> bool {
+    let under = unsafe { WindowFromPoint(as_point(point)) };
+    if under.is_invalid() {
+        return false;
+    }
+    root_of(under) == target || ancestor(under, GA_ROOTOWNER) == target
+}
+
+/// The window currently at `point`, for logging which obstruction won.
+pub fn describe_window_at(point: ScreenPoint) -> String {
+    match live_root_at(point) {
+        Some(hwnd) => format!("{:?}", hwnd.0),
+        None => "nothing".to_string(),
+    }
+}
+
+/// Move the real cursor to the scroll point. Called before the run, and
+/// again only when a pause ends — between those, every reading of the
+/// cursor is a question about what the *user* is doing, and re-parking it
+/// would erase the answer.
 pub fn park_cursor(point: ScreenPoint) {
     if unsafe { SetCursorPos(point.x, point.y) }.is_err() {
         warn!("SetCursorPos({}, {}) failed; wheel events may land elsewhere", point.x, point.y);
     }
 }
 
-/// Chebyshev distance from the parked point to where the cursor is now.
-/// Non-zero means the user took the mouse back — the driver reads that as
-/// "finish now", which turns the classic mis-scroll bug into a deliberate
-/// gesture.
-pub fn cursor_drift(parked: ScreenPoint) -> i32 {
+/// Where the cursor is now, or `None` if Windows will not say (a locked
+/// desktop, a secure-desktop transition). Callers treat that as "no news",
+/// never as "it moved".
+pub fn cursor_pos() -> Option<ScreenPoint> {
     let mut pt = POINT::default();
-    if unsafe { GetCursorPos(&mut pt) }.is_err() {
-        return 0;
-    }
-    (pt.x - parked.x)
-        .abs()
-        .max((pt.y - parked.y).abs())
+    unsafe { GetCursorPos(&mut pt) }.ok()?;
+    Some(ScreenPoint::new(pt.x, pt.y))
+}
+
+/// Chebyshev distance from the parked point to where the cursor is now.
+/// Past a threshold this means the user has taken the mouse back, and the
+/// driver pauses until they give it up again — a scroll injected while they
+/// are using the pointer lands somewhere they did not ask for.
+pub fn cursor_drift(parked: ScreenPoint) -> i32 {
+    cursor_pos().map_or(0, |pt| chebyshev(pt, parked))
+}
+
+/// Chebyshev (chessboard) distance between two points. The measure the
+/// whole driver uses for "has the pointer moved": axis-independent and
+/// integer, so a diagonal nudge counts the same as a horizontal one.
+pub fn chebyshev(a: ScreenPoint, b: ScreenPoint) -> i32 {
+    (a.x - b.x).abs().max((a.y - b.y).abs())
 }
 
 /// Is Escape physically down right now?
@@ -253,11 +359,18 @@ fn deepest_child_at(root: HWND, point: ScreenPoint) -> Option<HWND> {
 
 /// Top-level ancestor of `hwnd` (itself, if it is already one).
 fn root_of(hwnd: HWND) -> HWND {
-    let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
-    if root.is_invalid() {
+    ancestor(hwnd, GA_ROOT)
+}
+
+/// `GetAncestor`, falling back to `hwnd` itself when there is no such
+/// ancestor — the answer every caller here wants for a window that is
+/// already the thing being asked for.
+fn ancestor(hwnd: HWND, flag: windows::Win32::UI::WindowsAndMessaging::GET_ANCESTOR_FLAGS) -> HWND {
+    let found = unsafe { GetAncestor(hwnd, flag) };
+    if found.is_invalid() {
         hwnd
     } else {
-        root
+        found
     }
 }
 
@@ -290,17 +403,27 @@ mod tests {
     }
 
     #[test]
-    fn the_live_window_outranks_the_marker() {
-        // The overlay's snapshot filters untitled and mostly-obscured
-        // windows, so its marker can name a window *behind* the one a
-        // wheel at the point will actually reach — the live answer must
-        // win whenever both exist.
-        assert_eq!(choose_target(Some(hwnd(1)), Some(hwnd(2))), Some(hwnd(1)));
+    fn the_marker_outranks_the_live_window() {
+        // The marker is the window the user picked in the overlay. Whatever
+        // is topmost at the point *now* may be sitting over it, and both the
+        // wheel and the BitBlt would go to that one — so the user's choice
+        // wins and gets raised.
+        assert_eq!(choose_target(Some(hwnd(1)), Some(hwnd(2))), Some(hwnd(2)));
         assert_eq!(choose_target(Some(hwnd(1)), Some(hwnd(1))), Some(hwnd(1)));
-        assert_eq!(choose_target(Some(hwnd(1)), None), Some(hwnd(1)));
-        // The marker is still better than nothing when the point is over
-        // no window at all.
         assert_eq!(choose_target(None, Some(hwnd(2))), Some(hwnd(2)));
+        // The live window still stands in when the overlay never resolved a
+        // marker, or the one it resolved no longer holds up.
+        assert_eq!(choose_target(Some(hwnd(1)), None), Some(hwnd(1)));
         assert_eq!(choose_target(None, None), None);
+    }
+
+    #[test]
+    fn chebyshev_is_the_larger_axis() {
+        assert_eq!(chebyshev(ScreenPoint::new(10, 10), ScreenPoint::new(10, 10)), 0);
+        assert_eq!(chebyshev(ScreenPoint::new(10, 10), ScreenPoint::new(13, 11)), 3);
+        assert_eq!(chebyshev(ScreenPoint::new(10, 10), ScreenPoint::new(9, 4)), 6);
+        // Negative coordinates (a monitor left of or above the primary) are
+        // just as valid a place to park the cursor.
+        assert_eq!(chebyshev(ScreenPoint::new(-100, -50), ScreenPoint::new(-90, -50)), 10);
     }
 }

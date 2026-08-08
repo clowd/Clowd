@@ -5,6 +5,9 @@ pub(crate) mod win_capture;
 mod win_cursor;
 
 #[cfg(windows)]
+mod win_foreground;
+
+#[cfg(windows)]
 mod win_monitor;
 
 #[cfg(windows)]
@@ -281,6 +284,13 @@ impl SystemInterop {
         win_mouse::set_position(pos)
     }
 
+    /// Let the shell that spawned us take the foreground next. Called as a
+    /// cycle ends, while the overlay is still the foreground window — see
+    /// [`win_foreground`] for why the shell needs it back.
+    pub fn hand_foreground_to_shell() {
+        win_foreground::hand_to_parent()
+    }
+
     pub fn capture_cursor(_monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
         win_cursor::capture_cursor()
     }
@@ -379,6 +389,10 @@ impl SystemInterop {
     pub fn set_mouse_position(pos: ScreenPoint, monitors: &[MonitorInfo]) {
         mac_mouse::set_position(pos, monitors)
     }
+
+    /// No foreground lock to hand back on macOS: activation is the app's
+    /// own business, and nothing here has rights to pass on.
+    pub fn hand_foreground_to_shell() {}
 
     pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
         mac_cursor::capture_cursor(monitors)

@@ -40,6 +40,9 @@ windows = { workspace = true, features = [
     "Win32_Graphics_Dxgi",
     "Win32_Storage_Xps",
     "Win32_System_Com",
+    # Walking the process table to find the shell that spawned us, so the
+    # foreground rights it lent us can be handed back (`win_foreground`).
+    "Win32_System_Diagnostics_ToolHelp",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
 ] }
