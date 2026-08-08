@@ -279,6 +279,20 @@ impl WindowWalker {
             .map(|w| w.hwnd.0 as isize)
     }
 
+    /// Handle of the window at `window_index` — the index
+    /// [`hit_test_full`] reports and a [`PeekCommand`] carries.
+    ///
+    /// The scrolling capture needs it: a peeked window is by definition
+    /// partly covered, so asking what is at the scroll point would name the
+    /// window on top instead of the one the user selected.
+    ///
+    /// [`PeekCommand`]: crate::render::protocol::PeekCommand
+    pub fn hwnd_at_index(&self, window_index: usize) -> Option<isize> {
+        self.windows
+            .get(window_index)
+            .map(|w| w.hwnd.0 as isize)
+    }
+
     /// Full hit-test returning window index and obstruction info.
     pub fn hit_test_full(&self, point: ScreenPoint) -> Option<HitTestResult> {
         let (idx, top) = self

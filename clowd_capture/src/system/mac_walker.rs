@@ -88,6 +88,14 @@ impl WindowWalker {
         None
     }
 
+    /// Windows counterpart of the peeked-window handle lookup — same story
+    /// as [`top_level_hwnd_at`]: no HWNDs here, and no driver to consume
+    /// one.
+    #[allow(dead_code)]
+    pub fn hwnd_at_index(&self, _window_index: usize) -> Option<isize> {
+        None
+    }
+
     /// Full hit-test returning window index and obstruction info.
     pub fn hit_test_full(&self, point: ScreenPoint) -> Option<HitTestResult> {
         let (idx, top) = self
