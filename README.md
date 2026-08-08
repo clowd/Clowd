@@ -12,6 +12,7 @@ Clowd is a minimalist screen capture / screen recording tool. It sits out of you
  - [Video recording](#video-recorder) to MKV, MP4, or GIF, with speaker and microphone audio
  - [Image editor](#image-editor) for quick annotations and edits
  - [Upload anything](#upload-anything) to a variety of file sharing websites, with the URL copied to your clipboard
+ - [Accelerated uploads](#accelerated-uploads) - share the link immediately, before the upload has finished
  - [Color picker](#color-picker) that can sample any pixel on screen
  - Window detection - selections snap to window borders
  - Fully keyboard accessible
@@ -61,6 +62,7 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
  - Minimalistic / Easy-To-Learn UI for quick edits
  - Save and return to recent seessions
  - Copy to Clipboard or Upload to the web in one click
+ - Pin the editor above every other window, so a capture stays visible while you work
  
 ![picture of image editor](https://user-images.githubusercontent.com/1287295/177043066-46f6fe23-260c-4b06-9c2c-da2970e9f249.png)
 
@@ -70,6 +72,26 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
  - Supports a vareity of file sharing websites
  
 ![picture of upload](https://user-images.githubusercontent.com/1287295/177044201-1b510910-4211-4eda-9f3c-508fac4c8fba.png)
+
+----
+
+## Accelerated Uploads
+
+Uploading a large file to your own cloud storage normally means waiting for the whole transfer to
+finish before you have anything to share. Accelerated uploads remove that wait.
+
+ - **The link is ready instantly.** Clowd copies a shareable URL to your clipboard the moment the
+   upload *starts*, not when it finishes.
+ - **Recipients don't wait either.** Anyone who opens the link starts downloading right away — the
+   bytes stream through to them as they arrive, so they can begin watching a video or viewing an
+   image while you are still uploading it.
+ - **Your files still land in your own storage.** The transfer is relayed to your bucket in the
+   background. Once it completes the link simply redirects there, so nothing stays in the middle.
+
+Enable it with the ⚡ toggle next to any provider on the Upload settings page. It is available for
+the providers that upload to storage you own — Azure Blob Storage, Amazon S3 (and S3-compatible
+services), Cloudflare R2, and Backblaze B2 — and is on by default for those. Turn it off to upload
+directly to your storage as usual.
 
 ----
 
