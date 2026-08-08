@@ -393,6 +393,12 @@ namespace Clowd.UI
             psi.ArgumentList.Add("--persistent");
             psi.ArgumentList.Add("--log-dir");
             psi.ArgumentList.Add(TryGetLogDirectory());
+            // So the host can hand its foreground rights back to us as each cycle ends — we need
+            // them to raise whatever the capture opens next, and cannot grant what we no longer
+            // hold (CAPTURE_PROTOCOL.md §3.5). Process-level, not per-capture: this host serves
+            // every capture for the lifetime of this process, and it exits with us.
+            psi.ArgumentList.Add("--shell-pid");
+            psi.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
             if (SettingsRoot.Current?.Capture?.MemoryHints == CapturerMemoryHints.MaxPerformance)
             {
                 psi.ArgumentList.Add("--memory-hints");
