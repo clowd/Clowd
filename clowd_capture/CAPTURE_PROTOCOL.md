@@ -296,7 +296,7 @@ out, so nothing should ever route there).
 ### 3.1 Spawn
 
 ```
-clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N
+clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N [--no-rewind]
 ```
 
 | Flag | Required | Meaning |
@@ -304,6 +304,7 @@ clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N
 | `--session-dir` | yes | The directory the overlay was given. It is empty by the time the driver starts (the shell consumed `action.txt`), and the driver owns it from here. |
 | `--region X,Y,W,H` | yes | The rect to photograph, physical virtual-desktop px — the same space and the same numbers as the marker. Rejected if W or H is 0. |
 | `--point PX,PY` | yes | Where the cursor is parked and the wheel is aimed, same space. Re-clamped into `--region`; a point outside it is a caller bug and is logged. |
+| `--no-rewind` | no | Start capturing from wherever the document is sitting instead of winding it back to the top first. Negative because rewinding is the default — the shell passes this only when the user turns "Scroll to top first" off, which is the deliberate "capture from here" intent. |
 | `--hwnd N` | no (default 0) | Decimal top-level handle from the marker. Re-validated at drive time (`IsWindow` + `GetAncestor(GA_ROOT)` + rect contains the point) because the overlay's Z-order snapshot predates its own window; `0` or a stale handle falls back to `WindowFromPoint`. |
 
 The shell must redirect **all three** stdio streams. Stdin in particular: the
@@ -323,7 +324,7 @@ may treat any line starting `{` and ending `}` as an event (the same rule as
 | Event | Fields | Semantics |
 |---|---|---|
 | `ready` | — | The target is resolved and focused; scrolling is about to start. |
-| `status` | `frames` (u32), `height_px` (u32), `state` | Progress. Emitted at each phase change of every step, so up to three per step. `state` ∈ `scrolling` \| `settling` \| `stitching`. |
+| `status` | `frames` (u32), `height_px` (u32), `state` | Progress. Emitted at each phase change of every step, so up to three per step. `state` ∈ `rewinding` \| `scrolling` \| `settling` \| `stitching`. `rewinding` appears only before the first frame and only when the rewind is enabled; its `frames` and `height_px` are both 0. |
 | `done` | `result`, `frames` (u32), `height_px` (u32) | The run ended. Unless `result` is `failed`, `session.json` is already on disk. |
 | `fatal_error` | `message` (string) | Setup or output failed and there is no session. The shell deletes the directory and reports it. |
 

@@ -24,8 +24,10 @@ namespace Clowd.UI
         [JsonPropertyName("height_px")]
         public int HeightPx { get; init; }
 
-        /// <summary>What the driver is doing right now: <c>scrolling</c>, <c>settling</c> or
-        /// <c>stitching</c> (<c>status</c> only).</summary>
+        /// <summary>What the driver is doing right now: <c>rewinding</c>, <c>scrolling</c>,
+        /// <c>settling</c> or <c>stitching</c> (<c>status</c> only). <c>rewinding</c> only
+        /// appears when the rewind is enabled, and only before the first frame — its
+        /// <see cref="Frames"/> and <see cref="HeightPx"/> are both 0.</summary>
         [JsonPropertyName("state")]
         public string State { get; init; }
 

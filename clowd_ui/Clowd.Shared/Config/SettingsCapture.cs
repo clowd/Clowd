@@ -80,6 +80,23 @@ namespace Clowd.Config
             set => Set(ref _tipsMode, value);
         }
 
+        /// <summary>
+        /// Whether a scrolling capture winds the target back to the top before it starts
+        /// (<c>clowd_scroll_driver</c>, inverted onto its <c>--no-rewind</c> flag). On by default:
+        /// someone who selects a region halfway down a page almost always wants the whole page,
+        /// and capturing only the bottom half gives them no sign the top is missing. Turning it
+        /// off is the "capture from here" intent — a long thread from one particular message.
+        /// </summary>
+        [Category("Behavior")]
+        [DisplayName("Scroll to top first")]
+        [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +
+                     "document is captured. Turn this off to capture from wherever the page is sitting.")]
+        public bool ScrollCaptureRewindToTop
+        {
+            get => _scrollCaptureRewindToTop;
+            set => Set(ref _scrollCaptureRewindToTop, value);
+        }
+
         [Category("Behavior")]
         [DisplayName("Obscured window peek")]
         [Description("Capture obstructed windows and show a peek-through composite when hovering them")]
@@ -166,6 +183,7 @@ namespace Clowd.Config
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
+        private bool _scrollCaptureRewindToTop = true;
         private double _obscuredWindowDetectionThreshold = 0.80;
         private bool _openSavedInExplorer = true;
         private bool _useSystemAccentColor = true;

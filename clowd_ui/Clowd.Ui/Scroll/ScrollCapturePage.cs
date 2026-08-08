@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
 
@@ -99,7 +100,8 @@ namespace Clowd.UI
                 _driver = new ScrollDriver();
                 _driver.StatusReceived += OnDriverStatus;
 
-                var outcome = await _driver.RunAsync(binary, sessionDir, region, scrollPoint, targetHwnd);
+                var outcome = await _driver.RunAsync(binary, sessionDir, region, scrollPoint, targetHwnd,
+                                                     SettingsRoot.Current.Capture.ScrollCaptureRewindToTop);
 
                 // app exit took the run down while we were waiting; it has already cleaned up.
                 if (_closing)
@@ -343,6 +345,10 @@ namespace Clowd.UI
 
         private static string DescribeState(string state) => state switch
         {
+            // Says what it is doing, not just that it is busy: the rewind can
+            // run for several seconds before the first frame is captured, and
+            // an unexplained pause with a frame count of zero reads as a hang.
+            "rewinding" => "Scrolling to the top…",
             "scrolling" => "Scrolling…",
             "settling" => "Waiting for the page…",
             "stitching" => "Stitching…",

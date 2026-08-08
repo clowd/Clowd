@@ -152,13 +152,33 @@ pub fn escape_pressed() -> bool {
     (unsafe { GetAsyncKeyState(VK_ESCAPE.0 as i32) } as u16 & 0x8000) != 0
 }
 
+/// Which way a burst moves the document.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WheelDir {
+    /// Away from the user — further down the page. The capture direction.
+    Down,
+    /// Toward the user — back up the page. Used only by the rewind.
+    Up,
+}
+
+impl WheelDir {
+    /// The signed `mouseData` delta for one notch.
+    fn delta(self) -> i32 {
+        match self {
+            WheelDir::Down => -WHEEL_DELTA,
+            WheelDir::Up => WHEEL_DELTA,
+        }
+    }
+}
+
 /// Inject `ticks` wheel notches at the current (parked) cursor position.
 ///
 /// One `INPUT` record per notch rather than a single record carrying
 /// `n * WHEEL_DELTA`: that is the stream a real wheel produces, and apps
 /// that quantise per message — or start one smooth-scroll animation per
 /// event — behave the same way for us as for a person.
-pub fn wheel_burst(ticks: u32) {
+pub fn wheel_burst(ticks: u32, dir: WheelDir) {
+    let delta = dir.delta();
     let inputs: Vec<INPUT> = (0..ticks.max(1))
         .map(|_| INPUT {
             r#type: INPUT_MOUSE,
@@ -166,8 +186,7 @@ pub fn wheel_burst(ticks: u32) {
                 mi: MOUSEINPUT {
                     dx: 0,
                     dy: 0,
-                    // Negative = scroll away from the user = down the page.
-                    mouseData: (-WHEEL_DELTA) as u32,
+                    mouseData: delta as u32,
                     dwFlags: MOUSEEVENTF_WHEEL,
                     time: 0,
                     dwExtraInfo: 0,

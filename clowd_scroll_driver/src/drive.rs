@@ -105,6 +105,38 @@ const MAX_FRAMES: u32 = 120;
 const MAX_HEIGHT_PX: u32 = 20_000;
 const MAX_ELAPSED: Duration = Duration::from_secs(120);
 
+/// Notches per burst while rewinding to the top. Far larger than the
+/// downward `TICKS_*` because nothing is stitched on the way up — the only
+/// question is whether the page still moves, so overshooting a screen
+/// costs nothing and makes the rewind a fraction of the capture.
+const REWIND_TICKS: u32 = 15;
+
+/// Consecutive rewind bursts that changed nothing before we call it the
+/// top. Two for the same reason as [`ZERO_STREAK_END`].
+const REWIND_STILL_STREAK: u32 = 2;
+
+/// Hard caps on the rewind. "Scroll up until nothing moves" does not
+/// terminate in an app that lazily loads history upward — Slack, Discord,
+/// any chat log — so it has to give up, and give up quickly enough that
+/// the user reads it as a pause rather than a hang. Hitting either cap
+/// starts the capture from wherever the rewind reached; it is never a
+/// failure.
+const REWIND_MAX_BURSTS: u32 = 40;
+const REWIND_MAX_ELAPSED: Duration = Duration::from_secs(8);
+
+// The rewind's shape, enforced where it is defined rather than in a test.
+const _: () = {
+    // Nothing is stitched on the way up, so a burst that overshoots a
+    // screen costs nothing — and one that does not outpace the capture
+    // would make the rewind longer than the run it precedes.
+    assert!(REWIND_TICKS > TICKS_MAX);
+    // One unchanged burst can be a frame caught mid-repaint.
+    assert!(REWIND_STILL_STREAK >= 2);
+    // Long enough to wind back a real document, short enough that a page
+    // which never stops loading reads as a pause and not a hang.
+    assert!(REWIND_MAX_ELAPSED.as_secs() <= 10);
+};
+
 /// Consecutive steps with no new content that mean "the document ended".
 /// Two, not one: a frame captured mid-animation can coincidentally match
 /// its predecessor.
@@ -140,6 +172,10 @@ enum DriveEvent {
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum DriveState {
+    /// Winding the document back to the top before frame 0. Emitted only
+    /// when the rewind is enabled, and always before any other state — the
+    /// HUD needs it or the pause reads as a hang.
+    Rewinding,
     Scrolling,
     Settling,
     Stitching,
@@ -202,6 +238,9 @@ struct DriveArgs {
     region: ScreenRect,
     point: ScreenPoint,
     hwnd: i64,
+    /// Wind the document back to the top before frame 0. On unless the
+    /// shell passed `--no-rewind`.
+    rewind: bool,
 }
 
 impl DriveArgs {
@@ -229,6 +268,7 @@ impl DriveArgs {
             region,
             point,
             hwnd: args.hwnd,
+            rewind: !args.no_rewind,
         })
     }
 }
@@ -284,6 +324,18 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     input::park_cursor(cfg.point);
     wait_latching_escape(START_DELAY, &esc_latch);
 
+    if cfg.rewind {
+        match rewind_to_top(&cfg, &signals, &esc_latch, target, target_rect)? {
+            // The user asked to abandon the run while it was still winding
+            // back; there is nothing captured to keep.
+            Rewind::Cancelled => {
+                info!("cancelled during rewind; writing nothing");
+                return Ok(());
+            }
+            Rewind::Finished(why) => info!("rewind finished: {why}"),
+        }
+    }
+
     let frame0 = frame::capture_region(cfg.region)?;
     let mut stitcher = Stitcher::new(frame0);
 
@@ -332,7 +384,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
                     break DriveResult::NoMovement;
                 }
             } else {
-                input::wheel_burst(ticks);
+                input::wheel_burst(ticks, input::WheelDir::Down);
             }
         }
 
@@ -433,6 +485,93 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
         height_px,
     });
     Ok(())
+}
+
+/// How the rewind ended. Only a `cancel` aborts the run — every other
+/// ending, including hitting a cap, just means "start capturing here".
+enum Rewind {
+    Finished(String),
+    Cancelled,
+}
+
+/// Wind the document back to the top before frame 0.
+///
+/// The same mechanism as the end detection, run in reverse: burst the
+/// wheel upward, wait for the region to settle, and stop once two
+/// consecutive bursts change nothing. Nothing is stitched on the way up,
+/// so the bursts are large ([`REWIND_TICKS`]) and only the *fact* of
+/// movement matters, not how much.
+///
+/// It never fails the run. A page that will not wind back — a chat log
+/// that loads history upward forever, a target that ignores synthetic
+/// wheel entirely — hits a cap and the capture starts from wherever it
+/// got to, which is exactly what would have happened without a rewind.
+/// That is also why the `WM_MOUSEWHEEL` fallback ladder is deliberately
+/// *not* run here: "nothing moved going up" is ambiguous (already at the
+/// top, or input is being ignored) and the downward phase is where that
+/// distinction can actually be drawn.
+///
+/// Esc and a `stop` end the rewind and begin the capture from here — the
+/// same "end this phase, keep going with what you have" they mean during
+/// the capture, where what you have is the current scroll position. Only
+/// `cancel` abandons the run.
+fn rewind_to_top(
+    cfg: &DriveArgs,
+    signals: &Signals,
+    esc_latch: &AtomicBool,
+    target: HWND,
+    target_rect: Option<ScreenRect>,
+) -> anyhow::Result<Rewind> {
+    let started = Instant::now();
+    let mut still_streak = 0u32;
+    let mut previous = frame::capture_region(cfg.region)?;
+
+    for burst in 1..=REWIND_MAX_BURSTS {
+        if signals.cancelled() {
+            return Ok(Rewind::Cancelled);
+        }
+        // Same stop conditions as the capture loop — Esc, a `stop`, the
+        // cursor being taken back, the target window going away. Drift gets
+        // the same grace as it does there: the HUD's buttons can only be
+        // reached by moving the cursor, so a CANCEL click is always a beat
+        // behind the drift it caused.
+        if let Some(stop) = stop_requested(signals, esc_latch, cfg, target, target_rect) {
+            if stop.cursor_drift && cancel_within(signals, DRIFT_CANCEL_GRACE) {
+                return Ok(Rewind::Cancelled);
+            }
+            return Ok(Rewind::Finished(format!("{}; capturing from here", stop.reason)));
+        }
+
+        emit(&DriveEvent::Status {
+            frames: 0,
+            height_px: 0,
+            state: DriveState::Rewinding,
+        });
+
+        input::wheel_burst(REWIND_TICKS, input::WheelDir::Up);
+        let current = settle(cfg.region, esc_latch)?;
+
+        if band_equal(&previous, &current) {
+            still_streak += 1;
+            if still_streak >= REWIND_STILL_STREAK {
+                return Ok(Rewind::Finished(format!("reached the top after {burst} burst(s)")));
+            }
+        } else {
+            still_streak = 0;
+        }
+        previous = current;
+
+        if started.elapsed() >= REWIND_MAX_ELAPSED {
+            return Ok(Rewind::Finished(format!(
+                "gave up after {}s; capturing from here",
+                REWIND_MAX_ELAPSED.as_secs()
+            )));
+        }
+    }
+
+    Ok(Rewind::Finished(format!(
+        "gave up after {REWIND_MAX_BURSTS} bursts; capturing from here"
+    )))
 }
 
 fn status(stitcher: &Stitcher, state: DriveState) {
@@ -772,6 +911,7 @@ mod tests {
     #[test]
     fn every_state_and_result_is_snake_case() {
         let states = [
+            (DriveState::Rewinding, "rewinding"),
             (DriveState::Scrolling, "scrolling"),
             (DriveState::Settling, "settling"),
             (DriveState::Stitching, "stitching"),
@@ -817,6 +957,38 @@ mod tests {
         assert_eq!(args.region, ScreenRect::from_xy_size(0, 0, 800, 600));
         assert_eq!(args.point, ScreenPoint::new(400, 300));
         assert_eq!(args.hwnd, 0);
+    }
+
+    #[test]
+    fn rewinding_is_on_unless_the_shell_opts_out() {
+        // The default lives in one place — the flag is negative on both
+        // sides of the boundary — so a shell that passes nothing rewinds.
+        let base = [
+            "clowd_scroll_driver",
+            "--session-dir",
+            "C:/tmp/s",
+            "--region",
+            "0,0,800,600",
+            "--point",
+            "400,300",
+        ];
+        assert!(
+            DriveArgs::from_cli(&CliArgs::parse_from(base))
+                .unwrap()
+                .rewind
+        );
+
+        let opted_out = CliArgs::parse_from(
+            base.iter()
+                .copied()
+                .chain(["--no-rewind"])
+                .collect::<Vec<_>>(),
+        );
+        assert!(
+            !DriveArgs::from_cli(&opted_out)
+                .unwrap()
+                .rewind
+        );
     }
 
     #[test]
