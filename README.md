@@ -10,6 +10,8 @@ Clowd is a minimalist screen capture / screen recording tool. It sits out of you
 ## Features
  - [Region capture](#region-capture--prntscr-replacement) as a fast, zoomable `PrntScr` replacement
  - [Video recording](#video-recorder) to MKV, MP4, or GIF, with speaker and microphone audio
+ - [Scrolling capture](#scrolling-capture) to grab a whole page or document as one tall image
+ - [Text recognition](#text-recognition-ocr) to copy, search, or share the text out of anything on screen
  - [Image editor](#image-editor) for quick annotations and edits
  - [Upload anything](#upload-anything) to a variety of file sharing websites, with the URL copied to your clipboard
  - [Accelerated uploads](#accelerated-uploads) - share the link immediately, before the upload has finished
@@ -55,6 +57,49 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
  - Optionally show animation where mouse was clicked
  
 ![image of video capture ui](https://user-images.githubusercontent.com/1287295/177043599-853d4718-e879-4007-919a-7aee91776c7d.png)
+
+----
+
+## Scrolling Capture
+
+*Windows only.*
+
+Some things don't fit on screen — a long article, a chat history, a settings page. Scrolling
+capture takes the picture anyway.
+
+ - Select a region, press `L` (SCROLL), then click the part of the screen the wheel should scroll
+ - Clowd drives the scrolling for you, photographs each step, and stitches them into a single tall
+   image that opens in the editor like any other capture
+ - **You get the whole page, not just the part you could see.** The target is wound back to the top
+   before the capture starts, so it doesn't matter where you were scrolled to. Turn this off with
+   *Settings → Capture → Scroll to top first* when you want to capture from where you are
+ - **Sticky headers and toolbars appear once**, not repeated down the length of the image
+ - It stops on its own when it reaches the end of the document. `Esc` or **FINISH** ends it early
+   and keeps everything captured so far; **CANCEL** throws it away
+ - **Take your mouse back whenever you like.** Moving the cursor pauses the capture rather than
+   ruining it; put it down again and the capture resumes where it left off
+ - Works on a window that is behind other windows — Clowd brings the one you selected to the front
+   and makes sure it is the one being photographed
+
+A capture is capped at 120 frames, 20,000 pixels tall, or two minutes, whichever comes first.
+Scrolling a pane *inside* a window (a sidebar, a chat column) is not supported yet — for now, aim
+it at something that scrolls as a whole window.
+
+----
+
+## Text Recognition (OCR)
+
+Select any region and press `O` to read the text inside it — including text in screenshots,
+videos, error dialogs, and other places you can't select text normally.
+
+ - **Runs entirely on your machine.** The recognition models are built into Clowd, so there is no
+   cloud service, no network round trip, no API key, and no language pack to install
+ - **You see what it read.** The recognised lines lift off the frozen screenshot as text, so you
+   can check the result before doing anything with it
+ - Then `C` copies it, `S` searches the web for it, `U` uploads it as a text paste with the link on
+   your clipboard, and `B` takes you back to the normal capture buttons
+ - Handles the text that usually defeats built-in OCR — small type, dark mode, low contrast
+ - Everything inside the selection is read, so select tighter to read less
 
 ----
 
