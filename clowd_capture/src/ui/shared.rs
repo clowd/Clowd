@@ -11,8 +11,10 @@
 
 use std::sync::Arc;
 
+use crate::interaction::{OcrNotice, OcrState};
 use crate::settings::TipsMode;
 use crate::ui::components::panel::layout::{compute_layout as compute_panel_layout, PanelLayout};
+use crate::ui::components::panel::model::PanelButtonSet;
 use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 /// Minimal per-monitor info the UI layout rules need.
@@ -68,6 +70,14 @@ pub struct UiSharedState {
     /// from. Renderers use it to drop the panel — the click that follows
     /// belongs to the picker, so nothing clickable may be in the way.
     pub scroll_pick_mode: bool,
+    /// Mirror of `InteractionState::ocr`. Carried whole rather than
+    /// decomposed into flags so the lifted lines, the modal state and the
+    /// panel set are guaranteed to change together in one broadcast — a
+    /// renderer can never see the OCR button set over un-lifted lines.
+    pub ocr: OcrState,
+    /// Mirror of `InteractionState::ocr_notice`: the transient "OCR gave
+    /// you nothing" pill.
+    pub ocr_notice: Option<OcrNotice>,
 }
 
 /// Return the monitor the virtual cursor is over. `None` when it sits in
@@ -108,24 +118,61 @@ pub struct PanelVisibility {
     pub layout: PanelLayout,
 }
 
-/// Decide whether the button panel is visible and where. Pure function —
-/// the app thread and every render thread call this with the same state.
-pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
-    if !state.overlays_visible {
-        return None;
-    }
-    if !state.captured {
+/// Which set of buttons the panel is showing, or `None` when there is no
+/// panel at all.
+///
+/// This is the SINGLE decision point, consulted by both
+/// [`panel_visibility`] (what the renderers draw) and
+/// `app::current_panel_layout` (where the app thread routes clicks). Those
+/// two are documented mirrors of each other — see the warning above
+/// `current_panel_layout` — and the set is exactly the kind of thing that
+/// drifts between them: get it wrong and a click on BACK fires the command
+/// that happens to sit at that index in the *other* set. Keeping the
+/// decision in one pure function makes that class of bug unrepresentable
+/// rather than merely unlikely.
+///
+/// Takes the three inputs loose rather than a `&UiSharedState` so the app
+/// thread can call it straight off `InteractionState` without building a
+/// snapshot first.
+pub fn active_panel_set(captured: bool, scroll_pick_mode: bool, ocr: &OcrState) -> Option<PanelButtonSet> {
+    if !captured {
         return None;
     }
     // Scroll-point picking runs over the same selection the panel sits on
     // top of: the panel must be gone so the pick click can land anywhere
     // inside the region, including under where the buttons were.
-    if state.scroll_pick_mode {
+    if scroll_pick_mode {
         return None;
     }
+    // While the OCR sweep is looping there is nothing to act on yet, so no
+    // panel AT ALL — not the Normal set (its buttons would act on a frozen
+    // selection mid-scan) and not the OCR set (COPY/SEARCH/UPLOAD would be
+    // lit but dead, indistinguishable from broken buttons). The strip
+    // materialises with the reveal, when the actions become real.
+    if ocr.hides_panel() {
+        return None;
+    }
+    if ocr.shows_ocr_panel() {
+        return Some(PanelButtonSet::Ocr);
+    }
+    Some(PanelButtonSet::Normal)
+}
+
+/// Decide whether the button panel is visible and where. Pure function —
+/// the app thread and every render thread call this with the same state.
+pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
+    // Deliberately ahead of `active_panel_set`, and deliberately not part
+    // of it: the Q toggle is about *drawing*, not about which buttons are
+    // live. The app-thread mirror keeps routing clicks while overlays are
+    // hidden (that is pre-existing behaviour), so folding this gate into
+    // the shared function would silently change it.
+    if !state.overlays_visible {
+        return None;
+    }
+    let set = active_panel_set(state.captured, state.scroll_pick_mode, &state.ocr)?;
     let sel = state.selection?;
     let monitor = pick_monitor_containing_center(&state.monitors, sel)?;
-    let layout = compute_panel_layout(monitor.bounds, sel, monitor.dpi_scale)?;
+    let layout = compute_panel_layout(monitor.bounds, sel, monitor.dpi_scale, set)?;
     Some(PanelVisibility {
         monitor,
         layout,
@@ -248,6 +295,7 @@ pub fn debug_primary_visibility(state: &UiSharedState, this: &UiMonitor) -> bool
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Instant;
 
     fn monitor() -> UiMonitor {
         UiMonitor {
@@ -281,7 +329,23 @@ mod tests {
             show_scroll_hint: false,
             has_used_magnifier: false,
             scroll_pick_mode: false,
+            ocr: OcrState::Idle,
+            ocr_notice: None,
         }
+    }
+
+    /// The panel-set decision never looks inside the outcome, so an empty
+    /// one is enough to stand a Lifted/Retracting state up.
+    fn dummy_outcome() -> Arc<crate::ocr::OcrOutcome> {
+        Arc::new(crate::ocr::OcrOutcome {
+            lines: Vec::new(),
+            full_text: String::new(),
+            text_angle: 0.0,
+        })
+    }
+
+    fn dummy_presentation() -> Arc<[crate::ocr::coverage::LinePresentation]> {
+        Arc::from(Vec::new())
     }
 
     #[test]
@@ -305,6 +369,64 @@ mod tests {
         assert!(panel_visibility(&s).is_none());
         s.scroll_pick_mode = false;
         assert!(panel_visibility(&s).is_some());
+    }
+
+    /// The panel's OCR lifecycle: HIDDEN while the sweep loops (nothing to
+    /// act on — buttons that no-op read as broken), the OCR strip once the
+    /// outcome is lifted. Both click routing and drawing flow through this
+    /// one function, so this test pins the behaviour for both.
+    #[test]
+    fn panel_hidden_while_scanning_shows_ocr_set_when_lifted() {
+        let mut s = state();
+        s.captured = true;
+        assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Normal);
+
+        s.ocr = OcrState::Scanning {
+            anchor: Instant::now(),
+            req: 1,
+            region: s.selection.unwrap(),
+        };
+        assert!(panel_visibility(&s).is_none());
+
+        s.ocr = OcrState::Lifted {
+            anchor: Instant::now(),
+            region: s.selection.unwrap(),
+            dpi_scale: 1.0,
+            outcome: dummy_outcome(),
+            presentation: dummy_presentation(),
+        };
+        assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Ocr);
+    }
+
+    /// BACK must hand the familiar buttons back immediately; the retract
+    /// animation is cosmetic and must not hold the OCR strip on screen.
+    #[test]
+    fn panel_shows_normal_set_while_retracting() {
+        let mut s = state();
+        s.captured = true;
+        s.ocr = OcrState::Retracting {
+            anchor: Instant::now(),
+            region: s.selection.unwrap(),
+        };
+        assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Normal);
+    }
+
+    /// Scroll picking outranks OCR mode: the panel is gone entirely, so
+    /// there is no set to argue about. (Unreachable today — the two modes
+    /// cannot both be engaged — but the ordering is what makes that true.)
+    #[test]
+    fn scroll_pick_hides_the_panel_even_in_ocr_mode() {
+        assert_eq!(active_panel_set(false, false, &OcrState::Idle), None);
+        assert_eq!(active_panel_set(true, false, &OcrState::Idle), Some(PanelButtonSet::Normal));
+        let lifted = OcrState::Lifted {
+            anchor: Instant::now(),
+            region: ScreenRect::from_xy_size(0, 0, 10, 10),
+            dpi_scale: 1.0,
+            outcome: dummy_outcome(),
+            presentation: dummy_presentation(),
+        };
+        assert_eq!(active_panel_set(true, true, &lifted), None);
+        assert_eq!(active_panel_set(false, false, &lifted), None);
     }
 
     #[test]

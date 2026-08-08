@@ -8,11 +8,15 @@
 //! draw into the same render pass as the desktop triangle, avoiding an
 //! MSAA tile store+load on M1 TBDR between a separate desktop and UI pass.
 //!
-//! Draw order inside the pass:
-//!   1. `rect` pipeline: backgrounds, borders, shadow, color swatch,
-//!      area indicator brackets, label underlines.
-//!   2. `svg` pipeline: button icons (lyon-tessellated meshes).
-//!   3. glyphon text: labels, tips body, area-indicator digits.
+//! Draw order inside the pass (see [`UiRenderer::draw`] for the OCR
+//! bubble sandwich):
+//!   1. `lift` pipeline: OCR sweep + pixel-crop fallback lines.
+//!   2. `rect` pipeline, LEADING range: OCR bubble pills + shadows.
+//!   3. glyphon bubble renderer: the bubbles' recognized-text glyphs.
+//!   4. `rect` pipeline, TRAILING range: backgrounds, borders, shadow,
+//!      color swatch, area indicator brackets, label underlines.
+//!   5. `svg` pipeline: button icons (lyon-tessellated meshes).
+//!   6. glyphon text: labels, tips body, area-indicator digits.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -23,6 +27,8 @@ use crate::ui::gpu::area::AreaRenderer;
 use crate::ui::gpu::debug::DebugRenderer;
 use crate::ui::gpu::hints::HintsRenderer;
 use crate::ui::gpu::icon::{IconInstance, IconPipeline};
+use crate::ui::gpu::lift::LiftPipeline;
+use crate::ui::gpu::ocr_bubbles::OcrBubblesRenderer;
 use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::rect::{RectInstance, RectPipeline};
 use crate::ui::gpu::text::TextStack;
@@ -32,6 +38,8 @@ use crate::ui::shared::{UiMonitor, UiSharedState};
 pub struct UiRenderer {
     rect: RectPipeline,
     icon: IconPipeline,
+    lift: LiftPipeline,
+    ocr_bubbles: OcrBubblesRenderer,
     text: TextStack,
     area: AreaRenderer,
     hints: HintsRenderer,
@@ -57,6 +65,15 @@ pub struct UiRenderer {
     /// Set by `prepare()` when at least one text area was shaped — tells
     /// `draw()` whether to issue the glyphon draw.
     any_text: bool,
+    /// Set by `prepare()` when at least one OCR bubble text area was
+    /// staged on the dedicated bubble renderer. MUST gate the bubble text
+    /// draw: an ungated draw would re-issue the renderer's previous
+    /// frame's vertices (see `TextStack::prepare_bubbles`).
+    any_bubble_text: bool,
+    /// How many instances at the FRONT of the rect buffer are OCR bubble
+    /// pills/shadows this frame — the split point for the two-range rect
+    /// draw (`draw` documents the sandwich).
+    bubble_rect_count: u32,
     /// Animation clock origin for UI effects (border trail).
     start_time: Instant,
 }
@@ -75,6 +92,7 @@ impl UiRenderer {
     ) -> Self {
         let rect = RectPipeline::new(device, surface_format);
         let icon = IconPipeline::new(device, surface_format);
+        let lift = LiftPipeline::new(device, surface_format);
         warmup.workers[monitor_index]
             .prep_ui_pipelines
             .set_once(warmup.t_start.elapsed());
@@ -90,6 +108,8 @@ impl UiRenderer {
         Self {
             rect,
             icon,
+            lift,
+            ocr_bubbles: OcrBubblesRenderer::new(),
             text,
             area,
             hints,
@@ -105,6 +125,8 @@ impl UiRenderer {
             capture: None,
             has_prepared: false,
             any_text: false,
+            any_bubble_text: false,
+            bubble_rect_count: 0,
             start_time: Instant::now(),
         }
     }
@@ -126,8 +148,67 @@ impl UiRenderer {
     pub fn begin_cycle(&mut self, timings: Arc<CaptureTimings>) {
         self.state = None;
         self.last_frame_time = None;
+        // VRAM: the lift pass's bind group holds a TextureView of the
+        // whole-virtual-desktop snapshot. `EndCycle` frees `gpu.snapshot`
+        // and parks the surface at 1×1 precisely to release that memory
+        // between cycles — a bind group retained here would silently pin
+        // tens of MB per monitor for the entire parked gap.
+        //
+        // [`end_cycle`](Self::end_cycle) is what actually releases it in
+        // time; this call is the second half of the bracket. Keep BOTH:
+        // the lift cache is keyed on the snapshot's heap ADDRESS, and the
+        // key is only meaningful because no snapshot's identity ever
+        // outlives its cycle in this struct (see `LiftPipeline::prepare`).
+        self.lift.clear_snapshot();
+        // The bubble layouts are the previous cycle's data too (shaped
+        // glyph buffers keyed to a dead outcome) — same bracket discipline
+        // as the lift bind group above, minus the VRAM stakes.
+        self.ocr_bubbles.clear();
         self.capture = Some(timings);
         self.start_time = Instant::now();
+    }
+
+    /// Release everything this renderer holds that belongs to the cycle
+    /// just finished, before the worker parks.
+    ///
+    /// Called from every `render.rs` path that returns a worker to the
+    /// parked state (see `render::park_worker`). `UiRenderer` is built once
+    /// per worker, OUTSIDE the cycle loop, so anything it caches survives
+    /// the whole idle gap in persistent mode. The lift bind group is the
+    /// one entry that matters: it pins a `TextureView` of the
+    /// whole-virtual-desktop snapshot, ~33 MB per 4K monitor, which would
+    /// defeat the entire point of dropping `gpu.snapshot` and shrinking the
+    /// surface to 1×1 on `EndCycle`. Finishing a cycle from
+    /// `OcrState::Lifted` — what OCR's COPY/SEARCH/UPLOAD and EXIT all do —
+    /// is the case that leaves the bind group populated.
+    ///
+    /// Clearing a bind group that was never built is a plain field write,
+    /// so the normal (non-OCR) path pays nothing: `prepare` already clears
+    /// the cache on every frame that has no snapshot or an idle
+    /// `OcrState`, and the next cycle rebuilds from the new snapshot on
+    /// its first `prepare` because the cached identity went with it.
+    ///
+    /// Audited and deliberately NOT dropped here: the icon pipeline's bind
+    /// group (its atlas texture is owned by `PanelRenderer` and stays warm
+    /// across cycles by design, so dropping the bind group frees nothing),
+    /// the glyphon font atlas (`trim`ed per frame, not per-cycle data), and
+    /// the rect/icon/lift instance buffers (tens of KB, grow-never-shrink
+    /// on purpose).
+    pub fn end_cycle(&mut self) {
+        self.lift.clear_snapshot();
+        // Shaped bubble buffers can hold a page of recognized text; like
+        // `state` below, release them at park rather than letting them sit
+        // out the idle gap.
+        self.ocr_bubbles.clear();
+        // Not GPU memory, but it is this cycle's data and it would sit in
+        // RAM for the whole idle gap otherwise — `OcrOutcome::full_text`
+        // alone can be a page of recognized text. `begin_cycle` clears it
+        // too; doing it here just releases it hours earlier.
+        self.state = None;
+        // Nothing staged in this frame's buffers may be drawn again: the
+        // next `draw` must be preceded by a fresh `prepare` (which sets
+        // this back) or it would issue draws over a released snapshot.
+        self.has_prepared = false;
     }
 
     /// Stage all per-frame work: component visibility decisions,
@@ -137,9 +218,18 @@ impl UiRenderer {
     /// from `draw` so the UI can share the same render pass as the
     /// desktop triangle — on M1 TBDR this avoids an MSAA tile
     /// store+load between passes.
-    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), perf: &PerfTracker) {
+    pub fn prepare(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        viewport_px: (u32, u32),
+        perf: &PerfTracker,
+        snapshot: Option<&crate::gpu::desktop::DesktopSnapshot>,
+    ) {
         self.has_prepared = false;
         self.any_text = false;
+        self.any_bubble_text = false;
+        self.bubble_rect_count = 0;
 
         let now = Instant::now();
         let dt = self
@@ -166,6 +256,29 @@ impl UiRenderer {
         let mut rect_instances: Vec<RectInstance> = Vec::with_capacity(512);
         let mut icon_draws: Vec<IconInstance> = Vec::with_capacity(16);
 
+        // OCR bubbles stage into their OWN rect list: it becomes the
+        // LEADING range of the single rect upload below, which is what
+        // lets `draw` slip the bubble glyphs between the pills and every
+        // other rect (the panel must cover bubbles, bubbles must cover
+        // the dimmed desktop).
+        let mut bubble_rects: Vec<RectInstance> = Vec::with_capacity(32);
+        self.ocr_bubbles
+            .prepare(&mut self.text, &state, &self.this_monitor, &mut bubble_rects);
+
+        // Lift goes first among the shared-list prepares so the accent
+        // highlights it pushes into `rect_instances` sit at the front of
+        // that list — i.e. UNDER the panel/hint pills that follow, while
+        // still landing on top of the lifted pixels (the whole rect
+        // pipeline draws after the lift pipeline; see `draw`).
+        self.lift.prepare(
+            device,
+            queue,
+            viewport_px,
+            &state,
+            &self.this_monitor,
+            snapshot,
+            &mut rect_instances,
+        );
         self.area
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.hints
@@ -195,12 +308,35 @@ impl UiRenderer {
         );
 
         let elapsed_secs = self.start_time.elapsed().as_secs_f32();
+        // One upload, two draw ranges: bubble pills lead, everything else
+        // trails. Appending into `bubble_rects` (usually empty) rather
+        // than the other way round keeps the common non-OCR frame to a
+        // single already-sized allocation move.
+        self.bubble_rect_count = bubble_rects.len() as u32;
+        bubble_rects.append(&mut rect_instances);
         self.rect
-            .prepare(device, queue, viewport_px, elapsed_secs, &rect_instances);
+            .prepare(device, queue, viewport_px, elapsed_secs, &bubble_rects);
         if let Some(atlas) = self.panel.atlas() {
             self.icon
                 .prepare(device, queue, viewport_px, atlas, &icon_draws);
         }
+
+        // Bubble glyphs ride the dedicated renderer so their draw can be
+        // ordered between the two rect ranges — the main renderer below
+        // draws last, above the panel.
+        let mut bubble_text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(16);
+        self.ocr_bubbles
+            .text_areas(&mut bubble_text_areas);
+        self.any_bubble_text = match self
+            .text
+            .prepare_bubbles(device, queue, &bubble_text_areas)
+        {
+            Ok(b) => b,
+            Err(e) => {
+                log::warn!("glyphon bubble prepare error: {:?}", e);
+                false
+            }
+        };
 
         let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
         self.area
@@ -227,7 +363,31 @@ impl UiRenderer {
         if !self.has_prepared {
             return;
         }
-        self.rect.draw(rpass);
+        // Ordering contract, bottom to top (each item relies on the ones
+        // before it having already painted):
+        //   1. lift — the OCR sweep and pixel-crop fallback lines, over
+        //      the desktop/peek passes that already ran in this render
+        //      pass and under everything below.
+        //   2. rect LEADING range — OCR bubble pills + shadows, over the
+        //      lifted pixels and the dimmed desktop.
+        //   3. bubble glyphs — the recognized text, on its own glyphon
+        //      renderer precisely so it can be issued here: above its
+        //      pill backgrounds, below the panel's rects.
+        //   4. rect TRAILING range — accent highlights, hint pills, the
+        //      button panel: covers any bubble it overlaps.
+        //   5. icons, then 6. main glyphon text (panel/hint labels) —
+        //      the panel and its labels end up above EVERYTHING, bubbles
+        //      included.
+        self.lift.draw(rpass);
+        self.rect
+            .draw_range(rpass, 0..self.bubble_rect_count);
+        if self.any_bubble_text {
+            if let Err(e) = self.text.draw_bubbles(rpass) {
+                log::warn!("glyphon bubble render error: {:?}", e);
+            }
+        }
+        self.rect
+            .draw_range(rpass, self.bubble_rect_count..u32::MAX);
         self.icon.draw(rpass);
         if self.any_text {
             if let Err(e) = self.text.draw(rpass) {

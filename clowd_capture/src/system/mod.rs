@@ -1,4 +1,7 @@
 #[cfg(windows)]
+mod win_browser;
+
+#[cfg(windows)]
 pub(crate) mod win_capture;
 
 #[cfg(windows)]
@@ -18,6 +21,9 @@ mod win_walker;
 
 #[cfg(windows)]
 pub use win_walker::WindowWalker;
+
+#[cfg(target_os = "macos")]
+mod mac_browser;
 
 #[cfg(target_os = "macos")]
 pub(crate) mod mac_capture;
@@ -297,6 +303,21 @@ impl SystemInterop {
         win_foreground::hand_to_shell()
     }
 
+    /// Let whoever takes the foreground next have it, rather than naming
+    /// the shell. Needed only by the OCR search action, whose browser may
+    /// already be running — see [`win_foreground::allow_any_foreground`].
+    /// Called while the overlay is still foreground, like its sibling.
+    pub fn allow_any_foreground() {
+        win_foreground::allow_any_foreground()
+    }
+
+    /// Open `url` in the user's default browser. `false` means the shell
+    /// refused it and nothing was launched, so the caller still owns the
+    /// screen and should stay where it is.
+    pub fn open_url(url: &str) -> bool {
+        win_browser::open_url(url)
+    }
+
     pub fn capture_cursor(_monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
         win_cursor::capture_cursor()
     }
@@ -402,6 +423,18 @@ impl SystemInterop {
 
     /// See [`Self::set_shell_pid`].
     pub fn hand_foreground_to_shell() {}
+
+    /// See [`Self::set_shell_pid`] — there is no foreground lock to hand
+    /// out, so a launched browser comes forward on its own. Kept as a
+    /// no-op rather than cfg'ing the call site, matching
+    /// [`Self::hand_foreground_to_shell`].
+    pub fn allow_any_foreground() {}
+
+    /// Open `url` in the user's default browser. `false` means nothing was
+    /// launched.
+    pub fn open_url(url: &str) -> bool {
+        mac_browser::open_url(url)
+    }
 
     pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
         mac_cursor::capture_cursor(monitors)

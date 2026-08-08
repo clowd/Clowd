@@ -111,8 +111,12 @@ pub enum HostEvent {
         elapsed_ms: u64,
     },
     /// The capture cycle ended. `action` is the snake_case `CycleAction`
-    /// (`edit|upload|select_color|video|copy|save|cancelled`); any session
-    /// payload is already on disk when this is emitted.
+    /// (`edit|upload|select_color|video|scroll|copy|save|ocr_copy|
+    /// ocr_search|ocr_upload|cancelled`); any session payload is already on
+    /// disk when this is emitted. The `ocr_*` actions end the cycle from
+    /// OCR mode — note that leaving the mode (BACK) is not one of them: it
+    /// never ends the cycle, so exactly one `finished` per accepted `show`
+    /// still holds however many times the mode is entered and left.
     Finished {
         action: CycleAction,
     },
@@ -205,6 +209,15 @@ mod tests {
             })
             .unwrap(),
             r#"{"type":"finished","action":"select_color"}"#
+        );
+        // Pins the snake_case wire form of the OCR actions — the shell's
+        // dispatcher and CAPTURE_PROTOCOL.md both spell it `ocr_search`.
+        assert_eq!(
+            serde_json::to_string(&HostEvent::Finished {
+                action: CycleAction::OcrSearch,
+            })
+            .unwrap(),
+            r#"{"type":"finished","action":"ocr_search"}"#
         );
         assert_eq!(serde_json::to_string(&HostEvent::Pong).unwrap(), r#"{"type":"pong"}"#);
     }

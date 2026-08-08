@@ -16,6 +16,17 @@ pub struct WindowUniforms {
     pub cursor_rect: [f32; 4],
     /// Cursor compositing type: 0=hidden, 1=alpha_blended, 2=masked.
     pub cursor_params: [f32; 4],
+    /// OCR source region in window-local physical pixels: [l, t, r, b].
+    /// Empty (right<=left) while OCR mode is idle. Currently informational
+    /// (the dim applies to the whole selection fill — the OCR region IS
+    /// the selection, modulo edge clamping); plumbed so a future partial
+    /// dim needs no uniform-layout change, same precedent as
+    /// `selection_params.z`.
+    pub ocr_rect: [f32; 4],
+    /// x = source-region dim amount 0..1 (ramps with the lift animation),
+    /// y = OCR-mode-active flag (suppresses the resize handles: they must
+    /// not draw over lifted text), z/w spare.
+    pub ocr_params: [f32; 4],
 }
 
 pub const WINDOW_UNIFORMS_SIZE: u64 = std::mem::size_of::<WindowUniforms>() as u64;

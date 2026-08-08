@@ -22,6 +22,17 @@ pub struct TextStack {
     pub viewport: Viewport,
     pub atlas: TextAtlas,
     pub renderer: TextRenderer,
+    /// Second renderer over the SAME atlas, for the OCR bubble glyphs.
+    ///
+    /// It exists because draw order is the layering: bubble text must land
+    /// UNDER the panel/hint rects while the main text draw runs above them
+    /// (`UiRenderer::draw`), and one glyphon renderer issues one draw.
+    /// Lazily created on the first OCR reveal — this overlay is
+    /// startup-latency-sensitive (see the warmup marks around
+    /// `TextStack::new`) and non-OCR sessions never pay for it. Cheap when
+    /// it does happen: the pipeline is shared via glyphon's `Cache`, so
+    /// this is essentially a vertex-buffer allocation.
+    bubble_renderer: Option<TextRenderer>,
 }
 
 impl TextStack {
@@ -54,6 +65,7 @@ impl TextStack {
             viewport,
             atlas,
             renderer,
+            bubble_renderer: None,
         }
     }
 
@@ -91,6 +103,53 @@ impl TextStack {
     pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) -> Result<(), glyphon::RenderError> {
         self.renderer
             .render(&self.atlas, &self.viewport, pass)
+    }
+
+    /// Prepare the OCR bubble glyphs on the dedicated renderer (created on
+    /// first use — see the field docs). Returns whether anything was
+    /// staged; the caller MUST gate [`Self::draw_bubbles`] on it, because
+    /// a renderer that prepared nothing this frame would re-issue its
+    /// previous frame's vertices.
+    pub fn prepare_bubbles<'a>(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        text_areas: &[TextArea<'a>],
+    ) -> Result<bool, glyphon::PrepareError> {
+        if text_areas.is_empty() {
+            return Ok(false);
+        }
+        let renderer = self.bubble_renderer.get_or_insert_with(|| {
+            TextRenderer::new(
+                &mut self.atlas,
+                device,
+                wgpu::MultisampleState {
+                    count: crate::render::MSAA_SAMPLES,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
+                None,
+            )
+        });
+        renderer.prepare(
+            device,
+            queue,
+            &mut self.font_system,
+            &mut self.atlas,
+            &self.viewport,
+            text_areas.iter().cloned(),
+            &mut self.swash_cache,
+        )?;
+        Ok(true)
+    }
+
+    /// Draw the bubble glyphs. Only called when the same frame's
+    /// `prepare_bubbles` returned true — see its docs.
+    pub fn draw_bubbles<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) -> Result<(), glyphon::RenderError> {
+        match &self.bubble_renderer {
+            Some(r) => r.render(&self.atlas, &self.viewport, pass),
+            None => Ok(()),
+        }
     }
 
     pub fn trim(&mut self) {

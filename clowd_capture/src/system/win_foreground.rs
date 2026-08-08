@@ -17,7 +17,7 @@
 
 use std::sync::OnceLock;
 
-use windows::Win32::UI::WindowsAndMessaging::AllowSetForegroundWindow;
+use windows::Win32::UI::WindowsAndMessaging::{AllowSetForegroundWindow, ASFW_ANY};
 
 /// The shell's pid, from `--shell-pid`. Set once during startup, before any
 /// window exists; `None` in a standalone run, where there is no shell.
@@ -51,5 +51,25 @@ pub fn hand_to_shell() {
     // per cycle is the intended usage rather than a leak.
     if let Err(e) = unsafe { AllowSetForegroundWindow(pid) } {
         debug!("AllowSetForegroundWindow({pid}) refused ({e}); the shell may not be able to raise its next window");
+    }
+}
+
+/// Give the NEXT foreground-taker the grant, whoever it turns out to be.
+///
+/// Used by the OCR SEARCH action. `ShellExecuteW` may hand the URL to an
+/// **already running** browser process — one we did not start and which
+/// therefore holds no activation rights of its own. [`hand_to_shell`] is
+/// no help there: it names a single pid, and it names the wrong one, so
+/// the browser would raise a tab we cannot see and merely flash in the
+/// taskbar. `ASFW_ANY` lets *any* process come forward, exactly once.
+///
+/// Same best-effort caveat as [`hand_to_shell`]: it only works while we
+/// still hold the foreground, so call it before hiding the overlay.
+///
+/// Windows-only by design — macOS has no foreground lock, so there is
+/// nothing to grant; the mac side of `SystemInterop` is a no-op.
+pub fn allow_any_foreground() {
+    if let Err(e) = unsafe { AllowSetForegroundWindow(ASFW_ANY) } {
+        debug!("AllowSetForegroundWindow(ASFW_ANY) refused ({e}); the browser may only flash in the taskbar");
     }
 }

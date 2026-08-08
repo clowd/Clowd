@@ -226,15 +226,24 @@ impl RectPipeline {
         self.pending_count = instances.len() as u32;
     }
 
-    /// Issue the draw inside an existing render pass. Call after
-    /// `prepare()`. No-op when prepare was called with an empty slice.
-    pub fn draw(&self, rpass: &mut wgpu::RenderPass<'_>) {
-        if self.pending_count == 0 {
+    /// Issue a sub-range of this frame's instances inside an existing
+    /// render pass (clamped to what `prepare` uploaded; pass `0..u32::MAX`
+    /// for everything). Ranged rather than all-or-nothing so
+    /// `UiRenderer::draw` can SPLIT the rect draw around the OCR bubble
+    /// text: the bubble pills are the leading range and must sit under
+    /// the bubble glyphs, while the panel/hint rects are the trailing
+    /// range and must sit over them — one contiguous draw cannot express
+    /// that sandwich. Two draws of the same pipeline/buffer cost nothing
+    /// measurable.
+    pub fn draw_range(&self, rpass: &mut wgpu::RenderPass<'_>, range: std::ops::Range<u32>) {
+        let start = range.start.min(self.pending_count);
+        let end = range.end.min(self.pending_count);
+        if start >= end {
             return;
         }
         rpass.set_pipeline(&self.pipeline);
         rpass.set_bind_group(0, &self.bind_group, &[]);
         rpass.set_vertex_buffer(0, self.instance_buf.slice(..));
-        rpass.draw(0..6, 0..self.pending_count);
+        rpass.draw(0..6, start..end);
     }
 }

@@ -27,6 +27,11 @@ use crate::system::{virtual_desktop_bounds, CapturedDesktop, CursorImage, Monito
 /// capture. Matches `CaptureSessionDispatcher` in Clowd.Ui.
 const ACTION_FILE: &str = "action.txt";
 
+/// Sidecar carrying the payload of an `ocr-upload` action: the recognized
+/// text, verbatim UTF-8. Read by `ProcessFinishedSession` before the
+/// session directory is deleted.
+const OCR_TEXT_FILE: &str = "ocr.txt";
+
 /// Which shell action a session payload is for. `Edit` is the default
 /// and writes no marker, so shells that pre-date `action.txt` behave
 /// unchanged; `Upload` writes the marker alongside the payload.
@@ -327,6 +332,57 @@ fn scroll_action_point(point: ScreenPoint, monitors: &[MonitorInfo]) -> (i32, i3
         }
         None => (point.x, point.y),
     }
+}
+
+/// Write an OCR-UPLOAD action payload: `ocr.txt` holding the recognized
+/// text and an `action.txt` = `ocr-upload` marker written LAST, so its
+/// appearance is the completion signal (the same rule
+/// [`write_video_action`] documents). No `cropped.png` and no
+/// `session.json` — the shell uploads text through `UploadManager`, which
+/// needs no session at all; uploading the image too would just duplicate
+/// what the plain UPLOAD button already does.
+///
+/// The text rides in a sidecar rather than on the marker line because
+/// `action.txt` markers are single-line and prefix-matched by
+/// `CaptureSessionDispatcher`: a multi-line, arbitrary-content payload
+/// cannot live there without inventing an escaping scheme, and the
+/// recognized text is arbitrary by definition (newlines, `#`, commas, any
+/// script). A separate file sidesteps the question entirely.
+///
+/// `text` is written byte-for-byte as UTF-8 with no BOM and no trailing
+/// newline added: the caller has already joined the lines with `\n`, and
+/// whatever it produced is what gets pasted.
+pub fn write_ocr_upload_action(session_dir: &Path, text: &str) -> ActionResult {
+    match write_ocr_upload_action_inner(session_dir, text) {
+        Ok(action_path) => {
+            // The text itself is never logged — it is the user's screen
+            // contents and these logs are mirrored into Sentry.
+            log::info!("ocr-upload action written to {:?} ({} bytes of text)", action_path, text.len());
+            ActionResult::Success
+        }
+        Err(e) => {
+            log::error!("ocr-upload action write failed: {e:#}");
+            ActionResult::Failed(format!("Failed to write OCR upload action: {e}"))
+        }
+    }
+}
+
+fn write_ocr_upload_action_inner(session_dir: &Path, text: &str) -> anyhow::Result<PathBuf> {
+    std::fs::create_dir_all(session_dir)?;
+    let session_dir = absolute_path(session_dir);
+
+    // ocr.txt first. `fs::write` of a &str emits its UTF-8 bytes and
+    // nothing else — no BOM, which the C# side relies on: it reads the
+    // file as UTF-8 and would otherwise paste a leading U+FEFF.
+    std::fs::write(session_dir.join(OCR_TEXT_FILE), text)?;
+
+    // action.txt last: a half-written payload is invisible to the shell
+    // because the marker it watches for is not there yet, so a failure
+    // above leaves a directory the shell simply ignores and later cleans
+    // up — the same guarantee the video and screenshot writers give.
+    let action_path = session_dir.join(ACTION_FILE);
+    std::fs::write(&action_path, "ocr-upload\n")?;
+    Ok(action_path)
 }
 
 fn write_session_inner(
@@ -674,6 +730,81 @@ mod tests {
             std::fs::read_to_string(dir.join(ACTION_FILE)).unwrap(),
             "scroll 0,0,640,480 10,20 -1\n"
         );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The `ocr-upload` marker is a wire contract with
+    /// `CaptureSessionDispatcher`: the bare verb, no payload, one trailing
+    /// newline — and the payload lives beside it in `ocr.txt`.
+    #[test]
+    fn ocr_upload_action_writes_marker_and_sidecar() {
+        let dir = temp_session_dir();
+        assert!(matches!(write_ocr_upload_action(&dir, "hello"), ActionResult::Success));
+
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| {
+                e.unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        assert_eq!(names, vec![ACTION_FILE.to_string(), OCR_TEXT_FILE.to_string()]);
+        assert_eq!(std::fs::read_to_string(dir.join(ACTION_FILE)).unwrap(), "ocr-upload\n");
+        assert_eq!(std::fs::read_to_string(dir.join(OCR_TEXT_FILE)).unwrap(), "hello");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Recognized text is multi-line by nature. It must reach `ocr.txt`
+    /// byte-for-byte — no re-wrapping, no trailing newline of our own —
+    /// while `action.txt` stays exactly one line, because the dispatcher
+    /// prefix-matches the marker's first line and would mis-route a
+    /// payload that leaked into it.
+    #[test]
+    fn ocr_upload_text_is_verbatim_and_marker_stays_one_line() {
+        let dir = temp_session_dir();
+        let text = "first line\nsecond, with a comma\n\n#fourth after a blank";
+        assert!(matches!(write_ocr_upload_action(&dir, text), ActionResult::Success));
+
+        let marker = std::fs::read_to_string(dir.join(ACTION_FILE)).unwrap();
+        assert_eq!(marker.lines().count(), 1, "marker must stay single-line: {marker:?}");
+        assert_eq!(marker, "ocr-upload\n");
+        assert_eq!(std::fs::read_to_string(dir.join(OCR_TEXT_FILE)).unwrap(), text);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The PP-OCRv6 small model reads CJK natively, so non-Latin output is
+    /// an ordinary case rather than an exotic one; the bytes on disk are
+    /// UTF-8 and the C# reader decodes them as such.
+    #[test]
+    fn ocr_upload_text_round_trips_cjk() {
+        let dir = temp_session_dir();
+        let text = "日本語のテキスト\n中文文本\n한국어";
+        assert!(matches!(write_ocr_upload_action(&dir, text), ActionResult::Success));
+
+        let path = dir.join(OCR_TEXT_FILE);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), text);
+        assert_eq!(std::fs::read(&path).unwrap(), text.as_bytes());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// No BOM. `File.ReadAllText` on the C# side would silently strip one,
+    /// but the text is pasted into an upload verbatim elsewhere, and a
+    /// leading U+FEFF is invisible in every viewer that would show it.
+    #[test]
+    fn ocr_upload_text_has_no_bom() {
+        let dir = temp_session_dir();
+        assert!(matches!(write_ocr_upload_action(&dir, "ascii start"), ActionResult::Success));
+
+        let bytes = std::fs::read(dir.join(OCR_TEXT_FILE)).unwrap();
+        assert_eq!(bytes.first(), Some(&b'a'));
+        assert_ne!(bytes.first(), Some(&0xEF), "UTF-8 BOM leaked into ocr.txt");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
