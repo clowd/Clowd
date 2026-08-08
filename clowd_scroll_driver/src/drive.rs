@@ -1,7 +1,7 @@
 //! The driver loop and its conversation with the shell.
 //!
 //! One NDJSON object per line, same shape as the persistent host's protocol
-//! (`host::protocol`) and under the same rule: **stdout carries only
+//! (`clowd_capture/src/host/protocol.rs`) and under the same rule: **stdout carries only
 //! protocol lines**. Every log record goes to stderr and the session's
 //! `scroll.log`, so the shell can treat any `{…}` line as an event.
 //!
@@ -42,13 +42,12 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use windows::Win32::UI::HiDpi::{GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext, DPI_AWARENESS_PER_MONITOR_AWARE};
 
-use crate::geometry::{ScreenPoint, ScreenRect};
-use crate::settings::CliArgs;
-
-use super::frame::{self, Frame};
-use super::input::{self, HWND};
-use super::output;
-use super::stitch::{AppendResult, Stitcher};
+use crate::cli::CliArgs;
+use crate::frame::{self, Frame};
+use crate::input::{self, HWND};
+use crate::output;
+use crate::stitch::{AppendResult, Stitcher};
+use clowd_rust_core::geometry::{ScreenPoint, ScreenRect};
 
 /// Wheel notches in the first burst. One notch is a crawl on most apps
 /// (many frames, a slow run), while a burst big enough to clear the
@@ -197,7 +196,7 @@ fn emit(event: &DriveEvent) {
 
 // ── Entry point ────────────────────────────────────────────────────────
 
-/// Everything `--scroll-drive` needs, validated out of the CLI once.
+/// Everything the driver needs, validated out of the CLI once.
 struct DriveArgs {
     session_dir: PathBuf,
     region: ScreenRect,
@@ -210,13 +209,13 @@ impl DriveArgs {
         let session_dir = args
             .session_dir
             .clone()
-            .ok_or_else(|| anyhow!("--scroll-drive requires --session-dir"))?;
+            .ok_or_else(|| anyhow!("the scrolling capture driver requires --session-dir"))?;
         let region = args
             .region
-            .ok_or_else(|| anyhow!("--scroll-drive requires --region X,Y,W,H"))?;
+            .ok_or_else(|| anyhow!("the scrolling capture driver requires --region X,Y,W,H"))?;
         let point = args
             .point
-            .ok_or_else(|| anyhow!("--scroll-drive requires --point PX,PY"))?;
+            .ok_or_else(|| anyhow!("the scrolling capture driver requires --point PX,PY"))?;
         // The overlay clamps the point into the region before writing the
         // marker, so this only fires if the two arguments disagree. Clamping
         // aims the wheel at the region's edge instead of somewhere the user
@@ -235,7 +234,7 @@ impl DriveArgs {
 }
 
 /// Clamp a point onto `rect`'s last addressable pixel row/column — the
-/// same bound the overlay's own clamp uses (`session_output`), so a point
+/// same bound the overlay's own clamp uses (`session_output::write_scroll_action`), so a point
 /// that came through it is left untouched.
 fn clamp_into(point: ScreenPoint, rect: ScreenRect) -> ScreenPoint {
     let clamp = |v: i32, min: i32, max: i32| v.clamp(min, max.max(min));
@@ -245,10 +244,10 @@ fn clamp_into(point: ScreenPoint, rect: ScreenRect) -> ScreenPoint {
     )
 }
 
-/// `--scroll-drive` entry point, called from `main::run` before anything
-/// else exists. Always returns `Ok` for outcomes the shell can act on —
-/// failures are reported as `fatal_error` on the protocol channel, which is
-/// the only place the shell is listening.
+/// The driver's entry point, called from `main::run`. Always returns `Ok`
+/// for outcomes the shell can act on — failures are reported as
+/// `fatal_error` on the protocol channel, which is the only place the
+/// shell is listening.
 pub fn run(args: CliArgs) -> anyhow::Result<()> {
     let result = DriveArgs::from_cli(&args).and_then(drive);
     if let Err(e) = result {
@@ -737,8 +736,8 @@ fn spawn_stdin_reader(signals: Arc<Signals>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::RectExt;
     use clap::Parser;
+    use clowd_rust_core::geometry::RectExt;
 
     #[test]
     fn events_match_the_wire_contract() {
@@ -801,13 +800,12 @@ mod tests {
 
     #[test]
     fn drive_args_require_the_scroll_trio() {
-        let base = ["clowd_capture_wgpu", "--scroll-drive"];
+        let base = ["clowd_scroll_driver"];
         let missing_all = CliArgs::parse_from(base);
         assert!(DriveArgs::from_cli(&missing_all).is_err());
 
         let full = CliArgs::parse_from([
-            "clowd_capture_wgpu",
-            "--scroll-drive",
+            "clowd_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",
@@ -824,8 +822,7 @@ mod tests {
     #[test]
     fn drive_args_clamp_a_point_outside_the_region() {
         let outside = CliArgs::parse_from([
-            "clowd_capture_wgpu",
-            "--scroll-drive",
+            "clowd_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",
@@ -842,8 +839,7 @@ mod tests {
         // The overlay clamps to max-1 before writing the marker; that exact
         // point must survive the driver's own clamp unchanged.
         let edge = CliArgs::parse_from([
-            "clowd_capture_wgpu",
-            "--scroll-drive",
+            "clowd_scroll_driver",
             "--session-dir",
             "C:/tmp/s",
             "--region",

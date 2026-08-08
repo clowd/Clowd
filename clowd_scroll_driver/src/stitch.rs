@@ -98,7 +98,7 @@
 //! one strip per candidate displacement — tens of milliseconds, paid only
 //! on a pair the in-band sweep has already failed.
 
-use super::frame::Frame;
+use crate::frame::Frame;
 
 /// Minimum rows of overlap a dy hypothesis must leave between the two
 /// frames. Below this the correlation has too little evidence to mean

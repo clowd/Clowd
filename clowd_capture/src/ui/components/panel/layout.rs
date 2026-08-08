@@ -13,8 +13,8 @@
 //! the C++ ceil/floor convention so a side-by-side comparison gives
 //! identical pixel positions at every DPI.
 
-use crate::geometry::{RectExt, ScreenRect};
 use crate::selection::intersect_rects;
+use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
 use super::model::NUM_SVG_BUTTONS;
 

@@ -14,7 +14,9 @@ using Clowd.UI.Helpers;
 namespace Clowd.UI
 {
     /// <summary>
-    /// Locates the external Rust capture binary (<c>clowd_capture_wgpu</c>, see CAPTURE_PROTOCOL.md).
+    /// Locates the external Rust capture binaries (see CAPTURE_PROTOCOL.md): the capture overlay
+    /// <c>clowd_capture_wgpu</c> and, beside it, the scrolling-capture driver
+    /// <c>clowd_scroll_driver</c>.
     /// Probe order: the <c>CLOWD_CAPTURE_PATH</c> environment variable, then alongside the Clowd.Ui
     /// executable (release layout), then walking up from the app base directory to a cargo workspace
     /// root and probing <c>target/debug</c> followed by <c>target/release</c> (debug-time layout).
@@ -23,11 +25,39 @@ namespace Clowd.UI
     {
         public const string EnvVarName = "CLOWD_CAPTURE_PATH";
 
-        public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "clowd_capture_wgpu.exe" : "clowd_capture_wgpu";
+        public static string BinaryFileName => Executable("clowd_capture_wgpu");
+
+        /// <summary>The scrolling-capture driver (CAPTURE_PROTOCOL.md §3) — a separate process
+        /// from the overlay, spawned once the user has picked the region and the scroll point.
+        /// Windows-only: the overlay's SCROLL button is compiled out elsewhere.</summary>
+        public static string ScrollDriverFileName => Executable("clowd_scroll_driver");
+
+        private static string Executable(string stem) =>
+            OperatingSystem.IsWindows() ? stem + ".exe" : stem;
 
         public static string Resolve() =>
             Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory);
+
+        /// <summary>
+        /// Locates the scrolling-capture driver, which ships in the same directory as the overlay
+        /// in every layout — next to Clowd.Ui when installed, and in the same <c>target/</c>
+        /// profile directory when built locally. Deriving it from the overlay's resolved path
+        /// rather than probing again means the <c>CLOWD_CAPTURE_PATH</c> override keeps pointing
+        /// both binaries at the same build. Returns null when either is missing.
+        /// </summary>
+        public static string ResolveScrollDriver() => ResolveScrollDriver(Resolve());
+
+        /// <summary>Testable overload. <paramref name="capturePath"/> is the overlay binary's
+        /// resolved path (null when it could not be found).</summary>
+        public static string ResolveScrollDriver(string capturePath)
+        {
+            var dir = String.IsNullOrEmpty(capturePath) ? null : Path.GetDirectoryName(capturePath);
+            if (String.IsNullOrEmpty(dir))
+                return null;
+
+            var driver = Path.Combine(dir, ScrollDriverFileName);
+            return File.Exists(driver) ? Path.GetFullPath(driver) : null;
+        }
 
         /// <summary>Testable overload. Returns null when the binary cannot be found.</summary>
         public static string Resolve(string envVarValue, string baseDirectory)
@@ -86,7 +116,7 @@ namespace Clowd.UI
         public static bool IsCaptureActive => Volatile.Read(ref _captureActive) != 0;
 
         /// <summary>The capturer's exit code for "macOS has not granted Screen Recording" — see
-        /// <c>EXIT_NO_SCREEN_PERMISSION</c> in clowd_capture/src/system/mod.rs. Reported instead of
+        /// <c>NO_SCREEN_PERMISSION</c> in clowd_rust_core/src/exit.rs. Reported instead of
         /// crashing, so a revoked permission gets the permission dialog rather than a stack trace.
         /// </summary>
         private const int ExitCodeNoScreenPermission = 3;

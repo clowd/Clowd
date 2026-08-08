@@ -1,4 +1,4 @@
-use crate::geometry::ScreenRect;
+use clowd_rust_core::geometry::ScreenRect;
 
 pub(crate) struct PeekTextureEntry {
     pub _texture: wgpu::Texture,

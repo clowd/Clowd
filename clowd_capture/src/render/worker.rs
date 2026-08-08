@@ -4,12 +4,12 @@ use std::thread::{self, JoinHandle};
 
 use winit::event_loop::EventLoopProxy;
 
-use crate::geometry::ScreenRect;
 use crate::host::AppEvent;
 use crate::render::protocol::{RenderMsg, WorkerInput};
 use crate::settings::MemoryHintsMode;
 use crate::system::MonitorInfo;
 use crate::telemetry::startup::WarmupTimings;
+use clowd_rust_core::geometry::ScreenRect;
 
 pub struct RenderWorkerParams {
     pub monitor: MonitorInfo,

@@ -15,8 +15,8 @@ use core_graphics::geometry::CGRect;
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
 use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 use crate::system::MonitorInfo;
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;

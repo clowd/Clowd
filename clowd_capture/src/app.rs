@@ -13,7 +13,6 @@ use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture::session::{spawn_screenshot_job, spawn_walker_job, ScreenshotJobParams};
 use crate::capture_output::{copy_to_clipboard_with_peek, ActionResult};
-use crate::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectExt, ScreenRectRounded, WindowPoint};
 use crate::host::{
     self,
     protocol::{HostCommand, HostEvent, ShowParams},
@@ -33,6 +32,9 @@ use crate::ui::command::Command;
 use crate::ui::components::panel;
 use crate::ui::shared::UiMonitor;
 use crate::ui_state::{build_ui_shared_state, sample_bgra, UiStateBuildInput};
+use clowd_rust_core::geometry::{
+    to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect, ScreenRectExt, ScreenRectRounded, WindowPoint,
+};
 
 const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
@@ -219,7 +221,19 @@ fn broadcast_mouse_state(windows: &WindowSet, input: &InteractionState) {
 }
 
 fn update_cursor_visibility(windows: &WindowSet, input: &InteractionState) {
-    if input.captured || input.debug_visible {
+    // Picking a scroll point draws its own scope reticle at the cursor, so
+    // the OS pointer has to go — it would sit on top of the reticle it is
+    // standing in for. Checked ahead of `captured`, which is always set
+    // while picking.
+    //
+    // Gated on `overlays_visible` for the same reason the reticle is
+    // (`ui::shared::scroll_pick_visibility`): the two must agree, or a state
+    // that suppresses the reticle while the pointer stays hidden would leave
+    // the user with no pointer at all. Unreachable today — Q is swallowed in
+    // pick mode — and this keeps it that way if a path is ever added.
+    if input.scroll_pick_mode && input.overlays_visible {
+        windows.hide_cursors();
+    } else if input.captured || input.debug_visible {
         windows.show_cursors();
     } else {
         windows.hide_cursors();
@@ -1256,7 +1270,10 @@ impl App {
                     return;
                 }
                 cycle.input.scroll_pick_mode = true;
+                // Crosshair is the fallback if the hardware hide below
+                // fails; the reticle is the real pointer from here on.
                 set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, CursorIcon::Crosshair);
+                update_cursor_visibility(&self.windows, &cycle.input);
                 broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
             }
         }
@@ -1538,6 +1555,7 @@ impl ApplicationHandler<AppEvent> for App {
                     cycle.input.scroll_pick_mode = false;
                     let cursor = cycle.input.hittest.cursor();
                     set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, cursor);
+                    update_cursor_visibility(&self.windows, &cycle.input);
                     broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     return;
                 }
@@ -1573,14 +1591,23 @@ impl ApplicationHandler<AppEvent> for App {
                         cycle.input.debug_visible = !cycle.input.debug_visible;
                         update_cursor_visibility(&self.windows, &cycle.input);
                         broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
-                    } else if c_lower == 'm' {
-                        cycle.input.cursor_overlay_visible = !cycle.input.cursor_overlay_visible;
-                        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     } else if cycle.input.scroll_pick_mode {
                         // Panel accelerators are the panel's, and the panel
                         // is hidden while picking — swallow them rather
                         // than let an invisible button fire. Escape (above)
                         // is the only way out.
+                        //
+                        // M is swallowed here too, ahead of its handler
+                        // below. Picking suppresses both of that toggle's
+                        // feedback channels — the [M] hint is gone and the
+                        // frozen cursor is force-hidden — so honouring the
+                        // key would silently change whether the cursor lands
+                        // in the saved image, with nothing on screen to say
+                        // so. D stays live: it is a developer affordance and
+                        // the debug panel is its own feedback.
+                    } else if c_lower == 'm' {
+                        cycle.input.cursor_overlay_visible = !cycle.input.cursor_overlay_visible;
+                        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     } else if cycle.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
                             self.dispatch_command(cmd, event_loop, id);

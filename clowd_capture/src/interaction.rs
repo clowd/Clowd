@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use crate::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
 use crate::selection::{dpi_at_point, hit_test, DragMode, Hittest};
 use crate::settings::TipsMode;
 use crate::system::MonitorInfo;
+use clowd_rust_core::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
 use winit::window::CursorIcon;
 
 pub const ZOOM_MIN: f32 = 1.0;
@@ -243,7 +243,7 @@ impl InteractionController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::geometry::RectExt;
+    use clowd_rust_core::geometry::RectExt;
 
     fn monitor() -> MonitorInfo {
         MonitorInfo {
@@ -254,7 +254,7 @@ mod tests {
             name: "test".to_string(),
             adapter_id: None,
             #[cfg(target_os = "macos")]
-            logical_origin: crate::geometry::LogicalPoint::new(0.0, 0.0),
+            logical_origin: clowd_rust_core::geometry::LogicalPoint::new(0.0, 0.0),
         }
     }
 

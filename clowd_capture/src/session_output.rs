@@ -15,12 +15,11 @@
 //! payload). No file means edit — the historical default.
 
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
-use serde::Serialize;
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
+use clowd_rust_core::session::{absolute_path, created_utc_now, save_png, SessionJson};
 
 use crate::capture_output::ActionResult;
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 use crate::image_extract::{composite_cursor_rgba, extract_selection_rgba, extract_selection_rgba_with_peek};
 use crate::system::{virtual_desktop_bounds, CapturedDesktop, CursorImage, MonitorInfo, WindowPeekImage};
 
@@ -462,51 +461,6 @@ fn write_session_inner(
     Ok(json_path)
 }
 
-/// Serialized shape of `session.json`, shared with `Clowd.Ui`
-/// (`SessionInfo`, MIGRATION.md §2.11) and documented in
-/// CAPTURE_PROTOCOL.md — keys are PascalCase to match what
-/// Newtonsoft.Json expects there.
-///
-/// `pub(crate)` because the scrolling-capture driver writes a session of
-/// its own (`scroll::output`) and there must be exactly one definition of
-/// this contract in the binary.
-#[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub(crate) struct SessionJson {
-    pub(crate) created_utc: String,
-    pub(crate) name: &'static str,
-    pub(crate) desktop_img_path: String,
-    pub(crate) preview_img_path: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) cursor_img_path: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) cursor_position: Option<RectJson>,
-    pub(crate) cropped_rect: RectJson,
-    pub(crate) original_bounds: RectJson,
-}
-
-/// Serialized shape of `Clowd.PlatformUtil.ScreenRect` (exact key
-/// casing, §2.11).
-#[derive(Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub(crate) struct RectJson {
-    x: i32,
-    y: i32,
-    width: i32,
-    height: i32,
-}
-
-impl From<ScreenRect> for RectJson {
-    fn from(r: ScreenRect) -> Self {
-        Self {
-            x: r.min_x(),
-            y: r.min_y(),
-            width: r.width(),
-            height: r.height(),
-        }
-    }
-}
-
 /// Extract a region of the desktop bitmap as RGBA, compositing the
 /// locked peek window when present.
 fn extract_region(region: ScreenRect, buffer: &CapturedDesktop, peek: Option<&WindowPeekImage>) -> Option<(Vec<u8>, u32, u32)> {
@@ -516,97 +470,11 @@ fn extract_region(region: ScreenRect, buffer: &CapturedDesktop, peek: Option<&Wi
     }
 }
 
-pub(crate) fn save_png(path: &Path, rgba: Vec<u8>, width: u32, height: u32) -> anyhow::Result<()> {
-    let img: image::RgbaImage = image::ImageBuffer::from_raw(width, height, rgba).ok_or_else(|| anyhow!("pixel buffer size mismatch"))?;
-    img.save_with_format(path, image::ImageFormat::Png)?;
-    Ok(())
-}
-
-/// Best-effort absolute path without `std::path::absolute` (stabilised
-/// after our MSRV). The session dir is normally already absolute.
-pub(crate) fn absolute_path(p: &Path) -> PathBuf {
-    if p.is_absolute() {
-        p.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .map(|d| d.join(p))
-            .unwrap_or_else(|_| p.to_path_buf())
-    }
-}
-
-pub(crate) fn created_utc_now() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    format_iso8601_utc(secs)
-}
-
-/// Format Unix seconds as ISO 8601 UTC (`2026-06-12T18:30:00Z`) — a
-/// shape Newtonsoft.Json parses into `DateTime` directly. Uses the
-/// days-to-civil algorithm (Howard Hinnant) to avoid a date-time crate.
-fn format_iso8601_utc(unix_secs: u64) -> String {
-    let days = (unix_secs / 86_400) as i64;
-    let rem = unix_secs % 86_400;
-    let (hh, mm, ss) = (rem / 3600, (rem % 3600) / 60, rem % 60);
-
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
-
-    format!("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z", y, m, d, hh, mm, ss)
-}
-
 #[cfg(test)]
 mod tests {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
     use super::*;
-
-    #[test]
-    fn iso8601_epoch() {
-        assert_eq!(format_iso8601_utc(0), "1970-01-01T00:00:00Z");
-    }
-
-    #[test]
-    fn iso8601_known_timestamp() {
-        // 2001-09-09T01:46:40Z is the well-known 10^9 Unix timestamp.
-        assert_eq!(format_iso8601_utc(1_000_000_000), "2001-09-09T01:46:40Z");
-    }
-
-    #[test]
-    fn iso8601_leap_year_day() {
-        // 2024-02-29T12:00:00Z
-        assert_eq!(format_iso8601_utc(1_709_208_000), "2024-02-29T12:00:00Z");
-    }
-
-    #[test]
-    fn rect_json_shape() {
-        let r: RectJson = ScreenRect::from_xy_size(-10, 20, 300, 400).into();
-        assert_eq!(serde_json::to_string(&r).unwrap(), r#"{"X":-10,"Y":20,"Width":300,"Height":400}"#);
-    }
-
-    #[test]
-    fn session_json_omits_cursor_when_absent() {
-        let info = SessionJson {
-            created_utc: "2026-01-01T00:00:00Z".to_string(),
-            name: "Screenshot",
-            desktop_img_path: "C:\\s\\desktop.png".to_string(),
-            preview_img_path: "C:\\s\\cropped.png".to_string(),
-            cursor_img_path: None,
-            cursor_position: None,
-            cropped_rect: ScreenRect::from_xy_size(0, 0, 10, 10).into(),
-            original_bounds: ScreenRect::from_xy_size(5, 5, 10, 10).into(),
-        };
-        let json = serde_json::to_string(&info).unwrap();
-        assert!(!json.contains("CursorImgPath"));
-        assert!(!json.contains("CursorPosition"));
-        assert!(json.contains(r#""DesktopImgPath":"C:\\s\\desktop.png""#));
-    }
 
     #[test]
     fn min_video_size_passthrough() {
@@ -660,7 +528,7 @@ mod tests {
             name: "test".to_string(),
             adapter_id: None,
             #[cfg(target_os = "macos")]
-            logical_origin: crate::geometry::LogicalPoint::new(x as f64, y as f64),
+            logical_origin: clowd_rust_core::geometry::LogicalPoint::new(x as f64, y as f64),
         }
     }
 

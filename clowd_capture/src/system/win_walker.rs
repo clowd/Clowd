@@ -28,7 +28,7 @@ use windows::{
 };
 
 use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;

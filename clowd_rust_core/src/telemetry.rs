@@ -1,19 +1,22 @@
-//! Error and crash reporting (Sentry).
+//! Error and crash reporting (Sentry), shared by every Clowd Rust binary.
 //!
 //! Release builds only — in a debug build [`init`] returns immediately and the
 //! plain terminal logger is installed unwrapped, because local failures belong in
 //! a debugger rather than in the issue tracker.
 //!
 //! Reports into the same Sentry project as the C# shell
-//! (clowd_ui/Clowd.Ui/Util/SentryConfig.cs) under the same rule. The two are told
-//! apart by the `app` tag and share a release name, so a failure in either process
-//! lines up against the same release.
+//! (clowd_ui/Clowd.Ui/Util/SentryConfig.cs) under the same rule. Processes are
+//! told apart by the `app` tag each passes to [`init`], and share a release
+//! name, so a failure in any of them lines up against the same release. That
+//! sharing is the whole reason this lives in `clowd_rust_core`: a DSN, an
+//! opt-out variable or a release format that drifted between binaries would
+//! split one incident across several projects.
 //!
 //! Three things reach Sentry:
 //!
 //! 1. Panics, via the SDK's own hook (installed by `sentry::init`). It captures
 //!    *and* flushes, so no wrapper is needed.
-//! 2. Every `error!()` in the crate, via the `log` bridge in [`install_logger`].
+//! 2. Every `error!()` in the process, via the `log` bridge in [`install_logger`].
 //!    `warn!()` and below become breadcrumbs attached to whatever is reported next.
 //! 3. A hard failure out of `run()`, via [`capture_error`] — an `Err` return is not
 //!    a panic and nothing else would ever see it.
@@ -27,8 +30,8 @@ use sentry::integrations::log::{LogFilter, SentryLogger};
 const DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.sentry.io/4511796263387136";
 
 /// Set to any non-empty value to turn reporting off. The shell honours the same
-/// variable, and the capturer inherits its environment, so opting out once
-/// covers both processes.
+/// variable, and every process it spawns inherits its environment, so opting
+/// out once covers all of them.
 const OPT_OUT_VAR: &str = "CLOWD_DISABLE_TELEMETRY";
 
 /// True when this build reports at all. Debug builds never do.
@@ -77,13 +80,17 @@ const PANIC_TARGET: &str = "clowd_panic";
 /// Starts Sentry. The returned guard flushes queued events when dropped; hold it
 /// for the lifetime of `main`. `None` means reporting is off — a debug build, the
 /// user opted out, or the client refused the DSN.
-pub fn init() -> Option<sentry::ClientInitGuard> {
+///
+/// `app` is the value of the `app` tag every event from this process carries —
+/// the crate name of the binary (`clowd_capture`, `clowd_scroll_driver`). It is
+/// how one project's issues are told apart, so give each binary its own.
+pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
     if !reporting_compiled_in() {
         return None;
     }
 
     if opted_out() {
-        info!("crash reporting disabled by {OPT_OUT_VAR}");
+        log::info!("crash reporting disabled by {OPT_OUT_VAR}");
         return None;
     }
 
@@ -109,7 +116,7 @@ pub fn init() -> Option<sentry::ClientInitGuard> {
     }
 
     sentry::configure_scope(|scope| {
-        scope.set_tag("app", "clowd_capture");
+        scope.set_tag("app", app);
     });
 
     Some(guard)
@@ -140,7 +147,14 @@ fn opted_out() -> bool {
 
 /// `clowd@<version>`, matching the shell's release name. `CLOWD_VERSION` is stamped
 /// at build time by build.sh and CI from the same nbgv version that stamps
-/// Clowd.Ui; a plain `cargo build` falls back to the crate version.
+/// Clowd.Ui; a build without it falls back to this crate's version. That fallback
+/// is reachable in a local `cargo build --release` — reporting is gated on
+/// `debug_assertions`, not on the variable — so such a build reports against
+/// release `clowd@<core's version>`. Harmless, but it is not "off".
+///
+/// Resolved here rather than per-binary so every process reports the same
+/// release string — `build.rs` re-runs this crate on a `CLOWD_VERSION` change so
+/// a cached object file cannot keep the old one.
 fn release() -> Cow<'static, str> {
     let version = option_env!("CLOWD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
     Cow::Owned(format!("clowd@{version}"))

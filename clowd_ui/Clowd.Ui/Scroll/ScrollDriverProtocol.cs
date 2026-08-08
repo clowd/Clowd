@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace Clowd.UI
 {
     /// <summary>
-    /// One NDJSON line from the capturer's <c>--scroll-drive</c> mode (CAPTURE_PROTOCOL.md).
+    /// One NDJSON line from the <c>clowd_scroll_driver</c> process (CAPTURE_PROTOCOL.md).
     /// Deliberately one flat shape rather than a polymorphic hierarchy: the four event kinds
     /// share a discriminator and between them use six fields, and System.Text.Json's source
     /// generator (which this app requires — reflection-based serialization is trimmed away)

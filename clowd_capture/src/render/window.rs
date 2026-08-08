@@ -7,11 +7,11 @@ use anyhow::Result;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture_output::{save_to_file_with_peek, ActionResult};
-use crate::geometry::{ScreenPointF, ScreenRect};
 use crate::render::protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput};
 use crate::render::worker::WorkerSetup;
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
 use crate::ui::shared::UiSharedState;
+use clowd_rust_core::geometry::{ScreenPointF, ScreenRect};
 
 // ── WindowHandle ───────────────────────────────────────────────────
 

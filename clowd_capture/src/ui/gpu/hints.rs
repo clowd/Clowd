@@ -1,14 +1,16 @@
 use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
-use crate::geometry::RectExt;
 use crate::ui::components::hints::layout::{
-    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, HintLayout, HintRect, CURSOR_SQUARE_PAD,
-    HINT_FONT_PX,
+    compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, compute_scroll_pick_hint, HintLayout,
+    HintRect, CURSOR_SQUARE_PAD, HINT_FONT_PX,
 };
 use crate::ui::components::hints::model::{render_hint_text, HINT_MONITOR};
+use crate::ui::components::scope::layout::{ScopeLayout, SCOPE_EXTENT};
 use crate::ui::gpu::rect::RectInstance;
+use crate::ui::gpu::scope::emit_scope;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE, FAMILY_MONO};
-use crate::ui::shared::{hints_visibility, UiMonitor, UiSharedState};
+use crate::ui::shared::{hints_visibility, scroll_pick_visibility, UiMonitor, UiSharedState};
+use clowd_rust_core::geometry::RectExt;
 
 const TOOLTIP_FILL: [f32; 4] = [1.0, 1.0, 1.0, 0.80];
 const TOOLTIP_BORDER: [f32; 4] = [0.75, 0.75, 0.75, 0.80];
@@ -26,6 +28,9 @@ const KEYCAP_FACE: [f32; 4] = [0.38, 0.38, 0.38, 0.90];
 const KEYCAP_BORDER: [f32; 4] = [0.06, 0.06, 0.06, 0.95];
 
 const DASH_LEN: f32 = 6.0;
+
+/// AA fringe the rounded-rect instances are inflated by.
+const AA: f32 = 1.5;
 
 struct CachedBuffer {
     buffer: Buffer,
@@ -103,7 +108,11 @@ const IDX_KEY_MAGNIFIER: usize = 6;
 const IDX_DESC_MAGNIFIER: usize = 7;
 const IDX_KEY_SCROLL: usize = 8;
 const IDX_DESC_SCROLL: usize = 9;
-const TOTAL_BUFFERS: usize = 10;
+/// The scroll-point picker's hint has no keycap — description only.
+const IDX_DESC_PICK: usize = 10;
+const TOTAL_BUFFERS: usize = 11;
+
+const SCROLL_PICK_TEXT: &str = "Click within the scrollable area";
 
 pub struct HintsRenderer {
     buffers: Vec<CachedBuffer>,
@@ -115,7 +124,9 @@ impl HintsRenderer {
     pub fn new(ts: &mut TextStack) -> Self {
         let mut buffers = Vec::with_capacity(TOTAL_BUFFERS);
         for i in 0..TOTAL_BUFFERS {
-            let is_key = i % 2 == 0;
+            // Key/description buffers alternate up to the keycap-less
+            // picker hint, which is a description like any other.
+            let is_key = i < IDX_DESC_PICK && i % 2 == 0;
             buffers.push(CachedBuffer::new(ts, 11.0, is_key, !is_key));
         }
         Self {
@@ -138,6 +149,53 @@ impl HintsRenderer {
 
         let mut placed: Vec<HintRect> = Vec::with_capacity(4);
 
+        // --- Scroll-point picker ---
+        // The picker takes the whole overlay: the only input it wants is
+        // one click inside the selection, so it replaces the pointer with
+        // its own reticle and shows a single instruction. Returning here
+        // is what suppresses the [M] cursor hint below, which is otherwise
+        // the one hint that survives capture.
+        if state.scroll_pick_mode {
+            if let Some(target) = scroll_pick_visibility(state) {
+                // The reticle is drawn by every monitor it reaches, not just
+                // the one under the cursor: aiming near a seam would
+                // otherwise show half a scope, and with the OS pointer
+                // hidden that half is the only aim indicator there is.
+                // Sized by the *cursor's* monitor so both halves match in
+                // physical pixels and line up across the seam.
+                let cx = state.virtual_cursor.x;
+                let cy = state.virtual_cursor.y;
+                let reach = SCOPE_EXTENT * target.dpi_scale.max(0.1);
+                let touches_this_monitor =
+                    cx + reach >= mon_f.left() && cx - reach < mon_f.right() && cy + reach >= mon_f.top() && cy - reach < mon_f.bottom();
+                if touches_this_monitor {
+                    let layout = ScopeLayout::compute(cx - mon_left, cy - mon_top, target.dpi_scale);
+                    emit_scope(rects, &layout, state.accent_color);
+                }
+
+                // The hint stays on the cursor's own monitor — one copy, and
+                // its placement rules are written against that monitor's
+                // bounds.
+                if target.bounds == this_monitor.bounds {
+                    self.buffers[IDX_DESC_PICK].set(ts, SCROLL_PICK_TEXT, font_px, false);
+                    let desc_w = self.buffers[IDX_DESC_PICK].width();
+                    let layout = compute_scroll_pick_hint(state, &target, dpi, desc_w, text_line_h);
+                    self.emit_hint(
+                        rects,
+                        &layout,
+                        mon_left,
+                        mon_top,
+                        None,
+                        IDX_DESC_PICK,
+                        1.0,
+                        state.accent_color,
+                        true,
+                    );
+                }
+            }
+            return;
+        }
+
         // --- Non-cursor hints (gated by hints_visibility) ---
         if let Some(target) = hints_visibility(state) {
             if target.bounds == this_monitor.bounds {
@@ -159,7 +217,7 @@ impl HintsRenderer {
                         &layout,
                         mon_left,
                         mon_top,
-                        IDX_KEY_MAGNIFIER,
+                        Some(IDX_KEY_MAGNIFIER),
                         IDX_DESC_MAGNIFIER,
                         1.0,
                         state.accent_color,
@@ -186,7 +244,7 @@ impl HintsRenderer {
                         &layout,
                         mon_left,
                         mon_top,
-                        IDX_KEY_MONITOR,
+                        Some(IDX_KEY_MONITOR),
                         IDX_DESC_MONITOR,
                         1.0,
                         state.accent_color,
@@ -217,7 +275,7 @@ impl HintsRenderer {
                         &layout,
                         mon_left,
                         mon_top,
-                        IDX_KEY_COLOR,
+                        Some(IDX_KEY_COLOR),
                         IDX_DESC_COLOR,
                         1.0,
                         state.accent_color,
@@ -259,7 +317,7 @@ impl HintsRenderer {
                     &layout,
                     mon_left,
                     mon_top,
-                    IDX_KEY_SCROLL,
+                    Some(IDX_KEY_SCROLL),
                     IDX_DESC_SCROLL,
                     1.0,
                     state.accent_color,
@@ -311,7 +369,7 @@ impl HintsRenderer {
                             &layout,
                             mon_left,
                             mon_top,
-                            IDX_KEY_CURSOR,
+                            Some(IDX_KEY_CURSOR),
                             IDX_DESC_CURSOR,
                             alpha_mul,
                             state.accent_color,
@@ -356,13 +414,15 @@ impl HintsRenderer {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// `key_idx == None` draws the pill without a keycap — the layout has
+    /// already collapsed the space it would have taken.
     fn emit_hint(
         &mut self,
         rects: &mut Vec<RectInstance>,
         layout: &HintLayout,
         mon_left: f32,
         mon_top: f32,
-        key_idx: usize,
+        key_idx: Option<usize>,
         desc_idx: usize,
         alpha_mul: f32,
         accent: [f32; 4],
@@ -376,7 +436,7 @@ impl HintsRenderer {
         let lh = layout.tooltip_h;
         let so = layout.shadow_offset;
         let se = layout.shadow_extra;
-        let aa: f32 = 1.5;
+        let aa = AA;
 
         let shadow_cr = layout.corner_radius + se;
         rects.push(RectInstance {
@@ -403,6 +463,34 @@ impl HintsRenderer {
                 params: [layout.border_px, 2.0, layout.corner_radius, glow_pad],
             });
         }
+
+        if let Some(key_idx) = key_idx {
+            self.emit_keycap(rects, layout, mon_left, mon_top, key_idx, alpha_mul);
+        }
+
+        let desc_x = layout.desc_text_x - mon_left;
+        let desc_y = layout.desc_text_y - mon_top;
+        self.positions.push(PositionedText {
+            buffer_idx: desc_idx,
+            x: desc_x,
+            y: desc_y,
+            color: [0x1A, 0x1A, 0x1A, 0xE0],
+            alpha_mul,
+        });
+    }
+
+    /// The 3-layer bevelled keycap and its letter.
+    fn emit_keycap(
+        &mut self,
+        rects: &mut Vec<RectInstance>,
+        layout: &HintLayout,
+        mon_left: f32,
+        mon_top: f32,
+        key_idx: usize,
+        alpha_mul: f32,
+    ) {
+        let a = |base: [f32; 4]| -> [f32; 4] { [base[0], base[1], base[2], base[3] * alpha_mul] };
+        let aa = AA;
 
         let kx = layout.keycap_x - mon_left;
         let ky = layout.keycap_y - mon_top;
@@ -450,16 +538,6 @@ impl HintsRenderer {
             x: key_text_x,
             y: key_text_y,
             color: [0xFF, 0xFF, 0xFF, 0xFF],
-            alpha_mul,
-        });
-
-        let desc_x = layout.desc_text_x - mon_left;
-        let desc_y = layout.desc_text_y - mon_top;
-        self.positions.push(PositionedText {
-            buffer_idx: desc_idx,
-            x: desc_x,
-            y: desc_y,
-            color: [0x1A, 0x1A, 0x1A, 0xE0],
             alpha_mul,
         });
     }

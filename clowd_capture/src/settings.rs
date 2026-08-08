@@ -10,8 +10,6 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
-
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TipsMode {
@@ -141,11 +139,10 @@ impl Default for CapturerSettings {
 /// Command-line interface. One flag per `CapturerSettings` knob; flag
 /// defaults mirror `CapturerSettings::default()` exactly.
 ///
-/// The `--scroll-drive` group at the bottom is the exception: those flags
-/// select a different *mode* of the binary (the scrolling-capture driver,
-/// CAPTURE_PROTOCOL.md §3) rather than tuning the overlay, so they never
-/// reach `CapturerSettings` — `main::run` branches on them before any
-/// session, winit or wgpu setup exists.
+/// The second half of a scrolling capture has its own binary and its own
+/// command line — see `clowd_scroll_driver` and CAPTURE_PROTOCOL.md §3.
+/// Nothing about it belongs here: the overlay's part ends when it writes
+/// the `scroll` action marker.
 #[derive(Debug, Parser)]
 #[command(version, about = "Clowd screen capturer")]
 pub struct CliArgs {
@@ -212,41 +209,6 @@ pub struct CliArgs {
     /// with `--persistent` — one-shot mode logs into `--session-dir`.
     #[arg(long, value_name = "PATH")]
     pub log_dir: Option<PathBuf>,
-
-    /// Run as the scrolling-capture driver instead of showing an overlay:
-    /// scroll the window under `--point`, capture and stitch the region,
-    /// then write a finished session into `--session-dir`. No winit, no
-    /// wgpu; stdout carries only NDJSON protocol lines and stdin accepts
-    /// `stop`/`cancel` (CAPTURE_PROTOCOL.md §3). Windows only — exits
-    /// `EXIT_CAPTURE_FAILED` elsewhere. Requires `--session-dir`,
-    /// `--region` and `--point`.
-    #[arg(long)]
-    pub scroll_drive: bool,
-
-    /// `--scroll-drive` capture region, `X,Y,W,H` in the platform capture
-    /// coordinate space (physical virtual-desktop px on Windows) — the same
-    /// space and format the overlay's `scroll` action marker uses, passed
-    /// through verbatim by the shell. `allow_hyphen_values`: a monitor left
-    /// of or above the primary puts the whole region at negative
-    /// coordinates, and without it clap reads a separate-token value like
-    /// `-1920,0,…` as an unknown flag and refuses the command line.
-    #[arg(long, value_name = "X,Y,W,H", value_parser = parse_region, allow_hyphen_values = true)]
-    pub region: Option<ScreenRect>,
-
-    /// `--scroll-drive` scroll point, `PX,PY` in the same space as
-    /// `--region` (negative coordinates included, hence
-    /// `allow_hyphen_values`). The cursor is parked here for the whole run
-    /// and every wheel event is aimed at it, so it decides which pane
-    /// scrolls.
-    #[arg(long, value_name = "PX,PY", value_parser = parse_point, allow_hyphen_values = true)]
-    pub point: Option<ScreenPoint>,
-
-    /// `--scroll-drive` target window handle as a decimal integer, as
-    /// resolved by the overlay when the user picked the scroll point. `0`
-    /// (the default) or a handle that no longer holds up means "work it out
-    /// from `--point`" — the driver re-validates it either way.
-    #[arg(long, value_name = "N", default_value_t = 0, allow_hyphen_values = true)]
-    pub hwnd: i64,
 }
 
 impl CliArgs {
@@ -272,44 +234,6 @@ pub(crate) fn parse_hex_color(s: &str) -> Result<[f32; 4], String> {
     let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap() as f32 / 255.0;
     let alpha = if hex.len() == 8 { channel(6) } else { 1.0 };
     Ok([channel(0), channel(2), channel(4), alpha])
-}
-
-/// `--region X,Y,W,H`. Zero-area regions are rejected here rather than
-/// deeper in the driver: a BitBlt of a 0-wide rect fails with a Win32 error
-/// that says nothing about where the bad rect came from.
-fn parse_region(s: &str) -> Result<ScreenRect, String> {
-    let n = parse_i32_list::<4>(s)?;
-    if n[2] <= 0 || n[3] <= 0 {
-        return Err(format!("'{s}' has a non-positive width or height"));
-    }
-    Ok(ScreenRect::from_xy_size(n[0], n[1], n[2], n[3]))
-}
-
-/// `--point PX,PY`. Negative coordinates are legal and common — a monitor
-/// left of or above the primary one lives at negative virtual-desktop
-/// coordinates.
-fn parse_point(s: &str) -> Result<ScreenPoint, String> {
-    let n = parse_i32_list::<2>(s)?;
-    Ok(ScreenPoint::new(n[0], n[1]))
-}
-
-/// Exactly `N` comma-separated decimal integers, no more and no fewer.
-fn parse_i32_list<const N: usize>(s: &str) -> Result<[i32; N], String> {
-    let mut out = [0i32; N];
-    let mut parts = s.split(',');
-    for slot in out.iter_mut() {
-        let part = parts
-            .next()
-            .ok_or_else(|| format!("'{s}' needs {N} comma-separated integers"))?
-            .trim();
-        *slot = part
-            .parse()
-            .map_err(|_| format!("'{part}' is not an integer"))?;
-    }
-    if parts.next().is_some() {
-        return Err(format!("'{s}' needs exactly {N} comma-separated integers"));
-    }
-    Ok(out)
 }
 
 fn parse_fraction(s: &str) -> Result<f32, String> {
@@ -366,101 +290,6 @@ mod tests {
         assert_eq!(parse_hex_color("#00000080").unwrap()[3], 128.0 / 255.0);
         assert!(parse_hex_color("#F00").is_err());
         assert!(parse_hex_color("not-a-color").is_err());
-    }
-
-    #[test]
-    fn region_parses_and_rejects_degenerate() {
-        assert_eq!(parse_region("10,20,300,400").unwrap(), ScreenRect::from_xy_size(10, 20, 300, 400));
-        // Secondary monitor left of the primary: negative origin, positive size.
-        assert_eq!(
-            parse_region("-1920,0,1920,1080").unwrap(),
-            ScreenRect::from_xy_size(-1920, 0, 1920, 1080)
-        );
-        assert_eq!(parse_region(" 1 , 2 , 3 , 4 ").unwrap(), ScreenRect::from_xy_size(1, 2, 3, 4));
-        assert!(parse_region("10,20,0,400").is_err());
-        assert!(parse_region("10,20,300,-1").is_err());
-        assert!(parse_region("10,20,300").is_err());
-        assert!(parse_region("10,20,300,400,500").is_err());
-        assert!(parse_region("10,20,300,x").is_err());
-    }
-
-    #[test]
-    fn point_parses_negative_coordinates() {
-        assert_eq!(parse_point("40,50").unwrap(), ScreenPoint::new(40, 50));
-        assert_eq!(parse_point("-40,-50").unwrap(), ScreenPoint::new(-40, -50));
-        assert!(parse_point("40").is_err());
-        assert!(parse_point("40,50,60").is_err());
-    }
-
-    #[test]
-    fn scroll_drive_flags_parse() {
-        let cli = CliArgs::parse_from([
-            "clowd_capture_wgpu",
-            "--scroll-drive",
-            "--session-dir",
-            "C:/tmp/session",
-            "--region",
-            "100,200,800,600",
-            "--point",
-            "450,500",
-            "--hwnd",
-            "133756",
-        ]);
-        assert!(cli.scroll_drive);
-        assert_eq!(cli.region, Some(ScreenRect::from_xy_size(100, 200, 800, 600)));
-        assert_eq!(cli.point, Some(ScreenPoint::new(450, 500)));
-        assert_eq!(cli.hwnd, 133756);
-        assert_eq!(cli.session_dir.as_deref(), Some(std::path::Path::new("C:/tmp/session")));
-    }
-
-    #[test]
-    fn scroll_flags_accept_negative_origins_as_separate_tokens() {
-        // A monitor left of or above the primary puts the region and point
-        // at negative virtual-desktop coordinates, and the shell passes
-        // each flag and its value as separate argv tokens. Without
-        // allow_hyphen_values clap reads "-1920,…" as an unknown flag and
-        // the driver dies with a usage error before emitting a single
-        // protocol line — making scrolling capture unusable on that
-        // monitor.
-        let cli = CliArgs::try_parse_from([
-            "clowd_capture_wgpu",
-            "--scroll-drive",
-            "--session-dir",
-            "C:/tmp/s",
-            "--region",
-            "-1920,-1080,1920,1080",
-            "--point",
-            "-960,-500",
-            "--hwnd",
-            "133756",
-        ])
-        .expect("separate-token negative coordinates must parse");
-        assert_eq!(cli.region, Some(ScreenRect::from_xy_size(-1920, -1080, 1920, 1080)));
-        assert_eq!(cli.point, Some(ScreenPoint::new(-960, -500)));
-        assert_eq!(cli.hwnd, 133756);
-
-        // The shell is moving to the `--flag=value` single-token spelling;
-        // both forms must keep parsing.
-        let eq_form = CliArgs::try_parse_from([
-            "clowd_capture_wgpu",
-            "--scroll-drive",
-            "--region=-1920,0,1920,1080",
-            "--point=-960,500",
-            "--hwnd=133756",
-        ])
-        .expect("single-token negative coordinates must parse");
-        assert_eq!(eq_form.region, Some(ScreenRect::from_xy_size(-1920, 0, 1920, 1080)));
-        assert_eq!(eq_form.point, Some(ScreenPoint::new(-960, 500)));
-        assert_eq!(eq_form.hwnd, 133756);
-    }
-
-    #[test]
-    fn scroll_drive_absent_by_default() {
-        let cli = CliArgs::parse_from(["clowd_capture_wgpu"]);
-        assert!(!cli.scroll_drive);
-        assert_eq!(cli.region, None);
-        assert_eq!(cli.point, None);
-        assert_eq!(cli.hwnd, 0);
     }
 
     #[test]

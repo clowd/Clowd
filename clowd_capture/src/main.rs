@@ -2,13 +2,11 @@
 mod app;
 mod capture;
 mod capture_output;
-mod geometry;
 mod gpu;
 mod host;
 mod image_extract;
 mod interaction;
 mod render;
-mod scroll;
 mod selection;
 mod session_output;
 mod settings;
@@ -41,16 +39,10 @@ fn main() -> anyhow::Result<()> {
     // (host::emit), so terminal logging goes to stderr only, and the file
     // mirror is one long-lived --log-dir/capture-host.log (previous run kept
     // as .1) instead of a per-session capture.log.
-    //
-    // The scrolling-capture driver shares the stdout rule for the same reason
-    // (scroll::drive::emit), but keeps the per-session file — under its own
-    // name, because the overlay already wrote capture.log into that very
-    // directory before handing the session over.
-    let stdout_is_protocol = args.persistent || args.scroll_drive;
     let mut loggers: Vec<Box<dyn simplelog::SharedLogger>> = vec![simplelog::TermLogger::new(
         log::LevelFilter::Info,
         simplelog::Config::default(),
-        if stdout_is_protocol {
+        if args.persistent {
             simplelog::TerminalMode::Stderr
         } else {
             simplelog::TerminalMode::Mixed
@@ -67,10 +59,9 @@ fn main() -> anyhow::Result<()> {
             std::fs::File::create(path).ok()
         })
     } else {
-        let name = if args.scroll_drive { "scroll.log" } else { "capture.log" };
         args.session_dir
             .as_ref()
-            .and_then(|dir| std::fs::File::create(dir.join(name)).ok())
+            .and_then(|dir| std::fs::File::create(dir.join("capture.log")).ok())
     };
     if let Some(file) = log_file {
         loggers.push(simplelog::WriteLogger::new(
@@ -79,10 +70,10 @@ fn main() -> anyhow::Result<()> {
             std::io::LineWriter::new(file),
         ));
     }
-    telemetry::crash::install_logger(simplelog::CombinedLogger::new(loggers));
+    clowd_rust_core::telemetry::install_logger(simplelog::CombinedLogger::new(loggers));
 
     // held for the rest of main: dropping the guard flushes anything still queued
-    let _sentry = telemetry::crash::init();
+    let _sentry = clowd_rust_core::telemetry::init("clowd_capture");
 
     // run() bails out with `?` in several places, and an Err return is not a panic —
     // the hook would never see it. Report it here, then hand it back to the runtime
@@ -90,21 +81,12 @@ fn main() -> anyhow::Result<()> {
     // ScreenCaptureService.LaunchAsync).
     let result = run(args);
     if let Err(err) = &result {
-        telemetry::crash::capture_error(err);
+        clowd_rust_core::telemetry::capture_error(err);
     }
     result
 }
 
 fn run(args: settings::CliArgs) -> anyhow::Result<()> {
-    // Scrolling-capture driver (CAPTURE_PROTOCOL.md §3). This branch comes
-    // before everything else on purpose: the driver is pure Win32 — no COM
-    // apartment, no screenshot permission dance, no event loop, no GPU — and
-    // bringing any of that up would put windows on screen in front of the
-    // very content it is about to photograph.
-    if args.scroll_drive {
-        return scroll::run(args);
-    }
-
     system::SystemInterop::init();
 
     // The shell preflights this before spawning us and owns the whole permission

@@ -1,7 +1,7 @@
 //! Writing the finished scrolling capture into the session directory.
 //!
 //! The shell is already watching this directory (`CaptureSessionDispatcher`),
-//! and the ordering invariant from `session_output` holds here too:
+//! and the ordering invariant from the overlay's `session_output` holds here too:
 //! `session.json` appears **last**, because its presence is what tells the
 //! shell the payload is complete. Everything else is written before it.
 //!
@@ -17,10 +17,10 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::geometry::{RectExt, ScreenRect};
-use crate::session_output::{absolute_path, created_utc_now, save_png, SessionJson};
+use clowd_rust_core::geometry::{RectExt, ScreenRect};
+use clowd_rust_core::session::{absolute_path, created_utc_now, save_png, SessionJson};
 
-use super::stitch::Composite;
+use crate::stitch::Composite;
 
 /// Write `desktop.png`, `cropped.png` and then `session.json`. Returns the
 /// path of the session file.
