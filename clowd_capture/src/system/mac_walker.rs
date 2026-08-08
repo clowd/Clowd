@@ -15,8 +15,8 @@ use core_graphics::geometry::CGRect;
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
 use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
 use crate::system::MonitorInfo;
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;
@@ -78,6 +78,22 @@ impl WindowWalker {
             .iter()
             .find(|w| w.rect.contains(point))
             .map(|w| w.rect)
+    }
+
+    /// Windows counterpart of the scrolling-capture target lookup. There
+    /// are no HWNDs on macOS and no scroll driver to consume one, so this
+    /// always reports "unresolved"; callers already tolerate that.
+    #[allow(dead_code)]
+    pub fn top_level_hwnd_at(&self, _point: ScreenPoint) -> Option<isize> {
+        None
+    }
+
+    /// Windows counterpart of the peeked-window handle lookup — same story
+    /// as [`top_level_hwnd_at`]: no HWNDs here, and no driver to consume
+    /// one.
+    #[allow(dead_code)]
+    pub fn hwnd_at_index(&self, _window_index: usize) -> Option<isize> {
+        None
     }
 
     /// Full hit-test returning window index and obstruction info.

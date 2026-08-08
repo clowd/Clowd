@@ -16,6 +16,7 @@ pub mod icon;
 pub mod panel;
 pub mod rect;
 pub mod renderer;
+pub mod scope;
 pub mod text;
 pub mod tips;
 

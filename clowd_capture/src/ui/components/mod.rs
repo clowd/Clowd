@@ -5,4 +5,5 @@
 pub mod debug;
 pub mod hints;
 pub mod panel;
+pub mod scope;
 pub mod tips;

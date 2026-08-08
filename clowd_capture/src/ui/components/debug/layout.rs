@@ -1,6 +1,6 @@
 //! Geometry for the debug instrumentation panels.
 
-use crate::geometry::{RectExt, ScreenRect};
+use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
 /// Distance from the screen edge (pre-DPI).
 pub const SCREEN_MARGIN: f32 = 50.0;

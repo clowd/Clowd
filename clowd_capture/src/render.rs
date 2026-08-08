@@ -3,7 +3,6 @@ use std::sync::atomic::Ordering;
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use crate::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::desktop::{create_placeholder_cursor_view, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
 use crate::gpu::{self, SURFACE_FORMAT};
@@ -12,6 +11,7 @@ use crate::telemetry::perf::{PerfSample, PerfTracker};
 use crate::ui::gpu::gpu_timing::GpuTimings;
 use crate::ui::gpu::UiRenderer;
 use crate::ui::shared::UiMonitor;
+use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 
 pub mod desktop;
 pub mod frame;
@@ -410,6 +410,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         let mut captured: bool = false;
         let mut overlays_visible: bool = true;
         let mut cursor_overlay_visible: bool = true;
+        let mut scroll_pick_mode: bool = false;
         let mut last_iter = Instant::now();
 
         loop {
@@ -429,6 +430,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     Ok(RenderMsg::UiState(state)) => {
                         overlays_visible = state.overlays_visible;
                         cursor_overlay_visible = state.cursor_overlay_visible;
+                        scroll_pick_mode = state.scroll_pick_mode;
                         ui_renderer.set_state(state);
                     }
                     Ok(RenderMsg::BlurredDesktop {
@@ -583,6 +585,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         captured,
                         overlays_visible,
                         cursor_overlay_visible,
+                        scroll_pick_mode,
                         elapsed: start.elapsed().as_secs_f32(),
                         surface_size: (config.width, config.height),
                     },

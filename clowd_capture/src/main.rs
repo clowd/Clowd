@@ -2,7 +2,6 @@
 mod app;
 mod capture;
 mod capture_output;
-mod geometry;
 mod gpu;
 mod host;
 mod image_extract;
@@ -71,10 +70,10 @@ fn main() -> anyhow::Result<()> {
             std::io::LineWriter::new(file),
         ));
     }
-    telemetry::crash::install_logger(simplelog::CombinedLogger::new(loggers));
+    clowd_rust_core::telemetry::install_logger(simplelog::CombinedLogger::new(loggers));
 
     // held for the rest of main: dropping the guard flushes anything still queued
-    let _sentry = telemetry::crash::init();
+    let _sentry = clowd_rust_core::telemetry::init("clowd_capture");
 
     // run() bails out with `?` in several places, and an Err return is not a panic —
     // the hook would never see it. Report it here, then hand it back to the runtime
@@ -82,13 +81,18 @@ fn main() -> anyhow::Result<()> {
     // ScreenCaptureService.LaunchAsync).
     let result = run(args);
     if let Err(err) = &result {
-        telemetry::crash::capture_error(err);
+        clowd_rust_core::telemetry::capture_error(err);
     }
     result
 }
 
 fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     system::SystemInterop::init();
+
+    // Before any window exists, so no cycle can end without knowing who to
+    // hand foreground rights back to. Applies to both modes: the persistent
+    // host serves many cycles for the same shell.
+    system::SystemInterop::set_shell_pid(args.shell_pid);
 
     // The shell preflights this before spawning us and owns the whole permission
     // conversation with the user (Settings → General → Permissions), so all we do

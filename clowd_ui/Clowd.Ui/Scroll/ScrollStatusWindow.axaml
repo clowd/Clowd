@@ -1,0 +1,66 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Clowd.UI.Controls"
+        xmlns:ui="using:Clowd"
+        x:Class="Clowd.UI.ScrollStatusWindow"
+        Title="Clowd Scrolling Capture"
+        WindowDecorations="None"
+        Width="300"
+        Height="50"
+        Topmost="True"
+        ShowInTaskbar="False"
+        CanResize="False"
+        ShowActivated="False"
+        Background="Transparent"
+        TransparencyLevelHint="Transparent">
+
+    <!-- The recording toolbar's look (gray #373737 panel, 50px buttons carrying their own fill,
+         Cascadia Code labels — see FloatingToolbarWindow.axaml) with none of its behavior: this
+         strip cannot be dragged or rotated. The size is FIXED rather than SizeToContent because
+         the placement search in the code-behind has to know how big the strip is BEFORE it is
+         shown — a strip that appeared anywhere provisional would, for one frame, risk sitting on
+         top of the region the driver is photographing. Keep the width in sync with
+         ScrollStatusWindow.WidthLogical / HeightLogical. -->
+    <Border Background="{x:Static ui:AppStyles.IdealBackgroundBrush}">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+
+            <StackPanel Grid.Column="0" Margin="10,0" VerticalAlignment="Center">
+                <TextBlock Name="StatusText"
+                           FontFamily="avares://Clowd.Ui/Assets/Fonts#Cascadia Code"
+                           FontSize="11"
+                           Foreground="White"
+                           LineHeight="14"
+                           Text="Starting…"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBlock Name="HintText"
+                           FontFamily="avares://Clowd.Ui/Assets/Fonts#Cascadia Code"
+                           FontSize="11"
+                           Foreground="#B0FFFFFF"
+                           LineHeight="14"
+                           Text="Esc or FINISH to stop"
+                           TextTrimming="CharacterEllipsis" />
+            </StackPanel>
+
+            <!-- FINISH stops the driver and keeps everything captured so far; CANCEL throws the
+                 whole run away. Same pairing (and same glyphs) as the recording toolbar. -->
+            <controls:CaptureToolButton Grid.Column="1"
+                                        Name="BtnFinish"
+                                        Click="FinishButtonClicked"
+                                        IconPath="{StaticResource IconStop}"
+                                        IconSize="15.2"
+                                        Primary="True"
+                                        Text="FINISH"
+                                        ToolTip.Tip="Stop scrolling and keep what has been captured (Esc does the same)" />
+
+            <controls:CaptureToolButton Grid.Column="2"
+                                        Name="BtnCancel"
+                                        Click="CancelButtonClicked"
+                                        IconPath="{StaticResource IconClose}"
+                                        IconSize="18"
+                                        Text="CANCEL"
+                                        ToolTip.Tip="Discard the scrolling capture" />
+
+        </Grid>
+    </Border>
+
+</Window>

@@ -1,5 +1,5 @@
-use crate::geometry::{RectExt, ScreenRect};
 use crate::system::{CapturedCursor, CapturedDesktop, CursorImage, WindowPeekImage};
+use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
 /// Blur the desktop bitmap for the peek overlay background.
 ///
@@ -293,7 +293,7 @@ mod tests {
         assert!(extract_selection_rgba(selection, &desktop).is_none());
     }
 
-    use crate::geometry::ScreenPoint;
+    use clowd_rust_core::geometry::ScreenPoint;
 
     #[test]
     fn composite_cursor_alpha_blended_opaque() {

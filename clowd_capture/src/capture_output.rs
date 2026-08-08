@@ -3,9 +3,9 @@ use std::time::Duration;
 
 use winit::window::Window;
 
-use crate::geometry::ScreenRect;
 use crate::image_extract::{composite_cursor_rgba, extract_selection_rgba, extract_selection_rgba_with_peek};
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
+use clowd_rust_core::geometry::ScreenRect;
 
 /// Result of a Copy or Save action.
 pub enum ActionResult {

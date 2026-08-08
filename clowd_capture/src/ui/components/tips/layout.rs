@@ -8,8 +8,8 @@
 //! All raw-pixel values are scaled by `dpi` (the primary monitor's DPI
 //! scale) at computation time.
 
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::ui::components::tips::model::{TIPS_BOTTOM, TIPS_TOP};
+use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 /// Distance from the screen edge (pre-DPI). `DEBUGBOX_MARGIN` in `pch.h:53`.
 pub const SCREEN_MARGIN: f32 = 50.0;

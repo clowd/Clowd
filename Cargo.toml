@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "clowd_capture",
+    "clowd_rust_core",
+    "clowd_scroll_driver",
     "clowd_shell_ext",
 ]
 # clowd_server is a standalone workers-rs crate (own [workspace], wasm target).
@@ -18,6 +20,9 @@ edition = "2021"
 rust-version = "1.89"
 
 [workspace.dependencies]
+# Shared by clowd_capture and clowd_scroll_driver: geometry, the session.json
+# contract, exit codes, Sentry setup.
+clowd_rust_core = { path = "clowd_rust_core" }
 anyhow = "1.0"
 clap = "4.6"
 image = { version = "0.25", default-features = false }
@@ -51,7 +56,7 @@ block2 = "0.6"
 # rustls rather than the default native-tls: keeps the capturer off OpenSSL/schannel and
 # builds identically on every target we ship. "debug-images" ships the loaded-module list
 # Sentry needs to symbolicate native frames; "log" bridges the log crate (see
-# telemetry/crash.rs) and "anyhow" preserves the error chain when main bails out.
+# clowd_rust_core/src/telemetry.rs) and "anyhow" preserves the error chain when main bails out.
 sentry = { version = "0.48", default-features = false, features = [
     "anyhow",
     "backtrace",

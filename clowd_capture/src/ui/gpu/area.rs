@@ -5,10 +5,10 @@
 //! is centered horizontally at the bottom of the selection, clamped to
 //! monitor bounds. Matches `DxScreenCapture.cpp:652-704`.
 
-use crate::geometry::RectExt;
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE};
 use crate::ui::shared::{area_indicator_visibility, UiMonitor, UiSharedState};
+use clowd_rust_core::geometry::RectExt;
 use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 const AREA_FONT_PX: f32 = 14.0;
@@ -75,7 +75,7 @@ pub struct AreaRenderer {
     buffer: CachedBuffer,
     position: Option<PositionedText>,
     text_buf: String,
-    last_selection: Option<crate::geometry::ScreenRect>,
+    last_selection: Option<clowd_rust_core::geometry::ScreenRect>,
 }
 
 impl AreaRenderer {

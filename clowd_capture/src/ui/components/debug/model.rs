@@ -6,10 +6,10 @@
 use std::fmt::{Arguments, Write};
 use std::time::Duration;
 
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::telemetry::perf::PerfTracker;
 use crate::telemetry::perf::{PerfStats, Series};
 use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
+use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 pub const COLOR_WHITE: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
 
