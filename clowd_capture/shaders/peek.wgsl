@@ -9,6 +9,13 @@ struct PeekUniforms {
     params:         vec4<f32>,
     // (cursor_x, cursor_y, dpi_scale, 0) in monitor-local pixels.
     cursor_params:  vec4<f32>,
+    // (ocr_dim, ocr_gray, ocr_active, 0) — same values the desktop pass
+    // receives in its own ocr uniforms. The peek quad covers the desktop
+    // pass inside the selection, so the OCR dim/desaturation must be
+    // re-applied HERE to the pixels actually displayed; sampling the
+    // desktop snapshot instead would show the OBSCURING window (the
+    // snapshot has no peek composite). All zero outside OCR mode.
+    ocr_params:     vec4<f32>,
     // Up to 16 obstruction rects in monitor-local pixels.
     obstruction_rects: array<vec4<f32>, 16>,
 };
@@ -100,7 +107,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     }
 
     // ── Preserve resize handles (drawn by desktop shader) ─────────
-    if (captured) {
+    // Skipped while OCR is active: the desktop pass suppresses the
+    // handles then (its ocr gate), so discarding here would punch
+    // handle-shaped holes showing the RAW desktop — the obscuring
+    // window — through the peeked content.
+    if (captured && u.ocr_params.z < 0.5) {
         let fpos = in.pos.xy;
         let step_f = f32(half);
         let handle_r = 6.0 * step_f;
@@ -152,6 +163,19 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             let gray = vec3(luma);
             result = mix(gray, window_color.rgb, ghost_opacity);
         }
+    }
+
+    // ── OCR dim + desaturation ────────────────────────────────────
+    // The identical treatment desktop.wgsl's in_fill branch applies
+    // (desaturate in gamma-2 linear light WITHOUT the outside fade's
+    // 0.42 crush, then darken), re-applied to the peek pixels actually
+    // on screen. The `<= 0` guard keeps the non-OCR path byte-exact.
+    let ocr_dim = clamp(u.ocr_params.x, 0.0, 1.0);
+    let ocr_gray = clamp(u.ocr_params.y, 0.0, 1.0);
+    if (ocr_dim > 0.0 || ocr_gray > 0.0) {
+        let lin = result * result;
+        let luma = vec3(dot(lin, vec3(0.2126, 0.7152, 0.0722)));
+        result = sqrt(mix(lin, luma, ocr_gray)) * (1.0 - ocr_dim);
     }
 
     // Inner thin crosshair cross: same geometry and contrast rule as

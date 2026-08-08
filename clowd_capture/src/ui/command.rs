@@ -30,6 +30,19 @@ pub enum Command {
     /// platforms share one dispatcher.
     #[cfg_attr(not(windows), allow(dead_code))]
     ScrollCapture,
+    /// Run OCR over the current selection and lift the recognised lines
+    /// off the desktop. The PaddleOCR backend is platform-independent, so
+    /// unlike `ScrollCapture` this is emitted on every platform.
+    Ocr,
+    /// Copy the recognised text to the clipboard.
+    OcrCopy,
+    /// Open a web search for the recognised text.
+    OcrSearch,
+    /// Upload the recognised text as a paste.
+    OcrUpload,
+    /// Leave OCR mode and return to the capture panel, keeping the
+    /// selection.
+    OcrBack,
     /// Copy the selection to the clipboard.
     Copy,
     /// Save the selection to a file.

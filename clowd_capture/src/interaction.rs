@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::ocr::coverage::LinePresentation;
+use crate::ocr::OcrOutcome;
 use crate::selection::{dpi_at_point, hit_test, DragMode, Hittest};
 use crate::settings::TipsMode;
 use crate::system::MonitorInfo;
@@ -16,6 +19,168 @@ const FAST_SPEED_THRESHOLD: f32 = 40.0;
 const HINT_MIN_DISPLAY: Duration = Duration::from_secs(3);
 const MIN_HISTORY: Duration = Duration::from_secs(3);
 const MAX_VELOCITY_SAMPLES: usize = 512;
+
+/// How long an OCR notice stays up before it expires, in seconds. The last
+/// [`NOTICE_FADE_SECS`] of that window fades it out.
+pub const NOTICE_SECS: f32 = 2.5;
+pub const NOTICE_FADE_SECS: f32 = 0.5;
+
+/// Which "OCR did not give you anything" message the overlay is showing.
+///
+/// This exists because the alternative is worse than missing polish: press
+/// OCR, get nothing back, and the overlay silently snaps to the captured
+/// state — indistinguishable from a dead button. A dialog is not an option
+/// (the overlay is topmost and fullscreen, so a dialog would open *behind*
+/// it), hence an in-overlay pill.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OcrNoticeKind {
+    /// Recognition succeeded but produced zero lines.
+    NoText,
+    /// No recognizer at all — no language pack, or a platform with no OCR.
+    Unavailable,
+    /// The engine errored. The detail goes to the log, not to the user:
+    /// a WinRT HRESULT string is noise on screen.
+    Failed,
+}
+
+impl OcrNoticeKind {
+    /// Short, plain user-facing text. Deliberately terse — the pill is
+    /// small, transient, and sits over the user's own screen content.
+    pub fn message(&self) -> &'static str {
+        match self {
+            OcrNoticeKind::NoText => "No text found",
+            OcrNoticeKind::Unavailable => "OCR is not available on this PC",
+            OcrNoticeKind::Failed => "OCR failed",
+        }
+    }
+}
+
+/// A transient notice pill shown over the selection.
+///
+/// `anchor` is an absolute `Instant` for the same reason [`OcrState`]'s is:
+/// every render worker free-runs at its own refresh rate, so the fade must
+/// be a pure function of wall-clock elapsed time, not of frame counts.
+///
+/// No extra frame scheduling is needed to animate the fade: the capture
+/// cycle already runs `ControlFlow::Poll` and the render workers free-run,
+/// so frames keep arriving on their own while the notice is up.
+#[derive(Debug, Clone, Copy)]
+pub struct OcrNotice {
+    pub anchor: Instant,
+    pub kind: OcrNoticeKind,
+}
+
+impl OcrNotice {
+    /// Whether the notice should still be drawn at all.
+    pub fn visible(&self) -> bool {
+        self.anchor.elapsed().as_secs_f32() < NOTICE_SECS
+    }
+
+    /// Opacity multiplier: solid, then a linear ramp to zero across the
+    /// final [`NOTICE_FADE_SECS`].
+    pub fn alpha(&self) -> f32 {
+        notice_alpha(self.anchor.elapsed().as_secs_f32())
+    }
+}
+
+/// The fade curve, split out as a pure function of elapsed seconds so it is
+/// testable without doing arithmetic on `Instant` (subtracting from
+/// `Instant::now()` can panic on a freshly-booted machine, and adding to it
+/// cannot be observed by `elapsed()`).
+fn notice_alpha(elapsed: f32) -> f32 {
+    let fade_starts = NOTICE_SECS - NOTICE_FADE_SECS;
+    if elapsed <= fade_starts {
+        return 1.0;
+    }
+    // Clamped rather than assumed in-range: a notice left up across a
+    // suspend/resume can come back with an arbitrarily large elapsed.
+    (1.0 - (elapsed - fade_starts) / NOTICE_FADE_SECS).clamp(0.0, 1.0)
+}
+
+/// Where the OCR "lift-and-act" mode is in its lifecycle. One enum rather
+/// than a bool plus a result pair, so illegal states — a pending result
+/// outside the mode, a mode with no result — are unrepresentable.
+///
+/// Every variant that animates carries an `anchor`: the animation clock's
+/// t=0 for the CURRENT phase, as an absolute `Instant`. That is the whole
+/// point of the shape. Each render worker free-runs at its own monitor's
+/// refresh rate and would otherwise anchor its clock at BeginCycle delivery
+/// time; the resulting skew would pull the per-line stagger apart across
+/// monitors. `Instant` is `Copy + Send` off one process-global monotonic
+/// source, so every worker derives byte-identical geometry from
+/// `anchor.elapsed()`.
+///
+#[derive(Debug, Clone)]
+pub enum OcrState {
+    Idle,
+    /// Recognition in flight; the scanning sweep plays over `region`.
+    /// `req` is a per-cycle monotonic id — a late result whose id no longer
+    /// matches is discarded. The cycle_gen tag cannot stand in for it:
+    /// BACK leaves the same cycle alive, so a stale result would arrive
+    /// under a still-current generation.
+    Scanning {
+        anchor: Instant,
+        req: u64,
+        region: ScreenRect,
+    },
+    /// Lines recognized; the reveal pass sweeps top→bottom raising them,
+    /// and the OCR button set is live.
+    /// `dpi_scale` is the scale of the monitor containing the region's
+    /// centre — ONE value for all lift geometry, so a line crossing a
+    /// mixed-DPI seam moves by the same physical amount on both halves
+    /// instead of tearing at the seam.
+    /// `presentation[i]` is line i's bubble-vs-pixel-crop decision,
+    /// classified ONCE on the app thread when the outcome landed
+    /// (`ocr::coverage`) — carried here so no render worker re-scans the
+    /// text per frame, and so every worker agrees on it by construction.
+    Lifted {
+        anchor: Instant,
+        region: ScreenRect,
+        dpi_scale: f32,
+        outcome: Arc<OcrOutcome>,
+        presentation: Arc<[LinePresentation]>,
+    },
+    /// BACK/Escape pressed. The text does NOT animate out — every bubble
+    /// and crop vanishes on the first frame of this phase (see
+    /// `anim::RETRACT_DURATION_SECS`) — so all this phase does is fade the
+    /// region's dim/desaturation back to colour, which is why it carries
+    /// no outcome: there is nothing left to draw that needs one. The app
+    /// thread flips to `Idle` once `anchor.elapsed()` passes the fade
+    /// duration.
+    Retracting {
+        anchor: Instant,
+        region: ScreenRect,
+    },
+}
+
+impl OcrState {
+    /// Any non-Idle phase. Used to freeze selection drag/resize and gate
+    /// input: the selection must not move out from under lifted lines whose
+    /// geometry was computed against it.
+    pub fn active(&self) -> bool {
+        !matches!(self, OcrState::Idle)
+    }
+
+    /// Phases that show the OCR button set: `Lifted` ONLY.
+    ///
+    /// `Scanning` deliberately shows no panel at all (see [`Self::hides_panel`]
+    /// and `ui::shared::active_panel_set`): while the sweep is looping there
+    /// is no text yet, so COPY/SEARCH/UPLOAD would be lit but dead — the
+    /// strip appears exactly when it becomes usable. `Retracting` shows the
+    /// Normal set again — BACK restores the familiar buttons instantly
+    /// while the retract animation plays out purely cosmetically.
+    pub fn shows_ocr_panel(&self) -> bool {
+        matches!(self, OcrState::Lifted { .. })
+    }
+
+    /// Phases where no panel may be on screen at all. Split from
+    /// [`Self::shows_ocr_panel`] so `active_panel_set` reads as policy
+    /// rather than pattern-matching: during the scan the only live inputs
+    /// are Escape and waiting, and nothing clickable may suggest otherwise.
+    pub fn hides_panel(&self) -> bool {
+        matches!(self, OcrState::Scanning { .. })
+    }
+}
 
 pub(crate) struct MouseVelocityTracker {
     samples: VecDeque<(Instant, ScreenPointF)>,
@@ -131,6 +296,16 @@ pub(crate) struct InteractionState {
     /// routed to the picker instead of the panel/drag machinery. Escape
     /// leaves the mode without cancelling the cycle.
     pub scroll_pick_mode: bool,
+    /// Where the OCR lift-and-act mode is in its lifecycle — see
+    /// [`OcrState`]. Mirrored verbatim onto `UiSharedState` so the lifted
+    /// lines, the modal input gates and the panel set all swap in one
+    /// atomic broadcast.
+    pub ocr: OcrState,
+    /// A transient "that produced nothing" pill — see [`OcrNotice`]. It
+    /// deliberately outlives the OCR attempt that raised it: by the time
+    /// the user reads it, `ocr` is back to `Idle`, so it cannot live inside
+    /// the state enum.
+    pub ocr_notice: Option<OcrNotice>,
 }
 
 #[derive(Default)]
@@ -227,6 +402,13 @@ impl InteractionController {
         // to click inside; dropping the selection must drop the mode too,
         // or the crosshair/hidden-panel state would outlive its reason.
         input.scroll_pick_mode = false;
+        // Same reasoning as pick mode, one step stronger: a recognition
+        // result is a set of rects positioned against the selection that
+        // produced it. Once that selection is gone the lifted lines have
+        // nothing to sit on and the OCR button set has nothing to act on,
+        // so the mode — and any notice it raised — goes with it.
+        input.ocr = OcrState::Idle;
+        input.ocr_notice = None;
         input.hittest = Hittest::Outside;
         input.drag_mode = None;
         input.drag_anchor_selection = None;
@@ -286,7 +468,25 @@ mod tests {
             velocity_tracker: MouseVelocityTracker::new(),
             has_used_magnifier: false,
             scroll_pick_mode: false,
+            ocr: OcrState::Idle,
+            ocr_notice: None,
         }
+    }
+
+    /// A result-shaped payload for state assertions. Recognition itself is
+    /// never exercised here — this module only cares that the mode field is
+    /// carried and cleared correctly.
+    fn dummy_outcome() -> Arc<OcrOutcome> {
+        Arc::new(OcrOutcome {
+            lines: Vec::new(),
+            full_text: String::new(),
+            text_angle: 0.0,
+        })
+    }
+
+    /// Companion to [`dummy_outcome`]: an empty per-line classification.
+    fn dummy_presentation() -> Arc<[LinePresentation]> {
+        Arc::from(Vec::new())
     }
 
     #[test]
@@ -326,15 +526,100 @@ mod tests {
         input.captured = true;
         input.selection = Some(ScreenRect::from_xy_size(1, 1, 10, 10));
         input.scroll_pick_mode = true;
+        input.ocr = OcrState::Lifted {
+            anchor: Instant::now(),
+            region: ScreenRect::from_xy_size(1, 1, 10, 10),
+            dpi_scale: 1.0,
+            outcome: dummy_outcome(),
+            presentation: dummy_presentation(),
+        };
+        input.ocr_notice = Some(OcrNotice {
+            anchor: Instant::now(),
+            kind: OcrNoticeKind::NoText,
+        });
 
         let effects = InteractionController::reset(&mut input);
 
         assert!(!input.captured);
         assert_eq!(input.selection, None);
         assert!(!input.scroll_pick_mode);
+        // The lifted lines were positioned against the selection that just
+        // disappeared; leaving the mode up would draw them over nothing.
+        assert!(!input.ocr.active());
+        assert!(input.ocr_notice.is_none());
         assert_eq!(input.hittest, Hittest::Outside);
         assert!(effects.broadcast_ui);
         assert!(effects.update_cursor_visibility);
+    }
+
+    #[test]
+    fn ocr_state_gates_agree_on_each_phase() {
+        let region = ScreenRect::from_xy_size(1, 1, 10, 10);
+
+        assert!(!OcrState::Idle.active());
+        assert!(!OcrState::Idle.shows_ocr_panel());
+        assert!(!OcrState::Idle.hides_panel());
+
+        // Scanning: modal, but NO panel of any kind — the strip used to
+        // show here with COPY/SEARCH/UPLOAD lit-but-dead, which read as
+        // broken buttons. The strip now appears only once there is text to
+        // act on.
+        let scanning = OcrState::Scanning {
+            anchor: Instant::now(),
+            req: 1,
+            region,
+        };
+        assert!(scanning.active());
+        assert!(!scanning.shows_ocr_panel());
+        assert!(scanning.hides_panel());
+
+        let lifted = OcrState::Lifted {
+            anchor: Instant::now(),
+            region,
+            dpi_scale: 1.0,
+            outcome: dummy_outcome(),
+            presentation: dummy_presentation(),
+        };
+        assert!(lifted.active());
+        assert!(lifted.shows_ocr_panel());
+        assert!(!lifted.hides_panel());
+
+        // Retracting is still modal (the colour fade is playing, the
+        // selection stays frozen) but hands the Normal buttons back at once.
+        let retracting = OcrState::Retracting {
+            anchor: Instant::now(),
+            region,
+        };
+        assert!(retracting.active());
+        assert!(!retracting.shows_ocr_panel());
+        assert!(!retracting.hides_panel());
+    }
+
+    #[test]
+    fn notice_alpha_is_solid_then_ramps_to_zero() {
+        // t=0 and anywhere before the fade window: fully opaque.
+        assert_eq!(notice_alpha(0.0), 1.0);
+        assert_eq!(notice_alpha(NOTICE_SECS - NOTICE_FADE_SECS), 1.0);
+        // Halfway through the fade window.
+        assert!((notice_alpha(NOTICE_SECS - NOTICE_FADE_SECS / 2.0) - 0.5).abs() < 1e-4);
+        // Just before expiry: nearly gone, but not yet zero.
+        let nearly_done = notice_alpha(NOTICE_SECS - 0.001);
+        assert!(nearly_done > 0.0 && nearly_done < 0.01, "got {nearly_done}");
+        // Past expiry, including absurdly far past it (suspend/resume).
+        assert_eq!(notice_alpha(NOTICE_SECS), 0.0);
+        assert_eq!(notice_alpha(NOTICE_SECS + 10.0), 0.0);
+        assert_eq!(notice_alpha(1.0e9), 0.0);
+    }
+
+    #[test]
+    fn fresh_notice_is_visible_and_opaque() {
+        let n = OcrNotice {
+            anchor: Instant::now(),
+            kind: OcrNoticeKind::Unavailable,
+        };
+        assert!(n.visible());
+        assert_eq!(n.alpha(), 1.0);
+        assert!(!n.kind.message().is_empty());
     }
 
     #[test]

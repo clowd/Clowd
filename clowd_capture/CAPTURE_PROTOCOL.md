@@ -61,7 +61,9 @@ The shell pre-creates the session directory and passes it via
 | SELECT-COLOR | `action.txt` only | `select-color #RRGGBB` |
 | VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H` |
 | SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
+| OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
+| OCR-COPY / OCR-SEARCH | none — handled inside the capturer (clipboard / browser launch) | — |
 | Cancelled (Escape / close) | none | — |
 
 File contents:
@@ -72,6 +74,7 @@ File contents:
 | `cropped.png` | Preview of the selection, peek composited; cursor composited only if visible to the user. For VIDEO: no peek compositing (the recording shows real obstructions). |
 | `cursor.png` | Desktop crop at the cursor rect with the cursor composited. Absent when no cursor was captured or the OS reported it hidden. |
 | `session.json` | Session metadata (§1.3). |
+| `ocr.txt` | The text recognized in the selection, UTF-8 without BOM, lines separated by `\n`. Present only with the `ocr-upload` marker; the shell reads it, uploads it as a text paste, and deletes the directory. |
 | `action.txt` | Routing marker read by `CaptureSessionDispatcher` (missing = edit). |
 | `capture.log` | Mirror of the capturer's log (one-shot mode only), read by the shell after a non-zero exit. |
 | `scroll.log` | Same, for the `clowd_scroll_driver` pass (§3). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
@@ -86,8 +89,11 @@ completion signal, so readers must wait for process exit (one-shot) or the
 2. VIDEO: `cropped.png` first, then **`action.txt` last**. Its appearance is
    the completion signal; no `desktop.png`, no `session.json` (the session is
    created by Clowd.Ui when recording finishes).
-3. SELECT-COLOR / SCROLL: `action.txt` only.
-4. Neither `session.json` nor `action.txt` present = the capture was
+3. OCR-UPLOAD: `ocr.txt` first, then **`action.txt` last**. Its appearance is
+   the completion signal; no PNGs and no `session.json` — the recognized text
+   is the entire payload, and the shell uploads it as a text paste.
+4. SELECT-COLOR / SCROLL: `action.txt` only.
+5. Neither `session.json` nor `action.txt` present = the capture was
    cancelled; the shell deletes the pre-created directory.
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
@@ -102,6 +108,14 @@ window handle under that point, or `0` when the walker could not resolve one
 poster frame: the driver produces every image plus the `session.json` for
 the stitched result, so `action.txt` is the whole overlay payload. macOS
 never emits this marker.
+
+The OCR markers come from a second action panel the overlay shows once it has
+recognized text inside the selection (Windows only — like SCROLL, the button
+is compiled out elsewhere, so macOS never emits them either). Only UPLOAD
+reaches the shell: COPY and SEARCH finish inside the capturer, BACK returns to
+the ordinary panel without ending the cycle at all, and EXIT is an ordinary
+cancel. `ocr-upload` carries no rect — by then the selection has been reduced
+to the text in `ocr.txt`.
 
 ### 1.3 `session.json` schema
 
@@ -127,7 +141,7 @@ Constants in `src/system/mod.rs`; keep in sync with
 
 | Code | Meaning |
 |---|---|
-| 0 | Every normal outcome — edit, upload, color, video, copy, save, **and cancel**. The shell distinguishes them by the session files, not the code. |
+| 0 | Every normal outcome — edit, upload, color, video, copy, save, OCR copy/search/upload, **and cancel**. The shell distinguishes them by the session files, not the code. |
 | 3 | `EXIT_NO_SCREEN_PERMISSION` — the OS has not granted screen capture (macOS Screen Recording). The shell shows the permission dialog instead of a crash report. |
 | 4 | `EXIT_CAPTURE_FAILED` — the desktop screenshot itself failed. The reason is in stderr/`capture.log`, not a stack trace. |
 
@@ -210,7 +224,7 @@ Examples:
 |---|---|---|
 | `ready` | `warmup_ms` (u64), `monitors` (count) | Emitted once, when every render worker has parked (device, pipelines, surface ready). A `show` will now be fast. `warmup_ms` is measured from process start. |
 | `shown` | `elapsed_ms` (u64) | The overlay windows are on screen. Exactly one per accepted `show`; `elapsed_ms` is measured from the `show` command. |
-| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `scroll` \| `copy` \| `save` \| `cancelled`. |
+| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `scroll` \| `copy` \| `save` \| `ocr_copy` \| `ocr_search` \| `ocr_upload` \| `cancelled`. |
 | `pong` | — | Answer to `ping`. |
 | `display_changed` | — | The monitor topology changed (or a GPU device was lost) under the warm state; the process exits right after with code 5 or 6. Informational — the parent keys its respawn policy off the exit code. |
 | `fatal_error` | `message` (string) | Something unrecoverable happened to the active cycle (e.g. the desktop screenshot never arrived within its 30 s deadline). The cycle is cancelled; a `finished` (`action: "cancelled"`) always follows, so a waiting parent is never left hanging. |

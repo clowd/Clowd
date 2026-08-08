@@ -6,6 +6,7 @@ mod gpu;
 mod host;
 mod image_extract;
 mod interaction;
+mod ocr;
 mod render;
 mod selection;
 mod session_output;

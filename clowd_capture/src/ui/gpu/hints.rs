@@ -2,7 +2,7 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 
 use crate::ui::components::hints::layout::{
     compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, compute_scroll_pick_hint, HintLayout,
-    HintRect, CURSOR_SQUARE_PAD, HINT_FONT_PX,
+    HintRect, CORNER_RADIUS, CURSOR_SQUARE_PAD, HINT_FONT_PX, HINT_PADDING_H, HINT_PADDING_V, SHADOW_EXTRA, SHADOW_OFFSET,
 };
 use crate::ui::components::hints::model::{render_hint_text, HINT_MONITOR};
 use crate::ui::components::scope::layout::{ScopeLayout, SCOPE_EXTENT};
@@ -10,11 +10,18 @@ use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::scope::emit_scope;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE, FAMILY_MONO};
 use crate::ui::shared::{hints_visibility, scroll_pick_visibility, UiMonitor, UiSharedState};
-use clowd_rust_core::geometry::RectExt;
+use clowd_rust_core::geometry::{RectExt, ScreenRectExt};
 
-const TOOLTIP_FILL: [f32; 4] = [1.0, 1.0, 1.0, 0.80];
-const TOOLTIP_BORDER: [f32; 4] = [0.75, 0.75, 0.75, 0.80];
+// pub(crate): the tooltip palette is shared style — the OCR text bubbles
+// (`super::ocr_bubbles`) must match the hint pills exactly, so they import
+// these instead of re-deriving them. (SHADOW_FILL stays private: the
+// bubbles deliberately carry no shadow — they sit on a darkened page.)
+pub(crate) const TOOLTIP_FILL: [f32; 4] = [1.0, 1.0, 1.0, 0.80];
+pub(crate) const TOOLTIP_BORDER: [f32; 4] = [0.75, 0.75, 0.75, 0.80];
 const SHADOW_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.40];
+/// The pill body-text colour (near-black at 88% alpha) — same sharing
+/// story as the fills above.
+pub(crate) const TOOLTIP_TEXT_COLOR: [u8; 4] = [0x1A, 0x1A, 0x1A, 0xE0];
 
 // Keycap: 3-layer bevel design.
 // Layer 1 (base): dark gray — visible as bottom-right shadow edge.
@@ -29,8 +36,9 @@ const KEYCAP_BORDER: [f32; 4] = [0.06, 0.06, 0.06, 0.95];
 
 const DASH_LEN: f32 = 6.0;
 
-/// AA fringe the rounded-rect instances are inflated by.
-const AA: f32 = 1.5;
+/// AA fringe the rounded-rect instances are inflated by. Shared with the
+/// OCR bubbles for the same reason as the palette above.
+pub(crate) const AA: f32 = 1.5;
 
 struct CachedBuffer {
     buffer: Buffer,
@@ -110,9 +118,14 @@ const IDX_KEY_SCROLL: usize = 8;
 const IDX_DESC_SCROLL: usize = 9;
 /// The scroll-point picker's hint has no keycap — description only.
 const IDX_DESC_PICK: usize = 10;
-const TOTAL_BUFFERS: usize = 11;
+/// The OCR notice pill ("No text found" etc.) — also keycap-less.
+const IDX_DESC_NOTICE: usize = 11;
+const TOTAL_BUFFERS: usize = 12;
 
 const SCROLL_PICK_TEXT: &str = "Click within the scrollable area";
+
+/// Gap between the selection's top edge and the pill's bottom edge.
+const NOTICE_GAP_Y: f32 = 8.0;
 
 pub struct HintsRenderer {
     buffers: Vec<CachedBuffer>,
@@ -125,7 +138,8 @@ impl HintsRenderer {
         let mut buffers = Vec::with_capacity(TOTAL_BUFFERS);
         for i in 0..TOTAL_BUFFERS {
             // Key/description buffers alternate up to the keycap-less
-            // picker hint, which is a description like any other.
+            // picker + OCR-notice hints, which are descriptions like any
+            // other.
             let is_key = i < IDX_DESC_PICK && i % 2 == 0;
             buffers.push(CachedBuffer::new(ts, 11.0, is_key, !is_key));
         }
@@ -193,6 +207,101 @@ impl HintsRenderer {
                     );
                 }
             }
+            return;
+        }
+
+        // --- OCR notice pill ---
+        // Transient feedback for an OCR attempt that produced nothing
+        // (no text / engine unavailable / engine failure). By design it is
+        // only ever up while `state.ocr` is Idle — the failed attempt has
+        // already unwound back to the plain captured state — so it MUST
+        // sit before the ocr.active() suppression below, or it could never
+        // render at all and the OCR button would be indistinguishable from
+        // a dead one.
+        if let Some(notice) = state.ocr_notice {
+            // The notice anchors to the selection the OCR attempt ran on;
+            // both are cleared together on reset, so a missing selection
+            // just means there is nothing to anchor to.
+            if notice.visible() {
+                if let Some(sel) = state.selection {
+                    // One copy, on the monitor holding the selection's
+                    // centre — the same rule that places the panel, so the
+                    // pill and the buttons that caused it share a monitor.
+                    let b = this_monitor.bounds;
+                    let cx = sel.center_x();
+                    let cy = sel.center_y();
+                    if cx >= b.min_x() && cx < b.max_x() && cy >= b.min_y() && cy < b.max_y() {
+                        self.buffers[IDX_DESC_NOTICE].set(ts, notice.kind.message(), font_px, false);
+                        let desc_w = self.buffers[IDX_DESC_NOTICE].width();
+
+                        // The shared pill paddings (the OCR button-strip
+                        // press was what raised this pill, and the bubbles
+                        // it leads to use the same metrics).
+                        let padding_h = (HINT_PADDING_H * dpi).floor();
+                        let padding_v = (HINT_PADDING_V * dpi).floor();
+                        let tooltip_w = padding_h * 2.0 + desc_w;
+                        let tooltip_h = padding_v * 2.0 + text_line_h;
+
+                        // Centred over the selection, just above its top
+                        // edge, clamped fully inside the monitor (a
+                        // selection at the very top pushes the pill down
+                        // over itself rather than off screen).
+                        let sel_f = sel.to_f32();
+                        let x = ((sel_f.left() + sel_f.right()) * 0.5 - tooltip_w * 0.5)
+                            .clamp(mon_f.left(), (mon_f.right() - tooltip_w).max(mon_f.left()));
+                        let y = (sel_f.top() - (NOTICE_GAP_Y * dpi).floor() - tooltip_h)
+                            .clamp(mon_f.top(), (mon_f.bottom() - tooltip_h).max(mon_f.top()));
+
+                        // A hand-rolled keycap-less HintLayout mirroring
+                        // what layout.rs's finalize_layout would produce —
+                        // its dimension helpers are private, and this pill
+                        // is the only selection-anchored hint.
+                        let layout = HintLayout {
+                            tooltip_x: x,
+                            tooltip_y: y,
+                            tooltip_w,
+                            tooltip_h,
+                            keycap_x: x,
+                            keycap_y: y,
+                            keycap_size: 0.0,
+                            keycap_inset: 0.0,
+                            desc_text_x: x + padding_h,
+                            desc_text_y: (y + (tooltip_h - text_line_h) / 2.0 + font_px * 0.1).floor(),
+                            corner_radius: (CORNER_RADIUS * dpi).floor(),
+                            keycap_corner_radius: 0.0,
+                            keycap_inner_corner_radius: 0.0,
+                            shadow_offset: (SHADOW_OFFSET * dpi).floor(),
+                            shadow_extra: (SHADOW_EXTRA * dpi).floor(),
+                            border_px: dpi.ceil().max(1.0),
+                        };
+                        // The fade needs no frame scheduling: the cycle
+                        // runs ControlFlow::Poll and every render worker
+                        // free-runs, so `alpha()` is simply re-read each
+                        // frame.
+                        self.emit_hint(
+                            rects,
+                            &layout,
+                            mon_left,
+                            mon_top,
+                            None,
+                            IDX_DESC_NOTICE,
+                            notice.alpha(),
+                            state.accent_color,
+                            false,
+                        );
+                    }
+                }
+            }
+        }
+
+        // --- OCR mode: every hint is suppressed ---
+        // Same reasoning as the picker above: while OCR mode is active the
+        // only live surface is the button panel, so nothing else may look
+        // interactive. That includes the [M] cursor hint — the one hint
+        // that otherwise survives capture — because the app thread
+        // swallows 'm' in this mode; the hint and the key gate must agree
+        // or the overlay advertises a key that does nothing.
+        if state.ocr.active() {
             return;
         }
 
@@ -474,7 +583,7 @@ impl HintsRenderer {
             buffer_idx: desc_idx,
             x: desc_x,
             y: desc_y,
-            color: [0x1A, 0x1A, 0x1A, 0xE0],
+            color: TOOLTIP_TEXT_COLOR,
             alpha_mul,
         });
     }

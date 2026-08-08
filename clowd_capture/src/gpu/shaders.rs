@@ -34,3 +34,7 @@ pub fn ui_rect(device: &wgpu::Device) -> wgpu::ShaderModule {
 pub fn ui_icon(device: &wgpu::Device) -> wgpu::ShaderModule {
     wgsl(device, "ui_icon", include_str!("../../shaders/ui_icon.wgsl"))
 }
+
+pub fn ui_lift(device: &wgpu::Device) -> wgpu::ShaderModule {
+    wgsl(device, "ui_lift", include_str!("../../shaders/ui_lift.wgsl"))
+}

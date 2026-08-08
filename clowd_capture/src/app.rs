@@ -12,18 +12,24 @@ use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture::session::{spawn_screenshot_job, spawn_walker_job, ScreenshotJobParams};
-use crate::capture_output::{copy_to_clipboard_with_peek, ActionResult};
+use crate::capture_output::{copy_text_to_clipboard, copy_to_clipboard_with_peek, ActionResult};
 use crate::host::{
     self,
     protocol::{HostCommand, HostEvent, ShowParams},
     AppEvent,
 };
-use crate::interaction::{InteractionController, InteractionEffects, InteractionState, MouseVelocityTracker};
+use crate::image_extract::{extract_selection_bgra, extract_selection_bgra_with_peek};
+use crate::interaction::{
+    InteractionController, InteractionEffects, InteractionState, MouseVelocityTracker, OcrNotice, OcrNoticeKind, OcrState,
+};
+use crate::ocr::{self, OcrError, OcrOutcome, OcrRequest};
 use crate::render::protocol::{next_cycle_gen, PeekCommand, RenderMsg, WorkerInput};
 use crate::render::window::{set_hardware_cursor_visible, WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
-use crate::session_output::{write_color_action, write_scroll_action, write_session, write_video_action, SessionAction};
+use crate::session_output::{
+    write_color_action, write_ocr_upload_action, write_scroll_action, write_session, write_video_action, SessionAction,
+};
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker, EXIT_DISPLAY_CHANGED, EXIT_GPU_LOST};
@@ -165,7 +171,40 @@ pub struct CaptureCycle {
     /// once, regardless of which capture path (drag / keyboard / preselect)
     /// fired (DESIGN §3.3).
     video_dispatched: bool,
+    /// Monotonic per-cycle OCR request id. Bumped on every dispatch AND on
+    /// every BACK/cancel, so a late result from a superseded request is
+    /// discarded on pickup — the cycle_gen tag cannot help here because BACK
+    /// leaves the same cycle alive.
+    ocr_req: u64,
+    /// The in-flight recognition job, if any.
+    ocr_job: Option<OcrJob>,
+    /// A result being held until its release time: `(release_secs, result)`
+    /// where `release_secs` is measured on the Scanning anchor. Computed at
+    /// pickup by `anim::scan_release_secs`: failures wait only the
+    /// anti-flicker floor (warm OCR is 6-35 ms), while a successful outcome
+    /// is held until the looping sweep's current pass WRAPS — the one
+    /// instant the band is fully off-screen — so the Lifted reveal pass
+    /// (fresh anchor, band entering from the top) continues it seamlessly.
+    ocr_ready: Option<(f32, Result<OcrOutcome, OcrError>)>,
+    /// Whether the current OCR request's pixels had the locked peek image
+    /// composited in (`Command::Ocr`). Read when the result lifts: a peeked
+    /// recognition must suppress the PIXEL-CROP fallback lines, because the
+    /// crop quads sample the raw desktop snapshot texture, which contains
+    /// the OBSCURING window and not the composite that was recognized. Text
+    /// bubbles are immune (they render recognized glyphs, not texture
+    /// samples) and show normally — see `try_advance_ocr`. Per-request like
+    /// `ocr_ready`: rewritten on every dispatch, and stale results are
+    /// discarded by `ocr_req` before this is ever consulted.
+    ocr_peek_composited: bool,
+    /// Defence against the panel's synchronous set swap turning one
+    /// physical double-click into two different commands — see
+    /// [`PanelSwapGuard`].
+    panel_swap: PanelSwapGuard,
 }
+
+/// An in-flight OCR recognition: (request id, one-shot result latch,
+/// cooperative cancel flag read by the worker around its blocking call).
+type OcrJob = (u64, Arc<Latch<Result<OcrOutcome, OcrError>>>, Arc<AtomicBool>);
 
 struct PendingShow {
     ready_count: Arc<AtomicUsize>,
@@ -186,6 +225,13 @@ pub enum CycleAction {
     Scroll,
     Copy,
     Save,
+    /// OCR mode's COPY: the recognized text went to the clipboard.
+    OcrCopy,
+    /// OCR mode's SEARCH: a web search for the recognized text was opened.
+    OcrSearch,
+    /// OCR mode's UPLOAD: the recognized text was handed to the shell to
+    /// upload as a paste.
+    OcrUpload,
     Cancelled,
 }
 
@@ -272,10 +318,14 @@ fn set_cursor_if_changed(windows: &WindowSet, last_cursor: &mut HashMap<WindowId
 /// App-thread mirror of [`crate::ui::shared::panel_visibility`] — the two
 /// must agree on every gate, or the app would route clicks to buttons the
 /// renderers are not drawing.
+///
+/// The riskiest half of that agreement — *which* button set is up, and
+/// therefore which command each index maps to — is not duplicated here at
+/// all: both sides call [`crate::ui::shared::active_panel_set`], so a click
+/// on the OCR strip's BACK can never fire whatever the Normal strip has at
+/// that index.
 fn current_panel_layout(cycle: &CaptureCycle, monitors: &[MonitorInfo]) -> Option<crate::ui::components::panel::layout::PanelLayout> {
-    if !cycle.input.captured || cycle.input.scroll_pick_mode {
-        return None;
-    }
+    let set = crate::ui::shared::active_panel_set(cycle.input.captured, cycle.input.scroll_pick_mode, &cycle.input.ocr)?;
     let sel = cycle.input.selection?;
     let cx = sel.center_x();
     let cy = sel.center_y();
@@ -283,23 +333,135 @@ fn current_panel_layout(cycle: &CaptureCycle, monitors: &[MonitorInfo]) -> Optio
         let b = m.bounds;
         cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
     })?;
-    crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor)
+    crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor, set)
 }
 
-/// Whether Return fires the panel's default accept (`Command::Edit`).
+/// The command Return fires — the panel's invisible default button — or
+/// `None` when Return must stay inert.
 ///
-/// Return is the panel's invisible default button, so it is gated by the
-/// same state the panel is: while a scroll point is being picked the panel
-/// is hidden and every accelerator it owns is swallowed, so Return must be
-/// inert too. Without the pick-mode gate it would write a plain screenshot
-/// session and end the cycle out from under the scroll capture the user is
-/// half-way through configuring. Escape remains the only way out of pick
-/// mode.
-fn enter_accepts_default_action(input: &InteractionState) -> bool {
-    input.captured && !input.scroll_pick_mode
+/// Return is gated by the same state the panel is:
+/// - While a scroll point is being picked the panel is hidden and every
+///   accelerator it owns is swallowed, so Return must be inert too. Without
+///   the pick-mode gate it would write a plain screenshot session and end
+///   the cycle out from under the scroll capture the user is half-way
+///   through configuring. Escape remains the only way out of pick mode.
+/// - While OCR lines are lifted the default accept is COPY, the most likely
+///   reason the user ran OCR at all. Returning `Edit` here would write a
+///   plain screenshot session and destroy the OCR result.
+/// - Scanning/Retracting are transitions with nothing to accept yet (or
+///   any more), so Return waits them out.
+fn default_action(input: &InteractionState) -> Option<Command> {
+    if !input.captured || input.scroll_pick_mode {
+        return None;
+    }
+    match input.ocr {
+        OcrState::Scanning {
+            ..
+        }
+        | OcrState::Retracting {
+            ..
+        } => None,
+        OcrState::Lifted {
+            ..
+        } => Some(Command::OcrCopy),
+        OcrState::Idle => Some(Command::Edit),
+    }
+}
+
+/// How long panel-aimed mouse dispatch stays ignored after the visible
+/// button set changes: the OS double-click time on Windows — exactly the
+/// interval within which the second press of one physical double-click can
+/// arrive, and it tracks the user's accessibility settings — with the OS
+/// default (500 ms) as the fixed fallback elsewhere.
+fn panel_swap_guard_window() -> Duration {
+    #[cfg(windows)]
+    {
+        // GetDoubleClickTime never fails; the clamp is belt-and-braces so a
+        // hostile/broken registry value can neither disable the guard (0)
+        // nor wedge the panel shut for whole seconds.
+        let ms = unsafe { windows::Win32::UI::Input::KeyboardAndMouse::GetDoubleClickTime() };
+        Duration::from_millis(u64::from(ms.clamp(100, 2000)))
+    }
+    #[cfg(not(windows))]
+    {
+        Duration::from_millis(500)
+    }
+}
+
+/// Watches which button set the panel is showing and when that last
+/// changed, to enforce one property: **a single physical double-click on a
+/// panel button must never dispatch two different commands.**
+///
+/// The set swap is synchronous on the first press, and the strip
+/// RE-CENTRES with its own width on every swap (`layout::compute_layout`),
+/// so the second press of a double-click lands at an arbitrary position in
+/// the new strip — possibly a different button, possibly nothing. Which
+/// button is a function of strip widths and selection position, i.e.
+/// unpinnable; ignoring panel-aimed mouse dispatch for one double-click
+/// interval after ANY swap (including None→Some — a panel materialising
+/// under the cursor) closes the entire class at once, independent of
+/// geometry. Keyboard accelerators never consult this guard: a key press
+/// carries no screen position, so a swap cannot redirect it.
+struct PanelSwapGuard {
+    /// The set last shown (`None` = panel hidden). Only *changes* arm the
+    /// guard — the steady-state broadcast on every mouse move must not
+    /// keep re-arming it.
+    shown: Option<panel::model::PanelButtonSet>,
+    /// When `shown` last changed; `None` until the first change.
+    changed_at: Option<Instant>,
+}
+
+impl PanelSwapGuard {
+    fn new() -> Self {
+        Self {
+            shown: None,
+            changed_at: None,
+        }
+    }
+
+    /// Record the set currently on screen. Called from
+    /// `broadcast_ui_state`, the single choke point every renderer-visible
+    /// state mutation already flows through — so no transition can swap
+    /// the panel without passing here first.
+    ///
+    /// `None -> Some` arms the guard too, deliberately: a double-click
+    /// that CAPTURES a selection materialises the panel under the cursor,
+    /// and its second press would otherwise fire whichever button appeared
+    /// there.
+    fn observe(&mut self, set: Option<panel::model::PanelButtonSet>, now: Instant) {
+        if set != self.shown {
+            self.shown = set;
+            self.changed_at = Some(now);
+        }
+    }
+
+    /// Whether a panel-aimed click at `now` must be ignored. Split from
+    /// [`Self::blocks_click`] so tests can pin the window arithmetic
+    /// without a live OS double-click setting.
+    fn blocks_click_within(&self, now: Instant, window: Duration) -> bool {
+        // duration_since saturates to zero for out-of-order Instants, so a
+        // click stamped before the swap is (correctly) still blocked.
+        self.changed_at
+            .is_some_and(|t| now.duration_since(t) < window)
+    }
+
+    fn blocks_click(&self, now: Instant) -> bool {
+        self.blocks_click_within(now, panel_swap_guard_window())
+    }
 }
 
 fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors: &Arc<[UiMonitor]>, cycle: &mut CaptureCycle) {
+    // Feed the double-click swap guard from the same decision function the
+    // click routing and the renderers use (`active_panel_set`) — deriving
+    // it any other way could let the guard and the panel disagree about
+    // when a swap happened. Every renderer-visible state mutation flows
+    // through this broadcast, so the guard is armed before any click can
+    // be routed against the new set.
+    cycle.panel_swap.observe(
+        crate::ui::shared::active_panel_set(cycle.input.captured, cycle.input.scroll_pick_mode, &cycle.input.ocr),
+        Instant::now(),
+    );
+
     let cursor_pt = to_screen_point(cycle.input.virtual_cursor);
 
     let hovered_monitor_name = monitors
@@ -360,6 +522,13 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
         show_scroll_hint: cycle.input.show_scroll_hint,
         has_used_magnifier: cycle.input.has_used_magnifier,
         scroll_pick_mode: cycle.input.scroll_pick_mode,
+        // The cycle keeps its copy, so this one is a genuine clone — but
+        // the only heap content is the outcome behind an Arc, so the cost
+        // is one atomic increment (and one decrement when the previous
+        // broadcast's Arc is finally dropped), even on the per-mouse-move
+        // path. Everything else in the enum is Copy.
+        ocr: cycle.input.ocr.clone(),
+        ocr_notice: cycle.input.ocr_notice,
     }));
 
     for h in windows.values() {
@@ -534,6 +703,11 @@ impl App {
             }),
             pending_preselect,
             video_dispatched: false,
+            ocr_req: 0,
+            ocr_job: None,
+            ocr_ready: None,
+            ocr_peek_composited: false,
+            panel_swap: PanelSwapGuard::new(),
             input: InteractionState {
                 virtual_cursor: setup.initial_mouse,
                 zoom: 1.0,
@@ -561,6 +735,8 @@ impl App {
                 velocity_tracker: MouseVelocityTracker::new(),
                 has_used_magnifier: false,
                 scroll_pick_mode: false,
+                ocr: OcrState::Idle,
+                ocr_notice: None,
             },
         });
     }
@@ -590,6 +766,14 @@ impl App {
             cycle
                 .cancelled
                 .store(true, Ordering::Release);
+            // A recognition may still be running; flag it cancelled so the
+            // worker skips setting a latch nobody will read. NEVER joined:
+            // this path also serves ParentGone and topology restarts, and a
+            // cold recognize can take hundreds of ms — blocking here would
+            // strand a visible overlay behind a dead cycle.
+            if let Some((_, _, cancel)) = &cycle.ocr_job {
+                cancel.store(true, Ordering::Release);
+            }
             if let Some(pending) = &cycle.pending_show {
                 pending.visible_latch.signal_all();
             }
@@ -910,6 +1094,252 @@ impl App {
                 cycle.walker = Some(w);
             }
         }
+    }
+
+    /// Non-blocking pickup of the OCR worker's result, plus the OCR phase
+    /// clock. Polled every `about_to_wait` pass beside the walker/screenshot
+    /// pickups — the cycle already runs `ControlFlow::Poll`, so no WaitUntil
+    /// machinery is needed for any of the time-gated transitions below.
+    fn try_advance_ocr(&mut self) {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        // Result pickup. A finished job is always consumed, but whether the
+        // result is USED depends on its id still matching the current
+        // Scanning phase: BACK bumps `ocr_req` while the same cycle stays
+        // alive, which the cycle_gen tag could never detect.
+        if let Some((job_req, latch, _)) = cycle.ocr_job.as_ref() {
+            if let Some(result) = latch.try_get() {
+                let job_req = *job_req;
+                cycle.ocr_job = None;
+                if let OcrState::Scanning {
+                    req,
+                    anchor,
+                    ..
+                } = &cycle.input.ocr
+                {
+                    if *req == job_req {
+                        // Held (not applied) until its release time. A
+                        // successful outcome waits for the sweep's current
+                        // pass to wrap so the Lifted reveal pass picks up
+                        // with the band off-screen (no mid-region
+                        // teleport); failures wait only the anti-flicker
+                        // floor — nothing is going to be revealed, so
+                        // dragging the error out a full pass would be
+                        // pure latency.
+                        let align = matches!(&result, Ok(o) if !o.lines.is_empty());
+                        let release = ocr::anim::scan_release_secs(anchor.elapsed().as_secs_f32(), align);
+                        cycle.ocr_ready = Some((release, result));
+                    } else {
+                        log::info!("discarding OCR result for superseded request {job_req}");
+                    }
+                } else {
+                    log::info!("discarding OCR result for superseded request {job_req}");
+                }
+            }
+        }
+        match &cycle.input.ocr {
+            OcrState::Scanning {
+                anchor,
+                region,
+                ..
+            } => {
+                let (anchor, region) = (*anchor, *region);
+                let elapsed = anchor.elapsed().as_secs_f32();
+                if cycle
+                    .ocr_ready
+                    .as_ref()
+                    .is_none_or(|(release, _)| elapsed < *release)
+                {
+                    return;
+                }
+                let Some((_, result)) = cycle.ocr_ready.take() else {
+                    return;
+                };
+                match result {
+                    Ok(outcome) if !outcome.lines.is_empty() => {
+                        // ONE dpi_scale for all lift geometry — the monitor
+                        // containing the region's centre — so a line
+                        // crossing a mixed-DPI seam moves by the same
+                        // physical amount on both halves instead of tearing.
+                        let cx = region.center_x();
+                        let cy = region.center_y();
+                        let dpi_scale = self
+                            .monitors
+                            .iter()
+                            .find(|m| {
+                                let b = m.bounds;
+                                cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+                            })
+                            .map(|m| m.scale_factor)
+                            .unwrap_or(1.0);
+                        // text_angle is deliberately logged and nowhere else
+                        // consumed: the lift draws axis-aligned quads, so a
+                        // skewed page still lifts straight. The number is here
+                        // so a "the lift looks wrong on this page" report can
+                        // be diagnosed from a log instead of a repro.
+                        log::info!(
+                            "OCR recognized {} lines (text angle {:.2} deg)",
+                            outcome.lines.len(),
+                            outcome.text_angle
+                        );
+                        // Classify each line ONCE, here, never per frame:
+                        // lines the embedded fonts cover become text
+                        // bubbles (rendered glyphs), the rest fall back to
+                        // the pixel-crop lift. Under a locked peek only
+                        // the FALLBACK lines are suppressed (Hidden): the
+                        // crop quads sample the raw desktop snapshot
+                        // texture, which holds the OBSCURING window and
+                        // not the composite that was recognized — but
+                        // bubbles never touch that texture, so a peeked
+                        // recognition shows them normally. (The eventual
+                        // fix for the hidden lines is plumbing the peek
+                        // texture into LiftPipeline; until then, a missing
+                        // crop beats a wrong one.)
+                        let presentation: Arc<[_]> = ocr::coverage::classify_lines(&outcome.lines, !cycle.ocr_peek_composited).into();
+                        let bubbles = presentation
+                            .iter()
+                            .filter(|p| matches!(p, ocr::coverage::LinePresentation::Bubble))
+                            .count();
+                        log::info!(
+                            "OCR presentation: {} bubbles, {} pixel-crop fallbacks, {} hidden{}",
+                            bubbles,
+                            presentation
+                                .iter()
+                                .filter(|p| matches!(p, ocr::coverage::LinePresentation::PixelCrop))
+                                .count(),
+                            presentation
+                                .iter()
+                                .filter(|p| matches!(p, ocr::coverage::LinePresentation::Hidden))
+                                .count(),
+                            if cycle.ocr_peek_composited { " (locked peek)" } else { "" },
+                        );
+                        // Fresh anchor: the reveal pass's t=0 is NOW — and
+                        // NOW is (poll latency aside) the instant the
+                        // scanning sweep wrapped, because the release
+                        // above was pass-aligned. The band re-enters from
+                        // above the region top exactly as the old pass
+                        // exited below its bottom.
+                        cycle.input.ocr = OcrState::Lifted {
+                            anchor: Instant::now(),
+                            region,
+                            dpi_scale,
+                            outcome: Arc::new(outcome),
+                            presentation,
+                        };
+                        // Entering the mode clears any stale failure pill —
+                        // it would sit there contradicting the lifted lines.
+                        cycle.input.ocr_notice = None;
+                    }
+                    // All three failure shapes land back in the plain
+                    // captured state — never in OCR mode — with a transient
+                    // notice pill instead of a dialog: the overlay is
+                    // topmost and fullscreen, so a dialog would open BEHIND
+                    // it (every existing dialog call site hides the overlay
+                    // first), and a silent return would be indistinguishable
+                    // from a broken button.
+                    Ok(_) => {
+                        log::info!("OCR found no text");
+                        cycle.input.ocr = OcrState::Idle;
+                        cycle.input.ocr_notice = Some(OcrNotice {
+                            anchor: Instant::now(),
+                            kind: OcrNoticeKind::NoText,
+                        });
+                    }
+                    Err(OcrError::Unavailable) => {
+                        // MNN engine failed to init — cause logged at error
+                        // level by ocr::paddle.
+                        log::warn!("OCR is unavailable on this machine");
+                        cycle.input.ocr = OcrState::Idle;
+                        cycle.input.ocr_notice = Some(OcrNotice {
+                            anchor: Instant::now(),
+                            kind: OcrNoticeKind::Unavailable,
+                        });
+                    }
+                    Err(OcrError::Failed(msg)) => {
+                        // The detail goes to the log only — a WinRT HRESULT
+                        // string is noise on screen.
+                        log::warn!("OCR failed: {msg}");
+                        cycle.input.ocr = OcrState::Idle;
+                        cycle.input.ocr_notice = Some(OcrNotice {
+                            anchor: Instant::now(),
+                            kind: OcrNoticeKind::Failed,
+                        });
+                    }
+                }
+                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+            }
+            OcrState::Retracting {
+                anchor,
+                ..
+            } => {
+                if anchor.elapsed().as_secs_f32() >= ocr::anim::RETRACT_DURATION_SECS {
+                    cycle.input.ocr = OcrState::Idle;
+                    broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                }
+            }
+            OcrState::Idle
+            | OcrState::Lifted {
+                ..
+            } => {}
+        }
+    }
+
+    /// Leave OCR mode one step: Scanning cancels the job outright, Lifted
+    /// drops every bubble/crop AT ONCE and starts the region's colour
+    /// fade, Retracting (Escape pressed twice) skips straight to Idle.
+    /// Serves both the panel's BACK button and Escape.
+    ///
+    /// Deliberately narrow, modelled on the scroll-pick Escape arm: it must
+    /// NOT touch `InteractionController::reset` (which would destroy the
+    /// selection BACK exists to preserve) and must NOT hide the overlay —
+    /// the user lands back on the captured panel, not on the desktop.
+    fn exit_ocr_mode(&mut self, window_id: WindowId) {
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        match std::mem::replace(&mut cycle.input.ocr, OcrState::Idle) {
+            OcrState::Idle => return,
+            OcrState::Scanning {
+                ..
+            } => {
+                // Cooperative cancel: the worker checks the flag around its
+                // blocking recognize call and the latch is simply dropped.
+                // Never joined — this runs on the winit thread and a cold
+                // recognize can take hundreds of ms.
+                if let Some((_, _, cancel)) = cycle.ocr_job.take() {
+                    cancel.store(true, Ordering::Release);
+                }
+                cycle.ocr_ready = None;
+            }
+            OcrState::Lifted {
+                region,
+                ..
+            } => {
+                // Fresh anchor: the exit fade starts NOW. The outcome is
+                // deliberately dropped here — the text vanishes on this
+                // very frame (no reverse animation, by design) and only
+                // the region's fade back to colour remains to play.
+                cycle.input.ocr = OcrState::Retracting {
+                    anchor: Instant::now(),
+                    region,
+                };
+            }
+            // Second Escape mid-retract: the user wants out, not a replay —
+            // the replace above already snapped to Idle.
+            OcrState::Retracting {
+                ..
+            } => {}
+        }
+        // Bump the request id on EVERY exit path so a result still in
+        // flight is discarded at pickup — within a live cycle this counter
+        // is the only stale-result guard there is.
+        cycle.ocr_req += 1;
+        // The mode forced a Default cursor over the frozen selection;
+        // restore whatever the current hit-test says.
+        let cursor = cycle.input.hittest.cursor();
+        set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, cursor);
+        broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
     }
 
     fn finalise_selection(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId) {
@@ -1317,12 +1747,238 @@ impl App {
                     log::info!("command ScrollCapture ignored: no captured selection");
                     return;
                 }
+                // One mode at a time — the symmetric twin of the
+                // Command::Ocr guard below. The only live path here is the
+                // Normal strip's SCROLL button during Retracting (BACK
+                // hands the Normal strip back while the exit fade still
+                // owns the frozen selection); honouring it would arm
+                // scroll-pick mid-fade. It also backstops the double-click
+                // hazard: the strip recentres on the swap, so a stray
+                // second press can land on ANY Normal button, and while
+                // the swap guard covers the double-click window, the
+                // 0.18 s fade can outlive it on slow double-click
+                // settings.
+                if cycle.input.ocr.active() {
+                    log::info!("command ScrollCapture ignored: OCR mode is active");
+                    return;
+                }
                 cycle.input.scroll_pick_mode = true;
                 // Crosshair is the fallback if the hardware hide below
                 // fails; the reticle is the real pointer from here on.
                 set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, CursorIcon::Crosshair);
                 update_cursor_visibility(&self.windows, &cycle.input);
                 broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+            }
+            Command::Ocr => {
+                // OCR reads a frozen region; without a captured selection
+                // there is nothing to recognize. No session_dir requirement:
+                // COPY and SEARCH work standalone, and UPLOAD checks at its
+                // own dispatch (the Command::Video precedent).
+                if !cycle.input.captured || cycle.input.selection.is_none() {
+                    log::info!("command Ocr ignored: no captured selection");
+                    return;
+                }
+                // One recognition at a time. The only live-mode path here is
+                // the Normal strip's OCR button during Retracting; honouring
+                // it would tear the retract animation out from under the
+                // render workers mid-flight.
+                if cycle.input.ocr.active() {
+                    log::info!("command Ocr ignored: OCR mode already active");
+                    return;
+                }
+                let (Some(sel), Some(buf)) = (cycle.input.selection, cycle.desktop_buffer.as_deref()) else {
+                    log::info!("command Ocr ignored: no selection or buffer");
+                    return;
+                };
+                // A click-locked peek means the overlay is SHOWING the
+                // peeked window's pixels composited over the desktop
+                // snapshot. Recognition must read that same composite —
+                // extracting the raw snapshot would OCR the OBSCURING
+                // window and hand COPY/SEARCH/UPLOAD text for content the
+                // user cannot even see. Copy/Save/Edit/Upload all
+                // composite via their *_with_peek helpers; OCR does the
+                // same. Remembered on the cycle because the LIFT has to be
+                // suppressed for a peeked recognition (see try_advance_ocr).
+                let peek_composited = active_peek_image.is_some();
+                // `covered` — the rect the crop ACTUALLY produced, clamped
+                // to the desktop buffer — is the only valid origin for the
+                // result rects. Offsetting by `sel` instead would misplace
+                // every lifted quad on negative-origin multi-monitor
+                // layouts (extract_selection_bgra documents the clamp).
+                let extraction = match active_peek_image {
+                    Some(peek) => extract_selection_bgra_with_peek(sel, buf, peek),
+                    None => extract_selection_bgra(sel, buf),
+                };
+                let Some((bgra, width, height, covered)) = extraction else {
+                    log::info!("command Ocr ignored: selection is outside the desktop bitmap");
+                    return;
+                };
+                cycle.ocr_peek_composited = peek_composited;
+                let request = OcrRequest {
+                    bgra,
+                    width,
+                    height,
+                    origin: covered,
+                };
+                // Fresh id + latch + flag per request: the Latch is
+                // one-shot, so reusing one would replay the previous run's
+                // result forever; the id is what lets a BACK-superseded
+                // result be recognised as stale on pickup.
+                cycle.ocr_req += 1;
+                let req = cycle.ocr_req;
+                let latch: Arc<Latch<Result<OcrOutcome, OcrError>>> = Arc::new(Latch::new());
+                let cancel = Arc::new(AtomicBool::new(false));
+                // A dedicated detached thread, never joined: recognize() is
+                // blocking and does its own CoInitializeEx(MTA), while this
+                // (winit) thread is STA and must never block — a join would
+                // freeze the overlay for the whole recognition.
+                let spawned = {
+                    let latch = latch.clone();
+                    let cancel = cancel.clone();
+                    std::thread::Builder::new()
+                        .name("ocr".into())
+                        .spawn(move || {
+                            // Checked on both sides of the expensive call:
+                            // before, to skip work the user already backed
+                            // out of; after, to avoid setting a latch whose
+                            // reader is gone (cheap either way — the stale
+                            // req id would discard the result regardless).
+                            if cancel.load(Ordering::Acquire) {
+                                return;
+                            }
+                            let result = ocr::recognize(&request);
+                            if cancel.load(Ordering::Acquire) {
+                                return;
+                            }
+                            latch.set(result);
+                        })
+                };
+                if let Err(e) = spawned {
+                    log::warn!("failed to spawn the OCR worker thread: {e}");
+                    cycle.input.ocr_notice = Some(OcrNotice {
+                        anchor: Instant::now(),
+                        kind: OcrNoticeKind::Failed,
+                    });
+                    broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                    return;
+                }
+                // A new request starts with a clean slate: a leftover
+                // failure pill under the scan sweep would be read as this
+                // attempt's verdict.
+                cycle.input.ocr_notice = None;
+                cycle.ocr_job = Some((req, latch, cancel));
+                cycle.input.ocr = OcrState::Scanning {
+                    anchor: Instant::now(),
+                    req,
+                    region: covered,
+                };
+                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+            }
+            Command::OcrBack => self.exit_ocr_mode(window_id),
+            Command::OcrCopy => {
+                // Lifted only: during Scanning there is no text yet (and
+                // no strip on screen — this arm is belt-and-braces against
+                // a stray dispatch, e.g. Enter's default_action racing a
+                // state change).
+                let OcrState::Lifted {
+                    outcome,
+                    ..
+                } = &cycle.input.ocr
+                else {
+                    log::info!("command OcrCopy ignored: no lifted OCR result");
+                    return;
+                };
+                let text = outcome.full_text.clone();
+                hide_overlay_for_action(&self.windows);
+                match copy_text_to_clipboard(&text) {
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrCopy),
+                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Failed(msg) => {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
+                        {
+                            self.show_all_windows();
+                        } else {
+                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                        }
+                    }
+                }
+            }
+            Command::OcrSearch => {
+                let OcrState::Lifted {
+                    outcome,
+                    ..
+                } = &cycle.input.ocr
+                else {
+                    log::info!("command OcrSearch ignored: no lifted OCR result");
+                    return;
+                };
+                let Some(url) = ocr::search::search_url(&outcome.full_text) else {
+                    // Whitespace-only text: nothing to search for. Stay in
+                    // the mode — the lifted lines are still on screen and
+                    // the other buttons still work.
+                    log::info!("command OcrSearch ignored: no searchable text");
+                    return;
+                };
+                // ShellExecuteW may hand the URL to an ALREADY RUNNING
+                // browser, which holds no activation rights of its own —
+                // the usual hand-to-shell grant names the wrong pid and
+                // would leave it flashing in the taskbar. ASFW_ANY lets
+                // whoever takes the foreground next have it, and only works
+                // while we are still the foreground window, so it must come
+                // before the hide.
+                SystemInterop::allow_any_foreground();
+                // Deliberately NOT hide_overlay_for_action: that would hand
+                // the (single-use) foreground grant to Clowd.Ui instead of
+                // the browser — see the comment on hide_overlay_for_action.
+                self.windows.hide_all();
+                // Must stay on this (winit) thread: ShellExecuteW rides the
+                // STA COM that SystemInterop::init established here and
+                // fails silently from a worker thread.
+                if SystemInterop::open_url(&url) {
+                    self.finish_cycle(event_loop, CycleAction::OcrSearch);
+                } else {
+                    // Nothing was launched, so the overlay still owns the
+                    // screen — re-show it and stay Lifted.
+                    log::warn!("failed to open the browser for OCR search; returning to the overlay");
+                    self.show_all_windows();
+                }
+            }
+            Command::OcrUpload => {
+                let OcrState::Lifted {
+                    outcome,
+                    ..
+                } = &cycle.input.ocr
+                else {
+                    log::info!("command OcrUpload ignored: no lifted OCR result");
+                    return;
+                };
+                // The Command::Video precedent: without a --session-dir
+                // there is no shell listening for the marker — ignore.
+                let Some(session_dir) = cycle.settings.session_dir.clone() else {
+                    log::info!("command OcrUpload ignored: no --session-dir provided");
+                    return;
+                };
+                let text = outcome.full_text.clone();
+                // The shell treats an ocr-upload marker with whitespace-only
+                // text as a cancelled capture; don't emit one at all rather
+                // than lean on that fallback. Unreachable from a Lifted
+                // outcome (empty results never lift), hence belt-and-braces.
+                if text.trim().is_empty() {
+                    log::info!("command OcrUpload ignored: recognized text is empty");
+                    return;
+                }
+                hide_overlay_for_action(&self.windows);
+                match write_ocr_upload_action(&session_dir, &text) {
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrUpload),
+                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Failed(msg) => {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Text Upload Failed", &msg, ErrorIcon).unwrap_or(false) {
+                            self.show_all_windows();
+                        } else {
+                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1510,6 +2166,7 @@ impl ApplicationHandler<AppEvent> for App {
         // and (persistent mode) this cycle's screenshot.
         self.try_pick_up_walker();
         self.try_pick_up_screenshot(event_loop);
+        self.try_advance_ocr();
 
         if let Some(cycle) = self.cycle.as_mut() {
             if let Some(ref pending) = cycle.pending_show {
@@ -1596,9 +2253,15 @@ impl ApplicationHandler<AppEvent> for App {
                     },
                 ..
             } => {
-                // Escape backs out one step at a time: while picking a
-                // scroll point it returns to the panel with the selection
-                // intact, and only cancels the whole cycle otherwise.
+                // Escape backs out one step at a time: OCR mode unwinds
+                // through its own ladder (Scanning cancels, Lifted starts
+                // the retract, Retracting skips it), picking a scroll point
+                // returns to the panel with the selection intact, and only
+                // outside any mode does Escape cancel the whole cycle.
+                if cycle.input.ocr.active() {
+                    self.exit_ocr_mode(id);
+                    return;
+                }
                 if cycle.input.scroll_pick_mode {
                     cycle.input.scroll_pick_mode = false;
                     let cursor = cycle.input.hittest.cursor();
@@ -1617,12 +2280,15 @@ impl ApplicationHandler<AppEvent> for App {
                         ..
                     },
                 ..
-            }
+            } => {
                 // Mirrors the Dx capturer: Return acts as the default
-                // accept ("open in editor") once a selection is made.
-                if enter_accepts_default_action(&cycle.input) => {
-                    self.dispatch_command(Command::Edit, event_loop, id);
+                // accept once a selection is made — "open in editor"
+                // normally, COPY while OCR lines are lifted. Which (if
+                // either) is `default_action`'s decision.
+                if let Some(cmd) = default_action(&cycle.input) {
+                    self.dispatch_command(cmd, event_loop, id);
                 }
+            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -1653,11 +2319,38 @@ impl ApplicationHandler<AppEvent> for App {
                         // in the saved image, with nothing on screen to say
                         // so. D stays live: it is a developer affordance and
                         // the debug panel is its own feedback.
+                    } else if cycle.input.ocr.active() {
+                        // Accelerators are scoped to the strip on screen:
+                        // only while the OCR strip is up (Lifted) do its
+                        // keys dispatch; everything else is swallowed so
+                        // an invisible button can never fire. Scanning
+                        // shows NO panel (the sweep is still working, so
+                        // there is nothing to act on — Escape above is the
+                        // only exit) and swallows everything for the same
+                        // reason. Retracting swallows everything too — the
+                        // strip is mid-swap and the mode ends by itself in
+                        // a fraction of a second.
+                        //
+                        // M is swallowed too, for the scroll-pick reasoning
+                        // above: both of that toggle's feedback channels
+                        // (the [M] hint and any image output) are suppressed
+                        // in this mode, so honouring it would silently
+                        // change the eventual image with nothing on screen
+                        // to say so. D stays live (the arm above precedes).
+                        if cycle.input.ocr.shows_ocr_panel() {
+                            if let Some(cmd) = panel::lookup_command_by_key(panel::model::PanelButtonSet::Ocr, c) {
+                                self.dispatch_command(cmd, event_loop, id);
+                            }
+                        }
                     } else if c_lower == 'm' {
                         cycle.input.cursor_overlay_visible = !cycle.input.cursor_overlay_visible;
                         broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     } else if cycle.input.captured {
-                        if let Some(cmd) = panel::lookup_command_by_key(c) {
+                        // Normal stays hardcoded here: the OCR arm above
+                        // claims every keypress while ocr.active(), so this
+                        // branch can only run with the Normal strip up —
+                        // the two sets deliberately reuse letters.
+                        if let Some(cmd) = panel::lookup_command_by_key(panel::model::PanelButtonSet::Normal, c) {
                             self.dispatch_command(cmd, event_loop, id);
                         }
                     } else if cycle.input.mouse_down {
@@ -1761,8 +2454,12 @@ impl ApplicationHandler<AppEvent> for App {
 
                 if cycle.input.mouse_down && !cycle.input.captured {
                     if let Some(start) = cycle.input.mouse_down_pt {
-                        let psel =
-                            ScreenRect::from_rounded_threshold(start.x, start.y, cycle.input.virtual_cursor.x, cycle.input.virtual_cursor.y);
+                        let psel = ScreenRect::from_rounded_threshold(
+                            start.x,
+                            start.y,
+                            cycle.input.virtual_cursor.x,
+                            cycle.input.virtual_cursor.y,
+                        );
                         if !cycle.input.dragging {
                             let threshold = 6.0 / (cycle.input.mouse_down_dpi * cycle.input.zoom);
                             let crossed = psel.is_some_and(|r| (r.width() as f32) > threshold || (r.height() as f32) > threshold);
@@ -1810,6 +2507,11 @@ impl ApplicationHandler<AppEvent> for App {
                             CursorIcon::Crosshair
                         } else if over_button {
                             CursorIcon::Pointer
+                        } else if cycle.input.ocr.active() {
+                            // The selection is frozen for the whole of OCR
+                            // mode: resize arrows would promise an
+                            // interaction it no longer offers.
+                            CursorIcon::Default
                         } else {
                             cycle.input.hittest.cursor()
                         };
@@ -1846,6 +2548,18 @@ impl ApplicationHandler<AppEvent> for App {
                         // scroll point the click is the pick, and nothing
                         // else in the overlay may claim it.
                         if cycle.input.scroll_pick_mode {
+                            // Pick mode is armed by a panel press (SCROLL)
+                            // that also hides the panel — a set change the
+                            // swap guard records. Without this check the
+                            // second press of a double-click on SCROLL
+                            // would be taken as the pick and write the
+                            // scroll action aimed at the button's own
+                            // location. Same property as the panel guard
+                            // below: one physical double-click, one command.
+                            if cycle.panel_swap.blocks_click(Instant::now()) {
+                                log::info!("scroll pick ignored: within the double-click window of the panel swap");
+                                return;
+                            }
                             self.dispatch_scroll_pick(event_loop);
                             return;
                         }
@@ -1853,21 +2567,52 @@ impl ApplicationHandler<AppEvent> for App {
                             let pos = cycle.input.virtual_cursor;
                             if let Some(layout) = current_panel_layout(cycle, &self.monitors) {
                                 if let Some(idx) = layout.hit_test(pos.x, pos.y) {
-                                    let cmd = panel::model::button_defs()[idx].command;
+                                    // PROPERTY: a single physical double-
+                                    // click on a panel button must never
+                                    // dispatch two different commands. The
+                                    // set swap is synchronous on the first
+                                    // press and the strips are pixel-
+                                    // identical, so the second press lands
+                                    // on the same rect in the OTHER set —
+                                    // e.g. OCR's first press swaps the
+                                    // strip and the second would hit the
+                                    // OCR strip's EXIT, destroying the
+                                    // capture. Swallow (not fall through:
+                                    // the click was aimed at a button) any
+                                    // press within one double-click
+                                    // interval of a swap. See
+                                    // PanelSwapGuard for why this guards
+                                    // the interval rather than specific
+                                    // index collisions.
+                                    if cycle.panel_swap.blocks_click(Instant::now()) {
+                                        log::info!("panel click ignored: the button set changed within the double-click window");
+                                        return;
+                                    }
+                                    // Resolved through the layout so the
+                                    // index can only be read against the
+                                    // set it was hit-tested in.
+                                    let cmd = layout.command_at(idx);
                                     self.dispatch_command(cmd, event_loop, id);
                                     return;
                                 }
                             }
-                            let drag_mode = match cycle.input.hittest {
-                                Hittest::Inside => Some(DragMode::Move),
-                                Hittest::Outside => None,
-                                handle => Some(DragMode::Resize(handle)),
-                            };
-                            if drag_mode.is_some() {
-                                cycle.input.mouse_down = true;
-                                cycle.input.mouse_down_pt = Some(cycle.input.virtual_cursor);
-                                cycle.input.drag_mode = drag_mode;
-                                cycle.input.drag_anchor_selection = cycle.input.selection;
+                            // The selection is frozen under the lifted
+                            // lines — their geometry was computed against
+                            // it — so drag/resize never arms while OCR mode
+                            // is active; a click outside the panel simply
+                            // does nothing there.
+                            if !cycle.input.ocr.active() {
+                                let drag_mode = match cycle.input.hittest {
+                                    Hittest::Inside => Some(DragMode::Move),
+                                    Hittest::Outside => None,
+                                    handle => Some(DragMode::Resize(handle)),
+                                };
+                                if drag_mode.is_some() {
+                                    cycle.input.mouse_down = true;
+                                    cycle.input.mouse_down_pt = Some(cycle.input.virtual_cursor);
+                                    cycle.input.drag_mode = drag_mode;
+                                    cycle.input.drag_anchor_selection = cycle.input.selection;
+                                }
                             }
                             return;
                         }
@@ -1888,6 +2633,14 @@ impl ApplicationHandler<AppEvent> for App {
                         cycle.input.drag_anchor_selection = None;
                         if was_move_drag && cycle.input.captured && cycle.input.selection.is_none() {
                             cycle.input.captured = false;
+                            // Unreachable while OCR is active (drags never
+                            // arm there), but this un-capture path bypasses
+                            // InteractionController::reset, so clear the
+                            // mode and its notice explicitly — both are
+                            // anchored to the selection that just ceased to
+                            // exist.
+                            cycle.input.ocr = OcrState::Idle;
+                            cycle.input.ocr_notice = None;
                             cycle.input.hittest = Hittest::Outside;
                             update_cursor_visibility(&self.windows, &cycle.input);
                             set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, CursorIcon::Default);
@@ -2041,15 +2794,31 @@ mod tests {
             velocity_tracker: MouseVelocityTracker::new(),
             has_used_magnifier: false,
             scroll_pick_mode: false,
+            ocr: OcrState::Idle,
+            ocr_notice: None,
         }
     }
 
+    /// A result-shaped payload for gating assertions; recognition itself is
+    /// never exercised here.
+    fn dummy_outcome() -> Arc<OcrOutcome> {
+        Arc::new(OcrOutcome {
+            lines: Vec::new(),
+            full_text: String::new(),
+            text_angle: 0.0,
+        })
+    }
+
+    fn dummy_presentation() -> Arc<[ocr::coverage::LinePresentation]> {
+        Arc::from(Vec::new())
+    }
+
     #[test]
-    fn enter_accepts_once_captured() {
+    fn enter_opens_editor_once_captured() {
         let mut i = input();
-        assert!(!enter_accepts_default_action(&i));
+        assert_eq!(default_action(&i), None);
         i.captured = true;
-        assert!(enter_accepts_default_action(&i));
+        assert_eq!(default_action(&i), Some(Command::Edit));
     }
 
     /// The panel is hidden while a scroll point is being picked, and Enter
@@ -2060,6 +2829,114 @@ mod tests {
         let mut i = input();
         i.captured = true;
         i.scroll_pick_mode = true;
-        assert!(!enter_accepts_default_action(&i));
+        assert_eq!(default_action(&i), None);
+    }
+
+    /// With OCR lines lifted, the default accept is the recognized text,
+    /// not the editor: Edit would write a plain screenshot session and
+    /// destroy the OCR result.
+    #[test]
+    fn enter_copies_while_ocr_lifted() {
+        let mut i = input();
+        i.captured = true;
+        i.ocr = OcrState::Lifted {
+            anchor: Instant::now(),
+            region: ScreenRect::from_xy_size(0, 0, 10, 10),
+            dpi_scale: 1.0,
+            outcome: dummy_outcome(),
+            presentation: dummy_presentation(),
+        };
+        assert_eq!(default_action(&i), Some(Command::OcrCopy));
+    }
+
+    /// The transitional phases have nothing to accept: Scanning has no text
+    /// yet, Retracting is on its way out of the mode.
+    #[test]
+    fn enter_inert_while_ocr_scanning() {
+        let mut i = input();
+        i.captured = true;
+        i.ocr = OcrState::Scanning {
+            anchor: Instant::now(),
+            req: 1,
+            region: ScreenRect::from_xy_size(0, 0, 10, 10),
+        };
+        assert_eq!(default_action(&i), None);
+
+        i.ocr = OcrState::Retracting {
+            anchor: Instant::now(),
+            region: ScreenRect::from_xy_size(0, 0, 10, 10),
+        };
+        assert_eq!(default_action(&i), None);
+    }
+
+    /// The swap guard's whole contract: a click inside one double-click
+    /// interval of a set change is swallowed, one outside it is not, and
+    /// only genuine *changes* arm it (the broadcast on every mouse move
+    /// re-observes the same set constantly). The strips recentre on every
+    /// swap, so without this guard the second press of a double-click on
+    /// BACK — or on whatever materialises when a selection is captured by
+    /// double-click — fires whichever button happens to land under the
+    /// cursor.
+    #[test]
+    fn panel_swap_guard_blocks_reclick_inside_window_only() {
+        use panel::model::PanelButtonSet;
+        let window = Duration::from_millis(500);
+        let t0 = Instant::now();
+        let mut g = PanelSwapGuard::new();
+
+        // Nothing observed yet: nothing to guard.
+        assert!(!g.blocks_click_within(t0, window));
+
+        // The panel appears (None -> Normal): armed — a double-click that
+        // CAPTURES a selection must not press whatever button materialised
+        // under the cursor.
+        g.observe(Some(PanelButtonSet::Normal), t0);
+        assert!(g.blocks_click_within(t0 + Duration::from_millis(100), window));
+        // ...and releases once a full double-click interval has passed.
+        assert!(!g.blocks_click_within(t0 + window, window));
+
+        // Steady-state re-observation of the same set must NOT re-arm.
+        let t1 = t0 + Duration::from_secs(10);
+        g.observe(Some(PanelButtonSet::Normal), t1);
+        assert!(!g.blocks_click_within(t1 + Duration::from_millis(1), window));
+
+        // A genuine swap (Normal -> Ocr) re-arms: the double-click-OCR-
+        // hits-EXIT case itself.
+        let t2 = t0 + Duration::from_secs(20);
+        g.observe(Some(PanelButtonSet::Ocr), t2);
+        assert!(g.blocks_click_within(t2 + Duration::from_millis(100), window));
+        assert!(!g.blocks_click_within(t2 + window, window));
+
+        // Hiding the panel (Some -> None) then re-showing it re-arms too —
+        // the scroll-pick round trip.
+        let t3 = t0 + Duration::from_secs(30);
+        g.observe(None, t3);
+        g.observe(Some(PanelButtonSet::Normal), t3 + Duration::from_secs(5));
+        assert!(g.blocks_click_within(t3 + Duration::from_secs(5) + Duration::from_millis(100), window));
+    }
+
+    /// A click stamped at (or even before) the swap instant is still inside
+    /// the window: `duration_since` saturates to zero rather than wrapping
+    /// or panicking, so event-timestamp skew cannot punch through the guard.
+    #[test]
+    fn panel_swap_guard_handles_out_of_order_instants() {
+        use panel::model::PanelButtonSet;
+        let window = Duration::from_millis(500);
+        // Anchored ahead of now so the subtraction below cannot underflow.
+        let t0 = Instant::now() + Duration::from_secs(60);
+        let mut g = PanelSwapGuard::new();
+        g.observe(Some(PanelButtonSet::Normal), t0);
+        assert!(g.blocks_click_within(t0, window));
+        assert!(g.blocks_click_within(t0 - Duration::from_millis(5), window));
+    }
+
+    /// The live window comes from GetDoubleClickTime; the clamp guarantees
+    /// a broken registry value can neither disable the guard nor wedge the
+    /// panel shut.
+    #[cfg(windows)]
+    #[test]
+    fn panel_swap_guard_window_is_sane() {
+        let w = panel_swap_guard_window();
+        assert!(w >= Duration::from_millis(100) && w <= Duration::from_millis(2000), "window {w:?}");
     }
 }

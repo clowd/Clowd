@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use crate::gpu::desktop::{create_placeholder_cursor_view, WindowUniforms, WINDOW_UNIFORMS_SIZE};
 use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
 use crate::gpu::{self, SURFACE_FORMAT};
+use crate::interaction::OcrState;
 use crate::sync::ReadyGuard;
 use crate::telemetry::perf::{PerfSample, PerfTracker};
 use crate::ui::gpu::gpu_timing::GpuTimings;
@@ -40,6 +41,39 @@ pub const MSAA_SAMPLES: u32 = 1;
 // Handle to a render thread, held by the main thread. Dropping it sends
 // `Shutdown` and joins the thread.
 // ── Worker spawn + lifecycle ────────────────────────────────────────
+
+/// Return a worker to the parked state: release everything the finished
+/// cycle allocated, then shrink the surface back to 1×1.
+///
+/// Centralised because there is more than one way back to parking
+/// (`EndCycle`, and a cycle cancelled after the visible latch) and both the
+/// COMPLETENESS and the ORDER of the release matter. A path that skips a
+/// step keeps tens of MB of VRAM per monitor alive for the entire idle gap
+/// in persistent mode — precisely what the 1×1 parked surface exists to
+/// avoid. Route any future park path through here.
+///
+/// Order is deliberate:
+/// 1. `UiRenderer::end_cycle` FIRST. The renderer outlives the cycle loop,
+///    and its lift pass caches a bind group holding a `TextureView` of the
+///    virtual-desktop snapshot. Dropping `gpu.snapshot` while that bind
+///    group lives releases one of two references and frees nothing.
+/// 2. Drop the snapshot `Arc`, now the last reference.
+/// 3. Reconfigure at 1×1 to release the swapchain backbuffers.
+/// 4. A non-blocking poll: wgpu reclaims a dropped resource during device
+///    maintenance, and a parked worker submits nothing until the next
+///    `BeginCycle` — without this the texture would sit on the
+///    to-be-destroyed list for the whole gap, i.e. still allocated.
+fn park_worker(
+    surface: &wgpu::Surface<'static>,
+    gpu: &mut gpu::WindowGpu,
+    parked_config: &wgpu::SurfaceConfiguration,
+    ui_renderer: &mut UiRenderer,
+) {
+    ui_renderer.end_cycle();
+    gpu.snapshot = None;
+    surface.configure(&gpu.device, parked_config);
+    let _ = gpu.device.poll(wgpu::PollType::Poll);
+}
 
 /// Per-worker parameters built in main() before the event loop starts.
 fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<WorkerInput>, msg_rx: mpsc::Receiver<RenderMsg>) {
@@ -230,6 +264,13 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         // checks below.
         if cycle.cancelled.load(Ordering::Acquire) {
             info!("render worker {monitor_index}: discarding BeginCycle for an already-finished cycle");
+            // Already parked (no surface to shrink, no snapshot uploaded
+            // yet this iteration), so no full `park_worker` — but still
+            // assert the invariant that a parked worker's UiRenderer holds
+            // nothing snapshot-derived. It is a no-op today because the
+            // previous park cleared it; keeping it unconditional means the
+            // invariant does not depend on which path got us here.
+            ui_renderer.end_cycle();
             continue 'cycles;
         }
 
@@ -287,6 +328,8 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 selection_params: [0.0, 0.0, 0.0, 0.0],
                 cursor_rect: [0.0, 0.0, -1.0, -1.0],
                 cursor_params: [0.0, 0.0, 0.0, 0.0],
+                ocr_rect: [0.0, 0.0, -1.0, -1.0],
+                ocr_params: [0.0, 0.0, 0.0, 0.0],
             };
 
             let ubo = gpu
@@ -390,8 +433,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         // cycle that ended before the overlay was shown releases us here —
         // park instead of rendering the dead cycle.
         if cycle.cancelled.load(Ordering::Acquire) {
-            gpu.snapshot = None;
-            surface.configure(&gpu.device, &parked_config);
+            park_worker(&surface, &mut gpu, &parked_config, &mut ui_renderer);
             continue 'cycles;
         }
 
@@ -411,6 +453,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         let mut overlays_visible: bool = true;
         let mut cursor_overlay_visible: bool = true;
         let mut scroll_pick_mode: bool = false;
+        // Mirrored whole (not decomposed into flags) so the dim, the handle
+        // suppression and the lift geometry all derive from the same
+        // broadcast — the same reason UiSharedState carries the enum.
+        let mut ocr: OcrState = OcrState::Idle;
         let mut last_iter = Instant::now();
 
         loop {
@@ -431,6 +477,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         overlays_visible = state.overlays_visible;
                         cursor_overlay_visible = state.cursor_overlay_visible;
                         scroll_pick_mode = state.scroll_pick_mode;
+                        ocr = state.ocr.clone();
                         ui_renderer.set_state(state);
                     }
                     Ok(RenderMsg::BlurredDesktop {
@@ -558,8 +605,15 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         // this cycle iteration. Frees the per-device VRAM
                         // (including the swapchain backbuffers, via the 1×1
                         // parked surface), then park for the next BeginCycle.
-                        gpu.snapshot = None;
-                        surface.configure(&gpu.device, &parked_config);
+                        //
+                        // Via `park_worker` because the UiRenderer — built
+                        // once per worker, outside this loop — must release
+                        // the lift bind group first. Ending a cycle from
+                        // OcrState::Lifted (OCR's COPY/SEARCH/UPLOAD and
+                        // EXIT all do) leaves it holding a view of the
+                        // snapshot, which would keep the texture resident
+                        // for the whole parked gap.
+                        park_worker(&surface, &mut gpu, &parked_config, &mut ui_renderer);
                         continue 'cycles;
                     }
                     Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => {
@@ -569,6 +623,15 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     Err(mpsc::TryRecvError::Empty) => break,
                 }
             }
+
+            // Evaluated every frame (not only on UiState receipt): the
+            // dim/desaturation are animations on the phase's shared
+            // anchor clock, and frames keep flowing between broadcasts.
+            // Hoisted above the snapshot block because the PEEK uniforms
+            // below need the same values — the peek quad covers the
+            // desktop pass inside the selection, so it re-applies the
+            // identical treatment (see peek.wgsl).
+            let ocr_fx = desktop::ocr_overlay(&ocr);
 
             if let Some(state) = snapshot_state.as_mut() {
                 let cursor_textures = gpu
@@ -586,6 +649,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         overlays_visible,
                         cursor_overlay_visible,
                         scroll_pick_mode,
+                        ocr_rect: ocr_fx.rect,
+                        ocr_dim: ocr_fx.dim,
+                        ocr_gray: ocr_fx.gray,
+                        ocr_active: ocr_fx.active,
                         elapsed: start.elapsed().as_secs_f32(),
                         surface_size: (config.width, config.height),
                     },
@@ -651,6 +718,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     config.height as f32,
                 ];
                 peek_uniforms.cursor_params = [local_cursor.x, local_cursor.y, scale_factor, 0.0];
+                // Same values the desktop pass got this frame — the two
+                // shaders must dim/desaturate in lockstep or the peeked
+                // region visibly detaches from the rest of the selection.
+                peek_uniforms.ocr_params = [ocr_fx.dim, ocr_fx.gray, if ocr_fx.active { 1.0 } else { 0.0 }, 0.0];
                 for (i, r) in pt
                     .obstruction_rects
                     .iter()
