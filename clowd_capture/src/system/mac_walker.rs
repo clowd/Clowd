@@ -80,6 +80,14 @@ impl WindowWalker {
             .map(|w| w.rect)
     }
 
+    /// Windows counterpart of the scrolling-capture target lookup. There
+    /// are no HWNDs on macOS and no scroll driver to consume one, so this
+    /// always reports "unresolved"; callers already tolerate that.
+    #[allow(dead_code)]
+    pub fn top_level_hwnd_at(&self, _point: ScreenPoint) -> Option<isize> {
+        None
+    }
+
     /// Full hit-test returning window index and obstruction info.
     pub fn hit_test_full(&self, point: ScreenPoint) -> Option<HitTestResult> {
         let (idx, top) = self

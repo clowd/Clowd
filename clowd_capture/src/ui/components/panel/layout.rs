@@ -4,8 +4,8 @@
 //! `clowd_capture_dx/DxScreenCapture.cpp:112-195`. Pure CPU; no wgpu,
 //! no winit, no globals — the caller passes the monitor's bounds, the
 //! current selection, and the monitor's DPI scale, and gets back a
-//! `PanelLayout` carrying the 7 button rects plus the area-indicator
-//! rect, both in virtual-desktop pixel coordinates.
+//! `PanelLayout` carrying the `NUM_SVG_BUTTONS` button rects plus the
+//! area-indicator rect, both in virtual-desktop pixel coordinates.
 //!
 //! The layout is computed in **integer** virtual-desktop pixels because
 //! the C++ is integer and any f32 drift on top of integer selection

@@ -18,6 +18,18 @@ pub enum Command {
     Edit,
     /// Start video capture on the current selection.
     Video,
+    /// Enter scroll-point pick mode for the current selection: the next
+    /// click inside it hands the region + point off to the scrolling
+    /// capture driver.
+    ///
+    /// The variant itself is platform-independent — the dispatcher arm
+    /// compiles everywhere — but the only thing that *emits* it is the
+    /// SCROLL panel button, which is `#[cfg(windows)]` because the driver
+    /// is. On macOS nothing constructs it, and `-D warnings` would call
+    /// that dead code; the arm is kept rather than cfg'd out so the two
+    /// platforms share one dispatcher.
+    #[cfg_attr(not(windows), allow(dead_code))]
+    ScrollCapture,
     /// Copy the selection to the clipboard.
     Copy,
     /// Save the selection to a file.

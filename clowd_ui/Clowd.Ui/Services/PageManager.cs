@@ -92,6 +92,13 @@ namespace Clowd.UI
             return new VideoCapturePage();
         }
 
+        public IScrollCapturePage GetScrollCapturePage()
+        {
+            // self-guarding via ScrollCapturePage.ActiveInstance, which is also how the app-exit
+            // path reaches an in-flight run — same rationale as recordings.
+            return new ScrollCapturePage();
+        }
+
         private T GetOrCreate<T>(Action closing = null) where T : IPage
         {
             // _singletons is not synchronized and window creation must happen on the UI

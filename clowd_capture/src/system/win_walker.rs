@@ -265,6 +265,20 @@ impl WindowWalker {
         }
     }
 
+    /// Handle of the top-level window [`hit_test`] would pick for `point`
+    /// — the first entry in Z-order whose true bounds contain it — as a
+    /// plain integer, or `None` over the desktop background.
+    ///
+    /// Deliberately stops at the top level: consumers (the scrolling
+    /// capture driver) resolve the child under the point themselves, live,
+    /// once the overlay is gone and the Z-order is the real one again.
+    pub fn top_level_hwnd_at(&self, point: ScreenPoint) -> Option<isize> {
+        self.windows
+            .iter()
+            .find(|w| w.rect.contains(point))
+            .map(|w| w.hwnd.0 as isize)
+    }
+
     /// Full hit-test returning window index and obstruction info.
     pub fn hit_test_full(&self, point: ScreenPoint) -> Option<HitTestResult> {
         let (idx, top) = self

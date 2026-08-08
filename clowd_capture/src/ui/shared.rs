@@ -63,6 +63,11 @@ pub struct UiSharedState {
     pub cursor_image_rect: Option<[f32; 4]>,
     pub show_scroll_hint: bool,
     pub has_used_magnifier: bool,
+    /// Mirror of `InteractionState::scroll_pick_mode`: the user pressed
+    /// SCROLL and is now picking the point wheel events will be aimed
+    /// from. Renderers use it to drop the panel — the click that follows
+    /// belongs to the picker, so nothing clickable may be in the way.
+    pub scroll_pick_mode: bool,
 }
 
 /// Return the monitor whose bounds contain the center of `rect`. `None`
@@ -95,6 +100,12 @@ pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
         return None;
     }
     if !state.captured {
+        return None;
+    }
+    // Scroll-point picking runs over the same selection the panel sits on
+    // top of: the panel must be gone so the pick click can land anywhere
+    // inside the region, including under where the buttons were.
+    if state.scroll_pick_mode {
         return None;
     }
     let sel = state.selection?;
@@ -239,6 +250,7 @@ mod tests {
             cursor_image_rect: None,
             show_scroll_hint: false,
             has_used_magnifier: false,
+            scroll_pick_mode: false,
         }
     }
 
@@ -251,6 +263,18 @@ mod tests {
         assert!(panel_visibility(&s).is_some());
         s.overlays_visible = false;
         assert!(panel_visibility(&s).is_none());
+    }
+
+    #[test]
+    fn panel_hidden_while_picking_scroll_point() {
+        let mut s = state();
+        s.captured = true;
+
+        assert!(panel_visibility(&s).is_some());
+        s.scroll_pick_mode = true;
+        assert!(panel_visibility(&s).is_none());
+        s.scroll_pick_mode = false;
+        assert!(panel_visibility(&s).is_some());
     }
 
     #[test]

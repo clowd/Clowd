@@ -11,10 +11,16 @@ process. Two modes share all capture behavior and the on-disk session format:
   Completion signal = the `finished` event. The session directory format is
   identical — large payloads never ride the pipe.
 
+A third mode, **`--scroll-drive`** (§3), is not a capture overlay at all: it is
+the same binary re-spawned headless to carry out a scrolling capture the
+overlay already set up. It shares the session format and nothing else.
+
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `src/host/protocol.rs` + `src/host/stdin.rs` (wire protocol),
-`src/system/mod.rs` (exit codes). C# counterparts: `ScreenCaptureService.cs`
-(one-shot + session dispatch), `CaptureProcessHost.cs` (persistent host).
+`src/scroll/drive.rs` (scrolling-capture driver), `src/system/mod.rs` (exit
+codes). C# counterparts: `ScreenCaptureService.cs` (one-shot + session
+dispatch), `CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
++ `Scroll/ScrollDriverProtocol.cs` (driver).
 
 ## 1. One-shot mode
 
@@ -48,6 +54,7 @@ The shell pre-creates the session directory and passes it via
 | UPLOAD | same as EDIT + `action.txt` | `upload` |
 | SELECT-COLOR | `action.txt` only | `select-color #RRGGBB` |
 | VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H` |
+| SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
 | Cancelled (Escape / close) | none | — |
 
@@ -61,6 +68,7 @@ File contents:
 | `session.json` | Session metadata (§1.3). |
 | `action.txt` | Routing marker read by `CaptureSessionDispatcher` (missing = edit). |
 | `capture.log` | Mirror of the capturer's log (one-shot mode only), read by the shell after a non-zero exit. |
+| `scroll.log` | Same, for the `--scroll-drive` pass (§3). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
 
 **Write ordering** (`session_output.rs`) — the last file to appear is the
 completion signal, so readers must wait for process exit (one-shot) or the
@@ -72,13 +80,22 @@ completion signal, so readers must wait for process exit (one-shot) or the
 2. VIDEO: `cropped.png` first, then **`action.txt` last**. Its appearance is
    the completion signal; no `desktop.png`, no `session.json` (the session is
    created by Clowd.Ui when recording finishes).
-3. SELECT-COLOR: `action.txt` only.
+3. SELECT-COLOR / SCROLL: `action.txt` only.
 4. Neither `session.json` nor `action.txt` present = the capture was
    cancelled; the shell deletes the pre-created directory.
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
 pixels (virtual-desktop, possibly negative origin) on Windows, CG points on
 macOS — passed verbatim to obs-express `--region`. W and H are always >= 2.
+
+The SCROLL marker uses the same rect space and adds two fields: `PX,PY` is
+the point the scrolling capture driver parks the cursor at and aims wheel
+events from — always inside `X,Y,W,H` — and `HWND` is the decimal top-level
+window handle under that point, or `0` when the walker could not resolve one
+(the driver then falls back to `WindowFromPoint`). Unlike VIDEO there is no
+poster frame: the driver produces every image plus the `session.json` for
+the stitched result, so `action.txt` is the whole overlay payload. macOS
+never emits this marker.
 
 ### 1.3 `session.json` schema
 
@@ -187,7 +204,7 @@ Examples:
 |---|---|---|
 | `ready` | `warmup_ms` (u64), `monitors` (count) | Emitted once, when every render worker has parked (device, pipelines, surface ready). A `show` will now be fast. `warmup_ms` is measured from process start. |
 | `shown` | `elapsed_ms` (u64) | The overlay windows are on screen. Exactly one per accepted `show`; `elapsed_ms` is measured from the `show` command. |
-| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `copy` \| `save` \| `cancelled`. |
+| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `scroll` \| `copy` \| `save` \| `cancelled`. |
 | `pong` | — | Answer to `ping`. |
 | `display_changed` | — | The monitor topology changed (or a GPU device was lost) under the warm state; the process exits right after with code 5 or 6. Informational — the parent keys its respawn policy off the exit code. |
 | `fatal_error` | `message` (string) | Something unrecoverable happened to the active cycle (e.g. the desktop screenshot never arrived within its 30 s deadline). The cycle is cancelled; a `finished` (`action: "cancelled"`) always follows, so a waiting parent is never left hanging. |
@@ -252,3 +269,99 @@ Parent-side timing contract:
   `shown` is reported as a capture crash — never retried from cold.
 - While the child is idle the parent pings every 60 s; two consecutive
   missed pongs mean a wedged child, which is killed (and respawned).
+
+## 3. Scrolling-capture driver mode
+
+`--scroll-drive` is the second half of a scrolling capture. The first half is
+an ordinary one-shot cycle: the user selects a region, presses SCROLL, clicks
+the point to scroll at, and the overlay exits leaving the `scroll X,Y,W,H
+PX,PY HWND` marker of §1.2. `CaptureSessionDispatcher` turns that marker into
+`CaptureAction.Scroll`, `ScrollCapturePage` puts its border window up around
+the region, and re-spawns this same binary — headless — to do the mechanical
+part.
+
+The mode is **Windows-only**; on macOS it logs and exits 4 (the SCROLL button
+is compiled out, so nothing should ever route here).
+
+### 3.1 Spawn
+
+```
+clowd_capture_wgpu --scroll-drive --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N
+```
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--scroll-drive` | yes | Selects the mode. Branches in `main::run` before the event loop, the GPU, and the screen-permission check — nothing this mode does needs any of them, and bringing them up would put windows in front of the content it is about to photograph. |
+| `--session-dir` | yes | The directory the overlay was given. It is empty by the time the driver starts (the shell consumed `action.txt`), and the driver owns it from here. |
+| `--region X,Y,W,H` | yes | The rect to photograph, physical virtual-desktop px — the same space and the same numbers as the marker. Rejected if W or H is 0. |
+| `--point PX,PY` | yes | Where the cursor is parked and the wheel is aimed, same space. Re-clamped into `--region`; a point outside it is a caller bug and is logged. |
+| `--hwnd N` | no (default 0) | Decimal top-level handle from the marker. Re-validated at drive time (`IsWindow` + `GetAncestor(GA_ROOT)` + rect contains the point) because the overlay's Z-order snapshot predates its own window; `0` or a stale handle falls back to `WindowFromPoint`. |
+
+The shell must redirect **all three** stdio streams. Stdin in particular: the
+driver reads a closed stdin as "the shell is gone" and cancels, which is what
+keeps a crashed Clowd.Ui from leaving something scrolling the user's window.
+The shell also calls `AllowSetForegroundWindow(driver pid)` right after spawn —
+without it `SetForegroundWindow` in the driver is refused and the run relies on
+Win10+ scroll-inactive-windows routing alone.
+
+### 3.2 Events (driver → shell)
+
+One JSON object per line on stdout, and **only** protocol lines: the terminal
+logger is routed to stderr in this mode for exactly that reason, so the shell
+may treat any line starting `{` and ending `}` as an event (the same rule as
+§2.2).
+
+| Event | Fields | Semantics |
+|---|---|---|
+| `ready` | — | The target is resolved and focused; scrolling is about to start. |
+| `status` | `frames` (u32), `height_px` (u32), `state` | Progress. Emitted at each phase change of every step, so up to three per step. `state` ∈ `scrolling` \| `settling` \| `stitching`. |
+| `done` | `result`, `frames` (u32), `height_px` (u32) | The run ended. Unless `result` is `failed`, `session.json` is already on disk. |
+| `fatal_error` | `message` (string) | Setup or output failed and there is no session. The shell deletes the directory and reports it. |
+
+```json
+{"type":"ready"}
+{"type":"status","frames":12,"height_px":4180,"state":"scrolling"}
+{"type":"done","result":"complete","frames":31,"height_px":9800}
+{"type":"fatal_error","message":"no window at scroll point ScreenPoint { x: 400, y: 300 }"}
+```
+
+`done.result`:
+
+| Result | Meaning | Session written |
+|---|---|---|
+| `complete` | Two consecutive steps produced no new content: the document ended. | yes |
+| `stopped` | Esc, the cursor moving off the parked point, a `stop` command, the target window closing/moving, or the stitcher giving up. The partial capture is kept. | yes |
+| `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock. | yes |
+| `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated window silently eating `SendInput`. Reported whatever else ended the run, and a single-screen session is still written. | yes |
+| `failed` | Defined for completeness; the driver has no failure it can recognise *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
+
+### 3.3 Commands (shell → driver)
+
+| Command | Effect |
+|---|---|
+| `{"type":"stop"}` | Finish now and keep everything captured so far — the HUD's FINISH button. Ends as `stopped`. |
+| `{"type":"cancel"}` | Abandon the run. **Nothing is written**: no `done`, no session, an empty directory for the shell to delete. |
+
+Both are polled between steps, never inside one, so a command that lands
+mid-settle takes effect up to a settle cycle (~800 ms) later. Unparseable
+lines are logged and ignored — garbage on the command channel must not take
+down a capture that is going fine. Stdin EOF is treated as `cancel`; stdin
+that is unusable rather than closed (no console, not redirected) is tolerated
+and the run continues without a command channel.
+
+### 3.4 Output and exit
+
+On any result but `failed` the driver writes, in this order: `desktop.png`
+(the stitched composite), `cropped.png` (a byte copy of it — `cropped.png` is
+what `SessionInfo.UploadSourcePath` shares from Recents, so it must not be a
+downscaled preview), then **`session.json` strictly last**, per §1.2's
+ordering invariant. `CroppedRect` is `0,0,W,H` and `OriginalBounds` is the
+empty rect: a 20,000 px composite has no meaningful place on the virtual
+desktop, and empty bounds make the editor centre its window instead of trying
+to open one taller than every monitor stacked. `Name` is `"Screenshot"` like
+every other session; the shell renames it to "Scrolling Capture".
+
+The process **exits 0 for every outcome the shell can act on**, `fatal_error`
+included — the shell reads the event, not the code. A non-zero exit therefore
+means a crash (or exit 4 on macOS, where the mode does not exist), and the
+shell reports it with the stderr tail attached.

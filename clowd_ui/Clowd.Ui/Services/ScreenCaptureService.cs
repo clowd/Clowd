@@ -259,6 +259,12 @@ namespace Clowd.UI
                         // VideoCapturePage has its own single-instance guard.
                         PageManager.Current.GetVideoCapturePage().Open(result.Region, result.SessionDir);
                         break;
+                    case CaptureAction.Scroll:
+                        // same hand-off as Video: the overlay is gone, and the scroll page runs its
+                        // own (much longer) lifetime around the session dir it now owns.
+                        PageManager.Current.GetScrollCapturePage()
+                            .Open(result.Region, result.ScrollPoint, result.TargetHwnd, result.SessionDir);
+                        break;
                 }
             }
             catch (Exception ex)
@@ -452,11 +458,13 @@ namespace Clowd.UI
         Upload,
         SelectColor,
         Video,
+        Scroll,
     }
 
     /// <summary>A finished, non-cancelled capture. <see cref="Session"/> is set for
     /// Edit/Upload; <see cref="Color"/> for SelectColor; <see cref="Region"/> and
-    /// <see cref="SessionDir"/> for Video.</summary>
+    /// <see cref="SessionDir"/> for Video and Scroll, which additionally carry
+    /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>.</summary>
     public sealed class CaptureResult
     {
         public CaptureAction Action { get; init; }
@@ -464,6 +472,14 @@ namespace Clowd.UI
         public Color? Color { get; init; }
         public ScreenRect Region { get; init; }
         public string SessionDir { get; init; }
+
+        /// <summary>Where the wheel events will be aimed, in the same physical virtual-desktop
+        /// space as <see cref="Region"/> (Scroll only).</summary>
+        public ScreenPoint ScrollPoint { get; init; }
+
+        /// <summary>Top-level window under <see cref="ScrollPoint"/>, or 0 when the overlay could
+        /// not resolve one — the driver falls back to WindowFromPoint (Scroll only).</summary>
+        public long TargetHwnd { get; init; }
     }
 
     /// <summary>
@@ -541,6 +557,34 @@ namespace Clowd.UI
                 return null;
             }
 
+            // a "scroll x,y,w,h px,py hwnd" marker means the overlay confirmed a scrolling capture
+            // and exited. The directory is empty at this point — the scroll driver, not the
+            // overlay, writes the session into it — so it must NOT be deleted; only the consumed
+            // action.txt marker is removed. From here on ScrollCapturePage owns the directory.
+            const string scrollPrefix = "scroll";
+            if (action != null && action.StartsWith(scrollPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var scroll = ParseScrollAction(action.Substring(scrollPrefix.Length).Trim(), sessionDir);
+                if (scroll != null)
+                {
+                    try
+                    {
+                        File.Delete(Path.Combine(sessionDir, "action.txt"));
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("Failed to delete scroll action file: " + ex);
+                        SentryConfig.CaptureHandled(ex, "capture.delete-action-file");
+                    }
+
+                    return scroll;
+                }
+
+                Debug.WriteLine("Unparseable scroll action: " + action);
+                DeleteSessionDir(sessionDir);
+                return null;
+            }
+
             // no session payload — either a color pick or a cancelled capture; in both cases
             // the pre-created directory has nothing worth keeping.
             DeleteSessionDir(sessionDir);
@@ -558,8 +602,8 @@ namespace Clowd.UI
             return null;
         }
 
-        /// <summary>Parses the "x,y,w,h" rect of a video action (invariant ints, x/y may be
-        /// negative in virtual-desktop space). Returns null when unparseable.</summary>
+        /// <summary>Parses the "x,y,w,h" rect of a video or scroll action (invariant ints, x/y may
+        /// be negative in virtual-desktop space). Returns null when unparseable.</summary>
         private static ScreenRect ParseRegion(string rect)
         {
             var parts = rect.Split(',');
@@ -581,6 +625,57 @@ namespace Clowd.UI
                 return null;
 
             return new ScreenRect(nums[0], nums[1], nums[2], nums[3]);
+        }
+
+        /// <summary>Parses the "x,y,w,h px,py hwnd" payload of a scroll action into a finished
+        /// result (CAPTURE_PROTOCOL.md). Every field is required: a marker we cannot fully
+        /// understand is a contract violation, not a capture worth driving. An unresolvable
+        /// window is spelled as hwnd 0 by the overlay, not by omission. Returns null when
+        /// unparseable.</summary>
+        private static CaptureResult ParseScrollAction(string payload, string sessionDir)
+        {
+            var parts = payload.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 3)
+                return null;
+
+            var region = ParseRegion(parts[0]);
+            if (region == null)
+                return null;
+
+            var point = ParsePoint(parts[1]);
+            if (point == null)
+                return null;
+
+            // isize on the Rust side, so signed and 64-bit wide — never parse an HWND as int.
+            if (!Int64.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out var hwnd))
+                return null;
+
+            return new CaptureResult
+            {
+                Action = CaptureAction.Scroll,
+                Region = region,
+                ScrollPoint = point,
+                TargetHwnd = hwnd,
+                SessionDir = sessionDir,
+            };
+        }
+
+        /// <summary>Parses an "x,y" point in the same virtual-desktop space as the region
+        /// (invariant ints, either coordinate may be negative). Returns null when unparseable.</summary>
+        private static ScreenPoint ParsePoint(string point)
+        {
+            var parts = point.Split(',');
+            if (parts.Length != 2)
+                return null;
+
+            var nums = new int[2];
+            for (int i = 0; i < 2; i++)
+            {
+                if (!Int32.TryParse(parts[i].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out nums[i]))
+                    return null;
+            }
+
+            return new ScreenPoint(nums[0], nums[1]);
         }
 
         public static void DeleteSessionDir(string sessionDir)
