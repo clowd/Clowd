@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use crate::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect};
 use crate::settings::TipsMode;
 use crate::system::{CapturedDesktop, CursorImage};
 use crate::ui::shared::{UiMonitor, UiSharedState};
+use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect};
 
 pub struct UiStateBuildInput<'a> {
     /// Invariant for the whole session — build once and clone the Arc.

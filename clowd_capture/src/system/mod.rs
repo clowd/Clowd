@@ -32,8 +32,8 @@ mod mac_mouse;
 mod mac_walker;
 
 #[cfg(target_os = "macos")]
-use crate::geometry::{LogicalPoint, LogicalSize};
-use crate::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
+use clowd_rust_core::geometry::{LogicalPoint, LogicalSize};
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
 
 /// Full hit-test result including peek metadata.
 #[derive(Debug, Clone)]
@@ -137,11 +137,11 @@ pub struct MonitorInfo {
 #[allow(dead_code)]
 impl MonitorInfo {
     pub fn window_to_screen(&self, pt: WindowPoint) -> ScreenPointF {
-        crate::geometry::window_to_screen(self.bounds, pt)
+        clowd_rust_core::geometry::window_to_screen(self.bounds, pt)
     }
 
     pub fn screen_to_window(&self, pt: ScreenPointF) -> WindowPoint {
-        crate::geometry::screen_to_window(self.bounds, pt)
+        clowd_rust_core::geometry::screen_to_window(self.bounds, pt)
     }
 }
 
@@ -252,26 +252,13 @@ pub struct CapturedDesktop {
 
 pub struct SystemInterop;
 
-/// Exit code for "the OS has not granted this process permission to capture the
-/// screen" (macOS Screen Recording). Distinct from the generic failure exit so the
-/// shell can tell a missing permission apart from a crash and offer the user the
-/// System Settings route instead of a stack trace — keep in sync with
-/// `ScreenCaptureService.cs`'s `ExitCodeNoScreenPermission`.
-pub const EXIT_NO_SCREEN_PERMISSION: i32 = 3;
-
-/// Exit code for "the desktop screenshot itself failed" (e.g. every
-/// CGDisplayCreateImage returned null despite the TCC preflight passing). Kept
-/// distinct from a panic-driven exit so the shell's crash report carries the
-/// reason from stderr/capture.log rather than a stack trace.
-pub const EXIT_CAPTURE_FAILED: i32 = 4;
-
-/// Exit code for "the monitor topology changed while running as a persistent
-/// host". Not a failure: the warm state (per-monitor workers, hidden windows,
-/// configured surfaces) was built for a topology that no longer exists, and a
-/// fresh start is cheaper and safer than in-process re-init. The shell
-/// respawns immediately with no backoff penalty — keep in sync with
-/// `CaptureProcessHost.cs`'s `ExitCodeDisplayChanged`.
-pub const EXIT_DISPLAY_CHANGED: i32 = 5;
+/// Exit codes, re-exported from `clowd_rust_core::exit` so the existing
+/// `system::EXIT_*` spelling keeps working. They are defined there because
+/// the scrolling-capture driver exits with the same meanings and the shell
+/// reads both processes' codes through one table.
+pub use clowd_rust_core::exit::{
+    CAPTURE_FAILED as EXIT_CAPTURE_FAILED, DISPLAY_CHANGED as EXIT_DISPLAY_CHANGED, NO_SCREEN_PERMISSION as EXIT_NO_SCREEN_PERMISSION,
+};
 
 /// Exit code for "a render worker's wgpu device was lost while warm" (driver
 /// reset/update, GPU removed). Same contract as [`EXIT_DISPLAY_CHANGED`] —
@@ -310,7 +297,7 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                crate::telemetry::crash::flush();
+                clowd_rust_core::telemetry::flush();
                 std::process::exit(EXIT_CAPTURE_FAILED);
             }
         };
@@ -408,7 +395,7 @@ impl SystemInterop {
             Ok(bitmap) => bitmap,
             Err(err) => {
                 error!("unable to capture the desktop: {err:#}");
-                crate::telemetry::crash::flush();
+                clowd_rust_core::telemetry::flush();
                 std::process::exit(EXIT_CAPTURE_FAILED);
             }
         };

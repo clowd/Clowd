@@ -152,7 +152,7 @@ namespace Clowd.UI
 
         /// <summary>Exit codes that mean "clean, respawn me" rather than a crash: the monitor
         /// topology changed under us (5) or the GPU device was lost (6). See
-        /// clowd_capture/src/system/mod.rs.</summary>
+        /// clowd_rust_core/src/exit.rs (5) and clowd_capture/src/system/mod.rs (6, capture-only).</summary>
         private const int ExitCodeDisplayChanged = 5;
         private const int ExitCodeGpuLost = 6;
 

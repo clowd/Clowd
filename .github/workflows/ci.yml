@@ -4,7 +4,7 @@ name: CI
 # (deploy-server.yml) and is excluded from the cargo workspace.
 #
 # Packages (4): win-x64, win-arm64, osx-x64, osx-arm64. Each contains the
-# published Clowd.Ui app with the Rust capture binary alongside it and the
+# published Clowd.Ui app with the Rust capture binaries alongside it and the
 # obs-express recording distribution in an obs-express/ subdirectory — the
 # layout expected by ScreenCaptureService/ObsBinaryLocator. obs-express is
 # pulled from the latest clowd/obs-express-rs GitHub release (public repo,
@@ -59,8 +59,12 @@ jobs:
       - name: "Rust gate: format + lint + tests"
         run: |
           cargo fmt --check
+          cargo clippy -p clowd_rust_core --all-targets -- -D warnings
+          cargo test -p clowd_rust_core
           cargo clippy -p clowd_capture_wgpu -- -D warnings
           cargo test -p clowd_capture_wgpu
+          cargo clippy -p clowd_scroll_driver --all-targets -- -D warnings
+          cargo test -p clowd_scroll_driver
         shell: bash
 
       # the shell extension is a Windows COM dll (empty crate elsewhere), so its
@@ -180,7 +184,7 @@ jobs:
 
       # dotnet publish above gets its version from nbgv automatically; the Rust build has
       # no such hook, so resolve the same version here and stamp it into the Sentry release
-      # name (telemetry/crash.rs). Both processes then report against one release.
+      # name (clowd_rust_core/src/telemetry.rs). Every process then reports against one release.
       - name: Resolve version for capture binary
         shell: bash
         run: |
@@ -189,6 +193,12 @@ jobs:
 
       - name: Build capture binary
         run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
+
+      # The scrolling-capture driver only does anything on Windows (the overlay's
+      # SCROLL button is compiled out elsewhere), but it is built on both legs so
+      # the non-Windows stub cannot rot unnoticed. Only Windows packages it.
+      - name: Build scrolling capture driver
+        run: cargo build --release -p clowd_scroll_driver --target ${{ matrix.target }}
 
       - name: Build shell extension (Windows)
         if: runner.os == 'Windows'
@@ -218,13 +228,23 @@ jobs:
             DIF="$OUT/clowd_capture_wgpu.dSYM"
           fi
           sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
-          # the shell extension dll (Windows-only) gets the same treatment
+          # the scrolling capture driver reports into the same project under its own
+          # `app` tag, and only ships on Windows
           if [ "${{ runner.os }}" = "Windows" ]; then
+            sentry-cli debug-files upload "$OUT/clowd_scroll_driver.pdb" "$OUT/clowd_scroll_driver.exe"
+            # the shell extension dll (Windows-only) gets the same treatment
             sentry-cli debug-files upload "$OUT/clowd_shell_ext.pdb" "$OUT/clowd_shell_ext.dll"
           fi
 
       - name: Copy capture binary into package
         run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
+        shell: bash
+
+      # Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver
+      # looks for it.
+      - name: Copy scrolling capture driver into package (Windows)
+        if: runner.os == 'Windows'
+        run: cp "target/${{ matrix.target }}/release/clowd_scroll_driver.exe" publish/
         shell: bash
 
       # The dll ships under a name carrying the crate's own version (independent of the app

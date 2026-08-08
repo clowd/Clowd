@@ -11,9 +11,9 @@
 
 use std::sync::Arc;
 
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect};
 use crate::settings::TipsMode;
 use crate::ui::components::panel::layout::{compute_layout as compute_panel_layout, PanelLayout};
+use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 /// Minimal per-monitor info the UI layout rules need.
 ///
@@ -68,6 +68,21 @@ pub struct UiSharedState {
     /// from. Renderers use it to drop the panel — the click that follows
     /// belongs to the picker, so nothing clickable may be in the way.
     pub scroll_pick_mode: bool,
+}
+
+/// Return the monitor the virtual cursor is over. `None` when it sits in
+/// a gap between monitors.
+fn monitor_under_cursor(state: &UiSharedState) -> Option<UiMonitor> {
+    let cx = state.virtual_cursor.x.round() as i32;
+    let cy = state.virtual_cursor.y.round() as i32;
+    state
+        .monitors
+        .iter()
+        .find(|m| {
+            let b = m.bounds;
+            cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+        })
+        .copied()
 }
 
 /// Return the monitor whose bounds contain the center of `rect`. `None`
@@ -180,16 +195,31 @@ pub fn hints_visibility(state: &UiSharedState) -> Option<UiMonitor> {
     if state.captured || state.mouse_down {
         return None;
     }
-    let cx = state.virtual_cursor.x.round() as i32;
-    let cy = state.virtual_cursor.y.round() as i32;
-    state
-        .monitors
-        .iter()
-        .find(|m| {
-            let b = m.bounds;
-            cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
-        })
-        .copied()
+    monitor_under_cursor(state)
+}
+
+/// Decide whether the scroll-point picker's scope reticle (and the one
+/// hint that goes with it) is visible, and which monitor the cursor is on.
+///
+/// While this is `Some`, the picker owns the overlay: every other hint,
+/// the tips panel, the button panel and the selection's resize handles are
+/// suppressed, because the only input the overlay is waiting for is one
+/// click anywhere inside the selection.
+///
+/// The returned monitor is where the *hint* goes. The reticle itself is
+/// drawn by every monitor within `SCOPE_EXTENT` of the cursor, so it is not
+/// cut in half at a seam — see `ui::gpu::hints`.
+///
+/// The magnifier's Q toggle still hides everything, hence the
+/// `overlays_visible` gate. `app::update_cursor_visibility` carries the
+/// same gate: if this returns `None` the OS pointer must come back, or
+/// there would be no pointer at all. Unreachable today (Q is swallowed
+/// while picking) but the two must not drift apart.
+pub fn scroll_pick_visibility(state: &UiSharedState) -> Option<UiMonitor> {
+    if !state.scroll_pick_mode || !state.overlays_visible {
+        return None;
+    }
+    monitor_under_cursor(state)
 }
 
 /// Whether the per-monitor debug panel is visible on `this` monitor. Shown
@@ -275,6 +305,26 @@ mod tests {
         assert!(panel_visibility(&s).is_none());
         s.scroll_pick_mode = false;
         assert!(panel_visibility(&s).is_some());
+    }
+
+    #[test]
+    fn scroll_pick_reticle_follows_the_cursor_and_obeys_the_overlay_toggle() {
+        let mut s = state();
+        s.captured = true;
+
+        // Not picking: no reticle, even though a selection is captured.
+        assert!(scroll_pick_visibility(&s).is_none());
+
+        s.scroll_pick_mode = true;
+        assert!(scroll_pick_visibility(&s).is_some());
+
+        // Cursor off every monitor — nothing to draw it on.
+        s.virtual_cursor = ScreenPointF::new(1000.0, 30.0);
+        assert!(scroll_pick_visibility(&s).is_none());
+        s.virtual_cursor = ScreenPointF::new(30.0, 30.0);
+
+        s.overlays_visible = false;
+        assert!(scroll_pick_visibility(&s).is_none());
     }
 
     #[test]

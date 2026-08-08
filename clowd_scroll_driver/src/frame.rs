@@ -31,7 +31,7 @@ use windows::Win32::{
     UI::WindowsAndMessaging::GetDesktopWindow,
 };
 
-use crate::geometry::ScreenRect;
+use clowd_rust_core::geometry::ScreenRect;
 
 /// One capture of the region: raw BGRA, top-down, `width * height * 4`
 /// bytes. Kept in BGRA — the order `GetDIBits` hands back — because

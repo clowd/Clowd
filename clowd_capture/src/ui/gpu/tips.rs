@@ -18,12 +18,12 @@
 
 use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
-use crate::geometry::RectExt;
 use crate::ui::components::tips::layout::{compute_layout as compute_tips_layout, BODY_FONT_PX, TITLE_FONT_PX};
 use crate::ui::components::tips::model::{render_description, COLOR_ROW_HOTKEY, HOTKEY_GAP, TIPS_BOTTOM, TIPS_TOP, TITLE};
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_MONO};
 use crate::ui::shared::{tips_visibility, UiMonitor, UiSharedState};
+use clowd_rust_core::geometry::RectExt;
 
 /// Panel opacity applied to body + title (excluding shadow). Matches the
 /// old `base_opacity` constant.

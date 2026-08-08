@@ -5,7 +5,6 @@ use std::time::{Duration, Instant};
 use winit::event_loop::EventLoopProxy;
 
 use crate::app::{App, CycleSetup};
-use crate::geometry::ScreenPointF;
 use crate::host::AppEvent;
 use crate::image_extract;
 use crate::render::protocol::{next_cycle_gen, BlurredDesktopImage, CycleParams, RenderMsg, WorkerInput};
@@ -14,6 +13,7 @@ use crate::settings::{CapturerSettings, MemoryHintsMode};
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedCursor, CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
+use clowd_rust_core::geometry::ScreenPointF;
 
 type WalkerLatch = Arc<Latch<Arc<WindowWalker>>>;
 type PeekImagesLatch = Arc<Latch<Vec<Arc<WindowPeekImage>>>>;

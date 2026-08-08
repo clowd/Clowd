@@ -8,9 +8,9 @@
 
 use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
-use crate::geometry::{RectExt, ScreenRect};
 use crate::ui::components::debug::layout::{compute_layout, DebugPanelLayout, PanelAnchor, BODY_FONT_PX};
 use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
+use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
 use crate::telemetry::perf::{PerfSample, PerfTracker};
 use crate::telemetry::startup::{CaptureTimings, WarmupTimings};

@@ -1,7 +1,8 @@
 # clowd_capture protocol
 
-The contract between the Clowd.Ui shell and the `clowd_capture_wgpu` capture
-process. Two modes share all capture behavior and the on-disk session format:
+The contract between the Clowd.Ui shell and the Rust capture processes. The
+capture overlay `clowd_capture_wgpu` has two modes, which share all capture
+behavior and the on-disk session format:
 
 - **One-shot**: the shell spawns one process per capture with CLI flags; the
   process shows the overlay, writes its result into `--session-dir`, and exits.
@@ -11,14 +12,18 @@ process. Two modes share all capture behavior and the on-disk session format:
   Completion signal = the `finished` event. The session directory format is
   identical — large payloads never ride the pipe.
 
-A third mode, **`--scroll-drive`** (§3), is not a capture overlay at all: it is
-the same binary re-spawned headless to carry out a scrolling capture the
-overlay already set up. It shares the session format and nothing else.
+A **separate binary**, `clowd_scroll_driver` (§3), carries out the second half
+of a scrolling capture the overlay already set up. It is not a capture overlay
+at all — no window, no event loop, no GPU — and shares the session format with
+the capturer and nothing else. It is documented here because it speaks to the
+same shell across the same boundary.
 
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `src/host/protocol.rs` + `src/host/stdin.rs` (wire protocol),
-`src/scroll/drive.rs` (scrolling-capture driver), `src/system/mod.rs` (exit
-codes). C# counterparts: `ScreenCaptureService.cs` (one-shot + session
+`clowd_scroll_driver/src/drive.rs` (scrolling-capture driver), and
+`clowd_rust_core` for what the two binaries must agree on — the `session.json`
+shape (`session.rs`), the coordinate space (`geometry.rs`) and the exit codes
+(`exit.rs`). C# counterparts: `ScreenCaptureService.cs` (one-shot + session
 dispatch), `CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
 + `Scroll/ScrollDriverProtocol.cs` (driver).
 
@@ -68,7 +73,7 @@ File contents:
 | `session.json` | Session metadata (§1.3). |
 | `action.txt` | Routing marker read by `CaptureSessionDispatcher` (missing = edit). |
 | `capture.log` | Mirror of the capturer's log (one-shot mode only), read by the shell after a non-zero exit. |
-| `scroll.log` | Same, for the `--scroll-drive` pass (§3). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
+| `scroll.log` | Same, for the `clowd_scroll_driver` pass (§3). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
 
 **Write ordering** (`session_output.rs`) — the last file to appear is the
 completion signal, so readers must wait for process exit (one-shot) or the
@@ -270,28 +275,32 @@ Parent-side timing contract:
 - While the child is idle the parent pings every 60 s; two consecutive
   missed pongs mean a wedged child, which is killed (and respawned).
 
-## 3. Scrolling-capture driver mode
+## 3. Scrolling-capture driver (`clowd_scroll_driver`)
 
-`--scroll-drive` is the second half of a scrolling capture. The first half is
-an ordinary one-shot cycle: the user selects a region, presses SCROLL, clicks
-the point to scroll at, and the overlay exits leaving the `scroll X,Y,W,H
-PX,PY HWND` marker of §1.2. `CaptureSessionDispatcher` turns that marker into
+The driver is the second half of a scrolling capture. The first half is an
+ordinary one-shot cycle: the user selects a region, presses SCROLL, clicks the
+point to scroll at, and the overlay exits leaving the `scroll X,Y,W,H PX,PY
+HWND` marker of §1.2. `CaptureSessionDispatcher` turns that marker into
 `CaptureAction.Scroll`, `ScrollCapturePage` puts its border window up around
-the region, and re-spawns this same binary — headless — to do the mechanical
-part.
+the region, and spawns the driver to do the mechanical part.
 
-The mode is **Windows-only**; on macOS it logs and exits 4 (the SCROLL button
-is compiled out, so nothing should ever route here).
+It is a **separate binary**, not a mode of the capturer. Nothing it does needs
+a window, an event loop, a GPU or the screen-recording permission dance, and
+bringing any of that up would put pixels on screen in front of the content it
+is about to photograph. It ships beside `clowd_capture_wgpu`, which is where
+`CaptureBinaryLocator.ResolveScrollDriver` looks for it.
+
+**Windows-only**; elsewhere it logs and exits 4 (the SCROLL button is compiled
+out, so nothing should ever route there).
 
 ### 3.1 Spawn
 
 ```
-clowd_capture_wgpu --scroll-drive --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N
+clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N
 ```
 
 | Flag | Required | Meaning |
 |---|---|---|
-| `--scroll-drive` | yes | Selects the mode. Branches in `main::run` before the event loop, the GPU, and the screen-permission check — nothing this mode does needs any of them, and bringing them up would put windows in front of the content it is about to photograph. |
 | `--session-dir` | yes | The directory the overlay was given. It is empty by the time the driver starts (the shell consumed `action.txt`), and the driver owns it from here. |
 | `--region X,Y,W,H` | yes | The rect to photograph, physical virtual-desktop px — the same space and the same numbers as the marker. Rejected if W or H is 0. |
 | `--point PX,PY` | yes | Where the cursor is parked and the wheel is aimed, same space. Re-clamped into `--region`; a point outside it is a caller bug and is logged. |
@@ -307,7 +316,7 @@ Win10+ scroll-inactive-windows routing alone.
 ### 3.2 Events (driver → shell)
 
 One JSON object per line on stdout, and **only** protocol lines: the terminal
-logger is routed to stderr in this mode for exactly that reason, so the shell
+logger is routed to stderr for exactly that reason, so the shell
 may treat any line starting `{` and ending `}` as an event (the same rule as
 §2.2).
 

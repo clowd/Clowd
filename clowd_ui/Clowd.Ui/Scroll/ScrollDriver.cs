@@ -22,7 +22,7 @@ namespace Clowd.UI
     internal sealed record ScrollDriverOutcome(string Result, string Message, int Frames, int HeightPx, int? ExitCode);
 
     /// <summary>
-    /// Hosts one run of the capturer's <c>--scroll-drive</c> mode and speaks its NDJSON protocol
+    /// Hosts one run of the <c>clowd_scroll_driver</c> process and speaks its NDJSON protocol
     /// (CAPTURE_PROTOCOL.md): JSON commands in on stdin, JSON events out on stdout, log chatter on
     /// stderr. Only lines that start with '{' and end with '}' are protocol — the same rule the
     /// recording and warm-host protocols use; everything else goes to the bounded log buffer a
@@ -142,8 +142,9 @@ namespace Clowd.UI
 
         /// <summary>
         /// The exact command line the driver is spawned with. Factored out so the argument
-        /// contract is readable in one place — the capturer rejects a missing or malformed
-        /// <c>--region</c>/<c>--point</c> outright.
+        /// contract is readable in one place — the driver rejects a missing or malformed
+        /// <c>--region</c>/<c>--point</c> outright (as a <c>fatal_error</c> event, not a usage
+        /// error).
         /// <para>Every numeric option is emitted as a single <c>--name=value</c> token. A monitor
         /// left of or above the primary has a negative virtual-desktop origin, and clap reads a
         /// separate value token that begins with '-' as an unknown flag — the run would die with
@@ -157,7 +158,6 @@ namespace Clowd.UI
 
             return new[]
             {
-                "--scroll-drive",
                 "--session-dir", sessionDir,
                 // physical virtual-desktop px, the same space the action.txt marker used.
                 "--region=" + String.Join(",", Num(region.X), Num(region.Y), Num(region.Width), Num(region.Height)),
@@ -271,7 +271,7 @@ namespace Clowd.UI
         {
             try
             {
-                // in --scroll-drive mode the terminal logger is routed to stderr precisely so
+                // the driver routes its terminal logger to stderr precisely so
                 // stdout can carry nothing but protocol lines.
                 string line;
                 while ((line = await _proc.StandardError.ReadLineAsync()) != null)

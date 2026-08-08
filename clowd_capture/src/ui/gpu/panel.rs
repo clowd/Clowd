@@ -16,13 +16,13 @@
 
 use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
 
-use crate::geometry::RectExt;
 use crate::ui::components::panel::layout::PanelLayout;
 use crate::ui::components::panel::model::{button_defs, NUM_SVG_BUTTONS};
 use crate::ui::gpu::icon::{IconAtlas, IconInstance};
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE};
 use crate::ui::shared::{panel_visibility, UiMonitor, UiSharedState};
+use clowd_rust_core::geometry::RectExt;
 
 // Tuning constants (port of the old CPU code).
 const LABEL_FONT_PX: f32 = 11.0;
@@ -131,7 +131,7 @@ pub struct PanelRenderer {
     /// Reused string buffers for the selection's width / height digits.
     width_str: String,
     height_str: String,
-    last_selection: Option<crate::geometry::ScreenRect>,
+    last_selection: Option<clowd_rust_core::geometry::ScreenRect>,
     dpi_scale: f32,
 }
 
@@ -228,7 +228,7 @@ impl PanelRenderer {
         }
 
         let mon = this_monitor.bounds;
-        let to_local = |r: crate::geometry::ScreenRect| -> (f32, f32, f32, f32) {
+        let to_local = |r: clowd_rust_core::geometry::ScreenRect| -> (f32, f32, f32, f32) {
             (
                 (r.left() - mon.left()) as f32,
                 (r.top() - mon.top()) as f32,

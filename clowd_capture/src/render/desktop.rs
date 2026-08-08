@@ -1,5 +1,5 @@
-use crate::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 use crate::gpu::desktop::{CursorTextures, WindowUniforms};
+use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 
 /// Duration of the colour to grayscale fade after the window first becomes visible.
 const FADE_DURATION_SECS: f32 = 0.3;
@@ -19,6 +19,10 @@ pub(crate) struct FrameState {
     pub captured: bool,
     pub overlays_visible: bool,
     pub cursor_overlay_visible: bool,
+    /// Mirrors [`crate::ui::shared::UiSharedState::scroll_pick_mode`].
+    /// Suppresses the resize handles (see `desktop.wgsl`) and the frozen
+    /// cursor composited from the snapshot.
+    pub scroll_pick_mode: bool,
     pub elapsed: f32,
     pub surface_size: (u32, u32),
 }
@@ -33,9 +37,21 @@ impl SnapshotState {
             captured,
             overlays_visible,
             cursor_overlay_visible,
+            scroll_pick_mode,
             elapsed,
             surface_size,
         } = *frame;
+
+        self.uniforms.selection_params[3] = if scroll_pick_mode { 1.0 } else { 0.0 };
+
+        // The picker draws its own reticle at the live cursor. The
+        // snapshot's frozen cursor sits wherever the pointer happened to
+        // be when the screenshot was taken, so it reads as a second,
+        // stuck pointer right where the user is aiming — hide it for the
+        // duration whatever the M toggle says. Display only: the frozen
+        // cursor is not part of what the scroll driver captures, and the
+        // user's setting is untouched when they back out.
+        let show_frozen_cursor = cursor_overlay_visible && !scroll_pick_mode;
 
         if !overlays_visible {
             self.uniforms.params[0] = 0.0;
@@ -62,7 +78,7 @@ impl SnapshotState {
             self.uniforms.selection_params[0] = elapsed;
             self.uniforms.selection_params[1] = 0.0;
             self.uniforms.selection_params[2] = zoom;
-            self.set_cursor_uniforms(cursor_textures, cursor_overlay_visible, monitor_bounds, mouse_pos, zoom);
+            self.set_cursor_uniforms(cursor_textures, show_frozen_cursor, monitor_bounds, mouse_pos, zoom);
             queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
             return;
         }
@@ -112,7 +128,7 @@ impl SnapshotState {
         self.uniforms.selection_params[0] = elapsed;
         self.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
         self.uniforms.selection_params[2] = zoom;
-        self.set_cursor_uniforms(cursor_textures, cursor_overlay_visible, monitor_bounds, mouse_pos, zoom);
+        self.set_cursor_uniforms(cursor_textures, show_frozen_cursor, monitor_bounds, mouse_pos, zoom);
 
         queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
     }

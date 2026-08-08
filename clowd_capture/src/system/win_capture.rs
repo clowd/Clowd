@@ -1,5 +1,5 @@
-use crate::geometry::ScreenRect;
 use anyhow::Result;
+use clowd_rust_core::geometry::ScreenRect;
 use std::{mem, ops::Deref, ptr};
 use windows::{
     core::PCWSTR,

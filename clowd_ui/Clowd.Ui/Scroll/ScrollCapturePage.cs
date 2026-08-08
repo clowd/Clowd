@@ -57,13 +57,13 @@ namespace Clowd.UI
                 ActiveInstance = this;
                 _sessionDir = sessionDir;
 
-                var binary = CaptureBinaryLocator.Resolve();
+                var binary = CaptureBinaryLocator.ResolveScrollDriver();
                 if (binary == null)
                 {
                     await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                        $"The screen capture binary ({CaptureBinaryLocator.BinaryFileName}) could not be found. " +
+                        $"The scrolling capture binary ({CaptureBinaryLocator.ScrollDriverFileName}) could not be found. " +
                         $"Run 'cargo build' in the clowd-rust repository, or set the {CaptureBinaryLocator.EnvVarName} " +
-                        "environment variable to its location.",
+                        "environment variable to the capture binary's location — the driver ships beside it.",
                         "Scrolling capture unavailable");
                     CaptureSessionDispatcher.DeleteSessionDir(_sessionDir);
                     Close();

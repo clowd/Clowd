@@ -2,7 +2,7 @@
 //! `telemetry_core` (which explains why this is hand-rolled rather than the
 //! `sentry` crate).
 //!
-//! Mirrors `clowd_capture/src/telemetry/crash.rs`: same project, same
+//! Mirrors `clowd_rust_core/src/telemetry.rs`: same project, same
 //! `CLOWD_DISABLE_TELEMETRY` opt-out, and an `app` tag (`clowd_server`) that
 //! tells the three Clowd components apart inside one Sentry project.
 //!

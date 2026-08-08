@@ -1,5 +1,6 @@
-use crate::geometry::{RectExt, ScreenRect, ScreenRectF};
+use crate::ui::components::scope::layout::SCOPE_EXTENT;
 use crate::ui::shared::{UiMonitor, UiSharedState};
+use clowd_rust_core::geometry::{RectExt, ScreenRect, ScreenRectF};
 
 pub const HINT_FONT_PX: f32 = 11.0;
 const KEYCAP_SIZE: f32 = 20.0;
@@ -17,6 +18,11 @@ const CURSOR_OFFSET_Y: f32 = 6.0;
 const CROSSHAIR_OFFSET_X: f32 = 18.0;
 const CROSSHAIR_OFFSET_Y: f32 = 18.0;
 const MONITOR_INSET_Y: f32 = 40.0;
+
+/// Diagonal offset of the scroll-pick hint from the cursor. Derived from
+/// the reticle's own extent so the tooltip's near corner always clears the
+/// outer ticks — the two move together if the reticle is ever resized.
+const SCOPE_HINT_OFFSET: f32 = SCOPE_EXTENT * 0.8;
 
 /// Padding around the cursor image for the dashed highlight square.
 pub const CURSOR_SQUARE_PAD: f32 = 4.0;
@@ -111,6 +117,37 @@ pub fn compute_color_hint(
 
     let layout = finalize_layout(hr.x, hr.y, tooltip_w, tooltip_h, dpi, inner);
     (layout, hr)
+}
+
+/// "Click within the scrollable area" — the scroll-point picker's only
+/// hint. Text-only (there is no key to press) and offset from the cursor
+/// far enough to clear the scope reticle, flipping to the other side when
+/// it would run off the monitor.
+pub fn compute_scroll_pick_hint(
+    state: &UiSharedState,
+    monitor: &UiMonitor,
+    dpi: f32,
+    desc_text_width: f32,
+    text_line_height: f32,
+) -> HintLayout {
+    let (tooltip_w, tooltip_h, inner) = tooltip_dimensions_with(dpi, desc_text_width, text_line_height, false);
+    let mon = monitor.bounds.to_f32();
+    let cx = state.virtual_cursor.x.round();
+    let cy = state.virtual_cursor.y.round();
+    let off = SCOPE_HINT_OFFSET * dpi;
+
+    let mut x = cx + off;
+    let mut y = cy + off;
+    if x + tooltip_w > mon.right() {
+        x = cx - off - tooltip_w;
+    }
+    if y + tooltip_h > mon.bottom() {
+        y = cy - off - tooltip_h;
+    }
+    x = x.clamp(mon.left(), (mon.right() - tooltip_w).max(mon.left()));
+    y = y.clamp(mon.top(), (mon.bottom() - tooltip_h).max(mon.top()));
+
+    finalize_layout(x, y, tooltip_w, tooltip_h, dpi, inner)
 }
 
 /// [F] Select Monitor — bottom-center of the current monitor (used by magnifier hint).
@@ -223,11 +260,19 @@ struct InnerMetrics {
 }
 
 fn tooltip_dimensions(dpi: f32, desc_text_width: f32, text_line_height: f32) -> (f32, f32, InnerMetrics) {
-    let keycap_size = (KEYCAP_SIZE * dpi).floor();
+    tooltip_dimensions_with(dpi, desc_text_width, text_line_height, true)
+}
+
+/// `with_keycap == false` collapses the keycap and its gap to zero, giving
+/// a text-only pill for hints that describe an action with no key behind
+/// it. [`finalize_layout`] then places the description hard against the
+/// left padding, and the renderer skips the keycap layers.
+fn tooltip_dimensions_with(dpi: f32, desc_text_width: f32, text_line_height: f32, with_keycap: bool) -> (f32, f32, InnerMetrics) {
+    let keycap_size = if with_keycap { (KEYCAP_SIZE * dpi).floor() } else { 0.0 };
     let keycap_inset = (KEYCAP_INSET * dpi).floor().max(1.0);
     let padding_h = (HINT_PADDING_H * dpi).floor();
     let padding_v = (HINT_PADDING_V * dpi).floor();
-    let keycap_gap = (KEYCAP_GAP * dpi).floor();
+    let keycap_gap = if with_keycap { (KEYCAP_GAP * dpi).floor() } else { 0.0 };
 
     let content_h = keycap_size.max(text_line_height);
     let tooltip_w = padding_h + keycap_size + keycap_gap + desc_text_width + padding_h;

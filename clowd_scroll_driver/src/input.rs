@@ -38,7 +38,7 @@ use windows::Win32::{
 
 pub use windows::Win32::Foundation::HWND;
 
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// One wheel notch, as Windows defines it. How far the target moves per
 /// notch is entirely the target's business — see the module note.
