@@ -54,13 +54,7 @@ pub(crate) fn draw_once(
             label: Some("frame encoder"),
         });
 
-    ui_renderer.prepare(
-        &gpu.device,
-        &gpu.queue,
-        (config.width, config.height),
-        perf,
-        gpu.snapshot.as_deref(),
-    );
+    ui_renderer.prepare(&gpu.device, &gpu.queue, (config.width, config.height), perf);
 
     let begin_frame = gpu_timing.and_then(|gt| gt.begin_frame());
     let (pass_ts, slot_id) = match &begin_frame {

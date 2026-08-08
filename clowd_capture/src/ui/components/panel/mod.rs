@@ -12,10 +12,13 @@
 //!     off the selection (UPLOAD / SEARCH / COPY / BACK / EXIT).
 //!
 //! They have different lengths, so every entry point takes the set as a
-//! parameter. Each strip is positioned by the same algorithm with its own
-//! width, so the shorter OCR strip re-centres under the selection on a
-//! swap — the re-click hazard that movement creates is `PanelSwapGuard`'s
-//! job (app.rs), not geometry's. See `layout::compute_layout`.
+//! parameter — and a second one, [`model::PanelFeatures`], because the
+//! shell can switch UPLOAD / SCROLL / OCR off (SettingsCapture's "Optional
+//! features"), which narrows either strip further. Each strip is
+//! positioned by the same algorithm with its own width, so the shorter OCR
+//! strip re-centres under the selection on a swap — the re-click hazard
+//! that movement creates is `PanelSwapGuard`'s job (app.rs), not
+//! geometry's. See `layout::compute_layout`.
 //!
 //! Pure layout/model logic only — GPU rendering lives in
 //! [`crate::ui::gpu`].

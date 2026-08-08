@@ -33,6 +33,8 @@ pub struct TextStack {
     /// it does happen: the pipeline is shared via glyphon's `Cache`, so
     /// this is essentially a vertex-buffer allocation.
     bubble_renderer: Option<TextRenderer>,
+    /// Whether [`Self::ensure_fallback_fonts`] has run — see its docs.
+    fallback_fonts_loaded: bool,
 }
 
 impl TextStack {
@@ -66,7 +68,36 @@ impl TextStack {
             atlas,
             renderer,
             bubble_renderer: None,
+            fallback_fonts_loaded: false,
         }
+    }
+
+    /// Register the system's fonts with the font DB so cosmic-text's
+    /// per-script fallback can shape glyphs the embedded Cascadia faces
+    /// lack (CJK, Cyrillic, Greek, Arabic, …). The startup DB deliberately
+    /// contains ONLY the embedded faces — this overlay is startup-latency-
+    /// sensitive, and a system scan is a directory walk plus a name-table
+    /// parse per font file — so the scan is deferred to the first OCR
+    /// bubble layout, the one consumer that can meet arbitrary scripts.
+    /// It lands during the scanning-sweep animation, where a one-time hit
+    /// is invisible. Idempotent; every later call is a boolean test.
+    ///
+    /// Safe to do after shaping has already happened: the pre-load shaping
+    /// (panel/hint labels) is ASCII the embedded faces fully cover, so no
+    /// cached fallback list for those runs can be wrong — and bubble text
+    /// is only ever shaped after this ran.
+    pub fn ensure_fallback_fonts(&mut self) {
+        if self.fallback_fonts_loaded {
+            return;
+        }
+        let t0 = std::time::Instant::now();
+        self.font_system.db_mut().load_system_fonts();
+        log::info!(
+            "loaded system fonts for OCR glyph fallback: {} faces in {:?}",
+            self.font_system.db().faces().count(),
+            t0.elapsed()
+        );
+        self.fallback_fonts_loaded = true;
     }
 
     pub fn update_viewport(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use crate::interaction::{OcrNotice, OcrState};
 use crate::settings::TipsMode;
 use crate::ui::components::panel::layout::{compute_layout as compute_panel_layout, PanelLayout};
-use crate::ui::components::panel::model::PanelButtonSet;
+use crate::ui::components::panel::model::{PanelButtonSet, PanelFeatures};
 use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 /// Minimal per-monitor info the UI layout rules need.
@@ -78,6 +78,11 @@ pub struct UiSharedState {
     /// Mirror of `InteractionState::ocr_notice`: the transient "OCR gave
     /// you nothing" pill.
     pub ocr_notice: Option<OcrNotice>,
+    /// Which optional panel buttons the shell left switched on. Fixed for
+    /// the whole cycle, but it rides in the broadcast rather than in each
+    /// renderer's own copy of the settings so the app thread and every
+    /// render thread compute the panel from one value.
+    pub panel_features: PanelFeatures,
 }
 
 /// Return the monitor the virtual cursor is over. `None` when it sits in
@@ -172,7 +177,7 @@ pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
     let set = active_panel_set(state.captured, state.scroll_pick_mode, &state.ocr)?;
     let sel = state.selection?;
     let monitor = pick_monitor_containing_center(&state.monitors, sel)?;
-    let layout = compute_panel_layout(monitor.bounds, sel, monitor.dpi_scale, set)?;
+    let layout = compute_panel_layout(monitor.bounds, sel, monitor.dpi_scale, set, state.panel_features)?;
     Some(PanelVisibility {
         monitor,
         layout,
@@ -331,6 +336,7 @@ mod tests {
             scroll_pick_mode: false,
             ocr: OcrState::Idle,
             ocr_notice: None,
+            panel_features: PanelFeatures::ALL,
         }
     }
 
@@ -342,10 +348,6 @@ mod tests {
             full_text: String::new(),
             text_angle: 0.0,
         })
-    }
-
-    fn dummy_presentation() -> Arc<[crate::ocr::coverage::LinePresentation]> {
-        Arc::from(Vec::new())
     }
 
     #[test]
@@ -393,7 +395,6 @@ mod tests {
             region: s.selection.unwrap(),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
-            presentation: dummy_presentation(),
         };
         assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Ocr);
     }
@@ -423,7 +424,6 @@ mod tests {
             region: ScreenRect::from_xy_size(0, 0, 10, 10),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
-            presentation: dummy_presentation(),
         };
         assert_eq!(active_panel_set(true, true, &lifted), None);
         assert_eq!(active_panel_set(false, false, &lifted), None);

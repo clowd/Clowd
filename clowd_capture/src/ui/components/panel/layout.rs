@@ -17,7 +17,7 @@
 use crate::selection::intersect_rects;
 use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
-use super::model::{PanelButtonSet, MAX_PANEL_BUTTONS};
+use super::model::{ButtonDef, PanelButtonSet, PanelFeatures, MAX_PANEL_BUTTONS};
 use crate::ui::command::Command;
 
 /// Base DPI used by the C++ to convert logical (CSS-pixel) sizes to
@@ -56,40 +56,57 @@ pub struct PanelLayout {
     /// Drawn first in the visual row, corresponds to
     /// `buttonPositions[NUM_SVG_BUTTONS]` in the C++.
     pub area_rect: ScreenRect,
-    /// Which set these rects belong to. Carried *on the layout* rather
-    /// than looked up separately so a button index can only ever be
-    /// resolved against the set it was hit-tested in — see
-    /// [`PanelLayout::command_at`].
+    /// Which set these rects belong to. Kept for the callers that reason
+    /// about the *mode* rather than the buttons (the double-click swap
+    /// guard, the renderer's hover reset). Button identity does NOT come
+    /// from here — see `defs` below.
     pub set: PanelButtonSet,
-    /// Clickable button rects in the same order as `set.defs()`. Private
-    /// because only the first `count` entries are real; the rest are the
-    /// zero-rect padding that keeps this array `Copy` and fixed-size.
-    /// Handing out the whole array is what would let a caller hit-test a
-    /// stale button from the longer set.
+    /// Clickable button rects, one per *visible* button in strip order.
+    /// Private because only the first `count` entries are real; the rest
+    /// are the zero-rect padding that keeps this array `Copy` and
+    /// fixed-size. Handing out the whole array is what would let a caller
+    /// hit-test a stale button from a longer strip.
     buttons: [ScreenRect; MAX_PANEL_BUTTONS],
-    /// How many entries of `buttons` are live — always `set.len()`.
+    /// The button behind each rect, same indices as `buttons`. Carried on
+    /// the layout rather than re-derived from `set` because the visible
+    /// strip depends on the shell's feature switches as well as the set:
+    /// re-filtering at every consumer is exactly how index N comes to mean
+    /// two different buttons on two threads. `&'static ButtonDef` keeps
+    /// this `Copy`. Padding slots hold the set's first def and are never
+    /// handed out.
+    defs: [&'static ButtonDef; MAX_PANEL_BUTTONS],
+    /// How many entries of `buttons` / `defs` are live.
     count: usize,
 }
 
 impl PanelLayout {
-    /// The live button rects, in `set.defs()` order. Never includes the
-    /// padding slots.
+    /// The live button rects, in strip order. Never includes the padding
+    /// slots.
     pub fn buttons(&self) -> &[ScreenRect] {
         &self.buttons[..self.count]
     }
 
+    /// The live buttons, in the same order (and of the same length) as
+    /// [`buttons`](Self::buttons) — what the renderer draws labels and
+    /// icons from.
+    pub fn defs(&self) -> &[&'static ButtonDef] {
+        &self.defs[..self.count]
+    }
+
     /// The command button `idx` emits.
     ///
-    /// Resolving the index through the layout's own `set` is what makes
-    /// an index/set desync structurally impossible: the alternative
-    /// (index into a globally-chosen def table) silently fires
-    /// `Command::Video` when the user clicks BACK, because both live at
-    /// index 3 in their respective sets.
+    /// Resolving the index through the layout's own captured strip is
+    /// what makes an index/strip desync structurally impossible: the
+    /// alternative (index into a globally-chosen def table) silently
+    /// fires `Command::Video` when the user clicks BACK, because both
+    /// live at index 3 in their respective sets — and, now that buttons
+    /// can be switched off, would fire the wrong command in the *same*
+    /// set as soon as an earlier button is missing.
     ///
     /// Panics on an out-of-range index, which cannot happen for an index
-    /// that came from [`hit_test`](Self::hit_test) — `count == set.len()`.
+    /// that came from [`hit_test`](Self::hit_test).
     pub fn command_at(&self, idx: usize) -> Command {
-        self.set.defs()[idx].command
+        self.defs()[idx].command
     }
 
     /// Return the button index whose rect contains `pt`, or `None` if
@@ -118,15 +135,23 @@ impl PanelLayout {
 /// `Gdiplus::Rect::Intersect`); `dpi_scale` is `monitor.dpi / 96` and
 /// scales every measurement to match the target display.
 ///
-/// `set` selects which strip of buttons to place. The strip is positioned
-/// with its OWN width — the shorter OCR strip re-centres under the
-/// selection on a swap rather than inheriting the capture strip's
-/// footprint (see `long_edge_px` below for the re-click hazard story).
+/// `set` selects which strip of buttons to place and `features` which of
+/// its optional buttons the user has left switched on. The strip is
+/// positioned with its OWN width — the shorter OCR strip re-centres under
+/// the selection on a swap rather than inheriting the capture strip's
+/// footprint (see `long_edge_px` below for the re-click hazard story), and
+/// a strip narrowed by a switched-off button re-centres the same way.
 ///
 /// Returns `None` if the selection doesn't overlap the monitor at all
 /// (i.e. the intersect produced an empty rect) — the caller handles
 /// that by not showing a panel on this monitor.
-pub fn compute_layout(monitor_bounds: ScreenRect, selection: ScreenRect, dpi_scale: f32, set: PanelButtonSet) -> Option<PanelLayout> {
+pub fn compute_layout(
+    monitor_bounds: ScreenRect,
+    selection: ScreenRect,
+    dpi_scale: f32,
+    set: PanelButtonSet,
+    features: PanelFeatures,
+) -> Option<PanelLayout> {
     // Clip the selection to the monitor. Mirrors
     // `Gdiplus::Rect::Intersect(selection, screenBounds, ...)` at
     // DxScreenCapture.cpp:130.
@@ -144,7 +169,23 @@ pub fn compute_layout(monitor_bounds: ScreenRect, selection: ScreenRect, dpi_sca
     let button_spacing = (3.0 * dpi_zoom).ceil() as i32;
     let svg_button_size = ((UNSCALED_BUTTON_SIZE as f64) * dpi_zoom).floor() as i32;
     let area_size = svg_button_size;
-    // The set's OWN length: each strip is positioned by the same
+
+    // Resolve the visible strip ONCE, before any geometry: everything
+    // below (the width, the rect walk, and the identity each rect carries
+    // out of here) has to agree on the same button list.
+    //
+    // Fixed-size arrays (padded past `count`) so `PanelLayout` stays
+    // `Copy`; only `count` slots are filled and only that prefix is ever
+    // handed out. The def padding is the set's first button, an arbitrary
+    // non-null filler — `defs()` never exposes it.
+    let mut buttons = [ScreenRect::zero(); MAX_PANEL_BUTTONS];
+    let mut defs: [&'static ButtonDef; MAX_PANEL_BUTTONS] = [&set.defs()[0]; MAX_PANEL_BUTTONS];
+    let mut count = 0;
+    for def in set.visible_defs(features) {
+        defs[count] = def;
+        count += 1;
+    }
+    // The strip's OWN length: each strip is positioned by the same
     // algorithm with its true width, so the shorter OCR strip re-centres
     // under the selection instead of sitting left-aligned in the capture
     // strip's wider footprint (owner call — an off-centre strip read as
@@ -158,7 +199,7 @@ pub fn compute_layout(monitor_bounds: ScreenRect, selection: ScreenRect, dpi_sca
     // Orientation is unaffected: all three orientation predicates below
     // compare against `short_edge_px`, which does not depend on the
     // button count at all.
-    let long_edge_px = svg_button_size * set.len() as i32 + button_spacing * 2 + area_size;
+    let long_edge_px = svg_button_size * count as i32 + button_spacing * 2 + area_size;
     let short_edge_px = svg_button_size;
 
     // Available space on each side of the selection (C++ lines 132-134).
@@ -233,11 +274,6 @@ pub fn compute_layout(monitor_bounds: ScreenRect, selection: ScreenRect, dpi_sca
     // Vertical). Matches the C++ `vchange += ...` loop at lines 184-194.
     let area_rect = ScreenRect::from_xy_size(panel_left, panel_top, area_size, area_size);
 
-    // Fixed-size array (padded past `count`) so `PanelLayout` stays
-    // `Copy`; only `set.len()` slots are filled and only that prefix is
-    // ever handed out.
-    let mut buttons = [ScreenRect::zero(); MAX_PANEL_BUTTONS];
-    let count = set.len();
     let (mut cursor_x, mut cursor_y) = match orientation {
         PanelOrientation::Horizontal => {
             // Jump past the area indicator + spacing along X.
@@ -273,6 +309,7 @@ pub fn compute_layout(monitor_bounds: ScreenRect, selection: ScreenRect, dpi_sca
         area_rect,
         set,
         buttons,
+        defs,
         count,
     })
 }
@@ -292,7 +329,11 @@ mod tests {
     }
 
     fn layout_for(set: PanelButtonSet, dpi: f32) -> PanelLayout {
-        compute_layout(rect(MON), rect(SEL), dpi, set).expect("selection overlaps the monitor")
+        layout_with(set, dpi, PanelFeatures::ALL)
+    }
+
+    fn layout_with(set: PanelButtonSet, dpi: f32, features: PanelFeatures) -> PanelLayout {
+        compute_layout(rect(MON), rect(SEL), dpi, set, features).expect("selection overlaps the monitor")
     }
 
     /// Re-derives the two size constants exactly as `compute_layout`
@@ -340,7 +381,8 @@ mod tests {
         for dpi in [1.0_f32, 1.25, 1.5, 2.0] {
             for set in PanelButtonSet::ALL {
                 let (button_size, spacing) = metrics(dpi);
-                let long_edge = button_size * set.len() as i32 + spacing * 2 + button_size;
+                let strip_len = set.visible_defs(PanelFeatures::ALL).count() as i32;
+                let long_edge = button_size * strip_len + spacing * 2 + button_size;
 
                 let l = layout_for(*set, dpi);
                 let spanned = l.buttons().last().unwrap().right() - l.area_rect.left();
@@ -418,8 +460,8 @@ mod tests {
     fn orientation_is_count_independent() {
         let mon = rect(MON);
         let sel = rect((100, 100, 400, 960));
-        let normal = compute_layout(mon, sel, 1.0, PanelButtonSet::Normal).unwrap();
-        let ocr = compute_layout(mon, sel, 1.0, PanelButtonSet::Ocr).unwrap();
+        let normal = compute_layout(mon, sel, 1.0, PanelButtonSet::Normal, PanelFeatures::ALL).unwrap();
+        let ocr = compute_layout(mon, sel, 1.0, PanelButtonSet::Ocr, PanelFeatures::ALL).unwrap();
 
         for (name, l) in [("Normal", &normal), ("Ocr", &ocr)] {
             let b = l.buttons();
@@ -453,6 +495,7 @@ mod tests {
                 rect((SEL.0 + DX, SEL.1, SEL.2, SEL.3)),
                 1.0,
                 *set,
+                PanelFeatures::ALL,
             )
             .unwrap();
 
@@ -475,5 +518,70 @@ mod tests {
         let normal = layout_for(PanelButtonSet::Normal, 1.0);
         assert_eq!(normal.command_at(0), Command::Upload);
         assert_ne!(normal.command_at(0), ocr.command_at(0), "the two strips' index 0 must not collide");
+    }
+
+    /// The failure mode a switched-off button introduces: every rect after
+    /// the gap shifts down one index, so a layout that resolved commands
+    /// through the *unfiltered* table would fire EDIT when the user clicks
+    /// the button drawn as VIDEO. UPLOAD is index 0, so switching it off
+    /// moves every remaining button.
+    #[test]
+    fn switching_a_button_off_shifts_the_rest_and_their_commands_with_them() {
+        let full = layout_for(PanelButtonSet::Normal, 1.0);
+        let no_upload = layout_with(
+            PanelButtonSet::Normal,
+            1.0,
+            PanelFeatures {
+                upload: false,
+                ..PanelFeatures::ALL
+            },
+        );
+
+        assert_eq!(no_upload.buttons().len(), full.buttons().len() - 1);
+        assert_eq!(no_upload.command_at(0), Command::Edit);
+        for (i, def) in PanelButtonSet::Normal
+            .defs()
+            .iter()
+            .filter(|d| d.command != Command::Upload)
+            .enumerate()
+        {
+            assert_eq!(no_upload.command_at(i), def.command, "button {i}");
+        }
+
+        // Hit-testing the drawn rect must agree: the click lands where
+        // EDIT is now drawn and fires EDIT, not UPLOAD.
+        let b = no_upload.buttons()[0];
+        let idx = no_upload
+            .hit_test((b.left() + 1) as f32, (b.top() + 1) as f32)
+            .expect("first button is hittable");
+        assert_eq!(no_upload.command_at(idx), Command::Edit);
+    }
+
+    /// A narrowed strip re-centres with its own width, exactly like a set
+    /// swap does — it must not sit left-aligned in the full strip's
+    /// footprint.
+    #[test]
+    fn a_narrowed_strip_recentres() {
+        let (button_size, spacing) = metrics(1.0);
+        let features = PanelFeatures {
+            upload: false,
+            scroll_capture: false,
+            ocr: false,
+        };
+        let l = layout_with(PanelButtonSet::Normal, 1.0, features);
+
+        let strip_len = PanelButtonSet::Normal
+            .visible_defs(features)
+            .count() as i32;
+        let long_edge = button_size * strip_len + spacing * 2 + button_size;
+        assert_eq!(l.buttons().last().unwrap().right() - l.area_rect.left(), long_edge);
+        assert_eq!(l.area_rect.left(), SEL.0 + SEL.2 / 2 - long_edge / 2);
+        assert!(
+            l.area_rect.left()
+                > layout_for(PanelButtonSet::Normal, 1.0)
+                    .area_rect
+                    .left(),
+            "narrowed strip did not recentre"
+        );
     }
 }

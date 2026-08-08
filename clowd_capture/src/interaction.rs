@@ -2,7 +2,6 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::ocr::coverage::LinePresentation;
 use crate::ocr::OcrOutcome;
 use crate::selection::{dpi_at_point, hit_test, DragMode, Hittest};
 use crate::settings::TipsMode;
@@ -129,16 +128,11 @@ pub enum OcrState {
     /// centre — ONE value for all lift geometry, so a line crossing a
     /// mixed-DPI seam moves by the same physical amount on both halves
     /// instead of tearing at the seam.
-    /// `presentation[i]` is line i's bubble-vs-pixel-crop decision,
-    /// classified ONCE on the app thread when the outcome landed
-    /// (`ocr::coverage`) — carried here so no render worker re-scans the
-    /// text per frame, and so every worker agrees on it by construction.
     Lifted {
         anchor: Instant,
         region: ScreenRect,
         dpi_scale: f32,
         outcome: Arc<OcrOutcome>,
-        presentation: Arc<[LinePresentation]>,
     },
     /// BACK/Escape pressed. The text does NOT animate out — every bubble
     /// and crop vanishes on the first frame of this phase (see
@@ -484,11 +478,6 @@ mod tests {
         })
     }
 
-    /// Companion to [`dummy_outcome`]: an empty per-line classification.
-    fn dummy_presentation() -> Arc<[LinePresentation]> {
-        Arc::from(Vec::new())
-    }
-
     #[test]
     fn finalize_selection_resets_drag_zoom_and_restores_anchor() {
         let mut input = state();
@@ -531,7 +520,6 @@ mod tests {
             region: ScreenRect::from_xy_size(1, 1, 10, 10),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
-            presentation: dummy_presentation(),
         };
         input.ocr_notice = Some(OcrNotice {
             anchor: Instant::now(),
@@ -578,7 +566,6 @@ mod tests {
             region,
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
-            presentation: dummy_presentation(),
         };
         assert!(lifted.active());
         assert!(lifted.shows_ocr_panel());

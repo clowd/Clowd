@@ -1,20 +1,24 @@
-//! OCR text bubbles: the primary presentation of a recognized line — a
+//! OCR text bubbles: the ONLY presentation of a recognized line — a
 //! rounded pill containing the recognized string as REAL GLYPHS, revealed
-//! line by line as the sweep's band passes over the selection.
+//! line by line as the sweep's band passes over the selection. Scripts the
+//! embedded Cascadia faces cannot shape (CJK, Cyrillic, …) come from
+//! system fonts via cosmic-text's per-script fallback —
+//! `TextStack::ensure_fallback_fonts` registers them on the first bubble
+//! layout. (There used to be a pixel-crop fallback pass for those lines,
+//! sampling the desktop snapshot texture; system-font fallback replaced
+//! it wholesale.)
 //!
 //! Styling is deliberately the hint pills' (`super::hints`): same fill,
 //! border, text colour, corner radius and padding proportions, imported
 //! from the shared constants rather than re-derived, so the two families
-//! cannot drift apart. Lines the embedded fonts cannot cover never reach
-//! this renderer — `ocr::coverage` classified them once, on the app
-//! thread, and `super::lift` draws those as pixel crops instead.
+//! cannot drift apart.
 //!
 //! Draw-order contract (see `UiRenderer::draw` for the enforcement): the
 //! bubble RECTS are the leading range of the shared rect buffer, drawn
 //! right after the lift pass; the bubble TEXT goes through the TextStack's
 //! dedicated bubble renderer, drawn between that range and the rest of the
-//! rects. Net stacking, bottom to top: dimmed desktop → sweep/pixel crops
-//! → bubble pills → bubble glyphs → panel/hint rects → icons → panel/hint
+//! rects. Net stacking, bottom to top: dimmed desktop → sweep →
+//! bubble pills → bubble glyphs → panel/hint rects → icons → panel/hint
 //! text. That is what puts readable text over the darkened screenshot
 //! while the panel and its labels still cover everything.
 //!
@@ -28,7 +32,6 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 
 use crate::interaction::OcrState;
 use crate::ocr::anim;
-use crate::ocr::coverage::LinePresentation;
 use crate::ui::components::hints::layout::{CORNER_RADIUS, HINT_FONT_PX, HINT_PADDING_H, HINT_PADDING_V};
 use crate::ui::gpu::hints::{AA, TOOLTIP_BORDER, TOOLTIP_FILL, TOOLTIP_TEXT_COLOR};
 use crate::ui::gpu::rect::RectInstance;
@@ -122,14 +125,13 @@ impl OcrBubblesRenderer {
     pub fn prepare(&mut self, ts: &mut TextStack, state: &UiSharedState, this_monitor: &UiMonitor, bubble_rects: &mut Vec<RectInstance>) {
         self.drawn.clear();
 
-        let (anchor, region, dpi, outcome, presentation) = match &state.ocr {
+        let (anchor, region, dpi, outcome) = match &state.ocr {
             OcrState::Lifted {
                 anchor,
                 region,
                 dpi_scale,
                 outcome,
-                presentation,
-            } => (anchor, region, *dpi_scale, outcome, presentation),
+            } => (anchor, region, *dpi_scale, outcome),
             // Scanning: nothing is recognized yet, so the sweep just loops
             // (lift.rs). Retracting: the text vanishes AT ONCE on exit —
             // no reverse animation, by explicit owner call — so bubbles
@@ -150,9 +152,16 @@ impl OcrBubblesRenderer {
         let rf = region.to_f32();
         let key = std::sync::Arc::as_ptr(outcome) as usize;
         if self.outcome_key != Some(key) {
+            // System fonts must be in the DB before any bubble shaping so
+            // cosmic-text's fallback can cover scripts the embedded faces
+            // lack. One-time cost, paid here (not at startup) because only
+            // OCR text can contain arbitrary scripts.
+            ts.ensure_fallback_fonts();
             self.entries.clear();
-            for (i, line) in outcome.lines.iter().enumerate() {
-                if presentation.get(i).copied() != Some(LinePresentation::Bubble) {
+            for line in outcome.lines.iter() {
+                // An all-whitespace line has no ink to lift; an empty pill
+                // floating over the page would be pure noise.
+                if line.text.trim().is_empty() {
                     continue;
                 }
                 self.entries.push(layout_bubble(

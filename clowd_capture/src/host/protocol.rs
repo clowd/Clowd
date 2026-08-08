@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::app::CycleAction;
 use crate::settings::{parse_hex_color, CaptureMode, CapturerSettings, TipsMode};
+use crate::ui::components::panel::model::PanelFeatures;
 
 /// Parent → child commands.
 #[derive(Debug, Deserialize)]
@@ -34,8 +35,10 @@ pub enum HostCommand {
 /// `CliArgs` one-to-one and every default matches the corresponding CLI
 /// default (`CapturerSettings::default()`), so the shell can send
 /// `{"type":"show"}` and get the same overlay a bare one-shot launch
-/// would produce. Note the polarity: `peek`/`cursor` are positive here
-/// where the CLI has `--no-peek`/`--no-cursor`.
+/// would produce. Note the polarity: `peek`/`cursor`/`upload`/
+/// `scroll_capture`/`ocr` are positive here where the CLI has
+/// `--no-peek`/`--no-cursor`/`--no-upload`/`--no-scroll-capture`/
+/// `--no-ocr`.
 #[derive(Debug, Deserialize)]
 pub struct ShowParams {
     #[serde(default)]
@@ -56,6 +59,14 @@ pub struct ShowParams {
     pub capture_mode: CaptureMode,
     #[serde(default)]
     pub video: bool,
+    /// The optional panel buttons — see `PanelFeatures`. Positive
+    /// polarity, all defaulting to on.
+    #[serde(default = "default_true")]
+    pub upload: bool,
+    #[serde(default = "default_true")]
+    pub scroll_capture: bool,
+    #[serde(default = "default_true")]
+    pub ocr: bool,
 }
 
 impl ShowParams {
@@ -71,6 +82,11 @@ impl ShowParams {
             session_dir: self.session_dir,
             capture_mode: self.capture_mode,
             video_mode: self.video,
+            panel_features: PanelFeatures {
+                upload: self.upload,
+                scroll_capture: self.scroll_capture,
+                ocr: self.ocr,
+            },
         }
     }
 }
@@ -157,6 +173,7 @@ mod tests {
         assert_eq!(from_show.session_dir, default.session_dir);
         assert_eq!(from_show.capture_mode, default.capture_mode);
         assert_eq!(from_show.video_mode, default.video_mode);
+        assert_eq!(from_show.panel_features, default.panel_features);
     }
 
     #[test]
@@ -170,7 +187,10 @@ mod tests {
             "peek_threshold": 0.5,
             "cursor": false,
             "capture_mode": "window",
-            "video": true
+            "video": true,
+            "upload": false,
+            "scroll_capture": false,
+            "ocr": false
         }"##;
         let cmd: HostCommand = serde_json::from_str(json).unwrap();
         let HostCommand::Show(params) = cmd else {
@@ -184,6 +204,15 @@ mod tests {
         assert_eq!(params.capture_mode, CaptureMode::Window);
         assert!(params.video);
         assert_eq!(params.session_dir.as_deref(), Some(std::path::Path::new("C:/tmp/session")));
+        assert!(!params.upload && !params.scroll_capture && !params.ocr);
+        assert_eq!(
+            params.into_settings().panel_features,
+            PanelFeatures {
+                upload: false,
+                scroll_capture: false,
+                ocr: false,
+            }
+        );
     }
 
     #[test]

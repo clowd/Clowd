@@ -42,6 +42,9 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-peek` | flag | peek on | Disable obstructed-window peek-through capture. |
 | `--peek-threshold` | 0.0–1.0 | `0.80` | Max obstructed fraction before a window is dropped from hit-testing. |
 | `--no-cursor` | flag | cursor on | Start with the captured cursor hidden (user toggles with `M`). |
+| `--no-upload` | flag | UPLOAD shown | Hide the UPLOAD button — in the capture strip *and* the OCR strip — and drop its `U` accelerator. |
+| `--no-scroll-capture` | flag | SCROLL shown | Hide the SCROLL button and drop its `L` accelerator. Windows-only button; the flag parses everywhere. |
+| `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
 | `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation (process-level, applies in both modes). `lower-memory-usage` keeps the allocator's retained heap blocks small so an idle persistent host holds minimal memory; a running host must be relaunched for a change to take effect. |
@@ -195,8 +198,8 @@ line. Parent writes `HostCommand`s to the child's stdin; child writes
 
 `show` fields mirror the CLI one-to-one and every default matches the CLI
 default, so `{"type":"show"}` produces the same overlay a bare one-shot
-launch would. Note the polarity: `peek`/`cursor` are positive here where the
-CLI has `--no-peek`/`--no-cursor`.
+launch would. Note the polarity: `peek`/`cursor`/`upload`/`scroll_capture`/
+`ocr` are positive here where the CLI has the corresponding `--no-*` flag.
 
 | Field | Type | Default | CLI counterpart |
 |---|---|---|---|
@@ -208,11 +211,14 @@ CLI has `--no-peek`/`--no-cursor`.
 | `cursor` | bool | `true` | `--no-cursor` (inverted) |
 | `capture_mode` | `region` \| `screen` \| `window` | `region` | `--capture-mode` |
 | `video` | bool | `false` | `--video` |
+| `upload` | bool | `true` | `--no-upload` (inverted) |
+| `scroll_capture` | bool | `true` | `--no-scroll-capture` (inverted) |
+| `ocr` | bool | `true` | `--no-ocr` (inverted) |
 
 Examples:
 
 ```json
-{"type":"show","session_dir":"C:\\ProgramData\\Clowd\\Sessions\\42","accent_color":"#2F7CAE","tips_mode":"hints","peek":true,"peek_threshold":0.8,"cursor":true,"capture_mode":"region","video":false}
+{"type":"show","session_dir":"C:\\ProgramData\\Clowd\\Sessions\\42","accent_color":"#2F7CAE","tips_mode":"hints","peek":true,"peek_threshold":0.8,"cursor":true,"capture_mode":"region","video":false,"upload":true,"scroll_capture":true,"ocr":true}
 {"type":"cancel"}
 {"type":"ping"}
 {"type":"shutdown"}
