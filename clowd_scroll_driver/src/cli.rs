@@ -48,6 +48,18 @@ pub struct CliArgs {
     /// `--point`" — the driver re-validates it either way.
     #[arg(long, value_name = "N", default_value_t = 0, allow_hyphen_values = true)]
     pub hwnd: i64,
+
+    /// Start capturing from wherever the document is sitting instead of
+    /// rewinding it to the top first.
+    ///
+    /// Negative because rewinding is the default: a user who selects a
+    /// region halfway down a page almost always wants the whole page, and
+    /// silently capturing only the bottom half gives them no sign the top
+    /// is missing. The shell passes this when the user has turned the
+    /// setting off, which is the "capture from here" intent — a long
+    /// thread from one particular message.
+    #[arg(long)]
+    pub no_rewind: bool,
 }
 
 /// `--region X,Y,W,H`. Zero-area regions are rejected here rather than

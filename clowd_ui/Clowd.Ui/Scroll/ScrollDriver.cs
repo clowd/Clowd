@@ -75,7 +75,7 @@ namespace Clowd.UI
         /// Only the spawn itself throws.
         /// </summary>
         public async Task<ScrollDriverOutcome> RunAsync(string binary, string sessionDir, ScreenRect region,
-                                                        ScreenPoint point, long targetHwnd)
+                                                        ScreenPoint point, long targetHwnd, bool rewindToTop)
         {
             if (_proc != null)
                 throw new InvalidOperationException("A ScrollDriver drives exactly one capture.");
@@ -93,7 +93,7 @@ namespace Clowd.UI
                 RedirectStandardError = true,
             };
 
-            var args = BuildArguments(sessionDir, region, point, targetHwnd);
+            var args = BuildArguments(sessionDir, region, point, targetHwnd, rewindToTop);
             foreach (var arg in args)
                 psi.ArgumentList.Add(arg);
 
@@ -152,11 +152,11 @@ namespace Clowd.UI
         /// two-token pair: a path never starts with '-'.</para>
         /// </summary>
         internal static IReadOnlyList<string> BuildArguments(string sessionDir, ScreenRect region, ScreenPoint point,
-                                                             long targetHwnd)
+                                                             long targetHwnd, bool rewindToTop)
         {
             static string Num(long value) => value.ToString(CultureInfo.InvariantCulture);
 
-            return new[]
+            var args = new List<string>
             {
                 "--session-dir", sessionDir,
                 // physical virtual-desktop px, the same space the action.txt marker used.
@@ -166,6 +166,13 @@ namespace Clowd.UI
                 // WindowFromPoint. It re-validates a non-zero handle either way.
                 "--hwnd=" + Num(targetHwnd),
             };
+
+            // The driver rewinds by default, so only the opt-out is ever passed — the flag is
+            // negative on both sides so the default lives in one place.
+            if (!rewindToTop)
+                args.Add("--no-rewind");
+
+            return args;
         }
 
         /// <summary>Sends a command to the running driver. Best-effort by design: after a
