@@ -28,6 +28,7 @@ pub struct UiStateBuildInput<'a> {
     pub desktop_buffer: Option<&'a CapturedDesktop>,
     pub show_scroll_hint: bool,
     pub has_used_magnifier: bool,
+    pub scroll_pick_mode: bool,
 }
 
 pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
@@ -86,6 +87,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         cursor_image_rect: if peek_covers_cursor { None } else { cursor_image_rect },
         show_scroll_hint: input.show_scroll_hint,
         has_used_magnifier: input.has_used_magnifier,
+        scroll_pick_mode: input.scroll_pick_mode,
     }
 }
 

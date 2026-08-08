@@ -24,7 +24,7 @@ use crate::render::protocol::{next_cycle_gen, PeekCommand, RenderMsg, WorkerInpu
 use crate::render::window::{set_hardware_cursor_visible, WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
-use crate::session_output::{write_color_action, write_session, write_video_action, SessionAction};
+use crate::session_output::{write_color_action, write_scroll_action, write_session, write_video_action, SessionAction};
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker, EXIT_DISPLAY_CHANGED, EXIT_GPU_LOST};
@@ -181,6 +181,7 @@ pub enum CycleAction {
     Upload,
     SelectColor,
     Video,
+    Scroll,
     Copy,
     Save,
     Cancelled,
@@ -235,8 +236,11 @@ fn set_cursor_if_changed(windows: &WindowSet, last_cursor: &mut HashMap<WindowId
     }
 }
 
+/// App-thread mirror of [`crate::ui::shared::panel_visibility`] — the two
+/// must agree on every gate, or the app would route clicks to buttons the
+/// renderers are not drawing.
 fn current_panel_layout(cycle: &CaptureCycle, monitors: &[MonitorInfo]) -> Option<crate::ui::components::panel::layout::PanelLayout> {
-    if !cycle.input.captured {
+    if !cycle.input.captured || cycle.input.scroll_pick_mode {
         return None;
     }
     let sel = cycle.input.selection?;
@@ -247,6 +251,19 @@ fn current_panel_layout(cycle: &CaptureCycle, monitors: &[MonitorInfo]) -> Optio
         cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
     })?;
     crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor)
+}
+
+/// Whether Return fires the panel's default accept (`Command::Edit`).
+///
+/// Return is the panel's invisible default button, so it is gated by the
+/// same state the panel is: while a scroll point is being picked the panel
+/// is hidden and every accelerator it owns is swallowed, so Return must be
+/// inert too. Without the pick-mode gate it would write a plain screenshot
+/// session and end the cycle out from under the scroll capture the user is
+/// half-way through configuring. Escape remains the only way out of pick
+/// mode.
+fn enter_accepts_default_action(input: &InteractionState) -> bool {
+    input.captured && !input.scroll_pick_mode
 }
 
 fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors: &Arc<[UiMonitor]>, cycle: &mut CaptureCycle) {
@@ -309,6 +326,7 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
         desktop_buffer: cycle.desktop_buffer.as_deref(),
         show_scroll_hint: cycle.input.show_scroll_hint,
         has_used_magnifier: cycle.input.has_used_magnifier,
+        scroll_pick_mode: cycle.input.scroll_pick_mode,
     }));
 
     for h in windows.values() {
@@ -509,6 +527,7 @@ impl App {
                 show_scroll_hint: false,
                 velocity_tracker: MouseVelocityTracker::new(),
                 has_used_magnifier: false,
+                scroll_pick_mode: false,
             },
         });
     }
@@ -1010,6 +1029,60 @@ impl App {
         }
     }
 
+    /// Complete a scroll-point pick — the click that finishes what
+    /// [`Command::ScrollCapture`] armed.
+    ///
+    /// Same shape as the Video dispatch arm (hide the overlay, write the
+    /// action payload, finish the cycle), with the picked point and the
+    /// window under it added to the marker. A click outside the selection
+    /// is ignored and leaves pick mode armed: the driver may only aim the
+    /// wheel inside the region it is going to stitch, and re-clicking is a
+    /// friendlier correction than dropping the user back to the panel.
+    fn dispatch_scroll_pick(&mut self, event_loop: &ActiveEventLoop) {
+        use xdialog::XDialogIcon::Error as ErrorIcon;
+
+        let Some(cycle) = self.cycle.as_mut() else {
+            return;
+        };
+        let Some(session_dir) = cycle.settings.session_dir.clone() else {
+            log::info!("scroll pick ignored: no --session-dir provided");
+            return;
+        };
+        let Some(selection) = cycle.input.selection else {
+            log::info!("scroll pick ignored: no selection");
+            return;
+        };
+        let point = to_screen_point(cycle.input.virtual_cursor);
+        if !selection.contains(point) {
+            log::info!("scroll pick ignored: click outside the selection");
+            return;
+        }
+        // No walker (snapshot still in flight, or macOS) is not an error:
+        // `0` tells the driver to resolve the target itself with
+        // WindowFromPoint once the overlay is out of the way — which it
+        // has to do regardless, since this handle predates the overlay.
+        let hwnd = cycle
+            .walker
+            .as_ref()
+            .and_then(|w| w.top_level_hwnd_at(point))
+            .unwrap_or(0);
+
+        self.windows.hide_all();
+        match write_scroll_action(&session_dir, selection, point, hwnd, &self.monitors) {
+            ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Scroll),
+            ActionResult::Cancelled => self.show_all_windows(),
+            ActionResult::Failed(msg) => {
+                // Retry re-shows the overlay still in pick mode, so the
+                // user lands back on the crosshair, not on the panel.
+                if xdialog::show_message_retry_cancel("Clowd Capture", "Scrolling Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                    self.show_all_windows();
+                } else {
+                    self.finish_cycle(event_loop, CycleAction::Cancelled);
+                }
+            }
+        }
+    }
+
     fn dispatch_command(&mut self, command: Command, event_loop: &ActiveEventLoop, window_id: WindowId) {
         use xdialog::XDialogIcon::Error as ErrorIcon;
         log::info!("dispatch command: {:?}", command);
@@ -1163,6 +1236,28 @@ impl App {
                         }
                     }
                 }
+            }
+            Command::ScrollCapture => {
+                // SCROLL needs one more input than every other panel
+                // command — the point the driver parks the cursor at — so
+                // it does not write its payload here. It arms pick mode
+                // and leaves the overlay up; the click handler below is
+                // what writes `action.txt` and ends the cycle.
+                //
+                // Like Video, without a --session-dir there is no shell to
+                // hand the session to, and without a captured selection
+                // there is no region to scroll inside — ignore either way.
+                if cycle.settings.session_dir.is_none() {
+                    log::info!("command ScrollCapture ignored: no --session-dir provided");
+                    return;
+                }
+                if !cycle.input.captured || cycle.input.selection.is_none() {
+                    log::info!("command ScrollCapture ignored: no captured selection");
+                    return;
+                }
+                cycle.input.scroll_pick_mode = true;
+                set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, window_id, CursorIcon::Crosshair);
+                broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
             }
         }
     }
@@ -1436,6 +1531,16 @@ impl ApplicationHandler<AppEvent> for App {
                     },
                 ..
             } => {
+                // Escape backs out one step at a time: while picking a
+                // scroll point it returns to the panel with the selection
+                // intact, and only cancels the whole cycle otherwise.
+                if cycle.input.scroll_pick_mode {
+                    cycle.input.scroll_pick_mode = false;
+                    let cursor = cycle.input.hittest.cursor();
+                    set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, cursor);
+                    broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                    return;
+                }
                 self.finish_cycle(event_loop, CycleAction::Cancelled);
             }
             WindowEvent::KeyboardInput {
@@ -1449,7 +1554,7 @@ impl ApplicationHandler<AppEvent> for App {
             }
                 // Mirrors the Dx capturer: Return acts as the default
                 // accept ("open in editor") once a selection is made.
-                if cycle.input.captured => {
+                if enter_accepts_default_action(&cycle.input) => {
                     self.dispatch_command(Command::Edit, event_loop, id);
                 }
             WindowEvent::KeyboardInput {
@@ -1471,6 +1576,11 @@ impl ApplicationHandler<AppEvent> for App {
                     } else if c_lower == 'm' {
                         cycle.input.cursor_overlay_visible = !cycle.input.cursor_overlay_visible;
                         broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                    } else if cycle.input.scroll_pick_mode {
+                        // Panel accelerators are the panel's, and the panel
+                        // is hidden while picking — swallow them rather
+                        // than let an invisible button fire. Escape (above)
+                        // is the only way out.
                     } else if cycle.input.captured {
                         if let Some(cmd) = panel::lookup_command_by_key(c) {
                             self.dispatch_command(cmd, event_loop, id);
@@ -1617,7 +1727,13 @@ impl ApplicationHandler<AppEvent> for App {
                         let over_button = current_panel_layout(cycle, &self.monitors)
                             .and_then(|l| l.hit_test(pos.x, pos.y))
                             .is_some();
-                        let cursor = if over_button {
+                        // Pick mode owns the cursor for the whole move: the
+                        // panel is gone and every pixel of the selection is
+                        // a valid target, so neither the button pointer nor
+                        // the move/resize handles apply.
+                        let cursor = if cycle.input.scroll_pick_mode {
+                            CursorIcon::Crosshair
+                        } else if over_button {
                             CursorIcon::Pointer
                         } else {
                             cycle.input.hittest.cursor()
@@ -1651,6 +1767,13 @@ impl ApplicationHandler<AppEvent> for App {
                 }
                 match state {
                     ElementState::Pressed => {
+                        // Ahead of the panel hit-test: while picking a
+                        // scroll point the click is the pick, and nothing
+                        // else in the overlay may claim it.
+                        if cycle.input.scroll_pick_mode {
+                            self.dispatch_scroll_pick(event_loop);
+                            return;
+                        }
                         if cycle.input.captured {
                             let pos = cycle.input.virtual_cursor;
                             if let Some(layout) = current_panel_layout(cycle, &self.monitors) {
@@ -1806,5 +1929,62 @@ impl ApplicationHandler<AppEvent> for App {
             }
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::settings::TipsMode;
+
+    /// A freshly-shown overlay: nothing selected, no modes engaged.
+    fn input() -> InteractionState {
+        InteractionState {
+            virtual_cursor: ScreenPointF::new(0.0, 0.0),
+            zoom: 1.0,
+            anchored: false,
+            anchor_just_engaged: false,
+            anchor: ScreenPoint::new(0, 0),
+            mouse_down: false,
+            mouse_down_pt: None,
+            mouse_down_dpi: 1.0,
+            dragging: false,
+            selection: None,
+            captured: false,
+            hittest: Hittest::Outside,
+            drag_mode: None,
+            drag_anchor_selection: None,
+            tips_mode: TipsMode::Off,
+            debug_visible: false,
+            last_scroll_end: None,
+            scroll_momentum: false,
+            overlays_visible: true,
+            cursor_overlay_visible: false,
+            peek_suspended: false,
+            has_ever_scrolled: false,
+            show_scroll_hint: false,
+            velocity_tracker: MouseVelocityTracker::new(),
+            has_used_magnifier: false,
+            scroll_pick_mode: false,
+        }
+    }
+
+    #[test]
+    fn enter_accepts_once_captured() {
+        let mut i = input();
+        assert!(!enter_accepts_default_action(&i));
+        i.captured = true;
+        assert!(enter_accepts_default_action(&i));
+    }
+
+    /// The panel is hidden while a scroll point is being picked, and Enter
+    /// is its default button: firing Edit here would silently replace the
+    /// scrolling capture with a plain screenshot.
+    #[test]
+    fn enter_inert_while_picking_scroll_point() {
+        let mut i = input();
+        i.captured = true;
+        i.scroll_pick_mode = true;
+        assert!(!enter_accepts_default_action(&i));
     }
 }

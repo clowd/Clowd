@@ -124,6 +124,13 @@ pub(crate) struct InteractionState {
     pub show_scroll_hint: bool,
     pub velocity_tracker: MouseVelocityTracker,
     pub has_used_magnifier: bool,
+    /// SCROLL was pressed and we are waiting for the user to click the
+    /// point the driver will aim wheel events from. The selection is
+    /// already captured and frozen — this mode only collects a point, so
+    /// the panel hides, the cursor becomes a crosshair, and clicks are
+    /// routed to the picker instead of the panel/drag machinery. Escape
+    /// leaves the mode without cancelling the cycle.
+    pub scroll_pick_mode: bool,
 }
 
 #[derive(Default)]
@@ -216,6 +223,10 @@ impl InteractionController {
     pub fn reset(input: &mut InteractionState) -> InteractionEffects {
         input.selection = None;
         input.captured = false;
+        // Pick mode only means anything while a captured selection exists
+        // to click inside; dropping the selection must drop the mode too,
+        // or the crosshair/hidden-panel state would outlive its reason.
+        input.scroll_pick_mode = false;
         input.hittest = Hittest::Outside;
         input.drag_mode = None;
         input.drag_anchor_selection = None;
@@ -274,6 +285,7 @@ mod tests {
             show_scroll_hint: false,
             velocity_tracker: MouseVelocityTracker::new(),
             has_used_magnifier: false,
+            scroll_pick_mode: false,
         }
     }
 
@@ -313,11 +325,13 @@ mod tests {
         let mut input = state();
         input.captured = true;
         input.selection = Some(ScreenRect::from_xy_size(1, 1, 10, 10));
+        input.scroll_pick_mode = true;
 
         let effects = InteractionController::reset(&mut input);
 
         assert!(!input.captured);
         assert_eq!(input.selection, None);
+        assert!(!input.scroll_pick_mode);
         assert_eq!(input.hittest, Hittest::Outside);
         assert!(effects.broadcast_ui);
         assert!(effects.update_cursor_visibility);
