@@ -1,7 +1,8 @@
 # clowd_capture protocol
 
-The contract between the Clowd.Ui shell and the `clowd_capture_wgpu` capture
-process. Two modes share all capture behavior and the on-disk session format:
+The contract between the Clowd.Ui shell and the Rust capture processes. The
+capture overlay `clowd_capture_wgpu` has two modes, which share all capture
+behavior and the on-disk session format:
 
 - **One-shot**: the shell spawns one process per capture with CLI flags; the
   process shows the overlay, writes its result into `--session-dir`, and exits.
@@ -11,10 +12,20 @@ process. Two modes share all capture behavior and the on-disk session format:
   Completion signal = the `finished` event. The session directory format is
   identical — large payloads never ride the pipe.
 
+A **separate binary**, `clowd_scroll_driver` (§3), carries out the second half
+of a scrolling capture the overlay already set up. It is not a capture overlay
+at all — no window, no event loop, no GPU — and shares the session format with
+the capturer and nothing else. It is documented here because it speaks to the
+same shell across the same boundary.
+
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `src/host/protocol.rs` + `src/host/stdin.rs` (wire protocol),
-`src/system/mod.rs` (exit codes). C# counterparts: `ScreenCaptureService.cs`
-(one-shot + session dispatch), `CaptureProcessHost.cs` (persistent host).
+`clowd_scroll_driver/src/drive.rs` (scrolling-capture driver), and
+`clowd_rust_core` for what the two binaries must agree on — the `session.json`
+shape (`session.rs`), the coordinate space (`geometry.rs`) and the exit codes
+(`exit.rs`). C# counterparts: `ScreenCaptureService.cs` (one-shot + session
+dispatch), `CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
++ `Scroll/ScrollDriverProtocol.cs` (driver).
 
 ## 1. One-shot mode
 
@@ -36,6 +47,7 @@ flags that differ (`CaptureArguments.Build`).
 | `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation (process-level, applies in both modes). `lower-memory-usage` keeps the allocator's retained heap blocks small so an idle persistent host holds minimal memory; a running host must be relaunched for a change to take effect. |
 | `--persistent` | flag | off | Persistent host mode (§2). The per-capture flags above (except `--memory-hints`) are ignored; settings arrive per `show`. |
 | `--log-dir` | path | none | Persistent mode only: directory for `capture-host.log`. |
+| `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as each cycle ends (§3.5). Process-level and passed on both spawn paths: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
 
 ### 1.2 Session-directory file protocol
 
@@ -48,6 +60,7 @@ The shell pre-creates the session directory and passes it via
 | UPLOAD | same as EDIT + `action.txt` | `upload` |
 | SELECT-COLOR | `action.txt` only | `select-color #RRGGBB` |
 | VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H` |
+| SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
 | Cancelled (Escape / close) | none | — |
 
@@ -61,6 +74,7 @@ File contents:
 | `session.json` | Session metadata (§1.3). |
 | `action.txt` | Routing marker read by `CaptureSessionDispatcher` (missing = edit). |
 | `capture.log` | Mirror of the capturer's log (one-shot mode only), read by the shell after a non-zero exit. |
+| `scroll.log` | Same, for the `clowd_scroll_driver` pass (§3). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
 
 **Write ordering** (`session_output.rs`) — the last file to appear is the
 completion signal, so readers must wait for process exit (one-shot) or the
@@ -72,13 +86,22 @@ completion signal, so readers must wait for process exit (one-shot) or the
 2. VIDEO: `cropped.png` first, then **`action.txt` last**. Its appearance is
    the completion signal; no `desktop.png`, no `session.json` (the session is
    created by Clowd.Ui when recording finishes).
-3. SELECT-COLOR: `action.txt` only.
+3. SELECT-COLOR / SCROLL: `action.txt` only.
 4. Neither `session.json` nor `action.txt` present = the capture was
    cancelled; the shell deletes the pre-created directory.
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
 pixels (virtual-desktop, possibly negative origin) on Windows, CG points on
 macOS — passed verbatim to obs-express `--region`. W and H are always >= 2.
+
+The SCROLL marker uses the same rect space and adds two fields: `PX,PY` is
+the point the scrolling capture driver parks the cursor at and aims wheel
+events from — always inside `X,Y,W,H` — and `HWND` is the decimal top-level
+window handle under that point, or `0` when the walker could not resolve one
+(the driver then falls back to `WindowFromPoint`). Unlike VIDEO there is no
+poster frame: the driver produces every image plus the `session.json` for
+the stitched result, so `action.txt` is the whole overlay payload. macOS
+never emits this marker.
 
 ### 1.3 `session.json` schema
 
@@ -187,7 +210,7 @@ Examples:
 |---|---|---|
 | `ready` | `warmup_ms` (u64), `monitors` (count) | Emitted once, when every render worker has parked (device, pipelines, surface ready). A `show` will now be fast. `warmup_ms` is measured from process start. |
 | `shown` | `elapsed_ms` (u64) | The overlay windows are on screen. Exactly one per accepted `show`; `elapsed_ms` is measured from the `show` command. |
-| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `copy` \| `save` \| `cancelled`. |
+| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `scroll` \| `copy` \| `save` \| `cancelled`. |
 | `pong` | — | Answer to `ping`. |
 | `display_changed` | — | The monitor topology changed (or a GPU device was lost) under the warm state; the process exits right after with code 5 or 6. Informational — the parent keys its respawn policy off the exit code. |
 | `fatal_error` | `message` (string) | Something unrecoverable happened to the active cycle (e.g. the desktop screenshot never arrived within its 30 s deadline). The cycle is cancelled; a `finished` (`action: "cancelled"`) always follows, so a waiting parent is never left hanging. |
@@ -252,3 +275,153 @@ Parent-side timing contract:
   `shown` is reported as a capture crash — never retried from cold.
 - While the child is idle the parent pings every 60 s; two consecutive
   missed pongs mean a wedged child, which is killed (and respawned).
+
+## 3. Scrolling-capture driver (`clowd_scroll_driver`)
+
+The driver is the second half of a scrolling capture. The first half is an
+ordinary one-shot cycle: the user selects a region, presses SCROLL, clicks the
+point to scroll at, and the overlay exits leaving the `scroll X,Y,W,H PX,PY
+HWND` marker of §1.2. `CaptureSessionDispatcher` turns that marker into
+`CaptureAction.Scroll`, `ScrollCapturePage` puts its border window up around
+the region, and spawns the driver to do the mechanical part.
+
+It is a **separate binary**, not a mode of the capturer. Nothing it does needs
+a window, an event loop, a GPU or the screen-recording permission dance, and
+bringing any of that up would put pixels on screen in front of the content it
+is about to photograph. It ships beside `clowd_capture_wgpu`, which is where
+`CaptureBinaryLocator.ResolveScrollDriver` looks for it.
+
+**Windows-only**; elsewhere it logs and exits 4 (the SCROLL button is compiled
+out, so nothing should ever route there).
+
+### 3.1 Spawn
+
+```
+clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N [--no-rewind]
+```
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--session-dir` | yes | The directory the overlay was given. It is empty by the time the driver starts (the shell consumed `action.txt`), and the driver owns it from here. |
+| `--region X,Y,W,H` | yes | The rect to photograph, physical virtual-desktop px — the same space and the same numbers as the marker. Rejected if W or H is 0. |
+| `--point PX,PY` | yes | Where the cursor is parked and the wheel is aimed, same space. Re-clamped into `--region`; a point outside it is a caller bug and is logged. |
+| `--no-rewind` | no | Start capturing from wherever the document is sitting instead of winding it back to the top first. Negative because rewinding is the default — the shell passes this only when the user turns "Scroll to top first" off, which is the deliberate "capture from here" intent. |
+| `--hwnd N` | no (default 0) | Decimal top-level handle from the marker: **the window the user's selection snapped to**, not whatever is topmost at the scroll point. Re-validated at drive time (`IsWindow` + `GetAncestor(GA_ROOT)` + rect contains the point); `0` or a stale handle falls back to `WindowFromPoint`. Whichever wins is then raised over the scroll point and *verified* there before the first frame — see §3.5. |
+
+The shell must redirect **all three** stdio streams. Stdin in particular: the
+driver reads a closed stdin as "the shell is gone" and cancels, which is what
+keeps a crashed Clowd.Ui from leaving something scrolling the user's window.
+The shell also calls `AllowSetForegroundWindow(driver pid)` right after spawn —
+without it `SetForegroundWindow` in the driver is refused and the run relies on
+Win10+ scroll-inactive-windows routing alone.
+
+### 3.2 Events (driver → shell)
+
+One JSON object per line on stdout, and **only** protocol lines: the terminal
+logger is routed to stderr for exactly that reason, so the shell
+may treat any line starting `{` and ending `}` as an event (the same rule as
+§2.2).
+
+| Event | Fields | Semantics |
+|---|---|---|
+| `ready` | — | The target is resolved and focused; scrolling is about to start. |
+| `status` | `frames` (u32), `height_px` (u32), `state`, `resume_in_s` (u64, optional) | Progress. Emitted at each phase change of every step, so up to three per step. `state` ∈ `rewinding` \| `paused` \| `resuming` \| `scrolling` \| `settling` \| `stitching`. `rewinding` appears only before the first frame and only when the rewind is enabled; its `frames` and `height_px` are both 0. `paused` means the user has the mouse (§3.5) — nothing advances until they put it down. `resuming` carries `resume_in_s`, the whole seconds left before the run takes the cursor back, and is the only state on which that field is present. |
+| `done` | `result`, `frames` (u32), `height_px` (u32) | The run ended. Unless `result` is `failed`, `session.json` is already on disk. |
+| `fatal_error` | `message` (string) | Setup or output failed and there is no session. The shell deletes the directory and reports it. |
+
+```json
+{"type":"ready"}
+{"type":"status","frames":12,"height_px":4180,"state":"scrolling"}
+{"type":"done","result":"complete","frames":31,"height_px":9800}
+{"type":"fatal_error","message":"no window at scroll point ScreenPoint { x: 400, y: 300 }"}
+```
+
+`done.result`:
+
+| Result | Meaning | Session written |
+|---|---|---|
+| `complete` | Two consecutive steps produced no new content: the document ended. | yes |
+| `stopped` | Esc, a `stop` command, the target window closing/moving, the stitcher giving up, or a pause the user never came back from (§3.5). The partial capture is kept. | yes |
+| `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock — the clock excludes time spent paused. | yes |
+| `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated window silently eating `SendInput`. Reported whatever else ended the run, and a single-screen session is still written. | yes |
+| `failed` | Defined for completeness; the driver has no failure it can recognise *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
+
+### 3.3 Commands (shell → driver)
+
+| Command | Effect |
+|---|---|
+| `{"type":"stop"}` | Finish now and keep everything captured so far — the HUD's FINISH button. Ends as `stopped`. |
+| `{"type":"cancel"}` | Abandon the run. **Nothing is written**: no `done`, no session, an empty directory for the shell to delete. |
+
+Both are polled between steps, never inside one, so a command that lands
+mid-settle takes effect up to a settle cycle (~800 ms) later. Unparseable
+lines are logged and ignored — garbage on the command channel must not take
+down a capture that is going fine. Stdin EOF is treated as `cancel`; stdin
+that is unusable rather than closed (no console, not redirected) is tolerated
+and the run continues without a command channel.
+
+### 3.4 Output and exit
+
+On any result but `failed` the driver writes, in this order: `desktop.png`
+(the stitched composite), `cropped.png` (a byte copy of it — `cropped.png` is
+what `SessionInfo.UploadSourcePath` shares from Recents, so it must not be a
+downscaled preview), then **`session.json` strictly last**, per §1.2's
+ordering invariant. `CroppedRect` is `0,0,W,H` and `OriginalBounds` is the
+empty rect: a 20,000 px composite has no meaningful place on the virtual
+desktop, and empty bounds make the editor centre its window instead of trying
+to open one taller than every monitor stacked. `Name` is `"Screenshot"` like
+every other session; the shell renames it to "Scrolling Capture".
+
+The process **exits 0 for every outcome the shell can act on**, `fatal_error`
+included — the shell reads the event, not the code. A non-zero exit therefore
+means a crash (or exit 4 on macOS, where the mode does not exist), and the
+shell reports it with the stderr tail attached.
+
+### 3.5 The target window and the user's mouse
+
+Both halves of the run depend on the same fact: **whatever window is at the
+scroll point gets the wheel and gets photographed.** Wheel input is routed by
+cursor position, and each frame is a `BitBlt` of the screen.
+
+So before frame 0 the driver raises the target over the scroll point and then
+checks that it worked — `WindowFromPoint` at the point must resolve to the
+target or to a window it owns. `SetForegroundWindow` first, then
+`SetWindowPos(HWND_TOP, SWP_NOACTIVATE)` if that is not enough. Failing the
+check is a `fatal_error`, not a warning: a run against a covered window
+produces a tall, entirely plausible picture of the wrong thing, and there is
+no way for the user to tell.
+
+The second rung carries the common case unaided: restacking a window that is
+not the foreground one is not gated by the foreground lock, so a target
+buried under an *inactive* window comes up even when `SetForegroundWindow`
+was refused. What neither rung can do without foreground rights is get past a
+window that holds the foreground itself. Those rights arrive along a chain,
+and every link is required:
+
+| Link | Where | Why |
+|---|---|---|
+| Shell → capturer | `ScreenCaptureService`, both the warm-host and cold-spawn paths | The overlay needs focus the instant it appears (Esc, shortcuts). |
+| Capturer → shell | `hide_overlay_for_action`, which every action dispatch and `finish_cycle` go through **before** the overlay hides. Addressed with `--shell-pid` (§1.1) | The shell has no visible window at this moment, so once ours goes away it holds nothing to pass on. |
+| Shell → driver | `ScrollDriver.RunAsync`, right after `Process.Start` | A freshly spawned process is refused `SetForegroundWindow` outright. |
+
+Deliberately **not** used: `AttachThreadInput` to borrow the foreground
+thread's input queue. It defeats the lock reliably, and it also couples the
+driver to another application's input state — a driver left attached to a
+hung foreground thread is a much worse outcome than a capture that declines
+to run.
+
+During the run, the cursor stays parked on the scroll point, and moving it
+more than 10 px **pauses** the run rather than ending it — a wheel injected
+while the user is pointing somewhere else scrolls whatever they are pointing
+at, and a frame taken while they are moving picks up hover highlights and
+selections it can never lose again. A pause emits `status.state = paused`,
+holds until the cursor has been still for 3 s, then parks it back on the
+scroll point and resumes; the frame captured across the disturbance is
+discarded and retaken without an extra wheel burst. After 1 s of stillness
+the state switches to `resuming` and ticks `resume_in_s` down each second, so
+the cursor is never taken back without warning — any movement drops straight
+back to `paused`. `stop`, `cancel`, Esc and
+the target window going away are all honoured while paused. Paused time is
+excluded from the wall-clock cap. One pause may last 60 s — reachable only by
+a cursor that keeps *moving* that whole time — after which the run finalizes
+as `stopped` with everything captured so far.

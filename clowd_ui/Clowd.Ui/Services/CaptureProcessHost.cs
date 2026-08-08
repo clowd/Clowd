@@ -152,7 +152,7 @@ namespace Clowd.UI
 
         /// <summary>Exit codes that mean "clean, respawn me" rather than a crash: the monitor
         /// topology changed under us (5) or the GPU device was lost (6). See
-        /// clowd_capture/src/system/mod.rs.</summary>
+        /// clowd_rust_core/src/exit.rs (5) and clowd_capture/src/system/mod.rs (6, capture-only).</summary>
         private const int ExitCodeDisplayChanged = 5;
         private const int ExitCodeGpuLost = 6;
 
@@ -393,6 +393,12 @@ namespace Clowd.UI
             psi.ArgumentList.Add("--persistent");
             psi.ArgumentList.Add("--log-dir");
             psi.ArgumentList.Add(TryGetLogDirectory());
+            // So the host can hand its foreground rights back to us as each cycle ends — we need
+            // them to raise whatever the capture opens next, and cannot grant what we no longer
+            // hold (CAPTURE_PROTOCOL.md §3.5). Process-level, not per-capture: this host serves
+            // every capture for the lifetime of this process, and it exits with us.
+            psi.ArgumentList.Add("--shell-pid");
+            psi.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
             if (SettingsRoot.Current?.Capture?.MemoryHints == CapturerMemoryHints.MaxPerformance)
             {
                 psi.ArgumentList.Add("--memory-hints");

@@ -1,0 +1,36 @@
+[package]
+name = "clowd_scroll_driver"
+version = "1.0.0"
+edition = "2021"
+
+# The second half of a scrolling capture: the overlay (clowd_capture_wgpu)
+# picks the region and the scroll point, this binary does the scrolling,
+# photographing and stitching. Kept out of the capturer because the two
+# have nothing in common at runtime — the driver needs no window, no event
+# loop and no GPU, and starting any of that would put pixels on screen in
+# front of the very content it is about to photograph.
+
+# image (PNG encoding), euclid (the geometry types) and sentry (the init
+# guard's type) all reach this crate through clowd_rust_core; it names none of
+# them directly, so they are not declared here.
+[dependencies]
+clowd_rust_core.workspace = true
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+log.workspace = true
+simplelog.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    # SendInput / GetAsyncKeyState for the wheel injection and the Esc poll
+    # (input.rs).
+    "Win32_UI_Input_KeyboardAndMouse",
+    # Window resolution, cursor parking, WM_MOUSEWHEEL (input.rs).
+    "Win32_UI_WindowsAndMessaging",
+    # The per-monitor-DPI-awareness assertion (drive.rs).
+    "Win32_UI_HiDpi",
+    # BitBlt of the capture region (frame.rs) and ScreenToClient (input.rs).
+    "Win32_Graphics_Gdi",
+] }

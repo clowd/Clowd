@@ -3,11 +3,11 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::geometry::{ScreenPointF, ScreenRect};
 use crate::sync::VisibleLatch;
 use crate::system::{CapturedDesktop, WindowPeekImage};
 use crate::telemetry::startup::CaptureTimings;
 use crate::ui::shared::UiSharedState;
+use clowd_rust_core::geometry::{ScreenPointF, ScreenRect};
 
 /// Messages the main thread sends to a render thread during the frame loop.
 pub enum RenderMsg {

@@ -748,6 +748,7 @@ dependencies = [
  "block2 0.6.2",
  "bytemuck",
  "clap",
+ "clowd_rust_core",
  "core-foundation 0.10.1",
  "core-graphics 0.25.0",
  "etagere",
@@ -774,6 +775,33 @@ dependencies = [
  "windows",
  "winit",
  "xdialog",
+]
+
+[[package]]
+name = "clowd_rust_core"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "euclid",
+ "image",
+ "log",
+ "sentry",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "clowd_scroll_driver"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clowd_rust_core",
+ "log",
+ "serde",
+ "serde_json",
+ "simplelog",
+ "windows",
 ]
 
 [[package]]

@@ -28,6 +28,13 @@
 //                        selection has been finalised). When set, the
 //                        shader stops drawing the crosshair entirely
 //                        so the OS cursor takes over the visual role.
+//   selection_params.w = scroll-point pick flag (0 = normal, 1 = the user
+//                        pressed SCROLL and is picking the point the wheel
+//                        will be aimed at). Suppresses the resize handles:
+//                        the picker owns the next click, so nothing that
+//                        looks draggable may be on screen. The dashed
+//                        border stays — it is what shows the region being
+//                        captured.
 //   selection_params.z = current magnifier zoom (1 .. 256). Currently
 //                        unused — the selection border stays a fixed
 //                        2 physical px and the dash period scales
@@ -273,9 +280,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let outer_right  = sz + half - 1;
 
         // Resize handles: 8 anti-aliased circles (corners + edge
-        // midpoints), shown only after capture.  From edge inward:
-        // sel_step px accent, sel_step px white ring, rest accent.
-        if (captured) {
+        // midpoints), shown only after capture and never while a scroll
+        // point is being picked.  From edge inward: sel_step px accent,
+        // sel_step px white ring, rest accent.
+        let scroll_pick = u.selection_params.w > 0.5;
+        if (captured && !scroll_pick) {
             let fpos = in.pos.xy;
             let step_f = f32(sel_step);
             let handle_r    = 6.0 * step_f;

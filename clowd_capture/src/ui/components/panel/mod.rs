@@ -1,9 +1,10 @@
 //! Button panel that appears after a selection is finalised.
 //!
-//! Mirrors the C++ `clowd_capture_dx` button panel: seven SVG action
-//! buttons (UPLOAD / EDIT / VIDEO / COPY / SAVE / RESET / EXIT) plus a
-//! non-clickable area indicator that shows the selected width×height with
-//! decorative corner brackets.
+//! Mirrors the C++ `clowd_capture_dx` button panel: SVG action buttons
+//! (UPLOAD / EDIT / VIDEO / SCROLL / COPY / SAVE / RESET / EXIT — SCROLL
+//! is Windows-only, see `model::NUM_SVG_BUTTONS`) plus a non-clickable
+//! area indicator that shows the selected width×height with decorative
+//! corner brackets.
 //!
 //! Pure layout/model logic only — GPU rendering lives in
 //! [`crate::ui::gpu`].

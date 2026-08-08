@@ -6,7 +6,7 @@
 //!
 //! ## Why a hand-rolled client instead of the `sentry` crate
 //!
-//! `clowd_capture` uses the real SDK (clowd_capture/src/telemetry/crash.rs); the
+//! `clowd_capture` uses the real SDK (clowd_rust_core/src/telemetry.rs); the
 //! Worker cannot. `sentry-core` timestamps every event with `SystemTime::now()`,
 //! which *panics* on `wasm32-unknown-unknown`, and its `Transport` trait is a
 //! synchronous `send_envelope` + blocking `flush` — neither exists in an isolate

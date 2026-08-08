@@ -1,7 +1,7 @@
 use core_graphics::display::{CGDisplay, CGPoint};
 
-use crate::geometry::{LogicalPoint, ScreenPoint};
 use crate::system::MonitorInfo;
+use clowd_rust_core::geometry::{LogicalPoint, ScreenPoint};
 
 extern "C" {
     fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;

@@ -437,6 +437,20 @@ namespace Clowd
                 SentryConfig.CaptureHandled(ex, "exit.finish-recording");
             }
 
+            // and end an in-flight scrolling capture, for the opposite reason: it has no partial
+            // artifact worth keeping, but its driver would otherwise carry on scrolling (and
+            // photographing) whatever window it was pointed at after Clowd is gone.
+            try
+            {
+                if (ScrollCapturePage.ActiveInstance is { } scrolling)
+                    await scrolling.ShutdownAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error stopping the scrolling capture during exit: " + ex);
+                SentryConfig.CaptureHandled(ex, "exit.stop-scroll-capture");
+            }
+
             // close all open windows first so per-window persistence runs before the process dies
             // (EditorWindow.Closing renders the session preview and clears OpenEditor, §5.7).
             CloseAllWindows();

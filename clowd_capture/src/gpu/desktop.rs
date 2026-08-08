@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use crate::geometry::{RectExt, ScreenPoint};
 use crate::system::{CapturedCursor, CapturedDesktop, CursorImage};
+use clowd_rust_core::geometry::{RectExt, ScreenPoint};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]

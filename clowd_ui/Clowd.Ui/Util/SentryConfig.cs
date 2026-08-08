@@ -21,7 +21,7 @@ namespace Clowd
     /// local crashes belong in the debugger, not in the issue tracker.</para>
     /// <para>Exceptions only — there is deliberately no logging bridge on this side. The Rust
     /// capturer additionally routes its <c>error!</c> log calls to Sentry
-    /// (clowd_capture/src/telemetry/crash.rs); the shell does not.</para>
+    /// (clowd_rust_core/src/telemetry.rs); the shell does not.</para>
     /// <para>Lives in the root <c>Clowd</c> namespace so every call site resolves it without a
     /// using directive, the same way <see cref="Constants"/> does.</para>
     /// </remarks>

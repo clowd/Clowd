@@ -138,6 +138,11 @@ impl Default for CapturerSettings {
 
 /// Command-line interface. One flag per `CapturerSettings` knob; flag
 /// defaults mirror `CapturerSettings::default()` exactly.
+///
+/// The second half of a scrolling capture has its own binary and its own
+/// command line — see `clowd_scroll_driver` and CAPTURE_PROTOCOL.md §3.
+/// Nothing about it belongs here: the overlay's part ends when it writes
+/// the `scroll` action marker.
 #[derive(Debug, Parser)]
 #[command(version, about = "Clowd screen capturer")]
 pub struct CliArgs {
@@ -204,6 +209,19 @@ pub struct CliArgs {
     /// with `--persistent` — one-shot mode logs into `--session-dir`.
     #[arg(long, value_name = "PATH")]
     pub log_dir: Option<PathBuf>,
+
+    /// The shell's process id, so the overlay can hand its foreground
+    /// rights back with `AllowSetForegroundWindow` as each cycle ends —
+    /// the shell needs them to raise whatever it opens next, and cannot
+    /// grant what it no longer holds (CAPTURE_PROTOCOL.md §3.5).
+    ///
+    /// Process-level rather than a `CapturerSettings` knob: it is the same
+    /// for every cycle a process serves, and the shell that spawned us is
+    /// also the shell that outlives us — the capturer dies with it, so the
+    /// two can never disagree about who to hand rights to. Omitted in
+    /// standalone runs, where there is no shell and nothing to hand back.
+    #[arg(long, value_name = "PID")]
+    pub shell_pid: Option<u32>,
 }
 
 impl CliArgs {
@@ -262,6 +280,23 @@ mod tests {
         assert_eq!(from_cli.session_dir, default.session_dir);
         assert_eq!(from_cli.capture_mode, default.capture_mode);
         assert_eq!(from_cli.video_mode, default.video_mode);
+    }
+
+    #[test]
+    fn shell_pid_parses_and_is_absent_by_default() {
+        // Standalone runs have no shell, and nothing to hand foreground
+        // rights back to.
+        assert_eq!(CliArgs::parse_from(["clowd_capture_wgpu"]).shell_pid, None);
+        assert_eq!(
+            CliArgs::parse_from(["clowd_capture_wgpu", "--shell-pid", "4321"]).shell_pid,
+            Some(4321)
+        );
+        // Both spawn paths use the two-token form; the `=` form is what a
+        // human types, and clap accepts either.
+        assert_eq!(
+            CliArgs::parse_from(["clowd_capture_wgpu", "--shell-pid=4321"]).shell_pid,
+            Some(4321)
+        );
     }
 
     #[test]

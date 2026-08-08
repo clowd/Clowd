@@ -1,7 +1,7 @@
 use winit::window::CursorIcon;
 
-use crate::geometry::{RectExt, ScreenPointF, ScreenRect, ScreenRectExt};
 use crate::system::MonitorInfo;
+use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect, ScreenRectExt};
 
 /// Pre-DPI radius (in virtual-desktop pixels) of the resize-handle hit
 /// boxes used once a selection is captured. Matches

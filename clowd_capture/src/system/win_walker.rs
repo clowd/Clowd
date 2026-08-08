@@ -28,7 +28,7 @@ use windows::{
 };
 
 use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
-use crate::geometry::{RectExt, ScreenPoint, ScreenRect};
+use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
 const MIN_WINDOW_SIZE: i32 = 25;
@@ -263,6 +263,34 @@ impl WindowWalker {
         } else {
             None
         }
+    }
+
+    /// Handle of the top-level window [`hit_test`] would pick for `point`
+    /// — the first entry in Z-order whose true bounds contain it — as a
+    /// plain integer, or `None` over the desktop background.
+    ///
+    /// Deliberately stops at the top level: consumers (the scrolling
+    /// capture driver) resolve the child under the point themselves, live,
+    /// once the overlay is gone and the Z-order is the real one again.
+    pub fn top_level_hwnd_at(&self, point: ScreenPoint) -> Option<isize> {
+        self.windows
+            .iter()
+            .find(|w| w.rect.contains(point))
+            .map(|w| w.hwnd.0 as isize)
+    }
+
+    /// Handle of the window at `window_index` — the index
+    /// [`hit_test_full`] reports and a [`PeekCommand`] carries.
+    ///
+    /// The scrolling capture needs it: a peeked window is by definition
+    /// partly covered, so asking what is at the scroll point would name the
+    /// window on top instead of the one the user selected.
+    ///
+    /// [`PeekCommand`]: crate::render::protocol::PeekCommand
+    pub fn hwnd_at_index(&self, window_index: usize) -> Option<isize> {
+        self.windows
+            .get(window_index)
+            .map(|w| w.hwnd.0 as isize)
     }
 
     /// Full hit-test returning window index and obstruction info.
