@@ -16,6 +16,12 @@
 //! The panel now carries *two* sets — see [`PanelButtonSet`]. They have
 //! different lengths, which is why every consumer takes the set as a
 //! parameter instead of reaching for one global table.
+//!
+//! On top of the set, the shell can switch individual buttons off — see
+//! [`PanelFeatures`]. The tables below stay the full static truth; the
+//! *visible* strip is `set.visible_defs(features)`, and every consumer
+//! (layout, hit-testing, rendering, accelerators) works from that filtered
+//! view so a switched-off button is unreachable by mouse AND by key.
 
 use crate::ui::command::Command;
 
@@ -64,6 +70,58 @@ pub const ICON_OCR: usize = 9;
 #[cfg(windows)]
 pub const ICON_SCROLL: usize = 10;
 
+/// Which of the optional panel buttons the shell has left switched on.
+///
+/// The capture strip grew past what fits comfortably under a small
+/// selection, so UPLOAD, SCROLL and OCR became opt-out (SettingsCapture's
+/// "Optional features" section, carried in over `--no-upload` /
+/// `--no-scroll-capture` / `--no-ocr` and the matching `show` fields).
+/// EDIT / VIDEO / COPY / SAVE / RESET / EXIT are deliberately NOT
+/// configurable — they are the capturer's reason to exist, and a strip
+/// that can be emptied is a strip that can strand a captured selection.
+///
+/// Every field defaults to `true`, so a bare capturer (standalone runs,
+/// `{"type":"show"}`) shows the full strip.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PanelFeatures {
+    /// UPLOAD in the capture strip, and UPLOAD in the OCR strip: one
+    /// switch, because both are "hand this to the upload provider" and a
+    /// user who turned uploading off did not mean "except for text".
+    pub upload: bool,
+    /// SCROLL in the capture strip. Already `#[cfg(windows)]` at the
+    /// table level — this is the user's switch on top of that.
+    pub scroll_capture: bool,
+    /// OCR in the capture strip. Switching it off makes the OCR strip
+    /// unreachable, since OCR mode is the only thing that raises it.
+    pub ocr: bool,
+}
+
+impl Default for PanelFeatures {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
+impl PanelFeatures {
+    /// Everything on — the default, and what standalone runs use.
+    pub const ALL: Self = Self {
+        upload: true,
+        scroll_capture: true,
+        ocr: true,
+    };
+
+    /// Whether a button emitting `command` may appear at all. Commands
+    /// with no switch of their own are always allowed.
+    pub fn allows(self, command: Command) -> bool {
+        match command {
+            Command::Upload | Command::OcrUpload => self.upload,
+            Command::ScrollCapture => self.scroll_capture,
+            Command::Ocr => self.ocr,
+            _ => true,
+        }
+    }
+}
+
 /// Which strip of buttons the panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelButtonSet {
@@ -82,8 +140,9 @@ impl PanelButtonSet {
     #[cfg_attr(not(test), allow(dead_code))]
     pub const ALL: &'static [PanelButtonSet] = &[Self::Normal, Self::Ocr];
 
-    /// The buttons in this set, in left-to-right (or top-to-bottom)
-    /// order.
+    /// Every button this set *can* show, in left-to-right (or
+    /// top-to-bottom) order — including any the user has switched off.
+    /// Callers that draw or dispatch want [`Self::visible_defs`] instead.
     pub const fn defs(self) -> &'static [ButtonDef] {
         match self {
             Self::Normal => NORMAL_DEFS,
@@ -91,14 +150,19 @@ impl PanelButtonSet {
         }
     }
 
-    /// How many buttons this set actually draws — and, since the strip is
-    /// re-centred with its own width on every set swap (see
-    /// `layout::compute_layout`), also the count the geometry derives
-    /// from. The strip moving under the cursor on a swap is deliberate;
-    /// the double-click hazard that movement creates is absorbed by
+    /// The buttons this set actually shows under `features`, in the same
+    /// order — the single definition of "the strip on screen", shared by
+    /// layout, hit-testing, rendering and the accelerator lookup.
+    ///
+    /// Its length is also what the geometry derives from: each strip is
+    /// re-centred with its own width (see `layout::compute_layout`), so
+    /// the panel moves under the cursor on a set swap. That is deliberate;
+    /// the double-click hazard the movement creates is absorbed by
     /// `PanelSwapGuard` in app.rs.
-    pub const fn len(self) -> usize {
-        self.defs().len()
+    pub fn visible_defs(self, features: PanelFeatures) -> impl Iterator<Item = &'static ButtonDef> {
+        self.defs()
+            .iter()
+            .filter(move |def| features.allows(def.command))
     }
 }
 
@@ -327,17 +391,17 @@ impl ButtonDef {
 }
 
 /// Look up a panel button `Command` by its accelerator key
-/// (case-insensitive) **within one set**. Returns `None` if no button in
-/// that set matches.
+/// (case-insensitive) **within one set, under one feature switch set**.
+/// Returns `None` if no visible button matches.
 ///
 /// Scoping to a set is not an optimisation: the two sets deliberately
 /// reuse `u`, `s`, `c` and `x`, and a global search would let a key fire
 /// a button that is not on screen. The caller must pass the set the user
-/// is actually looking at.
-pub fn lookup_command_by_key(set: PanelButtonSet, c: char) -> Option<Command> {
+/// is actually looking at. `features` closes the same hole from the other
+/// direction — a switched-off button must not answer to its letter either.
+pub fn lookup_command_by_key(set: PanelButtonSet, features: PanelFeatures, c: char) -> Option<Command> {
     let lower = c.to_ascii_lowercase();
-    set.defs()
-        .iter()
+    set.visible_defs(features)
         .find(|def| def.accel_key() == lower)
         .map(|def| def.command)
 }
@@ -345,6 +409,23 @@ pub fn lookup_command_by_key(set: PanelButtonSet, c: char) -> Option<Command> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// All eight on/off combinations of the three switches, so the
+    /// invariants below are checked against every strip the shell can ask
+    /// for rather than just the extremes.
+    const FEATURE_COMBINATIONS: [PanelFeatures; 8] = {
+        let mut out = [PanelFeatures::ALL; 8];
+        let mut i = 0;
+        while i < 8 {
+            out[i] = PanelFeatures {
+                upload: i & 1 != 0,
+                scroll_capture: i & 2 != 0,
+                ocr: i & 4 != 0,
+            };
+            i += 1;
+        }
+        out
+    };
 
     /// Every icon must survive `usvg` parsing: `PanelRenderer::new`
     /// swallows a parse failure into an empty tree and an `error!` line,
@@ -399,12 +480,71 @@ mod tests {
     /// across.
     #[test]
     fn lookup_is_scoped_to_its_set() {
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, 'e'), None);
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, 'l'), None);
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, 'b'), None);
+        let all = PanelFeatures::ALL;
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, all, 'e'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, all, 'l'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'b'), None);
         // The shared letters must still resolve — to *this* set's command.
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, 'c'), Some(Command::OcrCopy));
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, 'c'), Some(Command::Copy));
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, all, 'c'), Some(Command::OcrCopy));
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'c'), Some(Command::Copy));
+    }
+
+    /// The whole point of the feature switches: a button the user turned
+    /// off must be unreachable by keyboard too, or the strip would be
+    /// missing a button that still fires. The buttons that are NOT
+    /// configurable must be untouched by any combination.
+    #[test]
+    fn switched_off_buttons_lose_their_accelerator() {
+        let off = PanelFeatures {
+            upload: false,
+            scroll_capture: false,
+            ocr: false,
+        };
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'u'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'l'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'o'), None);
+        // UPLOAD is one switch across both strips — text is still an upload.
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, off, 'u'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, off, 's'), Some(Command::OcrSearch));
+
+        // The non-configurable core survives every combination.
+        for features in FEATURE_COMBINATIONS {
+            for (key, cmd) in [
+                ('e', Command::Edit),
+                ('v', Command::Video),
+                ('c', Command::Copy),
+                ('s', Command::Save),
+                ('r', Command::Reset),
+                ('x', Command::Exit),
+            ] {
+                assert_eq!(
+                    lookup_command_by_key(PanelButtonSet::Normal, features, key),
+                    Some(cmd),
+                    "{key} under {features:?}"
+                );
+            }
+        }
+    }
+
+    /// Switching optional buttons off may only ever *remove* buttons —
+    /// never reorder the rest, and never empty a strip (a strip with no
+    /// way out would strand a captured selection).
+    #[test]
+    fn visible_defs_is_a_subsequence_and_never_empty() {
+        for set in PanelButtonSet::ALL {
+            for features in FEATURE_COMBINATIONS {
+                let visible: Vec<_> = set
+                    .visible_defs(features)
+                    .map(|d| d.command)
+                    .collect();
+                assert!(!visible.is_empty(), "{set:?} emptied by {features:?}");
+
+                let mut full = set.defs().iter().map(|d| d.command);
+                for cmd in &visible {
+                    assert!(full.any(|c| c == *cmd), "{cmd:?} out of order in {set:?} under {features:?}");
+                }
+            }
+        }
     }
 
     /// A wrong `icon_id` is invisible until the render thread draws the
@@ -453,8 +593,15 @@ mod tests {
     #[cfg(windows)]
     #[test]
     fn scroll_button_answers_to_l() {
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, 'l'), Some(Command::ScrollCapture));
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, 'L'), Some(Command::ScrollCapture));
+        let all = PanelFeatures::ALL;
+        assert_eq!(
+            lookup_command_by_key(PanelButtonSet::Normal, all, 'l'),
+            Some(Command::ScrollCapture)
+        );
+        assert_eq!(
+            lookup_command_by_key(PanelButtonSet::Normal, all, 'L'),
+            Some(Command::ScrollCapture)
+        );
     }
 
     /// The scrolling-capture driver is Win32-only, so macOS must not
@@ -462,7 +609,7 @@ mod tests {
     #[cfg(not(windows))]
     #[test]
     fn scroll_button_is_absent_off_windows() {
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, 'l'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, PanelFeatures::ALL, 'l'), None);
         for def in PanelButtonSet::Normal.defs() {
             assert_ne!(def.command, Command::ScrollCapture);
         }
@@ -470,8 +617,9 @@ mod tests {
 
     #[test]
     fn ocr_button_answers_to_o() {
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, 'o'), Some(Command::Ocr));
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, 'O'), Some(Command::Ocr));
+        let all = PanelFeatures::ALL;
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'o'), Some(Command::Ocr));
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'O'), Some(Command::Ocr));
     }
 
     // (The old `set_swap_reclick_collisions_are_pinned` test is gone with

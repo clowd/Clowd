@@ -477,6 +477,17 @@ namespace Clowd.UI
             if (!settings.ScreenshotWithCursor)
                 args.Add("--no-cursor");
 
+            // The overlay's optional buttons (SettingsCapture "Optional features"). All on by
+            // default, so these only ever appear when the user has switched something off.
+            if (!settings.UploadButtonEnabled)
+                args.Add("--no-upload");
+
+            if (!settings.ScrollingCaptureEnabled)
+                args.Add("--no-scroll-capture");
+
+            if (!settings.OcrEnabled)
+                args.Add("--no-ocr");
+
             if (settings.MemoryHints == CapturerMemoryHints.MaxPerformance)
             {
                 args.Add("--memory-hints");

@@ -46,6 +46,8 @@ I will respond to bug reports or questions in GitHub issues. Also feel free to b
  - Snaps selection to window borders
  - Click on any window to quickly bring it to the foreground
  - Select any color to open a color picker
+ - Don't use one of the buttons? Switch UPLOAD, SCROLL or OCR off under
+   *Settings → Capture → Optional features* and the capture window drops them
 
 https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-acee-216529f49c23.mp4
 
@@ -72,7 +74,8 @@ capture takes the picture anyway.
    image that opens in the editor like any other capture
  - **You get the whole page, not just the part you could see.** The target is wound back to the top
    before the capture starts, so it doesn't matter where you were scrolled to. Turn this off with
-   *Settings → Capture → Scroll to top first* when you want to capture from where you are
+   *Settings → Capture → Optional features → Scroll to top first* when you want to capture from
+   where you are
  - **Sticky headers and toolbars appear once**, not repeated down the length of the image
  - It stops on its own when it reaches the end of the document. `Esc` or **FINISH** ends it early
    and keeps everything captured so far; **CANCEL** throws it away

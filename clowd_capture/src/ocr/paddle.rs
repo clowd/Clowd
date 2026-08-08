@@ -26,8 +26,20 @@ const DET_MAX_SIDE_LEN: u32 = 1920;
 /// Detection inflates every box by this many pixels per side before
 /// recognition (`DetOptions::box_border`, crate default 5) — the context
 /// helps the recognizer, but the returned rects carry the same inflation,
-/// so the geometry mapping below deflates them back for tight lift quads.
+/// so the geometry mapping below deflates them back out.
 const BOX_BORDER: u32 = 5;
+
+/// Fraction of a box's height shaved off EACH side (vertically and
+/// horizontally) after the border deflation, to approximate the glyph-ink
+/// rect the bubble renderer sizes its text from. The DB detector's unclip
+/// expansion (`unclip_ratio` 1.5) reports boxes ~1.4x taller than the ink:
+/// MEASURED on 7-11pt renders — 14px-ink Segoe lines came back h=20,
+/// 9px-ink Consolas lines h=13 — and the Windows.Media.Ocr word rects the
+/// bubble font sizing was originally tuned against were ink-tight, so
+/// without this the bubbles render ~40% oversized and overlap on densely
+/// spaced small text. 0.14 per side keeps 72% of the height: 20 -> 14.4.
+/// Horizontal uses the same ABSOLUTE amount because unclip pads uniformly.
+const UNCLIP_TIGHTEN: f32 = 0.14;
 
 // PP-OCRv6 small, converted to MNN, vendored from
 // github.com/zibo-chen/rust-paddle-ocr (models/). ~16 MB embedded — the
@@ -140,6 +152,17 @@ pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
             top = r.top() as f32;
             bottom = top + r.height() as f32;
         }
+        // Then the unclip tighten (see UNCLIP_TIGHTEN) — skipped per axis
+        // if it would collapse the rect.
+        let d = (bottom - top) * UNCLIP_TIGHTEN;
+        if bottom - top - 2.0 * d >= 1.0 {
+            top += d;
+            bottom -= d;
+        }
+        if right - left - 2.0 * d >= 1.0 {
+            left += d;
+            right -= d;
+        }
         lines.push(OcrLine {
             text: result.text,
             // Boxes come back in input-image coordinates (detection's
@@ -247,6 +270,18 @@ mod tests {
             px.swap(0, 2);
         }
         let outcome = recognize(&request(bgra, w, h)).expect("test image must recognize");
+        // Geometry log (visible with --nocapture): the rect heights are how
+        // bubble font sizing is tuned against known-size source text.
+        for line in &outcome.lines {
+            eprintln!(
+                "  rect x={:.1} y={:.1} w={:.1} h={:.1} :: {}",
+                line.rect.left(),
+                line.rect.top(),
+                line.rect.width(),
+                line.rect.height(),
+                line.text
+            );
+        }
         assert!(
             outcome.full_text.contains(&expect),
             "expected {:?} within recognized text:\n{}",

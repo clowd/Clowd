@@ -21,6 +21,78 @@ namespace Clowd.Config
 
     public class SettingsCapture : SimpleNotifyObject
     {
+        /// <summary>
+        /// Whether the capture overlay offers UPLOAD. On by default like every switch in this
+        /// section — the point is trimming a strip that grew past what fits comfortably under a
+        /// small selection, not shipping features off. Hides the button in both strips: the
+        /// capture panel's UPLOAD and the OCR panel's, because someone who turned uploading off
+        /// did not mean "except for text". Turning it off also takes the U accelerator with it,
+        /// so a hidden button cannot still fire (clowd_capture PanelFeatures).
+        /// </summary>
+        [Category("Optional features")]
+        [DisplayName("Upload")]
+        [Description("Show the UPLOAD button in the capture window, which uploads the capture and " +
+                     "copies its link to the clipboard")]
+        public bool UploadButtonEnabled
+        {
+            get => _uploadButtonEnabled;
+            set => Set(ref _uploadButtonEnabled, value);
+        }
+
+        /// <summary>
+        /// Whether the capture overlay offers SCROLL. Windows-only: the scrolling-capture driver
+        /// (<c>clowd_scroll_driver</c>) is Win32, and the capturer compiles the button out
+        /// elsewhere — so the row is hidden on macOS rather than offering to switch off something
+        /// that is not there.
+        /// </summary>
+        [Category("Optional features")]
+        [DisplayName("Scrolling capture")]
+        [Description("Show the SCROLL button in the capture window, which captures a whole scrolling " +
+                     "page by scrolling it and stitching the frames together")]
+        [HiddenOnMacOS]
+        public bool ScrollingCaptureEnabled
+        {
+            get => _scrollingCaptureEnabled;
+            set => Set(ref _scrollingCaptureEnabled, value);
+        }
+
+        /// <summary>
+        /// Whether a scrolling capture winds the target back to the top before it starts
+        /// (<c>clowd_scroll_driver</c>, inverted onto its <c>--no-rewind</c> flag). On by default:
+        /// someone who selects a region halfway down a page almost always wants the whole page,
+        /// and capturing only the bottom half gives them no sign the top is missing. Turning it
+        /// off is the "capture from here" intent — a long thread from one particular message.
+        ///
+        /// Lives beside its parent switch and greys out with it: with scrolling capture off there
+        /// is no scrolling capture for it to describe.
+        /// </summary>
+        [Category("Optional features")]
+        [DisplayName("Scroll to top first")]
+        [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +
+                     "document is captured. Turn this off to capture from wherever the page is sitting.")]
+        [DisabledWhen(nameof(ScrollingCaptureEnabled), false)]
+        [HiddenOnMacOS]
+        public bool ScrollCaptureRewindToTop
+        {
+            get => _scrollCaptureRewindToTop;
+            set => Set(ref _scrollCaptureRewindToTop, value);
+        }
+
+        /// <summary>
+        /// Whether the capture overlay offers OCR. Switching it off makes the whole OCR flow
+        /// unreachable — the OCR button is the only way into the mode that raises the
+        /// UPLOAD/SEARCH/COPY strip.
+        /// </summary>
+        [Category("Optional features")]
+        [DisplayName("Text recognition (OCR)")]
+        [Description("Show the OCR button in the capture window, which lifts the text out of the " +
+                     "selection so it can be copied, searched or uploaded")]
+        public bool OcrEnabled
+        {
+            get => _ocrEnabled;
+            set => Set(ref _ocrEnabled, value);
+        }
+
         [Category("Behavior")]
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
@@ -78,23 +150,6 @@ namespace Clowd.Config
         {
             get => _tipsMode;
             set => Set(ref _tipsMode, value);
-        }
-
-        /// <summary>
-        /// Whether a scrolling capture winds the target back to the top before it starts
-        /// (<c>clowd_scroll_driver</c>, inverted onto its <c>--no-rewind</c> flag). On by default:
-        /// someone who selects a region halfway down a page almost always wants the whole page,
-        /// and capturing only the bottom half gives them no sign the top is missing. Turning it
-        /// off is the "capture from here" intent — a long thread from one particular message.
-        /// </summary>
-        [Category("Behavior")]
-        [DisplayName("Scroll to top first")]
-        [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +
-                     "document is captured. Turn this off to capture from wherever the page is sitting.")]
-        public bool ScrollCaptureRewindToTop
-        {
-            get => _scrollCaptureRewindToTop;
-            set => Set(ref _scrollCaptureRewindToTop, value);
         }
 
         [Category("Behavior")]
@@ -183,7 +238,10 @@ namespace Clowd.Config
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
+        private bool _uploadButtonEnabled = true;
+        private bool _scrollingCaptureEnabled = true;
         private bool _scrollCaptureRewindToTop = true;
+        private bool _ocrEnabled = true;
         private double _obscuredWindowDetectionThreshold = 0.80;
         private bool _openSavedInExplorer = true;
         private bool _useSystemAccentColor = true;

@@ -186,16 +186,6 @@ pub struct CaptureCycle {
     /// instant the band is fully off-screen — so the Lifted reveal pass
     /// (fresh anchor, band entering from the top) continues it seamlessly.
     ocr_ready: Option<(f32, Result<OcrOutcome, OcrError>)>,
-    /// Whether the current OCR request's pixels had the locked peek image
-    /// composited in (`Command::Ocr`). Read when the result lifts: a peeked
-    /// recognition must suppress the PIXEL-CROP fallback lines, because the
-    /// crop quads sample the raw desktop snapshot texture, which contains
-    /// the OBSCURING window and not the composite that was recognized. Text
-    /// bubbles are immune (they render recognized glyphs, not texture
-    /// samples) and show normally — see `try_advance_ocr`. Per-request like
-    /// `ocr_ready`: rewritten on every dispatch, and stale results are
-    /// discarded by `ocr_req` before this is ever consulted.
-    ocr_peek_composited: bool,
     /// Defence against the panel's synchronous set swap turning one
     /// physical double-click into two different commands — see
     /// [`PanelSwapGuard`].
@@ -333,7 +323,7 @@ fn current_panel_layout(cycle: &CaptureCycle, monitors: &[MonitorInfo]) -> Optio
         let b = m.bounds;
         cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
     })?;
-    crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor, set)
+    crate::ui::components::panel::layout::compute_layout(mon.bounds, sel, mon.scale_factor, set, cycle.settings.panel_features)
 }
 
 /// The command Return fires — the panel's invisible default button — or
@@ -529,6 +519,7 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
         // path. Everything else in the enum is Copy.
         ocr: cycle.input.ocr.clone(),
         ocr_notice: cycle.input.ocr_notice,
+        panel_features: cycle.settings.panel_features,
     }));
 
     for h in windows.values() {
@@ -706,7 +697,6 @@ impl App {
             ocr_req: 0,
             ocr_job: None,
             ocr_ready: None,
-            ocr_peek_composited: false,
             panel_swap: PanelSwapGuard::new(),
             input: InteractionState {
                 virtual_cursor: setup.initial_mouse,
@@ -1183,37 +1173,6 @@ impl App {
                             outcome.lines.len(),
                             outcome.text_angle
                         );
-                        // Classify each line ONCE, here, never per frame:
-                        // lines the embedded fonts cover become text
-                        // bubbles (rendered glyphs), the rest fall back to
-                        // the pixel-crop lift. Under a locked peek only
-                        // the FALLBACK lines are suppressed (Hidden): the
-                        // crop quads sample the raw desktop snapshot
-                        // texture, which holds the OBSCURING window and
-                        // not the composite that was recognized — but
-                        // bubbles never touch that texture, so a peeked
-                        // recognition shows them normally. (The eventual
-                        // fix for the hidden lines is plumbing the peek
-                        // texture into LiftPipeline; until then, a missing
-                        // crop beats a wrong one.)
-                        let presentation: Arc<[_]> = ocr::coverage::classify_lines(&outcome.lines, !cycle.ocr_peek_composited).into();
-                        let bubbles = presentation
-                            .iter()
-                            .filter(|p| matches!(p, ocr::coverage::LinePresentation::Bubble))
-                            .count();
-                        log::info!(
-                            "OCR presentation: {} bubbles, {} pixel-crop fallbacks, {} hidden{}",
-                            bubbles,
-                            presentation
-                                .iter()
-                                .filter(|p| matches!(p, ocr::coverage::LinePresentation::PixelCrop))
-                                .count(),
-                            presentation
-                                .iter()
-                                .filter(|p| matches!(p, ocr::coverage::LinePresentation::Hidden))
-                                .count(),
-                            if cycle.ocr_peek_composited { " (locked peek)" } else { "" },
-                        );
                         // Fresh anchor: the reveal pass's t=0 is NOW — and
                         // NOW is (poll latency aside) the instant the
                         // scanning sweep wrapped, because the release
@@ -1225,7 +1184,6 @@ impl App {
                             region,
                             dpi_scale,
                             outcome: Arc::new(outcome),
-                            presentation,
                         };
                         // Entering the mode clears any stale failure pill —
                         // it would sit there contradicting the lifted lines.
@@ -1797,9 +1755,9 @@ impl App {
                 // window and hand COPY/SEARCH/UPLOAD text for content the
                 // user cannot even see. Copy/Save/Edit/Upload all
                 // composite via their *_with_peek helpers; OCR does the
-                // same. Remembered on the cycle because the LIFT has to be
-                // suppressed for a peeked recognition (see try_advance_ocr).
-                let peek_composited = active_peek_image.is_some();
+                // same. (Nothing downstream needs to know: bubbles render
+                // recognized glyphs, never desktop-texture samples, so a
+                // peeked recognition presents like any other.)
                 // `covered` — the rect the crop ACTUALLY produced, clamped
                 // to the desktop buffer — is the only valid origin for the
                 // result rects. Offsetting by `sel` instead would misplace
@@ -1813,7 +1771,6 @@ impl App {
                     log::info!("command Ocr ignored: selection is outside the desktop bitmap");
                     return;
                 };
-                cycle.ocr_peek_composited = peek_composited;
                 let request = OcrRequest {
                     bgra,
                     width,
@@ -2338,7 +2295,8 @@ impl ApplicationHandler<AppEvent> for App {
                         // change the eventual image with nothing on screen
                         // to say so. D stays live (the arm above precedes).
                         if cycle.input.ocr.shows_ocr_panel() {
-                            if let Some(cmd) = panel::lookup_command_by_key(panel::model::PanelButtonSet::Ocr, c) {
+                            let features = cycle.settings.panel_features;
+                            if let Some(cmd) = panel::lookup_command_by_key(panel::model::PanelButtonSet::Ocr, features, c) {
                                 self.dispatch_command(cmd, event_loop, id);
                             }
                         }
@@ -2349,8 +2307,13 @@ impl ApplicationHandler<AppEvent> for App {
                         // Normal stays hardcoded here: the OCR arm above
                         // claims every keypress while ocr.active(), so this
                         // branch can only run with the Normal strip up —
-                        // the two sets deliberately reuse letters.
-                        if let Some(cmd) = panel::lookup_command_by_key(panel::model::PanelButtonSet::Normal, c) {
+                        // the two sets deliberately reuse letters. The
+                        // feature switches are NOT hardcoded: a button the
+                        // user turned off must not answer to its letter
+                        // either, or the strip would be missing a button
+                        // that still fires.
+                        let features = cycle.settings.panel_features;
+                        if let Some(cmd) = panel::lookup_command_by_key(panel::model::PanelButtonSet::Normal, features, c) {
                             self.dispatch_command(cmd, event_loop, id);
                         }
                     } else if cycle.input.mouse_down {
@@ -2809,10 +2772,6 @@ mod tests {
         })
     }
 
-    fn dummy_presentation() -> Arc<[ocr::coverage::LinePresentation]> {
-        Arc::from(Vec::new())
-    }
-
     #[test]
     fn enter_opens_editor_once_captured() {
         let mut i = input();
@@ -2844,7 +2803,6 @@ mod tests {
             region: ScreenRect::from_xy_size(0, 0, 10, 10),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
-            presentation: dummy_presentation(),
         };
         assert_eq!(default_action(&i), Some(Command::OcrCopy));
     }

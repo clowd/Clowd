@@ -3,7 +3,7 @@
 //! Submodules:
 //!   * [`rect`]   — instanced colored/bordered rect pipeline
 //!   * [`icon`]   — CPU-rasterised icon atlas + textured-quad pipeline
-//!   * [`lift`]   — OCR scanning sweep + pixel-crop fallback lift
+//!   * [`lift`]   — OCR scanning-sweep band
 //!   * [`ocr_bubbles`] — OCR re-rendered text bubbles
 //!   * [`text`]   — glyphon wrapper
 //!   * [`panel`]  — per-frame button-panel draw

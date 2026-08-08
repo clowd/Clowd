@@ -7,7 +7,6 @@
 mod paddle;
 
 pub mod anim;
-pub mod coverage;
 pub mod search;
 
 use clowd_rust_core::geometry::{ScreenRect, ScreenRectF};
@@ -18,10 +17,11 @@ use clowd_rust_core::geometry::{ScreenRect, ScreenRectF};
 #[derive(Debug, Clone)]
 pub struct OcrLine {
     pub text: String,
-    /// The line's detection rect, in virtual-desktop screen coordinates
-    /// (f32: the lift quad samples the desktop texture with this rect, so
-    /// sub-pixel precision matters). Already offset by the crop origin the
-    /// extractor actually used.
+    /// The line's approximate glyph-ink rect, in virtual-desktop screen
+    /// coordinates — the bubble renderer sizes and places its pill from
+    /// this, so it must track the SOURCE text's visual extent, not the
+    /// detector's padded box (see `paddle::UNCLIP_TIGHTEN`). Already offset
+    /// by the crop origin the extractor actually used.
     pub rect: ScreenRectF,
 }
 

@@ -15,10 +15,10 @@ pub const MIN_SCAN_SECS: f32 = 0.3;
 /// One full sweep of the scanning band.
 pub const SCAN_PERIOD_SECS: f32 = 1.2;
 /// How long the region's dim/desaturation take to fade back to colour on
-/// exit. The TEXT does not animate out at all — every bubble and crop
-/// vanishes on the first Retracting frame (a reverse cascade reads as the
-/// overlay stalling on the way out; disappearance should be instant) — so
-/// this fade is the only thing the Retracting phase exists to play.
+/// exit. The TEXT does not animate out at all — every bubble vanishes on
+/// the first Retracting frame (a reverse cascade reads as the overlay
+/// stalling on the way out; disappearance should be instant) — so this
+/// fade is the only thing the Retracting phase exists to play.
 pub const RETRACT_DURATION_SECS: f32 = 0.18;
 /// How long one line/bubble takes to rise and fade in once the sweep's
 /// band centre has passed its top edge.
@@ -26,7 +26,6 @@ pub const LIFT_DURATION_SECS: f32 = 0.28;
 /// Vertical lift distance in physical px at dpi 1.0 — callers multiply by
 /// the mode's single dpi_scale.
 pub const LIFT_PX: f32 = 4.0;
-pub const LIFT_SCALE: f32 = 1.06;
 /// The region dim — ONE level for the whole mode. It ramps in when OCR is
 /// pressed, HOLDS through the reveal, and fades out on exit. There is
 /// deliberately no deeper "lifted" dim: an earlier build darkened a second

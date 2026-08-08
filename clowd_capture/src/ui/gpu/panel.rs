@@ -233,7 +233,11 @@ impl PanelRenderer {
         let dpi = vis.monitor.dpi_scale.max(0.1);
         self.dpi_scale = dpi;
 
-        let defs = layout.set.defs();
+        // The strip AS LAID OUT — not `layout.set.defs()`, which is the
+        // full table including any button the user switched off. Indexing
+        // that by a button slot would draw a label and icon one button
+        // ahead of the rect they sit in.
+        let defs = layout.defs();
         let button_count = layout.buttons().len();
 
         // Hover animation. Hit-test happens in VD coords since that's

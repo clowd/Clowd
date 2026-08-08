@@ -10,7 +10,7 @@
 //!
 //! Draw order inside the pass (see [`UiRenderer::draw`] for the OCR
 //! bubble sandwich):
-//!   1. `lift` pipeline: OCR sweep + pixel-crop fallback lines.
+//!   1. `lift` pipeline: the OCR scanning sweep.
 //!   2. `rect` pipeline, LEADING range: OCR bubble pills + shadows.
 //!   3. glyphon bubble renderer: the bubbles' recognized-text glyphs.
 //!   4. `rect` pipeline, TRAILING range: backgrounds, borders, shadow,
@@ -148,21 +148,9 @@ impl UiRenderer {
     pub fn begin_cycle(&mut self, timings: Arc<CaptureTimings>) {
         self.state = None;
         self.last_frame_time = None;
-        // VRAM: the lift pass's bind group holds a TextureView of the
-        // whole-virtual-desktop snapshot. `EndCycle` frees `gpu.snapshot`
-        // and parks the surface at 1×1 precisely to release that memory
-        // between cycles — a bind group retained here would silently pin
-        // tens of MB per monitor for the entire parked gap.
-        //
-        // [`end_cycle`](Self::end_cycle) is what actually releases it in
-        // time; this call is the second half of the bracket. Keep BOTH:
-        // the lift cache is keyed on the snapshot's heap ADDRESS, and the
-        // key is only meaningful because no snapshot's identity ever
-        // outlives its cycle in this struct (see `LiftPipeline::prepare`).
-        self.lift.clear_snapshot();
-        // The bubble layouts are the previous cycle's data too (shaped
-        // glyph buffers keyed to a dead outcome) — same bracket discipline
-        // as the lift bind group above, minus the VRAM stakes.
+        // The bubble layouts are the previous cycle's data (shaped glyph
+        // buffers keyed to a dead outcome) — clear on both sides of the
+        // parked gap, same bracket discipline as `end_cycle`.
         self.ocr_bubbles.clear();
         self.capture = Some(timings);
         self.start_time = Instant::now();
@@ -174,19 +162,11 @@ impl UiRenderer {
     /// Called from every `render.rs` path that returns a worker to the
     /// parked state (see `render::park_worker`). `UiRenderer` is built once
     /// per worker, OUTSIDE the cycle loop, so anything it caches survives
-    /// the whole idle gap in persistent mode. The lift bind group is the
-    /// one entry that matters: it pins a `TextureView` of the
-    /// whole-virtual-desktop snapshot, ~33 MB per 4K monitor, which would
-    /// defeat the entire point of dropping `gpu.snapshot` and shrinking the
-    /// surface to 1×1 on `EndCycle`. Finishing a cycle from
-    /// `OcrState::Lifted` — what OCR's COPY/SEARCH/UPLOAD and EXIT all do —
-    /// is the case that leaves the bind group populated.
-    ///
-    /// Clearing a bind group that was never built is a plain field write,
-    /// so the normal (non-OCR) path pays nothing: `prepare` already clears
-    /// the cache on every frame that has no snapshot or an idle
-    /// `OcrState`, and the next cycle rebuilds from the new snapshot on
-    /// its first `prepare` because the cached identity went with it.
+    /// the whole idle gap in persistent mode. (The lift pass used to hold
+    /// the big-ticket item here — a bind group pinning a TextureView of the
+    /// whole-virtual-desktop snapshot, ~33 MB per 4K monitor. It samples no
+    /// texture any more, so the remaining releases are RAM-hygiene, not
+    /// VRAM-critical.)
     ///
     /// Audited and deliberately NOT dropped here: the icon pipeline's bind
     /// group (its atlas texture is owned by `PanelRenderer` and stays warm
@@ -195,7 +175,6 @@ impl UiRenderer {
     /// the rect/icon/lift instance buffers (tens of KB, grow-never-shrink
     /// on purpose).
     pub fn end_cycle(&mut self) {
-        self.lift.clear_snapshot();
         // Shaped bubble buffers can hold a page of recognized text; like
         // `state` below, release them at park rather than letting them sit
         // out the idle gap.
@@ -207,7 +186,7 @@ impl UiRenderer {
         self.state = None;
         // Nothing staged in this frame's buffers may be drawn again: the
         // next `draw` must be preceded by a fresh `prepare` (which sets
-        // this back) or it would issue draws over a released snapshot.
+        // this back).
         self.has_prepared = false;
     }
 
@@ -218,14 +197,7 @@ impl UiRenderer {
     /// from `draw` so the UI can share the same render pass as the
     /// desktop triangle — on M1 TBDR this avoids an MSAA tile
     /// store+load between passes.
-    pub fn prepare(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        viewport_px: (u32, u32),
-        perf: &PerfTracker,
-        snapshot: Option<&crate::gpu::desktop::DesktopSnapshot>,
-    ) {
+    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), perf: &PerfTracker) {
         self.has_prepared = false;
         self.any_text = false;
         self.any_bubble_text = false;
@@ -265,20 +237,8 @@ impl UiRenderer {
         self.ocr_bubbles
             .prepare(&mut self.text, &state, &self.this_monitor, &mut bubble_rects);
 
-        // Lift goes first among the shared-list prepares so the accent
-        // highlights it pushes into `rect_instances` sit at the front of
-        // that list — i.e. UNDER the panel/hint pills that follow, while
-        // still landing on top of the lifted pixels (the whole rect
-        // pipeline draws after the lift pipeline; see `draw`).
-        self.lift.prepare(
-            device,
-            queue,
-            viewport_px,
-            &state,
-            &self.this_monitor,
-            snapshot,
-            &mut rect_instances,
-        );
+        self.lift
+            .prepare(device, queue, viewport_px, &state, &self.this_monitor);
         self.area
             .prepare(&mut self.text, &state, &self.this_monitor, &mut rect_instances);
         self.hints
@@ -365,16 +325,16 @@ impl UiRenderer {
         }
         // Ordering contract, bottom to top (each item relies on the ones
         // before it having already painted):
-        //   1. lift — the OCR sweep and pixel-crop fallback lines, over
-        //      the desktop/peek passes that already ran in this render
-        //      pass and under everything below.
+        //   1. lift — the OCR scanning sweep, over the desktop/peek
+        //      passes that already ran in this render pass and under
+        //      everything below.
         //   2. rect LEADING range — OCR bubble pills + shadows, over the
-        //      lifted pixels and the dimmed desktop.
+        //      dimmed desktop.
         //   3. bubble glyphs — the recognized text, on its own glyphon
         //      renderer precisely so it can be issued here: above its
         //      pill backgrounds, below the panel's rects.
-        //   4. rect TRAILING range — accent highlights, hint pills, the
-        //      button panel: covers any bubble it overlaps.
+        //   4. rect TRAILING range — hint pills, the button panel: covers
+        //      any bubble it overlaps.
         //   5. icons, then 6. main glyphon text (panel/hint labels) —
         //      the panel and its labels end up above EVERYTHING, bubbles
         //      included.

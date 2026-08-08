@@ -10,6 +10,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use crate::ui::components::panel::model::PanelFeatures;
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TipsMode {
@@ -114,6 +116,10 @@ pub struct CapturerSettings {
     /// instead of waiting for a panel click. The VIDEO panel button still
     /// works in normal mode.
     pub video_mode: bool,
+    /// Which of the optional panel buttons (UPLOAD / SCROLL / OCR) the
+    /// user has left switched on — see [`PanelFeatures`]. Everything on
+    /// by default, so a standalone run shows the full strip.
+    pub panel_features: PanelFeatures,
 }
 
 impl Default for CapturerSettings {
@@ -132,6 +138,7 @@ impl Default for CapturerSettings {
             session_dir: None,
             capture_mode: CaptureMode::default(),
             video_mode: false,
+            panel_features: PanelFeatures::ALL,
         }
     }
 }
@@ -210,6 +217,21 @@ pub struct CliArgs {
     #[arg(long, value_name = "PATH")]
     pub log_dir: Option<PathBuf>,
 
+    /// Hide the UPLOAD button (both the capture strip's and the OCR
+    /// strip's — a user who turned uploading off did not mean "except
+    /// for text").
+    #[arg(long)]
+    pub no_upload: bool,
+
+    /// Hide the SCROLL (scrolling capture) button. Windows-only button;
+    /// the flag parses everywhere so one command line serves both.
+    #[arg(long)]
+    pub no_scroll_capture: bool,
+
+    /// Hide the OCR button, which is the only way into OCR mode.
+    #[arg(long)]
+    pub no_ocr: bool,
+
     /// The shell's process id, so the overlay can hand its foreground
     /// rights back with `AllowSetForegroundWindow` as each cycle ends —
     /// the shell needs them to raise whatever it opens next, and cannot
@@ -235,6 +257,11 @@ impl CliArgs {
             session_dir: self.session_dir,
             capture_mode: self.capture_mode,
             video_mode: self.video,
+            panel_features: PanelFeatures {
+                upload: !self.no_upload,
+                scroll_capture: !self.no_scroll_capture,
+                ocr: !self.no_ocr,
+            },
         }
     }
 }
@@ -280,6 +307,29 @@ mod tests {
         assert_eq!(from_cli.session_dir, default.session_dir);
         assert_eq!(from_cli.capture_mode, default.capture_mode);
         assert_eq!(from_cli.video_mode, default.video_mode);
+        assert_eq!(from_cli.panel_features, default.panel_features);
+    }
+
+    /// The optional-button flags are opt-OUT: a bare command line shows
+    /// the full strip, and each flag removes exactly its own button.
+    #[test]
+    fn panel_feature_flags_are_opt_out() {
+        let bare = CliArgs::parse_from(["clowd_capture_wgpu"]).into_settings();
+        assert_eq!(bare.panel_features, PanelFeatures::ALL);
+
+        let none = CliArgs::parse_from(["clowd_capture_wgpu", "--no-upload", "--no-scroll-capture", "--no-ocr"]).into_settings();
+        assert_eq!(
+            none.panel_features,
+            PanelFeatures {
+                upload: false,
+                scroll_capture: false,
+                ocr: false,
+            }
+        );
+
+        let no_ocr = CliArgs::parse_from(["clowd_capture_wgpu", "--no-ocr"]).into_settings();
+        assert!(!no_ocr.panel_features.ocr);
+        assert!(no_ocr.panel_features.upload && no_ocr.panel_features.scroll_capture);
     }
 
     #[test]
