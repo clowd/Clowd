@@ -284,11 +284,17 @@ impl SystemInterop {
         win_mouse::set_position(pos)
     }
 
+    /// Record the shell's pid (`--shell-pid`) for
+    /// [`Self::hand_foreground_to_shell`]. Called once during startup.
+    pub fn set_shell_pid(pid: Option<u32>) {
+        win_foreground::set_shell_pid(pid)
+    }
+
     /// Let the shell that spawned us take the foreground next. Called as a
     /// cycle ends, while the overlay is still the foreground window — see
     /// [`win_foreground`] for why the shell needs it back.
     pub fn hand_foreground_to_shell() {
-        win_foreground::hand_to_parent()
+        win_foreground::hand_to_shell()
     }
 
     pub fn capture_cursor(_monitors: &[MonitorInfo]) -> Option<CapturedCursor> {
@@ -390,8 +396,11 @@ impl SystemInterop {
         mac_mouse::set_position(pos, monitors)
     }
 
-    /// No foreground lock to hand back on macOS: activation is the app's
-    /// own business, and nothing here has rights to pass on.
+    /// No foreground lock on macOS, so there is nothing to hand back and
+    /// nobody to hand it to: activation is the app's own business.
+    pub fn set_shell_pid(_pid: Option<u32>) {}
+
+    /// See [`Self::set_shell_pid`].
     pub fn hand_foreground_to_shell() {}
 
     pub fn capture_cursor(monitors: &[MonitorInfo]) -> Option<CapturedCursor> {

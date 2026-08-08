@@ -436,6 +436,11 @@ namespace Clowd.UI
             {
                 "--session-dir", sessionDir,
                 "--accent-color", $"#{accent.R:X2}{accent.G:X2}{accent.B:X2}",
+                // So the overlay can hand its foreground rights back to us as the cycle ends — we
+                // need them to raise whatever the capture opens next, and cannot grant what we no
+                // longer hold (CAPTURE_PROTOCOL.md §3.5). Always emitted: unlike the flags below
+                // there is no capturer-side default that could stand in for it.
+                "--shell-pid", Environment.ProcessId.ToString(CultureInfo.InvariantCulture),
             };
 
             // Region is the capturer's default (free selection) and is left implicit;

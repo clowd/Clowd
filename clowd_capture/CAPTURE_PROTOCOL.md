@@ -47,6 +47,7 @@ flags that differ (`CaptureArguments.Build`).
 | `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation (process-level, applies in both modes). `lower-memory-usage` keeps the allocator's retained heap blocks small so an idle persistent host holds minimal memory; a running host must be relaunched for a change to take effect. |
 | `--persistent` | flag | off | Persistent host mode (§2). The per-capture flags above (except `--memory-hints`) are ignored; settings arrive per `show`. |
 | `--log-dir` | path | none | Persistent mode only: directory for `capture-host.log`. |
+| `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as each cycle ends (§3.5). Process-level and passed on both spawn paths: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
 
 ### 1.2 Session-directory file protocol
 
@@ -400,7 +401,7 @@ and every link is required:
 | Link | Where | Why |
 |---|---|---|
 | Shell → capturer | `ScreenCaptureService`, both the warm-host and cold-spawn paths | The overlay needs focus the instant it appears (Esc, shortcuts). |
-| Capturer → shell | `App::finish_cycle` and the SCROLL dispatch, **before** the overlay hides | The shell has no visible window at this moment, so once ours goes away it holds nothing to pass on. |
+| Capturer → shell | `hide_overlay_for_action`, which every action dispatch and `finish_cycle` go through **before** the overlay hides. Addressed with `--shell-pid` (§1.1) | The shell has no visible window at this moment, so once ours goes away it holds nothing to pass on. |
 | Shell → driver | `ScrollDriver.RunAsync`, right after `Process.Start` | A freshly spawned process is refused `SetForegroundWindow` outright. |
 
 Deliberately **not** used: `AttachThreadInput` to borrow the foreground

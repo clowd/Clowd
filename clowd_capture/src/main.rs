@@ -89,6 +89,11 @@ fn main() -> anyhow::Result<()> {
 fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     system::SystemInterop::init();
 
+    // Before any window exists, so no cycle can end without knowing who to
+    // hand foreground rights back to. Applies to both modes: the persistent
+    // host serves many cycles for the same shell.
+    system::SystemInterop::set_shell_pid(args.shell_pid);
+
     // The shell preflights this before spawning us and owns the whole permission
     // conversation with the user (Settings → General → Permissions), so all we do
     // here is refuse to run — no prompt, no System Settings, no overlay flashing up
