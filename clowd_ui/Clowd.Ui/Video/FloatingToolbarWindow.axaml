@@ -73,6 +73,17 @@
                                         Text="SPK"
                                         ToolTip.Tip="Capture speakers" />
 
+            <!-- CAM: a pipeline element, not a runtime mute like MIC/SPK — the recorder can only
+                 add or drop the webcam source while it is still waiting, so the code-behind
+                 disables this button once recording starts. No level meter (nothing to meter). -->
+            <controls:CaptureToolButton Name="BtnWebcam"
+                                        Click="WebcamClicked"
+                                        IconPath="{StaticResource IconWebcamDisabled}"
+                                        IconPathAlternate="{StaticResource IconWebcamEnabled}"
+                                        IconSize="20.6"
+                                        Text="CAM"
+                                        ToolTip.Tip="Capture webcam as a second track (position it later in the video editor)" />
+
             <controls:CaptureToolButton Name="BtnSettings"
                                         Click="SettingsButtonClicked"
                                         IconPath="{StaticResource IconSettings}"

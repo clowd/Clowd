@@ -29,6 +29,21 @@ namespace Clowd
         public ScreenRect RestorePosition { get; set; }
     }
 
+    /// <summary>
+    /// The second video track inside a recording's mp4 — the webcam, kept out of the composited
+    /// picture on purpose so the overlay can be placed (or dropped) later in the video editor.
+    /// Recorded at capture time from obs-express's <c>tracks</c> report, or probed off the file
+    /// when the recorder was too old to send one. A record so <see cref="FileSyncObject"/>'s
+    /// equality check can skip a redundant disk write, exactly like <see cref="SessionOpenEditor"/>.
+    /// </summary>
+    public sealed record SessionVideoTrack
+    {
+        /// <summary>Stream index inside the mp4 (the screen is 0, the webcam 1).</summary>
+        public int Index { get; set; }
+        public int Width { get; set; }
+        public int Height { get; set; }
+    }
+
     public class SessionInfo : FileSyncObject
     {
         public SessionInfo(string file) : base(file)
@@ -115,7 +130,9 @@ namespace Clowd
         }
 
         // null/empty for capture/editor sessions; for upload-only sessions (clipboard / file / tray
-        // uploads that have no editor) one of "image", "video", "text", "file".
+        // uploads that do not open in the image editor) one of "image", "video", "text", "file".
+        // NOTE: "upload-only" is about the *image* editor. A "video" session is IsUploadOnly and
+        // still has an editor of its own — the video editor, offered through CanEditVideo.
         public string ContentKind
         {
             get => Get<string>();
@@ -132,7 +149,11 @@ namespace Clowd
             set
             {
                 if (Set(value))
+                {
                     OnPropertyChanged(nameof(CanUpload));
+                    OnPropertyChanged(nameof(CanEditVideo));
+                    OnPropertyChanged(nameof(ShowEditVideo));
+                }
             }
         }
 
@@ -142,6 +163,24 @@ namespace Clowd
             get => Get<long>();
             set => Set(value);
         }
+
+        // set on recordings that carry a webcam track; null (the common case) means the mp4 has
+        // nothing but the screen. Written once, when the recording session is created — the video
+        // editor still derives its own layout from the file it opens, so this exists to decide
+        // whether a recording is worth opening the editor for at all, without probing every file.
+        public SessionVideoTrack WebcamTrack
+        {
+            get => Get<SessionVideoTrack>();
+            set
+            {
+                if (Set(value))
+                    OnPropertyChanged(nameof(HasWebcamTrack));
+            }
+        }
+
+        // a track with no dimensions is not one anything can lay out.
+        [JsonIgnore]
+        public bool HasWebcamTrack => WebcamTrack != null && WebcamTrack.Width > 0 && WebcamTrack.Height > 0;
 
         [JsonIgnore] public bool IsVideo => String.Equals(ContentKind, "video", StringComparison.OrdinalIgnoreCase);
 
@@ -156,6 +195,7 @@ namespace Clowd
         [JsonIgnore]
         public bool CanUpload => ActiveUpload == null
                                  && ActiveGifConversion == null
+                                 && ActiveRender == null
                                  && (!String.IsNullOrEmpty(VideoPath) || !String.IsNullOrEmpty(PreviewImgPath) || IsUploadOnly);
 
         /// <summary>The file an upload of this session sends: the recording itself for a video entry
@@ -204,12 +244,37 @@ namespace Clowd
             set
             {
                 if (Set(value))
+                {
                     OnPropertyChanged(nameof(CanCreateGif));
+                    OnPropertyChanged(nameof(CanEditVideo));
+                    OnPropertyChanged(nameof(ShowEditVideo));
+                }
             }
         }
 
         // a GIF can be made from any video recording except one that is itself a GIF.
         [JsonIgnore] public bool CanCreateGif => IsVideo && String.IsNullOrEmpty(SourceVideoPath);
+
+        // set only on "Edited" sessions: the recording this session's video was rendered from. It
+        // ties the edited entry back to its source, so re-rendering the same recording replaces
+        // that entry instead of piling up a new one. Deliberately NOT SourceVideoPath, which means
+        // "this session is a GIF" and switches CanCreateGif off.
+        public string EditSourceVideoPath
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+
+        // any recording can be opened in the video editor, except a GIF (nothing to trim, no audio,
+        // and the render tool would not read it back as a video).
+        [JsonIgnore]
+        public bool CanEditVideo => IsVideo && String.IsNullOrEmpty(SourceVideoPath) && !String.IsNullOrEmpty(VideoPath);
+
+        // what the Recent page binds to: the video editor is Windows-only for now (the render tool
+        // and the webcam track only ship there), so the affordance is hidden rather than offered
+        // and then refused.
+        [JsonIgnore]
+        public bool ShowEditVideo => CanEditVideo && OperatingSystem.IsWindows();
 
         public string UploadFileKey
         {
@@ -269,8 +334,31 @@ namespace Clowd
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ShowNotUploaded));
                 OnPropertyChanged(nameof(CanUpload));
+                OnPropertyChanged(nameof(IsIdle));
             }
         }
+
+        // not persisted — the in-flight video render filling this session in, set by
+        // VideoRenderManager. Non-null only while it runs; the mirror image of
+        // ActiveGifConversion, and treated the same everywhere a busy entry is.
+        [JsonIgnore]
+        public Clowd.UI.Services.VideoRender ActiveRender
+        {
+            get => _activeRender;
+            set
+            {
+                _activeRender = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowNotUploaded));
+                OnPropertyChanged(nameof(CanUpload));
+                OnPropertyChanged(nameof(IsIdle));
+            }
+        }
+
+        // false while a child process is still writing this entry's file: there is nothing to
+        // play, open, upload or reveal until it lands. Bound by the row's action bar and its
+        // context menu.
+        [JsonIgnore] public bool IsIdle => ActiveGifConversion == null && ActiveRender == null;
 
         // the full upload history: the persisted list when present, otherwise a single synthesized
         // record from the legacy UploadUrl/UploadFileKey fields (Provider null → not deletable).
@@ -293,9 +381,10 @@ namespace Clowd
         // a session still being written into has nothing to upload yet, so it says nothing rather
         // than "Not uploaded" over the top of its own progress row.
         [JsonIgnore]
-        public bool ShowNotUploaded => ActiveGifConversion == null && ActiveUpload == null && AllUploads.Length == 0;
+        public bool ShowNotUploaded => ActiveGifConversion == null && ActiveRender == null && ActiveUpload == null && AllUploads.Length == 0;
 
         private Clowd.UI.ActiveUpload _activeUpload;
         private Clowd.UI.Services.GifConversion _activeGifConversion;
+        private Clowd.UI.Services.VideoRender _activeRender;
     }
 }

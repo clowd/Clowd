@@ -18,6 +18,17 @@ namespace Clowd.UI
     /// in CLI order, always finite, floored at -100.</summary>
     public sealed record ObsLevels(double[] Speaker, double[] Mic);
 
+    /// <summary>One video track inside the recorded mp4: its stream index and the frame size it
+    /// was encoded at.</summary>
+    public sealed record ObsTrackInfo(int Index, int Width, int Height);
+
+    /// <summary>The video tracks the recorder wrote, reported on <c>started_recording</c> and
+    /// again on <c>stopped_recording</c> as an optional <c>tracks</c> object. The video editor
+    /// needs it to place the webcam overlay (which stream, and what aspect ratio). Null on a
+    /// recorder too old to send it, and <see cref="Webcam"/> is null whenever no camera was
+    /// captured.</summary>
+    public sealed record ObsTracks(ObsTrackInfo Screen, ObsTrackInfo Webcam);
+
 /// <summary>The recorder's answer to a <c>configure</c> command (DESIGN §1.3): either
 /// <c>configure_applied</c>, whose <see cref="IgnoredKeys"/> names the settings the recorder
 /// refused to change in its current phase (empty before recording starts), or
@@ -64,6 +75,13 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         /// <summary>Raised on the UI thread for every <c>levels</c> message (10 Hz from
         /// <c>initialized</c> onward, only when audio sources exist).</summary>
         public event EventHandler<ObsLevels> LevelsReceived;
+
+        /// <summary>The video tracks the recorder last reported (<c>started_recording</c>, then
+        /// <c>stopped_recording</c>), or null when it did not report any — the field is optional,
+        /// so an older recorder simply leaves this null and the video editor falls back to probing
+        /// the file. Written from the stdout pump and read from the UI thread after a lifecycle
+        /// ack has resolved, which is what orders the two.</summary>
+        public ObsTracks LastTracks { get; private set; }
 
         /// <summary>Raised on the UI thread when the recording fails: a nonzero
         /// <c>stopped_recording</c> code (possibly spontaneous) or a process exit without a
@@ -458,6 +476,9 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                         break;
 
                     case "started_recording":
+                        // the tracks are read before the ack resolves, so a caller that awaits
+                        // StartAsync can read LastTracks straight afterwards.
+                        ReadTracks(root);
                         _startTcs.TrySetResult(true);
                         break;
 
@@ -526,6 +547,40 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             return values;
         }
 
+        /// <summary>Reads the optional <c>tracks</c> object
+        /// (<c>{"screen":{"index":0,"width":W,"height":H},"webcam":{...}|null}</c>) into
+        /// <see cref="LastTracks"/>. An absent field leaves the previous value alone rather than
+        /// clearing it: <c>stopped_recording</c> is the second report, and a recorder that sends
+        /// tracks on start but not on stop must not lose them.</summary>
+        private void ReadTracks(JsonElement root)
+        {
+            if (!root.TryGetProperty("tracks", out var tracksEl) || tracksEl.ValueKind != JsonValueKind.Object)
+                return;
+
+            var screen = ReadTrack(tracksEl, "screen");
+            if (screen == null)
+                return; // a tracks object without a screen track is not one we can use
+
+            LastTracks = new ObsTracks(screen, ReadTrack(tracksEl, "webcam"));
+        }
+
+        private static ObsTrackInfo ReadTrack(JsonElement tracks, string name)
+        {
+            // "webcam": null is the documented way of saying "no camera was captured".
+            if (!tracks.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Object)
+                return null;
+
+            return new ObsTrackInfo(
+                ReadInt(el, "index"),
+                ReadInt(el, "width"),
+                ReadInt(el, "height"));
+        }
+
+        private static int ReadInt(JsonElement obj, string name) =>
+            obj.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var value)
+                ? value
+                : 0;
+
         private static string[] ReadStringArray(JsonElement root, string name)
         {
             if (!root.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Array)
@@ -549,6 +604,9 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
         private void HandleStoppedRecording(JsonElement root)
         {
+            // the final word on what was written; the page reads it once the stop has resolved.
+            ReadTracks(root);
+
             var code = root.GetProperty("code").GetInt64();
             var message = root.GetProperty("message").GetString();
             string error = null;

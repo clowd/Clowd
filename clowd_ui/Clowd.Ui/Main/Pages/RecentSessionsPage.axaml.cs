@@ -550,12 +550,19 @@ namespace Clowd.UI
 
         private async System.Threading.Tasks.Task DeleteWithConfirmation(SessionInfo session)
         {
-            // a conversion owns the (incomplete) entry it is writing into: cancelling is what removes
-            // the row, so there is nothing to confirm and nothing finished to lose.
+            // a conversion or a render owns the (incomplete) entry it is writing into: cancelling is
+            // what removes the row, so there is nothing to confirm and nothing finished to lose.
             var conversion = session.ActiveGifConversion;
             if (conversion != null)
             {
                 conversion.Cancel();
+                return;
+            }
+
+            var render = session.ActiveRender;
+            if (render != null)
+            {
+                render.Cancel();
                 return;
             }
 
@@ -608,7 +615,7 @@ namespace Clowd.UI
         private void ViewDoubleClick(object sender, TappedEventArgs e)
         {
             var session = GetSessionFromEvent(sender);
-            if (session == null || session.ActiveGifConversion != null)
+            if (session == null || !session.IsIdle)
                 return;
 
             if (session.IsVideo)
@@ -659,7 +666,7 @@ namespace Clowd.UI
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
-                if (session.ActiveGifConversion != null)
+                if (!session.IsIdle)
                     return; // still being written — there is nothing to open yet
 
                 if (session.IsVideo)
@@ -677,8 +684,8 @@ namespace Clowd.UI
         private async void CreateGifClicked(object sender, RoutedEventArgs e)
         {
             var session = GetSessionFromEvent(sender);
-            if (session == null)
-                return;
+            if (session == null || !session.IsIdle || !session.CanCreateGif)
+                return; // a rendering edit is still being written — there is no usable mp4 yet
 
             try
             {
@@ -701,9 +708,23 @@ namespace Clowd.UI
             }
         }
 
+        private void EditVideoClicked(object sender, RoutedEventArgs e)
+        {
+            var session = GetSessionFromEvent(sender);
+            if (session == null || !session.CanEditVideo)
+                return;
+
+            Clowd.UI.VideoEditor.VideoEditorWindow.ShowSession(session);
+        }
+
         private void CancelGifClicked(object sender, RoutedEventArgs e)
         {
             ((sender as Control)?.DataContext as GifConversion)?.Cancel();
+        }
+
+        private void CancelRenderClicked(object sender, RoutedEventArgs e)
+        {
+            ((sender as Control)?.DataContext as VideoRender)?.Cancel();
         }
 
         private void CancelUploadClicked(object sender, RoutedEventArgs e)
