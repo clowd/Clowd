@@ -13,6 +13,34 @@
 //! from the shared constants rather than re-derived, so the two families
 //! cannot drift apart.
 //!
+//! First-reveal smoothness is engineered in three stages, because a fresh
+//! process pays three one-time costs (system-font scan, cosmic-text
+//! font-matching, swash glyph rasterization + atlas growth) that would
+//! otherwise land on animated frames and visibly chop them. The governing
+//! rule: no single frame ever carries more than a frame's slack of warmup
+//! work — the work is SLICED, never paused-for:
+//!
+//! * **Ordinary capture frames** (crosshair/selection — nothing latency-
+//!   critical animating): the fallback fonts load once (~11 ms, the one
+//!   deliberate over-budget step, taken a few frames after first paint),
+//!   then printable ASCII is shaped + staged as INVISIBLE (alpha-0) text
+//!   at the quantized bubble sizes, ~a dozen glyphs per frame (~1-2 ms).
+//!   By the time OCR is even pressed the atlas is usually fully warm and
+//!   the scanning wave has zero warmup work left. The slicing continues
+//!   under Scanning if OCR was pressed immediately; it PAUSES during
+//!   Lifted so the reveal never shares its frames with generic warmup.
+//! * **The Scanning→Lifted transition frame** shapes every line at once.
+//!   That is deliberate: the app thread wrap-aligns the transition, so on
+//!   this exact frame the band is entirely off-screen — the one frame in
+//!   the whole choreography where a burst is invisible by construction.
+//! * **Lifted, ahead of the wave:** lines whose reveal starts within the
+//!   next [`PRERASTER_LOOKAHEAD_SECS`] are staged at their resting spot
+//!   with alpha 0, so whatever the generic warmup missed (odd glyphs,
+//!   uncommon sizes, CJK) rasterizes a comfortable margin before its line
+//!   can show, a few lines per frame as the band descends. Re-staging
+//!   every frame until reveal also marks the glyphs in-use, which is what
+//!   protects them from atlas eviction between rasterization and reveal.
+//!
 //! Draw-order contract (see `UiRenderer::draw` for the enforcement): the
 //! bubble RECTS are the leading range of the shared rect buffer, drawn
 //! right after the lift pass; the bubble TEXT goes through the TextStack's
@@ -58,6 +86,55 @@ const MIN_FONT_PX: f32 = 6.0;
 /// is allowed a modest overhang past the selection's right edge instead.
 const MIN_FIT_SHRINK: f32 = 0.6;
 
+/// Font sizes (physical px — bubble fonts are whole-pixel, see
+/// `bubble_font_px`) pre-rasterized by the sliced warmup, most common
+/// screen-text sizes first so an early OCR press still finds the sizes
+/// that matter warm. Deliberately stops at 30: pages whose bubbles are
+/// larger have FEW lines, so their look-ahead rasterization is cheap
+/// without help from the ladder.
+const WARMUP_SIZES: &[f32] = &[
+    11.0, 12.0, 13.0, 10.0, 14.0, 9.0, 15.0, 16.0, 8.0, 18.0, 7.0, 6.0, 20.0, 23.0, 26.0, 30.0,
+];
+
+/// Every printable-ASCII glyph, as one line — warmup steps slice it into
+/// [`WARMUP_CHUNK_BYTES`]-char chunks (all ASCII, so byte slicing is
+/// safe). A chunk stays well inside any monitor's width even at the
+/// largest ladder size, which matters because glyphon culls out-of-bounds
+/// glyphs BEFORE rasterization and would silently defeat the warmup.
+const WARMUP_CHARS: &str = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
+
+/// Glyphs rasterized per warmup frame. ~12 small glyphs ≈ 1-2 ms of swash
+/// work — inside a frame's slack even at high refresh rates, which is the
+/// entire point of slicing (a whole-size-per-frame warmup visibly chopped
+/// the scanning wave).
+const WARMUP_CHUNK_BYTES: usize = 12;
+
+/// How far ahead of a line's reveal moment its glyphs are pre-staged
+/// (alpha 0) during Lifted. Comfortably more than one frame at any
+/// refresh rate, and long enough that the pre-stage doubles as an
+/// eviction pin for the glyphs about to be needed; short enough that a
+/// dense page's rasterization spreads across the band's descent instead
+/// of piling onto its first frame.
+const PRERASTER_LOOKAHEAD_SECS: f32 = 0.3;
+
+/// One warmup step: `None` for the font-DB step (step 0), else the
+/// (size, chunk) to shape+stage. Steps sequence the whole ladder, chunk
+/// by chunk, one step per frame. Pure so the schedule is testable.
+fn warmup_step(step: usize) -> Option<(f32, &'static str)> {
+    let chunks_per_size = WARMUP_CHARS.len().div_ceil(WARMUP_CHUNK_BYTES);
+    let i = step.checked_sub(1)?;
+    let size = *WARMUP_SIZES.get(i / chunks_per_size)?;
+    let start = (i % chunks_per_size) * WARMUP_CHUNK_BYTES;
+    let chunk = &WARMUP_CHARS[start..(start + WARMUP_CHUNK_BYTES).min(WARMUP_CHARS.len())];
+    Some((size, chunk))
+}
+
+/// Total steps including the font-DB step — `warm_step` past this means
+/// the warmup is finished for the process lifetime.
+fn warmup_total_steps() -> usize {
+    1 + WARMUP_SIZES.len() * WARMUP_CHARS.len().div_ceil(WARMUP_CHUNK_BYTES)
+}
+
 /// One laid-out bubble, cached for the lifetime of the outcome (shaping is
 /// the expensive part and the resting geometry never changes — only the
 /// per-frame rise/alpha do).
@@ -98,6 +175,24 @@ pub struct OcrBubblesRenderer {
     /// can exist).
     outcome_key: Option<usize>,
     drawn: Vec<DrawnText>,
+    /// This frame's warmup chunk, staged as one alpha-0 text area and
+    /// replaced (or dropped) next frame — rasterization into the atlas is
+    /// the durable product, not the buffer.
+    warm_buffer: Option<Buffer>,
+    /// Next `warmup_step` to run, EVER — never reset, because the atlas
+    /// and the caches the warmup fills are process-lifetime. A later
+    /// capture re-runs nothing; if a warm glyph was evicted under atlas
+    /// pressure in between, the Lifted look-ahead pre-stage (see module
+    /// docs) re-rasterizes it before it can show.
+    warm_step: usize,
+    /// Frames prepared so far, saturating — the warmup waits out the
+    /// first few so the one over-budget step (the font scan) can never
+    /// delay first paint.
+    frames_seen: u32,
+    /// Window-local clip size for the warmup area, captured in `prepare`
+    /// (glyphon culls out-of-bounds glyphs before rasterizing, so the
+    /// warmup must be staged inside the real viewport).
+    warm_bounds: [i32; 2],
 }
 
 impl OcrBubblesRenderer {
@@ -106,17 +201,23 @@ impl OcrBubblesRenderer {
             entries: Vec::new(),
             outcome_key: None,
             drawn: Vec::new(),
+            warm_buffer: None,
+            warm_step: 0,
+            frames_seen: 0,
+            warm_bounds: [0, 0],
         }
     }
 
     /// Drop the cached layouts (glyphon Buffers hold shaped-glyph heap
     /// data — a page of recognized text is worth releasing promptly).
     /// Called whenever the mode leaves Lifted and from
-    /// `UiRenderer::end_cycle`.
+    /// `UiRenderer::end_cycle`. Deliberately does NOT touch `warm_step`:
+    /// the caches the warmup filled outlive the cycle.
     pub fn clear(&mut self) {
         self.entries.clear();
         self.outcome_key = None;
         self.drawn.clear();
+        self.warm_buffer = None;
     }
 
     /// Stage this frame's bubbles: pill rects into `bubble_rects` (the
@@ -124,6 +225,19 @@ impl OcrBubblesRenderer {
     /// see the module docs) and text placements for [`Self::text_areas`].
     pub fn prepare(&mut self, ts: &mut TextStack, state: &UiSharedState, this_monitor: &UiMonitor, bubble_rects: &mut Vec<RectInstance>) {
         self.drawn.clear();
+        self.frames_seen = self.frames_seen.saturating_add(1);
+
+        // One sliced warmup step per frame, in EVERY state except Lifted
+        // (the reveal never shares its frames with generic warmup — its
+        // own look-ahead pre-stage below has priority) and except the
+        // first few frames of the process (first paint must not wait on
+        // the font scan). See the module docs for the staging story.
+        let lifted = matches!(state.ocr, OcrState::Lifted { .. });
+        if !lifted && self.frames_seen > 3 {
+            self.advance_warmup(ts, this_monitor);
+        } else {
+            self.warm_buffer = None;
+        }
 
         let (anchor, region, dpi, outcome) = match &state.ocr {
             OcrState::Lifted {
@@ -132,30 +246,39 @@ impl OcrBubblesRenderer {
                 dpi_scale,
                 outcome,
             } => (anchor, region, *dpi_scale, outcome),
-            // Scanning: nothing is recognized yet, so the sweep just loops
-            // (lift.rs). Retracting: the text vanishes AT ONCE on exit —
-            // no reverse animation, by explicit owner call — so bubbles
-            // stop existing the frame BACK is pressed and the shaped
-            // buffers are released immediately.
-            OcrState::Idle
-            | OcrState::Scanning {
+            OcrState::Scanning {
                 ..
+            } => {
+                self.entries.clear();
+                self.outcome_key = None;
+                return;
             }
+            // Retracting: the text vanishes AT ONCE on exit — no reverse
+            // animation, by explicit owner call — so bubbles stop existing
+            // the frame BACK is pressed and the shaped buffers are
+            // released immediately.
+            OcrState::Idle
             | OcrState::Retracting {
                 ..
             } => {
-                self.clear();
+                self.entries.clear();
+                self.outcome_key = None;
                 return;
             }
         };
 
         let rf = region.to_f32();
         let key = std::sync::Arc::as_ptr(outcome) as usize;
+        // Shaping every line in ONE frame is deliberate, not an oversight:
+        // this branch runs on the wrap-aligned Scanning→Lifted transition
+        // frame, the one frame in the choreography where the band is
+        // entirely off-screen and a burst is invisible by construction
+        // (see the module docs).
         if self.outcome_key != Some(key) {
-            // System fonts must be in the DB before any bubble shaping so
-            // cosmic-text's fallback can cover scripts the embedded faces
-            // lack. One-time cost, paid here (not at startup) because only
-            // OCR text can contain arbitrary scripts.
+            // Belt-and-braces: the Scanning warmup already did this, but
+            // bubble shaping must NEVER run without the fallback fonts in
+            // the DB (tofu otherwise), so re-assert the invariant where it
+            // matters. A boolean test when the warmup ran.
             ts.ensure_fallback_fonts();
             self.entries.clear();
             for line in outcome.lines.iter() {
@@ -186,9 +309,18 @@ impl OcrBubblesRenderer {
 
         for (entry_idx, entry) in self.entries.iter().enumerate() {
             let e = anim::reveal_progress(t, entry.rel_top);
-            // Not yet revealed: the bubble simply does not exist. This is
-            // the wave doing the revealing.
-            if e <= 0.001 {
+            // Not yet revealed but revealing SOON: no pill, but the TEXT
+            // is staged at its resting spot with alpha 0 — the look-ahead
+            // pre-rasterization pass the module docs describe. Glyphon
+            // rasterizes staged glyphs regardless of colour, so by the
+            // time the wave reaches this line its glyphs are guaranteed
+            // atlas-resident (and re-staging every frame until reveal
+            // keeps them pinned there). Lines beyond the look-ahead don't
+            // exist yet — that bounding is what spreads a dense page's
+            // rasterization across the band's descent instead of piling
+            // it onto one frame.
+            let visible = e > 0.001;
+            if !visible && anim::reveal_start_secs(entry.rel_top) > t + PRERASTER_LOOKAHEAD_SECS {
                 continue;
             }
 
@@ -212,20 +344,21 @@ impl OcrBubblesRenderer {
                 continue;
             }
 
-            let a = |c: [f32; 4]| -> [f32; 4] { [c[0], c[1], c[2], c[3] * e] };
-
-            bubble_rects.push(RectInstance {
-                dest_px: [x0 - mon_left - AA, y0 - mon_top - AA, x1 - mon_left + AA, y1 - mon_top + AA],
-                fill_rgba: a(TOOLTIP_FILL),
-                border_rgba: a(TOOLTIP_BORDER),
-                params: [entry.border_px, 0.0, entry.corner_radius, AA],
-            });
+            if visible {
+                let a = |c: [f32; 4]| -> [f32; 4] { [c[0], c[1], c[2], c[3] * e] };
+                bubble_rects.push(RectInstance {
+                    dest_px: [x0 - mon_left - AA, y0 - mon_top - AA, x1 - mon_left + AA, y1 - mon_top + AA],
+                    fill_rgba: a(TOOLTIP_FILL),
+                    border_rgba: a(TOOLTIP_BORDER),
+                    params: [entry.border_px, 0.0, entry.corner_radius, AA],
+                });
+            }
 
             self.drawn.push(DrawnText {
                 entry_idx,
                 x: entry.text_x - mon_left,
                 y: entry.text_y + dy - mon_top,
-                alpha: e,
+                alpha: if visible { e } else { 0.0 },
                 bounds: [
                     (x0 - mon_left).floor() as i32,
                     (y0 - mon_top).floor() as i32,
@@ -236,12 +369,68 @@ impl OcrBubblesRenderer {
         }
     }
 
+    /// One frame's slice of the first-reveal warmup (see the module docs):
+    /// step 0 loads the fallback fonts, every later step shapes + stages
+    /// one small glyph chunk. Each slice is sized to fit inside a frame's
+    /// slack precisely so NO animation ever needs pausing for warmup.
+    fn advance_warmup(&mut self, ts: &mut TextStack, this_monitor: &UiMonitor) {
+        self.warm_buffer = None;
+        if self.warm_step >= warmup_total_steps() {
+            return;
+        }
+
+        if self.warm_step == 0 {
+            // The one over-budget step (~11 ms measured): a single early
+            // frame while nothing more than the crosshair is on screen.
+            ts.ensure_fallback_fonts();
+            self.warm_step = 1;
+            return;
+        }
+
+        let (size, chunk) = warmup_step(self.warm_step).expect("warm_step < total_steps has a chunk");
+        let mon = this_monitor.bounds;
+        self.warm_bounds = [mon.width(), mon.height()];
+        let mut buffer = Buffer::new(&mut ts.font_system, Metrics::new(size, size * 1.2));
+        buffer.set_wrap(Wrap::None);
+        // Same attrs as the real bubbles — that identity is what makes the
+        // shaping/matching caches this warms the ones layout_bubble hits.
+        buffer.set_text(chunk, &Attrs::new().family(Family::Name(FAMILY_CODE)), Shaping::Advanced, None);
+        buffer.shape_until_scroll(&mut ts.font_system, false);
+        self.warm_buffer = Some(buffer);
+        self.warm_step += 1;
+        if self.warm_step == warmup_total_steps() {
+            log::info!(
+                "OCR glyph warmup complete ({} sizes, {} steps)",
+                WARMUP_SIZES.len(),
+                warmup_total_steps()
+            );
+        }
+    }
+
     /// Collect this frame's bubble text areas. Goes through the
     /// TextStack's DEDICATED bubble renderer (`prepare_bubbles`), not the
     /// main one: the main text draw runs last (above the panel), while
     /// bubble glyphs must sit below the panel's rects — see the module
     /// docs for the full stacking contract.
     pub fn text_areas<'a>(&'a self, out: &mut Vec<TextArea<'a>>) {
+        // This frame's warmup chunk (if any): fully transparent,
+        // positioned inside the viewport so glyphon actually rasterizes
+        // it. One frame on stage is all a chunk needs — the atlas keeps
+        // the rasterization.
+        out.extend(self.warm_buffer.iter().map(|buffer| TextArea {
+            buffer,
+            left: 0.0,
+            top: 0.0,
+            scale: 1.0,
+            bounds: TextBounds {
+                left: 0,
+                top: 0,
+                right: self.warm_bounds[0],
+                bottom: self.warm_bounds[1],
+            },
+            default_color: Color::rgba(255, 255, 255, 0),
+            custom_glyphs: &[],
+        }));
         out.extend(self.drawn.iter().map(|d| {
             let a = (TOOLTIP_TEXT_COLOR[3] as f32 * d.alpha)
                 .round()
@@ -294,7 +483,8 @@ fn layout_bubble(ts: &mut TextStack, text: &str, line: [f32; 4], region: [f32; 4
     // most twice per line per outcome.
     let shrink = fit_shrink(text_w, region[2] - region[0], bubble_pad_h(font_px));
     if shrink < 1.0 {
-        font_px = (font_px * shrink).max(MIN_FONT_PX);
+        // Floored for the same atlas-sharing reason as bubble_font_px.
+        font_px = (font_px * shrink).floor().max(MIN_FONT_PX);
         buffer = shape(ts, font_px);
         text_w = measure(&buffer);
     }
@@ -351,9 +541,13 @@ fn bubble_pad_h(font_px: f32) -> f32 {
 }
 
 /// Font size that renders text at visually the same height as the
-/// recognized line — see [`FONT_FRACTION`].
+/// recognized line — see [`FONT_FRACTION`]. Floored to a WHOLE pixel:
+/// sub-pixel sizes are visually indistinguishable at these magnitudes,
+/// while integer sizes are what let the Scanning-phase warmup (and every
+/// earlier capture) actually share atlas entries with this bubble —
+/// glyph rasterizations are keyed by exact size.
 fn bubble_font_px(line_h: f32) -> f32 {
-    (line_h * FONT_FRACTION).max(MIN_FONT_PX)
+    (line_h * FONT_FRACTION).floor().max(MIN_FONT_PX)
 }
 
 /// How much the font must shrink for the bubble to fit the region width:
@@ -378,14 +572,60 @@ mod tests {
     use super::*;
 
     /// The size mapping is what makes a bubble read as "this line, lifted":
-    /// proportional to the source, floored at legibility.
+    /// proportional to the source, whole-pixel (atlas sharing — see
+    /// `bubble_font_px`), floored at legibility.
     #[test]
     fn font_tracks_line_height_with_a_floor() {
         assert_eq!(bubble_font_px(100.0), 82.0);
-        assert!((bubble_font_px(20.0) - 16.4).abs() < 1e-3);
+        // 20 * 0.82 = 16.4 -> floored to a whole pixel.
+        assert_eq!(bubble_font_px(20.0), 16.0);
         // Tiny source lines hit the legibility floor instead of vanishing.
         assert_eq!(bubble_font_px(4.0), MIN_FONT_PX);
         assert_eq!(bubble_font_px(0.0), MIN_FONT_PX);
+    }
+
+    /// Every whole-pixel bubble size from the legibility floor up to 16 px
+    /// (the sizes dense small-text pages actually produce, where glyph
+    /// volume is highest) must be in the warmup ladder — a gap would
+    /// silently reintroduce first-reveal rasterization for exactly the
+    /// pages with the most glyphs.
+    #[test]
+    fn warmup_ladder_covers_the_dense_sizes() {
+        for px in (MIN_FONT_PX as u32)..=16 {
+            assert!(
+                WARMUP_SIZES.contains(&(px as f32)),
+                "warmup ladder is missing {px}px"
+            );
+        }
+        // And the ladder itself only contains whole pixels — fractional
+        // entries could never match a bubble_font_px result.
+        for s in WARMUP_SIZES {
+            assert_eq!(s.fract(), 0.0, "{s} is not a whole pixel");
+        }
+    }
+
+    /// The sliced schedule must, across all steps, cover every printable-
+    /// ASCII glyph at every ladder size exactly — an off-by-one in the
+    /// chunk math would silently leave a cold stripe of glyphs for the
+    /// first reveal to rasterize. Also pins the per-step budget (chunk
+    /// length) and the schedule's endpoints.
+    #[test]
+    fn warmup_schedule_covers_everything_in_small_steps() {
+        // Step 0 is the font-DB step, past-the-end steps are None.
+        assert!(warmup_step(0).is_none());
+        assert!(warmup_step(warmup_total_steps()).is_none());
+
+        let mut seen: std::collections::HashMap<u32, String> = Default::default();
+        for step in 1..warmup_total_steps() {
+            let (size, chunk) = warmup_step(step).expect("in-range step");
+            assert!(chunk.len() <= WARMUP_CHUNK_BYTES, "step {step} over budget");
+            assert!(!chunk.is_empty(), "step {step} is a no-op");
+            seen.entry(size as u32).or_default().push_str(chunk);
+        }
+        assert_eq!(seen.len(), WARMUP_SIZES.len(), "sizes missing from schedule");
+        for (size, chars) in seen {
+            assert_eq!(chars, WARMUP_CHARS, "size {size} does not cover WARMUP_CHARS exactly");
+        }
     }
 
     /// Fit policy: no shrink when it fits, proportional shrink when it
