@@ -1,3 +1,22 @@
+# rustc 1.97 turned the `linker_messages` lint on by default, so link.exe's
+# warnings now reach the build output. Two of them are noise we cannot act on,
+# and they are silenced at the linker rather than by allowing the lint — the
+# lint stays on so a genuine link problem is still reported.
+#
+#   LNK4099  the prebuilt MNN inside ocr-rs was compiled /Zi but upstream ships
+#            no vc140.pdb, so every one of its ~260 C++ objects links without
+#            debug info. Only a from-source MNN build would fix it, and the
+#            volume was burying LNK4098 below.
+#   LNK4104  rustc generates clowd_shell_ext's .def itself and cannot mark an
+#            export PRIVATE, which is what MSVC wants for the COM entry points.
+#            Cosmetic: it concerns the unused import lib, and the DLL's export
+#            table carries DllCanUnloadNow/DllGetClassObject correctly.
+#
+# LNK4098 (MNN is /MT, rustc links /MD) is deliberately NOT ignored — see the
+# note in clowd_capture/Cargo.toml.
+[target.'cfg(windows)']
+rustflags = ["-Clink-arg=/IGNORE:4099", "-Clink-arg=/IGNORE:4104"]
+
 [alias]
 r = "run -p clowd_capture_wgpu"
 b = "build -p clowd_capture_wgpu"
