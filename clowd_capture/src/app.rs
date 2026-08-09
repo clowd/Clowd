@@ -670,6 +670,22 @@ impl App {
             h.set_background_image(desktop_buffer.as_deref());
         }
 
+        // Warm the OCR backend off-thread so the first OCR press of the
+        // process doesn't pay the MNN model parse + session setup mid-scan
+        // (a one-time cost, cached for the process lifetime). Once per
+        // process, and only when the OCR button exists at all.
+        if setup.settings.panel_features.ocr {
+            static OCR_WARM: std::sync::Once = std::sync::Once::new();
+            OCR_WARM.call_once(|| {
+                if let Err(e) = std::thread::Builder::new()
+                    .name("ocr-warm".into())
+                    .spawn(ocr::warm)
+                {
+                    log::warn!("failed to spawn the OCR warm-up thread: {e}");
+                }
+            });
+        }
+
         self.cycle = Some(CaptureCycle {
             settings: setup.settings,
             cycle_gen: setup.cycle_gen,
@@ -1131,10 +1147,10 @@ impl App {
         match &cycle.input.ocr {
             OcrState::Scanning {
                 anchor,
+                req,
                 region,
-                ..
             } => {
-                let (anchor, region) = (*anchor, *region);
+                let (anchor, req, region) = (*anchor, *req, *region);
                 let elapsed = anchor.elapsed().as_secs_f32();
                 if cycle
                     .ocr_ready
@@ -1181,6 +1197,10 @@ impl App {
                         // exited below its bottom.
                         cycle.input.ocr = OcrState::Lifted {
                             anchor: Instant::now(),
+                            // The Scanning phase's request id, carried over:
+                            // the render side keys its shaped-bubble cache
+                            // on it (see OcrState::Lifted).
+                            req,
                             region,
                             dpi_scale,
                             outcome: Arc::new(outcome),
@@ -1795,15 +1815,18 @@ impl App {
                     std::thread::Builder::new()
                         .name("ocr".into())
                         .spawn(move || {
-                            // Checked on both sides of the expensive call:
-                            // before, to skip work the user already backed
-                            // out of; after, to avoid setting a latch whose
-                            // reader is gone (cheap either way — the stale
-                            // req id would discard the result regardless).
+                            // Checked on both sides of the expensive call
+                            // (and polled inside it — recognize() bails
+                            // between its det/rec stages): before, to skip
+                            // work the user already backed out of; after,
+                            // to avoid setting a latch whose reader is
+                            // gone, and because a cancelled recognize()
+                            // returns a placeholder error that must never
+                            // be surfaced as a real outcome.
                             if cancel.load(Ordering::Acquire) {
                                 return;
                             }
-                            let result = ocr::recognize(&request);
+                            let result = ocr::recognize(&request, &cancel);
                             if cancel.load(Ordering::Acquire) {
                                 return;
                             }
@@ -2800,6 +2823,7 @@ mod tests {
         i.captured = true;
         i.ocr = OcrState::Lifted {
             anchor: Instant::now(),
+            req: 1,
             region: ScreenRect::from_xy_size(0, 0, 10, 10),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),

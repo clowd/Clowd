@@ -74,6 +74,20 @@ pub struct UiRenderer {
     /// pills/shadows this frame — the split point for the two-range rect
     /// draw (`draw` documents the sandwich).
     bubble_rect_count: u32,
+    /// True when the PREVIOUS frame prepared the bubble glyphs while the
+    /// bubble scene was at rest (reveal settled — see
+    /// `OcrBubblesRenderer::prepare`'s return). Arms the static-Lifted
+    /// fast path below.
+    bubble_static_prepared: bool,
+    /// Viewport the armed preparation was made for — a resize invalidates
+    /// the retained vertices, so the fast path requires it unchanged.
+    bubble_static_viewport: (u32, u32),
+    /// Set per frame: this frame is RE-ISSUING the bubble renderer's
+    /// retained vertices instead of re-preparing them. While true, `trim`
+    /// must be (and is) skipped — trim evicts every atlas entry no
+    /// prepare referenced since the last trim, which would tear the
+    /// retained vertices' glyphs out from under them.
+    bubble_reuse_active: bool,
     /// Animation clock origin for UI effects (border trail).
     start_time: Instant,
 }
@@ -127,6 +141,9 @@ impl UiRenderer {
             any_text: false,
             any_bubble_text: false,
             bubble_rect_count: 0,
+            bubble_static_prepared: false,
+            bubble_static_viewport: (0, 0),
+            bubble_reuse_active: false,
             start_time: Instant::now(),
         }
     }
@@ -152,6 +169,7 @@ impl UiRenderer {
         // buffers keyed to a dead outcome) — clear on both sides of the
         // parked gap, same bracket discipline as `end_cycle`.
         self.ocr_bubbles.clear();
+        self.bubble_static_prepared = false;
         self.capture = Some(timings);
         self.start_time = Instant::now();
     }
@@ -179,6 +197,8 @@ impl UiRenderer {
         // `state` below, release them at park rather than letting them sit
         // out the idle gap.
         self.ocr_bubbles.clear();
+        self.bubble_static_prepared = false;
+        self.bubble_reuse_active = false;
         // Not GPU memory, but it is this cycle's data and it would sit in
         // RAM for the whole idle gap otherwise — `OcrOutcome::full_text`
         // alone can be a page of recognized text. `begin_cycle` clears it
@@ -202,6 +222,7 @@ impl UiRenderer {
         self.any_text = false;
         self.any_bubble_text = false;
         self.bubble_rect_count = 0;
+        self.bubble_reuse_active = false;
 
         let now = Instant::now();
         let dt = self
@@ -234,7 +255,8 @@ impl UiRenderer {
         // other rect (the panel must cover bubbles, bubbles must cover
         // the dimmed desktop).
         let mut bubble_rects: Vec<RectInstance> = Vec::with_capacity(32);
-        self.ocr_bubbles
+        let bubbles_at_rest = self
+            .ocr_bubbles
             .prepare(&mut self.text, &state, &self.this_monitor, &mut bubble_rects);
 
         self.lift
@@ -284,19 +306,39 @@ impl UiRenderer {
         // Bubble glyphs ride the dedicated renderer so their draw can be
         // ordered between the two rect ranges — the main renderer below
         // draws last, above the panel.
-        let mut bubble_text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(16);
-        self.ocr_bubbles
-            .text_areas(&mut bubble_text_areas);
-        self.any_bubble_text = match self
-            .text
-            .prepare_bubbles(device, queue, &bubble_text_areas)
-        {
-            Ok(b) => b,
-            Err(e) => {
-                log::warn!("glyphon bubble prepare error: {:?}", e);
-                false
-            }
-        };
+        //
+        // Static-Lifted fast path: once the reveal has settled every
+        // frame's staging is byte-identical (the animation is a pure
+        // clamped function of elapsed time), so the previous frame's
+        // prepared vertices are simply re-issued — glyphon renderers
+        // retain them — instead of re-shaping and re-uploading the whole
+        // page per frame per monitor (a dense page is thousands of glyphs,
+        // at up to whatever this monitor's refresh rate is). Correctness
+        // leans on two things: the viewport is unchanged, and `trim` is
+        // suppressed while the path is active (see [`Self::trim`]).
+        self.bubble_reuse_active = bubbles_at_rest && self.bubble_static_prepared && self.bubble_static_viewport == viewport_px;
+        if self.bubble_reuse_active {
+            self.any_bubble_text = true;
+        } else {
+            let mut bubble_text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(16);
+            self.ocr_bubbles
+                .text_areas(&mut bubble_text_areas);
+            self.any_bubble_text = match self
+                .text
+                .prepare_bubbles(device, queue, &bubble_text_areas)
+            {
+                Ok(b) => b,
+                Err(e) => {
+                    log::warn!("glyphon bubble prepare error: {:?}", e);
+                    false
+                }
+            };
+            // Arm the fast path only off a frame that actually staged
+            // bubble text at rest; an empty staging (no bubbles reach this
+            // monitor) keeps taking the cheap empty prepare instead.
+            self.bubble_static_prepared = bubbles_at_rest && self.any_bubble_text;
+            self.bubble_static_viewport = viewport_px;
+        }
 
         let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
         self.area
@@ -357,6 +399,16 @@ impl UiRenderer {
     }
 
     pub fn trim(&mut self) {
+        // While the static-Lifted fast path re-issues retained bubble
+        // vertices without re-preparing them (see `prepare`), trim would
+        // evict their glyphs — trim drops every atlas entry no prepare
+        // referenced since the last trim — and the retained vertices
+        // would sample whatever replaced them. Skipping it costs nothing
+        // there: the page is static and the generic warmup pauses during
+        // Lifted, so no new glyphs are entering the atlas anyway.
+        if self.bubble_reuse_active {
+            return;
+        }
         self.text.trim();
     }
 }

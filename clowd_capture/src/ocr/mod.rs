@@ -57,6 +57,20 @@ pub struct OcrRequest {
 }
 
 /// Recognize text. BLOCKING — call only from a dedicated worker thread.
-pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
-    paddle::recognize(req)
+///
+/// `cancel` is polled at every expensive internal boundary (lock
+/// acquisition, post-detection, between recognition batches); once it
+/// reads true the call returns an error promptly instead of finishing the
+/// page. The caller is expected to re-check the flag and discard whatever
+/// comes back — the error itself carries no user-facing meaning.
+pub fn recognize(req: &OcrRequest, cancel: &std::sync::atomic::AtomicBool) -> Result<OcrOutcome, OcrError> {
+    paddle::recognize(req, cancel)
+}
+
+/// Pre-initialize the recognition backend (embedded-model parse + MNN
+/// session setup) from a background thread, so the first OCR press of the
+/// process doesn't pay that one-time cost mid-scan. Blocking; idempotent;
+/// failures are cached and surface later as `OcrError::Unavailable`.
+pub fn warm() {
+    paddle::warm();
 }
