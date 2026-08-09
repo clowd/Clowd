@@ -267,16 +267,20 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
     // vectorization, and a 4K-area selection is ~8M pixels on the
     // latency-critical path before det even starts.
     let mut rgb = vec![0u8; req.width as usize * req.height as usize * 3];
-    for (dst, px) in rgb.chunks_exact_mut(3).zip(req.bgra.chunks_exact(4)) {
+    for (dst, px) in rgb
+        .chunks_exact_mut(3)
+        .zip(req.bgra.chunks_exact(4))
+    {
         dst[0] = px[2];
         dst[1] = px[1];
         dst[2] = px[0];
     }
-    let rgb_img = image::RgbImage::from_raw(req.width, req.height, rgb)
-        .expect("OcrRequest.bgra must be width * height * 4 bytes");
+    let rgb_img = image::RgbImage::from_raw(req.width, req.height, rgb).expect("OcrRequest.bgra must be width * height * 4 bytes");
     let img = DynamicImage::ImageRgb8(rgb_img);
 
-    let b = backend.lock().expect("OCR backend lock poisoned");
+    let b = backend
+        .lock()
+        .expect("OCR backend lock poisoned");
     // The lock wait can be long — a superseded job may still be mid-page —
     // and this job may have been cancelled while it queued.
     if cancel.load(Ordering::Acquire) {
@@ -305,7 +309,11 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
         let mut src: Vec<Option<TextBox>> = boxes.into_iter().map(Some).collect();
         order
             .iter()
-            .map(|&i| src[i].take().expect("reading_order returns a permutation"))
+            .map(|&i| {
+                src[i]
+                    .take()
+                    .expect("reading_order returns a permutation")
+            })
             .collect()
     };
     boxes.retain(|bx| {
@@ -320,7 +328,11 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
 
     // Tier choice — see the cost model constants. Logged with the numbers
     // so a slow-feeling capture can be diagnosed from the log alone.
-    let predicted_ms = predict_small_rec_ms(boxes.iter().map(|b| (b.rect.width(), b.rect.height())));
+    let predicted_ms = predict_small_rec_ms(
+        boxes
+            .iter()
+            .map(|b| (b.rect.width(), b.rect.height())),
+    );
     let use_tiny = predicted_ms > SMALL_TIER_BUDGET_MS;
     let rec = if use_tiny { &b.rec_tiny } else { &b.rec_small };
     log::info!(
@@ -356,8 +368,9 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
         let (w, h) = (crops[i].width() as u64, crops[i].height().max(1) as u64);
         w * REC_TARGET_HEIGHT as u64 / h
     });
-    let mut results: Vec<Option<RecognitionResult>> =
-        std::iter::repeat_with(|| None).take(crops.len()).collect();
+    let mut results: Vec<Option<RecognitionResult>> = std::iter::repeat_with(|| None)
+        .take(crops.len())
+        .collect();
     for chunk in rec_order.chunks(REC_BATCH) {
         if cancel.load(Ordering::Acquire) {
             return Err(cancelled());
@@ -402,10 +415,7 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
         // worth tracking the clamp per side.)
         let bpx = BOX_BORDER as f32;
         let (mut left, mut top) = (r.left() as f32 + bpx, r.top() as f32 + bpx);
-        let (mut right, mut bottom) = (
-            r.left() as f32 + r.width() as f32 - bpx,
-            r.top() as f32 + r.height() as f32 - bpx,
-        );
+        let (mut right, mut bottom) = (r.left() as f32 + r.width() as f32 - bpx, r.top() as f32 + r.height() as f32 - bpx);
         if right - left < 1.0 {
             left = r.left() as f32;
             right = left + r.width() as f32;
@@ -487,7 +497,9 @@ mod tests {
         let mut state = 0x12345678u32;
         let bgra: Vec<u8> = (0..w * h * 4)
             .map(|_| {
-                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                state = state
+                    .wrapping_mul(1664525)
+                    .wrapping_add(1013904223);
                 (state >> 24) as u8
             })
             .collect();
@@ -552,7 +564,9 @@ mod tests {
 
         // A long staircase must not chain into one giant row: each step is
         // within tolerance of the previous but far from the first.
-        let stairs: Vec<(i32, i32, u32)> = (0..10).map(|i| (i * 8, 100 - i * 10, 20)).collect();
+        let stairs: Vec<(i32, i32, u32)> = (0..10)
+            .map(|i| (i * 8, 100 - i * 10, 20))
+            .collect();
         let order = reading_order(&stairs);
         let mut sorted = order.clone();
         sorted.sort_unstable();
@@ -611,7 +625,11 @@ mod tests {
 
         // Predicted (serial cost model) vs the batched reality below —
         // the correction factor for re-calibrating the tier budget.
-        let predicted = predict_small_rec_ms(native_boxes.iter().map(|b| (b.rect.width(), b.rect.height())));
+        let predicted = predict_small_rec_ms(
+            native_boxes
+                .iter()
+                .map(|b| (b.rect.width(), b.rect.height())),
+        );
         eprintln!("predicted serial small-rec: {predicted:.0} ms");
 
         // Recognition quality on the native-res boxes, both tiers, batched
@@ -635,8 +653,9 @@ mod tests {
         for (name, model, charset) in [("small", REC_MODEL, CHARSET), ("tiny", TINY_REC_MODEL, TINY_CHARSET)] {
             let rec = RecModel::from_bytes_with_charset(model, charset, None).expect("rec model");
             let t = std::time::Instant::now();
-            let mut results: Vec<Option<RecognitionResult>> =
-                std::iter::repeat_with(|| None).take(crops.len()).collect();
+            let mut results: Vec<Option<RecognitionResult>> = std::iter::repeat_with(|| None)
+                .take(crops.len())
+                .collect();
             for chunk in order.chunks(REC_BATCH) {
                 let refs: Vec<&DynamicImage> = chunk.iter().map(|&i| &crops[i]).collect();
                 if let Ok(rs) = rec.recognize_batch_ref(&refs) {
@@ -651,8 +670,18 @@ mod tests {
                 .flatten()
                 .filter(|r| !r.text.trim().is_empty() && r.confidence >= MIN_CONFIDENCE)
                 .collect();
-            let mean_conf = kept.iter().map(|r| r.confidence).sum::<f32>() / kept.len().max(1) as f32;
-            eprintln!("rec {name}: {}/{} lines in {:?}, mean conf {:.3}", kept.len(), crops.len(), elapsed, mean_conf);
+            let mean_conf = kept
+                .iter()
+                .map(|r| r.confidence)
+                .sum::<f32>()
+                / kept.len().max(1) as f32;
+            eprintln!(
+                "rec {name}: {}/{} lines in {:?}, mean conf {:.3}",
+                kept.len(),
+                crops.len(),
+                elapsed,
+                mean_conf
+            );
             for &i in &widest {
                 if let Some(r) = &results[i] {
                     eprintln!("  [{i}] {:.2} {}", r.confidence, r.text);
@@ -679,7 +708,9 @@ mod tests {
             eprintln!("SKIP {}: CLOWD_OCR_BENCH_IMAGE not set", module_path!());
             return;
         };
-        let img = image::open(&path).expect("CLOWD_OCR_BENCH_IMAGE must decode").to_rgba8();
+        let img = image::open(&path)
+            .expect("CLOWD_OCR_BENCH_IMAGE must decode")
+            .to_rgba8();
         let (w, h) = img.dimensions();
         let mut bgra = img.into_raw();
         for px in bgra.chunks_exact_mut(4) {
@@ -690,7 +721,11 @@ mod tests {
         let _ = recognize(&req, &AtomicBool::new(false)).expect("warmup");
         let t = std::time::Instant::now();
         let outcome = recognize(&req, &AtomicBool::new(false)).expect("bench");
-        eprintln!("recognize(): {:?} ({} lines) — tier choice is in the log above", t.elapsed(), outcome.lines.len());
+        eprintln!(
+            "recognize(): {:?} ({} lines) — tier choice is in the log above",
+            t.elapsed(),
+            outcome.lines.len()
+        );
         for line in outcome.lines.iter().take(4) {
             eprintln!("  {}", line.text);
         }
