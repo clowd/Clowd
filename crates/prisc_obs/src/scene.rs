@@ -83,6 +83,32 @@ impl ObsSceneItem {
             )
         };
     }
+
+    pub fn set_bounds_type(&self, bounds_type: obs_sys::obs_bounds_type) {
+        unsafe { obs_sys::obs_sceneitem_set_bounds_type(self.ptr, bounds_type) };
+    }
+
+    /// `alignment` is an OBS_ALIGN_* bitmask; 0 = centered inside the bounds.
+    pub fn set_bounds_alignment(&self, alignment: u32) {
+        unsafe { obs_sys::obs_sceneitem_set_bounds_alignment(self.ptr, alignment) };
+    }
+
+    /// The bounds box size (px); only meaningful once a bounds type is set.
+    pub fn set_bounds(&self, w: f32, h: f32) {
+        // Same vec2 mirror as set_pos.
+        #[repr(C)]
+        struct Vec2 {
+            x: f32,
+            y: f32,
+        }
+        let bounds = Vec2 { x: w, y: h };
+        unsafe {
+            obs_sys::obs_sceneitem_set_bounds(
+                self.ptr,
+                &bounds as *const Vec2 as *const obs_sys::vec2,
+            )
+        };
+    }
 }
 
 impl Clone for ObsSceneItem {

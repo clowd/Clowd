@@ -60,6 +60,14 @@ pub struct Settings {
     /// devices with hardware volume and on macOS.
     #[serde(default)]
     pub speaker_volume_compensation: bool,
+    /// Webcam (DirectShow) device id recorded as video track 1, exactly as
+    /// printed by `--list-cameras`; empty = no webcam. The `--webcam` CLI flag
+    /// takes precedence and pins the device for the process lifetime. A
+    /// pipeline element rather than a live tunable: applied at build time and
+    /// on pre-start `configure`; ignored (and reported in `ignored_keys`) once
+    /// recording has started.
+    #[serde(default)]
+    pub webcam_device: String,
 }
 
 impl Settings {
@@ -79,6 +87,7 @@ impl Settings {
             speakers: cli.speaker.clone(),
             microphones: cli.microphone.clone(),
             speaker_volume_compensation: cli.speaker_volume_compensation,
+            webcam_device: cli.webcam.clone().unwrap_or_default(),
         }
     }
 
@@ -114,6 +123,15 @@ impl Settings {
                  are supported"
             ));
         }
+        // Webcam capture is DirectShow-based and exists only on Windows: fail
+        // with a clear message instead of at dshow source creation.
+        #[cfg(not(windows))]
+        if !self.webcam_device.is_empty() {
+            return Err(
+                "webcam capture (`webcam_device` / --webcam) is only supported on Windows"
+                    .to_string(),
+            );
+        }
         Ok(())
     }
 }
@@ -141,6 +159,7 @@ mod tests {
         assert!(s.speakers.is_empty());
         assert!(s.microphones.is_empty());
         assert!(!s.speaker_volume_compensation);
+        assert_eq!(s.webcam_device, "");
         assert!(s.validate().is_ok());
     }
 
@@ -161,7 +180,8 @@ mod tests {
                 "hw_accel": true, "low_cpu": false, "cursor": false,
                 "tracker": true, "tracker_color": "0,128,255",
                 "speakers": ["default"], "microphones": ["mic-id"],
-                "speaker_volume_compensation": true
+                "speaker_volume_compensation": true,
+                "webcam_device": "Live Streamer CAM 313:\\\\?\\usb#vid"
             }"#,
         );
         assert_eq!(s.crf, 23);
@@ -172,7 +192,21 @@ mod tests {
         assert_eq!(s.speakers, vec!["default".to_string()]);
         assert_eq!(s.microphones, vec!["mic-id".to_string()]);
         assert!(s.speaker_volume_compensation);
+        assert_eq!(s.webcam_device, "Live Streamer CAM 313:\\\\?\\usb#vid");
+        // A non-empty webcam_device is valid on Windows only (DirectShow).
+        #[cfg(windows)]
         assert!(s.validate().is_ok());
+        #[cfg(not(windows))]
+        assert!(s.validate().is_err());
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn webcam_device_is_rejected_off_windows() {
+        let err = parse(r#"{"webcam_device": "test"}"#).validate().unwrap_err();
+        assert!(err.contains("only supported on Windows"), "{err}");
+        // Empty (= disabled) stays valid everywhere.
+        assert!(parse(r#"{"webcam_device": ""}"#).validate().is_ok());
     }
 
     #[test]

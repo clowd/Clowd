@@ -343,6 +343,8 @@ fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
         // image_source + color_filter: the mouse click tracker (--tracker).
         "image-source",
         "obs-filters",
+        // dshow_input: webcam capture (--webcam / --list-cameras).
+        "win-dshow",
     ];
 
     // GPU-vendor hardware encoders (NVIDIA NVENC, Intel QSV, AMD AMF) exist only

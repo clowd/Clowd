@@ -126,7 +126,12 @@ pub fn plan_region(region: Rect, monitors: &[MonitorInfo]) -> Result<RegionPlan,
 }
 
 /// Single-pass aspect-preserving downscale: `s = min(1, max_w/w, max_h/h)`
-/// (0 caps = off), applied once to both dims, then forced even, min 2.
+/// (0 caps = off), applied once to both dims, then aligned: width to a
+/// multiple of 4 (min 4), height even (min 2). The width alignment mirrors
+/// `obs_reset_video`, which masks `output_width &= ~3` after validating the
+/// size — anything less and the reported dims would disagree with the encoded
+/// frames (and the min is 4, not 2, because `2 & !3 == 0` would fail the
+/// pre-mask validation).
 pub fn compute_output_size(base: (u32, u32), max_w: u32, max_h: u32) -> (u32, u32) {
     let (w, h) = base;
     let mut scale = 1.0f64;
@@ -138,7 +143,7 @@ pub fn compute_output_size(base: (u32, u32), max_w: u32, max_h: u32) -> (u32, u3
     }
     let out_w = (w as f64 * scale) as u32;
     let out_h = (h as f64 * scale) as u32;
-    ((out_w & !1).max(2), (out_h & !1).max(2))
+    ((out_w & !3).max(4), (out_h & !1).max(2))
 }
 
 fn rects_intersect(r: Rect, m: &MonitorInfo) -> bool {
@@ -374,14 +379,17 @@ mod tests {
     }
 
     #[test]
-    fn output_size_even_and_min_two() {
-        // 999/500 scale of (999, 501) -> odd results get forced even.
+    fn output_size_aligned_and_min() {
+        // 500/999 scale of (999, 501) -> results get aligned (w: 4, h: 2).
         let (w, h) = compute_output_size((999, 501), 500, 0);
-        assert_eq!(w % 2, 0);
+        assert_eq!(w % 4, 0);
         assert_eq!(h % 2, 0);
-        assert!(w >= 2 && h >= 2);
-        // Extreme downscale still yields the 2x2 floor.
+        assert!(w >= 4 && h >= 2);
+        // Extreme downscale still yields the 4x2 floor.
         assert_eq!(compute_output_size((10000, 10), 4, 0), (4, 2));
-        assert_eq!(compute_output_size((10000, 10000), 1, 1), (2, 2));
+        assert_eq!(compute_output_size((10000, 10000), 1, 1), (4, 2));
+        // Width ≡ 2 (mod 4) gets masked down exactly like obs_reset_video
+        // would — the reported and encoded widths must agree (e.g. 1366x768).
+        assert_eq!(compute_output_size((1366, 768), 0, 0), (1364, 768));
     }
 }

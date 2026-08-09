@@ -1,3 +1,4 @@
+mod cameras;
 mod cli;
 mod commands;
 mod encoder_config;
@@ -7,6 +8,7 @@ mod region;
 mod settings;
 mod status;
 mod tracker;
+mod webcam;
 
 use clap::Parser;
 
@@ -19,6 +21,13 @@ fn main() {
     // clap itself exits 2 on invalid arguments; mirror that for the §1.1
     // validations it cannot express (including a bad --settings file).
     let cli = cli::Cli::parse();
+
+    // --list-cameras: no recording pipeline — enumerate, print one JSON line,
+    // exit. Never returns.
+    if cli.list_cameras {
+        cameras::run();
+    }
+
     let settings = match cli.validate() {
         Ok(s) => s,
         Err(msg) => {
