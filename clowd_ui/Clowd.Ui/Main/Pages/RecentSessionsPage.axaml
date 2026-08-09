@@ -105,6 +105,33 @@
                 </Button>
             </StackPanel>
         </DataTemplate>
+
+        <!-- one in-flight video render: progress + status + cancel (the same row as GifConversionTemplate) -->
+        <DataTemplate x:Key="VideoRenderTemplate" DataType="services:VideoRender">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <ProgressBar Width="140"
+                             Minimum="0"
+                             Maximum="100"
+                             VerticalAlignment="Center"
+                             Value="{Binding Progress, Mode=OneWay}" />
+                <!-- fixed width, for the same reason as the gif row above -->
+                <TextBlock Width="120"
+                           VerticalAlignment="Center"
+                           Opacity="0.6"
+                           TextTrimming="CharacterEllipsis"
+                           TextWrapping="NoWrap"
+                           Text="{Binding Status}" />
+                <Button Classes="rowActionSmall"
+                        Click="CancelRenderClicked"
+                        ToolTip.Tip="Cancel render"
+                        AutomationProperties.Name="Cancel render">
+                    <Viewbox>
+                        <!-- 26px canvas; sized for the same reason as the play glyph above -->
+                        <Path Width="26" Height="26" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClose}" />
+                    </Viewbox>
+                </Button>
+            </StackPanel>
+        </DataTemplate>
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -198,19 +225,25 @@
                                               ColumnDefinitions="Auto,12,*">
                                             <Grid.ContextMenu>
                                                 <ContextMenu>
-                                                    <!-- a converting gif entry has no usable file yet: everything but Delete
-                                                         (which cancels, see DeleteWithConfirmation) is disabled until it lands. -->
+                                                    <!-- an entry a child process is still writing (a converting gif, a rendering
+                                                         edit) has no usable file yet: everything but Delete (which cancels, see
+                                                         DeleteWithConfirmation) is disabled until it lands — that is IsIdle. -->
                                                     <!-- same order as the row's action bar, so the ⋮ overflow menu (which is
-                                                         generated from those buttons) and this one agree. -->
+                                                         generated from those buttons) and this one agree. "Edit video" is the
+                                                         one exception: it has no button of its own until the video editor
+                                                         window lands, so for now it exists here only. -->
                                                     <MenuItem Header="Copy" Click="CopyItemClicked" IsVisible="{Binding CanCopy}"
-                                                              IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
+                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding IsVideo}"
-                                                              IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
-                                                    <MenuItem Header="Create GIF" Click="CreateGifClicked" IsVisible="{Binding CanCreateGif}" />
+                                                              IsEnabled="{Binding IsIdle}" />
+                                                    <MenuItem Header="Edit video" Click="EditVideoClicked" IsVisible="{Binding ShowEditVideo}"
+                                                              IsEnabled="{Binding IsIdle}" />
+                                                    <MenuItem Header="Create GIF" Click="CreateGifClicked" IsVisible="{Binding CanCreateGif}"
+                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding IsVideo}"
-                                                              IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
+                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Open" Click="OpenItemClicked" IsVisible="{Binding !IsUploadOnly}"
-                                                              IsEnabled="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}" />
+                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Upload" Click="UploadItemClicked" IsVisible="{Binding CanUpload}" />
                                                     <MenuItem Header="Delete" Click="DeleteItemClicked" />
                                                 </ContextMenu>
@@ -261,13 +294,14 @@
                                                      against the full row width, of which it leaves ReservedWidth to the
                                                      name beside it. -->
                                                 <DockPanel LastChildFill="True">
-                                                    <!-- while a gif is being written the row owns no finished file — its only
-                                                         action is the cancel button in the progress row below. -->
+                                                    <!-- while a gif or an edited video is being written the row owns no
+                                                         finished file — its only action is the cancel button in the progress
+                                                         row below. -->
                                                     <controls:CollapsingButtonBar DockPanel.Dock="Right"
                                                                                   Classes="rowActions"
                                                                                   ButtonClasses="rowAction"
                                                                                   ReservedWidth="140"
-                                                                                  IsVisible="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNull}}"
+                                                                                  IsVisible="{Binding IsIdle}"
                                                                                   Margin="8,0,4,0"
                                                                                   Spacing="2"
                                                                                   VerticalAlignment="Center">
@@ -377,6 +411,9 @@
                                                 <ContentControl Content="{Binding ActiveGifConversion}"
                                                                 ContentTemplate="{StaticResource GifConversionTemplate}"
                                                                 IsVisible="{Binding ActiveGifConversion, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                                                <ContentControl Content="{Binding ActiveRender}"
+                                                                ContentTemplate="{StaticResource VideoRenderTemplate}"
+                                                                IsVisible="{Binding ActiveRender, Converter={x:Static ObjectConverters.IsNotNull}}" />
                                             </StackPanel>
                                         </Grid>
                                     </DataTemplate>

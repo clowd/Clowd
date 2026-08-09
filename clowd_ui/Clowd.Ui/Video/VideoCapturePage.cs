@@ -7,6 +7,8 @@ using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
+using Clowd.Video;
+using Clowd.Video.Playback;
 
 namespace Clowd.UI
 {
@@ -46,6 +48,11 @@ namespace Clowd.UI
         // it — or the initial spawn — was running, coalesced into one follow-up configure (§4.2).
         private bool _configuring;
         private bool _configurePending;
+
+        // whether the recorder currently running was built WITH a webcam source. Compared against
+        // what a configure asks for so a rejected configure is only blamed on (and only reverts)
+        // the camera when the camera is the thing that changed.
+        private bool _appliedWebcam;
 
         private ObsCapturer _obs;
         // shutdown of a capturer being replaced (failed configure) — awaited before the
@@ -125,6 +132,7 @@ namespace Clowd.UI
                 // live mutes only — the toolbar itself persists the toggle settings.
                 _toolbar.MicToggled += (s, enabled) => _obs?.SetMicrophoneMute(!enabled);
                 _toolbar.SpeakerToggled += (s, enabled) => _obs?.SetSpeakerMute(!enabled);
+                _toolbar.WebcamToggled += (s, enabled) => OnWebcamToggled(enabled);
                 _toolbar.SetPrimaryText("WAIT…");
                 _toolbar.ShowNear(region);
 
@@ -173,6 +181,8 @@ namespace Clowd.UI
                 // respawn is picked up by the process it starts (hence the flag reset).
                 _configurePending = false;
                 ObsArguments.WriteSettingsFile(_settingsPath, _settings);
+                // the file just written is what this process is about to be built from.
+                _appliedWebcam = IsWebcamCaptured();
 
                 _obs = new ObsCapturer();
                 _obs.CriticalError += OnCriticalError;
@@ -306,18 +316,30 @@ namespace Clowd.UI
 
                 var moveError = await MoveToOutputFolderAsync();
 
-                CreateSession();
+                var session = CreateSession();
 
-                switch (SettingsRoot.Current.Recording.OpenWhenFinished)
+                // A recording with a webcam is only half-finished: the camera was captured as a
+                // separate track and is composited nowhere until the user places it, so the editor
+                // *is* the "open when finished" action for those — it overrides the setting rather
+                // than dropping the user on a Recents row whose thumbnail shows no webcam at all.
+                // Recordings without one keep the existing behavior exactly.
+                if (session != null && session.HasWebcamTrack && session.ShowEditVideo)
                 {
-                    case RecordingFinishAction.RecentsPage:
-                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
-                        break;
-                    case RecordingFinishAction.OutputFolder:
-                        // reveals the saved file in its folder — the same affordance as the
-                        // "Show in folder" item in Recents (WPF: OpenFinishedInExplorer).
-                        ShellHelper.RevealFileInFolder(_savedPath);
-                        break;
+                    VideoEditor.VideoEditorWindow.ShowSession(session);
+                }
+                else
+                {
+                    switch (SettingsRoot.Current.Recording.OpenWhenFinished)
+                    {
+                        case RecordingFinishAction.RecentsPage:
+                            PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
+                            break;
+                        case RecordingFinishAction.OutputFolder:
+                            // reveals the saved file in its folder — the same affordance as the
+                            // "Show in folder" item in Recents (WPF: OpenFinishedInExplorer).
+                            ShellHelper.RevealFileInFolder(_savedPath);
+                            break;
+                    }
                 }
 
                 // this is a tray app with no MainWindow, so with nothing open there is simply
@@ -497,6 +519,9 @@ namespace Clowd.UI
             if (e.PropertyName is nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker))
             {
                 // runtime mutes: the settings page and the toolbar buttons behave identically.
+                // CaptureWebcam deliberately does NOT belong here — there is no such thing as a
+                // muted camera; the recorder has to build or drop the source, so it falls through
+                // to the configure path below like any other pipeline setting.
                 ApplyCaptureMutes();
                 return;
             }
@@ -527,6 +552,11 @@ namespace Clowd.UI
             nameof(SettingsRecording.GifQuality) => false,
             nameof(SettingsRecording.GifMaxWidth) => false,
             nameof(SettingsRecording.GifMaxHeight) => false,
+            // spelled out rather than left to the default: both halves of the webcam decision feed
+            // the settings file's "webcam_device" key, and the recorder rebuilds its pipeline (source,
+            // track-1 encoder, obs_view mix) when it changes — so a change to either must configure.
+            nameof(SettingsRecording.CaptureWebcam) => true,
+            nameof(SettingsRecording.WebcamDeviceId) => true,
             _ => true,
         };
 
@@ -557,6 +587,10 @@ namespace Clowd.UI
                 {
                     _configurePending = false;
                     var obs = _obs;
+
+                    // what this pass is asking the recorder to build, remembered across the await so
+                    // a rejection can be blamed on the webcam only when the webcam is what changed.
+                    var wantedWebcam = IsWebcamCaptured();
 
                     ObsConfigureResult result = null;
                     try
@@ -591,9 +625,24 @@ namespace Clowd.UI
                     {
                         Debug.WriteLine("Recorder did not apply the new settings" +
                             (result == null ? "" : $" (fatal={result.Fatal}): {result.Message}") + "; respawning it.");
+
+                        // A camera the recorder refuses (unplugged, held by another app, or a
+                        // platform that has no webcam support at all) would otherwise be retried by
+                        // the respawn and fail it too, leaving the session with no recorder. Untick
+                        // the box first — that raises PropertyChanged, which the toolbar picks up to
+                        // unlight CAM and this method turns into a follow-up pass the respawn below
+                        // absorbs (InitializeCapturerAsync rewrites the settings file from scratch).
+                        if (wantedWebcam && !_appliedWebcam)
+                        {
+                            _settings.CaptureWebcam = false;
+                            NotifyWebcamRejected(result?.Message);
+                        }
+
                         await RespawnCapturerAsync();
                         return;
                     }
+
+                    _appliedWebcam = wantedWebcam;
 
                     // rebuilt audio sources come back unmuted.
                     ApplyCaptureMutes();
@@ -649,6 +698,49 @@ namespace Clowd.UI
             }
 
             await InitializeCapturerAsync();
+        }
+
+        /// <summary>True when the current settings will actually produce a webcam track: the box
+        /// ticked AND a camera picked, which is exactly the condition
+        /// <see cref="ObsArguments.WriteSettingsFile"/> uses to emit a non-empty
+        /// <c>webcam_device</c>.</summary>
+        private bool IsWebcamCaptured()
+            => _settings != null && _settings.CaptureWebcam && !String.IsNullOrEmpty(_settings.WebcamDeviceId);
+
+        /// <summary>
+        /// The CAM button was pressed. The toolbar has already written
+        /// <see cref="SettingsRecording.CaptureWebcam"/>, and <see cref="OnRecordingSettingChanged"/>
+        /// has already turned that into a <c>configure</c> — a webcam is a pipeline element, not a
+        /// mute, so there is nothing to apply live here. This only exists to say so in the log when
+        /// the click lands in a phase the recorder can no longer act on (a hotkey starting the
+        /// recording between the press and this callback).
+        /// </summary>
+        private void OnWebcamToggled(bool enabled)
+        {
+            if (IsRecording || _starting)
+                Debug.WriteLine($"Webcam toggled ({enabled}) after the recording started; it applies to the next recording.");
+        }
+
+        /// <summary>
+        /// Tells the user their camera did not make it into the pipeline, after the toggle has
+        /// already been reverted. Prefers a toast, but during the WAIT phase the only visible
+        /// windows are usually this session's own toolbar and border — a 50px transparent strip is
+        /// no place for a notification — so those are skipped and a notice takes over.
+        /// </summary>
+        private void NotifyWebcamRejected(string recorderMessage)
+        {
+            var message = "The webcam could not be added to this recording, so it has been turned off." +
+                (String.IsNullOrEmpty(recorderMessage) ? "" : Environment.NewLine + Environment.NewLine + recorderMessage);
+
+            var host = Toast.GetActiveOrMainWindow();
+            if (host != null && !ReferenceEquals(host, _toolbar) && !ReferenceEquals(host, _border))
+            {
+                Toast.Show(host, "Webcam capture unavailable — turned off");
+                Debug.WriteLine(message);
+                return;
+            }
+
+            _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning, message, "Webcam capture unavailable");
         }
 
         /// <summary>Applies the CaptureSpeaker/CaptureMicrophone toggles as live mutes — the
@@ -789,19 +881,78 @@ namespace Clowd.UI
 
         /// <summary>Creates the recents session for the finished (or partially recorded)
         /// video (§4.5). The poster frame (cropped.png) was written by the capture overlay at
-        /// region-confirm time (§4.1).</summary>
-        private void CreateSession()
+        /// region-confirm time (§4.1). Returns the session so the caller can act on it (the
+        /// webcam auto-open in <see cref="FinishRecording"/>).</summary>
+        private SessionInfo CreateSession()
         {
             var session = SessionManager.Current.CreateSessionInDirectory(_sessionDir);
             session.Name = "Recording";
             session.CreatedUtc = DateTime.UtcNow;
-            session.ContentKind = "video"; // IsUploadOnly=true → no editor affordance (correct)
+            session.ContentKind = "video"; // IsUploadOnly=true → no *image* editor affordance (correct); the video editor is offered through CanEditVideo
             // usually outside the session dir now (issue #50), so the recording survives the
             // session being deleted here or expiring out of Recents — the user's file is theirs.
             session.VideoPath = _savedPath;
             session.DurationMs = (long)_lastStatusElapsed.TotalMilliseconds;
             session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
             session.OriginalBounds = _region;
+            session.WebcamTrack = ResolveWebcamTrack();
+            return session;
+        }
+
+        /// <summary>
+        /// The webcam track this recording ended up with, or null if it has none. Normally read
+        /// straight from the recorder's own <c>tracks</c> report (started_recording, refreshed on
+        /// stopped_recording); a recorder too old to send one falls back to probing the finished
+        /// file, which is the only way an existing recording can be classified at all. The probe is
+        /// deliberately best-effort: a missing FFmpeg only costs the auto-open, never the session.
+        /// </summary>
+        private SessionVideoTrack ResolveWebcamTrack()
+        {
+            try
+            {
+                var reported = _obs?.LastTracks;
+                if (reported != null)
+                {
+                    return reported.Webcam == null
+                        ? null
+                        : new SessionVideoTrack
+                        {
+                            Index = reported.Webcam.Index,
+                            Width = reported.Webcam.Width,
+                            Height = reported.Webcam.Height,
+                        };
+                }
+
+                if (!OperatingSystem.IsWindows() || !FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+                    return null;
+
+                var info = MediaProbe.Probe(_savedPath);
+                // stream 0 is the screen, stream 1 (when present) is the webcam — the order the
+                // recorder writes the tracks in, and the order the editor reads them back in.
+                if (info?.VideoStreams == null || info.VideoStreams.Count < 2)
+                    return null;
+
+                var webcam = info.VideoStreams[1];
+                return new SessionVideoTrack
+                {
+                    Index = webcam.StreamIndex,
+                    Width = webcam.Width,
+                    Height = webcam.Height,
+                };
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Could not determine the recording's webcam track: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Production layout: the FFmpeg DLLs sit next to obs-express; dev machines set
+        /// CLOWD_FFMPEG_PATH, which FFmpegLoader checks before consulting this.</summary>
+        private static string ResolveFFmpegDirectory()
+        {
+            var obs = ObsBinaryLocator.Resolve();
+            return obs != null ? Path.GetDirectoryName(obs) : null;
         }
 
         /// <summary>

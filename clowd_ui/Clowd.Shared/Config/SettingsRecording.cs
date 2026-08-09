@@ -24,6 +24,19 @@ namespace Clowd.Config
     }
 
     /// <summary>
+    /// Marks a string settings property as a camera device id so the settings factory renders it
+    /// as a device dropdown (fed by CameraDeviceManager) instead of a free-text box. The stored
+    /// value stays a plain string (a platform device id, or empty for "no camera"), so persistence
+    /// and the obs-express settings mapping are unchanged. Unlike audio there is no device *type*
+    /// to distinguish and no "default" pseudo-device: a webcam is only ever captured when the user
+    /// has picked one.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property)]
+    public class CameraDeviceSelectorAttribute : Attribute
+    {
+    }
+
+    /// <summary>
     /// Hides a settings row from the generated settings UI on macOS. The property still persists
     /// and is still applied where the platform honors it — used for the speaker device picker,
     /// which selects nothing on macOS: ScreenCaptureKit captures the whole system mix, so there
@@ -234,6 +247,25 @@ namespace Clowd.Config
             set => Set(ref _microphoneDeviceId, value);
         }
 
+        [Category("Webcam")]
+        [DisplayName("Capture webcam")]
+        [Description("Record a webcam alongside the screen as a second video track. Nothing is composited into the recording itself — the track is only shown once you open the recording in the video editor, where the overlay can be positioned, shaped or dropped entirely.")]
+        public bool CaptureWebcam
+        {
+            get => _captureWebcam;
+            set => Set(ref _captureWebcam, value);
+        }
+
+        [Category("Webcam")]
+        [DisplayName("Webcam device")]
+        [Description("Camera to record. Empty means no camera, which is also what an unplugged one falls back to.")]
+        [CameraDeviceSelector]
+        public string WebcamDeviceId
+        {
+            get => _webcamDeviceId;
+            set => Set(ref _webcamDeviceId, value);
+        }
+
         [Category("GIF")]
         [DisplayName("Quality")]
         [Description("Quality preset used when converting a recording to a GIF — higher quality means a higher frame rate and finer dithering, and a much larger file")]
@@ -294,6 +326,8 @@ namespace Clowd.Config
         private bool _speakerVolumeCompensation = true;
         private bool _captureMicrophone = false;
         private string _microphoneDeviceId = "default";
+        private bool _captureWebcam = false;
+        private string _webcamDeviceId = "";
         private string _outputDirectory = DefaultOutputDirectory;
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private RecordingFinishAction _openWhenFinished = RecordingFinishAction.RecentsPage;

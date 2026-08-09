@@ -39,12 +39,19 @@ namespace Clowd.UI
         public event EventHandler<bool> MicToggled;
         public event EventHandler<bool> SpeakerToggled;
 
+        /// <summary>Raised when the CAM button flips <see cref="SettingsRecording.CaptureWebcam"/>
+        /// (already written by the time this fires, like the mic/speaker toggles). Never raised
+        /// while recording — the button is disabled then — and never raised for a click that only
+        /// opened the settings page because no camera has been picked yet.</summary>
+        public event EventHandler<bool> WebcamToggled;
+
         private readonly DispatcherTimer _saveDebounce;
         private readonly SettingsRecording _settings;
 
         private ScreenRect _region;
         private bool _micEnabled;
         private bool _spkEnabled;
+        private bool _camEnabled;
         private bool _hasStatusText;
         private bool _recording;
         private bool _paused;
@@ -94,8 +101,10 @@ namespace Clowd.UI
             _settings = SettingsRoot.Current.Recording;
             _micEnabled = _settings.CaptureMicrophone;
             _spkEnabled = _settings.CaptureSpeaker;
+            _camEnabled = IsWebcamCaptured(_settings);
             BtnMic.ShowAlternateIcon = _micEnabled;
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
+            BtnWebcam.ShowAlternateIcon = _camEnabled;
 
             (_micBar, _micFill) = BuildMeterBar();
             (_spkBar, _spkFill) = BuildMeterBar();
@@ -122,11 +131,13 @@ namespace Clowd.UI
         }
 
         /// <summary>Modes the strip for a rolling recording: the primary button becomes
-        /// PAUSE (its pre-start pulse stops) and the trailing CANCEL button becomes FINISH —
-        /// a rolling recording can be stopped and saved, but no longer discarded from here.</summary>
+        /// PAUSE (its pre-start pulse stops), the trailing CANCEL button becomes FINISH —
+        /// a rolling recording can be stopped and saved, but no longer discarded from here —
+        /// and the CAM toggle locks (see <see cref="UpdateWebcamEnabled"/>).</summary>
         public void SetRecordingState(bool recording)
         {
             _recording = recording;
+            UpdateWebcamEnabled();
 
             if (recording)
             {
@@ -231,20 +242,33 @@ namespace Clowd.UI
             Position = new PixelPoint(screen.Bounds.Right - 1, screen.Bounds.Bottom - 1);
         }
 
-        /// <summary>Mirrors settings edited elsewhere (the recording settings page) back into the
-        /// toolbar: the capture toggles drive the MIC/SPK glyphs and the level-bar visibility.</summary>
+        /// <summary>Mirrors settings edited elsewhere (the recording settings page, or the page
+        /// reverting a webcam the recorder refused) back into the toolbar: the capture toggles
+        /// drive the MIC/SPK/CAM glyphs and the level-bar visibility.</summary>
         private void OnSettingsChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName is not (null
-                or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)))
+                or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)
+                or nameof(SettingsRecording.CaptureWebcam) or nameof(SettingsRecording.WebcamDeviceId)))
                 return;
 
             _micEnabled = _settings.CaptureMicrophone;
             _spkEnabled = _settings.CaptureSpeaker;
+            // the CAM glyph tracks whether a webcam will actually be recorded, which needs a
+            // device as well as the tick — picking one on the settings page is what lights the
+            // button up after a click that could only send the user there.
+            _camEnabled = IsWebcamCaptured(_settings);
             BtnMic.ShowAlternateIcon = _micEnabled;
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
+            BtnWebcam.ShowAlternateIcon = _camEnabled;
             UpdateMeterVisibility();
         }
+
+        /// <summary>A webcam is only captured when the box is ticked AND a camera has been chosen
+        /// — <see cref="ObsArguments.WriteSettingsFile"/> writes an empty device id (i.e. no
+        /// webcam source at all) for either half being missing, so the button says the same.</summary>
+        private static bool IsWebcamCaptured(SettingsRecording settings)
+            => settings.CaptureWebcam && !String.IsNullOrEmpty(settings.WebcamDeviceId);
 
         protected override void OnClosed(EventArgs e)
         {
@@ -523,6 +547,45 @@ namespace Clowd.UI
             QueueSettingsSave();
             UpdateMeterVisibility();
             SpeakerToggled?.Invoke(this, _spkEnabled);
+        }
+
+        /// <summary>
+        /// CAM toggle. Unlike MIC/SPK this is not a mute: the recorder builds (or drops) a whole
+        /// webcam source and a second encoder for it, which it will only do while it is still
+        /// waiting — hence <see cref="UpdateWebcamEnabled"/> locking the button once frames flow.
+        /// Turning it on with no camera chosen would silently record nothing (the settings file
+        /// writes an empty device id), so that click opens the recording settings page instead of
+        /// ticking a box with no effect.
+        /// </summary>
+        private void WebcamClicked(object sender, RoutedEventArgs e)
+        {
+            if (_recording)
+                return;
+
+            if (!_camEnabled && String.IsNullOrEmpty(_settings.WebcamDeviceId))
+            {
+                // no camera picked yet: send the user to the picker rather than tick a dead box.
+                // The page's own handler owns the navigation (the toolbar never touches PageManager).
+                SettingsClicked?.Invoke(this, EventArgs.Empty);
+                return;
+            }
+
+            _camEnabled = !_camEnabled;
+            BtnWebcam.ShowAlternateIcon = _camEnabled;
+            _settings.CaptureWebcam = _camEnabled;
+            QueueSettingsSave();
+            WebcamToggled?.Invoke(this, _camEnabled);
+        }
+
+        /// <summary>The recorder can only add or remove the webcam source (and its track-1 encoder)
+        /// before recording starts — there is no live equivalent of the audio mutes — so the button
+        /// is disabled for the duration and says why.</summary>
+        private void UpdateWebcamEnabled()
+        {
+            BtnWebcam.IsEnabled = !_recording;
+            ToolTip.SetTip(BtnWebcam, _recording
+                ? "The webcam can't be turned on or off once recording has started"
+                : "Capture webcam as a second track (position it later in the video editor)");
         }
 
         // -- audio level meters (visible only while that source is enabled, WPF parity) --
