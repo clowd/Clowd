@@ -55,6 +55,12 @@ namespace Clowd.UI
         /// <summary>Windows only; the recorder ignores it on macOS.</summary>
         [JsonPropertyName("speaker_volume_compensation")]
         public bool SpeakerVolumeCompensation { get; set; }
+
+        /// <summary>Camera device id to record as a second video track, or "" for none. Unlike the
+        /// audio devices this is not listed unconditionally: a webcam source is a pipeline element,
+        /// not a runtime mute, so "capture off" has to be an empty id.</summary>
+        [JsonPropertyName("webcam_device")]
+        public string WebcamDevice { get; set; }
     }
 
     /// <summary>
@@ -111,6 +117,12 @@ namespace Clowd.UI
                 Speakers = DeviceList(settings.SpeakerDeviceId),
                 Microphones = DeviceList(settings.MicrophoneDeviceId),
                 SpeakerVolumeCompensation = settings.SpeakerVolumeCompensation,
+                // …and the camera, which is the opposite case: the source has to exist in the
+                // pipeline from the start or not at all, so an unticked box (or no device picked)
+                // is written as "" rather than a device the recorder would open and then mute.
+                WebcamDevice = settings.CaptureWebcam && !String.IsNullOrEmpty(settings.WebcamDeviceId)
+                    ? settings.WebcamDeviceId
+                    : "",
             };
 
             File.WriteAllText(path, JsonSerializer.Serialize(model, ClowdUiJsonContext.Default.ObsSettingsJson));
