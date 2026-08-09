@@ -1,0 +1,43 @@
+<ui:SystemThemedWindow
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:Clowd.UI"
+    x:Class="Clowd.UI.VideoEditor.VideoSpikeWindow"
+    Title="Clowd Video Spike"
+    Width="1280" Height="800">
+
+    <Grid RowDefinitions="*,Auto">
+
+        <!-- presenters: screen track fills; webcam track floats bottom-right when present -->
+        <Panel Grid.Row="0" Background="#111111">
+            <Image Name="ScreenImage" Stretch="Uniform" StretchDirection="Both" />
+            <Border Name="WebcamBorder" IsVisible="False"
+                    HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                    Margin="16" Width="320" Height="240"
+                    BorderBrush="#80FFFFFF" BorderThickness="1" Background="#22000000">
+                <Image Name="WebcamImage" Stretch="Uniform" />
+            </Border>
+
+            <!-- stats overlay -->
+            <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
+                    Background="#B0000000" CornerRadius="6" Padding="10,8">
+                <TextBlock Name="StatsText" FontFamily="Consolas,Cascadia Mono,monospace"
+                           FontSize="12" Foreground="#E0FFFFFF" Text="opening…" />
+            </Border>
+        </Panel>
+
+        <!-- transport: space = play/pause, click/drag the bar to seek -->
+        <DockPanel Grid.Row="1" Margin="12,8" LastChildFill="True">
+            <TextBlock Name="TimeText" DockPanel.Dock="Right" Margin="12,0,0,0"
+                       VerticalAlignment="Center" FontFamily="Consolas,Cascadia Mono,monospace"
+                       FontSize="12" Text="0:00 / 0:00" />
+            <Border Name="ProgressTrack" Height="18" CornerRadius="4"
+                    Background="#33888888" VerticalAlignment="Center" Cursor="Hand">
+                <Border Name="ProgressFill" HorizontalAlignment="Left" CornerRadius="4"
+                        Background="#FF3B82F6" Width="0" />
+            </Border>
+        </DockPanel>
+
+    </Grid>
+
+</ui:SystemThemedWindow>

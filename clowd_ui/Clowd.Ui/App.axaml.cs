@@ -68,6 +68,18 @@ namespace Clowd
         {
             try
             {
+                // hidden spike harness (`--video-spike file.mp4`): a bare playback window used to
+                // measure the video engine. Must run BEFORE single-instance forwarding — a spike
+                // process must never forward its args to (or be swallowed by) a resident Clowd.
+                if (UI.VideoEditor.VideoSpikeWindow.TryHandleArgs(args))
+                    return;
+
+                // hidden editor harness (`--video-edit file.mp4`): opens the video editor on an
+                // arbitrary file with no session (persistence disabled, render output next to the
+                // file). Used by e2e testing; same single-instance rules as the spike above.
+                if (UI.VideoEditor.VideoEditorWindow.TryHandleArgs(args))
+                    return;
+
                 await SetupMutex(args);
                 bool firstRun = await SetupSettings() || Program.IsVelopackFirstRun;
 
