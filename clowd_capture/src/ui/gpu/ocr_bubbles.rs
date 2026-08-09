@@ -121,7 +121,9 @@ const PRERASTER_LOOKAHEAD_SECS: f32 = 0.3;
 /// (size, chunk) to shape+stage. Steps sequence the whole ladder, chunk
 /// by chunk, one step per frame. Pure so the schedule is testable.
 fn warmup_step(step: usize) -> Option<(f32, &'static str)> {
-    let chunks_per_size = WARMUP_CHARS.len().div_ceil(WARMUP_CHUNK_BYTES);
+    let chunks_per_size = WARMUP_CHARS
+        .len()
+        .div_ceil(WARMUP_CHUNK_BYTES);
     let i = step.checked_sub(1)?;
     let size = *WARMUP_SIZES.get(i / chunks_per_size)?;
     let start = (i % chunks_per_size) * WARMUP_CHUNK_BYTES;
@@ -132,7 +134,10 @@ fn warmup_step(step: usize) -> Option<(f32, &'static str)> {
 /// Total steps including the font-DB step — `warm_step` past this means
 /// the warmup is finished for the process lifetime.
 fn warmup_total_steps() -> usize {
-    1 + WARMUP_SIZES.len() * WARMUP_CHARS.len().div_ceil(WARMUP_CHUNK_BYTES)
+    1 + WARMUP_SIZES.len()
+        * WARMUP_CHARS
+            .len()
+            .div_ceil(WARMUP_CHUNK_BYTES)
 }
 
 /// One laid-out bubble, cached for the lifetime of the outcome (shaping is
@@ -230,7 +235,13 @@ impl OcrBubblesRenderer {
     /// function of elapsed time), which is what lets `UiRenderer` skip the
     /// per-frame glyphon re-prepare of the whole page and re-issue its
     /// retained vertices instead.
-    pub fn prepare(&mut self, ts: &mut TextStack, state: &UiSharedState, this_monitor: &UiMonitor, bubble_rects: &mut Vec<RectInstance>) -> bool {
+    pub fn prepare(
+        &mut self,
+        ts: &mut TextStack,
+        state: &UiSharedState,
+        this_monitor: &UiMonitor,
+        bubble_rects: &mut Vec<RectInstance>,
+    ) -> bool {
         self.drawn.clear();
         self.frames_seen = self.frames_seen.saturating_add(1);
 
@@ -290,11 +301,7 @@ impl OcrBubblesRenderer {
             // `estimated_bubble_bounds`), so a partial overlap always
             // shapes. The key stays unset: monitors never move within a
             // cycle, so this cheap check simply repeats per frame.
-            let est = estimated_bubble_bounds(
-                &outcome.lines,
-                [rf.left(), rf.top(), rf.right(), rf.bottom()],
-                dpi,
-            );
+            let est = estimated_bubble_bounds(&outcome.lines, [rf.left(), rf.top(), rf.right(), rf.bottom()], dpi);
             if !(est[2] > mon_f.left() && est[0] < mon_f.right() && est[3] > mon_f.top() && est[1] < mon_f.bottom()) {
                 self.entries.clear();
                 return at_rest(anchor.elapsed().as_secs_f32());
@@ -442,20 +449,24 @@ impl OcrBubblesRenderer {
         // positioned inside the viewport so glyphon actually rasterizes
         // it. One frame on stage is all a chunk needs — the atlas keeps
         // the rasterization.
-        out.extend(self.warm_buffer.iter().map(|buffer| TextArea {
-            buffer,
-            left: 0.0,
-            top: 0.0,
-            scale: 1.0,
-            bounds: TextBounds {
-                left: 0,
-                top: 0,
-                right: self.warm_bounds[0],
-                bottom: self.warm_bounds[1],
-            },
-            default_color: Color::rgba(255, 255, 255, 0),
-            custom_glyphs: &[],
-        }));
+        out.extend(
+            self.warm_buffer
+                .iter()
+                .map(|buffer| TextArea {
+                    buffer,
+                    left: 0.0,
+                    top: 0.0,
+                    scale: 1.0,
+                    bounds: TextBounds {
+                        left: 0,
+                        top: 0,
+                        right: self.warm_bounds[0],
+                        bottom: self.warm_bounds[1],
+                    },
+                    default_color: Color::rgba(255, 255, 255, 0),
+                    custom_glyphs: &[],
+                }),
+        );
         out.extend(self.drawn.iter().map(|d| {
             let a = (TOOLTIP_TEXT_COLOR[3] as f32 * d.alpha)
                 .round()
@@ -507,7 +518,9 @@ fn estimated_bubble_bounds(lines: &[crate::ocr::OcrLine], region: [f32; 4], dpi:
     for line in lines {
         let font_px = bubble_font_px(line.rect.height());
         let pad_h = bubble_pad_h(font_px);
-        let pad_v = (HINT_PADDING_V * font_px / HINT_FONT_PX).floor().max(2.0);
+        let pad_v = (HINT_PADDING_V * font_px / HINT_FONT_PX)
+            .floor()
+            .max(2.0);
         let bubble_h = pad_v * 2.0 + font_px * 1.2;
         let est_w = pad_h * 2.0 + line.text.chars().count() as f32 * font_px * 1.5;
         let left = bubble_x(line.rect.left() - pad_h, est_w, region[0], region[2]);
@@ -614,7 +627,9 @@ fn bubble_pad_h(font_px: f32) -> f32 {
 /// earlier capture) actually share atlas entries with this bubble —
 /// glyph rasterizations are keyed by exact size.
 fn bubble_font_px(line_h: f32) -> f32 {
-    (line_h * FONT_FRACTION).floor().max(MIN_FONT_PX)
+    (line_h * FONT_FRACTION)
+        .floor()
+        .max(MIN_FONT_PX)
 }
 
 /// How much the font must shrink for the bubble to fit the region width:
@@ -659,10 +674,7 @@ mod tests {
     #[test]
     fn warmup_ladder_covers_the_dense_sizes() {
         for px in (MIN_FONT_PX as u32)..=16 {
-            assert!(
-                WARMUP_SIZES.contains(&(px as f32)),
-                "warmup ladder is missing {px}px"
-            );
+            assert!(WARMUP_SIZES.contains(&(px as f32)), "warmup ladder is missing {px}px");
         }
         // And the ladder itself only contains whole pixels — fractional
         // entries could never match a bubble_font_px result.
@@ -687,7 +699,9 @@ mod tests {
             let (size, chunk) = warmup_step(step).expect("in-range step");
             assert!(chunk.len() <= WARMUP_CHUNK_BYTES, "step {step} over budget");
             assert!(!chunk.is_empty(), "step {step} is a no-op");
-            seen.entry(size as u32).or_default().push_str(chunk);
+            seen.entry(size as u32)
+                .or_default()
+                .push_str(chunk);
         }
         assert_eq!(seen.len(), WARMUP_SIZES.len(), "sizes missing from schedule");
         for (size, chars) in seen {
