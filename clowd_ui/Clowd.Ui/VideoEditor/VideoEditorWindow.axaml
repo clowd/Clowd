@@ -1,0 +1,353 @@
+<local:SystemThemedWindow
+    x:Class="Clowd.UI.VideoEditor.VideoEditorWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:ve="clr-namespace:Clowd.UI.VideoEditor"
+    Title="Edit Video - Clowd"
+    Width="1100"
+    Height="720"
+    MinWidth="640"
+    MinHeight="420"
+    FontSize="13"
+    Foreground="White"
+    UseLayoutRounding="True"
+    WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <!--  transport icons not in VectorIcons: frame-step (bar + triangle)  -->
+        <StreamGeometry x:Key="IconFrameNext">M2,2 L2,14 L11,8 Z M12,2 L14,2 L14,14 L12,14 Z</StreamGeometry>
+        <StreamGeometry x:Key="IconFramePrev">M14,2 L14,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
+    </Window.Resources>
+
+    <Grid x:Name="rootGrid" Background="#535353">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <controls:DockAndWrapPanel
+            x:Name="TopBar"
+            HorizontalAlignment="Stretch"
+            ItemHeight="30"
+            Orientation="Horizontal">
+            <controls:DockAndWrapPanel.Styles>
+                <Style Selector="StackPanel">
+                    <Setter Property="Margin" Value="4,0,4,0" />
+                    <Setter Property="Height" Value="30" />
+                    <Setter Property="Orientation" Value="Horizontal" />
+                </Style>
+            </controls:DockAndWrapPanel.Styles>
+
+            <StackPanel>
+                <TextBlock
+                    x:Name="txtSessionName"
+                    VerticalAlignment="Center"
+                    FontWeight="Bold" />
+                <TextBlock
+                    x:Name="txtMediaSummary"
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Center"
+                    Foreground="#CCCCCC" />
+            </StackPanel>
+
+            <controls:ToolButton
+                x:Name="btnRender"
+                Padding="6"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{Binding CommandRender}"
+                IconPath="{StaticResource IconVideoMP4}"
+                ToolTip.Tip="Render edited video" />
+
+            <Rectangle
+                Width="1"
+                Height="20"
+                Margin="6,0"
+                VerticalAlignment="Center"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Fill="#666666" />
+
+            <controls:ToolButton
+                x:Name="btnWebcamSidebar"
+                Padding="6"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
+                IconPath="{StaticResource IconVideo}"
+                IsChecked="{Binding SidebarVisible, Mode=TwoWay}"
+                ToolTip.Tip="Webcam overlay panel" />
+
+            <controls:ToolButton
+                Padding="6"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
+                IconPath="{StaticResource IconPinned}"
+                IsChecked="{Binding Topmost, Mode=TwoWay}"
+                ToolTip.Tip="Always on top" />
+
+        </controls:DockAndWrapPanel>
+
+        <Grid x:Name="contentGrid" Grid.Row="1">
+            <Grid.Styles>
+                <Style Selector="GridSplitter#sidebarSplitter">
+                    <Setter Property="Background" Value="#666666" />
+                </Style>
+                <Style Selector="GridSplitter#sidebarSplitter:pointerover">
+                    <Setter Property="Background" Value="#808080" />
+                </Style>
+            </Grid.Styles>
+
+            <!--  Column 2 is the resizable webcam sidebar (reached in code as SidebarColumn); its
+                  pixel Width/MinWidth are driven by ApplySidebarVisible, MaxWidth bounds the drag.  -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition
+                    Width="230"
+                    MinWidth="140"
+                    MaxWidth="600" />
+            </Grid.ColumnDefinitions>
+
+            <Border
+                Grid.Column="0"
+                Background="#1e1e1e"
+                ClipToBounds="True">
+                <Panel>
+                    <ve:VideoPreviewControl x:Name="preview" />
+                    <Border
+                        x:Name="statusOverlay"
+                        Padding="14,10"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="#B0000000"
+                        CornerRadius="6"
+                        IsVisible="False">
+                        <TextBlock
+                            x:Name="txtStatus"
+                            MaxWidth="420"
+                            Foreground="#E0FFFFFF"
+                            TextWrapping="Wrap" />
+                    </Border>
+                </Panel>
+            </Border>
+
+            <GridSplitter
+                x:Name="sidebarSplitter"
+                Grid.Column="1"
+                Width="5"
+                DragCompleted="sidebarSplitter_DragCompleted"
+                IsVisible="False"
+                ResizeBehavior="PreviousAndNext"
+                ResizeDirection="Columns" />
+
+            <Border
+                x:Name="sidebarBorder"
+                Grid.Column="2"
+                Background="#454545"
+                BorderBrush="#666666"
+                BorderThickness="1,0,0,0"
+                IsVisible="False">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border
+                        Grid.Row="0"
+                        Padding="10,6"
+                        Background="#3d3d3d">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="WEBCAM" />
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="10" Spacing="10">
+
+                            <CheckBox Content="Show webcam overlay" IsChecked="{Binding Document.Webcam.Enabled, Mode=TwoWay}" />
+
+                            <StackPanel x:Name="webcamOptions" Spacing="10">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Foreground="#CCCCCC" Text="Shape" />
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <RadioButton
+                                            x:Name="radioCircle"
+                                            Content="Circle"
+                                            GroupName="WebcamShape" />
+                                        <RadioButton
+                                            x:Name="radioRounded"
+                                            Content="Rounded"
+                                            GroupName="WebcamShape" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <StackPanel
+                                    x:Name="rowCornerRadius"
+                                    Orientation="Horizontal"
+                                    Spacing="6">
+                                    <TextBlock
+                                        Width="60"
+                                        VerticalAlignment="Center"
+                                        Foreground="#CCCCCC"
+                                        Text="Corners" />
+                                    <controls:SpinnerTextBox
+                                        DisplayScale="100"
+                                        Max="0.5"
+                                        Min="0"
+                                        SpinAmount="0.05"
+                                        Suffix="%"
+                                        Value="{Binding Document.Webcam.CornerRadius, Mode=TwoWay}" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock
+                                        Width="60"
+                                        VerticalAlignment="Center"
+                                        Foreground="#CCCCCC"
+                                        Text="Size" />
+                                    <controls:SpinnerTextBox
+                                        DisplayScale="100"
+                                        Max="1"
+                                        Min="0.02"
+                                        SpinAmount="0.01"
+                                        Suffix="%"
+                                        Value="{Binding Document.Webcam.Width, Mode=TwoWay}" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock
+                                        Width="60"
+                                        VerticalAlignment="Center"
+                                        Foreground="#CCCCCC"
+                                        Text="Center X" />
+                                    <controls:SpinnerTextBox
+                                        DisplayScale="100"
+                                        Max="1"
+                                        Min="0"
+                                        SpinAmount="0.01"
+                                        Suffix="%"
+                                        Value="{Binding Document.Webcam.CenterX, Mode=TwoWay}" />
+                                </StackPanel>
+
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock
+                                        Width="60"
+                                        VerticalAlignment="Center"
+                                        Foreground="#CCCCCC"
+                                        Text="Center Y" />
+                                    <controls:SpinnerTextBox
+                                        DisplayScale="100"
+                                        Max="1"
+                                        Min="0"
+                                        SpinAmount="0.01"
+                                        Suffix="%"
+                                        Value="{Binding Document.Webcam.CenterY, Mode=TwoWay}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+
+        </Grid>
+
+        <!--  transport bar  -->
+        <Border
+            Grid.Row="2"
+            Background="#454545"
+            BorderBrush="#666666"
+            BorderThickness="0,1,0,0">
+            <DockPanel
+                Height="30"
+                Margin="8,4"
+                LastChildFill="True">
+
+                <StackPanel
+                    DockPanel.Dock="Left"
+                    Orientation="Horizontal"
+                    Spacing="2">
+                    <controls:ToolButton
+                        x:Name="btnStepBack"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandStepBack}"
+                        IconPath="{StaticResource IconFramePrev}"
+                        ToolTip.Tip="Previous frame (Left)" />
+                    <controls:ToolButton
+                        x:Name="btnPlayPause"
+                        Width="30"
+                        Height="30"
+                        Padding="7"
+                        Command="{Binding CommandPlayPause}"
+                        IconPath="{StaticResource IconPlay}"
+                        ToolTip.Tip="Play (Space)" />
+                    <controls:ToolButton
+                        x:Name="btnStepForward"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandStepForward}"
+                        IconPath="{StaticResource IconFrameNext}"
+                        ToolTip.Tip="Next frame (Right)" />
+
+                    <TextBlock
+                        x:Name="txtPosition"
+                        Margin="10,0"
+                        VerticalAlignment="Center"
+                        FontFamily="Consolas,Cascadia Mono,monospace"
+                        Text="00:00.0 / 00:00.0" />
+
+                    <controls:ToolButton
+                        x:Name="btnAddCut"
+                        Width="30"
+                        Height="30"
+                        Padding="7"
+                        Command="{Binding CommandAddCut}"
+                        IconPath="{StaticResource IconAdd}"
+                        ToolTip.Tip="Add cut at playhead (Ctrl+K)" />
+                </StackPanel>
+
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="4">
+                    <Path
+                        Width="16"
+                        Height="16"
+                        VerticalAlignment="Center"
+                        Data="{StaticResource IconSpeakerEnabled}"
+                        Fill="#CCCCCC"
+                        Stretch="Uniform" />
+                    <Slider
+                        x:Name="volumeSlider"
+                        Width="100"
+                        VerticalAlignment="Center"
+                        Maximum="1"
+                        Minimum="0" />
+                </StackPanel>
+
+                <Panel />
+            </DockPanel>
+        </Border>
+
+        <!--  timeline  -->
+        <Border
+            Grid.Row="3"
+            Background="#3a3a3a"
+            BorderBrush="#666666"
+            BorderThickness="0,1,0,0">
+            <ve:TimelineControl
+                x:Name="timeline"
+                Height="72"
+                Margin="8,4" />
+        </Border>
+
+    </Grid>
+</local:SystemThemedWindow>
