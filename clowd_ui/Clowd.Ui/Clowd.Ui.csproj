@@ -34,6 +34,7 @@
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
+    <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
