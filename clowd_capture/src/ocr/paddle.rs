@@ -3,44 +3,60 @@
 //! runs on the CPU, and recognition covers Chinese/Japanese/Latin scripts
 //! without any OS engine or language pack.
 //!
-//! The pipeline is run manually (det → sort/cap → per-region rec) rather
+//! The pipeline is run manually (det → sort/cap → batched rec) rather
 //! than through `OcrEngine::recognize`, for three reasons the engine's
 //! all-in-one path cannot deliver:
 //!
-//! * **The dense-window cliff.** Recognition cost is ~3.7 ms + ~22 ms per
-//!   1000 px of tensor width PER LINE (tensor width = aspect × 48), fully
-//!   serialized behind a global mutex in the MNN wrapper and immune to
-//!   thread count (measured: 4→24 threads moved a 176-line image from
-//!   5.45 s to 5.20 s). A text-dense terminal window therefore took tens
-//!   of seconds and read as hung. Running det ourselves lets us PREDICT
-//!   that cost from the box geometry and drop to the tiny recognition
-//!   model when it blows the budget — measured 3.5× faster (4.8 s → 1.4 s
-//!   on the 176-line bench image) at near-identical text.
+//! * **The dense-window cliff.** Recognition cost was measured at ~3.7 ms
+//!   plus ~22 ms per 1000 px of tensor width PER serial CALL (tensor width
+//!   = aspect × 48) and immune to thread count (4→24 threads moved a
+//!   176-line image from 5.45 s to 5.20 s — per-line tensors are too
+//!   small for threads to help). A text-dense terminal window therefore
+//!   took tens of seconds and read as hung. Running det ourselves lets us
+//!   PREDICT that cost from the box geometry and drop to the tiny
+//!   recognition model when it blows the budget — measured 3.5× faster
+//!   (4.8 s → 1.4 s on the 176-line bench image) at near-identical text.
+//!   Recognition additionally runs in width-sorted BATCHES (see
+//!   [`REC_BATCH`]), which amortizes the fixed per-call cost and hands
+//!   MNN tensors big enough for its threads to matter; the serial-call
+//!   cost model above is therefore conservative for the tier choice
+//!   until re-measured.
 //! * **The line cap belongs BEFORE recognition.** The engine recognizes
 //!   everything and lets us truncate after; a degenerate selection (a
 //!   whole spreadsheet) pays for lines that are then thrown away.
 //! * Reading-order sorting before the cap, so truncation keeps the top of
 //!   the page rather than raw detection order.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use image::DynamicImage;
-use ocr_rs::{DetModel, DetOptions, RecModel};
+use ocr_rs::{DetModel, DetOptions, RecModel, RecognitionResult, TextBox};
 
 use super::{OcrError, OcrLine, OcrOutcome, OcrRequest};
 use clowd_rust_core::geometry::{RectExt, ScreenRectF};
 
-/// The lift render pass hard-caps its instance buffer at 512 lines; past
-/// 256 a selection is degenerate (a whole spreadsheet) where extra lines
-/// only add latency. Applied BEFORE recognition (see module docs).
-const MAX_LINES: usize = 256;
+/// Line cap, applied BEFORE recognition (see module docs) purely to bound
+/// worst-case latency — the render side (bubble rects, glyphon buffers)
+/// grows dynamically and needs no cap. 512 because real pages get there:
+/// a full-screen 3440x1440 page of dense book text measured 361 genuine
+/// lines, and the previous cap of 256 silently dropped the bottom third.
+/// At 512 the worst-case tiny-tier recognition stays around ~3 s.
+const MAX_LINES: usize = 512;
 
 /// Detection-stage resolution ceiling (the image is downscaled to this long
 /// side before the DB detector runs; recognition always crops from the
-/// full-resolution input). The crate default of 960 loses small screen text
-/// on large selections — 1920 keeps ~12px UI text detectable on a 4K-wide
-/// crop. This is THE accuracy-vs-latency knob to revisit if either suffers.
-const DET_MAX_SIDE_LEN: u32 = 1920;
+/// full-resolution input). MEASURED CLIFF — do not lower casually: on a
+/// 3440x1440 dense-text page, det at native res found 361 clean line boxes
+/// (627 ms); at 1920 the same page shattered into 522 fragments (208 ms)
+/// whose crops recognized as garbage, and at 960 it found NOTHING. The DB
+/// detector simply cannot see ~7px downscaled text, so the ceiling exists
+/// only to bound det latency on inputs beyond any single monitor (det cost
+/// scales with area; a 4096-long-side page runs det in well under a
+/// second, hidden beneath the scanning sweep). Selections spanning
+/// multiple 4K monitors will start to degrade past this — revisit with
+/// tiled detection if that ever becomes a real complaint.
+const DET_MAX_SIDE_LEN: u32 = 4096;
 
 /// Every detection box is inflated by this many pixels per side before the
 /// recognition crop — the context measurably helps the recognizer (same
@@ -76,17 +92,33 @@ const REC_TARGET_HEIGHT: f32 = 48.0;
 const SMALL_REC_FIXED_MS: f32 = 3.7;
 const SMALL_REC_MS_PER_KPX: f32 = 22.0;
 
-/// Predicted small-model recognition time above which the tiny model takes
-/// over. At the boundary the small tier finishes in roughly this time;
-/// past it the tiny tier runs ~3.5-4x faster than small would have. Dense
-/// terminal windows land squarely in the tiny tier (a 176-line bench image
-/// predicted ~4.5 s small, ran 1.1 s tiny).
-const SMALL_TIER_BUDGET_MS: f32 = 1500.0;
+/// Predicted-serial small-model time above which the tiny model takes
+/// over. The prediction is in SERIAL units while recognition actually
+/// runs batched (measured 8454 ms predicted → 5350 ms batched on the
+/// 361-line reference page, a ~0.63 correction), so 2400 here targets a
+/// real batched small-tier ceiling of ~1.5 s — the same wall-clock cutoff
+/// the tier was designed around before batching.
+///
+/// Past the cutoff, tiny is not merely the fast fallback: on the dense
+/// reference page it was BOTH 3.7× faster than small (1.44 s vs 5.35 s)
+/// and clearly better on the ultra-wide small-text lines such pages are
+/// made of (coherent text at conf ~0.78 where small emitted fragments at
+/// ~0.53 — verified identical solo vs batched, so it is the model, not
+/// the batching).
+const SMALL_TIER_BUDGET_MS: f32 = 2400.0;
 
 /// Boxes with a width/height ratio beyond this are detector junk (a 1900px
 /// wide, 4px tall sliver would alone cost a ~23000px-wide tensor) — skip
 /// them rather than pay for garbage.
 const MAX_BOX_ASPECT: f32 = 300.0;
+
+/// Crops recognized per batched MNN call (matches ocr-rs's own default
+/// chunk size). The batch tensor is padded to the chunk's WIDEST sample,
+/// so crops are width-sorted before chunking — a chunk of near-equal
+/// widths pays almost nothing for padding, while reading-order chunks
+/// would routinely pair one full-width line with seven short ones and pay
+/// 8× the widest. Results are indexed back to reading order afterwards.
+const REC_BATCH: usize = 8;
 
 // PP-OCRv6, converted to MNN, vendored from
 // github.com/zibo-chen/rust-paddle-ocr (models/). ~18 MB embedded — the
@@ -152,9 +184,64 @@ fn create_backend() -> Result<Backend, ocr_rs::OcrError> {
     })
 }
 
+/// Force backend initialization (embedded-model parse + MNN session
+/// setup) so the first real recognition doesn't pay it mid-scan. Called
+/// from a background thread at capture-cycle start (see `app.rs`). The
+/// result is deliberately ignored: a failed init is cached by `backend()`
+/// and reported as `Unavailable` at recognize time.
+pub(super) fn warm() {
+    let _ = backend();
+}
+
+/// Reading-order permutation of detection boxes given as (top, left,
+/// height) keys: rows are clustered top-down with a half-line tolerance,
+/// then each row runs left-to-right.
+///
+/// Two passes (cluster, then sort by the fixed row key) rather than one
+/// comparator with the tolerance inline: a per-pair tolerance is not
+/// transitive — three boxes each within tolerance of their neighbour but
+/// not of the ends compare A<B, B<C by left yet A<C by top, an ordering
+/// cycle — and std's sort is allowed to PANIC when it detects a
+/// comparator that is not a total order. Row ids assigned once are a
+/// total order by construction.
+fn reading_order(keys: &[(i32, i32, u32)]) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..keys.len()).collect();
+    idx.sort_by_key(|&i| keys[i].0);
+    // Cluster: a box joins the current row while its top is within half
+    // the shorter line height of the row's FIRST box (the anchor —
+    // comparing against the anchor rather than the previous box stops a
+    // gentle staircase from chaining into one giant "row").
+    let mut row_of = vec![0u32; keys.len()];
+    let mut row = 0u32;
+    let mut anchor = 0usize;
+    for k in 1..idx.len() {
+        let (top, _, h) = keys[idx[k]];
+        let (anchor_top, _, anchor_h) = keys[idx[anchor]];
+        let tolerance = (h.min(anchor_h) / 2) as i32;
+        if top - anchor_top > tolerance {
+            row += 1;
+            anchor = k;
+        }
+        row_of[idx[k]] = row;
+    }
+    // Stable, so within-row ties keep their top-order from the first sort.
+    idx.sort_by_key(|&i| (row_of[i], keys[i].1));
+    idx
+}
+
+/// The error a cancelled recognition reports. Only the OCR worker thread
+/// ever sees it — the worker re-checks its cancel flag after recognize()
+/// returns and drops the result without setting the latch, so no
+/// user-facing path renders this string.
+fn cancelled() -> OcrError {
+    OcrError::Failed("cancelled".into())
+}
+
 /// Predicted milliseconds for the SMALL model to recognize boxes of the
 /// given (width, height) dimensions — the tier-choice input. Pure so the
-/// threshold behaviour is testable.
+/// threshold behaviour is testable. Measured on serial per-call
+/// recognition; batching (see [`REC_BATCH`]) only makes it an
+/// overestimate, which errs toward the fast tier.
 fn predict_small_rec_ms(dims: impl Iterator<Item = (u32, u32)>) -> f32 {
     dims.map(|(w, h)| {
         let aspect = w as f32 / (h as f32).max(1.0);
@@ -163,7 +250,11 @@ fn predict_small_rec_ms(dims: impl Iterator<Item = (u32, u32)>) -> f32 {
     .sum()
 }
 
-pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
+/// `cancel` is polled at every expensive boundary — after acquiring the
+/// backend lock, after detection, and between recognition batches — so
+/// BACK abandons the work promptly AND a superseded job stops hogging the
+/// backend mutex that a newly-dispatched request is queued behind.
+pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, OcrError> {
     let Some(backend) = backend() else {
         return Err(OcrError::Unavailable);
     };
@@ -171,37 +262,52 @@ pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
     // BGRA -> RGB up front (alpha dropped: BitBlt'd desktop pixels routinely
     // carry a == 0, and the crate's preprocess calls to_rgb8() on whatever it
     // receives — handing it RGB directly makes that a no-op instead of a
-    // second full-image conversion).
-    let mut rgb = Vec::with_capacity(req.width as usize * req.height as usize * 3);
-    for px in req.bgra.chunks_exact(4) {
-        rgb.extend_from_slice(&[px[2], px[1], px[0]]);
+    // second full-image conversion). Indexed writes into a pre-sized
+    // buffer, not per-pixel pushes: the push's length bookkeeping defeats
+    // vectorization, and a 4K-area selection is ~8M pixels on the
+    // latency-critical path before det even starts.
+    let mut rgb = vec![0u8; req.width as usize * req.height as usize * 3];
+    for (dst, px) in rgb.chunks_exact_mut(3).zip(req.bgra.chunks_exact(4)) {
+        dst[0] = px[2];
+        dst[1] = px[1];
+        dst[2] = px[0];
     }
     let rgb_img = image::RgbImage::from_raw(req.width, req.height, rgb)
         .expect("OcrRequest.bgra must be width * height * 4 bytes");
     let img = DynamicImage::ImageRgb8(rgb_img);
 
     let b = backend.lock().expect("OCR backend lock poisoned");
+    // The lock wait can be long — a superseded job may still be mid-page —
+    // and this job may have been cancelled while it queued.
+    if cancel.load(Ordering::Acquire) {
+        return Err(cancelled());
+    }
 
     let t_det = std::time::Instant::now();
-    let mut boxes = b
+    let boxes = b
         .det
         .detect(&img)
         .map_err(|e| OcrError::Failed(e.to_string()))?;
     let det_elapsed = t_det.elapsed();
+    if cancel.load(Ordering::Acquire) {
+        return Err(cancelled());
+    }
 
     // Reading order BEFORE the cap, so truncation keeps the top of the
-    // page. Boxes on one visual row can differ by a few pixels of top;
-    // bucket by half-line-height so columns on the same row sort
-    // left-to-right.
-    boxes.sort_by(|a, b| {
-        let (ar, br) = (&a.rect, &b.rect);
-        let tolerance = (ar.height().min(br.height()) / 2) as i32;
-        if (ar.top() - br.top()).abs() <= tolerance {
-            ar.left().cmp(&br.left())
-        } else {
-            ar.top().cmp(&br.top())
-        }
-    });
+    // page. Row clustering + fixed-key sort — see `reading_order` for why
+    // this is not one comparator.
+    let keys: Vec<(i32, i32, u32)> = boxes
+        .iter()
+        .map(|b| (b.rect.top(), b.rect.left(), b.rect.height()))
+        .collect();
+    let order = reading_order(&keys);
+    let mut boxes: Vec<TextBox> = {
+        let mut src: Vec<Option<TextBox>> = boxes.into_iter().map(Some).collect();
+        order
+            .iter()
+            .map(|&i| src[i].take().expect("reading_order returns a permutation"))
+            .collect()
+    };
     boxes.retain(|bx| {
         let aspect = bx.rect.width() as f32 / (bx.rect.height() as f32).max(1.0);
         aspect <= MAX_BOX_ASPECT
@@ -226,23 +332,66 @@ pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
     );
 
     let t_rec = std::time::Instant::now();
+
+    // Same crops the engine's own pipeline would take: the detector box
+    // expanded by the context border, clamped to the image. Kept in
+    // reading order; `expanded` doubles as the geometry source below.
+    let expanded: Vec<TextBox> = boxes
+        .iter()
+        .map(|tb| tb.expand(BOX_BORDER, req.width, req.height))
+        .collect();
+    let crops: Vec<DynamicImage> = expanded
+        .iter()
+        .map(|e| {
+            let r = &e.rect;
+            img.crop_imm(r.left() as u32, r.top() as u32, r.width(), r.height())
+        })
+        .collect();
+
+    // Batched recognition, width-sorted (see REC_BATCH for why), results
+    // indexed straight back to reading-order slots.
+    let mut rec_order: Vec<usize> = (0..crops.len()).collect();
+    rec_order.sort_by_key(|&i| {
+        // Tensor width the batch pads to: aspect × the model input height.
+        let (w, h) = (crops[i].width() as u64, crops[i].height().max(1) as u64);
+        w * REC_TARGET_HEIGHT as u64 / h
+    });
+    let mut results: Vec<Option<RecognitionResult>> =
+        std::iter::repeat_with(|| None).take(crops.len()).collect();
+    for chunk in rec_order.chunks(REC_BATCH) {
+        if cancel.load(Ordering::Acquire) {
+            return Err(cancelled());
+        }
+        let refs: Vec<&DynamicImage> = chunk.iter().map(|&i| &crops[i]).collect();
+        match rec.recognize_batch_ref(&refs) {
+            Ok(rs) => {
+                for (&i, r) in chunk.iter().zip(rs) {
+                    results[i] = Some(r);
+                }
+            }
+            Err(e) => {
+                // One unreadable region must not kill the whole page: a
+                // failed batch falls back to its members individually so
+                // only the truly bad crop is lost.
+                log::warn!("OCR batch failed ({e}); retrying its regions individually");
+                for &i in chunk {
+                    match rec.recognize(&crops[i]) {
+                        Ok(r) => results[i] = Some(r),
+                        Err(e) => log::warn!("OCR region failed: {e}"),
+                    }
+                }
+            }
+        }
+    }
+
     let ox = req.origin.left() as f32;
     let oy = req.origin.top() as f32;
     let mut lines: Vec<OcrLine> = Vec::with_capacity(boxes.len());
-    for text_box in &boxes {
-        // Same crop the engine's own pipeline would take: the detector box
-        // expanded by the context border, clamped to the image.
-        let expanded = text_box.expand(BOX_BORDER, req.width, req.height);
-        let r = &expanded.rect;
-        let crop = img.crop_imm(r.left() as u32, r.top() as u32, r.width(), r.height());
-        let result = match rec.recognize(&crop) {
-            Ok(r) => r,
-            Err(e) => {
-                // One unreadable region must not kill the whole page.
-                log::warn!("OCR region failed: {e}");
-                continue;
-            }
+    for (expanded_box, result) in expanded.iter().zip(results) {
+        let Some(result) = result else {
+            continue;
         };
+        let r = &expanded_box.rect;
         if result.text.trim().is_empty() || result.confidence < MIN_CONFIDENCE {
             continue;
         }
@@ -323,7 +472,7 @@ mod tests {
     #[test]
     fn blank_image_recognizes_to_empty() {
         let req = request(vec![255u8; 200 * 100 * 4], 200, 100);
-        let outcome = recognize(&req).expect("blank image must not error");
+        let outcome = recognize(&req, &AtomicBool::new(false)).expect("blank image must not error");
         assert!(outcome.lines.is_empty());
         assert_eq!(outcome.full_text, "");
     }
@@ -346,7 +495,7 @@ mod tests {
         // Negative origin: the offset math must hold on multi-monitor
         // layouts where the virtual desktop starts left of zero.
         req.origin = ScreenRect::from_xy_size(-500, -300, w as i32, h as i32);
-        let outcome = recognize(&req).expect("noise must not error");
+        let outcome = recognize(&req, &AtomicBool::new(false)).expect("noise must not error");
         let bounds = req.origin.to_f32();
         for line in &outcome.lines {
             assert!(
@@ -366,8 +515,48 @@ mod tests {
     #[test]
     fn consecutive_recognize_calls_succeed() {
         let req = request(vec![255u8; 64 * 64 * 4], 64, 64);
-        recognize(&req).expect("first call");
-        recognize(&req).expect("second call");
+        recognize(&req, &AtomicBool::new(false)).expect("first call");
+        recognize(&req, &AtomicBool::new(false)).expect("second call");
+    }
+
+    /// Reading order: rows cluster within a half-line tolerance and run
+    /// left-to-right; distinct rows keep their top-down order.
+    #[test]
+    fn reading_order_rows_then_columns() {
+        // (top, left, height): two visual rows with jittered tops, the
+        // second box of row one further left than the first.
+        let keys = [(0, 300, 20), (4, 10, 20), (60, 50, 20), (57, 200, 20)];
+        assert_eq!(reading_order(&keys), vec![1, 0, 2, 3]);
+        // Degenerate inputs.
+        assert_eq!(reading_order(&[]), Vec::<usize>::new());
+        assert_eq!(reading_order(&[(5, 5, 10)]), vec![0]);
+    }
+
+    /// The historical failure mode this replaced: a chain of boxes each
+    /// within tolerance of its neighbour but not of the chain's ends is
+    /// INTRANSITIVE under a pairwise comparator (A<B and B<C by left, but
+    /// A<C by top — a cycle std's sort may panic on). The clustered order
+    /// must simply produce a valid permutation, deterministically.
+    #[test]
+    fn reading_order_survives_tolerance_chains() {
+        // Tops 0, 8, 16 with height 20: each neighbour pair is "same row"
+        // (tolerance 10) but the ends are not; lefts descend so the pair
+        // comparisons used to disagree with the top comparison.
+        let keys = [(0, 30, 20), (8, 20, 20), (16, 10, 20)];
+        let order = reading_order(&keys);
+        let mut sorted = order.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, vec![0, 1, 2], "not a permutation: {order:?}");
+        // Anchor-based clustering: 8 joins 0's row, 16 starts a new row.
+        assert_eq!(order, vec![1, 0, 2]);
+
+        // A long staircase must not chain into one giant row: each step is
+        // within tolerance of the previous but far from the first.
+        let stairs: Vec<(i32, i32, u32)> = (0..10).map(|i| (i * 8, 100 - i * 10, 20)).collect();
+        let order = reading_order(&stairs);
+        let mut sorted = order.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted, (0..10).collect::<Vec<_>>());
     }
 
     /// The tier predictor: cheap boxes stay under the budget, a dense page
@@ -384,6 +573,100 @@ mod tests {
 
         // Degenerate zero-height boxes must not divide by zero.
         assert!(predict_small_rec_ms(std::iter::once((100u32, 0u32))).is_finite());
+    }
+
+    /// Opt-in diagnostic for detection-resolution and tier-quality
+    /// regressions (this probe found the DET_MAX_SIDE_LEN cliff: 0 boxes
+    /// at 960, 522 fragments at 1920, 361 clean lines at native on the
+    /// same 3440x1440 page). For each det ceiling it reports box count +
+    /// det time, then compares small/tiny recognition on the native-res
+    /// boxes — batched AND solo, so a batching-quality regression shows
+    /// up as a batched/solo mismatch. Set CLOWD_OCR_BENCH_IMAGE and run
+    /// with --release --nocapture.
+    #[test]
+    fn env_det_ceiling_probe() {
+        let Ok(path) = std::env::var("CLOWD_OCR_BENCH_IMAGE") else {
+            eprintln!("SKIP {}: CLOWD_OCR_BENCH_IMAGE not set", module_path!());
+            return;
+        };
+        let img = image::open(&path).expect("image must decode");
+        let img = DynamicImage::ImageRgb8(img.to_rgb8());
+        let (w, h) = (img.width(), img.height());
+        eprintln!("image {w}x{h}");
+
+        let mut native_boxes = Vec::new();
+        for ceiling in [960u32, 1920, 2560, w.max(h).max(2560)] {
+            let det = DetModel::from_bytes(DET_MODEL, None)
+                .expect("det model")
+                .with_options(
+                    DetOptions::new()
+                        .with_max_side_len(ceiling)
+                        .with_box_border(BOX_BORDER),
+                );
+            let t = std::time::Instant::now();
+            let boxes = det.detect(&img).expect("detect");
+            eprintln!("det ceiling {ceiling}: {} boxes in {:?}", boxes.len(), t.elapsed());
+            native_boxes = boxes;
+        }
+
+        // Predicted (serial cost model) vs the batched reality below —
+        // the correction factor for re-calibrating the tier budget.
+        let predicted = predict_small_rec_ms(native_boxes.iter().map(|b| (b.rect.width(), b.rect.height())));
+        eprintln!("predicted serial small-rec: {predicted:.0} ms");
+
+        // Recognition quality on the native-res boxes, both tiers, batched
+        // the way recognize() batches (width-sorted chunks of REC_BATCH).
+        // Samples are the WIDEST crops (real text lines) at fixed indices
+        // so the two tiers print the same lines for direct comparison.
+        let crops: Vec<DynamicImage> = native_boxes
+            .iter()
+            .map(|b| {
+                let e = b.expand(BOX_BORDER, w, h);
+                let r = &e.rect;
+                img.crop_imm(r.left() as u32, r.top() as u32, r.width(), r.height())
+            })
+            .collect();
+        let mut order: Vec<usize> = (0..crops.len()).collect();
+        order.sort_by_key(|&i| {
+            let (cw, ch) = (crops[i].width() as u64, crops[i].height().max(1) as u64);
+            cw * 48 / ch
+        });
+        let widest: Vec<usize> = order.iter().rev().take(5).copied().collect();
+        for (name, model, charset) in [("small", REC_MODEL, CHARSET), ("tiny", TINY_REC_MODEL, TINY_CHARSET)] {
+            let rec = RecModel::from_bytes_with_charset(model, charset, None).expect("rec model");
+            let t = std::time::Instant::now();
+            let mut results: Vec<Option<RecognitionResult>> =
+                std::iter::repeat_with(|| None).take(crops.len()).collect();
+            for chunk in order.chunks(REC_BATCH) {
+                let refs: Vec<&DynamicImage> = chunk.iter().map(|&i| &crops[i]).collect();
+                if let Ok(rs) = rec.recognize_batch_ref(&refs) {
+                    for (&i, r) in chunk.iter().zip(rs) {
+                        results[i] = Some(r);
+                    }
+                }
+            }
+            let elapsed = t.elapsed();
+            let kept: Vec<&RecognitionResult> = results
+                .iter()
+                .flatten()
+                .filter(|r| !r.text.trim().is_empty() && r.confidence >= MIN_CONFIDENCE)
+                .collect();
+            let mean_conf = kept.iter().map(|r| r.confidence).sum::<f32>() / kept.len().max(1) as f32;
+            eprintln!("rec {name}: {}/{} lines in {:?}, mean conf {:.3}", kept.len(), crops.len(), elapsed, mean_conf);
+            for &i in &widest {
+                if let Some(r) = &results[i] {
+                    eprintln!("  [{i}] {:.2} {}", r.confidence, r.text);
+                }
+            }
+            // The batching suspect: the same widest crops recognized
+            // INDIVIDUALLY — if these come back better than the batched
+            // rows above, batch padding is degrading recognition.
+            for &i in &widest {
+                if let Ok(r) = rec.recognize(&crops[i]) {
+                    eprintln!("  solo[{i}] {:.2} {}", r.confidence, r.text);
+                }
+            }
+        }
     }
 
     /// Opt-in perf probe: set CLOWD_OCR_BENCH_IMAGE to a file path and run
@@ -404,9 +687,9 @@ mod tests {
         }
         let req = request(bgra, w, h);
         // Warm (engine init paid) then timed.
-        let _ = recognize(&req).expect("warmup");
+        let _ = recognize(&req, &AtomicBool::new(false)).expect("warmup");
         let t = std::time::Instant::now();
-        let outcome = recognize(&req).expect("bench");
+        let outcome = recognize(&req, &AtomicBool::new(false)).expect("bench");
         eprintln!("recognize(): {:?} ({} lines) — tier choice is in the log above", t.elapsed(), outcome.lines.len());
         for line in outcome.lines.iter().take(4) {
             eprintln!("  {}", line.text);
@@ -431,7 +714,7 @@ mod tests {
         for px in bgra.chunks_exact_mut(4) {
             px.swap(0, 2);
         }
-        let outcome = recognize(&request(bgra, w, h)).expect("test image must recognize");
+        let outcome = recognize(&request(bgra, w, h), &AtomicBool::new(false)).expect("test image must recognize");
         // Geometry log (visible with --nocapture): the rect heights are how
         // bubble font sizing is tuned against known-size source text.
         for line in &outcome.lines {

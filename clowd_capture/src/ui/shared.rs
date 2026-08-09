@@ -392,6 +392,7 @@ mod tests {
 
         s.ocr = OcrState::Lifted {
             anchor: Instant::now(),
+            req: 1,
             region: s.selection.unwrap(),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
@@ -421,6 +422,7 @@ mod tests {
         assert_eq!(active_panel_set(true, false, &OcrState::Idle), Some(PanelButtonSet::Normal));
         let lifted = OcrState::Lifted {
             anchor: Instant::now(),
+            req: 1,
             region: ScreenRect::from_xy_size(0, 0, 10, 10),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),

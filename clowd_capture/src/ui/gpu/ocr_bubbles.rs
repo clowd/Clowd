@@ -166,14 +166,14 @@ struct DrawnText {
 
 pub struct OcrBubblesRenderer {
     entries: Vec<BubbleEntry>,
-    /// Identity of the outcome the entries were shaped from, as a plain
-    /// address — same caching discipline as `LiftPipeline::snapshot_key`:
-    /// safe against ABA because `prepare` clears it on every frame where
-    /// the mode is not Lifted, so a key never outlives the outcome it
-    /// names (the mode always passes through Retracting/Idle — or the
-    /// cycle ends, which clears via `end_cycle` — before a new outcome
-    /// can exist).
-    outcome_key: Option<usize>,
+    /// Identity of the outcome the entries were shaped from: the OCR
+    /// request id `OcrState::Lifted` carries. Unique within the cycle by
+    /// construction (the app thread bumps it on every dispatch AND every
+    /// exit), and `UiRenderer::begin_cycle`/`end_cycle` clear it across
+    /// cycles — so unlike the `Arc` address this used to be, it cannot
+    /// alias a later outcome even on a worker that stalled through every
+    /// intermediate state.
+    outcome_key: Option<u64>,
     drawn: Vec<DrawnText>,
     /// This frame's warmup chunk, staged as one alpha-0 text area and
     /// replaced (or dropped) next frame — rasterization into the atlas is
@@ -223,7 +223,14 @@ impl OcrBubblesRenderer {
     /// Stage this frame's bubbles: pill rects into `bubble_rects` (the
     /// DEDICATED leading rect range — not the shared list the panel uses,
     /// see the module docs) and text placements for [`Self::text_areas`].
-    pub fn prepare(&mut self, ts: &mut TextStack, state: &UiSharedState, this_monitor: &UiMonitor, bubble_rects: &mut Vec<RectInstance>) {
+    ///
+    /// Returns whether the bubble scene is AT REST: Lifted, reveal pass
+    /// finished, every bubble fully risen and opaque — from here on every
+    /// frame's staging is byte-identical (the animation is a pure clamped
+    /// function of elapsed time), which is what lets `UiRenderer` skip the
+    /// per-frame glyphon re-prepare of the whole page and re-issue its
+    /// retained vertices instead.
+    pub fn prepare(&mut self, ts: &mut TextStack, state: &UiSharedState, this_monitor: &UiMonitor, bubble_rects: &mut Vec<RectInstance>) -> bool {
         self.drawn.clear();
         self.frames_seen = self.frames_seen.saturating_add(1);
 
@@ -239,19 +246,20 @@ impl OcrBubblesRenderer {
             self.warm_buffer = None;
         }
 
-        let (anchor, region, dpi, outcome) = match &state.ocr {
+        let (anchor, req, region, dpi, outcome) = match &state.ocr {
             OcrState::Lifted {
                 anchor,
+                req,
                 region,
                 dpi_scale,
                 outcome,
-            } => (anchor, region, *dpi_scale, outcome),
+            } => (anchor, *req, region, *dpi_scale, outcome),
             OcrState::Scanning {
                 ..
             } => {
                 self.entries.clear();
                 self.outcome_key = None;
-                return;
+                return false;
             }
             // Retracting: the text vanishes AT ONCE on exit — no reverse
             // animation, by explicit owner call — so bubbles stop existing
@@ -263,18 +271,34 @@ impl OcrBubblesRenderer {
             } => {
                 self.entries.clear();
                 self.outcome_key = None;
-                return;
+                return false;
             }
         };
 
         let rf = region.to_f32();
-        let key = std::sync::Arc::as_ptr(outcome) as usize;
+        let mon_f = this_monitor.bounds.to_f32();
         // Shaping every line in ONE frame is deliberate, not an oversight:
         // this branch runs on the wrap-aligned Scanning→Lifted transition
         // frame, the one frame in the choreography where the band is
         // entirely off-screen and a burst is invisible by construction
         // (see the module docs).
-        if self.outcome_key != Some(key) {
+        if self.outcome_key != Some(req) {
+            // A worker whose monitor the bubbles can never reach skips the
+            // shaping burst entirely — it would pay the full-page layout
+            // for glyphs it never draws. The bound is a conservative
+            // OVERestimate computed without shaping (see
+            // `estimated_bubble_bounds`), so a partial overlap always
+            // shapes. The key stays unset: monitors never move within a
+            // cycle, so this cheap check simply repeats per frame.
+            let est = estimated_bubble_bounds(
+                &outcome.lines,
+                [rf.left(), rf.top(), rf.right(), rf.bottom()],
+                dpi,
+            );
+            if !(est[2] > mon_f.left() && est[0] < mon_f.right() && est[3] > mon_f.top() && est[1] < mon_f.bottom()) {
+                self.entries.clear();
+                return at_rest(anchor.elapsed().as_secs_f32());
+            }
             // Belt-and-braces: the Scanning warmup already did this, but
             // bubble shaping must NEVER run without the fallback fonts in
             // the DB (tofu otherwise), so re-assert the invariant where it
@@ -295,16 +319,16 @@ impl OcrBubblesRenderer {
                     dpi,
                 ));
             }
-            self.outcome_key = Some(key);
-        }
-
-        if self.entries.is_empty() {
-            return;
+            self.outcome_key = Some(req);
         }
 
         // Shared animation clock — the phase anchor, never this worker's.
         let t = anchor.elapsed().as_secs_f32();
-        let mon_f = this_monitor.bounds.to_f32();
+
+        if self.entries.is_empty() {
+            return at_rest(t);
+        }
+
         let (mon_left, mon_top) = (mon_f.left(), mon_f.top());
 
         for (entry_idx, entry) in self.entries.iter().enumerate() {
@@ -367,6 +391,7 @@ impl OcrBubblesRenderer {
                 ],
             });
         }
+        at_rest(t)
     }
 
     /// One frame's slice of the first-reveal warmup (see the module docs):
@@ -451,6 +476,48 @@ impl OcrBubblesRenderer {
             }
         }));
     }
+}
+
+/// Whether the reveal animation has fully settled at elapsed time `t`:
+/// the bottom-most possible line has finished its rise, so every bubble is
+/// at its resting spot with alpha 1 and all later frames stage
+/// byte-identical output. (Pure clamped-time animation is what makes this
+/// a mere threshold test.)
+fn at_rest(t: f32) -> bool {
+    t >= anim::reveal_start_secs(1.0) + anim::LIFT_DURATION_SECS
+}
+
+/// Conservative bounding rect (virtual-desktop px) that every bubble of
+/// this outcome is guaranteed to stay inside, computed WITHOUT shaping —
+/// the whole point is to let a worker skip the shaping burst when its
+/// monitor cannot intersect any bubble. Overestimates on purpose:
+///
+/// * Left edge: `bubble_x` clamps every pill to at least the region's
+///   left edge, so the region's own left is exact.
+/// * Width: bounded by chars × 1.5 em — the widest real advances are
+///   ~1 em (full-width CJK; Latin is ~0.6 em), and the extra half em
+///   absorbs any exotic fallback face. Fit-shrink only ever narrows.
+/// * Vertically: a pill is centred on its line and its height is padding
+///   plus one line box, so a full bubble-height past the line's centre
+///   covers both directions; the lift rise only ever moves bubbles UP.
+fn estimated_bubble_bounds(lines: &[crate::ocr::OcrLine], region: [f32; 4], dpi: f32) -> [f32; 4] {
+    let mut right = region[2];
+    let mut top = region[1];
+    let mut bottom = region[3];
+    for line in lines {
+        let font_px = bubble_font_px(line.rect.height());
+        let pad_h = bubble_pad_h(font_px);
+        let pad_v = (HINT_PADDING_V * font_px / HINT_FONT_PX).floor().max(2.0);
+        let bubble_h = pad_v * 2.0 + font_px * 1.2;
+        let est_w = pad_h * 2.0 + line.text.chars().count() as f32 * font_px * 1.5;
+        let left = bubble_x(line.rect.left() - pad_h, est_w, region[0], region[2]);
+        right = right.max(left + est_w);
+        let cy = (line.rect.top() + line.rect.bottom()) * 0.5;
+        top = top.min(cy - bubble_h);
+        bottom = bottom.max(cy + bubble_h);
+    }
+    top -= anim::LIFT_PX * dpi;
+    [region[0], top, right, bottom]
 }
 
 /// Shape one line and compute its resting pill geometry. Impure only in

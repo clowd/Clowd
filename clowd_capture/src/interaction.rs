@@ -124,12 +124,18 @@ pub enum OcrState {
     },
     /// Lines recognized; the reveal pass sweeps top→bottom raising them,
     /// and the OCR button set is live.
+    /// `req` is the id of the request that produced `outcome` (same
+    /// counter Scanning carries): unique within the cycle, so the bubble
+    /// renderer keys its shaped-layout cache on it — an `Arc` address
+    /// could be reused by a later outcome on a render worker that stalled
+    /// through every intermediate state, an id cannot.
     /// `dpi_scale` is the scale of the monitor containing the region's
     /// centre — ONE value for all lift geometry, so a line crossing a
     /// mixed-DPI seam moves by the same physical amount on both halves
     /// instead of tearing at the seam.
     Lifted {
         anchor: Instant,
+        req: u64,
         region: ScreenRect,
         dpi_scale: f32,
         outcome: Arc<OcrOutcome>,
@@ -517,6 +523,7 @@ mod tests {
         input.scroll_pick_mode = true;
         input.ocr = OcrState::Lifted {
             anchor: Instant::now(),
+            req: 1,
             region: ScreenRect::from_xy_size(1, 1, 10, 10),
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
@@ -563,6 +570,7 @@ mod tests {
 
         let lifted = OcrState::Lifted {
             anchor: Instant::now(),
+            req: 1,
             region,
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
