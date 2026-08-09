@@ -263,6 +263,57 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void WebcamOptions_DefaultToOff_AndRoundTrip()
+        {
+            // the webcam is a second video track, never composited into the recording, so it is
+            // off until the user has both ticked the box and picked a camera. There is no
+            // "default" camera pseudo-device the way there is for audio: empty means none.
+            var loaded = SettingsService.Load(_path);
+
+            Assert.False(loaded.Recording.CaptureWebcam);
+            Assert.Equal("", loaded.Recording.WebcamDeviceId);
+
+            var original = new SettingsRoot();
+            original.Recording.CaptureWebcam = true;
+            original.Recording.WebcamDeviceId = @"\\?\usb#vid_0000&pid_0000#global";
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.True(loaded.Recording.CaptureWebcam);
+            Assert.Equal(@"\\?\usb#vid_0000&pid_0000#global", loaded.Recording.WebcamDeviceId);
+        }
+
+        [Fact]
+        public void VideoEditorViewState_Defaults_WhenAbsentFromFile()
+        {
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(230d, loaded.VideoEditor.SidebarWidth);
+            Assert.Equal(1.0d, loaded.VideoEditor.Volume);
+            Assert.Null(loaded.VideoEditor.WindowBounds);
+            Assert.False(loaded.VideoEditor.WindowMaximized);
+        }
+
+        [Fact]
+        public void VideoEditorViewState_RoundTrips()
+        {
+            var original = new SettingsRoot();
+            original.VideoEditor.SidebarWidth = 315;
+            original.VideoEditor.Volume = 0.35; // invariant double
+            original.VideoEditor.WindowBounds = "10,20,1280,720";
+            original.VideoEditor.WindowMaximized = true;
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(315d, loaded.VideoEditor.SidebarWidth);
+            Assert.Equal(0.35d, loaded.VideoEditor.Volume);
+            Assert.Equal("10,20,1280,720", loaded.VideoEditor.WindowBounds);
+            Assert.True(loaded.VideoEditor.WindowMaximized);
+        }
+
+        [Fact]
         public void GifOptions_DefaultToBalancedQualityAndNoSizeCap_AndRoundTrip()
         {
             // the size caps are passed to vid2gif only when non-zero (its parser rejects 0), so the

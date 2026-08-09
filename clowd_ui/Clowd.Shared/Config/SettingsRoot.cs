@@ -26,6 +26,8 @@ namespace Clowd.Config
 
         public SettingsEditor Editor { get; set; } = new SettingsEditor();
 
+        public SettingsVideoEditor VideoEditor { get; set; } = new SettingsVideoEditor();
+
         public SettingsUpload Uploads { get; set; } = new SettingsUpload();
     }
 }
