@@ -31,7 +31,11 @@ sentry.workspace = true
 # release archive (windows-x86_64 msvc and macos-universal are both covered;
 # the build script needs curl + PowerShell's Expand-Archive or unzip, and
 # bindgen needs libclang). Model weights are embedded from assets/ocr/ via
-# include_bytes!.
+# include_bytes!. On Windows the prebuilt is /MT while rustc links /MD, so the
+# link emits LNK4098; it is left visible rather than ignored because two CRTs in
+# one image mean two heaps. It has not misbehaved (the ocr::paddle tests run real
+# MNN inference), and matching it would mean -Ctarget-feature=+crt-static for the
+# whole binary — worth revisiting if MNN ever faults inside an allocation.
 ocr-rs = "2.4"
 
 [target.'cfg(windows)'.dependencies]
