@@ -5,5 +5,7 @@
   <Project Path="clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj" />
   <Project Path="clowd_ui/Clowd.Ui/Clowd.Ui.csproj" />
   <Project Path="clowd_ui/Clowd.Upload/Clowd.Upload.csproj" />
+  <Project Path="clowd_ui/Clowd.Video/Clowd.Video.csproj" />
+  <Project Path="clowd_ui/Clowd.Video.Tests/Clowd.Video.Tests.csproj" />
   <Project Path="clowd_ui/CursorGenerator/CursorGenerator.csproj" />
 </Solution>
