@@ -76,11 +76,11 @@ impl TextStack {
     /// per-script fallback can shape glyphs the embedded Cascadia faces
     /// lack (CJK, Cyrillic, Greek, Arabic, …). The startup DB deliberately
     /// contains ONLY the embedded faces — this overlay is startup-latency-
-    /// sensitive, and a system scan is a directory walk plus a name-table
-    /// parse per font file — so the scan is deferred to the first OCR
-    /// bubble layout, the one consumer that can meet arbitrary scripts.
-    /// It lands during the scanning-sweep animation, where a one-time hit
-    /// is invisible. Idempotent; every later call is a boolean test.
+    /// sensitive — so the scan runs on the first OCR Scanning frame
+    /// instead (`OcrBubblesRenderer::advance_warmup`), where its measured
+    /// ~11 ms (363 faces; fontdb parses name tables lazily) hides under
+    /// the sweep animation. Idempotent; every later call is a boolean
+    /// test.
     ///
     /// Safe to do after shaping has already happened: the pre-load shaping
     /// (panel/hint labels) is ASCII the embedded faces fully cover, so no
@@ -185,5 +185,22 @@ impl TextStack {
 
     pub fn trim(&mut self) {
         self.atlas.trim();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// Perf probe, kept because `ensure_fallback_fonts`'s frame-budget
+    /// claim rests on it: the system font scan must stay ~one-frame cheap
+    /// (measured 11 ms / 363 faces on the dev box — fontdb only parses
+    /// name tables). Prints with --nocapture; asserts only a sanity bound
+    /// loose enough for any CI box.
+    #[test]
+    fn probe_system_font_load_cost() {
+        let mut db = glyphon::fontdb::Database::new();
+        let t = std::time::Instant::now();
+        db.load_system_fonts();
+        eprintln!("load_system_fonts: {} faces in {:?}", db.faces().count(), t.elapsed());
+        assert!(t.elapsed().as_secs() < 5, "system font scan took {:?}", t.elapsed());
     }
 }
