@@ -21,6 +21,16 @@
 /// (capped by `cli::MAX_AUDIO_SOURCES`) into their one track.
 pub const MAX_AUDIO_TRACKS: usize = 6;
 
+// A libobs bump that lowered either limit would otherwise go unnoticed:
+// `audio_mixer_mask` folds out-of-range sources into the last track, so the
+// devices past the new limit would silently share a track instead of failing
+// validation. Both limits are checked — a mask needs a mixer AND an encoder
+// slot.
+const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_AUDIO_MIXES as usize);
+const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_OUTPUT_AUDIO_ENCODERS as usize);
+// The webcam occupies video track 1 (`webcam::create` / `Recorder::new`).
+const _: () = assert!(obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioKind {
     /// One speaker (output/system audio) device.

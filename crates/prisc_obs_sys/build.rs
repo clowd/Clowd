@@ -510,6 +510,12 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         .allowlist_var("OBS_.*")
         .allowlist_var("VIDEO_.*")
         .allowlist_var("AUDIO_.*")
+        // Track-count limits: obs-express asserts its own constants against
+        // these at compile time, so a libobs bump that changes them fails the
+        // build instead of silently dropping tracks.
+        .allowlist_var("MAX_AUDIO_MIXES")
+        .allowlist_var("MAX_OUTPUT_AUDIO_ENCODERS")
+        .allowlist_var("MAX_OUTPUT_VIDEO_ENCODERS")
         .derive_default(true)
         .generate()
         .expect("Failed to generate bindings");

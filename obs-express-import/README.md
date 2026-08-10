@@ -8,7 +8,7 @@ This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-expre
 
 - **Region or monitor capture** — record an arbitrary `X,Y,W,H` rectangle (which may span multiple displays) or a whole monitor by id/index. Defaults to the primary monitor.
 - **Hardware or software H.264** — x264 by default; `--hw-accel` prefers a GPU encoder (NVENC → AMF → QSV on Windows, VideoToolbox on macOS) and transparently falls back to x264.
-- **Multi-device audio** — any number of speaker (output) and microphone (input) devices, up to 8 total, mixed into the recording.
+- **Multi-device audio** — any number of speaker (output) and microphone (input) devices: up to 8 total mixed into one audio track, or up to 6 on separate tracks with `--multi-track`.
 - **Multi-track recording** — `--multi-track` writes every stream to its own track in one MP4: video track 0 = clean screen, video track 1 = webcam, and one audio track per capture device. A screen recording with a webcam, a speaker and a microphone is a 4-track file, ready for picture-in-picture compositing and per-source audio mixing at edit time.
 - **Webcam second track** — `--webcam <id>` (requires `--multi-track`) records a camera — DirectShow on Windows, AVFoundation on macOS — as video track 1; `--list-cameras` enumerates the available devices.
 - **Programmatic control** — a parent process drives recording over stdin (`start` / `pause` / `quit`, per-device mute) and reads structured progress as one JSON object per line on stdout.

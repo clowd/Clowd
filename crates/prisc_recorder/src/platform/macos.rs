@@ -250,9 +250,9 @@ pub fn webcam_settings(device_id: &str) -> ObsData {
     // Keep the plugin's default "High" session preset (it picks the device's
     // best supported format); the recorder downscales the mix itself.
     settings.set_bool("use_preset", true);
-    // Many cameras expose a muxed audio stream. The recorder detaches the
-    // source from every audio mixer anyway, but not asking for the audio at
-    // all avoids the microphone-permission prompt entirely.
+    // Many cameras expose a muxed audio stream. `webcam::create` already
+    // clears the source's audio-mixer mask and mutes it, but not asking the
+    // device for audio at all also avoids the microphone-permission prompt.
     settings.set_bool("enable_audio", false);
     settings
 }
