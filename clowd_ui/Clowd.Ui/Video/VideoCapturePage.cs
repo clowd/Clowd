@@ -318,28 +318,35 @@ namespace Clowd.UI
 
                 var session = CreateSession();
 
+                var finishAction = SettingsRoot.Current.Recording.OpenWhenFinished;
+
                 // A recording with a webcam is only half-finished: the camera was captured as a
                 // separate track and is composited nowhere until the user places it, so the editor
                 // *is* the "open when finished" action for those — it overrides the setting rather
                 // than dropping the user on a Recents row whose thumbnail shows no webcam at all.
-                // Recordings without one keep the existing behavior exactly.
+                // Recordings without one honour the setting.
                 if (session != null && session.HasWebcamTrack && session.ShowEditVideo)
+                    finishAction = RecordingFinishAction.VideoEditor;
+
+                // the editor cannot open every entry (it is Windows-only for now, and CreateSession
+                // can return null), so that choice degrades to the Recents page rather than to
+                // nothing at all.
+                if (finishAction == RecordingFinishAction.VideoEditor && session?.ShowEditVideo != true)
+                    finishAction = RecordingFinishAction.RecentsPage;
+
+                switch (finishAction)
                 {
-                    VideoEditor.VideoEditorWindow.ShowSession(session);
-                }
-                else
-                {
-                    switch (SettingsRoot.Current.Recording.OpenWhenFinished)
-                    {
-                        case RecordingFinishAction.RecentsPage:
-                            PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
-                            break;
-                        case RecordingFinishAction.OutputFolder:
-                            // reveals the saved file in its folder — the same affordance as the
-                            // "Show in folder" item in Recents (WPF: OpenFinishedInExplorer).
-                            ShellHelper.RevealFileInFolder(_savedPath);
-                            break;
-                    }
+                    case RecordingFinishAction.VideoEditor:
+                        VideoEditor.VideoEditorWindow.ShowSession(session);
+                        break;
+                    case RecordingFinishAction.RecentsPage:
+                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
+                        break;
+                    case RecordingFinishAction.OutputFolder:
+                        // reveals the saved file in its folder — the same affordance as the
+                        // "Show in folder" item in Recents (WPF: OpenFinishedInExplorer).
+                        ShellHelper.RevealFileInFolder(_savedPath);
+                        break;
                 }
 
                 // this is a tray app with no MainWindow, so with nothing open there is simply

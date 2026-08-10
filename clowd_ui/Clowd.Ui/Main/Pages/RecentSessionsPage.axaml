@@ -229,14 +229,12 @@
                                                          edit) has no usable file yet: everything but Delete (which cancels, see
                                                          DeleteWithConfirmation) is disabled until it lands — that is IsIdle. -->
                                                     <!-- same order as the row's action bar, so the ⋮ overflow menu (which is
-                                                         generated from those buttons) and this one agree. "Edit video" is the
-                                                         one exception: it has no button of its own until the video editor
-                                                         window lands, so for now it exists here only. -->
+                                                         generated from those buttons) and this one agree. -->
                                                     <MenuItem Header="Copy" Click="CopyItemClicked" IsVisible="{Binding CanCopy}"
                                                               IsEnabled="{Binding IsIdle}" />
-                                                    <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding IsVideo}"
-                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Edit video" Click="EditVideoClicked" IsVisible="{Binding ShowEditVideo}"
+                                                              IsEnabled="{Binding IsIdle}" />
+                                                    <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding IsVideo}"
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Create GIF" Click="CreateGifClicked" IsVisible="{Binding CanCreateGif}"
                                                               IsEnabled="{Binding IsIdle}" />
@@ -317,6 +315,18 @@
                                                                 AutomationProperties.Name="Copy image to clipboard">
                                                             <Viewbox>
                                                                 <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <!-- leads the video actions because it is also what double-click and
+                                                             Enter do: editing is the default thing to do with a recording,
+                                                             playing it is the secondary one. -->
+                                                        <Button Classes="rowAction"
+                                                                Click="EditVideoClicked"
+                                                                IsVisible="{Binding ShowEditVideo}"
+                                                                ToolTip.Tip="Edit video"
+                                                                AutomationProperties.Name="Edit video">
+                                                            <Viewbox>
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconNavEditor}" />
                                                             </Viewbox>
                                                         </Button>
                                                         <Button Classes="rowAction"

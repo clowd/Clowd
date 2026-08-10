@@ -81,9 +81,15 @@ namespace Clowd.Config
         Fair,
     }
 
-    /// <summary>What Clowd shows the user once a recording has been saved.</summary>
+    /// <summary>What Clowd shows the user once a recording has been saved. Declaration order is
+    /// the order the settings dropdown offers them in, so the default comes first.</summary>
     public enum RecordingFinishAction
     {
+        /// <summary>Opens the recording in the video editor. Falls back to the Recents page where
+        /// the editor cannot run (non-Windows) or the entry is not editable (a GIF).</summary>
+        [Description("Video Editor")]
+        VideoEditor,
+
         [Description("Recent Page")]
         RecentsPage,
 
@@ -125,7 +131,7 @@ namespace Clowd.Config
 
         [Category("Output")]
         [DisplayName("Open when finished")]
-        [Description("What to show when a recording finishes: the Recents page (to play or upload it), the folder it was saved to, or nothing")]
+        [Description("What to show when a recording finishes: the video editor (to trim it and place the webcam), the Recents page (to play or upload it), the folder it was saved to, or nothing")]
         public RecordingFinishAction OpenWhenFinished
         {
             get => _openWhenFinished;
@@ -330,7 +336,7 @@ namespace Clowd.Config
         private string _webcamDeviceId = "";
         private string _outputDirectory = DefaultOutputDirectory;
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
-        private RecordingFinishAction _openWhenFinished = RecordingFinishAction.RecentsPage;
+        private RecordingFinishAction _openWhenFinished = RecordingFinishAction.VideoEditor;
         private GifQuality _gifQuality = GifQuality.Good;
         private int _gifMaxWidth = 0;
         private int _gifMaxHeight = 0;

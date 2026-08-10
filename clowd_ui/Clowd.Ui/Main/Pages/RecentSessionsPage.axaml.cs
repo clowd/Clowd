@@ -618,7 +618,18 @@ namespace Clowd.UI
             if (session == null || !session.IsIdle)
                 return;
 
-            if (session.IsVideo)
+            DefaultAction(session);
+        }
+
+        /// <summary>What double-click and Enter do to a row: open it in the editor that owns it —
+        /// the video editor for a recording, the image editor for a capture. A video with no editor
+        /// behind it (a GIF, or any recording on a platform the video editor does not ship on) plays
+        /// instead, which is what those rows have always done.</summary>
+        private static void DefaultAction(SessionInfo session)
+        {
+            if (session.ShowEditVideo)
+                Clowd.UI.VideoEditor.VideoEditorWindow.ShowSession(session);
+            else if (session.IsVideo)
                 PlayVideo(session);
             else if (!session.IsUploadOnly)
                 SessionManager.Current.OpenSession(session);
@@ -669,10 +680,7 @@ namespace Clowd.UI
                 if (!session.IsIdle)
                     return; // still being written — there is nothing to open yet
 
-                if (session.IsVideo)
-                    PlayVideo(session);
-                else if (!session.IsUploadOnly)
-                    SessionManager.Current.OpenSession(session);
+                DefaultAction(session);
             }
             else if (e.Key == Key.Delete)
             {
