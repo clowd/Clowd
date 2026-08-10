@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Clowd.Video.Playback;
+using Clowd.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.Video.Tests
+namespace Clowd.VideoSDK.Tests
 {
     public class SkipRangeScheduleTests
     {

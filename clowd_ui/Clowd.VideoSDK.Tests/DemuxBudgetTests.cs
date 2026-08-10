@@ -1,7 +1,7 @@
-using Clowd.Video.Playback;
+using Clowd.VideoSDK.Playback;
 using Xunit;
 
-namespace Clowd.Video.Tests
+namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
     /// The demuxer's read-ahead rule. There is one read thread feeding every stream, so when it

@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using System.Text.Json;
-using Clowd.Video;
+using Clowd.VideoSDK;
 using Xunit;
 
 namespace Clowd.Shared.Tests

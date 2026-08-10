@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     public enum PlayerState
     {
