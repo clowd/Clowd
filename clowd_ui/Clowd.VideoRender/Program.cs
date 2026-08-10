@@ -75,6 +75,13 @@ namespace Clowd.VideoRender
                     new RenderJobOptions
                     {
                         Crf = job.Crf,
+                        // CLOWD_RENDER_BACKEND=cpu forces the raster path — used by the GPU/CPU
+                        // equivalence checks; the surface factory falls back to CPU on its own
+                        // when no usable GPU context exists, so this is a test/diagnostic knob,
+                        // not something the app needs to set.
+                        PreferGpu = !String.Equals(
+                            Environment.GetEnvironmentVariable("CLOWD_RENDER_BACKEND"), "cpu",
+                            StringComparison.OrdinalIgnoreCase),
                         DiagnosticLog = message => Console.Error.WriteLine("Clowd.VideoRender: " + message),
                     },
                     new InlineProgress(percent => emitter.Emit(percent)),
