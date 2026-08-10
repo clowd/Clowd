@@ -87,7 +87,18 @@ namespace Clowd.VideoSDK.Render
 
             var args = Parse(text);
             CheckFiles(args);
-            return Build(args, MediaProbe.ProbeDetailed(args.Input));
+            var probe = MediaProbe.ProbeDetailed(args.Input);
+
+            // VFR inputs render as a frame-for-frame passthrough of the kept source frames, the
+            // way vid-render's trim/concat graph did — a CFR resample would change both the frame
+            // count and every frame's instant. The schedule needs the real packet timestamps,
+            // which the probe alone cannot provide.
+            var videoStreams = probe.VideoStreams;
+            IReadOnlyList<long> screenPts = null;
+            if (videoStreams is { Count: > 0 } && videoStreams[0].IsVariableFrameRate)
+                screenPts = MediaProbe.ReadVideoPacketPtsTicks(args.Input, videoStreams[0].StreamIndex);
+
+            return Build(args, probe, screenPts);
         }
 
         // ------------------------------------------------------------------------------- parse
@@ -186,9 +197,12 @@ namespace Clowd.VideoSDK.Render
         /// <summary>
         /// The pure mapping: validated v1 args plus the probed input become a renderable project.
         /// Takes the probe result rather than a path so the whole mapping is unit-testable without
-        /// the FFmpeg natives.
+        /// the FFmpeg natives. <paramref name="screenFramePtsTicks"/> is the screen stream's
+        /// sorted packet timestamps (ticks) — required for a VFR source, where the render follows
+        /// the source frames rather than a CFR grid; null (CFR source) renders on the grid.
         /// </summary>
-        internal static LegacyRenderPlan Build(LegacyArgs args, MediaProbeResult probe)
+        internal static LegacyRenderPlan Build(LegacyArgs args, MediaProbeResult probe,
+            IReadOnlyList<long> screenFramePtsTicks = null)
         {
             ArgumentNullException.ThrowIfNull(args);
             ArgumentNullException.ThrowIfNull(probe);
@@ -210,12 +224,23 @@ namespace Clowd.VideoSDK.Render
             // First audio stream, if any — vid-render took the first decodable one.
             var audio = probe.AudioStreams is { Count: > 0 } ? probe.AudioStreams[0] : null;
 
+            var (fpsNum, fpsDen) = ChooseFrameRate(screen);
+
             long sourceDurationTicks = MaxDuration(probe, screen);
+            bool wholeFile = args.Segments == null || args.Segments.Count == 0;
+            if (wholeFile && !screen.IsVariableFrameRate)
+            {
+                // vid-render passed every source frame through, so a whole-file CFR render must
+                // emit exactly the source's frame count. The probed duration is only
+                // microsecond-precise (a 244-frame 60 fps file probes as 4.066667 s — 4 ticks past
+                // the 244-frame boundary), and covering it with grid frames would append a
+                // spurious duplicate final frame. Snap it to the frame grid.
+                sourceDurationTicks = SnapToFrameGrid(sourceDurationTicks, screen, fpsNum, fpsDen);
+            }
+
             var segments = BuildSegments(args.Segments, sourceDurationTicks);
             if (segments.Count == 0)
                 throw new InvalidOperationException("the edit keeps nothing of the recording");
-
-            var (fpsNum, fpsDen) = ChooseFrameRate(screen);
 
             var project = new Project
             {
@@ -261,8 +286,17 @@ namespace Clowd.VideoSDK.Render
                         startTicks, linkGroup, camTransform.Clone());
 
                 if (audioTrack != null)
-                    AddItem(project, audioTrack, source.Id, audio.StreamIndex, timelineStart, durationTicks,
-                        startTicks, linkGroup, null);
+                {
+                    // Audio only where the source audio exists: real recordings' audio track ends
+                    // a few hundredths of a second before the video, and vid-render's atrim chain
+                    // ended the output audio there rather than padding silence to the video's end.
+                    long audioDuration = durationTicks;
+                    if (audio.DurationTicks > 0)
+                        audioDuration = Math.Clamp(audio.DurationTicks - startTicks, 0, durationTicks);
+                    if (audioDuration > 0)
+                        AddItem(project, audioTrack, source.Id, audio.StreamIndex, timelineStart,
+                            audioDuration, startTicks, linkGroup, null);
+                }
 
                 timelineStart += durationTicks;
             }
@@ -274,6 +308,16 @@ namespace Clowd.VideoSDK.Render
                 throw new InvalidOperationException(
                     "the v1 args do not describe a renderable project: " + String.Join(" ", problems));
 
+            // VFR: render exactly the kept source frames on their own (rebased) timestamps, the
+            // frame-for-frame behaviour of vid-render's trim/setpts/concat graph.
+            IReadOnlyList<long> schedule = null;
+            if (screenFramePtsTicks != null)
+            {
+                schedule = BuildFrameSchedule(screenFramePtsTicks, segments);
+                if (schedule.Count == 0)
+                    throw new InvalidOperationException("the edit keeps no video frames of the recording");
+            }
+
             return new LegacyRenderPlan
             {
                 Project = project,
@@ -281,6 +325,8 @@ namespace Clowd.VideoSDK.Render
                 OutputPath = args.Output,
                 Crf = args.Crf ?? DefaultCrf,
                 MaskPngPath = args.Webcam?.MaskPng,
+                FrameTimestampsTicks = schedule,
+                LegacyContainerTiming = true,
             };
         }
 
@@ -442,6 +488,62 @@ namespace Clowd.VideoSDK.Render
             return result;
         }
 
+        /// <summary>
+        /// Snaps a probed whole-file duration onto the output frame grid so the frame count
+        /// equals the source's. Prefers the container's own <c>nb_frames</c> when it agrees with
+        /// the duration to within one frame (mp4s from our recorder always carry it); otherwise
+        /// rounds the duration to the nearest whole frame count.
+        /// </summary>
+        private static long SnapToFrameGrid(long durationTicks, VideoStreamProbe screen,
+            int fpsNum, int fpsDen)
+        {
+            if (durationTicks <= 0)
+                return durationTicks;
+
+            long oneFrame = TimeBase.FrameIndexToTicks(1, fpsNum, fpsDen);
+            if (screen.NbFrames > 0)
+            {
+                long snapped = TimeBase.FrameIndexToTicks(screen.NbFrames, fpsNum, fpsDen);
+                if (Math.Abs(snapped - durationTicks) <= oneFrame)
+                    return snapped;
+                // nb_frames wildly off the probed duration: fall through to rounding.
+            }
+
+            long frames = Math.Max(1, TimeBase.TicksToFrameIndex(durationTicks + oneFrame / 2, fpsNum, fpsDen));
+            return TimeBase.FrameIndexToTicks(frames, fpsNum, fpsDen);
+        }
+
+        /// <summary>
+        /// The output frame schedule for a VFR source: every source frame timestamp falling inside
+        /// a kept segment (<c>start &lt;= pts &lt; end</c>, trim's bounds), rebased onto the output
+        /// timeline the same way the items are (segment source start maps to the segment's
+        /// timeline start). <paramref name="sourcePtsTicks"/> must be sorted ascending.
+        /// </summary>
+        internal static long[] BuildFrameSchedule(IReadOnlyList<long> sourcePtsTicks,
+            IReadOnlyList<(long StartTicks, long DurationTicks)> segments)
+        {
+            ArgumentNullException.ThrowIfNull(sourcePtsTicks);
+            ArgumentNullException.ThrowIfNull(segments);
+
+            var result = new List<long>();
+            long timelineStart = 0;
+            foreach (var (startTicks, durationTicks) in segments)
+            {
+                long endTicks = startTicks + durationTicks;
+                foreach (var pts in sourcePtsTicks)
+                {
+                    if (pts < startTicks)
+                        continue;
+                    if (pts >= endTicks)
+                        break;
+                    result.Add(timelineStart + (pts - startTicks));
+                }
+                timelineStart += durationTicks;
+            }
+
+            return result.ToArray();
+        }
+
         /// <summary>Output is CFR (the model composes N sources, so no source timing survives):
         /// take avg_frame_rate, fall back to r_frame_rate, then to <see cref="FallbackFpsNum"/>.</summary>
         private static (int Num, int Den) ChooseFrameRate(VideoStreamProbe screen)
@@ -521,6 +623,15 @@ namespace Clowd.VideoSDK.Render
 
         /// <summary>The mask PNG the shape was recovered from, for diagnostics only.</summary>
         public string MaskPngPath { get; init; }
+
+        /// <summary>For VFR inputs: the exact output-frame instants (ticks) — one per kept source
+        /// frame, vid-render's passthrough timing. Null renders the normal CFR grid.</summary>
+        public IReadOnlyList<long> FrameTimestampsTicks { get; init; }
+
+        /// <summary>True for v1 plans: mux with vid-render's container timing
+        /// (<see cref="Media.Mp4WriterOptions.LegacyContainerTiming"/>). v2 project renders leave
+        /// it false and write true sample durations.</summary>
+        public bool LegacyContainerTiming { get; init; }
     }
 
     // -------------------------------------------------------------------------------- v1 DTOs

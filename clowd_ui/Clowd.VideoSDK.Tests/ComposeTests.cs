@@ -191,6 +191,45 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Circle_mask_on_a_wide_rect_is_the_inscribed_ellipse()
+        {
+            // v1 mask PNGs (and the editor preview) inscribe an ellipse in the item rect — a true
+            // min(w,h)/2 circle diverged from vid-render by 23 dB on the parity gate's wide-rect
+            // cell (c7). Compose on a 96x48 canvas: the solid fills it, so the mask rect is 2:1.
+            const int Wd = 96, Ht = 48;
+            var p = new Project
+            {
+                Output = new OutputSettings { WidthPx = Wd, HeightPx = Ht, FpsNum = 30, FpsDen = 1, SampleRate = 48000 },
+            };
+            var item = AddItem(p, AddVideoTrack(p), new SolidContent { Color = "#FFFFFFFF" });
+            item.Transform.Mask = new Mask { Shape = MaskShape.Circle };
+
+            using var factory = new CpuSurfaceFactory();
+            using var surface = factory.CreateSurface(Wd, Ht);
+            FrameComposer.Compose(p, 5 * Sec, null, surface.Canvas, Wd, Ht);
+
+            var native = Marshal.AllocHGlobal(Wd * 4 * Ht);
+            try
+            {
+                Assert.True(factory.TryReadPixels(surface, Wd, Ht, native, Wd * 4));
+                var px = new byte[Wd * 4 * Ht];
+                Marshal.Copy(native, px, 0, px.Length);
+                byte At(int x, int y) => px[y * Wd * 4 + x * 4 + 1]; // green of BGRA
+
+                Assert.Equal(255, At(Wd / 2, Ht / 2)); // centre
+                Assert.Equal(255, At(2, Ht / 2));      // left edge midpoint: inside the ellipse,
+                                                       // far outside a min(w,h)/2 circle
+                Assert.Equal(255, At(Wd - 3, Ht / 2)); // right edge midpoint
+                Assert.Equal(0, At(1, 1));             // corners clipped
+                Assert.Equal(0, At(Wd - 2, Ht - 2));
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(native);
+            }
+        }
+
+        [Fact]
         public void Rounded_rect_mask_rounds_corners_only()
         {
             var p = NewProject();

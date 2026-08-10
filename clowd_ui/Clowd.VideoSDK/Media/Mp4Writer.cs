@@ -20,6 +20,26 @@ namespace Clowd.VideoSDK.Media
 
         /// <summary>Audio stream settings; null renders a video-only mp4.</summary>
         public Mp4AudioOptions Audio { get; init; }
+
+        /// <summary>
+        /// Encode video with a 1/1,000,000 (microsecond) time base instead of FpsDen/FpsNum, so
+        /// <see cref="Mp4Writer.SubmitVideoFrame"/> pts are microseconds and frames can sit on an
+        /// arbitrary (VFR) grid. This is the time base vid-render's trim/concat filter graph
+        /// negotiated, so a v1-compat VFR render muxes with the identical sample timing.
+        /// FpsNum/FpsDen are still required (x264's rate-control/level hint).
+        /// </summary>
+        public bool UseMicrosecondTimeBase { get; init; }
+
+        /// <summary>
+        /// Reproduce vid-render's container timing exactly: submit video frames and packets with
+        /// <b>no duration</b>, exactly as render.rs did. movenc then derives sample durations from
+        /// dts deltas, gives the final sample duration 0, and rounds the track's edit-list duration
+        /// up to whole milliseconds — with the quirk that a final frame whose pts lands on an exact
+        /// millisecond falls outside the edit window and is invisible to decoders. The v1 parity
+        /// gate requires this byte-level behaviour; leave it off for v2 renders, where every sample
+        /// carries its true duration and the last frame is always decodable.
+        /// </summary>
+        public bool LegacyContainerTiming { get; init; }
     }
 
     /// <summary>Audio settings for <see cref="Mp4Writer"/>. Submitted samples must already be at
@@ -66,6 +86,7 @@ namespace Clowd.VideoSDK.Media
         private SwsContext* _sws;      // cached BGRA -> yuv420p scaler
         private int _vstreamIndex = -1;
         private int _astreamIndex = -1;
+        private bool _legacyContainerTiming;
 
         private bool _headerWritten;
         private bool _trailerWritten;
@@ -124,6 +145,7 @@ namespace Clowd.VideoSDK.Media
 
         private void Initialize(string outputPath, Mp4WriterOptions options)
         {
+            _legacyContainerTiming = options.LegacyContainerTiming;
             AVFormatContext* fmt = null;
             Check(ffmpeg.avformat_alloc_output_context2(&fmt, null, "mp4", outputPath),
                 "could not create mp4 muxer");
@@ -142,8 +164,12 @@ namespace Clowd.VideoSDK.Media
             _venc->width = options.Width;
             _venc->height = options.Height;
             _venc->pix_fmt = AVPixelFormat.AV_PIX_FMT_YUV420P;
-            // CFR: one pts unit == one frame, so SubmitVideoFrame's frameIndex is the pts verbatim.
-            _venc->time_base = new AVRational { num = options.FpsDen, den = options.FpsNum };
+            // CFR: one pts unit == one frame, so SubmitVideoFrame's pts is the frame index.
+            // Microsecond mode (VFR passthrough): pts are microseconds — the time base
+            // vid-render's filter graph handed its encoder.
+            _venc->time_base = options.UseMicrosecondTimeBase
+                ? new AVRational { num = 1, den = 1_000_000 }
+                : new AVRational { num = options.FpsDen, den = options.FpsNum };
             // Same sanity cap as render.rs: only advertise a plausible rate to x264's level
             // selection (frames keep their own pts either way).
             if (options.FpsNum <= 240L * options.FpsDen)
@@ -235,11 +261,12 @@ namespace Clowd.VideoSDK.Media
         // ------------------------------------------------------------------------------- video
 
         /// <summary>
-        /// Encodes one BGRA frame. <paramref name="frameIndex"/> is the output frame number and is
-        /// used as the pts verbatim (encoder time base = FpsDen/FpsNum); frames must be submitted
-        /// in increasing index order. The source is scaled to the output size when it differs.
+        /// Encodes one BGRA frame. <paramref name="pts"/> is in the encoder time base: the output
+        /// frame number in CFR mode (time base FpsDen/FpsNum), microseconds when
+        /// <see cref="Mp4WriterOptions.UseMicrosecondTimeBase"/> is set; frames must be submitted
+        /// in increasing pts order. The source is scaled to the output size when it differs.
         /// </summary>
-        public void SubmitVideoFrame(IntPtr bgra, int rowBytes, int width, int height, long frameIndex)
+        public void SubmitVideoFrame(IntPtr bgra, int rowBytes, int width, int height, long pts)
         {
             ThrowIfNotWritable();
             if (bgra == IntPtr.Zero)
@@ -269,11 +296,13 @@ namespace Clowd.VideoSDK.Media
             }
             ffmpeg.sws_scale(_sws, _srcData, _srcStride, 0, height, _dstData, _dstStride);
 
-            _vframe->pts = frameIndex;
+            _vframe->pts = pts;
             // CFR: every frame lasts exactly one time-base unit. Propagates frame -> packet ->
             // movenc sample duration; without it the final sample gets duration 0 and the track's
             // avg_frame_rate probes back as nb_frames/(n-1 intervals) instead of the true rate.
-            _vframe->duration = 1;
+            // Legacy mode leaves the duration unset — vid-render never set one, and its movenc
+            // edit-list behaviour (see Mp4WriterOptions.LegacyContainerTiming) depends on that.
+            _vframe->duration = _legacyContainerTiming ? 0 : 1;
             // No decoder upstream here, but keep render.rs's contract: x264 chooses its own GOP.
             _vframe->pict_type = AVPictureType.AV_PICTURE_TYPE_NONE;
             EncodeAndMux(_venc, _vstreamIndex, _vframe, "video");
@@ -376,7 +405,9 @@ namespace Clowd.VideoSDK.Media
                 // libx264 leaves packet duration at 0; movenc then writes the final sample with
                 // duration 0 and the track's avg_frame_rate probes back wrong (n frames over n-1
                 // intervals). CFR means every video packet lasts exactly one time-base unit.
-                if (_pkt->duration == 0 && enc == _venc)
+                // Legacy mode keeps vid-render's zero-duration packets (movenc infers durations
+                // from dts deltas), which the v1 parity gate depends on.
+                if (_pkt->duration == 0 && enc == _venc && !_legacyContainerTiming)
                     _pkt->duration = 1;
 
                 var stream = _fmt->streams[streamIndex];

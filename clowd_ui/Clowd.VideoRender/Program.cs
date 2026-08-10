@@ -75,6 +75,11 @@ namespace Clowd.VideoRender
                     new RenderJobOptions
                     {
                         Crf = job.Crf,
+                        // v1 args are vid-render's contract: mux with its container timing, and
+                        // follow its VFR frame-passthrough schedule when the compat mapping built
+                        // one. v2 projects render on the CFR grid with full sample durations.
+                        FrameTimestampsTicks = job.FrameTimestampsTicks,
+                        LegacyContainerTiming = job.LegacyContainerTiming,
                         // CLOWD_RENDER_BACKEND=cpu forces the raster path — used by the GPU/CPU
                         // equivalence checks; the surface factory falls back to CPU on its own
                         // when no usable GPU context exists, so this is a test/diagnostic knob,
@@ -147,6 +152,8 @@ namespace Clowd.VideoRender
                         OutputPath = outputOverride,
                         Crf = plan.Crf,
                         MaskPngPath = plan.MaskPngPath,
+                        FrameTimestampsTicks = plan.FrameTimestampsTicks,
+                        LegacyContainerTiming = plan.LegacyContainerTiming,
                     };
             }
 

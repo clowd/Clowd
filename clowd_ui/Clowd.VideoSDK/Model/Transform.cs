@@ -72,6 +72,8 @@ public sealed class CropRect
 /// <summary>Mirror of the v1 <c>WebcamOverlayShape</c>.</summary>
 public enum MaskShape
 {
+    /// <summary>The ellipse inscribed in the item's rendered rect (a circle when the rect is
+    /// square) — the exact semantics of the v1 "Circle" mask PNGs and overlay preview.</summary>
     Circle,
     RoundedRect,
 }

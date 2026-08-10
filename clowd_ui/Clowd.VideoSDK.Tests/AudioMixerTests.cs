@@ -167,6 +167,31 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Audio_end_is_the_last_audio_items_end()
+        {
+            // The renderer's audio stream runs to the end of the audio items, not the video's end
+            // — a recording whose audio track is shorter than its video gets a shorter output
+            // audio track, exactly as vid-render's atrim graph produced (parity gate cell c1).
+            var project = NewProject();
+            var sourceId = Guid.NewGuid();
+            AddAudioItem(project, sourceId, 0, Second);
+            AddAudioItem(project, sourceId, 2 * Second, Second / 2);
+
+            var video = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video };
+            project.Tracks.Add(video);
+            project.Items.Add(new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = video.Id,
+                DurationTicks = 5 * Second, // video runs on past the audio
+                Content = new SolidContent { Color = "#FF102030" },
+            });
+
+            Assert.Equal(2 * Second + Second / 2, AudioMixer.GetAudioEndTicks(project));
+            Assert.Equal(0, AudioMixer.GetAudioEndTicks(NewProject()));
+        }
+
+        [Fact]
         public void Video_only_project_has_no_audio_items()
         {
             var project = NewProject();
