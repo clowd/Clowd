@@ -5,12 +5,18 @@ using FFmpeg.AutoGen.Abstractions;
 namespace Clowd.Video.Playback
 {
     /// <summary>
-    /// Bounded FIFO of demuxed packets for one stream, with ffplay-style flush serials. Slots are
+    /// Elastic FIFO of demuxed packets for one stream, with ffplay-style flush serials. Slots are
     /// preallocated AVPackets; producing/consuming moves refs (zero allocation, zero copy).
     ///
     /// The serial is the seek generation: <see cref="Flush"/> discards everything and increments
     /// it; consumers compare the serial attached to each packet against the last one they saw and
     /// flush their codec on change. A special EOF entry (no data) is queued at end of stream.
+    ///
+    /// The queue grows rather than blocking its producer: there is one demux thread feeding every
+    /// stream, so a queue that blocks when full stops the packets of *all* the other streams too
+    /// (see <see cref="Demuxer"/> — that starves the audio clock the video presenter waits on).
+    /// Read-ahead is bounded across streams by the demuxer's budget instead, which is why
+    /// <see cref="Bytes"/> is tracked here.
     /// </summary>
     internal sealed unsafe class PacketQueue : IDisposable
     {
@@ -22,9 +28,10 @@ namespace Clowd.Video.Playback
         }
 
         private readonly object _sync = new object();
-        private readonly Slot[] _slots;
+        private Slot[] _slots;
         private int _head;   // next slot to consume
         private int _count;
+        private long _bytes;  // queued packet payload, for the demuxer's read-ahead budget
         private int _serial;
         private bool _stopped;
         private bool _producerInterrupt;
@@ -51,35 +58,60 @@ namespace Clowd.Video.Playback
             get { lock (_sync) return _count; }
         }
 
+        /// <summary>Payload bytes currently queued (EOF markers count as zero).</summary>
+        public long Bytes
+        {
+            get { lock (_sync) return _bytes; }
+        }
+
         /// <summary>
-        /// Moves <paramref name="packet"/>'s ref into the queue; blocks while full. Returns false
-        /// (packet untouched) when the producer was interrupted (pending seek/stop command) so the
-        /// demux loop can go handle it.
+        /// Moves <paramref name="packet"/>'s ref into the queue, growing it if it is full. Returns
+        /// false (packet untouched) when the producer was interrupted (pending seek/stop command)
+        /// so the demux loop can go handle it.
         /// </summary>
         public bool Put(AVPacket* packet, bool eof)
         {
             lock (_sync)
             {
-                while (_count == _slots.Length)
-                {
-                    if (_stopped || _producerInterrupt)
-                        return false;
-                    Monitor.Wait(_sync);
-                }
-
                 if (_stopped || _producerInterrupt)
                     return false;
+
+                if (_count == _slots.Length)
+                    Grow();
 
                 int tail = (_head + _count) % _slots.Length;
                 ref var slot = ref _slots[tail];
                 slot.Serial = _serial;
                 slot.Eof = eof;
                 if (!eof && packet != null)
+                {
                     ffmpeg.av_packet_move_ref(slot.Packet, packet);
+                    _bytes += slot.Packet->size;
+                }
+
                 _count++;
                 Monitor.PulseAll(_sync);
                 return true;
             }
+        }
+
+        /// <summary>Doubles the slot ring. Only called while full, so every existing slot holds a
+        /// queued packet and re-linearizing from <see cref="_head"/> copies all of them.</summary>
+        private void Grow()
+        {
+            var bigger = new Slot[_slots.Length * 2];
+            for (int i = 0; i < _count; i++)
+                bigger[i] = _slots[(_head + i) % _slots.Length];
+
+            for (int i = _count; i < bigger.Length; i++)
+            {
+                bigger[i].Packet = ffmpeg.av_packet_alloc();
+                if (bigger[i].Packet == null)
+                    throw new OutOfMemoryException("av_packet_alloc failed");
+            }
+
+            _slots = bigger;
+            _head = 0;
         }
 
         /// <summary>
@@ -105,7 +137,11 @@ namespace Clowd.Video.Playback
                 serial = slot.Serial;
                 eof = slot.Eof;
                 if (!eof)
+                {
+                    _bytes -= slot.Packet->size;
                     ffmpeg.av_packet_move_ref(packet, slot.Packet);
+                }
+
                 _head = (_head + 1) % _slots.Length;
                 _count--;
                 Monitor.PulseAll(_sync);
@@ -127,6 +163,7 @@ namespace Clowd.Video.Playback
 
                 _head = 0;
                 _count = 0;
+                _bytes = 0;
                 _serial++;
                 Monitor.PulseAll(_sync);
                 return _serial;
@@ -174,6 +211,7 @@ namespace Clowd.Video.Playback
                 }
 
                 _count = 0;
+                _bytes = 0;
                 Monitor.PulseAll(_sync);
             }
         }

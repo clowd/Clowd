@@ -31,12 +31,23 @@ namespace Clowd.Video.Playback
     /// </summary>
     public sealed class PlaybackClock
     {
+        /// <summary>How far the clock may run ahead of the last audio position it actually saw.
+        /// Interpolation smooths the renderer's coarse updates; this stops it from inventing time
+        /// indefinitely if audio stops advancing altogether (device lost, permanent underrun),
+        /// where freezing is the honest answer.</summary>
+        private static readonly TimeSpan MaxAudioInterpolation = TimeSpan.FromMilliseconds(500);
+
         private readonly object _sync = new object();
         private readonly IMonotonicTime _time;
         private IAudioClockSource _audio;
         private TimeSpan _basePosition;
         private TimeSpan _baseElapsed;
         private bool _running;
+
+        // audio-master interpolation: the last position the renderer reported, and when we saw it.
+        private TimeSpan _audioAnchor;
+        private TimeSpan _audioAnchorElapsed;
+        private bool _hasAudioAnchor;
 
         public PlaybackClock(IMonotonicTime time = null)
         {
@@ -53,6 +64,7 @@ namespace Clowd.Video.Playback
                 _audio = audio;
                 _basePosition = pos;
                 _baseElapsed = _time.Elapsed;
+                ResetAudioAnchorLocked();
             }
         }
 
@@ -72,10 +84,44 @@ namespace Clowd.Video.Playback
             // last set (seek target / stepped frame pts) — the audio renderer's notion is stale
             // and would pin the position (e.g. frame steps would not move it).
             if (_running && _audio != null && _audio.HasTiming)
-                return _audio.PlayedTime;
+                return InterpolatedAudioLocked();
             if (!_running)
                 return _basePosition;
             return _basePosition + (_time.Elapsed - _baseElapsed);
+        }
+
+        /// <summary>
+        /// The audio position, carried forward by wall time between renderer updates. WASAPI only
+        /// moves its played-time once per device callback (~10ms), so reading it raw makes the
+        /// master clock a step function: video frames due inside a step all come due at once, and
+        /// the presenter drops the ones that land more than a frame late. Anchoring on each new
+        /// audio value and interpolating from it keeps the clock smooth without letting it drift —
+        /// every update re-anchors, so the error can never exceed one renderer callback.
+        /// </summary>
+        private TimeSpan InterpolatedAudioLocked()
+        {
+            var played = _audio.PlayedTime;
+            var elapsed = _time.Elapsed;
+
+            if (!_hasAudioAnchor || played != _audioAnchor)
+            {
+                _audioAnchor = played;
+                _audioAnchorElapsed = elapsed;
+                _hasAudioAnchor = true;
+                return played;
+            }
+
+            var lead = elapsed - _audioAnchorElapsed;
+            if (lead > MaxAudioInterpolation)
+                lead = MaxAudioInterpolation;
+            return _audioAnchor + lead;
+        }
+
+        /// <summary>Drops the interpolation anchor so the next read re-syncs to the renderer
+        /// (audio source swapped, seek, or playback stopped).</summary>
+        private void ResetAudioAnchorLocked()
+        {
+            _hasAudioAnchor = false;
         }
 
         public void Start()
@@ -86,6 +132,7 @@ namespace Clowd.Video.Playback
                     return;
                 _baseElapsed = _time.Elapsed;
                 _running = true;
+                ResetAudioAnchorLocked();
             }
         }
 
@@ -97,6 +144,7 @@ namespace Clowd.Video.Playback
                     return;
                 _basePosition = PositionLocked();
                 _running = false;
+                ResetAudioAnchorLocked();
             }
         }
 
@@ -107,6 +155,7 @@ namespace Clowd.Video.Playback
             {
                 _basePosition = position;
                 _baseElapsed = _time.Elapsed;
+                ResetAudioAnchorLocked();
             }
         }
     }

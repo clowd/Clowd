@@ -103,6 +103,72 @@ namespace Clowd.Video.Tests
         }
 
         [Fact]
+        public void Audio_master_interpolates_between_renderer_updates()
+        {
+            // WASAPI only moves its played-time once per device callback (~10ms). Read raw, the
+            // master clock is a step function and every video frame due inside a step comes due
+            // at once — the presenter then drops the ones that land more than a frame late.
+            var time = new FakeTime();
+            var audio = new FakeAudio { HasTiming = true, PlayedTime = TimeSpan.FromSeconds(1) };
+            var clock = new PlaybackClock(time);
+            clock.SetAudioSource(audio);
+            clock.Start();
+
+            Assert.Equal(TimeSpan.FromSeconds(1), clock.Position);
+
+            time.Advance(0.004);
+            Assert.Equal(TimeSpan.FromSeconds(1.004), clock.Position);
+            time.Advance(0.004);
+            Assert.Equal(TimeSpan.FromSeconds(1.008), clock.Position);
+
+            // the next renderer update re-anchors: interpolation error never compounds.
+            audio.PlayedTime = TimeSpan.FromSeconds(1.01);
+            Assert.Equal(TimeSpan.FromSeconds(1.01), clock.Position);
+            time.Advance(0.004);
+            Assert.Equal(TimeSpan.FromSeconds(1.014), clock.Position);
+        }
+
+        [Fact]
+        public void Audio_interpolation_stops_when_audio_stops_advancing()
+        {
+            // a lost device / permanent underrun must not have the clock inventing time forever.
+            var time = new FakeTime();
+            var audio = new FakeAudio { HasTiming = true, PlayedTime = TimeSpan.FromSeconds(3) };
+            var clock = new PlaybackClock(time);
+            clock.SetAudioSource(audio);
+            clock.Start();
+
+            Assert.Equal(TimeSpan.FromSeconds(3), clock.Position);
+            time.Advance(30);
+            Assert.Equal(TimeSpan.FromSeconds(3.5), clock.Position);
+        }
+
+        [Fact]
+        public void Seek_resets_interpolation_to_the_seek_target()
+        {
+            // the sink resets its own timing on a seek; the clock must not carry an anchor from
+            // before it across, or the first read after the seek drifts off the target.
+            var time = new FakeTime();
+            var audio = new FakeAudio { HasTiming = true, PlayedTime = TimeSpan.FromSeconds(2) };
+            var clock = new PlaybackClock(time);
+            clock.SetAudioSource(audio);
+            clock.Start();
+            time.Advance(0.006);
+
+            audio.HasTiming = false; // NAudioSink.ResetTiming
+            clock.SetPosition(TimeSpan.FromSeconds(40));
+            Assert.Equal(TimeSpan.FromSeconds(40), clock.Position);
+
+            // audio comes back at the seek target: the first read re-anchors there exactly,
+            // and interpolation resumes from it rather than from the pre-seek anchor.
+            audio.HasTiming = true;
+            audio.PlayedTime = TimeSpan.FromSeconds(40);
+            Assert.Equal(TimeSpan.FromSeconds(40), clock.Position);
+            time.Advance(0.003);
+            Assert.Equal(TimeSpan.FromSeconds(40.003), clock.Position);
+        }
+
+        [Fact]
         public void Detaching_audio_continues_from_current_position()
         {
             var time = new FakeTime();
