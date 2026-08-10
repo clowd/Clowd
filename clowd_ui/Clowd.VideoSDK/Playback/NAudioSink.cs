@@ -1,33 +1,23 @@
 using System;
 using System.Threading;
-using NAudio.CoreAudioApi;
-using NAudio.Wave;
+using Clowd.VideoSDK.Audio;
 
 namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
-    /// WASAPI shared-mode audio output draining the decode ring, and the audio master clock.
-    /// <see cref="PlayedTime"/> is the media time actually heard: the base pts set after each
-    /// open/seek plus samples delivered to the device, minus the (fixed) device latency.
-    /// The render callback fills silence on underrun without advancing media time.
+    /// Drains the decode ring into the platform audio output (<see cref="IAudioOutput"/>), and is
+    /// the audio master clock. <see cref="PlayedTime"/> is the media time actually heard: the base
+    /// pts set after each open/seek plus samples delivered to the device, minus the (fixed) device
+    /// latency. The render callback fills silence on underrun without advancing media time.
     /// </summary>
     internal sealed class NAudioSink : IDisposable, IAudioClockSource
     {
         private const int LatencyMs = 100;
 
-        private sealed class RingWaveProvider : IWaveProvider
-        {
-            private readonly NAudioSink _owner;
-            public RingWaveProvider(NAudioSink owner) { _owner = owner; }
-            public WaveFormat WaveFormat => _owner._format;
-            public int Read(byte[] buffer, int offset, int count) => _owner.RenderRead(buffer, offset, count);
-        }
-
-        private readonly WaveFormat _format;
         private readonly AudioRingBuffer _ring;
         private readonly int _sampleRate;
         private readonly int _channels;
-        private WasapiOut _out;
+        private readonly IAudioOutput _out;
         private long _consumedFrames;              // media frames delivered to the device
         private long _basePtsTicks = long.MinValue; // long.MinValue = no timing yet
         private long _underrunSamples;
@@ -39,7 +29,8 @@ namespace Clowd.VideoSDK.Playback
             _sampleRate = sampleRate;
             _channels = channels;
             _ring = ring;
-            _format = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
+            _out = AudioOutputFactory.Create();
+            _out.Initialize(sampleRate, channels, LatencyMs, RenderRead);
         }
 
         public AudioRingBuffer Ring => _ring;
@@ -70,35 +61,22 @@ namespace Clowd.VideoSDK.Playback
             set
             {
                 _volume = (float)Math.Clamp(value, 0.0, 1.0);
-                var device = _out;
-                if (device != null)
-                {
-                    try { device.Volume = _volume; }
-                    catch { }
-                }
+                _out.Volume = _volume;
             }
         }
 
-        /// <summary>Creates the device lazily on first play (device enumeration is not free).</summary>
+        /// <summary>The output opens its device lazily on this first call (device enumeration is
+        /// not free).</summary>
         public void Play()
         {
             if (_disposed)
                 return;
-            if (_out == null)
-            {
-                _out = new WasapiOut(AudioClientShareMode.Shared, true, LatencyMs);
-                _out.Init(new RingWaveProvider(this));
-                try { _out.Volume = _volume; }
-                catch { }
-            }
-
             _out.Play();
         }
 
         public void Pause()
         {
-            if (_out != null && _out.PlaybackState == PlaybackState.Playing)
-                _out.Pause();
+            _out.Pause();
         }
 
         /// <summary>Called by the audio decode thread after a flush: timing restarts from the
@@ -115,22 +93,16 @@ namespace Clowd.VideoSDK.Playback
             Interlocked.CompareExchange(ref _basePtsTicks, pts.Ticks, long.MinValue);
         }
 
-        private int RenderRead(byte[] buffer, int offset, int count)
+        private void RenderRead(Span<float> buffer)
         {
-            // interpret the byte buffer as floats in place; count is always a multiple of the
-            // float-stereo block align in shared mode.
-            var floats = System.Runtime.InteropServices.MemoryMarshal
-                .Cast<byte, float>(buffer.AsSpan(offset, count & ~3));
-
-            int read = _ring.Read(floats);
-            if (read < floats.Length)
+            int read = _ring.Read(buffer);
+            if (read < buffer.Length)
             {
-                floats.Slice(read).Clear();
-                Interlocked.Add(ref _underrunSamples, floats.Length - read);
+                buffer.Slice(read).Clear();
+                Interlocked.Add(ref _underrunSamples, buffer.Length - read);
             }
 
             Interlocked.Add(ref _consumedFrames, read / _channels);
-            return count;
         }
 
         public void Dispose()
@@ -138,11 +110,10 @@ namespace Clowd.VideoSDK.Playback
             if (_disposed)
                 return;
             _disposed = true;
-            try { _out?.Stop(); }
+            try { _out.Stop(); }
             catch { }
-            try { _out?.Dispose(); }
+            try { _out.Dispose(); }
             catch { }
-            _out = null;
         }
     }
 }
