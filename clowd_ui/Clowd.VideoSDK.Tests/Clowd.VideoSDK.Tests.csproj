@@ -5,6 +5,9 @@
     <Nullable>disable</Nullable>
     <IsPackable>false</IsPackable>
     <OutputType>Exe</OutputType>
+    <!-- EncoderTests probe encoded output (pixel format, codec ids) straight through the FFmpeg
+         C API — MediaProbe deliberately exposes only the composition model's view. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CA2007;xUnit1051</NoWarn>
   </PropertyGroup>
   <ItemGroup>
