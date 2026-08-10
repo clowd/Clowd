@@ -8,6 +8,7 @@ mod region;
 mod settings;
 mod status;
 mod tracker;
+mod tracks;
 mod webcam;
 
 use clap::Parser;

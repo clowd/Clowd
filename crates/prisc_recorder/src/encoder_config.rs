@@ -155,10 +155,20 @@ pub fn create_video_encoder(
         "Using video encoder '{encoder_id}' (crf/cqp={}, low_cpu={})",
         config.crf, config.low_cpu
     );
-    ObsEncoder::create_video(&encoder_id, "video_encoder", Some(&settings))
+    // The encoder name becomes the mp4 track name (mp4_output writes it into
+    // the track's udta box), so it is user-visible in players.
+    ObsEncoder::create_video(&encoder_id, "Screen", Some(&settings))
 }
 
-pub fn create_audio_encoder(available: &[String]) -> Result<ObsEncoder, ObsError> {
+/// Creates one audio encoder reading libobs audio mixer `mixer_idx` — the
+/// mixer whose sources make up output audio track `mixer_idx` (multi-track
+/// mode); single-track recordings only ever use mixer 0. `name` becomes the
+/// mp4 track name.
+pub fn create_audio_encoder(
+    available: &[String],
+    name: &str,
+    mixer_idx: usize,
+) -> Result<ObsEncoder, ObsError> {
     let settings = ObsData::new();
     settings.set_int("bitrate", 128);
     let id = if available.iter().any(|t| t == "CoreAudio_AAC") {
@@ -166,8 +176,8 @@ pub fn create_audio_encoder(available: &[String]) -> Result<ObsEncoder, ObsError
     } else {
         "ffmpeg_aac"
     };
-    eprintln!("Using audio encoder '{id}'");
-    ObsEncoder::create_audio(id, "audio_encoder", 0, Some(&settings))
+    eprintln!("Using audio encoder '{id}' for track {mixer_idx} ('{name}')");
+    ObsEncoder::create_audio(id, name, mixer_idx, Some(&settings))
 }
 
 #[cfg(test)]

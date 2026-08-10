@@ -3,8 +3,12 @@
 //! The webcam renders into its own `obs_view` video mix (independent size and
 //! shared fps), encoded by a dedicated x264 encoder attached to the output as
 //! video track 1 (`obs_output_set_video_encoder2`). Track 0 stays the clean
-//! screen canvas. Requires the multi-track "mp4_output" — `ffmpeg_muxer`
-//! silently ignores track indices > 0.
+//! screen canvas. Requires `--multi-track` (the "mp4_output" muxer) —
+//! `ffmpeg_muxer` silently ignores video track indices > 0.
+//!
+//! The camera source is platform-provided (`platform::WEBCAM_SOURCE_ID`:
+//! DirectShow on Windows, AVFoundation on macOS); everything downstream of it
+//! is identical on both.
 //!
 //! CRITICAL invariant (verified in libobs 32.1.2): `obs_reset_video` destroys
 //! ALL view mixes. Any code path calling `obs_reset_video` while a `Webcam`
@@ -60,9 +64,9 @@ pub struct Webcam {
 /// the mix. Everything fallible happens in here, before the caller mutates
 /// the output (`build_*_sources` pattern).
 ///
-/// `device_id` must be the exact string from `--list-cameras` (the dshow
-/// property list item value, already in escaped `<name>:<path>` form — no
-/// re-escaping is done here).
+/// `device_id` must be the exact string from `--list-cameras` (the camera
+/// source's property list item value — win-dshow's escaped `<name>:<path>` on
+/// Windows, an `AVCaptureDevice.uniqueID` on macOS — passed through verbatim).
 pub fn create(device_id: &str, settings: &Settings) -> Result<Webcam, String> {
     let source = if device_id == TEST_DEVICE_ID {
         let s = ObsData::new();
@@ -73,15 +77,8 @@ pub fn create(device_id: &str, settings: &Settings) -> Result<Webcam, String> {
         ObsSource::create("color_source", "webcam_0", Some(&s))
             .map_err(|e| format!("Failed to create the webcam test source: {e}"))?
     } else {
-        let s = ObsData::new();
-        s.set_string("video_device_id", device_id);
-        // 0 = the device's preferred resolution/format.
-        s.set_int("res_type", 0);
-        s.set_bool("active", true);
-        // Hidden win-dshow knob: block source creation until the device is
-        // actually running, so the size poll below usually succeeds at once.
-        s.set_bool("synchronous_activate", true);
-        ObsSource::create("dshow_input", "webcam_0", Some(&s))
+        let s = platform::webcam_settings(device_id);
+        ObsSource::create(platform::WEBCAM_SOURCE_ID, "webcam_0", Some(&s))
             .map_err(|e| format!("Failed to create webcam source for '{device_id}': {e}"))?
     };
 
@@ -144,8 +141,9 @@ pub fn create(device_id: &str, settings: &Settings) -> Result<Webcam, String> {
         .map_err(|e| format!("Failed to create the webcam video mix: {e}"))?;
 
     // Track 1 is always x264 (CRF): predictable, no second hardware-encoder
-    // session contention with the screen track.
-    let encoder = ObsEncoder::create_video("obs_x264", "webcam_encoder", Some(&encoder_settings(settings.crf)))
+    // session contention with the screen track. The encoder name becomes the
+    // mp4 track name (mp4_output writes it into the track's udta box).
+    let encoder = ObsEncoder::create_video("obs_x264", "Webcam", Some(&encoder_settings(settings.crf)))
         .map_err(|e| format!("Failed to create the webcam encoder: {e}"))?;
     encoder.set_video(video);
 

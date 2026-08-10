@@ -153,6 +153,10 @@ fn mac_cmake_build(obs_build: &Path, config: &str) {
         // image_source + color_filter: the mouse click tracker (--tracker).
         "image-source",
         "obs-filters",
+        // mp4_output: the hybrid MP4 muxer behind --multi-track.
+        "obs-outputs",
+        // macos-avcapture: webcam capture (--webcam / --list-cameras).
+        "mac-avcapture",
     ];
 
     let marker = obs_build.join(".build_complete");

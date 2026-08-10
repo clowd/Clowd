@@ -9,7 +9,8 @@ This is a Rust rewrite of [clowd/obs-express](https://github.com/clowd/obs-expre
 - **Region or monitor capture** — record an arbitrary `X,Y,W,H` rectangle (which may span multiple displays) or a whole monitor by id/index. Defaults to the primary monitor.
 - **Hardware or software H.264** — x264 by default; `--hw-accel` prefers a GPU encoder (NVENC → AMF → QSV on Windows, VideoToolbox on macOS) and transparently falls back to x264.
 - **Multi-device audio** — any number of speaker (output) and microphone (input) devices, up to 8 total, mixed into the recording.
-- **Webcam second track** (Windows) — `--webcam <id>` records a DirectShow camera as a *second video track* in the same MP4 (track 0 = clean screen, track 1 = webcam), for picture-in-picture compositing at edit time; `--list-cameras` enumerates the available devices.
+- **Multi-track recording** — `--multi-track` writes every stream to its own track in one MP4: video track 0 = clean screen, video track 1 = webcam, and one audio track per capture device. A screen recording with a webcam, a speaker and a microphone is a 4-track file, ready for picture-in-picture compositing and per-source audio mixing at edit time.
+- **Webcam second track** — `--webcam <id>` (requires `--multi-track`) records a camera — DirectShow on Windows, AVFoundation on macOS — as video track 1; `--list-cameras` enumerates the available devices.
 - **Programmatic control** — a parent process drives recording over stdin (`start` / `pause` / `quit`, per-device mute) and reads structured progress as one JSON object per line on stdout.
 - **Live reconfiguration** — all tunables (fps, quality, encoder, resolution cap, cursor, tracker, audio devices) can be supplied as a JSON file via `--settings` and re-applied at runtime with the stdin `configure` command — in `--pause` mode the whole pipeline is rebuilt in place, no process restart needed.
 - **Aspect-preserving downscale** — cap output resolution with `--max-width` / `--max-height` without distorting the picture (never upscales).
@@ -55,6 +56,10 @@ obs-express --output clip.mp4 --region 0,0,1280,720 --fps 60 --crf 20
 
 # Record monitor 0 with system audio and the default mic, hardware-encoded
 obs-express --output clip.mp4 --monitor 0 --hw-accel --speaker default --microphone default
+
+# Four separate tracks: screen, webcam, speaker, microphone
+obs-express --output clip.mp4 --multi-track --webcam "$(obs-express --list-cameras | jq -r .cameras[0].id)" \
+            --speaker default --microphone default
 ```
 
 ### Options
@@ -76,8 +81,9 @@ obs-express --output clip.mp4 --monitor 0 --hw-accel --speaker default --microph
 | `--pause` | off | Build the pipeline, emit `initialized`, and wait for a stdin `start` before recording. |
 | `--speaker <DEVICE>` | — | Output-capture (system audio) device id, or `default`. Repeatable. On macOS 13+ system audio is captured via ScreenCaptureKit: the device id is ignored (the flag only toggles system-audio capture on) and repeating the flag is rejected. |
 | `--microphone <DEVICE>` | — | Input-capture (microphone) device id, or `default`. Repeatable. |
-| `--webcam <ID>` | — | Windows: record the given DirectShow camera as a second video track (track 0 = screen, track 1 = webcam, ≤ 1280x720, x264 CRF). `ID` is a device id exactly as printed by `--list-cameras`. The camera's built-in microphone is never recorded — use `--microphone` for that. |
-| `--list-cameras` | — | Enumerate DirectShow cameras: prints exactly one JSON line `{"type":"cameras","cameras":[{"id":..,"name":..}]}` on stdout and exits 0 (`{"type":"error","message":..}` and exit 1 on failure). Mutually exclusive with all recording flags; `--output` is not required. |
+| `--multi-track` | off | Give every stream its own track (OBS's hybrid MP4 output): video track 0 = screen, video track 1 = webcam, and one audio track per `--speaker` / `--microphone` device — speakers first, in the order given, at most 6 audio tracks. Without it the recording uses the single-track muxer: one video track and all audio mixed into one track, and `--webcam` is rejected. |
+| `--webcam <ID>` | — | Record the given camera as a second video track (track 0 = screen, track 1 = webcam, ≤ 1280x720, x264 CRF). Requires `--multi-track`. `ID` is a device id exactly as printed by `--list-cameras`. The camera's built-in microphone is never recorded — use `--microphone` for that. |
+| `--list-cameras` | — | Enumerate cameras (DirectShow on Windows, AVFoundation on macOS): prints exactly one JSON line `{"type":"cameras","cameras":[{"id":..,"name":..}]}` on stdout and exits 0 (`{"type":"error","message":..}` and exit 1 on failure). Mutually exclusive with all recording flags; `--output` is not required. |
 | `--speaker-volume-compensation` | off | Windows: boost speaker capture to undo the system master volume when the audio device applies it in software. On such devices (no hardware volume control — common for USB DACs) the loopback stream Windows hands to recorders is already attenuated by the volume slider, so recordings sound quieter than the played content did. Devices with hardware volume are detected and left untouched; no-op on macOS. Volume changes made while recording are tracked within ~100 ms; the boost is capped at +30 dB. |
 | `--settings <FILE.json>` | — | Read the tunables from a JSON file instead of individual flags (see below). Conflicts with every flag it replaces: `--fps`, `--crf`, `--max-width`, `--max-height`, `--hw-accel`, `--low-cpu`, `--no-cursor`, `--tracker`, `--tracker-color`, `--speaker`, `--microphone`, `--speaker-volume-compensation`. |
 
@@ -105,7 +111,7 @@ Downscaling preserves aspect ratio: the tightest of the two caps is applied once
 }
 ```
 
-`webcam_device` is the settings-file equivalent of `--webcam` (a device id exactly as printed by `--list-cameras`; empty = no webcam). If the `--webcam` flag is also given it wins and pins the device for the process lifetime. Webcam capture is Windows-only: on other platforms a non-empty `webcam_device` (or `--webcam`) is rejected with a clear error.
+`webcam_device` is the settings-file equivalent of `--webcam` (a device id exactly as printed by `--list-cameras`; empty = no webcam). If the `--webcam` flag is also given it wins and pins the device for the process lifetime. Either way it requires `--multi-track` — a single-track recording carries one video track, so a webcam requested without that flag is rejected with a clear error (exit 2 at startup, `configure_error` at runtime).
 
 Every field is optional and defaults to the corresponding flag's default; note `cursor` has positive polarity ("capture the cursor", default `true`) where the flag is `--no-cursor`. A missing field always means the *default* — never "keep the current value" — so a file resolves to the same effective config whether it is read at startup or by a later `configure`. Unknown fields are ignored. Values are validated like the flags they replace (bad values fail startup with exit 2, or ack `configure_error` at runtime).
 
@@ -145,7 +151,7 @@ obs-express --output demo.mp4 --tracker --tracker-color 0,128,255
 
 What a `configure` can change depends on whether recording has started:
 
-- **Before `start`** (the `--pause` wait) — everything applies: fps and the resolution caps rebuild the video pipeline in place, the encoder is recreated for `crf` / `hw_accel` / `low_cpu` changes, audio device lists are rebuilt (the `levels` arrays and mute indices follow the new lists; rebuilt devices come back unmuted), the webcam chain is added/removed/rebuilt when `webcam_device` changes (unless `--webcam` pinned it), and cursor/tracker/color update directly. Repeatable — any number of `configure`s may precede `start`.
+- **Before `start`** (the `--pause` wait) — everything applies: fps and the resolution caps rebuild the video pipeline in place, the encoder is recreated for `crf` / `hw_accel` / `low_cpu` changes, audio device lists are rebuilt (the `levels` arrays and mute indices follow the new lists; rebuilt devices come back unmuted, and with `--multi-track` the audio *tracks* are re-laid-out to match), the webcam chain is added/removed/rebuilt when `webcam_device` changes (unless `--webcam` pinned it), and cursor/tracker/color update directly. Repeatable — any number of `configure`s may precede `start`.
 - **After `start`** — only the live-safe keys apply: `cursor`, `tracker`, `tracker_color`, and `speaker_volume_compensation`. Every other key that differs from the active config (including `webcam_device`) is left untouched and reported in the ack's `ignored_keys`; the recording is never disturbed.
 
 On failure the ack is `configure_error` with a `message` and a `fatal` flag. `fatal:false` means the pipeline still matches the config from before the command (bad file, invalid values, a device that failed to open — all validated before anything is committed); `fatal:true` means a mid-rebuild failure may have left the pipeline unusable and the parent should restart the process. Mute state for *unchanged* devices survives a reconfigure; per-device mutes always address the current lists.
@@ -167,7 +173,20 @@ On failure the ack is `configure_error` with a `message` and a `fatal` flag. `fa
 | `{"type":"configure_error","message":..,"fatal":..}` | A `configure` failed; nothing applied unless `fatal` is `true`, in which case the pipeline may be broken and the process should be restarted. |
 | `{"type":"stopped_recording","code":..,"message":..,"error":..,"tracks":{..}}` | Final line before exit. |
 
-`tracks` describes the video streams of the mp4: `{"screen":{"index":0,"width":W,"height":H},"webcam":{"index":1,"width":W,"height":H}}` — `index` is the mp4 video-stream index, `width`/`height` are the encoded dimensions (the screen canvas after any `max_width`/`max_height` downscale; the webcam's ≤ 1280x720 mix canvas), and the `webcam` entry is **absent** (not `null`) when no webcam is configured. It is present on both `started_recording` and `stopped_recording` (but absent from a `stopped_recording` emitted before recording ever started, e.g. cancellation during `--pause` or a start failure).
+`tracks` describes the streams of the mp4:
+
+```json
+{
+  "screen": {"index": 0, "width": 1920, "height": 1080},
+  "webcam": {"index": 1, "width": 1280, "height": 720},
+  "audio":  [{"index": 0, "kind": "speaker",    "device": "default", "name": "Speaker 1"},
+             {"index": 1, "kind": "microphone", "device": "mic-id",  "name": "Microphone 1"}]
+}
+```
+
+`index` is the stream index *within its media type* (video / audio), matching the container's per-type numbering. For the video entries, `width`/`height` are the encoded dimensions (the screen canvas after any `max_width`/`max_height` downscale; the webcam's ≤ 1280x720 mix canvas), and the `webcam` entry is **absent** (not `null`) when no webcam is configured. `audio` always holds at least one entry: with `--multi-track` one per device (`kind` is `speaker` or `microphone`, in `--speaker`-then-`--microphone` order), otherwise a single `{"kind":"mixed","device":null}` track carrying all devices mixed together (silence when none is configured). `name` is the track name written into the mp4, which is what a player shows in its track menu.
+
+`tracks` is present on both `started_recording` and `stopped_recording` (but absent from a `stopped_recording` emitted before recording ever started, e.g. cancellation during `--pause` or a start failure).
 
 `status` fields: `timeMs` is elapsed recording time in milliseconds (excluding paused spans), `fps` is the measured frame rate over the trailing 5 seconds of that clock (a lifetime average would read permanently low, since the frame counter trails the clock by the encoder's startup and in-flight frames), and `dropped` / `droppedPerc` report dropped frames. The final `stopped_recording.code` mirrors the OBS output stop code (`0` = success; negative values indicate invalid path, unsupported format, out of disk space, encoder error, etc.), with a human-readable `message`.
 
@@ -197,10 +216,11 @@ quit                      ->
 
 ## Encoding
 
-- **Container** — OBS's hybrid MP4 output (`mp4_output`): multi-track capable, written fragment-by-fragment so a crash or kill mid-recording leaves a file FFmpeg can still read, then soft-remuxed to a standard MP4 on stop. A hidden `--legacy-muxer` flag forces the old single-track `ffmpeg_muxer` (incompatible with `--webcam`).
+- **Container** — MP4. By default the single-track `ffmpeg_muxer` (one video track, one mixed audio track). `--multi-track` switches to OBS's hybrid MP4 output (`mp4_output`): it carries a track per stream (see below), is written fragment-by-fragment so a crash or kill mid-recording leaves a file FFmpeg can still read, and is soft-remuxed to a standard MP4 on stop.
+- **Track layout** — with `--multi-track`, video track 0 is the clean screen, video track 1 the webcam, and each `--speaker` / `--microphone` device gets its own audio track (speakers first, in the order given; at most 6, libobs's mixer limit). Every audio source is routed to exactly one libobs mixer and encoded by that mixer's own AAC encoder, so the tracks stay fully separate — nothing is pre-mixed. Track names (`Screen`, `Webcam`, `Speaker 1`, `Microphone 1`, …) are written into the MP4. Without the flag, all audio devices are mixed into the single audio track, exactly as before.
 - **Video** — H.264. Software x264 by default (`veryfast`, or `ultrafast` with `--low-cpu`); `--hw-accel` selects the first available hardware encoder (Windows priority NVENC → AMF → QSV; macOS VideoToolbox) and falls back to x264 otherwise. `--crf` is passed through as the CRF (x264) or CQP (hardware) value. Every video encoder uses a 2 s keyframe interval: the hybrid MP4 output flushes a fragment at each keyframe, so this bounds the data lost to a hard crash/kill to a few seconds (an encoder-default ~8 s GOP would make any recording killed in its first ~9 seconds a zero-byte total loss) and keeps editor seeking fast.
-- **Webcam track** — with `--webcam` (or the `webcam_device` settings key), video track 1 carries the camera at its native size, downscaled aspect-preserving to fit 1280x720, always encoded with x264 (CRF from `--crf`/settings, `veryfast`, high profile) at the recording fps.
-- **Audio** — AAC at 128 kbps (`CoreAudio_AAC` on macOS when available, otherwise `ffmpeg_aac`), 44.1 kHz.
+- **Webcam track** — with `--webcam` (or the `webcam_device` settings key), video track 1 carries the camera at its native size, downscaled aspect-preserving to fit 1280x720, always encoded with x264 (CRF from `--crf`/settings, `veryfast`, high profile) at the recording fps. The camera renders into its own private `obs_view` mix, so the screen track never sees it. Windows uses the DirectShow source (`dshow_input`), macOS AVFoundation (`macos-avcapture`).
+- **Audio** — AAC at 128 kbps (`CoreAudio_AAC` on macOS when available, otherwise `ffmpeg_aac`), 44.1 kHz, one encoder per audio track.
 
 ## vid2gif
 

@@ -25,6 +25,10 @@ use super::{MonitorInfo, MouseInfo, ObsPaths};
 pub const GRAPHICS_MODULE: &CStr = c"libobs-d3d11";
 pub const DISPLAY_CAPTURE_ID: &str = "monitor_capture";
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "wasapi_input_capture";
+/// Webcam capture source (`--webcam` / `--list-cameras`): DirectShow.
+pub const WEBCAM_SOURCE_ID: &str = "dshow_input";
+/// The `WEBCAM_SOURCE_ID` settings key (and property) holding the device id.
+pub const WEBCAM_DEVICE_KEY: &str = "video_device_id";
 
 /// `EDD_GET_DEVICE_INTERFACE_NAME` — request the device interface path in
 /// `DISPLAY_DEVICEW.DeviceID`.
@@ -186,6 +190,22 @@ pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
     let settings = ObsData::new();
     settings.set_string("device_id", device_id);
     ("wasapi_output_capture", settings)
+}
+
+/// Settings for a `WEBCAM_SOURCE_ID` instance capturing `device_id` (a value
+/// exactly as printed by `--list-cameras`, i.e. win-dshow's escaped
+/// `<name>:<path>` form — no re-escaping happens here).
+pub fn webcam_settings(device_id: &str) -> ObsData {
+    let settings = ObsData::new();
+    settings.set_string(WEBCAM_DEVICE_KEY, device_id);
+    // 0 = the device's preferred resolution/format.
+    settings.set_int("res_type", 0);
+    settings.set_bool("active", true);
+    // Hidden win-dshow knob: block source creation until the device is
+    // actually running, so the caller's frame-size poll usually succeeds at
+    // once.
+    settings.set_bool("synchronous_activate", true);
+    settings
 }
 
 pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {

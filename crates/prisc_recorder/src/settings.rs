@@ -60,9 +60,10 @@ pub struct Settings {
     /// devices with hardware volume and on macOS.
     #[serde(default)]
     pub speaker_volume_compensation: bool,
-    /// Webcam (DirectShow) device id recorded as video track 1, exactly as
-    /// printed by `--list-cameras`; empty = no webcam. The `--webcam` CLI flag
-    /// takes precedence and pins the device for the process lifetime. A
+    /// Webcam device id recorded as video track 1, exactly as printed by
+    /// `--list-cameras`; empty = no webcam. Requires `--multi-track`. The
+    /// `--webcam` CLI flag takes precedence and pins the device for the
+    /// process lifetime. A
     /// pipeline element rather than a live tunable: applied at build time and
     /// on pre-start `configure`; ignored (and reported in `ignored_keys`) once
     /// recording has started.
@@ -123,15 +124,9 @@ impl Settings {
                  are supported"
             ));
         }
-        // Webcam capture is DirectShow-based and exists only on Windows: fail
-        // with a clear message instead of at dshow source creation.
-        #[cfg(not(windows))]
-        if !self.webcam_device.is_empty() {
-            return Err(
-                "webcam capture (`webcam_device` / --webcam) is only supported on Windows"
-                    .to_string(),
-            );
-        }
+        // `webcam_device` also requires --multi-track, but that is a
+        // session-fixed CLI flag this type never sees; `Cli::validate` (and
+        // `Recorder::configure_full`) enforces it.
         Ok(())
     }
 }
@@ -193,19 +188,14 @@ mod tests {
         assert_eq!(s.microphones, vec!["mic-id".to_string()]);
         assert!(s.speaker_volume_compensation);
         assert_eq!(s.webcam_device, "Live Streamer CAM 313:\\\\?\\usb#vid");
-        // A non-empty webcam_device is valid on Windows only (DirectShow).
-        #[cfg(windows)]
         assert!(s.validate().is_ok());
-        #[cfg(not(windows))]
-        assert!(s.validate().is_err());
     }
 
-    #[cfg(not(windows))]
     #[test]
-    fn webcam_device_is_rejected_off_windows() {
-        let err = parse(r#"{"webcam_device": "test"}"#).validate().unwrap_err();
-        assert!(err.contains("only supported on Windows"), "{err}");
-        // Empty (= disabled) stays valid everywhere.
+    fn webcam_device_is_platform_neutral_here() {
+        // Webcam capture works on both platforms (DirectShow / AVFoundation);
+        // the only gate is --multi-track, which Settings cannot see.
+        assert!(parse(r#"{"webcam_device": "test"}"#).validate().is_ok());
         assert!(parse(r#"{"webcam_device": ""}"#).validate().is_ok());
     }
 

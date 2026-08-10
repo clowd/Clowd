@@ -33,6 +33,7 @@ use crate::region::{self, Rect};
 use crate::settings::Settings;
 use crate::status::{self, LevelPeaks, RecordingClock};
 use crate::tracker::{self, MouseTracker};
+use crate::tracks::{self, AudioTrack, MAX_AUDIO_TRACKS};
 use crate::webcam::{self, Webcam};
 
 /// Overall deadline waiting for the OBS stop signal after `quit` (§1.4).
@@ -148,6 +149,35 @@ fn build_mic_sources(devices: &[String]) -> Result<BuiltSide, AudioBuildError> {
     })
 }
 
+/// Routes every audio source to the libobs mixer feeding its output track:
+/// one mixer per device in multi-track mode, mixer 0 for everything in
+/// single-track mode (`tracks::audio_mixer_mask`). Must be re-applied over the
+/// WHOLE list whenever either side changes — a speaker added or removed
+/// shifts every microphone's track index.
+fn apply_audio_mixers(speakers: &[ObsSource], mics: &[ObsSource], multi_track: bool) {
+    for (index, source) in speakers.iter().chain(mics.iter()).enumerate() {
+        source.set_audio_mixers(tracks::audio_mixer_mask(index, multi_track));
+    }
+}
+
+/// Creates one audio encoder per planned track, each bound to the libobs
+/// mixer of the same index and to the global audio output. Nothing is
+/// attached to the output here — the caller commits the whole set at once.
+fn create_audio_encoders(
+    encoder_types: &[String],
+    plan: &[AudioTrack],
+    audio: *mut obs_sys::audio_t,
+) -> Result<Vec<ObsEncoder>, String> {
+    let mut encoders = Vec::with_capacity(plan.len());
+    for (idx, track) in plan.iter().enumerate() {
+        let encoder = encoder_config::create_audio_encoder(encoder_types, &track.name, idx)
+            .map_err(|e| format!("Failed to create the audio encoder for track {idx}: {e}"))?;
+        encoder.set_audio(audio);
+        encoders.push(encoder);
+    }
+    Ok(encoders)
+}
+
 /// Applies the current compensation gain (system software volume inverse; 1.0
 /// where none applies) to each speaker source. The levels thread keeps the
 /// values current afterwards; this makes the very first captured samples
@@ -197,7 +227,16 @@ pub struct Recorder {
     /// the process lifetime, so `configure` never changes it (the settings
     /// file the parent re-sends does not contain the flag).
     webcam_from_cli: bool,
-    _audio_encoder: ObsEncoder,
+    /// `--multi-track`: hybrid mp4 output, one track per stream. Session-fixed
+    /// (the output type cannot change once created), so `configure` never
+    /// touches it.
+    multi_track: bool,
+    /// One encoder per audio track, in output track order; each reads the
+    /// libobs mixer of its own index. Single-track mode always has exactly
+    /// one (mixer 0).
+    audio_encoders: Vec<ObsEncoder>,
+    /// The audio track layout `audio_encoders` was built from, for `tracks`.
+    audio_tracks: Vec<AudioTrack>,
     _sig_start: SignalConnection,
     _sig_stop: SignalConnection,
     _sig_deactivate: SignalConnection,
@@ -224,11 +263,23 @@ impl Recorder {
     pub fn new(cli: &Cli, mut settings: Settings) -> Recorder {
         // Effective webcam device: --webcam wins (and pins it for the process
         // lifetime); otherwise the settings file's `webcam_device` ("" = none).
+        let multi_track = cli.multi_track;
         let webcam_from_cli = cli.webcam.is_some();
         let webcam_device: Option<String> = cli
             .webcam
             .clone()
             .or_else(|| (!settings.webcam_device.is_empty()).then(|| settings.webcam_device.clone()));
+        // Both are §1.1 validations `Cli::validate` already made; re-checked
+        // here so a programmatically built Cli cannot silently produce a
+        // recording that drops the webcam or an audio device.
+        if webcam_device.is_some() && !multi_track {
+            fail_args("a webcam requires --multi-track");
+        }
+        if multi_track && settings.speakers.len() + settings.microphones.len() > MAX_AUDIO_TRACKS {
+            fail_args(format_args!(
+                "--multi-track supports at most {MAX_AUDIO_TRACKS} audio devices"
+            ));
+        }
         // Keep the stored settings reflecting the *effective* device so
         // `configure` diffs against reality.
         settings.webcam_device = webcam_device.clone().unwrap_or_default();
@@ -337,12 +388,14 @@ impl Recorder {
         // Same registration check for the webcam source, only when requested
         // (the "test" pseudo-device uses color_source from image-source).
         if matches!(webcam_device.as_deref(), Some(id) if id != webcam::TEST_DEVICE_ID) {
-            let dshow_c = CString::new("dshow_input").unwrap();
-            if unsafe { obs_sys::obs_source_get_display_name(dshow_c.as_ptr()) }.is_null() {
+            let webcam_c = CString::new(platform::WEBCAM_SOURCE_ID).unwrap();
+            if unsafe { obs_sys::obs_source_get_display_name(webcam_c.as_ptr()) }.is_null() {
                 fail(format_args!(
-                    "Webcam source 'dshow_input' is not registered — the win-dshow plugin failed \
+                    "Webcam source '{}' is not registered — the camera capture plugin failed \
                      to load.\n  module bin:  {}\n  module data: {}",
-                    paths.module_bin, paths.module_data
+                    platform::WEBCAM_SOURCE_ID,
+                    paths.module_bin,
+                    paths.module_data
                 ));
             }
         }
@@ -417,6 +470,13 @@ impl Recorder {
             context.set_output_source(channel, Some(source));
             channel += 1;
         }
+        // Output channels carry the sources; the mixer masks decide which
+        // audio *track* each one lands in.
+        apply_audio_mixers(
+            &speakers_built.sources,
+            &mics_built.sources,
+            multi_track,
+        );
         if settings.speaker_volume_compensation {
             apply_speaker_compensation(&speakers_built.sources, &speakers_built.devices);
         }
@@ -431,7 +491,7 @@ impl Recorder {
             compensate: settings.speaker_volume_compensation,
         }));
 
-        // 9. Encoders + ffmpeg_muxer output.
+        // 9. Encoders + output.
         let video_encoder = match encoder_config::create_video_encoder(
             &encoder_types,
             &EncoderConfig {
@@ -444,11 +504,16 @@ impl Recorder {
             Err(e) => fail(format_args!("Failed to create video encoder: {e}")),
         };
         video_encoder.set_video(context.get_video());
-        let audio_encoder = match encoder_config::create_audio_encoder(&encoder_types) {
-            Ok(e) => e,
-            Err(e) => fail(format_args!("Failed to create audio encoder: {e}")),
-        };
-        audio_encoder.set_audio(context.get_audio());
+        // One audio encoder per track: with --multi-track that is one per
+        // configured device (speakers then mics), otherwise a single encoder
+        // reading mixer 0, into which every source is mixed.
+        let audio_tracks =
+            tracks::plan_audio_tracks(&settings.speakers, &settings.microphones, multi_track);
+        let audio_encoders =
+            match create_audio_encoders(&encoder_types, &audio_tracks, context.get_audio()) {
+                Ok(e) => e,
+                Err(e) => fail(e),
+            };
 
         // Webcam chain (--webcam / settings `webcam_device`): built AFTER the
         // main pipeline is up but before the output — all fallible work
@@ -461,15 +526,15 @@ impl Recorder {
             None => None,
         };
 
-        // Output: "mp4_output" (Hybrid MP4) by default — multi-track capable,
-        // fragments continuously (crash-resilient) and soft-remuxes to a
-        // standard mp4 on stop. --legacy-muxer forces the old single-track
-        // ffmpeg_muxer (validate() already rejected --webcam with it). Both
+        // Output: "ffmpeg_muxer" (single video track, one mixed audio track)
+        // unless --multi-track opts into "mp4_output" (Hybrid MP4), which
+        // carries a track per stream, fragments continuously
+        // (crash-resilient) and soft-remuxes to a standard mp4 on stop. Both
         // take the same 'path' setting and emit the same 'stop' signal codes.
-        let output_id = if cli.legacy_muxer {
-            "ffmpeg_muxer"
-        } else {
+        let output_id = if multi_track {
             "mp4_output"
+        } else {
+            "ffmpeg_muxer"
         };
         let output_path = cli
             .output
@@ -487,7 +552,9 @@ impl Recorder {
             // (mp4_output); ffmpeg_muxer would silently drop it.
             output.set_video_encoder2(Some(&w.encoder), 1);
         }
-        output.set_audio_encoder(&audio_encoder, 0);
+        for (idx, encoder) in audio_encoders.iter().enumerate() {
+            output.set_audio_encoder(Some(encoder), idx);
+        }
 
         // 10. Signals → command-loop injection.
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
@@ -522,7 +589,9 @@ impl Recorder {
             webcam: webcam_chain,
             webcam_device,
             webcam_from_cli,
-            _audio_encoder: audio_encoder,
+            multi_track,
+            audio_encoders,
+            audio_tracks,
             _sig_start: sig_start,
             _sig_stop: sig_stop,
             _sig_deactivate: sig_deactivate,
@@ -759,6 +828,25 @@ impl Recorder {
         };
         let webcam_changed = new_webcam_device != self.webcam_device;
 
+        // The output type is session-fixed, so the two multi-track-only
+        // capabilities are rejected up front rather than half-applied.
+        if new_webcam_device.is_some() && !self.multi_track {
+            return status::emit_configure_error(
+                "`webcam_device` requires --multi-track; the recorder was started without it",
+                false,
+            );
+        }
+        let new_audio_sources = new.speakers.len() + new.microphones.len();
+        if self.multi_track && new_audio_sources > MAX_AUDIO_TRACKS {
+            return status::emit_configure_error(
+                &format!(
+                    "--multi-track records one audio track per device and supports at most \
+                     {MAX_AUDIO_TRACKS} (got {new_audio_sources})"
+                ),
+                false,
+            );
+        }
+
         // -- Fallible preparation (no pipeline mutation on failure).
         let new_speakers = if new.speakers != cur.speakers {
             match build_speaker_sources(&new.speakers) {
@@ -776,6 +864,21 @@ impl Recorder {
                 Err(AudioBuildError::Args(e)) | Err(AudioBuildError::Create(e)) => {
                     return status::emit_configure_error(&e, false)
                 }
+            }
+        } else {
+            None
+        };
+        // Multi-track puts every device on its own track, so a changed device
+        // list is a changed track layout: rebuild the whole encoder set (also
+        // fallible, hence still in the preparation phase). Single-track keeps
+        // its one mixer-0 encoder no matter what the device lists do.
+        let new_audio_encoders = if self.multi_track
+            && (new_speakers.is_some() || new_mics.is_some())
+        {
+            let plan = tracks::plan_audio_tracks(&new.speakers, &new.microphones, true);
+            match create_audio_encoders(&self.encoder_types, &plan, self.context.get_audio()) {
+                Ok(encoders) => Some((plan, encoders)),
+                Err(e) => return status::emit_configure_error(&e, false),
             }
         } else {
             None
@@ -920,6 +1023,9 @@ impl Recorder {
         }
         if new_speakers.is_some() || new_mics.is_some() {
             self.commit_audio(new_speakers, new_mics, new.speaker_volume_compensation);
+            if let Some((plan, encoders)) = new_audio_encoders {
+                self.commit_audio_encoders(plan, encoders);
+            }
         }
         if let Some(t) = new_tracker {
             self.tracker = Some(t);
@@ -1022,20 +1128,40 @@ impl Recorder {
     }
 
     /// Per-track stream map for `started_recording` / `stopped_recording`:
-    /// `{"screen":{"index":0,"width":W,"height":H},"webcam":{...}}`. The
-    /// `webcam` entry is ABSENT (not null) without a webcam — consumers treat
-    /// a missing key as "no webcam track". Screen dims are the encoded output
-    /// size (canvas after the max_width / max_height downscale — the same
-    /// computation `reset_video` was given); webcam dims are its track-1 mix
-    /// canvas.
+    /// `{"screen":{"index":0,..},"webcam":{..},"audio":[{"index":0,..},..]}`.
+    ///
+    /// The `webcam` entry is ABSENT (not null) without a webcam — consumers
+    /// treat a missing key as "no webcam track". Screen dims are the encoded
+    /// output size (canvas after the max_width / max_height downscale — the
+    /// same computation `reset_video` was given); webcam dims are its track-1
+    /// mix canvas. `index` is per media type (video / audio), matching the
+    /// container's per-type stream numbering.
+    ///
+    /// `audio` always has at least one entry: single-track recordings report
+    /// their one `"mixed"` track, multi-track ones a `"speaker"` /
+    /// `"microphone"` entry per device.
     fn tracks_json(&self) -> serde_json::Value {
         let (out_w, out_h) = region::compute_output_size(
             self.canvas,
             self.settings.max_width,
             self.settings.max_height,
         );
+        let audio: Vec<serde_json::Value> = self
+            .audio_tracks
+            .iter()
+            .enumerate()
+            .map(|(idx, track)| {
+                serde_json::json!({
+                    "index": idx,
+                    "kind": track.kind.as_str(),
+                    "device": track.device,
+                    "name": track.name,
+                })
+            })
+            .collect();
         let mut tracks = serde_json::json!({
             "screen": { "index": 0, "width": out_w, "height": out_h },
+            "audio": audio,
         });
         if let Some(ref w) = self.webcam {
             tracks["webcam"] = serde_json::json!({
@@ -1089,6 +1215,9 @@ impl Recorder {
         for unused in channel..=(MAX_AUDIO_SOURCES as u32) {
             self.context.set_output_source(unused, None);
         }
+        // Over the whole list, not just the replaced side: in multi-track mode
+        // a changed speaker count shifts every microphone's track index.
+        apply_audio_mixers(&self.speakers, &self.mics, self.multi_track);
         if speakers_replaced && compensate {
             apply_speaker_compensation(&self.speakers, &self.speaker_devices);
         }
@@ -1097,6 +1226,22 @@ impl Recorder {
         peaks.mic = self.mic_meters.iter().map(|(_, p)| p.clone()).collect();
         peaks.speaker_devices = self.speaker_devices.clone();
         peaks.compensate = compensate;
+    }
+
+    /// Swaps in a freshly built audio encoder set (multi-track only): attaches
+    /// each encoder to its track and clears the tracks a shorter new layout no
+    /// longer uses. Legal only pre-start — libobs refuses encoder changes on an
+    /// active output. The outgoing encoders are released last (the output holds
+    /// its own refs until each `set_audio_encoder` replaces them).
+    fn commit_audio_encoders(&mut self, plan: Vec<AudioTrack>, encoders: Vec<ObsEncoder>) {
+        for (idx, encoder) in encoders.iter().enumerate() {
+            self.output.set_audio_encoder(Some(encoder), idx);
+        }
+        for idx in encoders.len()..self.audio_encoders.len() {
+            self.output.set_audio_encoder(None, idx);
+        }
+        self.audio_encoders = encoders;
+        self.audio_tracks = plan;
     }
 
     /// Starts the output; on failure emits `stopped_recording` code -4 with the

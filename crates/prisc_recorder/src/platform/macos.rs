@@ -13,6 +13,13 @@ use super::{MonitorInfo, MouseInfo, ObsPaths};
 pub const GRAPHICS_MODULE: &CStr = c"libobs-metal.dylib";
 pub const DISPLAY_CAPTURE_ID: &str = "screen_capture";
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "coreaudio_input_capture";
+/// Webcam capture source (`--webcam` / `--list-cameras`): AVFoundation. The
+/// async ("macos-avcapture") variant rather than the fast path: it delivers
+/// frames without needing the source to be "showing" in a rendered scene.
+pub const WEBCAM_SOURCE_ID: &str = "macos-avcapture";
+/// The `WEBCAM_SOURCE_ID` settings key (and property) holding the device id
+/// (an `AVCaptureDevice.uniqueID`).
+pub const WEBCAM_DEVICE_KEY: &str = "device";
 
 extern "C" {
     fn CGGetActiveDisplayList(
@@ -233,6 +240,21 @@ pub fn audio_output_capture(device_id: &str) -> (&'static str, ObsData) {
         settings.set_string("device_id", device_id);
         ("coreaudio_output_capture", settings)
     }
+}
+
+/// Settings for a `WEBCAM_SOURCE_ID` instance capturing `device_id` (an
+/// `AVCaptureDevice.uniqueID`, exactly as printed by `--list-cameras`).
+pub fn webcam_settings(device_id: &str) -> ObsData {
+    let settings = ObsData::new();
+    settings.set_string(WEBCAM_DEVICE_KEY, device_id);
+    // Keep the plugin's default "High" session preset (it picks the device's
+    // best supported format); the recorder downscales the mix itself.
+    settings.set_bool("use_preset", true);
+    // Many cameras expose a muxed audio stream. The recorder detaches the
+    // source from every audio mixer anyway, but not asking for the audio at
+    // all avoids the microphone-permission prompt entirely.
+    settings.set_bool("enable_audio", false);
+    settings
 }
 
 /// System-audio capture on macOS (ScreenCaptureKit) taps upstream of the

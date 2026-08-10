@@ -1,13 +1,14 @@
 //! `--list-cameras` mode (RECORDER CORE R3): minimal libobs init, enumerate
-//! DirectShow video devices from the `dshow_input` source type's properties,
-//! print exactly ONE JSON line on stdout and exit.
+//! the camera devices the platform capture source offers, print exactly ONE
+//! JSON line on stdout and exit.
 //!
 //! Success: `{"type":"cameras","cameras":[{"id":"...","name":"..."}]}`, exit 0.
 //! Failure: `{"type":"error","message":"..."}`, exit 1.
 //!
-//! The `id` is the dshow property list item value — the escaped
-//! `<name>:<path>` form win-dshow expects back in `video_device_id` — and is
-//! passed to `--webcam` verbatim.
+//! The `id` is the source's property list item value — the escaped
+//! `<name>:<path>` form win-dshow expects back in `video_device_id` on
+//! Windows, an `AVCaptureDevice.uniqueID` on macOS — and is passed to
+//! `--webcam` verbatim.
 
 use std::ffi::CString;
 
@@ -17,8 +18,6 @@ use obs::video::VideoInfo;
 
 use crate::platform;
 use crate::status;
-
-const DSHOW_SOURCE_ID: &str = "dshow_input";
 
 /// Never returns; prints the single protocol line and exits.
 pub fn run() -> ! {
@@ -85,15 +84,27 @@ fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
 
     // Registration check (same pattern as Recorder::new: get_display_name is
     // null exactly when the id is unregistered).
-    let dshow_c = CString::new(DSHOW_SOURCE_ID).unwrap();
-    if unsafe { obs_sys::obs_source_get_display_name(dshow_c.as_ptr()) }.is_null() {
+    let source_id = platform::WEBCAM_SOURCE_ID;
+    let source_c = CString::new(source_id).unwrap();
+    if unsafe { obs_sys::obs_source_get_display_name(source_c.as_ptr()) }.is_null() {
         return Err(format!(
-            "Camera source '{DSHOW_SOURCE_ID}' is not registered — the win-dshow plugin failed \
+            "Camera source '{source_id}' is not registered — the camera capture plugin failed \
              to load.\n  module bin:  {}\n  module data: {}",
             paths.module_bin, paths.module_data
         ));
     }
 
-    obs::properties::source_list_property(DSHOW_SOURCE_ID, "video_device_id")
+    // win-dshow fills its device list straight from the source *type*'s
+    // properties; mac-avcapture only fills it from a modified callback on a
+    // real instance, so an empty type-level list falls through to the
+    // instance probe rather than reporting "no cameras".
+    let key = platform::WEBCAM_DEVICE_KEY;
+    let from_type = obs::properties::source_list_property(source_id, key);
+    if let Some(items) = from_type {
+        if !items.is_empty() {
+            return Ok(items);
+        }
+    }
+    obs::properties::source_instance_list_property(source_id, key)
         .ok_or_else(|| "Failed to enumerate camera devices".to_string())
 }

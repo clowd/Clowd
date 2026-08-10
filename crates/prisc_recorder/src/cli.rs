@@ -4,6 +4,7 @@ use clap::Parser;
 
 use crate::region;
 use crate::settings::Settings;
+use crate::tracks::MAX_AUDIO_TRACKS;
 
 /// Maximum total audio sources (speakers + microphones).
 pub const MAX_AUDIO_SOURCES: usize = 8;
@@ -22,22 +23,25 @@ pub struct Cli {
         "output", "region", "monitor", "fps", "crf", "max_width", "max_height",
         "hw_accel", "low_cpu", "no_cursor", "tracker", "tracker_color", "pause",
         "speaker", "microphone", "speaker_volume_compensation", "settings",
-        "webcam", "legacy_muxer",
+        "webcam", "multi_track",
     ])]
     pub list_cameras: bool,
 
+    /// Record every stream to its own track using OBS's hybrid mp4 output:
+    /// video track 0 = screen, video track 1 = webcam (--webcam), and one
+    /// audio track per --speaker / --microphone device (speakers first) —
+    /// at most 6 audio tracks. Off by default: without it the recording uses
+    /// the single-track ffmpeg muxer, mixing all audio into one track, and
+    /// --webcam is unavailable.
+    #[arg(long)]
+    pub multi_track: bool,
+
     /// Record a webcam as a second video track (track 0 = screen, track 1 =
     /// webcam). Value is a device id exactly as printed by --list-cameras.
-    /// The hidden value "test" substitutes a solid color source (for machines
-    /// without a camera).
+    /// Requires --multi-track. The hidden value "test" substitutes a solid
+    /// color source (for machines without a camera).
     #[arg(long)]
     pub webcam: Option<String>,
-
-    /// Force the legacy ffmpeg_muxer output instead of the hybrid mp4 output.
-    /// The legacy muxer supports only a single video track, so it cannot be
-    /// combined with --webcam. Hidden escape hatch.
-    #[arg(long, hide = true)]
-    pub legacy_muxer: bool,
 
     /// Capture region "X,Y,W,H" in the platform capture coordinate space
     /// (Windows: physical px, virtual desktop; macOS: CG points).
@@ -156,12 +160,12 @@ impl Cli {
             return Err("--region and --monitor are mutually exclusive".to_string());
         }
 
-        // The legacy single-track muxer cannot carry the webcam's second
+        // The default single-track muxer cannot carry the webcam's second
         // video track.
-        if self.webcam.is_some() && self.legacy_muxer {
+        if self.webcam.is_some() && !self.multi_track {
             return Err(
-                "--webcam requires the multi-track mp4 output and cannot be combined with \
-                 --legacy-muxer"
+                "--webcam requires --multi-track (the single-track muxer carries one video \
+                 track only)"
                     .to_string(),
             );
         }
@@ -169,13 +173,6 @@ impl Cli {
             if w.is_empty() {
                 return Err("--webcam device id must not be empty".to_string());
             }
-        }
-        // Settings::validate() rejects a non-empty `webcam_device` off Windows,
-        // which covers the from_cli path — but --webcam can also accompany
-        // --settings (the flag wins), so it needs its own platform check.
-        #[cfg(not(windows))]
-        if self.webcam.is_some() {
-            return Err("--webcam is only supported on Windows (DirectShow)".to_string());
         }
 
         if let Some(ref r) = self.region {
@@ -194,14 +191,24 @@ impl Cli {
             }
         };
 
-        // Same single-track restriction for a webcam requested via the
-        // settings file (the earlier check only sees the --webcam flag).
-        if self.legacy_muxer && !settings.webcam_device.is_empty() {
+        // Same restriction for a webcam requested via the settings file (the
+        // earlier check only sees the --webcam flag).
+        if !self.multi_track && !settings.webcam_device.is_empty() {
             return Err(
-                "a webcam (--webcam or the settings `webcam_device` key) requires the \
-                 multi-track mp4 output and cannot be combined with --legacy-muxer"
+                "a webcam (--webcam or the settings `webcam_device` key) requires --multi-track"
                     .to_string(),
             );
+        }
+
+        // Multi-track gives every audio device its own track, and libobs
+        // outputs carry at most MAX_AUDIO_TRACKS of them (single-track
+        // recordings mix all MAX_AUDIO_SOURCES down into one track instead).
+        let audio_sources = settings.speakers.len() + settings.microphones.len();
+        if self.multi_track && audio_sources > MAX_AUDIO_TRACKS {
+            return Err(format!(
+                "--multi-track records one audio track per device and supports at most \
+                 {MAX_AUDIO_TRACKS} (got {audio_sources})"
+            ));
         }
 
         Ok(settings)
@@ -373,55 +380,78 @@ mod tests {
         assert!(parse(&["--list-cameras", "--output", "a.mp4"]).is_err());
         assert!(parse(&["--list-cameras", "--region", "0,0,640,480"]).is_err());
         assert!(parse(&["--list-cameras", "--webcam", "dev"]).is_err());
+        assert!(parse(&["--list-cameras", "--multi-track"]).is_err());
         assert!(parse(&["--list-cameras", "--pause"]).is_err());
         assert!(parse(&["--list-cameras", "--settings", "s.json"]).is_err());
     }
 
-    #[cfg(windows)]
     #[test]
-    fn webcam_parses_and_rejects_legacy_muxer() {
-        let cli = parse(&["--output", "a.mp4", "--webcam", "Cam:\\\\?\\usb#vid"]).unwrap();
+    fn webcam_requires_multi_track() {
+        let cli = parse(&[
+            "--output",
+            "a.mp4",
+            "--multi-track",
+            "--webcam",
+            "Cam:\\\\?\\usb#vid",
+        ])
+        .unwrap();
         assert_eq!(cli.webcam.as_deref(), Some("Cam:\\\\?\\usb#vid"));
         assert!(cli.validate().is_ok());
 
-        let cli = parse(&["--output", "a.mp4", "--webcam", "dev", "--legacy-muxer"]).unwrap();
-        assert!(cli.validate().is_err());
+        // Single-track (the default) carries one video track only.
+        let cli = parse(&["--output", "a.mp4", "--webcam", "dev"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--multi-track"), "{err}");
 
-        // --legacy-muxer alone is fine.
-        let cli = parse(&["--output", "a.mp4", "--legacy-muxer"]).unwrap();
+        // --multi-track alone (no webcam) is fine.
+        let cli = parse(&["--output", "a.mp4", "--multi-track"]).unwrap();
         assert!(cli.validate().is_ok());
+        assert!(cli.multi_track);
+        // ...and is off by default.
+        assert!(!parse(&["--output", "a.mp4"]).unwrap().multi_track);
 
-        let cli = parse(&["--output", "a.mp4", "--webcam", ""]).unwrap();
+        let cli = parse(&["--output", "a.mp4", "--multi-track", "--webcam", ""]).unwrap();
         assert!(cli.validate().is_err());
     }
 
-    #[cfg(not(windows))]
     #[test]
-    fn webcam_is_rejected_off_windows() {
-        // The flag alone…
-        let cli = parse(&["--output", "a.mp4", "--webcam", "test"]).unwrap();
-        assert!(cli.validate().unwrap_err().contains("Windows"));
-        // …and alongside --settings (which does not conflict with --webcam).
-        let dir = std::env::temp_dir();
-        let path = dir.join(format!(
-            "obs-express-cli-webcam-nonwin-{}.json",
-            std::process::id()
-        ));
-        std::fs::write(&path, "{}").unwrap();
-        let path_str = path.to_string_lossy().into_owned();
-        let cli = parse(&["--output", "a.mp4", "--settings", &path_str, "--webcam", "t"]).unwrap();
-        assert!(cli.validate().unwrap_err().contains("Windows"));
-        // A settings file requesting a webcam is rejected too (via
-        // Settings::validate).
-        std::fs::write(&path, r#"{"webcam_device": "test"}"#).unwrap();
-        let cli = parse(&["--output", "a.mp4", "--settings", &path_str]).unwrap();
-        assert!(cli.validate().unwrap_err().contains("Windows"));
-        std::fs::remove_file(&path).unwrap();
+    fn multi_track_caps_audio_devices_at_the_libobs_track_limit() {
+        let mut args = vec![
+            "--output".to_string(),
+            "a.mp4".to_string(),
+            "--multi-track".to_string(),
+        ];
+        for i in 0..4 {
+            args.push("--speaker".to_string());
+            args.push(format!("spk{i}"));
+        }
+        for i in 0..2 {
+            args.push("--microphone".to_string());
+            args.push(format!("mic{i}"));
+        }
+        let argv: Vec<&str> = args.iter().map(String::as_str).collect();
+        let cli = parse(&argv).unwrap();
+        assert!(cli.validate().is_ok()); // 6 total = MAX_AUDIO_TRACKS
+
+        let mut args7 = args.clone();
+        args7.push("--microphone".to_string());
+        args7.push("mic2".to_string());
+        let argv7: Vec<&str> = args7.iter().map(String::as_str).collect();
+        let cli = parse(&argv7).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("at most 6"), "{err}");
+
+        // Single-track mixes them all down, so 7 devices stay legal there.
+        let argv_single: Vec<&str> = argv7
+            .iter()
+            .copied()
+            .filter(|a| *a != "--multi-track")
+            .collect();
+        assert!(parse(&argv_single).unwrap().validate().is_ok());
     }
 
-    #[cfg(windows)]
     #[test]
-    fn settings_webcam_device_flows_through_and_rejects_legacy_muxer() {
+    fn settings_webcam_device_flows_through_and_requires_multi_track() {
         let dir = std::env::temp_dir();
         let path = dir.join(format!(
             "obs-express-cli-webcam-{}.json",
@@ -430,24 +460,17 @@ mod tests {
         std::fs::write(&path, r#"{"webcam_device": "test"}"#).unwrap();
         let path_str = path.to_string_lossy().into_owned();
 
-        let cli = parse(&["--output", "a.mp4", "--settings", &path_str]).unwrap();
+        let cli = parse(&["--output", "a.mp4", "--multi-track", "--settings", &path_str]).unwrap();
         assert_eq!(cli.validate().unwrap().webcam_device, "test");
 
-        // The settings-file webcam hits the same single-track restriction as
+        // The settings-file webcam hits the same multi-track requirement as
         // the --webcam flag.
-        let cli = parse(&[
-            "--output",
-            "a.mp4",
-            "--settings",
-            &path_str,
-            "--legacy-muxer",
-        ])
-        .unwrap();
+        let cli = parse(&["--output", "a.mp4", "--settings", &path_str]).unwrap();
         assert!(cli.validate().is_err());
         std::fs::remove_file(&path).unwrap();
 
         // Without --settings, the --webcam flag lands in the effective config.
-        let cli = parse(&["--output", "a.mp4", "--webcam", "test"]).unwrap();
+        let cli = parse(&["--output", "a.mp4", "--multi-track", "--webcam", "test"]).unwrap();
         assert_eq!(cli.validate().unwrap().webcam_device, "test");
     }
 
