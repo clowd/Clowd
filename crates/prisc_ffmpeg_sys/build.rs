@@ -22,6 +22,12 @@ fn main() {
     for name in ["avformat", "avcodec", "avfilter", "avutil"] {
         println!("cargo:rustc-link-lib=dylib={name}");
     }
+    // Consumed by dependents as DEP_FFMPEG_DEPS_ROOT / _LIB / _BIN (links key
+    // is `ffmpeg`), so they resolve the SAME bundle this crate linked against
+    // instead of scanning `.deps` themselves — and only after it exists.
+    println!("cargo:deps_root={}", deps.display());
+    println!("cargo:deps_lib={}", lib.display());
+    println!("cargo:deps_bin={}", deps.join("bin").display());
     if target_os == "macos" {
         // For this crate's own test binaries. (Downstream binaries emit their
         // own rpaths — link-args do not propagate across crates.)
@@ -66,17 +72,46 @@ fn wait_for_deps(deps_dir: &Path) -> PathBuf {
     }
 }
 
+/// Picks the bundle built for the target architecture.
+///
+/// `.deps` can hold more than one: an ARM64 Windows build downloads the arm64
+/// bundle AND (through the child x64 CMake configure OBS spawns for its
+/// helpers) the x64 one. Directory order is arbitrary, so taking the first
+/// match linked the x64 import libraries into an ARM64 binary — `link.exe`
+/// warns LNK4272 and then fails with unresolved externals for every FFmpeg
+/// symbol.
 fn find_deps(deps_dir: &Path) -> Option<PathBuf> {
-    for entry in std::fs::read_dir(deps_dir).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let dir = entry.path();
-            if dir.join("include").join("libavcodec").exists() && dir.join("lib").exists() {
-                return Some(dir);
-            }
-        }
+    let mut candidates: Vec<PathBuf> = std::fs::read_dir(deps_dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|dir| {
+            let name = dir.file_name().unwrap_or_default().to_string_lossy();
+            name.starts_with("obs-deps-")
+                && !name.contains("qt6")
+                && dir.join("include").join("libavcodec").exists()
+                && dir.join("lib").exists()
+        })
+        .collect();
+    candidates.sort_by_key(|dir| arch_rank(dir));
+    candidates.into_iter().next()
+}
+
+/// 0 = built for this arch, 1 = universal (macOS), 2 = some other arch.
+fn arch_rank(dir: &Path) -> u8 {
+    let name = dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let suffix = match env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default().as_str() {
+        "x86_64" => "-x64",
+        "aarch64" => "-arm64",
+        _ => return 2,
+    };
+    if name.ends_with(suffix) {
+        0
+    } else if name.contains("universal") {
+        1
+    } else {
+        2
     }
-    None
 }
 
 fn generate_bindings(manifest_dir: &Path, include: &Path) {

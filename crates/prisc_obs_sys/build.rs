@@ -417,17 +417,50 @@ fn win_emit_exports(obs_src: &Path, build_dir: &Path, config: &str) {
 }
 
 fn find_obs_deps_bin(obs_src: &Path) -> Option<PathBuf> {
+    find_obs_deps_subdir(obs_src, "bin")
+}
+
+/// Locates `<obs-deps bundle>/<sub>`, preferring the bundle built for the
+/// target architecture.
+///
+/// `.deps` can hold several: an ARM64 Windows build downloads the arm64
+/// bundle AND (through the child x64 CMake configure OBS spawns for its
+/// helpers) the x64 one. Directory order is arbitrary, so taking the first
+/// match would ship x64 runtime DLLs in an ARM64 bundle.
+fn find_obs_deps_subdir(obs_src: &Path, sub: &str) -> Option<PathBuf> {
     let deps_dir = obs_src.join(".deps");
-    for entry in std::fs::read_dir(&deps_dir).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let bin = entry.path().join("bin");
-            if bin.exists() {
-                return Some(bin);
-            }
-        }
+    let mut candidates: Vec<PathBuf> = std::fs::read_dir(&deps_dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|dir| {
+            let name = dir.file_name().unwrap_or_default().to_string_lossy();
+            name.starts_with("obs-deps-") && !name.contains("qt6") && dir.join(sub).exists()
+        })
+        .collect();
+    candidates.sort_by_key(|dir| deps_arch_rank(dir));
+    candidates.into_iter().next().map(|dir| dir.join(sub))
+}
+
+/// 0 = built for this arch, 1 = universal (macOS), 2 = some other arch.
+fn deps_arch_rank(dir: &Path) -> u8 {
+    let name = dir
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let suffix = match target_arch().as_str() {
+        "x86_64" => "-x64",
+        "aarch64" => "-arm64",
+        _ => return 2,
+    };
+    if name.ends_with(suffix) {
+        0
+    } else if name.contains("universal") {
+        1
+    } else {
+        2
     }
-    None
 }
 
 // ---------------------------------------------------------------------------
@@ -520,24 +553,10 @@ fn assert_no_opaque_regressions(generated: &str) {
 }
 
 fn find_obs_deps_include(obs_src: &Path) -> Option<PathBuf> {
-    let deps_dir = obs_src.join(".deps");
-    if !deps_dir.exists() {
-        return None;
-    }
-
-    for entry in std::fs::read_dir(&deps_dir).ok()? {
-        let entry = entry.ok()?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let include = entry.path().join("include");
-            if include.exists() {
-                println!(
-                    "cargo:warning=Using obs-deps include: {}",
-                    include.display()
-                );
-                return Some(include);
-            }
-        }
-    }
-    None
+    let include = find_obs_deps_subdir(obs_src, "include")?;
+    println!(
+        "cargo:warning=Using obs-deps include: {}",
+        include.display()
+    );
+    Some(include)
 }
