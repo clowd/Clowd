@@ -5,7 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
-using Clowd.Video.Playback;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI.VideoEditor
 {

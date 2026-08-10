@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>Source of "wall time elapsed" — indirected so clock logic is unit-testable.</summary>
     public interface IMonotonicTime

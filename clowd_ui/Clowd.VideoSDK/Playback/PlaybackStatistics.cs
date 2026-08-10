@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>Per-video-track interval statistics (interval = time between GetStatistics calls).</summary>
     public sealed class TrackStatistics

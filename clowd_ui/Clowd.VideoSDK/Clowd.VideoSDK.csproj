@@ -3,7 +3,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
-    <RootNamespace>Clowd.Video</RootNamespace>
+    <RootNamespace>Clowd.VideoSDK</RootNamespace>
     <!-- The whole playback engine is a thin managed layer over the FFmpeg C API. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CA2007</NoWarn>
@@ -11,7 +11,7 @@
   <ItemGroup>
     <!-- for DemuxBudget: the read-ahead rule is testable without the native FFmpeg plumbing
          the rest of the demuxer needs. -->
-    <InternalsVisibleTo Include="Clowd.Video.Tests" />
+    <InternalsVisibleTo Include="Clowd.VideoSDK.Tests" />
   </ItemGroup>
   <ItemGroup>
     <!-- 7.1.1 is the FFmpeg.AutoGen series generated against FFmpeg 7.1

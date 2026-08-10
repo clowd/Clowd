@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// Cheap open/inspect of a media file (no decoding): duration, video stream dimensions and

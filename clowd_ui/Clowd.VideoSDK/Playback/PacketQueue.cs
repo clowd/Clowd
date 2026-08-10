@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// Elastic FIFO of demuxed packets for one stream, with ffplay-style flush serials. Slots are

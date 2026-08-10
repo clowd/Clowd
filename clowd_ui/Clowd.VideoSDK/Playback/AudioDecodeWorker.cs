@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// Decodes the audio stream and swr_converts to interleaved float stereo at the engine rate

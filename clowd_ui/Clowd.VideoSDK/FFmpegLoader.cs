@@ -3,13 +3,13 @@ using System.IO;
 using FFmpeg.AutoGen.Abstractions;
 using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
 
-namespace Clowd.Video
+namespace Clowd.VideoSDK
 {
     /// <summary>
     /// One-time process-wide initialization of the dynamically-loaded FFmpeg bindings.
     /// Resolution order for the native DLL directory: the <c>CLOWD_FFMPEG_PATH</c> environment
     /// variable, then the caller-supplied resolver (the app passes the directory of the
-    /// obs-express binary — the FFmpeg DLLs ship alongside it). Clowd.Video deliberately has no
+    /// obs-express binary — the FFmpeg DLLs ship alongside it). Clowd.VideoSDK deliberately has no
     /// reference to Clowd.Ui, so the fallback is a delegate rather than ObsBinaryLocator itself.
     /// </summary>
     public static class FFmpegLoader

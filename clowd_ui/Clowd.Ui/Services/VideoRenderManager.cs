@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Helpers;
-using Clowd.Video;
+using Clowd.VideoSDK;
 
 namespace Clowd.UI.Services
 {

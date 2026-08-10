@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Clowd.UI.VideoEditor;
 using Xunit;
 
-namespace Clowd.Video.Tests
+namespace Clowd.VideoSDK.Tests
 {
     // TimelineMath is the pure math behind TimelineControl (Clowd.Ui exposes internals to this
     // project via InternalsVisibleTo). No Avalonia runtime is needed: the class only uses

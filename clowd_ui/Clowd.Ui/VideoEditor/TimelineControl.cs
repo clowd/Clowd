@@ -8,11 +8,11 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
-using Clowd.Video;
+using Clowd.VideoSDK;
 
 // The pixel<->time and hit-test math lives in the internal TimelineMath class below so the
-// existing Clowd.Video.Tests project can unit-test it against the real production code.
-[assembly: InternalsVisibleTo("Clowd.Video.Tests")]
+// existing Clowd.VideoSDK.Tests project can unit-test it against the real production code.
+[assembly: InternalsVisibleTo("Clowd.VideoSDK.Tests")]
 
 namespace Clowd.UI.VideoEditor
 {
@@ -733,7 +733,7 @@ namespace Clowd.UI.VideoEditor
 
     /// <summary>
     /// Pure pixel&lt;-&gt;time mapping and hit-test math for <see cref="TimelineControl"/>, kept free
-    /// of Avalonia types so Clowd.Video.Tests can unit-test it directly (via InternalsVisibleTo).
+    /// of Avalonia types so Clowd.VideoSDK.Tests can unit-test it directly (via InternalsVisibleTo).
     /// </summary>
     internal static class TimelineMath
     {

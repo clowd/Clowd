@@ -1,6 +1,6 @@
 using System;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// A locked destination surface for one video frame. The decode thread writes BGRA pixels

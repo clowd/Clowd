@@ -7,8 +7,8 @@ using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.UI.Helpers;
-using Clowd.Video;
-using Clowd.Video.Playback;
+using Clowd.VideoSDK;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI
 {

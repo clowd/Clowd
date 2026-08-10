@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Clowd.Video
+namespace Clowd.VideoSDK
 {
     /// <summary>
     /// The render-args file (version 1) handed to the external <c>vid-render</c> tool as its one

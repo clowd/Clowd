@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Clowd.Video;
+namespace Clowd.VideoSDK;
 
 /// <summary>Source-generated (de)serialization for the vid-render argument file — the same
 /// pattern as Clowd.Ui's ClowdUiJsonContext and Clowd.Upload's UploadJsonContext. Public because

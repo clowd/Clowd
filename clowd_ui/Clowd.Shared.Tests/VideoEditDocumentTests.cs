@@ -1,5 +1,5 @@
 using System.Linq;
-using Clowd.Video;
+using Clowd.VideoSDK;
 using Xunit;
 
 namespace Clowd.Shared.Tests
