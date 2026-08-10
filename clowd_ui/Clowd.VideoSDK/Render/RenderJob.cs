@@ -24,6 +24,19 @@ namespace Clowd.VideoSDK.Render
         /// <summary>Receives backend selection and render diagnostics (the SDK has no logging
         /// dependency). Called from the render and composer threads.</summary>
         public Action<string> DiagnosticLog { get; init; }
+
+        /// <summary>
+        /// Optional explicit output-frame schedule (100ns ticks, strictly increasing): one output
+        /// frame is composed and encoded at each instant, instead of the uniform
+        /// <c>FpsNum/FpsDen</c> grid. This is how the v1 compat path reproduces vid-render's VFR
+        /// passthrough — vid-render re-encoded every kept source frame on its own source
+        /// timestamp, while the v2 model renders CFR. Null renders the normal CFR grid.
+        /// </summary>
+        public System.Collections.Generic.IReadOnlyList<long> FrameTimestampsTicks { get; init; }
+
+        /// <summary>Passes <see cref="Mp4WriterOptions.LegacyContainerTiming"/> through — v1
+        /// compat renders must mux byte-compatibly with vid-render.</summary>
+        public bool LegacyContainerTiming { get; init; }
     }
 
     public enum RenderOutcome
@@ -102,10 +115,31 @@ namespace Clowd.VideoSDK.Render
             if (durationTicks <= 0)
                 throw new InvalidOperationException("The project has no items — nothing to render.");
 
-            // frames n with FrameIndexToTicks(n) < duration: the largest covered index, plus one
-            long frameCount = TimeBase.TicksToFrameIndex(durationTicks - 1, output.FpsNum, output.FpsDen) + 1;
+            // Explicit schedule (v1 VFR passthrough) renders one frame per instant; otherwise the
+            // CFR grid: frames n with FrameIndexToTicks(n) < duration — the largest covered
+            // index, plus one.
+            var schedule = options.FrameTimestampsTicks;
+            if (schedule != null)
+            {
+                if (schedule.Count == 0)
+                    throw new ArgumentException("The frame schedule is empty.", nameof(options));
+                for (int i = 1; i < schedule.Count; i++)
+                {
+                    if (schedule[i] <= schedule[i - 1])
+                        throw new ArgumentException(
+                            $"The frame schedule must be strictly increasing (index {i}).", nameof(options));
+                }
+            }
+
+            long frameCount = schedule?.Count
+                ?? TimeBase.TicksToFrameIndex(durationTicks - 1, output.FpsNum, output.FpsDen) + 1;
             bool hasAudio = AudioMixer.HasAudioItems(project);
-            long totalAudioFrames = hasAudio ? AudioTime.SamplesCeil(durationTicks, output.SampleRate) : 0;
+            // The audio stream runs to the end of the last audio item, not to the video's end:
+            // where the source audio track is shorter than the video (real recordings routinely
+            // are, by a few hundredths of a second), vid-render's atrim/concat chain ended the
+            // output audio there too rather than padding silence to the video duration.
+            long audioEndTicks = Math.Min(durationTicks, AudioMixer.GetAudioEndTicks(project));
+            long totalAudioFrames = hasAudio ? AudioTime.SamplesCeil(audioEndTicks, output.SampleRate) : 0;
 
             ComposerThread composer = null;
             var pool = new FrameBufferPool();
@@ -164,6 +198,9 @@ namespace Clowd.VideoSDK.Render
                         FpsNum = output.FpsNum,
                         FpsDen = output.FpsDen,
                         Crf = options.Crf,
+                        // a schedule's instants are arbitrary, so pts go through in microseconds
+                        UseMicrosecondTimeBase = schedule != null,
+                        LegacyContainerTiming = options.LegacyContainerTiming,
                         Audio = hasAudio
                             ? new Mp4AudioOptions { SampleRate = output.SampleRate, Channels = AudioMixer.Channels }
                             : null,
@@ -189,7 +226,8 @@ namespace Clowd.VideoSDK.Render
                             long n = submitted;
                             var surface = surfaces[n % InFlight];
                             var stage = staging[n % InFlight];
-                            long tTicks = TimeBase.FrameIndexToTicks(n, output.FpsNum, output.FpsDen);
+                            long tTicks = schedule?[(int)n]
+                                ?? TimeBase.FrameIndexToTicks(n, output.FpsNum, output.FpsDen);
                             composer.Post(() =>
                             {
                                 try
@@ -217,14 +255,22 @@ namespace Clowd.VideoSDK.Render
                         // interleaver always has both streams' data for the span
                         if (mixer != null)
                         {
-                            long target = Math.Min(totalAudioFrames, AudioTime.SamplesFloor(
-                                TimeBase.FrameIndexToTicks(done.Frame + 1, output.FpsNum, output.FpsDen),
-                                output.SampleRate));
+                            // frame end = the next scheduled instant (schedule mode) or the next
+                            // grid instant; the last frame drives audio out to its full extent.
+                            long frameEndTicks = schedule != null
+                                ? (done.Frame + 1 < frameCount ? schedule[(int)(done.Frame + 1)] : audioEndTicks)
+                                : TimeBase.FrameIndexToTicks(done.Frame + 1, output.FpsNum, output.FpsDen);
+                            long target = Math.Min(totalAudioFrames,
+                                AudioTime.SamplesFloor(frameEndTicks, output.SampleRate));
                             audioPos = MixUpTo(mixer, writer, mixBuffer, audioPos, target);
                         }
 
+                        // pts: frame index on the CFR grid, microseconds under a schedule
+                        long pts = schedule != null
+                            ? TimeBase.TicksToStreamTime(schedule[(int)done.Frame], 1, 1_000_000)
+                            : done.Frame;
                         writer.SubmitVideoFrame(staging[done.Frame % InFlight].Address, rowBytes,
-                            output.WidthPx, output.HeightPx, done.Frame);
+                            output.WidthPx, output.HeightPx, pts);
                         encoded++;
                         progress?.Report(Math.Min(99.0, encoded * 100.0 / frameCount));
                     }

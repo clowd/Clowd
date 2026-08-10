@@ -145,6 +145,75 @@ namespace Clowd.VideoSDK.Playback
             }
         }
 
+        /// <summary>
+        /// Reads every packet timestamp of one video stream (demux only — nothing is decoded) and
+        /// returns them in presentation order as 100ns ticks, normalized by the stream's
+        /// start_time the same way the decode path is (<c>SyncStreamDecoder</c> subtracts it from
+        /// frame pts, so these values match frame-lookup ticks exactly). Used by the v1 compat
+        /// path to build a VFR render's frame schedule. Packets without a pts fall back to dts;
+        /// packets with neither are skipped.
+        /// </summary>
+        public static long[] ReadVideoPacketPtsTicks(string path, int streamIndex)
+        {
+            FFmpegLoader.EnsureInitialized();
+            if (!File.Exists(path))
+                throw new FileNotFoundException("Media file not found.", path);
+
+            AVFormatContext* fmt = null;
+            int err = ffmpeg.avformat_open_input(&fmt, path, null, null);
+            if (err < 0)
+                throw new InvalidOperationException($"Failed to open '{path}': {FFmpegLoader.ErrorToString(err)}");
+
+            AVPacket* pkt = null;
+            try
+            {
+                err = ffmpeg.avformat_find_stream_info(fmt, null);
+                if (err < 0)
+                    throw new InvalidOperationException($"Failed to read stream info: {FFmpegLoader.ErrorToString(err)}");
+
+                if (streamIndex < 0 || streamIndex >= fmt->nb_streams)
+                    throw new ArgumentOutOfRangeException(nameof(streamIndex), streamIndex,
+                        $"The file has {fmt->nb_streams} streams.");
+
+                var st = fmt->streams[streamIndex];
+                var tb = st->time_base;
+                if (tb.num <= 0 || tb.den <= 0)
+                    throw new InvalidOperationException($"Stream {streamIndex} has no usable time base.");
+
+                long startTimeTicks = st->start_time != ffmpeg.AV_NOPTS_VALUE
+                    ? TimeBase.StreamTimeToTicks(st->start_time, tb.num, tb.den)
+                    : 0;
+
+                pkt = ffmpeg.av_packet_alloc();
+                if (pkt == null)
+                    throw new InvalidOperationException("Could not allocate a packet.");
+
+                var ticks = new List<long>();
+                while (ffmpeg.av_read_frame(fmt, pkt) >= 0)
+                {
+                    if (pkt->stream_index == streamIndex)
+                    {
+                        long ts = pkt->pts != ffmpeg.AV_NOPTS_VALUE ? pkt->pts
+                            : pkt->dts != ffmpeg.AV_NOPTS_VALUE ? pkt->dts
+                            : long.MinValue;
+                        if (ts != long.MinValue)
+                            ticks.Add(TimeBase.StreamTimeToTicks(ts, tb.num, tb.den) - startTimeTicks);
+                    }
+                    ffmpeg.av_packet_unref(pkt);
+                }
+
+                // packets arrive in decode (dts) order; presentation order is what a schedule needs
+                ticks.Sort();
+                return ticks.ToArray();
+            }
+            finally
+            {
+                if (pkt != null)
+                    ffmpeg.av_packet_free(&pkt);
+                ffmpeg.avformat_close_input(&fmt);
+            }
+        }
+
         internal static MediaInfo BuildInfo(string path, AVFormatContext* fmt) => BuildProbe(path, fmt).ToMediaInfo();
 
         internal static MediaProbeResult BuildProbe(string path, AVFormatContext* fmt)

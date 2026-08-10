@@ -78,7 +78,8 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>The probe of a 1920x1080 30fps recording with a 640x480 webcam track (stream 1)
         /// and one 48 kHz audio stream (stream 2) — the shape our own recordings have.</summary>
         private static MediaProbeResult Probe(bool webcam = true, bool audio = true,
-            long durationTicks = 30 * Second, int fpsNum = 30, int fpsDen = 1, int rFpsNum = 30, int rFpsDen = 1)
+            long durationTicks = 30 * Second, int fpsNum = 30, int fpsDen = 1, int rFpsNum = 30, int rFpsDen = 1,
+            long nbFrames = 0, long audioDurationTicks = -1, bool vfr = false)
         {
             var video = new List<VideoStreamProbe>
             {
@@ -91,6 +92,8 @@ namespace Clowd.VideoSDK.Tests
                     AvgFrameRateDen = fpsDen,
                     RFrameRateNum = rFpsNum,
                     RFrameRateDen = rFpsDen,
+                    NbFrames = nbFrames,
+                    IsVariableFrameRate = vfr,
                     DurationTicks = durationTicks,
                 },
             };
@@ -114,14 +117,24 @@ namespace Clowd.VideoSDK.Tests
                 DurationTicks = durationTicks,
                 VideoStreams = video,
                 AudioStreams = audio
-                    ? new[] { new AudioStreamProbe { StreamIndex = 2, SampleRate = 48000, Channels = 2, DurationTicks = durationTicks } }
+                    ? new[]
+                    {
+                        new AudioStreamProbe
+                        {
+                            StreamIndex = 2,
+                            SampleRate = 48000,
+                            Channels = 2,
+                            DurationTicks = audioDurationTicks >= 0 ? audioDurationTicks : durationTicks,
+                        },
+                    }
                     : Array.Empty<AudioStreamProbe>(),
                 HasAudio = audio,
             };
         }
 
-        private static LegacyRenderPlan Build(string json, MediaProbeResult probe = null) =>
-            RenderArgsCompat.Build(RenderArgsCompat.Parse(json), probe ?? Probe());
+        private static LegacyRenderPlan Build(string json, MediaProbeResult probe = null,
+            IReadOnlyList<long> screenFramePtsTicks = null) =>
+            RenderArgsCompat.Build(RenderArgsCompat.Parse(json), probe ?? Probe(), screenFramePtsTicks);
 
         private static IReadOnlyList<Item> ItemsOn(Project project, string trackName)
         {
@@ -293,6 +306,48 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Whole_file_duration_snaps_to_the_source_frame_count()
+        {
+            // A real 244-frame 60 fps recording probes as 4.066667 s (microsecond precision) —
+            // 4 ticks past the exact 244-frame boundary. Without snapping, the grid render would
+            // append a spurious 245th frame (a hold of the last one); vid-render, which passed
+            // frames through, emitted exactly the source's frames. Parity gate cell c1.
+            long probed = 40_666_670; // 4.0666670 s
+            long exact = TimeBase.FrameIndexToTicks(244, 60, 1); // 40_666_667
+
+            var viaNbFrames = Build(ArgsJson(),
+                Probe(durationTicks: probed, fpsNum: 60, rFpsNum: 60, nbFrames: 244)).Project;
+            Assert.Equal(exact, Assert.Single(ItemsOn(viaNbFrames, "Screen")).DurationTicks);
+
+            // without nb_frames the duration rounds to the nearest whole frame count
+            var viaRounding = Build(ArgsJson(),
+                Probe(durationTicks: probed, fpsNum: 60, rFpsNum: 60)).Project;
+            Assert.Equal(exact, Assert.Single(ItemsOn(viaRounding, "Screen")).DurationTicks);
+
+            // a duration already on the grid is untouched
+            var onGrid = Build(ArgsJson(), Probe(durationTicks: 12 * Second)).Project;
+            Assert.Equal(12 * Second, Assert.Single(ItemsOn(onGrid, "Screen")).DurationTicks);
+        }
+
+        [Fact]
+        public void Audio_items_end_where_the_source_audio_ends()
+        {
+            // Recordings' audio tracks run a few hundredths of a second short of the video;
+            // vid-render's atrim chain ended the output audio there instead of padding silence
+            // to the video duration (parity gate cell c1's 4.04 s audio under 4.05 s video).
+            var project = Build(ArgsJson(),
+                Probe(durationTicks: 12 * Second, audioDurationTicks: 12 * Second - 300 * Ms)).Project;
+
+            Assert.Equal(12 * Second, Assert.Single(ItemsOn(project, "Screen")).DurationTicks);
+            Assert.Equal(12 * Second - 300 * Ms, Assert.Single(ItemsOn(project, "Audio")).DurationTicks);
+
+            // segments that end inside the audio track are untouched
+            var cut = Build(ArgsJson(segments: "[{\"start_ms\":0,\"end_ms\":5000}]"),
+                Probe(durationTicks: 12 * Second, audioDurationTicks: 12 * Second - 300 * Ms)).Project;
+            Assert.Equal(5 * Second, Assert.Single(ItemsOn(cut, "Audio")).DurationTicks);
+        }
+
+        [Fact]
         public void Segments_are_clamped_to_the_probed_duration()
         {
             // a stale args file asking past the end must not produce a freeze-frame tail.
@@ -312,6 +367,60 @@ namespace Clowd.VideoSDK.Tests
             var item = Assert.Single(ItemsOn(project, "Screen"));
             Assert.Equal(1234 * Ms, ((MediaContent)item.Content).SourceInTicks);
             Assert.Equal((5678 - 1234) * Ms, item.DurationTicks);
+        }
+
+        // ---------------------------------------------------------------------------------- vfr
+
+        [Fact]
+        public void A_vfr_source_gets_a_passthrough_frame_schedule()
+        {
+            // vid-render passed VFR source frames through on their own timestamps; a CFR resample
+            // would change the frame count and every instant (parity gate cell c6). 30 fps for 2s
+            // then 10 fps for 1s, keeping [1s, 2.5s).
+            var pts = new List<long>();
+            for (int i = 0; i < 60; i++)
+                pts.Add(i * Second / 30);
+            for (int i = 0; i < 10; i++)
+                pts.Add(2 * Second + i * Second / 10);
+
+            var plan = Build(ArgsJson(segments: "[{\"start_ms\":1000,\"end_ms\":2500}]"),
+                Probe(durationTicks: 3 * Second, vfr: true), pts);
+
+            var schedule = plan.FrameTimestampsTicks;
+            Assert.NotNull(schedule);
+            // kept: 30 frames in [1s,2s) at 30 fps + 5 frames in [2s,2.5s) at 10 fps
+            Assert.Equal(35, schedule.Count);
+            Assert.Equal(0, schedule[0]);                       // 1.0s source -> timeline 0
+            Assert.Equal(Second / 30, schedule[1]);
+            Assert.Equal(1 * Second, schedule[30]);             // the 2.0s source frame
+            Assert.Equal(1 * Second + 4 * Second / 10, schedule[34]);
+        }
+
+        [Fact]
+        public void A_cfr_source_renders_on_the_grid_without_a_schedule()
+        {
+            var plan = Build(ArgsJson(), Probe());
+            Assert.Null(plan.FrameTimestampsTicks);
+            Assert.True(plan.LegacyContainerTiming); // v1 plans always mux like vid-render
+        }
+
+        [Fact]
+        public void Frame_schedule_bounds_match_trim_semantics()
+        {
+            // trim keeps start <= pts < end; multi-segment schedules rebase each segment onto the
+            // accumulated timeline exactly like the items do.
+            long[] pts = { 0, 100 * Ms, 200 * Ms, 300 * Ms, 400 * Ms, 500 * Ms };
+            var segments = new[] { (100 * Ms, 100 * Ms), (300 * Ms, 200 * Ms) };
+
+            var schedule = RenderArgsCompat.BuildFrameSchedule(pts, segments);
+
+            Assert.Equal(new long[]
+            {
+                0,                 // pts 100ms == segment 0 start (inclusive)
+                                   // pts 200ms == segment 0 end (exclusive) — dropped
+                100 * Ms,          // pts 300ms -> segment 1 start on the timeline at 100ms
+                200 * Ms,          // pts 400ms
+            }, schedule);
         }
 
         [Fact]

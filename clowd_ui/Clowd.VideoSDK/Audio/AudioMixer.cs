@@ -120,6 +120,31 @@ namespace Clowd.VideoSDK.Audio
         }
 
         /// <summary>
+        /// The end of the last audio-stream item on the timeline (100ns ticks; 0 when there are
+        /// none). The renderer's audio stream runs to this instant rather than to the video's end:
+        /// when the source audio track is shorter than the video, the output audio track is
+        /// shorter too — the same result vid-render's atrim/concat graph produced.
+        /// </summary>
+        public static long GetAudioEndTicks(Project project)
+        {
+            ArgumentNullException.ThrowIfNull(project);
+            var audioTracks = new HashSet<Guid>();
+            foreach (var track in project.Tracks ?? new List<Track>())
+            {
+                if (track.Kind == TrackKind.Audio)
+                    audioTracks.Add(track.Id);
+            }
+
+            long end = 0;
+            foreach (var item in project.Items ?? new List<Item>())
+            {
+                if (item.Content is MediaContent && item.DurationTicks > 0 && audioTracks.Contains(item.TrackId))
+                    end = Math.Max(end, item.TimelineEndTicks);
+            }
+            return end;
+        }
+
+        /// <summary>
         /// Mixes output samples [<paramref name="firstFrame"/>, <paramref name="firstFrame"/> +
         /// <paramref name="frames"/>) into <paramref name="dst"/> (interleaved stereo, length at
         /// least <c>frames * 2</c>; fully overwritten). Chunks must be requested in forward order
