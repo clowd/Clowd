@@ -1225,8 +1225,9 @@ impl App {
                         });
                     }
                     Err(OcrError::Unavailable) => {
-                        // MNN engine failed to init — cause logged at error
-                        // level by ocr::paddle.
+                        // The recognizer could not be spawned, or its MNN
+                        // engine failed to init — either cause is already
+                        // logged at error level (ocr::client / clowd_ocr).
                         log::warn!("OCR is unavailable on this machine");
                         cycle.input.ocr = OcrState::Idle;
                         cycle.input.ocr_notice = Some(OcrNotice {
@@ -1805,10 +1806,14 @@ impl App {
                 let req = cycle.ocr_req;
                 let latch: Arc<Latch<Result<OcrOutcome, OcrError>>> = Arc::new(Latch::new());
                 let cancel = Arc::new(AtomicBool::new(false));
-                // A dedicated detached thread, never joined: recognize() is
-                // blocking and does its own CoInitializeEx(MTA), while this
-                // (winit) thread is STA and must never block — a join would
-                // freeze the overlay for the whole recognition.
+                // Where the recognizer leaves its response file and `ocr.log`
+                // (see ocr::recognize). None is normal: OCR has no session_dir
+                // requirement, and only UPLOAD needs one.
+                let session_dir = cycle.settings.session_dir.clone();
+                // A dedicated detached thread, never joined: recognize()
+                // blocks for the whole of the child process's run, while this
+                // (winit) thread must never block — a join would freeze the
+                // overlay for the entire recognition.
                 let spawned = {
                     let latch = latch.clone();
                     let cancel = cancel.clone();
@@ -1816,8 +1821,8 @@ impl App {
                         .name("ocr".into())
                         .spawn(move || {
                             // Checked on both sides of the expensive call
-                            // (and polled inside it — recognize() bails
-                            // between its det/rec stages): before, to skip
+                            // (and polled inside it — recognize() kills the
+                            // child when the flag goes up): before, to skip
                             // work the user already backed out of; after,
                             // to avoid setting a latch whose reader is
                             // gone, and because a cancelled recognize()
@@ -1826,7 +1831,7 @@ impl App {
                             if cancel.load(Ordering::Acquire) {
                                 return;
                             }
-                            let result = ocr::recognize(&request, &cancel);
+                            let result = ocr::recognize(&request, &cancel, session_dir.as_deref());
                             if cancel.load(Ordering::Acquire) {
                                 return;
                             }
