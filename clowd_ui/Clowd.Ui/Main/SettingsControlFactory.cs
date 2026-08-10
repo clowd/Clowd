@@ -152,21 +152,23 @@ namespace Clowd.UI.Config
             var editor = GetRowForProperty(pd);
 
             // [DisabledWhen] rows stay visible but stop responding (and dim) while the bool they
-            // defer to is set — e.g. the manual accent colour while the OS accent is followed.
+            // defer to holds the disabling value — e.g. the manual accent colour while the OS
+            // accent is followed, or the scroll rewind while scrolling capture is switched off.
             var disabledWhen = GetFirstAttributeOrDefault<DisabledWhenAttribute>(pd);
             if (disabledWhen != null)
             {
+                var disablingValue = disabledWhen.DisablingValue;
                 editor.Bind(InputElement.IsEnabledProperty, new Binding(disabledWhen.PropertyName)
                 {
                     Source = _obj,
                     Mode = BindingMode.OneWay,
-                    Converter = new FuncValueConverter<bool, bool>(disabled => !disabled),
+                    Converter = new FuncValueConverter<bool, bool>(v => v != disablingValue),
                 });
                 editor.Bind(Visual.OpacityProperty, new Binding(disabledWhen.PropertyName)
                 {
                     Source = _obj,
                     Mode = BindingMode.OneWay,
-                    Converter = new FuncValueConverter<bool, double>(disabled => disabled ? 0.4 : 1.0),
+                    Converter = new FuncValueConverter<bool, double>(v => v == disablingValue ? 0.4 : 1.0),
                 });
             }
 

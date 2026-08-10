@@ -27,6 +27,12 @@ rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
 sentry.workspace = true
 
+# NOTE there is deliberately no OCR engine here. Recognition runs in the
+# `clowd_ocr` binary (spawned per request by src/ocr/client.rs) so that an
+# abort or segfault inside its static C++ MNN runtime cannot take a capture
+# down with it. Adding `ocr-rs` back to this manifest would undo that and put
+# ~18 MB of embedded models back in the overlay's start-up path.
+
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",

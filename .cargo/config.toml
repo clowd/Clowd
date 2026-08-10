@@ -1,3 +1,28 @@
+# rustc 1.97 turned the `linker_messages` lint on by default, so link.exe's
+# warnings now reach the build output. Two of them are noise we cannot act on,
+# and they are silenced at the linker rather than by allowing the lint — the
+# lint stays on so a genuine link problem is still reported.
+#
+#   LNK4099  the prebuilt MNN inside ocr-rs (clowd_ocr) was compiled /Zi but
+#            upstream ships no vc140.pdb, so every one of its ~260 C++ objects
+#            links without debug info. Only a from-source MNN build would fix it.
+#   LNK4104  rustc generates clowd_shell_ext's .def itself and cannot mark an
+#            export PRIVATE, which is what MSVC wants for the COM entry points.
+#            Cosmetic: it concerns the unused import lib, and the DLL's export
+#            table carries DllCanUnloadNow/DllGetClassObject correctly.
+#
+# crt-static links the CRT itself into each binary (/MT) rather than importing
+# it (/MD). Two reasons, in order: it is what the prebuilt MNN in ocr-rs was
+# compiled as, so clowd_ocr's link no longer mixes two CRTs — i.e. two heaps —
+# in one image (that mismatch was LNK4098); and it drops the
+# vcruntime140/api-ms-win-crt imports, so nothing we ship needs the VC++
+# redistributable present. Set for every Windows target rather than just
+# clowd_ocr — a profile that differed per binary buys nothing and the
+# redist-free property is worth having everywhere. Verify with
+# `dumpbin /dependents` after touching this: the CRT names should be absent.
+[target.'cfg(windows)']
+rustflags = ["-Clink-arg=/IGNORE:4099", "-Clink-arg=/IGNORE:4104", "-Ctarget-feature=+crt-static"]
+
 [alias]
 r = "run -p clowd_capture_wgpu"
 b = "build -p clowd_capture_wgpu"

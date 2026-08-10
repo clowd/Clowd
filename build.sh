@@ -4,8 +4,8 @@
 # Usage: ./build.sh <version>
 #
 # 1. dotnet publish Clowd.Ui (Release, framework-dependent, host RID) to build/<version>/<rid>
-# 2. cargo build --release (builds clowd_capture_wgpu and, on Windows, the
-#    scrolling capture driver)
+# 2. cargo build --release (builds clowd_capture_wgpu, the clowd_ocr recognizer
+#    it spawns, and on Windows the scrolling capture driver)
 # 3. copy the capture binaries next to the published Clowd.Ui executable
 #    (release binary discovery expects them there — see clowd_ui/MIGRATION.md)
 #

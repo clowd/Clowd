@@ -53,6 +53,24 @@ struct Uniforms {
     cursor_rect:      vec4<f32>,
     // cursor_params.x = cursor type: 0=hidden, 1=alpha_blended, 2=masked.
     cursor_params:    vec4<f32>,
+    // ocr_rect.xyzw = OCR source region in window-local px (l, t, r, b).
+    // Empty (z <= x) while OCR mode is idle. Currently unread — the dim
+    // below applies to the whole selection fill, which IS the OCR region
+    // modulo edge clamping — but mirrored here so the Rust struct and this
+    // block cannot diverge in layout.
+    ocr_rect:         vec4<f32>,
+    // ocr_params.x = OCR source dim amount in [0, 1]; ramps alongside the
+    //                lift animation and reverses during retract.
+    // ocr_params.y = OCR-mode-active flag; suppresses the resize handles
+    //                so nothing draws over (or looks draggable under) the
+    //                lifted text.
+    // ocr_params.z = OCR selection desaturation in [0, 1]. Ramps on the
+    //                same shared-anchor clock as the dim (CPU-side, the
+    //                same quartic curve as the opening fade — see
+    //                render/desktop.rs) so the selection interior joins
+    //                the monochrome page when OCR starts and colour
+    //                returns with the retract.
+    ocr_params:       vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -284,7 +302,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // point is being picked.  From edge inward: sel_step px accent,
         // sel_step px white ring, rest accent.
         let scroll_pick = u.selection_params.w > 0.5;
-        if (captured && !scroll_pick) {
+        // The OCR gate mirrors the scroll_pick one: while lines are lifted
+        // (or lifting/retracting), the selection is frozen and the handles
+        // would draw right across the raised text.
+        if (captured && !scroll_pick && u.ocr_params.y < 0.5) {
             let fpos = in.pos.xy;
             let step_f = f32(sel_step);
             let handle_r    = 6.0 * step_f;
@@ -387,7 +408,33 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let in_fill = px.x >= inner_left && px.x <= inner_right
                    && px.y >= inner_top  && px.y <= inner_bottom;
         if (in_fill) {
-            return base;
+            // OCR treatment of the selection interior: desaturate, then
+            // darken, so the raised copies read as the live layer over a
+            // monochrome page. Done here rather than as a RectInstance
+            // because rect.draw runs AFTER lift.draw — a rect dim would
+            // land on top of the lifted lines. The `<= 0` early-out keeps
+            // the byte-exact passthrough the uncloak invariant depends on
+            // (and is the non-OCR fast path: both params are 0 outside the
+            // mode, so this branch is behaviourally identical to before).
+            let dim = clamp(u.ocr_params.x, 0.0, 1.0);
+            let gray = clamp(u.ocr_params.z, 0.0, 1.0);
+            if (dim <= 0.0 && gray <= 0.0) {
+                return base;
+            }
+            // Same linear-light luma machinery as the outside fade below,
+            // but WITHOUT its 0.42 luma crush: the OCR dim (ocr_params.x)
+            // is the darkening channel here, and stacking the crush under
+            // the dim would land the region at ~27% brightness —
+            // "crushed to black", exactly the read this composition is
+            // tuned to avoid. Result: selection ≈ luma × (1 - dim), which
+            // holds at 65% for the WHOLE mode (one darkening, on entry —
+            // deepening again when the text renders read as dimming
+            // twice) and always sits brighter than the crushed outside,
+            // so the region stays the focus of the whole screen.
+            let lin = srgb_to_linear(base.rgb);
+            let luma = vec3<f32>(dot(lin, vec3<f32>(0.2126, 0.7152, 0.0722)));
+            let desat = linear_to_srgb(mix(lin, luma, gray));
+            return vec4<f32>(desat * (1.0 - dim), 1.0);
         }
     }
 

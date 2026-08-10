@@ -10,8 +10,11 @@ Clowd is a minimalist screen capture / screen recording tool. It sits out of you
 ## Features
  - [Region capture](#region-capture--prntscr-replacement) as a fast, zoomable `PrntScr` replacement
  - [Video recording](#video-recorder) to MKV, MP4, or GIF, with speaker and microphone audio
+ - [Scrolling capture](#scrolling-capture) to grab a whole page or document as one tall image
+ - [Text recognition](#text-recognition-ocr) to copy, search, or share the text out of anything on screen
  - [Image editor](#image-editor) for quick annotations and edits
  - [Upload anything](#upload-anything) to a variety of file sharing websites, with the URL copied to your clipboard
+ - [Accelerated uploads](#accelerated-uploads) - share the link immediately, before the upload has finished
  - [Color picker](#color-picker) that can sample any pixel on screen
  - Window detection - selections snap to window borders
  - Fully keyboard accessible
@@ -43,6 +46,8 @@ I will respond to bug reports or questions in GitHub issues. Also feel free to b
  - Snaps selection to window borders
  - Click on any window to quickly bring it to the foreground
  - Select any color to open a color picker
+ - Don't use one of the buttons? Switch UPLOAD, SCROLL or OCR off under
+   *Settings → Capture → Optional features* and the capture window drops them
 
 https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-acee-216529f49c23.mp4
 
@@ -57,10 +62,55 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
 
 ----
 
+## Scrolling Capture
+
+*Windows only.*
+
+Some things don't fit on screen — a long article, a chat history, a settings page. Scrolling
+capture takes the picture anyway.
+
+ - Select a region, press `L` (SCROLL), then click the part of the screen the wheel should scroll
+ - Clowd drives the scrolling for you, photographs each step, and stitches them into a single tall
+   image that opens in the editor like any other capture
+ - **You get the whole page, not just the part you could see.** The target is wound back to the top
+   before the capture starts, so it doesn't matter where you were scrolled to. Turn this off with
+   *Settings → Capture → Optional features → Scroll to top first* when you want to capture from
+   where you are
+ - **Sticky headers and toolbars appear once**, not repeated down the length of the image
+ - It stops on its own when it reaches the end of the document. `Esc` or **FINISH** ends it early
+   and keeps everything captured so far; **CANCEL** throws it away
+ - **Take your mouse back whenever you like.** Moving the cursor pauses the capture rather than
+   ruining it; put it down again and the capture resumes where it left off
+ - Works on a window that is behind other windows — Clowd brings the one you selected to the front
+   and makes sure it is the one being photographed
+
+A capture is capped at 120 frames, 20,000 pixels tall, or two minutes, whichever comes first.
+Scrolling a pane *inside* a window (a sidebar, a chat column) is not supported yet — for now, aim
+it at something that scrolls as a whole window.
+
+----
+
+## Text Recognition (OCR)
+
+Select any region and press `O` to read the text inside it — including text in screenshots,
+videos, error dialogs, and other places you can't select text normally.
+
+ - **Runs entirely on your machine.** The recognition models are built into Clowd, so there is no
+   cloud service, no network round trip, no API key, and no language pack to install
+ - **You see what it read.** The recognised lines lift off the frozen screenshot as text, so you
+   can check the result before doing anything with it
+ - Then `C` copies it, `S` searches the web for it, `U` uploads it as a text paste with the link on
+   your clipboard, and `B` takes you back to the normal capture buttons
+ - Handles the text that usually defeats built-in OCR — small type, dark mode, low contrast
+ - Everything inside the selection is read, so select tighter to read less
+
+----
+
 ## Image Editor
  - Minimalistic / Easy-To-Learn UI for quick edits
  - Save and return to recent seessions
  - Copy to Clipboard or Upload to the web in one click
+ - Pin the editor above every other window, so a capture stays visible while you work
  
 ![picture of image editor](https://user-images.githubusercontent.com/1287295/177043066-46f6fe23-260c-4b06-9c2c-da2970e9f249.png)
 
@@ -70,6 +120,26 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
  - Supports a vareity of file sharing websites
  
 ![picture of upload](https://user-images.githubusercontent.com/1287295/177044201-1b510910-4211-4eda-9f3c-508fac4c8fba.png)
+
+----
+
+## Accelerated Uploads
+
+Uploading a large file to your own cloud storage normally means waiting for the whole transfer to
+finish before you have anything to share. Accelerated uploads remove that wait.
+
+ - **The link is ready instantly.** Clowd copies a shareable URL to your clipboard the moment the
+   upload *starts*, not when it finishes.
+ - **Recipients don't wait either.** Anyone who opens the link starts downloading right away — the
+   bytes stream through to them as they arrive, so they can begin watching a video or viewing an
+   image while you are still uploading it.
+ - **Your files still land in your own storage.** The transfer is relayed to your bucket in the
+   background. Once it completes the link simply redirects there, so nothing stays in the middle.
+
+Enable it with the ⚡ toggle next to any provider on the Upload settings page. It is available for
+the providers that upload to storage you own — Azure Blob Storage, Amazon S3 (and S3-compatible
+services), Cloudflare R2, and Backblaze B2 — and is on by default for those. Turn it off to upload
+directly to your storage as usual.
 
 ----
 

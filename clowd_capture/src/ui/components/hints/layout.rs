@@ -5,8 +5,12 @@ use clowd_rust_core::geometry::{RectExt, ScreenRect, ScreenRectF};
 pub const HINT_FONT_PX: f32 = 11.0;
 const KEYCAP_SIZE: f32 = 20.0;
 const KEYCAP_GAP: f32 = 5.0;
-const HINT_PADDING_H: f32 = 6.0;
-const HINT_PADDING_V: f32 = 4.0;
+/// `pub` because the pill paddings are SHARED STYLE, not private layout:
+/// the OCR notice pill and the OCR text bubbles must read as the same
+/// family as the hint pills, so they consume these rather than copying
+/// the literals (which is how the two drift apart).
+pub const HINT_PADDING_H: f32 = 6.0;
+pub const HINT_PADDING_V: f32 = 4.0;
 pub const CORNER_RADIUS: f32 = 6.0;
 pub const SHADOW_OFFSET: f32 = 3.0;
 pub const SHADOW_EXTRA: f32 = 2.0;

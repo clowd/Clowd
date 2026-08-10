@@ -18,14 +18,22 @@ at all — no window, no event loop, no GPU — and shares the session format wi
 the capturer and nothing else. It is documented here because it speaks to the
 same shell across the same boundary.
 
+A second separate binary, `clowd_ocr` (§4), does text recognition. It is the
+odd one out: the shell never spawns it and never speaks to it — the *overlay*
+does, per OCR press. It is documented here because it is the third process in
+the same family and shares `clowd_rust_core` with the other two.
+
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `src/host/protocol.rs` + `src/host/stdin.rs` (wire protocol),
-`clowd_scroll_driver/src/drive.rs` (scrolling-capture driver), and
-`clowd_rust_core` for what the two binaries must agree on — the `session.json`
-shape (`session.rs`), the coordinate space (`geometry.rs`) and the exit codes
-(`exit.rs`). C# counterparts: `ScreenCaptureService.cs` (one-shot + session
-dispatch), `CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
-+ `Scroll/ScrollDriverProtocol.cs` (driver).
+`clowd_scroll_driver/src/drive.rs` (scrolling-capture driver),
+`src/ocr/client.rs` + `clowd_ocr/src/main.rs` (recognizer), and
+`clowd_rust_core` for what the binaries must agree on — the `session.json`
+shape (`session.rs`), the recognition contract (`ocr.rs`), the coordinate space
+(`geometry.rs`) and the exit codes (`exit.rs`). C# counterparts:
+`ScreenCaptureService.cs` (one-shot + session dispatch),
+`CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
++ `Scroll/ScrollDriverProtocol.cs` (driver). There is no C# counterpart for
+§4 by design.
 
 ## 1. One-shot mode
 
@@ -42,6 +50,9 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-peek` | flag | peek on | Disable obstructed-window peek-through capture. |
 | `--peek-threshold` | 0.0–1.0 | `0.80` | Max obstructed fraction before a window is dropped from hit-testing. |
 | `--no-cursor` | flag | cursor on | Start with the captured cursor hidden (user toggles with `M`). |
+| `--no-upload` | flag | UPLOAD shown | Hide the UPLOAD button — in the capture strip *and* the OCR strip — and drop its `U` accelerator. |
+| `--no-scroll-capture` | flag | SCROLL shown | Hide the SCROLL button and drop its `L` accelerator. Windows-only button; the flag parses everywhere. |
+| `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
 | `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation (process-level, applies in both modes). `lower-memory-usage` keeps the allocator's retained heap blocks small so an idle persistent host holds minimal memory; a running host must be relaunched for a change to take effect. |
@@ -61,7 +72,9 @@ The shell pre-creates the session directory and passes it via
 | SELECT-COLOR | `action.txt` only | `select-color #RRGGBB` |
 | VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H` |
 | SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
+| OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
+| OCR-COPY / OCR-SEARCH | none — handled inside the capturer (clipboard / browser launch) | — |
 | Cancelled (Escape / close) | none | — |
 
 File contents:
@@ -72,6 +85,7 @@ File contents:
 | `cropped.png` | Preview of the selection, peek composited; cursor composited only if visible to the user. For VIDEO: no peek compositing (the recording shows real obstructions). |
 | `cursor.png` | Desktop crop at the cursor rect with the cursor composited. Absent when no cursor was captured or the OS reported it hidden. |
 | `session.json` | Session metadata (§1.3). |
+| `ocr.txt` | The text recognized in the selection, UTF-8 without BOM, lines separated by `\n`. Present only with the `ocr-upload` marker; the shell reads it, uploads it as a text paste, and deletes the directory. |
 | `action.txt` | Routing marker read by `CaptureSessionDispatcher` (missing = edit). |
 | `capture.log` | Mirror of the capturer's log (one-shot mode only), read by the shell after a non-zero exit. |
 | `scroll.log` | Same, for the `clowd_scroll_driver` pass (§3). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
@@ -86,8 +100,11 @@ completion signal, so readers must wait for process exit (one-shot) or the
 2. VIDEO: `cropped.png` first, then **`action.txt` last**. Its appearance is
    the completion signal; no `desktop.png`, no `session.json` (the session is
    created by Clowd.Ui when recording finishes).
-3. SELECT-COLOR / SCROLL: `action.txt` only.
-4. Neither `session.json` nor `action.txt` present = the capture was
+3. OCR-UPLOAD: `ocr.txt` first, then **`action.txt` last**. Its appearance is
+   the completion signal; no PNGs and no `session.json` — the recognized text
+   is the entire payload, and the shell uploads it as a text paste.
+4. SELECT-COLOR / SCROLL: `action.txt` only.
+5. Neither `session.json` nor `action.txt` present = the capture was
    cancelled; the shell deletes the pre-created directory.
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
@@ -102,6 +119,14 @@ window handle under that point, or `0` when the walker could not resolve one
 poster frame: the driver produces every image plus the `session.json` for
 the stitched result, so `action.txt` is the whole overlay payload. macOS
 never emits this marker.
+
+The OCR markers come from a second action panel the overlay shows once it has
+recognized text inside the selection (Windows only — like SCROLL, the button
+is compiled out elsewhere, so macOS never emits them either). Only UPLOAD
+reaches the shell: COPY and SEARCH finish inside the capturer, BACK returns to
+the ordinary panel without ending the cycle at all, and EXIT is an ordinary
+cancel. `ocr-upload` carries no rect — by then the selection has been reduced
+to the text in `ocr.txt`.
 
 ### 1.3 `session.json` schema
 
@@ -127,7 +152,7 @@ Constants in `src/system/mod.rs`; keep in sync with
 
 | Code | Meaning |
 |---|---|
-| 0 | Every normal outcome — edit, upload, color, video, copy, save, **and cancel**. The shell distinguishes them by the session files, not the code. |
+| 0 | Every normal outcome — edit, upload, color, video, copy, save, OCR copy/search/upload, **and cancel**. The shell distinguishes them by the session files, not the code. |
 | 3 | `EXIT_NO_SCREEN_PERMISSION` — the OS has not granted screen capture (macOS Screen Recording). The shell shows the permission dialog instead of a crash report. |
 | 4 | `EXIT_CAPTURE_FAILED` — the desktop screenshot itself failed. The reason is in stderr/`capture.log`, not a stack trace. |
 
@@ -181,8 +206,8 @@ line. Parent writes `HostCommand`s to the child's stdin; child writes
 
 `show` fields mirror the CLI one-to-one and every default matches the CLI
 default, so `{"type":"show"}` produces the same overlay a bare one-shot
-launch would. Note the polarity: `peek`/`cursor` are positive here where the
-CLI has `--no-peek`/`--no-cursor`.
+launch would. Note the polarity: `peek`/`cursor`/`upload`/`scroll_capture`/
+`ocr` are positive here where the CLI has the corresponding `--no-*` flag.
 
 | Field | Type | Default | CLI counterpart |
 |---|---|---|---|
@@ -194,11 +219,14 @@ CLI has `--no-peek`/`--no-cursor`.
 | `cursor` | bool | `true` | `--no-cursor` (inverted) |
 | `capture_mode` | `region` \| `screen` \| `window` | `region` | `--capture-mode` |
 | `video` | bool | `false` | `--video` |
+| `upload` | bool | `true` | `--no-upload` (inverted) |
+| `scroll_capture` | bool | `true` | `--no-scroll-capture` (inverted) |
+| `ocr` | bool | `true` | `--no-ocr` (inverted) |
 
 Examples:
 
 ```json
-{"type":"show","session_dir":"C:\\ProgramData\\Clowd\\Sessions\\42","accent_color":"#2F7CAE","tips_mode":"hints","peek":true,"peek_threshold":0.8,"cursor":true,"capture_mode":"region","video":false}
+{"type":"show","session_dir":"C:\\ProgramData\\Clowd\\Sessions\\42","accent_color":"#2F7CAE","tips_mode":"hints","peek":true,"peek_threshold":0.8,"cursor":true,"capture_mode":"region","video":false,"upload":true,"scroll_capture":true,"ocr":true}
 {"type":"cancel"}
 {"type":"ping"}
 {"type":"shutdown"}
@@ -210,7 +238,7 @@ Examples:
 |---|---|---|
 | `ready` | `warmup_ms` (u64), `monitors` (count) | Emitted once, when every render worker has parked (device, pipelines, surface ready). A `show` will now be fast. `warmup_ms` is measured from process start. |
 | `shown` | `elapsed_ms` (u64) | The overlay windows are on screen. Exactly one per accepted `show`; `elapsed_ms` is measured from the `show` command. |
-| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `scroll` \| `copy` \| `save` \| `cancelled`. |
+| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `scroll` \| `copy` \| `save` \| `ocr_copy` \| `ocr_search` \| `ocr_upload` \| `cancelled`. |
 | `pong` | — | Answer to `ping`. |
 | `display_changed` | — | The monitor topology changed (or a GPU device was lost) under the warm state; the process exits right after with code 5 or 6. Informational — the parent keys its respawn policy off the exit code. |
 | `fatal_error` | `message` (string) | Something unrecoverable happened to the active cycle (e.g. the desktop screenshot never arrived within its 30 s deadline). The cycle is cancelled; a `finished` (`action: "cancelled"`) always follows, so a waiting parent is never left hanging. |
@@ -425,3 +453,108 @@ the target window going away are all honoured while paused. Paused time is
 excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
 as `stopped` with everything captured so far.
+
+## 4. Text recognizer (`clowd_ocr`)
+
+The only protocol here that the shell is not a party to. When the user presses
+OCR, the overlay extracts the selected region's pixels — compositing a
+click-locked peek if one is up, so what is recognized is what the user can
+actually see — spawns `clowd_ocr`, and waits for it on the detached `ocr`
+worker thread. **One request, one process, one answer.**
+
+It is a **separate binary** because recognition runs on a static C++ engine
+(MNN, via `ocr-rs`). A Rust panic in it would unwind harmlessly, but an
+`abort`, a segfault or a refused allocation on a degenerate selection kills the
+process it is running in — which in-process meant the overlay, mid-capture,
+with the user's selection already framed. Out-of-process the same failure is an
+exit code the capturer turns into an "OCR failed" pill.
+
+Two things follow from that split, both improvements rather than costs:
+cancelling (BACK) is killing a process rather than polling a flag between
+inference batches, so a superseded request can no longer hold the engine while
+the next one queues behind it; and the ~18 MB of embedded models plus the
+static MNN left the overlay, which is respawned on display-change and GPU-loss
+and therefore pays for its own size in start-up latency.
+
+It ships beside `clowd_capture_wgpu` on **every** platform, which is where
+`src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
+`CLOWD_OCR_BINARY` environment variable overrides that, for tests and local
+development). It needs no window, no event loop, no GPU, and — because it is
+handed pixels rather than taking them — no screen-recording permission.
+
+### 4.1 Spawn
+
+```
+clowd_ocr --out <path> [--log-file <path>]
+```
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--out` | yes | Where to write the response (§4.3). The capturer puts this in the capture's session directory as `ocr.json` when there is one, and in the temp directory otherwise — OCR has no `--session-dir` requirement, since COPY and SEARCH need no shell round-trip. It reads the file only after the process exits 0, and deletes it either way. |
+| `--log-file` | no | Mirrors the log (det/rec timings, the tier choice) to a file. The capturer passes `<session-dir>/ocr.log` when it has a session; that file is deliberately *not* cleaned up, because it is the artefact a "why was OCR slow" report is diagnosed from. |
+
+Stdio, all three of which the capturer sets deliberately:
+
+| Stream | Setting | Why |
+|---|---|---|
+| stdin | pipe | Carries the request (§4.2). |
+| stdout | **null** | MNN prints device capabilities to stdout on session creation, so stdout cannot carry a protocol here — hence the `--out` file. It must never be *inherited*: the overlay's own stdout is the NDJSON host channel of §2, and MNN's chatter reaching `Clowd.Ui`'s line parser would corrupt it. A pipe would work but one nobody drains can eventually block the child; null cannot. |
+| stderr | inherited | Log chatter, by the same convention §2.2 and §3.2 follow. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
+
+On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a
+GUI-subsystem process with no console, so a console-wanting child would flash a
+brand new window on top of a fullscreen capture.
+
+### 4.2 Request (capturer → recognizer, stdin)
+
+One `RequestHeader` as a single JSON line, then the raw BGRA pixels —
+`width * height * 4` bytes, tightly packed — through to EOF. Closing stdin is
+what starts recognition.
+
+```json
+{"width":3440,"height":1440,"origin":{"x":-500,"y":-300,"width":3440,"height":1440}}
+```
+
+| Field | Meaning |
+|---|---|
+| `width`, `height` | Dimensions of the pixel payload. The recognizer checks the payload length against them and fails loudly on a mismatch — both sides of a private protocol disagreeing is a bug, not a bad capture. |
+| `origin` | The rect the crop **actually** covers, after `extract_selection_bgra` clamped it to the desktop bitmap. Result rects are offset by it; offsetting by the selection instead would misplace every bubble on a negative-origin multi-monitor layout. |
+
+The pixels never touch the disk. They are a picture of the user's screen, and a
+temp file holding one outlives a killed process. A 3440x1440 selection is
+19.8 MB, uploaded in 1 MB chunks so the cancel flag is polled throughout.
+
+### 4.3 Response (`--out` file)
+
+The JSON `OcrResponse` — `Result<OcrOutcome, OcrError>`, so `{"Ok":…}` or
+`{"Err":…}`. Rects use the same explicit `{x,y,width,height}` shape as
+`session.json` (§1.3).
+
+```json
+{"Ok":{"lines":[{"text":"hello","rect":{"x":-12.5,"y":7.25,"width":112.5,"height":14.25}}],"full_text":"hello","text_angle":0.0}}
+```
+
+A recognition that ran and failed is part of the answer, not a failure of the
+process: it is written as `{"Err":"Unavailable"}` or `{"Err":{"Failed":"…"}}`
+and the process still exits 0. That is what lets the capturer tell "the engine
+does not work on this machine" apart from "the child died", which is all a
+non-zero exit can mean.
+
+### 4.4 Exit codes and failure handling
+
+| Code | Meaning to the capturer |
+|---|---|
+| 0 | The response file is there and can be trusted. |
+| anything else | The child crashed or could not write. The file is not read. Reported as `OcrError::Failed`, and logged at `error!` — which is the path by which the crashes this split exists to isolate reach Sentry, since no panic hook runs for an `abort`. |
+
+The capturer additionally enforces a 30 s ceiling and kills the child if it is
+exceeded. That is not a latency target — a dense 3440x1440 desktop measures
+about 1.1 s end to end — but the `Scanning` phase has no other way out, and
+without it a child that hung instead of exiting would leave the user under the
+sweep animation indefinitely.
+
+The recognizer reports to Sentry under `app = clowd_ocr`, with release-health
+session tracking **off** (`telemetry::init_short_lived`): it runs once per OCR
+press rather than once per app run, so tracked sessions would bury the shell's
+and capturer's real ones — and the session envelope measured ~100 ms on a
+process that lives for about a second.
