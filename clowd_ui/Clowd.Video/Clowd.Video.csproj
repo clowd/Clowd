@@ -9,6 +9,11 @@
     <NoWarn>$(NoWarn);CA2007</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <!-- for DemuxBudget: the read-ahead rule is testable without the native FFmpeg plumbing
+         the rest of the demuxer needs. -->
+    <InternalsVisibleTo Include="Clowd.Video.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- 7.1.1 is the FFmpeg.AutoGen series generated against FFmpeg 7.1
          (avcodec 61 / avformat 61 / avutil 59 / swscale 8 / swresample 5) — the exact
          majors of the DLLs shipped in the obs-express folder. FFmpegLoader asserts the
