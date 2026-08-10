@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "clowd_capture",
+    "clowd_ocr",
     "clowd_rust_core",
     "clowd_scroll_driver",
     "clowd_shell_ext",

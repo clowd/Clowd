@@ -4,7 +4,9 @@ name: CI
 # (deploy-server.yml) and is excluded from the cargo workspace.
 #
 # Packages (4): win-x64, win-arm64, osx-x64, osx-arm64. Each contains the
-# published Clowd.Ui app with the Rust capture binaries alongside it and the
+# published Clowd.Ui app with the Rust capture binaries alongside it (the
+# overlay, the OCR recognizer it spawns, and on Windows the scrolling-capture
+# driver) and the
 # obs-express recording distribution in an obs-express/ subdirectory — the
 # layout expected by ScreenCaptureService/ObsBinaryLocator. obs-express is
 # pulled from the latest clowd/obs-express-rs GitHub release (public repo,
@@ -65,6 +67,8 @@ jobs:
           cargo test -p clowd_capture_wgpu
           cargo clippy -p clowd_scroll_driver --all-targets -- -D warnings
           cargo test -p clowd_scroll_driver
+          cargo clippy -p clowd_ocr --all-targets -- -D warnings
+          cargo test -p clowd_ocr
         shell: bash
 
       # the shell extension is a Windows COM dll (empty crate elsewhere), so its
@@ -194,6 +198,12 @@ jobs:
       - name: Build capture binary
         run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
 
+      # The OCR recognizer, spawned per request by the overlay (which looks for
+      # it beside itself). Unlike the scrolling-capture driver this ships on
+      # every platform — the overlay's OCR button is not compiled out anywhere.
+      - name: Build OCR recognizer
+        run: cargo build --release -p clowd_ocr --target ${{ matrix.target }}
+
       # The scrolling-capture driver only does anything on Windows (the overlay's
       # SCROLL button is compiled out elsewhere), but it is built on both legs so
       # the non-Windows stub cannot rot unnoticed. Only Windows packages it.
@@ -224,10 +234,15 @@ jobs:
           # that never made it into DWARF resolve from there.
           if [ "${{ runner.os }}" = "Windows" ]; then
             DIF="$OUT/clowd_capture_wgpu.pdb"
+            OCR_DIF="$OUT/clowd_ocr.pdb"
           else
             DIF="$OUT/clowd_capture_wgpu.dSYM"
+            OCR_DIF="$OUT/clowd_ocr.dSYM"
           fi
           sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
+          # the recognizer reports into the same project under its own `app`
+          # tag, and ships on every platform
+          sentry-cli debug-files upload "$OCR_DIF" "$OUT/clowd_ocr${{ matrix.exe }}"
           # the scrolling capture driver reports into the same project under its own
           # `app` tag, and only ships on Windows
           if [ "${{ runner.os }}" = "Windows" ]; then
@@ -238,6 +253,12 @@ jobs:
 
       - name: Copy capture binary into package
         run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
+        shell: bash
+
+      # Beside the overlay, which resolves it as a sibling of its own
+      # executable (clowd_capture/src/ocr/client.rs).
+      - name: Copy OCR recognizer into package
+        run: cp "target/${{ matrix.target }}/release/clowd_ocr${{ matrix.exe }}" publish/
         shell: bash
 
       # Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver

@@ -26,15 +26,20 @@
 //!   whole spreadsheet) pays for lines that are then thrown away.
 //! * Reading-order sorting before the cap, so truncation keeps the top of
 //!   the page rather than raw detection order.
+//!
+//! Nothing here polls for cancellation. This is a one-shot child process
+//! (see `main`), so a request the user backed out of is cancelled by the
+//! capturer killing us — which is both instant and, unlike the in-band
+//! polling this replaced, cannot leave a superseded job holding the engine
+//! while the next request queues behind it.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use image::DynamicImage;
 use ocr_rs::{DetModel, DetOptions, RecModel, RecognitionResult, TextBox};
 
-use super::{OcrError, OcrLine, OcrOutcome, OcrRequest};
 use clowd_rust_core::geometry::{RectExt, ScreenRectF};
+use clowd_rust_core::ocr::{OcrError, OcrLine, OcrOutcome, OcrRequest};
 
 /// Line cap, applied BEFORE recognition (see module docs) purely to bound
 /// worst-case latency — the render side (bubble rects, glyphon buffers)
@@ -134,63 +139,70 @@ const REC_BATCH: usize = 8;
 // CJK coverage, per upstream no Japanese): on a dense page a rare glyph
 // may come back wrong that the small tier would have read. Speed over
 // completeness there is deliberate — the alternative was "seemingly hung".
-static DET_MODEL: &[u8] = include_bytes!("../../assets/ocr/PP-OCRv6_small_det.mnn");
-static REC_MODEL: &[u8] = include_bytes!("../../assets/ocr/PP-OCRv6_small_rec.mnn");
-static CHARSET: &[u8] = include_bytes!("../../assets/ocr/ppocr_keys_v6_small.txt");
-static TINY_REC_MODEL: &[u8] = include_bytes!("../../assets/ocr/PP-OCRv6_tiny_rec.mnn");
-static TINY_CHARSET: &[u8] = include_bytes!("../../assets/ocr/ppocr_keys_v6_tiny.txt");
+static DET_MODEL: &[u8] = include_bytes!("../assets/ocr/PP-OCRv6_small_det.mnn");
+static REC_MODEL: &[u8] = include_bytes!("../assets/ocr/PP-OCRv6_small_rec.mnn");
+static CHARSET: &[u8] = include_bytes!("../assets/ocr/ppocr_keys_v6_small.txt");
+static TINY_REC_MODEL: &[u8] = include_bytes!("../assets/ocr/PP-OCRv6_tiny_rec.mnn");
+static TINY_CHARSET: &[u8] = include_bytes!("../assets/ocr/ppocr_keys_v6_tiny.txt");
 
-struct Backend {
-    det: DetModel,
-    rec_small: RecModel,
-    rec_tiny: RecModel,
-}
-
-/// Process-global models, created on first use: MNN session setup parses
-/// the models and is far too slow to repeat per capture. `Option` caches a
-/// failed init too — an MNN that cannot start once will not start later,
-/// so every recognize then reports `Unavailable` without retrying.
+/// The detector, created on first use. `Option` caches a failed init too — an
+/// MNN that cannot start once will not start later, so a second recognize in
+/// the same process reports `Unavailable` without retrying.
 ///
-/// `Mutex` (not bare `Backend`): inference takes `&self` but MNN sessions
-/// are not documented thread-safe, and the OCR worker threads are spawned
-/// per capture cycle — serialize them defensively. Recognitions never
-/// overlap in practice (one selection at a time), so the lock is
-/// uncontended.
-fn backend() -> Option<&'static Mutex<Backend>> {
-    static BACKEND: OnceLock<Option<Mutex<Backend>>> = OnceLock::new();
-    BACKEND
-        .get_or_init(|| match create_backend() {
-            Ok(b) => Some(Mutex::new(b)),
+/// `Mutex` (not a bare `DetModel`) because a `static` must be `Sync` and MNN
+/// sessions are not: inference takes `&self`, but nothing documents them as
+/// thread-safe, so the lock is what makes this static legal. It is not
+/// concurrency control — a one-shot child recognizes exactly once, so the
+/// lock is uncontended by construction.
+fn detector() -> Option<&'static Mutex<DetModel>> {
+    static DET: OnceLock<Option<Mutex<DetModel>>> = OnceLock::new();
+    DET.get_or_init(|| {
+        let t = std::time::Instant::now();
+        match DetModel::from_bytes(DET_MODEL, None) {
+            Ok(det) => {
+                log::info!("OCR detector init {:?}", t.elapsed());
+                Some(Mutex::new(
+                    det.with_options(
+                        DetOptions::new()
+                            .with_max_side_len(DET_MAX_SIDE_LEN)
+                            .with_box_border(BOX_BORDER),
+                    ),
+                ))
+            }
             Err(e) => {
-                log::error!("PaddleOCR engine init failed: {e}");
+                log::error!("PaddleOCR detector init failed: {e}");
                 None
             }
-        })
-        .as_ref()
-}
-
-fn create_backend() -> Result<Backend, ocr_rs::OcrError> {
-    let det = DetModel::from_bytes(DET_MODEL, None)?.with_options(
-        DetOptions::new()
-            .with_max_side_len(DET_MAX_SIDE_LEN)
-            .with_box_border(BOX_BORDER),
-    );
-    let rec_small = RecModel::from_bytes_with_charset(REC_MODEL, CHARSET, None)?;
-    let rec_tiny = RecModel::from_bytes_with_charset(TINY_REC_MODEL, TINY_CHARSET, None)?;
-    Ok(Backend {
-        det,
-        rec_small,
-        rec_tiny,
+        }
     })
+    .as_ref()
 }
 
-/// Force backend initialization (embedded-model parse + MNN session
-/// setup) so the first real recognition doesn't pay it mid-scan. Called
-/// from a background thread at capture-cycle start (see `app.rs`). The
-/// result is deliberately ignored: a failed init is cached by `backend()`
-/// and reported as `Unavailable` at recognize time.
-pub(super) fn warm() {
-    let _ = backend();
+/// Build the ONE recognition model the tier choice landed on.
+///
+/// Deliberately after detection and deliberately not cached: the two tiers are
+/// 10.6 MB and 2.3 MB of embedded weights, and parsing them both cost ~90 ms
+/// of pure latency on every request once recognition moved out-of-process —
+/// in-process that was a one-off per capturer, here it would be a tax on every
+/// OCR press. The tier is not known until det has produced its boxes, so this
+/// cannot be hoisted; it can only be made to load one model instead of two.
+fn load_rec(use_tiny: bool) -> Option<RecModel> {
+    let (model, charset, name) = if use_tiny {
+        (TINY_REC_MODEL, TINY_CHARSET, "tiny")
+    } else {
+        (REC_MODEL, CHARSET, "small")
+    };
+    let t = std::time::Instant::now();
+    match RecModel::from_bytes_with_charset(model, charset, None) {
+        Ok(rec) => {
+            log::info!("OCR {name} recognizer init {:?}", t.elapsed());
+            Some(rec)
+        }
+        Err(e) => {
+            log::error!("PaddleOCR {name} recognizer init failed: {e}");
+            None
+        }
+    }
 }
 
 /// Reading-order permutation of detection boxes given as (top, left,
@@ -229,14 +241,6 @@ fn reading_order(keys: &[(i32, i32, u32)]) -> Vec<usize> {
     idx
 }
 
-/// The error a cancelled recognition reports. Only the OCR worker thread
-/// ever sees it — the worker re-checks its cancel flag after recognize()
-/// returns and drops the result without setting the latch, so no
-/// user-facing path renders this string.
-fn cancelled() -> OcrError {
-    OcrError::Failed("cancelled".into())
-}
-
 /// Predicted milliseconds for the SMALL model to recognize boxes of the
 /// given (width, height) dimensions — the tier-choice input. Pure so the
 /// threshold behaviour is testable. Measured on serial per-call
@@ -250,12 +254,11 @@ fn predict_small_rec_ms(dims: impl Iterator<Item = (u32, u32)>) -> f32 {
     .sum()
 }
 
-/// `cancel` is polled at every expensive boundary — after acquiring the
-/// backend lock, after detection, and between recognition batches — so
-/// BACK abandons the work promptly AND a superseded job stops hogging the
-/// backend mutex that a newly-dispatched request is queued behind.
-pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, OcrError> {
-    let Some(backend) = backend() else {
+/// Recognize every line of text in `req`. Blocking, and the only thing this
+/// process does; a request the user abandons is cancelled by the capturer
+/// killing us mid-call (see the module docs).
+pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
+    let Some(det) = detector() else {
         return Err(OcrError::Unavailable);
     };
 
@@ -278,24 +281,17 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
     let rgb_img = image::RgbImage::from_raw(req.width, req.height, rgb).expect("OcrRequest.bgra must be width * height * 4 bytes");
     let img = DynamicImage::ImageRgb8(rgb_img);
 
-    let b = backend
-        .lock()
-        .expect("OCR backend lock poisoned");
-    // The lock wait can be long — a superseded job may still be mid-page —
-    // and this job may have been cancelled while it queued.
-    if cancel.load(Ordering::Acquire) {
-        return Err(cancelled());
-    }
-
     let t_det = std::time::Instant::now();
-    let boxes = b
-        .det
-        .detect(&img)
-        .map_err(|e| OcrError::Failed(e.to_string()))?;
+    let boxes = {
+        let d = det
+            .lock()
+            .expect("OCR detector lock poisoned");
+        d.detect(&img)
+            .map_err(|e| OcrError::Failed(e.to_string()))?
+        // lock released here: recognition uses its own model, so holding the
+        // detector through it would pin memory nothing is reading.
+    };
     let det_elapsed = t_det.elapsed();
-    if cancel.load(Ordering::Acquire) {
-        return Err(cancelled());
-    }
 
     // Reading order BEFORE the cap, so truncation keeps the top of the
     // page. Row clustering + fixed-key sort — see `reading_order` for why
@@ -334,7 +330,6 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
             .map(|b| (b.rect.width(), b.rect.height())),
     );
     let use_tiny = predicted_ms > SMALL_TIER_BUDGET_MS;
-    let rec = if use_tiny { &b.rec_tiny } else { &b.rec_small };
     log::info!(
         "OCR det {:?} ({} boxes), predicted small-rec {:.0} ms -> {} tier",
         det_elapsed,
@@ -342,6 +337,10 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
         predicted_ms,
         if use_tiny { "tiny" } else { "small" },
     );
+    let Some(rec) = load_rec(use_tiny) else {
+        return Err(OcrError::Unavailable);
+    };
+    let rec = &rec;
 
     let t_rec = std::time::Instant::now();
 
@@ -372,9 +371,6 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool) -> Result<OcrOutcome, Oc
         .take(crops.len())
         .collect();
     for chunk in rec_order.chunks(REC_BATCH) {
-        if cancel.load(Ordering::Acquire) {
-            return Err(cancelled());
-        }
         let refs: Vec<&DynamicImage> = chunk.iter().map(|&i| &crops[i]).collect();
         match rec.recognize_batch_ref(&refs) {
             Ok(rs) => {
@@ -482,7 +478,7 @@ mod tests {
     #[test]
     fn blank_image_recognizes_to_empty() {
         let req = request(vec![255u8; 200 * 100 * 4], 200, 100);
-        let outcome = recognize(&req, &AtomicBool::new(false)).expect("blank image must not error");
+        let outcome = recognize(&req).expect("blank image must not error");
         assert!(outcome.lines.is_empty());
         assert_eq!(outcome.full_text, "");
     }
@@ -507,7 +503,7 @@ mod tests {
         // Negative origin: the offset math must hold on multi-monitor
         // layouts where the virtual desktop starts left of zero.
         req.origin = ScreenRect::from_xy_size(-500, -300, w as i32, h as i32);
-        let outcome = recognize(&req, &AtomicBool::new(false)).expect("noise must not error");
+        let outcome = recognize(&req).expect("noise must not error");
         let bounds = req.origin.to_f32();
         for line in &outcome.lines {
             assert!(
@@ -527,8 +523,8 @@ mod tests {
     #[test]
     fn consecutive_recognize_calls_succeed() {
         let req = request(vec![255u8; 64 * 64 * 4], 64, 64);
-        recognize(&req, &AtomicBool::new(false)).expect("first call");
-        recognize(&req, &AtomicBool::new(false)).expect("second call");
+        recognize(&req).expect("first call");
+        recognize(&req).expect("second call");
     }
 
     /// Reading order: rows cluster within a half-line tolerance and run
@@ -718,9 +714,9 @@ mod tests {
         }
         let req = request(bgra, w, h);
         // Warm (engine init paid) then timed.
-        let _ = recognize(&req, &AtomicBool::new(false)).expect("warmup");
+        let _ = recognize(&req).expect("warmup");
         let t = std::time::Instant::now();
-        let outcome = recognize(&req, &AtomicBool::new(false)).expect("bench");
+        let outcome = recognize(&req).expect("bench");
         eprintln!(
             "recognize(): {:?} ({} lines) — tier choice is in the log above",
             t.elapsed(),
@@ -749,7 +745,7 @@ mod tests {
         for px in bgra.chunks_exact_mut(4) {
             px.swap(0, 2);
         }
-        let outcome = recognize(&request(bgra, w, h), &AtomicBool::new(false)).expect("test image must recognize");
+        let outcome = recognize(&request(bgra, w, h)).expect("test image must recognize");
         // Geometry log (visible with --nocapture): the rect heights are how
         // bubble font sizing is tuned against known-size source text.
         for line in &outcome.lines {

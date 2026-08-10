@@ -923,7 +923,6 @@ dependencies = [
  "objc2-core-graphics",
  "objc2-foundation 0.3.2",
  "objc2-quartz-core 0.3.2",
- "ocr-rs",
  "pollster",
  "resvg",
  "rfd",
@@ -936,6 +935,20 @@ dependencies = [
  "windows",
  "winit",
  "xdialog",
+]
+
+[[package]]
+name = "clowd_ocr"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "clowd_rust_core",
+ "image",
+ "log",
+ "ocr-rs",
+ "serde_json",
+ "simplelog",
 ]
 
 [[package]]

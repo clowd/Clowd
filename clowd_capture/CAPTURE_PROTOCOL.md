@@ -18,14 +18,22 @@ at all — no window, no event loop, no GPU — and shares the session format wi
 the capturer and nothing else. It is documented here because it speaks to the
 same shell across the same boundary.
 
+A second separate binary, `clowd_ocr` (§4), does text recognition. It is the
+odd one out: the shell never spawns it and never speaks to it — the *overlay*
+does, per OCR press. It is documented here because it is the third process in
+the same family and shares `clowd_rust_core` with the other two.
+
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `src/host/protocol.rs` + `src/host/stdin.rs` (wire protocol),
-`clowd_scroll_driver/src/drive.rs` (scrolling-capture driver), and
-`clowd_rust_core` for what the two binaries must agree on — the `session.json`
-shape (`session.rs`), the coordinate space (`geometry.rs`) and the exit codes
-(`exit.rs`). C# counterparts: `ScreenCaptureService.cs` (one-shot + session
-dispatch), `CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
-+ `Scroll/ScrollDriverProtocol.cs` (driver).
+`clowd_scroll_driver/src/drive.rs` (scrolling-capture driver),
+`src/ocr/client.rs` + `clowd_ocr/src/main.rs` (recognizer), and
+`clowd_rust_core` for what the binaries must agree on — the `session.json`
+shape (`session.rs`), the recognition contract (`ocr.rs`), the coordinate space
+(`geometry.rs`) and the exit codes (`exit.rs`). C# counterparts:
+`ScreenCaptureService.cs` (one-shot + session dispatch),
+`CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
++ `Scroll/ScrollDriverProtocol.cs` (driver). There is no C# counterpart for
+§4 by design.
 
 ## 1. One-shot mode
 
@@ -445,3 +453,108 @@ the target window going away are all honoured while paused. Paused time is
 excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
 as `stopped` with everything captured so far.
+
+## 4. Text recognizer (`clowd_ocr`)
+
+The only protocol here that the shell is not a party to. When the user presses
+OCR, the overlay extracts the selected region's pixels — compositing a
+click-locked peek if one is up, so what is recognized is what the user can
+actually see — spawns `clowd_ocr`, and waits for it on the detached `ocr`
+worker thread. **One request, one process, one answer.**
+
+It is a **separate binary** because recognition runs on a static C++ engine
+(MNN, via `ocr-rs`). A Rust panic in it would unwind harmlessly, but an
+`abort`, a segfault or a refused allocation on a degenerate selection kills the
+process it is running in — which in-process meant the overlay, mid-capture,
+with the user's selection already framed. Out-of-process the same failure is an
+exit code the capturer turns into an "OCR failed" pill.
+
+Two things follow from that split, both improvements rather than costs:
+cancelling (BACK) is killing a process rather than polling a flag between
+inference batches, so a superseded request can no longer hold the engine while
+the next one queues behind it; and the ~18 MB of embedded models plus the
+static MNN left the overlay, which is respawned on display-change and GPU-loss
+and therefore pays for its own size in start-up latency.
+
+It ships beside `clowd_capture_wgpu` on **every** platform, which is where
+`src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
+`CLOWD_OCR_BINARY` environment variable overrides that, for tests and local
+development). It needs no window, no event loop, no GPU, and — because it is
+handed pixels rather than taking them — no screen-recording permission.
+
+### 4.1 Spawn
+
+```
+clowd_ocr --out <path> [--log-file <path>]
+```
+
+| Flag | Required | Meaning |
+|---|---|---|
+| `--out` | yes | Where to write the response (§4.3). The capturer puts this in the capture's session directory as `ocr.json` when there is one, and in the temp directory otherwise — OCR has no `--session-dir` requirement, since COPY and SEARCH need no shell round-trip. It reads the file only after the process exits 0, and deletes it either way. |
+| `--log-file` | no | Mirrors the log (det/rec timings, the tier choice) to a file. The capturer passes `<session-dir>/ocr.log` when it has a session; that file is deliberately *not* cleaned up, because it is the artefact a "why was OCR slow" report is diagnosed from. |
+
+Stdio, all three of which the capturer sets deliberately:
+
+| Stream | Setting | Why |
+|---|---|---|
+| stdin | pipe | Carries the request (§4.2). |
+| stdout | **null** | MNN prints device capabilities to stdout on session creation, so stdout cannot carry a protocol here — hence the `--out` file. It must never be *inherited*: the overlay's own stdout is the NDJSON host channel of §2, and MNN's chatter reaching `Clowd.Ui`'s line parser would corrupt it. A pipe would work but one nobody drains can eventually block the child; null cannot. |
+| stderr | inherited | Log chatter, by the same convention §2.2 and §3.2 follow. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
+
+On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a
+GUI-subsystem process with no console, so a console-wanting child would flash a
+brand new window on top of a fullscreen capture.
+
+### 4.2 Request (capturer → recognizer, stdin)
+
+One `RequestHeader` as a single JSON line, then the raw BGRA pixels —
+`width * height * 4` bytes, tightly packed — through to EOF. Closing stdin is
+what starts recognition.
+
+```json
+{"width":3440,"height":1440,"origin":{"x":-500,"y":-300,"width":3440,"height":1440}}
+```
+
+| Field | Meaning |
+|---|---|
+| `width`, `height` | Dimensions of the pixel payload. The recognizer checks the payload length against them and fails loudly on a mismatch — both sides of a private protocol disagreeing is a bug, not a bad capture. |
+| `origin` | The rect the crop **actually** covers, after `extract_selection_bgra` clamped it to the desktop bitmap. Result rects are offset by it; offsetting by the selection instead would misplace every bubble on a negative-origin multi-monitor layout. |
+
+The pixels never touch the disk. They are a picture of the user's screen, and a
+temp file holding one outlives a killed process. A 3440x1440 selection is
+19.8 MB, uploaded in 1 MB chunks so the cancel flag is polled throughout.
+
+### 4.3 Response (`--out` file)
+
+The JSON `OcrResponse` — `Result<OcrOutcome, OcrError>`, so `{"Ok":…}` or
+`{"Err":…}`. Rects use the same explicit `{x,y,width,height}` shape as
+`session.json` (§1.3).
+
+```json
+{"Ok":{"lines":[{"text":"hello","rect":{"x":-12.5,"y":7.25,"width":112.5,"height":14.25}}],"full_text":"hello","text_angle":0.0}}
+```
+
+A recognition that ran and failed is part of the answer, not a failure of the
+process: it is written as `{"Err":"Unavailable"}` or `{"Err":{"Failed":"…"}}`
+and the process still exits 0. That is what lets the capturer tell "the engine
+does not work on this machine" apart from "the child died", which is all a
+non-zero exit can mean.
+
+### 4.4 Exit codes and failure handling
+
+| Code | Meaning to the capturer |
+|---|---|
+| 0 | The response file is there and can be trusted. |
+| anything else | The child crashed or could not write. The file is not read. Reported as `OcrError::Failed`, and logged at `error!` — which is the path by which the crashes this split exists to isolate reach Sentry, since no panic hook runs for an `abort`. |
+
+The capturer additionally enforces a 30 s ceiling and kills the child if it is
+exceeded. That is not a latency target — a dense 3440x1440 desktop measures
+about 1.1 s end to end — but the `Scanning` phase has no other way out, and
+without it a child that hung instead of exiting would leave the user under the
+sweep animation indefinitely.
+
+The recognizer reports to Sentry under `app = clowd_ocr`, with release-health
+session tracking **off** (`telemetry::init_short_lived`): it runs once per OCR
+press rather than once per app run, so tracked sessions would bury the shell's
+and capturer's real ones — and the session envelope measured ~100 ms on a
+process that lives for about a second.

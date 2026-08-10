@@ -26,15 +26,12 @@ arboard.workspace = true
 rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
 sentry.workspace = true
-# PaddleOCR (PP-OCRv6 small) via the MNN runtime — the OCR backend on all
-# platforms (src/ocr/paddle.rs). Links a static MNN from a prebuilt GitHub
-# release archive (windows-x86_64 msvc and macos-universal are both covered;
-# the build script needs curl + PowerShell's Expand-Archive or unzip, and
-# bindgen needs libclang). Model weights are embedded from assets/ocr/ via
-# include_bytes!. The Windows prebuilt is /MT, which is why .cargo/config.toml
-# builds the Windows targets with crt-static: matching it keeps one CRT — one
-# heap — across the Rust/C++ boundary.
-ocr-rs = "2.4"
+
+# NOTE there is deliberately no OCR engine here. Recognition runs in the
+# `clowd_ocr` binary (spawned per request by src/ocr/client.rs) so that an
+# abort or segfault inside its static C++ MNN runtime cannot take a capture
+# down with it. Adding `ocr-rs` back to this manifest would undo that and put
+# ~18 MB of embedded models back in the overlay's start-up path.
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
