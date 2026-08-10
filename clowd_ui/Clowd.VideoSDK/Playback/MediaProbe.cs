@@ -1,17 +1,106 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Clowd.VideoSDK.Media;
 using FFmpeg.AutoGen.Abstractions;
 
 namespace Clowd.VideoSDK.Playback
 {
+    /// <summary>
+    /// Per video stream timing facts, in the exact form the composition model wants them: rational
+    /// frame rates and 100ns ticks, never a reduced <see cref="double"/>.
+    /// </summary>
+    public sealed class VideoStreamProbe
+    {
+        public int StreamIndex { get; init; }
+        public int Width { get; init; }
+        public int Height { get; init; }
+        public string CodecName { get; init; }
+
+        /// <summary>avg_frame_rate — total frames / duration. 0/0 when the container gives no hint.</summary>
+        public int AvgFrameRateNum { get; init; }
+        public int AvgFrameRateDen { get; init; }
+
+        /// <summary>r_frame_rate — the lowest rate all timestamps are representable in (FFmpeg's
+        /// guess at the "real" base rate). 0/0 when unknown.</summary>
+        public int RFrameRateNum { get; init; }
+        public int RFrameRateDen { get; init; }
+
+        /// <summary>
+        /// Hint only: avg_frame_rate != r_frame_rate. False when either rate is unknown — absence of
+        /// evidence, so callers must stay VFR-correct regardless (frame lookup is by time, not index).
+        /// </summary>
+        public bool IsVariableFrameRate { get; init; }
+
+        /// <summary>Stream start_time rescaled to ticks; 0 when AV_NOPTS_VALUE. Can be negative.</summary>
+        public long StartTimeTicks { get; init; }
+
+        /// <summary>nb_frames; 0 when the container does not know (streamed/fragmented files).</summary>
+        public long NbFrames { get; init; }
+
+        /// <summary>Stream duration in ticks, falling back to the container duration when the stream
+        /// carries none; 0 when neither is known.</summary>
+        public long DurationTicks { get; init; }
+    }
+
+    /// <summary>
+    /// The full probe result. <see cref="MediaInfo"/> is the (lossy, double-fps) legacy view of this
+    /// for the existing player surface; new code should consume this type.
+    /// </summary>
+    public sealed class MediaProbeResult
+    {
+        public string Path { get; init; }
+
+        /// <summary>Container duration in ticks; 0 when AV_NOPTS_VALUE.</summary>
+        public long DurationTicks { get; init; }
+
+        public IReadOnlyList<VideoStreamProbe> VideoStreams { get; init; }
+        public bool HasAudio { get; init; }
+
+        /// <summary>Projects onto the legacy <see cref="MediaInfo"/> shape (frame rate collapsed to
+        /// a double) for callers that predate the rational model.</summary>
+        public MediaInfo ToMediaInfo()
+        {
+            var streams = new List<VideoStreamInfo>(VideoStreams.Count);
+            foreach (var s in VideoStreams)
+            {
+                // legacy semantics: avg_frame_rate, falling back to r_frame_rate.
+                double fps = 0;
+                if (s.AvgFrameRateDen != 0)
+                    fps = s.AvgFrameRateNum / (double)s.AvgFrameRateDen;
+                if (fps <= 0 && s.RFrameRateDen != 0)
+                    fps = s.RFrameRateNum / (double)s.RFrameRateDen;
+
+                streams.Add(new VideoStreamInfo
+                {
+                    StreamIndex = s.StreamIndex,
+                    Width = s.Width,
+                    Height = s.Height,
+                    Fps = fps,
+                    CodecName = s.CodecName,
+                });
+            }
+
+            return new MediaInfo
+            {
+                Path = Path,
+                Duration = TimeSpan.FromTicks(DurationTicks),
+                VideoStreams = streams,
+                HasAudio = HasAudio,
+            };
+        }
+    }
+
     /// <summary>
     /// Cheap open/inspect of a media file (no decoding): duration, video stream dimensions and
     /// frame rates, audio presence. Used by the editor and by auto-open logic.
     /// </summary>
     public static unsafe class MediaProbe
     {
-        public static MediaInfo Probe(string path)
+        public static MediaInfo Probe(string path) => ProbeDetailed(path).ToMediaInfo();
+
+        /// <summary>Probe returning rational frame rates, the VFR hint, start_time and nb_frames.</summary>
+        public static MediaProbeResult ProbeDetailed(string path)
         {
             FFmpegLoader.EnsureInitialized();
             if (!File.Exists(path))
@@ -28,7 +117,7 @@ namespace Clowd.VideoSDK.Playback
                 if (err < 0)
                     throw new InvalidOperationException($"Failed to read stream info: {FFmpegLoader.ErrorToString(err)}");
 
-                return BuildInfo(path, fmt);
+                return BuildProbe(path, fmt);
             }
             finally
             {
@@ -36,10 +125,16 @@ namespace Clowd.VideoSDK.Playback
             }
         }
 
-        internal static MediaInfo BuildInfo(string path, AVFormatContext* fmt)
+        internal static MediaInfo BuildInfo(string path, AVFormatContext* fmt) => BuildProbe(path, fmt).ToMediaInfo();
+
+        internal static MediaProbeResult BuildProbe(string path, AVFormatContext* fmt)
         {
-            var videoStreams = new List<VideoStreamInfo>();
+            var videoStreams = new List<VideoStreamProbe>();
             bool hasAudio = false;
+
+            long containerDurationTicks = fmt->duration != ffmpeg.AV_NOPTS_VALUE
+                ? TimeBase.Rescale(fmt->duration, 1, ffmpeg.AV_TIME_BASE, 1, TimeBase.TicksPerSecond)
+                : 0;
 
             for (int i = 0; i < fmt->nb_streams; i++)
             {
@@ -51,22 +146,42 @@ namespace Clowd.VideoSDK.Playback
                     if ((st->disposition & ffmpeg.AV_DISPOSITION_ATTACHED_PIC) != 0)
                         continue;
 
-                    double fps = 0;
-                    if (st->avg_frame_rate.den != 0)
-                        fps = ffmpeg.av_q2d(st->avg_frame_rate);
-                    if (fps <= 0 && st->r_frame_rate.den != 0)
-                        fps = ffmpeg.av_q2d(st->r_frame_rate);
+                    var avg = st->avg_frame_rate;
+                    var r = st->r_frame_rate;
+                    bool avgValid = avg.num > 0 && avg.den > 0;
+                    bool rValid = r.num > 0 && r.den > 0;
+
+                    // rational inequality by cross-multiply — no av_q2d, no double comparison.
+                    bool vfr = avgValid && rValid && (long)avg.num * r.den != (long)r.num * avg.den;
+
+                    var tb = st->time_base;
+                    bool tbValid = tb.num > 0 && tb.den > 0;
+
+                    long startTicks = tbValid && st->start_time != ffmpeg.AV_NOPTS_VALUE
+                        ? TimeBase.StreamTimeToTicks(st->start_time, tb.num, tb.den)
+                        : 0;
+
+                    long durationTicks = tbValid && st->duration != ffmpeg.AV_NOPTS_VALUE && st->duration > 0
+                        ? TimeBase.StreamTimeToTicks(st->duration, tb.num, tb.den)
+                        : containerDurationTicks;
 
                     var codec = ffmpeg.avcodec_find_decoder(par->codec_id);
-                    videoStreams.Add(new VideoStreamInfo
+                    videoStreams.Add(new VideoStreamProbe
                     {
                         StreamIndex = i,
                         Width = par->width,
                         Height = par->height,
-                        Fps = fps,
                         CodecName = codec != null
                             ? System.Runtime.InteropServices.Marshal.PtrToStringAnsi((IntPtr)codec->name)
                             : par->codec_id.ToString(),
+                        AvgFrameRateNum = avgValid ? avg.num : 0,
+                        AvgFrameRateDen = avgValid ? avg.den : 0,
+                        RFrameRateNum = rValid ? r.num : 0,
+                        RFrameRateDen = rValid ? r.den : 0,
+                        IsVariableFrameRate = vfr,
+                        StartTimeTicks = startTicks,
+                        NbFrames = st->nb_frames > 0 ? st->nb_frames : 0,
+                        DurationTicks = durationTicks,
                     });
                 }
                 else if (par->codec_type == AVMediaType.AVMEDIA_TYPE_AUDIO)
@@ -75,14 +190,10 @@ namespace Clowd.VideoSDK.Playback
                 }
             }
 
-            var duration = fmt->duration != ffmpeg.AV_NOPTS_VALUE
-                ? TimeSpan.FromSeconds(fmt->duration / (double)ffmpeg.AV_TIME_BASE)
-                : TimeSpan.Zero;
-
-            return new MediaInfo
+            return new MediaProbeResult
             {
                 Path = path,
-                Duration = duration,
+                DurationTicks = containerDurationTicks,
                 VideoStreams = videoStreams,
                 HasAudio = hasAudio,
             };
