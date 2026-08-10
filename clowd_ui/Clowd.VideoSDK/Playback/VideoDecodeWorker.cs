@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// Decode + present pipeline for one video track.

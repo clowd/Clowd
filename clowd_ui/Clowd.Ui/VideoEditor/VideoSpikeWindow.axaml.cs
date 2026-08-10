@@ -4,8 +4,8 @@ using System.Text;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
-using Clowd.Video;
-using Clowd.Video.Playback;
+using Clowd.VideoSDK;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI.VideoEditor
 {

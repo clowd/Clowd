@@ -3,7 +3,7 @@ using System.Threading;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// WASAPI shared-mode audio output draining the decode ring, and the audio master clock.

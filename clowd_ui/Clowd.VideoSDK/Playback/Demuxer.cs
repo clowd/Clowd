@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using FFmpeg.AutoGen.Abstractions;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// The demux read-ahead rule, kept separate from the native plumbing so it can be tested.

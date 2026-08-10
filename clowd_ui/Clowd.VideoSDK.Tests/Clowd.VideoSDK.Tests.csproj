@@ -13,7 +13,7 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Clowd.Video\Clowd.Video.csproj" />
+    <ProjectReference Include="..\Clowd.VideoSDK\Clowd.VideoSDK.csproj" />
     <!-- For TimelineMathTests: Clowd.Ui exposes its internals to this project so the timeline's
          pixel<->time and hit-test math is tested against the real production code. -->
     <ProjectReference Include="..\Clowd.Ui\Clowd.Ui.csproj" />

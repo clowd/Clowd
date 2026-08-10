@@ -19,8 +19,8 @@ using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Helpers;
 using Clowd.UI.Services;
-using Clowd.Video;
-using Clowd.Video.Playback;
+using Clowd.VideoSDK;
+using Clowd.VideoSDK.Playback;
 using Path = System.IO.Path;
 
 namespace Clowd.UI.VideoEditor

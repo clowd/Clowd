@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Clowd.Video.Playback
+namespace Clowd.VideoSDK.Playback
 {
     /// <summary>A half-open [Start, End) span of media time.</summary>
     public readonly struct TimeRange : IEquatable<TimeRange>

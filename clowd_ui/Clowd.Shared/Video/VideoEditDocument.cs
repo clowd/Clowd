@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace Clowd.Video
+namespace Clowd.VideoSDK
 {
     /// <summary>The outline the webcam overlay is masked to. The mask itself is rasterized by the
     /// UI (it needs a renderer) and handed to the render tool as a PNG.</summary>
