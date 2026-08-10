@@ -420,46 +420,40 @@ fn find_obs_deps_bin(obs_src: &Path) -> Option<PathBuf> {
     find_obs_deps_subdir(obs_src, "bin")
 }
 
-/// Locates `<obs-deps bundle>/<sub>`, preferring the bundle built for the
-/// target architecture.
+/// Locates `<obs-deps bundle>/<sub>` for the TARGET architecture.
 ///
-/// `.deps` can hold several: an ARM64 Windows build downloads the arm64
-/// bundle AND (through the child x64 CMake configure OBS spawns for its
-/// helpers) the x64 one. Directory order is arbitrary, so taking the first
-/// match would ship x64 runtime DLLs in an ARM64 bundle.
+/// `.deps` holds several bundles: a Windows build also downloads the x86 one
+/// (and an ARM64 build the x64 one) for the child CMake configures OBS spawns
+/// for its helpers. Directory order is arbitrary, so matching the first
+/// `obs-deps-*` would ship x64 runtime DLLs in an ARM64 bundle, or generate
+/// bindings against the wrong headers.
 fn find_obs_deps_subdir(obs_src: &Path, sub: &str) -> Option<PathBuf> {
     let deps_dir = obs_src.join(".deps");
-    let mut candidates: Vec<PathBuf> = std::fs::read_dir(&deps_dir)
+    std::fs::read_dir(&deps_dir)
         .ok()?
         .flatten()
         .map(|e| e.path())
-        .filter(|dir| {
+        .find(|dir| {
             let name = dir.file_name().unwrap_or_default().to_string_lossy();
-            name.starts_with("obs-deps-") && !name.contains("qt6") && dir.join(sub).exists()
+            name.starts_with("obs-deps-")
+                && !name.contains("qt6")
+                && is_target_arch_bundle(&name)
+                && dir.join(sub).exists()
         })
-        .collect();
-    candidates.sort_by_key(|dir| deps_arch_rank(dir));
-    candidates.into_iter().next().map(|dir| dir.join(sub))
+        .map(|dir| dir.join(sub))
 }
 
-/// 0 = built for this arch, 1 = universal (macOS), 2 = some other arch.
-fn deps_arch_rank(dir: &Path) -> u8 {
-    let name = dir
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-    let suffix = match target_arch().as_str() {
-        "x86_64" => "-x64",
-        "aarch64" => "-arm64",
-        _ => return 2,
-    };
-    if name.ends_with(suffix) {
-        0
-    } else if name.contains("universal") {
-        1
-    } else {
-        2
+/// True for a bundle name built for the target arch. macOS ships one
+/// `-universal` bundle covering both slices; Windows names them `-x64` /
+/// `-arm64` / `-x86`.
+fn is_target_arch_bundle(name: &str) -> bool {
+    if name.contains("universal") {
+        return true;
+    }
+    match target_arch().as_str() {
+        "x86_64" => name.ends_with("-x64"),
+        "aarch64" => name.ends_with("-arm64"),
+        _ => false,
     }
 }
 
