@@ -43,6 +43,20 @@ public sealed class Project
     public static Project FromJson(string json) =>
         JsonSerializer.Deserialize(json, ProjectJsonContext.Default.Project);
 
+    /// <summary>The timeline's length in 100ns ticks: the maximum <see cref="Item.TimelineEndTicks"/>
+    /// across all items, 0 for an empty project. This is the duration the renderer produces —
+    /// output runs to the end of the last item, wherever it sits.</summary>
+    public long GetDurationTicks()
+    {
+        long max = 0;
+        if (Items != null)
+        {
+            foreach (var item in Items)
+                max = Math.Max(max, item.TimelineEndTicks);
+        }
+        return max;
+    }
+
     /// <summary>
     /// Puts the model into canonical order without changing what it means: null collections become
     /// empty, tracks sort by <see cref="Track.Order"/> (then Id, so the sort is total), and items
