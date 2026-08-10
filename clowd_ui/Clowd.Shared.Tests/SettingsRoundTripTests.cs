@@ -247,7 +247,9 @@ namespace Clowd.Shared.Tests
 
             Assert.Equal(SettingsRecording.DefaultOutputDirectory, loaded.Recording.OutputDirectory);
             Assert.Equal("yyyy-MM-dd HH-mm-ss", loaded.Recording.FilenamePattern);
-            Assert.Equal(RecordingFinishAction.RecentsPage, loaded.Recording.OpenWhenFinished);
+            // a finished recording opens in the video editor by default — trimming it (and placing
+            // a webcam, when there is one) is the usual next step, not finding the file.
+            Assert.Equal(RecordingFinishAction.VideoEditor, loaded.Recording.OpenWhenFinished);
 
             var original = new SettingsRoot();
             original.Recording.OutputDirectory = @"C:\Users\test\Recordings";
