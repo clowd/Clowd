@@ -43,6 +43,22 @@ namespace Clowd.VideoSDK.Playback
         public long DurationTicks { get; init; }
     }
 
+    /// <summary>Per audio stream facts. The composition model needs the stream <b>index</b> (to
+    /// point a <c>MediaContent</c> at it) and the source sample rate (the output rate an import
+    /// defaults to), neither of which the boolean <c>HasAudio</c> can carry.</summary>
+    public sealed class AudioStreamProbe
+    {
+        public int StreamIndex { get; init; }
+
+        public int SampleRate { get; init; }
+
+        public int Channels { get; init; }
+
+        /// <summary>Stream duration in ticks, falling back to the container duration; 0 when
+        /// neither is known.</summary>
+        public long DurationTicks { get; init; }
+    }
+
     /// <summary>
     /// The full probe result. <see cref="MediaInfo"/> is the (lossy, double-fps) legacy view of this
     /// for the existing player surface; new code should consume this type.
@@ -55,6 +71,10 @@ namespace Clowd.VideoSDK.Playback
         public long DurationTicks { get; init; }
 
         public IReadOnlyList<VideoStreamProbe> VideoStreams { get; init; }
+
+        /// <summary>Every audio stream, in container order. Empty when the file has none.</summary>
+        public IReadOnlyList<AudioStreamProbe> AudioStreams { get; init; } = Array.Empty<AudioStreamProbe>();
+
         public bool HasAudio { get; init; }
 
         /// <summary>Projects onto the legacy <see cref="MediaInfo"/> shape (frame rate collapsed to
@@ -130,7 +150,7 @@ namespace Clowd.VideoSDK.Playback
         internal static MediaProbeResult BuildProbe(string path, AVFormatContext* fmt)
         {
             var videoStreams = new List<VideoStreamProbe>();
-            bool hasAudio = false;
+            var audioStreams = new List<AudioStreamProbe>();
 
             long containerDurationTicks = fmt->duration != ffmpeg.AV_NOPTS_VALUE
                 ? TimeBase.Rescale(fmt->duration, 1, ffmpeg.AV_TIME_BASE, 1, TimeBase.TicksPerSecond)
@@ -186,7 +206,18 @@ namespace Clowd.VideoSDK.Playback
                 }
                 else if (par->codec_type == AVMediaType.AVMEDIA_TYPE_AUDIO)
                 {
-                    hasAudio = true;
+                    var tb = st->time_base;
+                    bool tbValid = tb.num > 0 && tb.den > 0;
+
+                    audioStreams.Add(new AudioStreamProbe
+                    {
+                        StreamIndex = i,
+                        SampleRate = par->sample_rate,
+                        Channels = par->ch_layout.nb_channels,
+                        DurationTicks = tbValid && st->duration != ffmpeg.AV_NOPTS_VALUE && st->duration > 0
+                            ? TimeBase.StreamTimeToTicks(st->duration, tb.num, tb.den)
+                            : containerDurationTicks,
+                    });
                 }
             }
 
@@ -195,7 +226,8 @@ namespace Clowd.VideoSDK.Playback
                 Path = path,
                 DurationTicks = containerDurationTicks,
                 VideoStreams = videoStreams,
-                HasAudio = hasAudio,
+                AudioStreams = audioStreams,
+                HasAudio = audioStreams.Count > 0,
             };
         }
     }

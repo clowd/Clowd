@@ -17,6 +17,11 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Clowd.VideoSDK\Clowd.VideoSDK.csproj" />
+    <!-- Build-only: RenderArgsCompatTests runs the real render tool as a child process (protocol
+         smoke test) and finds its dll on disk, so it must be built — but its output must not be
+         copied into the test bin, where it would shadow nothing useful. -->
+    <ProjectReference Include="..\Clowd.VideoRender\Clowd.VideoRender.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
     <!-- For TimelineMathTests: Clowd.Ui exposes its internals to this project so the timeline's
          pixel<->time and hit-test math is tested against the real production code. -->
     <ProjectReference Include="..\Clowd.Ui\Clowd.Ui.csproj" />
