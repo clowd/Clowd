@@ -50,6 +50,18 @@ namespace Clowd.UI
 
         [JsonPropertyName("video")]
         public bool Video { get; set; }
+
+        /// <summary>The overlay's optional buttons (SettingsCapture "Optional features"). Positive
+        /// polarity here where the CLI has <c>--no-upload</c> / <c>--no-scroll-capture</c> /
+        /// <c>--no-ocr</c>.</summary>
+        [JsonPropertyName("upload")]
+        public bool Upload { get; set; }
+
+        [JsonPropertyName("scroll_capture")]
+        public bool ScrollCapture { get; set; }
+
+        [JsonPropertyName("ocr")]
+        public bool Ocr { get; set; }
     }
 
     /// <summary>
@@ -545,6 +557,9 @@ namespace Clowd.UI
                 Cursor = settings.ScreenshotWithCursor,
                 CaptureMode = mode.ToString().ToLowerInvariant(),
                 Video = video,
+                Upload = settings.UploadButtonEnabled,
+                ScrollCapture = settings.ScrollingCaptureEnabled,
+                Ocr = settings.OcrEnabled,
             };
 
             return JsonSerializer.Serialize(command, ClowdUiJsonContext.Default.CaptureShowCommand);

@@ -51,6 +51,29 @@ pub fn copy_to_clipboard_with_peek(
     }
 }
 
+/// Copy plain text to the clipboard. Used by the OCR COPY action, which has no image to offer —
+/// the user asked for the *words*, so text is the only format written.
+///
+/// Nothing waits on this and nothing hands ownership back afterwards, which is correct on Windows
+/// and Windows only: `SetClipboardData` takes ownership of the `HGLOBAL` the moment it succeeds
+/// (clipboard-win documents this explicitly), and `arboard` never registers delayed rendering, so
+/// the text is already the OS's by the time this returns and survives our process exiting — which
+/// it does, immediately, on every copy. A Linux port would *not* inherit that: X11 clipboard
+/// ownership lives in the owning process, so the X11 backend would need `SetExtLinux::wait()` (or
+/// a surviving daemon) before the process is allowed to die.
+pub fn copy_text_to_clipboard(text: &str) -> ActionResult {
+    match set_clipboard_text(text) {
+        Ok(()) => {
+            log::info!("copied {} chars of text to clipboard", text.chars().count());
+            ActionResult::Success
+        }
+        Err(e) => {
+            log::error!("copy: clipboard text write failed after {CLIPBOARD_SET_ATTEMPTS} attempts: {e}");
+            ActionResult::Failed(format!("Failed to copy to clipboard: {e}"))
+        }
+    }
+}
+
 /// How many times the whole clipboard write is attempted before giving up.
 const CLIPBOARD_SET_ATTEMPTS: u32 = 5;
 
@@ -87,6 +110,24 @@ fn set_clipboard_image(rgba: &[u8], width: usize, height: usize) -> Result<(), S
                     bytes: std::borrow::Cow::Borrowed(rgba),
                 })
             })
+            .map_err(|e| e.to_string())
+    })
+}
+
+/// Puts text on the clipboard, under the same retry policy as [`set_clipboard_image`].
+///
+/// The policy is not copied out of caution: on Windows `arboard`'s text path runs the *identical*
+/// `OpenClipboard` / `EmptyClipboard` / `SetClipboardData` sequence the image path does — only the
+/// format handed over differs — so it is exposed to exactly the race described above, including
+/// the clipboard-history service waking on our own `EmptyClipboard`. Error 1418 out of
+/// `SetClipboardData` is as reachable here as it was for images, and re-running the whole write is
+/// the only thing that recovers from it.
+fn set_clipboard_text(text: &str) -> Result<(), String> {
+    retry_clipboard_write(|| {
+        // a fresh Clipboard per attempt — see [`set_clipboard_image`]: the open happens inside the
+        // write and is the part that has to be redone.
+        arboard::Clipboard::new()
+            .and_then(|mut clipboard| clipboard.set_text(text))
             .map_err(|e| e.to_string())
     })
 }

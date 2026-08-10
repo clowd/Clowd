@@ -1,8 +1,23 @@
 use crate::gpu::desktop::{CursorTextures, WindowUniforms};
+use crate::interaction::OcrState;
+use crate::ocr::anim;
 use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 
-/// Duration of the colour to grayscale fade after the window first becomes visible.
+/// Duration of the colour to grayscale fade after the window first becomes
+/// visible — and of the OCR selection's own colour→grayscale ramp, which
+/// deliberately reuses the same curve (see [`grayscale_fade`]).
 const FADE_DURATION_SECS: f32 = 0.3;
+
+/// The colour→grayscale easing: quartic ease-out over
+/// [`FADE_DURATION_SECS`]. ONE function on purpose — the overlay's opening
+/// fade (outside the selection) and the OCR mode's selection desaturation
+/// (inside it) must feel like the same effect, so they share the curve
+/// rather than each hand-rolling a nearly-identical one.
+fn grayscale_fade(elapsed: f32) -> f32 {
+    let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
+    let inv = 1.0 - t;
+    1.0 - inv * inv * inv * inv
+}
 
 pub(crate) struct SnapshotState {
     pub ubo: wgpu::Buffer,
@@ -23,6 +38,21 @@ pub(crate) struct FrameState {
     /// Suppresses the resize handles (see `desktop.wgsl`) and the frozen
     /// cursor composited from the snapshot.
     pub scroll_pick_mode: bool,
+    /// OCR source region in virtual-desktop pixels — `None` while OCR mode
+    /// is idle. Derived per frame from the mirrored [`OcrState`] via
+    /// [`ocr_overlay`].
+    pub ocr_rect: Option<ScreenRect>,
+    /// Source-region dim in [0, 1], already evaluated on the OCR phase's
+    /// shared anchor clock (never this worker's own) so every monitor dims
+    /// in lockstep with the lift animation.
+    pub ocr_dim: f32,
+    /// Selection-interior desaturation in [0, 1], same shared clock as the
+    /// dim. Ramps on OCR entry so the whole screen reads monochrome while
+    /// the sweep runs, and reverses with the retract.
+    pub ocr_gray: f32,
+    /// Mirrors `OcrState::active()`. Suppresses the resize handles (see
+    /// `desktop.wgsl`) — they must not draw over lifted text.
+    pub ocr_active: bool,
     pub elapsed: f32,
     pub surface_size: (u32, u32),
 }
@@ -38,11 +68,44 @@ impl SnapshotState {
             overlays_visible,
             cursor_overlay_visible,
             scroll_pick_mode,
+            ocr_rect,
+            ocr_dim,
+            ocr_gray,
+            ocr_active,
             elapsed,
             surface_size,
         } = *frame;
 
         self.uniforms.selection_params[3] = if scroll_pick_mode { 1.0 } else { 0.0 };
+
+        // OCR uniforms are written before the overlays_visible early-return
+        // (same treatment as scroll_pick above): the mode flags must track
+        // the state machine unconditionally, not only while overlays draw.
+        self.uniforms.ocr_params = [
+            ocr_dim.clamp(0.0, 1.0),
+            if ocr_active { 1.0 } else { 0.0 },
+            ocr_gray.clamp(0.0, 1.0),
+            0.0,
+        ];
+        self.uniforms.ocr_rect = match ocr_rect {
+            Some(r) => {
+                // Same window-local transform as selection_rect below —
+                // through the zoom mapping, so the two rects stay congruent
+                // in every magnifier state.
+                let local_cursor = screen_to_window(monitor_bounds, mouse_pos);
+                let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
+                    (
+                        (vd_x - mouse_pos.x) * zoom + local_cursor.x,
+                        (vd_y - mouse_pos.y) * zoom + local_cursor.y,
+                    )
+                };
+                let rf = r.to_f32();
+                let (l, t) = to_local(rf.left(), rf.top());
+                let (rr, b) = to_local(rf.right(), rf.bottom());
+                [l, t, rr, b]
+            }
+            None => [0.0, 0.0, -1.0, -1.0],
+        };
 
         // The picker draws its own reticle at the live cursor. The
         // snapshot's frozen cursor sits wherever the pointer happened to
@@ -83,12 +146,7 @@ impl SnapshotState {
             return;
         }
 
-        let fade = {
-            let t = (elapsed / FADE_DURATION_SECS).clamp(0.0, 1.0);
-            let inv = 1.0 - t;
-            1.0 - inv * inv * inv * inv
-        };
-        self.uniforms.params[0] = fade;
+        self.uniforms.params[0] = grayscale_fade(elapsed);
 
         let local = screen_to_window(monitor_bounds, mouse_pos);
         self.uniforms.params[1] = local.x;
@@ -165,5 +223,163 @@ impl SnapshotState {
         let (r, b) = to_local(vd_right, vd_bottom);
         self.uniforms.cursor_rect = [l, t, r, b];
         self.uniforms.cursor_params = [ct.cursor_type as f32, 0.0, 0.0, 0.0];
+    }
+}
+
+// ── OCR dim + desaturation ──────────────────────────────────────────
+
+/// Per-frame OCR inputs for [`FrameState`].
+pub(crate) struct OcrOverlay {
+    pub rect: Option<ScreenRect>,
+    pub dim: f32,
+    pub gray: f32,
+    pub active: bool,
+}
+
+/// Evaluate the OCR overlay's dim + desaturation on the phase's shared
+/// `anchor` clock — the impure shell around the pure curves below, which
+/// carry the tests. The clamps inside `ocr::anim` make a worker that wakes
+/// late (or a suspend/resume gap) produce sane, settled values rather than
+/// out-of-range ones.
+pub(crate) fn ocr_overlay(ocr: &OcrState) -> OcrOverlay {
+    let (rect, dim, gray, active) = match ocr {
+        OcrState::Idle => (None, 0.0, 0.0, false),
+        OcrState::Scanning {
+            anchor,
+            region,
+            ..
+        } => {
+            let t = anchor.elapsed().as_secs_f32();
+            (Some(*region), scanning_dim(t), scanning_gray(t), true)
+        }
+        OcrState::Lifted {
+            region,
+            ..
+        } => {
+            // Both HOLD at their scanning ceilings — no new ramp on this
+            // phase's fresh anchor. The gray finished long before any
+            // outcome can land (the release is wrap-aligned, and even the
+            // failure floor MIN_SCAN_SECS >= FADE_DURATION_SECS), and the
+            // dim deliberately does NOT deepen when the text renders: an
+            // earlier build darkened again here and the region visibly
+            // dimmed twice (owner call — one darkening, on entry, only).
+            (Some(*region), anim::DIM_MAX, 1.0, true)
+        }
+        OcrState::Retracting {
+            anchor,
+            region,
+        } => {
+            let t = anchor.elapsed().as_secs_f32();
+            (Some(*region), retracting_dim(t), retracting_gray(t), true)
+        }
+    };
+    OcrOverlay {
+        rect,
+        dim,
+        gray,
+        active,
+    }
+}
+
+fn scanning_dim(t: f32) -> f32 {
+    anim::dim_amount(t)
+}
+
+/// The selection's colour→grayscale ramp on OCR entry: the same curve and
+/// duration as the overlay's opening fade outside the selection, so the
+/// interior joining the monochrome page reads as one continuous treatment,
+/// not a second effect.
+fn scanning_gray(t: f32) -> f32 {
+    grayscale_fade(t)
+}
+
+/// Exit: the text has already vanished (first Retracting frame), so the
+/// dim just fades back over the shared exit curve, hitting exactly 0 when
+/// the app thread flips Retracting -> Idle.
+fn retracting_dim(t: f32) -> f32 {
+    anim::DIM_MAX * anim::retract_fade(t)
+}
+
+/// The desaturation reverses on the same clock as the dim: both must be
+/// exactly 0 at the Retracting -> Idle flip or the region pops.
+fn retracting_gray(t: f32) -> f32 {
+    anim::retract_fade(t)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The scan dim must ramp from zero (no pop on entry) and settle at
+    /// the mode's ONE dim level. Lifted holds that exact level — pinned
+    /// here because a deeper "lifted" dim is precisely the darkening-twice
+    /// regression the owner flagged.
+    #[test]
+    fn scanning_dim_ramps_to_the_single_mode_level() {
+        assert_eq!(scanning_dim(0.0), 0.0);
+        assert!(scanning_dim(0.05) > 0.0);
+        assert_eq!(scanning_dim(10.0), anim::DIM_MAX);
+    }
+
+    /// The desaturation on OCR entry rides the same curve as the overlay's
+    /// opening fade: 0 at press (no pop), saturated at the fade duration,
+    /// and pinned there — Lifted assumes gray == 1 on handover.
+    #[test]
+    fn scanning_gray_ramps_and_saturates_before_any_release() {
+        assert_eq!(scanning_gray(0.0), 0.0);
+        assert!(scanning_gray(0.05) > 0.0);
+        assert_eq!(scanning_gray(FADE_DURATION_SECS), 1.0);
+        assert_eq!(scanning_gray(1.0e6), 1.0);
+        // The handover invariant Lifted's hard-coded 1.0 rests on: the ramp
+        // has ALWAYS finished by the earliest possible Scanning exit.
+        // (Const block per clippy: the relation between two consts is
+        // checkable at compile time.)
+        const {
+            assert!(anim::MIN_SCAN_SECS >= FADE_DURATION_SECS);
+        }
+        assert_eq!(scanning_gray(anim::MIN_SCAN_SECS), 1.0);
+    }
+
+    /// Lifted's hard-held DIM_MAX is exactly where the scanning ramp
+    /// settles, so the Scanning→Lifted handover (fresh anchor and all)
+    /// moves the dim by nothing: no flash back to bright, and no second
+    /// darkening as the text renders.
+    #[test]
+    fn lifted_holds_exactly_where_scanning_settled() {
+        // The earliest possible Scanning exit is the wrap-aligned release
+        // (>= one SCAN_PERIOD), by which point the ramp has long settled.
+        assert_eq!(scanning_dim(anim::SCAN_PERIOD_SECS), anim::DIM_MAX);
+        assert_eq!(scanning_gray(anim::SCAN_PERIOD_SECS), 1.0);
+    }
+
+    /// Retract must start where Lifted left off (DIM_MAX / full gray, no
+    /// pop) and both must be exactly 0 at the instant the app thread flips
+    /// the mode to Idle — a mismatch either pops the region bright or
+    /// leaves it stuck dark.
+    #[test]
+    fn retracting_dim_and_gray_reverse_to_zero_together() {
+        assert_eq!(retracting_dim(0.0), anim::DIM_MAX);
+        assert_eq!(retracting_gray(0.0), 1.0);
+        assert_eq!(retracting_dim(anim::RETRACT_DURATION_SECS), 0.0);
+        assert_eq!(retracting_gray(anim::RETRACT_DURATION_SECS), 0.0);
+        let mid_d = retracting_dim(anim::RETRACT_DURATION_SECS * 0.5);
+        let mid_g = retracting_gray(anim::RETRACT_DURATION_SECS * 0.5);
+        assert!((0.0..=anim::DIM_MAX).contains(&mid_d));
+        assert!((0.0..=1.0).contains(&mid_g));
+    }
+
+    /// The shared curve's endpoints: byte-exact passthrough at t=0 (the
+    /// uncloak invariant) and fully faded at the duration.
+    #[test]
+    fn grayscale_fade_endpoints() {
+        assert_eq!(grayscale_fade(0.0), 0.0);
+        assert_eq!(grayscale_fade(FADE_DURATION_SECS), 1.0);
+        assert_eq!(grayscale_fade(99.0), 1.0);
+        let mut prev = 0.0;
+        for step in 1..=30 {
+            let v = grayscale_fade(step as f32 * FADE_DURATION_SECS / 30.0);
+            assert!(v >= prev, "fade regressed at step {step}");
+            prev = v;
+        }
     }
 }

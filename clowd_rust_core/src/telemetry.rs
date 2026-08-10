@@ -84,6 +84,11 @@ const PANIC_TARGET: &str = "clowd_panic";
 /// `app` is the value of the `app` tag every event from this process carries —
 /// the crate name of the binary (`clowd_capture`, `clowd_scroll_driver`). It is
 /// how one project's issues are told apart, so give each binary its own.
+///
+/// Not every Rust binary calls this. `clowd_ocr` deliberately has no Sentry
+/// client of its own: it is spawned per OCR press, so release-health sessions
+/// would measure key presses rather than app runs, and it reports through the
+/// capturer instead (`clowd_capture/src/ocr/client.rs`).
 pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
     if !reporting_compiled_in() {
         return None;

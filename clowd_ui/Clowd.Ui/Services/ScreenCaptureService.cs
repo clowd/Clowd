@@ -100,9 +100,10 @@ namespace Clowd.UI
     /// (CAPTURE_PROTOCOL.md). Mirrors the WPF CaptureWindow callback dispatch: a completed
     /// capture (session.json present) loads the session, names it "Screenshot" and opens the
     /// editor or the upload flow depending on the action.txt marker; a SELECT-COLOR capture
-    /// (action.txt only) opens the color viewer; a cancelled capture (neither file) deletes
-    /// the pre-created session directory. COPY/SAVE are handled inside the capturer itself
-    /// and never produce a session.
+    /// (action.txt only) opens the color viewer; an OCR-UPLOAD capture (an "ocr-upload" marker
+    /// plus an ocr.txt sidecar, no image) uploads the recognized text as a paste; a cancelled
+    /// capture (neither file) deletes the pre-created session directory. COPY/SAVE are handled
+    /// inside the capturer itself and never produce a session.
     /// </summary>
     internal sealed class ScreenCapturePage : IScreenCapturePage
     {
@@ -295,6 +296,12 @@ namespace Clowd.UI
                         PageManager.Current.GetScrollCapturePage()
                             .Open(result.Region, result.ScrollPoint, result.TargetHwnd, result.SessionDir);
                         break;
+                    case CaptureAction.OcrUpload:
+                        // the recognized text travels in the result, not in a session — the
+                        // capturer's session dir is already gone by now. UploadText creates its
+                        // own session, exactly as the clipboard-upload hotkey does.
+                        await UploadManager.UploadText(result.Text, "Captured Text");
+                        break;
                 }
             }
             catch (Exception ex)
@@ -470,6 +477,17 @@ namespace Clowd.UI
             if (!settings.ScreenshotWithCursor)
                 args.Add("--no-cursor");
 
+            // The overlay's optional buttons (SettingsCapture "Optional features"). All on by
+            // default, so these only ever appear when the user has switched something off.
+            if (!settings.UploadButtonEnabled)
+                args.Add("--no-upload");
+
+            if (!settings.ScrollingCaptureEnabled)
+                args.Add("--no-scroll-capture");
+
+            if (!settings.OcrEnabled)
+                args.Add("--no-ocr");
+
             if (settings.MemoryHints == CapturerMemoryHints.MaxPerformance)
             {
                 args.Add("--memory-hints");
@@ -494,12 +512,14 @@ namespace Clowd.UI
         SelectColor,
         Video,
         Scroll,
+        OcrUpload,
     }
 
     /// <summary>A finished, non-cancelled capture. <see cref="Session"/> is set for
     /// Edit/Upload; <see cref="Color"/> for SelectColor; <see cref="Region"/> and
     /// <see cref="SessionDir"/> for Video and Scroll, which additionally carry
-    /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>.</summary>
+    /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>; <see cref="Text"/> for
+    /// OcrUpload, which carries no session at all.</summary>
     public sealed class CaptureResult
     {
         public CaptureAction Action { get; init; }
@@ -507,6 +527,10 @@ namespace Clowd.UI
         public Color? Color { get; init; }
         public ScreenRect Region { get; init; }
         public string SessionDir { get; init; }
+
+        /// <summary>The recognized text read out of the session dir's ocr.txt sidecar before that
+        /// directory was deleted (OcrUpload only) — the whole payload of an OCR upload.</summary>
+        public string Text { get; init; }
 
         /// <summary>Where the wheel events will be aimed, in the same physical virtual-desktop
         /// space as <see cref="Region"/> (Scroll only).</summary>
@@ -529,8 +553,9 @@ namespace Clowd.UI
         /// with <see cref="SessionManager"/>), renamed to "Screenshot" and returned with the
         /// action from the action.txt marker (missing marker = Edit). An action.txt of
         /// "select-color #RRGGBB" without a session carries just the picked color; the
-        /// directory is deleted. Otherwise the capture was cancelled: the pre-created
-        /// directory is deleted and null is returned.
+        /// directory is deleted. An "ocr-upload" marker carries its text in an ocr.txt sidecar,
+        /// which is read out before the directory is deleted. Otherwise the capture was
+        /// cancelled: the pre-created directory is deleted and null is returned.
         /// </summary>
         public static CaptureResult ProcessFinishedSession(string sessionDir)
         {
@@ -617,6 +642,37 @@ namespace Clowd.UI
 
                 Debug.WriteLine("Unparseable scroll action: " + action);
                 DeleteSessionDir(sessionDir);
+                return null;
+            }
+
+            // an "ocr-upload" marker means the overlay recognized text and wants it pasted. The
+            // payload is not in the marker (it is multi-line, and markers are single-line
+            // prefix-matched) but in an ocr.txt sidecar the capturer writes BEFORE action.txt, so
+            // the marker's presence is proof the text is complete on disk. This branch must stay
+            // above the fall-through DeleteSessionDir below — the sidecar has to be read before
+            // the directory goes away.
+            const string ocrPrefix = "ocr-upload";
+            if (action != null && action.StartsWith(ocrPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string text = null;
+                try
+                {
+                    text = File.ReadAllText(Path.Combine(sessionDir, "ocr.txt"));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Failed to read OCR text: " + ex);
+                    SentryConfig.CaptureHandled(ex, "capture.read-ocr-text");
+                }
+
+                // unlike Video/Scroll the directory is dead weight from here: there is no image and
+                // UploadManager.UploadText mints its own session for the paste.
+                DeleteSessionDir(sessionDir);
+
+                if (!String.IsNullOrWhiteSpace(text))
+                    return new CaptureResult { Action = CaptureAction.OcrUpload, Text = text };
+
+                Debug.WriteLine("ocr-upload marker with no readable text");
                 return null;
             }
 

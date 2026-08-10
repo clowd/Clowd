@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use crate::interaction::{OcrNotice, OcrState};
 use crate::settings::TipsMode;
 use crate::system::{CapturedDesktop, CursorImage};
+use crate::ui::components::panel::model::PanelFeatures;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect};
 
@@ -29,6 +31,9 @@ pub struct UiStateBuildInput<'a> {
     pub show_scroll_hint: bool,
     pub has_used_magnifier: bool,
     pub scroll_pick_mode: bool,
+    pub ocr: OcrState,
+    pub ocr_notice: Option<OcrNotice>,
+    pub panel_features: PanelFeatures,
 }
 
 pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
@@ -88,6 +93,13 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         show_scroll_hint: input.show_scroll_hint,
         has_used_magnifier: input.has_used_magnifier,
         scroll_pick_mode: input.scroll_pick_mode,
+        // Moved, not cloned: `input` is consumed here, so the Arc inside a
+        // Lifted/Retracting outcome changes hands with no refcount traffic
+        // at all. (The one unavoidable bump happens at the call site, which
+        // still owns the cycle's copy.)
+        ocr: input.ocr,
+        ocr_notice: input.ocr_notice,
+        panel_features: input.panel_features,
     }
 }
 

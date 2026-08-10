@@ -17,7 +17,7 @@
 use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
 
 use crate::ui::components::panel::layout::PanelLayout;
-use crate::ui::components::panel::model::{button_defs, NUM_SVG_BUTTONS};
+use crate::ui::components::panel::model::{PanelButtonSet, MAX_PANEL_BUTTONS, PANEL_ICONS};
 use crate::ui::gpu::icon::{IconAtlas, IconInstance};
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE};
@@ -112,8 +112,10 @@ struct PositionedText {
 }
 
 pub struct PanelRenderer {
-    /// Parsed SVG trees, indexed by button id. Kept around so the atlas
-    /// can be rebuilt at a new DPI without re-parsing.
+    /// Parsed SVG trees, indexed by `ButtonDef::icon_id` (i.e. by
+    /// position in `PANEL_ICONS`, *not* by button index — the two button
+    /// sets share icons and have different lengths). Kept around so the
+    /// atlas can be rebuilt at a new DPI without re-parsing.
     svg_trees: Vec<usvg::Tree>,
     /// CPU-rasterised icon atlas, built lazily on the first `prepare()`
     /// and rebuilt whenever the target icon size (DPI) changes.
@@ -122,12 +124,15 @@ pub struct PanelRenderer {
     /// 0: width string ("1920")
     /// 1: height string ("1080")
     /// 2: "×" separator
-    /// 3..3+NUM_SVG_BUTTONS: button labels ("UPLOAD", "EDIT", ...)
+    /// 3..3+MAX_PANEL_BUTTONS: button labels ("UPLOAD", "EDIT", ...)
     buffers: Vec<CachedBuffer>,
     /// Text positions captured during the latest `prepare()`.
     positions: Vec<PositionedText>,
     /// Per-button lighten amount, animated each frame.
-    hover_amounts: [f32; NUM_SVG_BUTTONS],
+    hover_amounts: [f32; MAX_PANEL_BUTTONS],
+    /// Which set `hover_amounts` was last animated for, so a set swap can
+    /// clear it — see the reset in `prepare`.
+    last_set: Option<PanelButtonSet>,
     /// Reused string buffers for the selection's width / height digits.
     width_str: String,
     height_str: String,
@@ -143,13 +148,16 @@ const IDX_LABEL_BASE: usize = 3;
 impl PanelRenderer {
     pub fn new(ts: &mut TextStack) -> Self {
         let usvg_opts = usvg::Options::default();
-        let defs = button_defs();
-        let mut svg_trees: Vec<usvg::Tree> = Vec::with_capacity(NUM_SVG_BUTTONS);
-        for (i, def) in defs.iter().enumerate() {
-            let tree = match usvg::Tree::from_data(def.svg_bytes, &usvg_opts) {
+        // The whole union, not one set's icons: the atlas is built once
+        // and both sets index it by `icon_id`, so every entry must have
+        // a tree at its own index even if the set on screen never uses
+        // it.
+        let mut svg_trees: Vec<usvg::Tree> = Vec::with_capacity(PANEL_ICONS.len());
+        for (i, bytes) in PANEL_ICONS.iter().enumerate() {
+            let tree = match usvg::Tree::from_data(bytes, &usvg_opts) {
                 Ok(t) => t,
                 Err(e) => {
-                    log::error!("failed to parse SVG for button {i}: {e:?}");
+                    log::error!("failed to parse panel SVG {i}: {e:?}");
                     usvg::Tree::from_str("<svg xmlns=\"http://www.w3.org/2000/svg\"/>", &usvg::Options::default())
                         .expect("empty SVG parses")
                 }
@@ -157,11 +165,13 @@ impl PanelRenderer {
             svg_trees.push(tree);
         }
 
-        let mut buffers = Vec::with_capacity(3 + NUM_SVG_BUTTONS);
+        // Labels are keyed by *button slot*, not by icon, so this sizes
+        // off the longest set rather than the icon table.
+        let mut buffers = Vec::with_capacity(3 + MAX_PANEL_BUTTONS);
         buffers.push(CachedBuffer::new(ts, 11.0)); // width
         buffers.push(CachedBuffer::new(ts, 11.0)); // height
         buffers.push(CachedBuffer::new(ts, 11.0)); // ×
-        for _ in 0..NUM_SVG_BUTTONS {
+        for _ in 0..MAX_PANEL_BUTTONS {
             buffers.push(CachedBuffer::new(ts, 11.0));
         }
 
@@ -171,7 +181,8 @@ impl PanelRenderer {
             last_icon_px: 0,
             buffers,
             positions: Vec::new(),
-            hover_amounts: [0.0; NUM_SVG_BUTTONS],
+            hover_amounts: [0.0; MAX_PANEL_BUTTONS],
+            last_set: None,
             width_str: String::new(),
             height_str: String::new(),
             last_selection: None,
@@ -209,14 +220,31 @@ impl PanelRenderer {
         }
 
         let layout: PanelLayout = vis.layout;
+        // The click that swaps the set is, by definition, on a button the
+        // cursor is hovering — so `hover_amounts[idx]` is at full
+        // strength at the exact moment the strip changes underneath it.
+        // Without this reset a ghost highlight bleeds onto whichever
+        // button inherits that slot, on 100% of entries *and* exits, and
+        // then eases away over ~200 ms as if the user had moused over it.
+        if self.last_set != Some(layout.set) {
+            self.hover_amounts.fill(0.0);
+            self.last_set = Some(layout.set);
+        }
         let dpi = vis.monitor.dpi_scale.max(0.1);
         self.dpi_scale = dpi;
+
+        // The strip AS LAID OUT — not `layout.set.defs()`, which is the
+        // full table including any button the user switched off. Indexing
+        // that by a button slot would draw a label and icon one button
+        // ahead of the rect they sit in.
+        let defs = layout.defs();
+        let button_count = layout.buttons().len();
 
         // Hover animation. Hit-test happens in VD coords since that's
         // what the broadcast cursor + layout both use.
         let cursor = state.virtual_cursor;
         let hovered_idx = layout.hit_test(cursor.x, cursor.y);
-        for i in 0..NUM_SVG_BUTTONS {
+        for i in 0..button_count {
             let target = if Some(i) == hovered_idx { HOVER_OVERLAY_STRENGTH } else { 0.0 };
             let diff = target - self.hover_amounts[i];
             if diff.abs() <= 0.01 {
@@ -240,9 +268,9 @@ impl PanelRenderer {
         let accent = state.accent_color;
 
         // Button backgrounds + hover lighten.
-        for (i, b) in layout.buttons.iter().enumerate() {
+        for (i, b) in layout.buttons().iter().enumerate() {
             let (l, t, r, bt) = to_local(*b);
-            let def = &button_defs()[i];
+            let def = &defs[i];
             let fill = if def.primary { accent } else { GRAY_RGBA };
             rects.push(RectInstance {
                 dest_px: [l, t, r, bt],
@@ -281,7 +309,7 @@ impl PanelRenderer {
         }
         let atlas = self.atlas.as_ref().unwrap();
         let icon_size = icon_px as f32;
-        for (i, b) in layout.buttons.iter().enumerate() {
+        for (i, b) in layout.buttons().iter().enumerate() {
             let (l, t, r, bt) = to_local(*b);
             let bw = r - l;
             let bh = bt - t;
@@ -292,7 +320,10 @@ impl PanelRenderer {
             let icon_top = (t + v_gap).round();
             icon_draws.push(IconInstance {
                 dest_px: [icon_left, icon_top, icon_left + icon_size, icon_top + icon_size],
-                uv: atlas.uv_for(i),
+                // Keyed by the button's icon, not its slot: the OCR strip
+                // reuses UPLOAD/COPY/EXIT from the capture strip and sits
+                // at different indices.
+                uv: atlas.uv_for(defs[i].icon_id),
                 alpha_mul: 1.0,
                 _pad: [0.0; 3],
             });
@@ -302,8 +333,7 @@ impl PanelRenderer {
         let label_px = (LABEL_FONT_PX * dpi).floor();
         let area_px = (AREA_FONT_PX * dpi).floor();
         let label_line_h = label_px * 1.2;
-        for i in 0..NUM_SVG_BUTTONS {
-            let def = &button_defs()[i];
+        for (i, def) in defs.iter().enumerate() {
             self.buffers[IDX_LABEL_BASE + i].set(ts, def.label, label_px, Some(def.underline_idx));
         }
 
@@ -326,7 +356,7 @@ impl PanelRenderer {
         self.buffers[IDX_CROSS].set(ts, "\u{00D7}", area_px, None);
 
         // Position labels beneath each icon.
-        for (i, b) in layout.buttons.iter().enumerate() {
+        for (i, b) in layout.buttons().iter().enumerate() {
             let (l, t, r, bt) = to_local(*b);
             let bw = r - l;
             let bh = bt - t;
@@ -348,7 +378,7 @@ impl PanelRenderer {
             });
 
             // Underline bar for the accelerator key.
-            let def = &button_defs()[i];
+            let def = &defs[i];
             let label_buf = &self.buffers[IDX_LABEL_BASE + i];
             if let Some((glyph_x, glyph_w)) = label_buf.glyph_bounds_at_byte(def.underline_idx) {
                 let u_x = label_x + glyph_x;
