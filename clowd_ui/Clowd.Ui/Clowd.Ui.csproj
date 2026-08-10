@@ -42,4 +42,16 @@
          runtime, so keep it out of the embedded Avalonia resources. -->
     <AvaloniaResource Remove="Assets\clowd-default.icns" />
   </ItemGroup>
+  <!-- Clowd.VideoSDK pins SkiaSharp to $(SkiaSharpVersion) (Directory.Build.props) so the
+       SDK and Avalonia share one native Skia in this process. NuGet silently unifies to the
+       highest requested version, so an Avalonia upgrade that bumps SkiaSharp would otherwise
+       drift past the pin unnoticed - fail the build instead and update the pin. -->
+  <Target Name="VerifySkiaSharpMatchesAvalonia" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_ResolvedSkiaSharp Include="@(RuntimeCopyLocalItems)"
+                          Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' == 'SkiaSharp'" />
+    </ItemGroup>
+    <Error Condition="'@(_ResolvedSkiaSharp)' != '' AND '%(_ResolvedSkiaSharp.NuGetPackageVersion)' != '$(SkiaSharpVersion)'"
+           Text="Clowd.Ui resolved SkiaSharp %(_ResolvedSkiaSharp.NuGetPackageVersion) but clowd_ui/Directory.Build.props pins SkiaSharpVersion=$(SkiaSharpVersion). Update the pin to the version Avalonia resolves." />
+  </Target>
 </Project>

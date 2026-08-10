@@ -22,5 +22,9 @@
     <PackageReference Include="FFmpeg.AutoGen.Bindings.DynamicallyLoaded" Version="7.1.1" />
     <!-- WASAPI output for the audio master clock; all call sites are Windows-only today. -->
     <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
+    <!-- Pinned (via Directory.Build.props) to the exact version Avalonia resolves — a mismatch
+         would mean the SDK compiles against a different Skia than the one Avalonia loads in
+         the Clowd.Ui process. Clowd.Ui's VerifySkiaSharpMatchesAvalonia target enforces it. -->
+    <PackageReference Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
   </ItemGroup>
 </Project>
