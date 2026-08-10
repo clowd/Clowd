@@ -300,8 +300,13 @@ namespace Clowd.VideoSDK.Composition
             {
                 if (mask.Shape == MaskShape.Circle)
                 {
+                    // The ellipse inscribed in the item rect — NOT a min(w,h)/2 circle. v1's mask
+                    // PNGs and the editor's preview both inscribe an ellipse in the webcam rect
+                    // (a circle only when the rect is square), and vid-render applied those PNGs
+                    // verbatim; the parity gate (design step 9) measured a 23 dB divergence on a
+                    // wide rect when this drew a true circle.
                     using var path = new SKPath();
-                    path.AddCircle(rect.MidX, rect.MidY, Math.Min(rect.Width, rect.Height) / 2);
+                    path.AddOval(rect);
                     target.ClipPath(path, SKClipOperation.Intersect, antialias: true);
                 }
                 else
