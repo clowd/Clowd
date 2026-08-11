@@ -6,39 +6,39 @@ namespace Clowd.VideoSDK.Playback
 {
     /// <summary>
     /// The precomputed timeline-time ↔ source-time mapping <see cref="CompositionPlayer"/> plays a
-    /// <see cref="Project"/> through. Immutable — rebuilt on every <c>UpdateProject</c> and swapped
-    /// atomically, so decode/present threads read it lock-free.
+    /// <see cref="Project"/>'s <b>video</b> streams through. Immutable — rebuilt on every
+    /// <c>UpdateProject</c> and swapped atomically, so decode/present threads read it lock-free.
+    /// Audio has no mapping here: it is mixed in timeline time by <see cref="AudioMixWorker"/>
+    /// (every unmuted stream audible, gaps silenced, per-sample gain — the render mixer's own
+    /// semantics), so audio tracks contribute only to <see cref="DurationTicks"/>.
     ///
-    /// Per referenced media stream it holds the item spans as <see cref="Segment"/>s
+    /// Per referenced video stream it holds the item spans as <see cref="Segment"/>s
     /// (timeline-ordered), giving the same timeline→source mapping <c>FrameComposer</c> uses
     /// (<c>src = SourceIn + (t - TimelineStart)</c>), plus the inverse used to pace source-stamped
     /// frames against the timeline clock, and the stream's interior source cuts as a
     /// <see cref="SkipRangeSchedule"/> (the source spans no item covers between consecutive
     /// segments — a cut made in the editor).
     ///
-    /// Phase 1 assumptions (documented, not enforced): items of one stream appear in source order
-    /// (trim/cut/split never reorder), and timelines are gapless. The mapping degrades gracefully
-    /// otherwise — a source instant inside a cut maps to the seam, a timeline instant in a gap maps
-    /// to the next segment's in-point — but audio played through a timeline gap is not silenced.
+    /// Assumptions (documented, not enforced) about video streams: items of one stream appear in
+    /// source order (trim/cut/split never reorder), and their timelines are gapless. The mapping
+    /// degrades gracefully otherwise — a source instant inside a cut maps to the seam, a timeline
+    /// instant in a gap maps to the next segment's in-point.
     /// </summary>
     internal sealed class ProjectTimelineMap
     {
         /// <summary>One item's span: timeline [TlStart, TlEnd) filled from source [SrcIn, SrcEnd).</summary>
         internal readonly struct Segment
         {
-            public Segment(long tlStart, long tlEnd, long srcIn, double volume)
+            public Segment(long tlStart, long tlEnd, long srcIn)
             {
                 TlStart = tlStart;
                 TlEnd = tlEnd;
                 SrcIn = srcIn;
-                Volume = volume;
             }
 
             public long TlStart { get; }
             public long TlEnd { get; }
             public long SrcIn { get; }
-            /// <summary>The owning item's linear gain (audio streams; 1.0 elsewhere).</summary>
-            public double Volume { get; }
 
             public long SrcEnd => SrcIn + (TlEnd - TlStart);
             /// <summary>Source minus timeline: constant within the segment.</summary>
@@ -127,18 +127,6 @@ namespace Clowd.VideoSDK.Playback
                 return long.MinValue;
             }
 
-            /// <summary>Item gain at the timeline instant (1.0 in gaps).</summary>
-            public double VolumeAtTimeline(long tlTicks)
-            {
-                foreach (var seg in _segments)
-                {
-                    if (tlTicks >= seg.TlStart && tlTicks < seg.TlEnd)
-                        return seg.Volume;
-                }
-
-                return 1.0;
-            }
-
             private static SkipRangeSchedule BuildCuts(Segment[] segments)
             {
                 List<TimeRange> ranges = null;
@@ -162,14 +150,10 @@ namespace Clowd.VideoSDK.Playback
         private ProjectTimelineMap(
             Dictionary<(Guid, int), StreamMap> video,
             (Guid, int)? primaryVideo,
-            (Guid, int)? audioStream,
-            StreamMap audioMap,
             long durationTicks)
         {
             _video = video;
             PrimaryVideo = primaryVideo;
-            AudioStream = audioStream;
-            AudioMap = audioMap;
             DurationTicks = durationTicks;
         }
 
@@ -177,17 +161,11 @@ namespace Clowd.VideoSDK.Playback
 
         /// <summary>The stream whose immediate-present frames define the paused position and whose
         /// segment offsets drive seam detection: the first media item on the lowest-order visible
-        /// video track (the screen recording, in a Phase 1 project).</summary>
+        /// video track (the screen recording, in a recording project).</summary>
         public (Guid SourceId, int StreamIndex)? PrimaryVideo { get; }
 
-        /// <summary>The single audible audio stream Phase 1 preview plays: the first media item on
-        /// the lowest-order unmuted audio track. Additional audio streams are silent in preview
-        /// (they do render — <c>AudioMixer</c> has no such limit).</summary>
-        public (Guid SourceId, int StreamIndex)? AudioStream { get; }
-
-        /// <summary>Mapping for <see cref="AudioStream"/>; null when the project has no audio.</summary>
-        public StreamMap AudioMap { get; }
-
+        /// <summary>Timeline length — the whole project's, so audio (or text/image) items running
+        /// past the last video frame still count.</summary>
         public long DurationTicks { get; }
 
         public bool TryGetVideo((Guid, int) key, out StreamMap map) => _video.TryGetValue(key, out map);
@@ -207,15 +185,10 @@ namespace Clowd.VideoSDK.Playback
 
             var videoSegments = new Dictionary<(Guid, int), List<Segment>>();
             (Guid, int)? primary = null;
-            (Guid, int)? audioKey = null;
-            List<Segment> audioSegments = null;
 
             foreach (var track in tracks)
             {
-                bool isVideo = track.Kind == TrackKind.Video;
-                if (isVideo && track.Hidden)
-                    continue;
-                if (!isVideo && track.Muted)
+                if (track.Kind != TrackKind.Video || track.Hidden)
                     continue;
 
                 // items of this track in timeline order (Project.Normalize sorts, but do not rely on it)
@@ -233,25 +206,12 @@ namespace Clowd.VideoSDK.Playback
                     var media = (MediaContent)item.Content;
                     var key = (media.SourceId, media.StreamIndex);
                     var segment = new Segment(item.TimelineStartTicks, item.TimelineEndTicks,
-                        media.SourceInTicks, item.Volume);
+                        media.SourceInTicks);
 
-                    if (isVideo)
-                    {
-                        if (!videoSegments.TryGetValue(key, out var list))
-                            videoSegments[key] = list = new List<Segment>();
-                        list.Add(segment);
-                        primary ??= key;
-                    }
-                    else
-                    {
-                        // Phase 1: only the first audio stream encountered is audible.
-                        audioKey ??= key;
-                        if (audioKey == key)
-                        {
-                            audioSegments ??= new List<Segment>();
-                            audioSegments.Add(segment);
-                        }
-                    }
+                    if (!videoSegments.TryGetValue(key, out var list))
+                        videoSegments[key] = list = new List<Segment>();
+                    list.Add(segment);
+                    primary ??= key;
                 }
             }
 
@@ -259,9 +219,7 @@ namespace Clowd.VideoSDK.Playback
             foreach (var (key, segments) in videoSegments)
                 video[key] = new StreamMap(segments);
 
-            var audioMap = audioSegments != null ? new StreamMap(audioSegments) : null;
-
-            return new ProjectTimelineMap(video, primary, audioKey, audioMap, project.GetDurationTicks());
+            return new ProjectTimelineMap(video, primary, project.GetDurationTicks());
         }
     }
 }

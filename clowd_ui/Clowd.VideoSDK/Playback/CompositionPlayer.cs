@@ -11,13 +11,18 @@ namespace Clowd.VideoSDK.Playback
     /// <summary>
     /// Plays a <see cref="Project"/> for preview: the generalization of
     /// <see cref="FFmpegVideoPlayer"/> from "one file, skip ranges" to "a timeline of items over N
-    /// media streams". One demux/decode pipeline runs per referenced (sourceId, streamIndex) —
-    /// reusing <see cref="Demuxer"/>/<see cref="VideoDecodeWorker"/>/<see cref="AudioDecodeWorker"/>
+    /// media streams". One demux/decode pipeline runs per referenced <b>video</b>
+    /// (sourceId, streamIndex) — reusing <see cref="Demuxer"/>/<see cref="VideoDecodeWorker"/>
     /// unchanged — against ONE shared <see cref="PlaybackClock"/> that runs in <b>output-timeline
     /// time</b>. Workers pace their source-stamped frames through the project's timeline↔source
     /// mapping (<see cref="ProjectTimelineMap"/>); presented frames land in the
     /// <see cref="PlaybackFrameSource"/> the preview's draw operation composes from
-    /// (<see cref="TryGetFrameSource"/>).
+    /// (<see cref="TryGetFrameSource"/>). Audio never rides the demuxers: every unmuted audio
+    /// stream is mixed in timeline time by one <see cref="AudioMixWorker"/> running the literal
+    /// render mixer (<see cref="Clowd.VideoSDK.Audio.AudioMixer"/>) over its own per-stream
+    /// decoders — gaps are silence, per-item volume and transition ramps are per-sample, and
+    /// preview therefore sounds like the render by construction. The player's own
+    /// <see cref="Volume"/> is a pure master gain on the sink.
     ///
     /// Cuts: back-to-back items whose source in-points jump are played by decoding continuously
     /// until the seam, then hopping the pipeline with an internal exact seek — the same mechanism
@@ -31,14 +36,19 @@ namespace Clowd.VideoSDK.Playback
     /// and no decoder is reopened; only adding/removing/relinking streams rebuilds pipelines,
     /// which happens on a background task (latest update wins) — never on the caller's thread.
     ///
-    /// Phase 1 parity limits (see <see cref="ProjectTimelineMap"/> for the mapping's own):
-    /// only the first audible audio stream plays; streams are paced correctly when their items
+    /// Remaining pacing caveat (video streams only): streams are paced correctly when their items
     /// share the primary stream's timeline placement (true for our recordings, where screen and
-    /// webcam rows are cut as one link group); timeline gaps show through to items but do not
-    /// silence the single audio stream.
+    /// webcam rows are cut as one link group). The timeline-domain audio mix has no such limit.
     /// </summary>
     public sealed class CompositionPlayer : IDisposable
     {
+        /// <summary>How far the audio sink's played time may sit from the playhead and still be
+        /// trusted as the master clock when re-attaching after an EOF detach (covers the sink's
+        /// device latency plus a tick of stopwatch drift). Timing further out means the sink's
+        /// base pts describes where production parked, not the playhead — attaching it would
+        /// snap the clock backwards.</summary>
+        private static readonly TimeSpan AudioReattachTolerance = TimeSpan.FromMilliseconds(250);
+
         private readonly Action<Action> _dispatch;
         private readonly object _stateSync = new object();
         private readonly object _lifecycleSync = new object(); // serializes seeks vs update/reopen/dispose
@@ -66,6 +76,7 @@ namespace Clowd.VideoSDK.Playback
         private readonly object _seekSync = new object();
         private TimeSpan _pendingSeekPos;
         private SeekMode _pendingSeekMode;
+        private bool _pendingSeekFlushAudio;
         private bool _hasPendingSeek;
         private bool _seekLoopActive;
         private Task _seekTask = Task.CompletedTask;
@@ -106,9 +117,10 @@ namespace Clowd.VideoSDK.Playback
             public FilePipe[] Files = Array.Empty<FilePipe>();
             public VideoPipe[] AllVideo = Array.Empty<VideoPipe>();
             public VideoPipe Primary;
-            public AudioDecodeWorker AudioWorker;
+            public AudioMixWorker MixWorker;
             public NAudioSink AudioSink;
             public AudioRingBuffer AudioRing;
+            public int MixRate;
             public string Signature;
         }
 
@@ -129,6 +141,11 @@ namespace Clowd.VideoSDK.Playback
         /// <summary>Diagnostic/test hook: number of decoder pipelines constructed over the
         /// player's lifetime. Live edits that only change the mapping never increment it.</summary>
         public int DecoderOpenCount => Volatile.Read(ref _decoderOpens);
+
+        /// <summary>Test/diagnostic: container seeks performed by the audio mix's source for the
+        /// current pipeline set. A video cut-seam hop must never move it — the mix decodes
+        /// straight through seams, which is what keeps preview audio sample-exact with render.</summary>
+        internal int AudioRepositionCount => _pipelines?.MixWorker?.SourceRepositionCount ?? 0;
 
         public event EventHandler PositionChanged;
         public event EventHandler<PlayerState> StateChanged;
@@ -160,13 +177,17 @@ namespace Clowd.VideoSDK.Playback
             }
         }
 
+        /// <summary>Master gain, applied at the sink. Per-item volume and transition ramps are
+        /// baked into the mixed samples by <see cref="AudioMixWorker"/> — exactly as in render.</summary>
         public double Volume
         {
             get => _volume;
             set
             {
                 _volume = Math.Clamp(value, 0.0, 1.0);
-                ApplyAudioVolume(_pipelines, _map);
+                var sink = _pipelines?.AudioSink;
+                if (sink != null)
+                    sink.Volume = _volume;
             }
         }
 
@@ -242,7 +263,8 @@ namespace Clowd.VideoSDK.Playback
                 pipe.Worker.OnSeeked(0);
             }
 
-            set.AudioWorker?.PrepareSeek(new TimeSpan(AudioSourceTarget(map, positionTicks)), SeekMode.Exact);
+            // the mix worker runs in timeline time — the position is its seek target directly.
+            set.MixWorker?.PrepareSeek(new TimeSpan(positionTicks));
 
             Volatile.Write(ref _activeOffsetTicks, PrimaryOffsetAt(map, positionTicks));
 
@@ -253,18 +275,25 @@ namespace Clowd.VideoSDK.Playback
                     pipe.Worker.Start();
             }
 
-            set.AudioWorker?.Start();
+            set.MixWorker?.Start();
         }
 
         private PipelineSet BuildPipelines(Project project, ProjectTimelineMap map)
         {
-            var set = new PipelineSet { Signature = StreamSignature(project, map) };
-            if (map.VideoStreams.Count == 0 && map.AudioStream == null)
+            var audioStreams = CollectAudioStreams(project);
+            int mixRate = MixRate(project);
+            var set = new PipelineSet
+            {
+                Signature = StreamSignature(project, map, audioStreams, mixRate),
+                MixRate = mixRate,
+            };
+            if (map.VideoStreams.Count == 0 && audioStreams.Count == 0)
                 return set; // media-less project (solids/text): transport still works off the clock
 
             FFmpegLoader.EnsureInitialized();
 
-            // group the needed streams by source file
+            // group the needed video streams by source file (audio never rides the demuxers —
+            // the mix worker's per-stream decoders own their files)
             var bySource = new Dictionary<Guid, List<(Guid SourceId, int StreamIndex)>>();
             foreach (var key in map.VideoStreams.Keys)
             {
@@ -272,9 +301,6 @@ namespace Clowd.VideoSDK.Playback
                     bySource[key.SourceId] = list = new List<(Guid, int)>();
                 list.Add(key);
             }
-
-            if (map.AudioStream is { } audioKey && !bySource.ContainsKey(audioKey.Item1))
-                bySource[audioKey.Item1] = new List<(Guid, int)>();
 
             var files = new List<FilePipe>();
             var allVideo = new List<VideoPipe>();
@@ -323,22 +349,16 @@ namespace Clowd.VideoSDK.Playback
                         if (map.PrimaryVideo == key)
                             set.Primary = pipe;
                     }
+                }
 
-                    if (map.AudioStream is { } ak && ak.Item1 == sourceId)
-                    {
-                        var queue = new PacketQueue(64);
-                        file.Queues.Add(queue);
-                        file.Demuxer.AttachQueue(ak.Item2, queue);
-
-                        set.AudioRing = new AudioRingBuffer(_options.AudioSampleRate); // ~500ms float stereo
-                        set.AudioSink = new NAudioSink(_options.AudioSampleRate, 2, set.AudioRing);
-                        set.AudioSink.Volume = _volume;
-                        set.AudioWorker = new AudioDecodeWorker(
-                            file.Demuxer, ak.Item2, queue, set.AudioRing, set.AudioSink, _options,
-                            MapAudioPtsToClock);
-                        Interlocked.Increment(ref _decoderOpens);
-                        _clock.SetAudioSource(set.AudioSink);
-                    }
+                if (audioStreams.Count > 0)
+                {
+                    set.AudioRing = new AudioRingBuffer(mixRate); // ~500ms float stereo
+                    set.AudioSink = new NAudioSink(mixRate, 2, set.AudioRing, _options.CreateAudioOutput?.Invoke());
+                    set.AudioSink.Volume = _volume;
+                    set.MixWorker = new AudioMixWorker(project, set.AudioRing, set.AudioSink, mixRate);
+                    Interlocked.Increment(ref _decoderOpens); // the audio pipeline, as one
+                    _clock.SetAudioSource(set.AudioSink);
                 }
             }
             catch
@@ -401,7 +421,7 @@ namespace Clowd.VideoSDK.Playback
 
                         var map = ProjectTimelineMap.Build(project);
                         var set = _pipelines;
-                        if (set != null && StreamSignature(project, map) == set.Signature)
+                        if (set != null && StreamSignature(project, map, CollectAudioStreams(project), MixRate(project)) == set.Signature)
                         {
                             ApplyMappingSwap(project, map, set);
                             return Task.CompletedTask;
@@ -421,13 +441,27 @@ namespace Clowd.VideoSDK.Playback
         }
 
         /// <summary>The stream-set-unchanged edit path: swap mapping + cut schedules atomically,
-        /// no decoder touched. Caller holds <see cref="_lifecycleSync"/>.</summary>
+        /// no decoder touched. The mix worker gets the edited project as a mixer-snapshot swap at
+        /// its next chunk boundary — volume/transition edits ride this without a decoder in
+        /// sight. Caller holds <see cref="_lifecycleSync"/>.</summary>
         private void ApplyMappingSwap(Project project, ProjectTimelineMap map, PipelineSet set)
         {
             _project = project;
             _map = map;
             _frameSource.SetCutSchedules(BuildCutSchedules(map));
-            ApplyAudioVolume(set, map);
+            if (set.MixWorker != null)
+            {
+                bool wasEof = set.MixWorker.EofReached;
+                set.MixWorker.UpdateProject(project);
+                // an edit that extends the audio revives a worker idling at the old audio end;
+                // without a re-base it would resume mixing THERE (its next-frame cursor and the
+                // sink's timing base froze at the old end), and OnTick's re-attach would yank
+                // the master clock backwards. Flush production onto the live position instead —
+                // the mix thread adopts the project before the seek in the same iteration, so
+                // the grown end is seen first and the seek then re-bases cursor + sink timing.
+                if (wasEof)
+                    set.MixWorker.PrepareSeek(Position);
+            }
             // _activeOffsetTicks intentionally kept: if the current position's segment
             // offset changed under the new map (e.g. a cut moved past the playhead), the
             // next tick's seam check sees the mismatch and hops the pipelines.
@@ -463,7 +497,7 @@ namespace Clowd.VideoSDK.Playback
 
                         var map = ProjectTimelineMap.Build(project);
                         var set = _pipelines;
-                        if (set != null && StreamSignature(project, map) == set.Signature)
+                        if (set != null && StreamSignature(project, map, CollectAudioStreams(project), MixRate(project)) == set.Signature)
                             ApplyMappingSwap(project, map, set);
                         else
                             ReopenCore(project, map); // contains its own failures (Failed state)
@@ -571,7 +605,15 @@ namespace Clowd.VideoSDK.Playback
         }
 
         /// <summary>Seek in timeline time; concurrent calls coalesce (last position wins).</summary>
-        public Task SeekAsync(TimeSpan position, SeekMode mode)
+        public Task SeekAsync(TimeSpan position, SeekMode mode) => SeekAsync(position, mode, flushAudio: true);
+
+        /// <summary>Internal seeks can skip the audio flush: the mix runs in timeline time, so a
+        /// video cut-seam hop (which does not move the timeline position) is a semantic no-op for
+        /// audio — flushing there would discard the ring's correct buffered lead (an audible
+        /// dropout at every cut) and force the mix's streams off the decode-discard path that
+        /// keeps preview seams sample-exact with render. Coalescing stays last-wins: a no-flush
+        /// hop targets the playhead itself, where the mix already is.</summary>
+        private Task SeekAsync(TimeSpan position, SeekMode mode, bool flushAudio)
         {
             if (_map == null)
                 throw new InvalidOperationException("No project open.");
@@ -586,6 +628,7 @@ namespace Clowd.VideoSDK.Playback
             {
                 _pendingSeekPos = position;
                 _pendingSeekMode = mode;
+                _pendingSeekFlushAudio = flushAudio;
                 _hasPendingSeek = true;
 
                 if (!_seekLoopActive)
@@ -604,6 +647,7 @@ namespace Clowd.VideoSDK.Playback
             {
                 TimeSpan pos;
                 SeekMode mode;
+                bool flushAudio;
                 lock (_seekSync)
                 {
                     if (!_hasPendingSeek || _disposed)
@@ -614,6 +658,7 @@ namespace Clowd.VideoSDK.Playback
 
                     pos = _pendingSeekPos;
                     mode = _pendingSeekMode;
+                    flushAudio = _pendingSeekFlushAudio;
                     _hasPendingSeek = false;
                 }
 
@@ -622,7 +667,7 @@ namespace Clowd.VideoSDK.Playback
                     lock (_lifecycleSync)
                     {
                         if (!_disposed)
-                            DoSeek(pos, mode);
+                            DoSeek(pos, mode, flushAudio);
                     }
                 }
                 catch
@@ -632,7 +677,7 @@ namespace Clowd.VideoSDK.Playback
             }
         }
 
-        private void DoSeek(TimeSpan target, SeekMode mode)
+        private void DoSeek(TimeSpan target, SeekMode mode, bool flushAudio)
         {
             if (_state == PlayerState.Ended)
                 SetState(PlayerState.Paused);
@@ -641,10 +686,13 @@ namespace Clowd.VideoSDK.Playback
             var map = _map;
             long tl = target.Ticks;
 
+            // the mix worker seeks in timeline time — no source-domain mapping exists for audio.
+            if (flushAudio)
+                set?.MixWorker?.PrepareSeek(target);
+
             if (set != null && set.Files.Length > 0)
             {
                 // 1. record per-worker post-flush behaviour (source-domain targets).
-                set.AudioWorker?.PrepareSeek(new TimeSpan(AudioSourceTarget(map, tl)), mode);
                 foreach (var pipe in set.AllVideo)
                     pipe.Worker.PrepareSeek(new TimeSpan(VideoSourceTarget(map, pipe.Key, tl)), mode);
 
@@ -655,13 +703,16 @@ namespace Clowd.VideoSDK.Playback
                     foreach (var pipe in file.Video)
                         pipe.Worker.OnSeeked(serial);
                 }
+            }
 
-                // 4. re-attach the audio master if it was detached at end-of-media.
-                if (_audioDetached && set.AudioSink != null)
-                {
-                    _audioDetached = false;
-                    _clock.SetAudioSource(set.AudioSink);
-                }
+            // re-attach the audio master if it was detached at end-of-audio (also for
+            // audio-only projects, which have no file pipes). A no-flush seam hop leaves the
+            // audio state entirely alone — the mix was not re-based, so its timing still
+            // describes wherever it last was, not this target.
+            if (flushAudio && _audioDetached && set?.AudioSink != null)
+            {
+                _audioDetached = false;
+                _clock.SetAudioSource(set.AudioSink);
             }
 
             Volatile.Write(ref _activeOffsetTicks, PrimaryOffsetAt(map, tl));
@@ -766,19 +817,56 @@ namespace Clowd.VideoSDK.Playback
                     && off != long.MinValue && off != Volatile.Read(ref _activeOffsetTicks)
                     && Interlocked.CompareExchange(ref _skipSeekBusy, 1, 0) == 0)
                 {
-                    SeekAsync(pos, SeekMode.Exact)
+                    // flushAudio: false — the timeline position does not change across a video
+                    // seam, so the timeline-domain mix is already producing the right samples;
+                    // flushing it would dump correct buffered lead and reposition its decoders.
+                    SeekAsync(pos, SeekMode.Exact, flushAudio: false)
                         .ContinueWith(_ => Interlocked.Exchange(ref _skipSeekBusy, 0));
                 }
 
-                // per-item audio gain follows the playhead
-                ApplyAudioVolume(set, map);
-
-                // audio finished before video: hand the clock to the stopwatch so video plays out.
-                if (!_audioDetached && set?.AudioWorker != null
-                    && set.AudioWorker.EofReached && set.AudioRing.Available == 0)
+                // audio finished before video: hand the clock to the stopwatch so video plays
+                // out. The reverse transition brings the audio master back when the worker
+                // produces again (a seek's optimistic EofReached clear lost the race to the mix
+                // thread, or an edit extended the audio). Both directions are serialized against
+                // DoSeek/ReopenCore — TryEnter, never lock: the transition self-retries next
+                // tick, and the timer thread must not block behind a hundreds-of-ms rebuild.
+                if (set?.MixWorker != null && Monitor.TryEnter(_lifecycleSync))
                 {
-                    _audioDetached = true;
-                    _clock.SetAudioSource(null);
+                    try
+                    {
+                        // re-check under the lock: a rebuild may have swapped the set out
+                        if (!_disposed && _pipelines == set)
+                        {
+                            bool audioEof = set.MixWorker.EofReached && set.AudioRing.Available == 0;
+                            if (!_audioDetached && audioEof)
+                            {
+                                _audioDetached = true;
+                                _clock.SetAudioSource(null);
+                            }
+                            else if (_audioDetached && !set.MixWorker.EofReached)
+                            {
+                                // only trust the sink as master when its timing describes the
+                                // playhead: after an EOF idle the base pts is still frozen where
+                                // production parked, and attaching that snaps the clock backwards.
+                                var sink = set.AudioSink;
+                                if (sink.HasTiming && (pos - sink.PlayedTime).Duration() <= AudioReattachTolerance)
+                                {
+                                    _audioDetached = false;
+                                    _clock.SetAudioSource(sink);
+                                }
+                                else
+                                {
+                                    // flush + re-base production on the playhead; re-attach on a
+                                    // later tick once the re-based timing lands.
+                                    set.MixWorker.PrepareSeek(pos);
+                                }
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        Monitor.Exit(_lifecycleSync);
+                    }
                 }
 
                 // end of timeline (trailing trim never reaches file EOF), or end of all media.
@@ -792,8 +880,8 @@ namespace Clowd.VideoSDK.Playback
                     bool videoDone = set.AllVideo.Length > 0;
                     foreach (var pipe in set.AllVideo)
                         videoDone &= pipe.Worker.EofPresented;
-                    bool audioDone = set.AudioWorker == null
-                                     || (set.AudioWorker.EofReached && set.AudioRing.Available == 0);
+                    bool audioDone = set.MixWorker == null
+                                     || (set.MixWorker.EofReached && set.AudioRing.Available == 0);
                     ended = eof && videoDone && audioDone;
                 }
 
@@ -823,9 +911,9 @@ namespace Clowd.VideoSDK.Playback
             return new PlaybackStatistics
             {
                 Video = tracks,
-                HasAudio = set?.AudioWorker != null,
+                HasAudio = set?.MixWorker != null,
                 AudioBufferedSeconds = set?.AudioRing != null
-                    ? set.AudioRing.Available / 2.0 / (_options?.AudioSampleRate ?? 48000)
+                    ? set.AudioRing.Available / 2.0 / set.MixRate
                     : 0,
             };
         }
@@ -840,12 +928,6 @@ namespace Clowd.VideoSDK.Playback
             return srcTicks;
         }
 
-        private long MapAudioPtsToClock(long srcTicks)
-        {
-            var map = _map;
-            return map?.AudioMap != null ? map.AudioMap.SourceToTimeline(srcTicks) : srcTicks;
-        }
-
         private static long VideoSourceTarget(ProjectTimelineMap map, (Guid, int) key, long tlTicks)
         {
             if (map != null && map.TryGetVideo(key, out var sm))
@@ -853,18 +935,11 @@ namespace Clowd.VideoSDK.Playback
             return tlTicks;
         }
 
-        private static long AudioSourceTarget(ProjectTimelineMap map, long tlTicks)
-            => map?.AudioMap != null ? map.AudioMap.TimelineToSource(tlTicks) : tlTicks;
-
-        /// <summary>The container seek target for one file: mapped through its first video
-        /// stream's timeline (Phase 1: streams of one recording share their placement), else its
-        /// audio stream's.</summary>
+        /// <summary>The container seek target for one file, mapped through its first video
+        /// stream's timeline (streams of one recording share their placement; files exist only
+        /// for video streams — audio has its own decoders).</summary>
         private static long FileSeekTarget(ProjectTimelineMap map, FilePipe file, long tlTicks)
-        {
-            if (file.Video.Count > 0)
-                return VideoSourceTarget(map, file.Video[0].Key, tlTicks);
-            return AudioSourceTarget(map, tlTicks);
-        }
+            => VideoSourceTarget(map, file.Video[0].Key, tlTicks);
 
         private static long PrimaryOffsetAt(ProjectTimelineMap map, long tlTicks)
         {
@@ -885,15 +960,6 @@ namespace Clowd.VideoSDK.Playback
             return cuts;
         }
 
-        private void ApplyAudioVolume(PipelineSet set, ProjectTimelineMap map)
-        {
-            var sink = set?.AudioSink;
-            if (sink == null)
-                return;
-            double item = map?.AudioMap?.VolumeAtTimeline(Position.Ticks) ?? 1.0;
-            sink.Volume = _volume * Math.Clamp(item, 0.0, 1.0);
-        }
-
         private static Source FindSource(Project project, Guid sourceId)
         {
             if (project.Sources == null)
@@ -907,9 +973,47 @@ namespace Clowd.VideoSDK.Playback
             return null;
         }
 
-        /// <summary>Identity of the decode-pipeline set: which streams of which files feed it.
+        /// <summary>The mix rate for a project: its own output rate, falling back to the open
+        /// options when the project does not carry one.</summary>
+        private int MixRate(Project project)
+            => project.Output != null && project.Output.SampleRate > 0
+                ? project.Output.SampleRate
+                : _options.AudioSampleRate;
+
+        /// <summary>The distinct audio streams referenced by items on unmuted audio tracks,
+        /// sorted — the audio half of the pipeline identity. Mute/unmute and stream add/remove
+        /// change it (rebuild); volume/transition edits do not (cheap mixer swap).</summary>
+        private static List<(Guid SourceId, int StreamIndex)> CollectAudioStreams(Project project)
+        {
+            var audioTracks = new HashSet<Guid>();
+            foreach (var track in project.Tracks ?? new List<Track>())
+            {
+                if (track.Kind == TrackKind.Audio && !track.Muted)
+                    audioTracks.Add(track.Id);
+            }
+
+            var keys = new List<(Guid SourceId, int StreamIndex)>();
+            foreach (var item in project.Items ?? new List<Item>())
+            {
+                if (item.Content is MediaContent media && item.DurationTicks > 0
+                    && audioTracks.Contains(item.TrackId)
+                    && !keys.Contains((media.SourceId, media.StreamIndex)))
+                    keys.Add((media.SourceId, media.StreamIndex));
+            }
+
+            keys.Sort((a, b) =>
+            {
+                int bySource = a.SourceId.CompareTo(b.SourceId);
+                return bySource != 0 ? bySource : a.StreamIndex.CompareTo(b.StreamIndex);
+            });
+            return keys;
+        }
+
+        /// <summary>Identity of the decode-pipeline set: which streams of which files feed it
+        /// (one line per video stream and per referenced audio item stream), plus the mix rate.
         /// Edits that keep this equal never rebuild pipelines.</summary>
-        private static string StreamSignature(Project project, ProjectTimelineMap map)
+        private static string StreamSignature(Project project, ProjectTimelineMap map,
+            List<(Guid SourceId, int StreamIndex)> audioStreams, int mixRate)
         {
             var keys = new List<(Guid SourceId, int StreamIndex)>(map.VideoStreams.Keys);
             keys.Sort((a, b) =>
@@ -922,9 +1026,11 @@ namespace Clowd.VideoSDK.Playback
             foreach (var key in keys)
                 sb.Append("v:").Append(key.SourceId).Append(':').Append(key.StreamIndex)
                   .Append(':').Append(FindSource(project, key.SourceId)?.Path).Append('\n');
-            if (map.AudioStream is { } ak)
-                sb.Append("a:").Append(ak.Item1).Append(':').Append(ak.Item2)
-                  .Append(':').Append(FindSource(project, ak.Item1)?.Path);
+            foreach (var key in audioStreams)
+                sb.Append("a:").Append(key.SourceId).Append(':').Append(key.StreamIndex)
+                  .Append(':').Append(FindSource(project, key.SourceId)?.Path).Append('\n');
+            if (audioStreams.Count > 0)
+                sb.Append("rate:").Append(mixRate);
             return sb.ToString();
         }
 
@@ -1022,7 +1128,7 @@ namespace Clowd.VideoSDK.Playback
                 }
             }
 
-            set.AudioWorker?.Dispose();
+            set.MixWorker?.Dispose(); // joins the mix thread before its sink/ring go away
             set.AudioSink?.Dispose();
 
             foreach (var file in set.Files)

@@ -37,8 +37,15 @@ namespace Clowd.VideoSDK.Playback
         /// <summary>Try d3d11va hardware decoding first, with automatic software fallback.</summary>
         public bool EnableHardwareDecode { get; set; } = true;
 
-        /// <summary>Engine mix rate; audio is converted to float stereo at this rate.</summary>
+        /// <summary>Engine mix rate; audio is converted to float stereo at this rate.
+        /// <see cref="CompositionPlayer"/> mixes at the project's own output rate instead and
+        /// falls back to this only when the project does not carry one.</summary>
         public int AudioSampleRate { get; set; } = 48000;
+
+        /// <summary>Factory for the audio output device; null picks the platform default
+        /// (WASAPI on Windows). Tests inject <see cref="Audio.SilentAudioOutput"/> here so
+        /// playback runs on real timing without touching a device.</summary>
+        public Func<Audio.IAudioOutput> CreateAudioOutput { get; set; }
     }
 
     public sealed class VideoStreamInfo
