@@ -75,23 +75,42 @@ namespace Clowd.UI.Services
         private Task _shutdownTask;
 
         public static string BinaryFileName =>
-            OperatingSystem.IsWindows() ? "vid-render.exe" : "vid-render";
+            OperatingSystem.IsWindows() ? "Clowd.VideoRender.exe" : "Clowd.VideoRender";
 
-        /// <summary>Locates vid-render: the <c>CLOWD_VID_RENDER_PATH</c> override first, otherwise
-        /// the directory obs-express was found in — the binaries ship side by side in every layout
-        /// (release bundle and cargo target dir alike). Returns null when it cannot be found.</summary>
+        /// <summary>Locates the render tool: the <c>CLOWD_VID_RENDER_PATH</c> override first, then
+        /// beside the app executable (Clowd.VideoRender publishes into the same directory as
+        /// Clowd.Ui — see ci.yml), then the dev-build output next to this repo's csproj. Returns
+        /// null when it cannot be found.</summary>
         public static string ResolveBinaryPath()
         {
             var env = Environment.GetEnvironmentVariable(EnvVarName);
             if (!String.IsNullOrWhiteSpace(env) && File.Exists(env))
                 return Path.GetFullPath(env);
 
-            var obs = ObsBinaryLocator.Resolve();
-            if (String.IsNullOrEmpty(obs))
-                return null;
+            var local = Path.Combine(AppContext.BaseDirectory, BinaryFileName);
+            if (File.Exists(local))
+                return Path.GetFullPath(local);
 
-            var candidate = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(obs)), BinaryFileName);
-            return File.Exists(candidate) ? candidate : null;
+            // dev layout: walk up from the app's bin directory to the repo root and probe the
+            // Clowd.VideoRender build output (mirrors ObsBinaryLocator's dev probe).
+            var dir = new DirectoryInfo(Path.GetFullPath(AppContext.BaseDirectory));
+            while (dir != null)
+            {
+                var project = Path.Combine(dir.FullName, "clowd_ui", "Clowd.VideoRender");
+                if (Directory.Exists(project))
+                {
+                    foreach (var configuration in new[] { "Debug", "Release" })
+                    {
+                        var candidate = Path.Combine(project, "bin", configuration, "net10.0", BinaryFileName);
+                        if (File.Exists(candidate))
+                            return candidate;
+                    }
+                }
+
+                dir = dir.Parent;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -116,13 +135,19 @@ namespace Clowd.UI.Services
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
-                // vid-render links the FFmpeg DLLs that sit beside it and loads them relative to
-                // the working directory — it cannot start anywhere else.
                 WorkingDirectory = Path.GetDirectoryName(exePath),
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
+
+            // The render tool self-locates FFmpeg (beside itself, then the dev walk-up), but in
+            // the release layout the DLLs live in the obs-express/ subdirectory — hand it the
+            // exact directory we already resolved obs-express from so the layouts can never
+            // disagree. Harmless when obs-express is missing (the tool's own probing runs).
+            var obs = ObsBinaryLocator.Resolve();
+            if (!String.IsNullOrEmpty(obs))
+                psi.Environment["CLOWD_FFMPEG_PATH"] = Path.GetDirectoryName(Path.GetFullPath(obs));
 
             // the whole job description is the file; nothing else is on the command line.
             psi.ArgumentList.Add(renderArgsPath);

@@ -159,6 +159,15 @@ jobs:
           -c Release -r ${{ matrix.rid }} --self-contained true
           -o publish
 
+      # The render tool is a separate thin exe over Clowd.VideoSDK; publishing into the
+      # same directory shares the self-contained runtime and SDK assemblies, so the
+      # marginal cost is the apphost. VidRenderRunner looks for it beside Clowd.Ui.
+      - name: Publish Clowd.VideoRender
+        run: >
+          dotnet publish clowd_ui/Clowd.VideoRender/Clowd.VideoRender.csproj
+          -c Release -r ${{ matrix.rid }} --self-contained true
+          -o publish
+
       # The Rust build has no nbgv hook, so stamp the same version into its Sentry release name (clowd_rust_core/src/telemetry.rs).
       - name: Resolve version for capture binary
         shell: bash
