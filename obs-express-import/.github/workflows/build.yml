@@ -46,7 +46,7 @@ jobs:
       LIBCLANG_PATH: C:\Program Files\LLVM\bin
     steps:
       - name: Checkout (recursive submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # obs-studio must be recursive: obs-browser / obs-websocket submodule
           # dirs must EXIST even though disabled, or their CMakeLists FATAL_ERROR.
@@ -84,7 +84,7 @@ jobs:
           }
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -98,7 +98,7 @@ jobs:
       # runner.os is "Windows" for both x64 and arm64, so the arch MUST be in the
       # key or the two builds would clobber each other's cache.
       - name: Cache OBS native build + prebuilt deps
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             target/obs-${{ matrix.arch }}
@@ -146,7 +146,7 @@ jobs:
           Write-Host ("Total staged size: {0:N1} MB" -f $mb)
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: obs-express-windows-${{ matrix.arch }}
           path: dist/obs-express-windows-${{ matrix.arch }}
@@ -185,7 +185,7 @@ jobs:
         shell: bash
     steps:
       - name: Checkout (recursive submodules)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           submodules: recursive
           ref: ${{ inputs.ref }}
@@ -227,7 +227,7 @@ jobs:
           echo "Target: ${{ matrix.triple }}"
 
       - name: Cache cargo registry
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry/index
@@ -241,7 +241,7 @@ jobs:
       # whole `out` dir together with the downloaded deps under one arch-scoped
       # key (runner.os is "macOS" for both slices, so arch must be in the key).
       - name: Cache OBS native build + prebuilt deps
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${{ matrix.outdir }}/build/obs-sys-*/out
@@ -371,7 +371,7 @@ jobs:
           echo "Bundle size:"; du -sh "$dist"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: obs-express-macos-${{ matrix.arch }}
           path: dist/obs-express-macos-${{ matrix.arch }}
