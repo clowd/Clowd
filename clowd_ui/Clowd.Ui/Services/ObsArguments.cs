@@ -115,31 +115,31 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// Whether this recording is written as one track per stream. Two things ask for it:
-        /// <list type="bullet">
-        /// <item>the user's <see cref="SettingsRecording.SeparateAudioTracks"/> preference, which
-        /// only means anything when the user has an audio device <i>enabled</i> — the recorder
-        /// plans one track per configured device regardless of mute state, so counting the ids
-        /// alone would give every stock install (ids default to "default", toggles default to off)
-        /// a file full of confidently-labelled silent tracks, silent rows in the editor, and a
-        /// waveform pass per silent stream;</item>
-        /// <item>a webcam, unconditionally — it is a second video track, which the single-track
-        /// muxer cannot carry at all, so the recorder rejects a <c>webcam_device</c> without this
-        /// flag rather than dropping the camera.</item>
-        /// </list>
+        /// Whether this recording is written as one track per stream — which is exactly what
+        /// <see cref="SettingsRecording.EnableComposition"/> means, so the user's switch decides it
+        /// directly. A single-track recording cannot be edited afterwards (nothing is left to
+        /// separate) and cannot carry a webcam at all, which is why the composition switch also
+        /// gates the webcam rows in settings and the Edit affordance on a finished recording.
         /// </summary>
         internal static bool UsesMultiTrack(SettingsRecording settings)
         {
-            if (settings == null)
+            if (settings == null || !settings.EnableComposition)
                 return false;
 
-            // the same condition WriteSettingsFile uses to emit a non-empty webcam_device.
-            if (settings.CaptureWebcam && !String.IsNullOrEmpty(settings.WebcamDeviceId))
-                return true;
-
-            var devices = AudioDeviceCount(settings);
-            return settings.SeparateAudioTracks && devices >= 1 && devices <= MaxAudioTracks;
+            // libobs' own cap. Clowd configures at most one speaker and one microphone, so this
+            // never bites today; if it ever did, the recorder would refuse to start with the flag,
+            // and a flattened recording beats no recording.
+            return AudioDeviceCount(settings) <= MaxAudioTracks;
         }
+
+        /// <summary>Whether a camera is actually recorded: a box ticked, a device picked, and
+        /// composition on to give the camera a track to live in. The one condition
+        /// <see cref="WriteSettingsFile"/> emits a non-empty <c>webcam_device</c> for.</summary>
+        internal static bool UsesWebcam(SettingsRecording settings)
+            => settings != null
+            && settings.EnableComposition
+            && settings.CaptureWebcam
+            && !String.IsNullOrEmpty(settings.WebcamDeviceId);
 
         /// <summary>The audio devices the user actually asked to record. The settings file still
         /// lists muted devices (so a live unmute stays possible — see
@@ -179,9 +179,10 @@ namespace Clowd.UI
                 // …and the camera, which is the opposite case: the source has to exist in the
                 // pipeline from the start or not at all, so an unticked box (or no device picked)
                 // is written as "" rather than a device the recorder would open and then mute.
-                WebcamDevice = settings.CaptureWebcam && !String.IsNullOrEmpty(settings.WebcamDeviceId)
-                    ? settings.WebcamDeviceId
-                    : "",
+                // Composition off means no --multi-track, and the recorder REFUSES to start with a
+                // webcam_device it has no second video track for — so the gate that greys the
+                // webcam rows out in settings has to be enforced here too, not just in the UI.
+                WebcamDevice = UsesWebcam(settings) ? settings.WebcamDeviceId : "",
             };
 
             File.WriteAllText(path, JsonSerializer.Serialize(model, ClowdUiJsonContext.Default.ObsSettingsJson));

@@ -159,6 +159,7 @@ namespace Clowd
                     OnPropertyChanged(nameof(CanUpload));
                     OnPropertyChanged(nameof(CanEditVideo));
                     OnPropertyChanged(nameof(ShowEditVideo));
+                    OnPropertyChanged(nameof(EditVideoTooltip));
                 }
             }
         }
@@ -263,6 +264,7 @@ namespace Clowd
                     OnPropertyChanged(nameof(CanCreateGif));
                     OnPropertyChanged(nameof(CanEditVideo));
                     OnPropertyChanged(nameof(ShowEditVideo));
+                    OnPropertyChanged(nameof(EditVideoTooltip));
                 }
             }
         }
@@ -280,16 +282,42 @@ namespace Clowd
             set => Set(value);
         }
 
-        // any recording can be opened in the video editor, except a GIF (nothing to trim, no audio,
-        // and the render tool would not read it back as a video).
-        [JsonIgnore]
-        public bool CanEditVideo => IsVideo && String.IsNullOrEmpty(SourceVideoPath) && !String.IsNullOrEmpty(VideoPath);
+        // set on recordings captured with composition turned off: obs-express was run without
+        // --multi-track and wrote one flattened track, so there are no separate streams for the
+        // editor to trim, place or mix. Written once, when the session is created. Absent (false)
+        // on recordings made before composition was a choice — those stay editable, which is what
+        // they did before this flag existed.
+        public bool SingleTrack
+        {
+            get => Get<bool>();
+            set
+            {
+                if (Set(value))
+                {
+                    OnPropertyChanged(nameof(CanEditVideo));
+                    OnPropertyChanged(nameof(EditVideoTooltip));
+                }
+            }
+        }
 
-        // what the Recent page binds to: the video editor is Windows-only for now (the render tool
-        // and the webcam track only ship there), so the affordance is hidden rather than offered
-        // and then refused.
+        // whether the Recent page offers an Edit button at all: any video recording that is not a
+        // GIF (nothing to trim, no audio, and the render tool would not read it back as a video),
+        // on Windows — the editor and render tool only ship there. A recording it cannot actually
+        // open still gets the button, disabled, so the user is told why instead of hunting for a
+        // control that silently is not there.
         [JsonIgnore]
-        public bool ShowEditVideo => CanEditVideo && OperatingSystem.IsWindows();
+        public bool ShowEditVideo => IsVideo && String.IsNullOrEmpty(SourceVideoPath)
+                                     && !String.IsNullOrEmpty(VideoPath) && OperatingSystem.IsWindows();
+
+        // …and whether that button does anything: a single-track capture has nothing to compose.
+        [JsonIgnore]
+        public bool CanEditVideo => ShowEditVideo && !SingleTrack;
+
+        [JsonIgnore]
+        public string EditVideoTooltip => CanEditVideo
+            ? "Edit video"
+            : "This recording was captured with composition turned off, so it has no separate tracks to edit. "
+              + "Turn on \"Enable composition and editing\" in recording settings before your next capture.";
 
         public string UploadFileKey
         {
