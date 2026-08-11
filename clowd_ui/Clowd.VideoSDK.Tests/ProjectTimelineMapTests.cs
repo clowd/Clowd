@@ -73,7 +73,10 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(Second / 4, stream.TimelineToSource(Second / 4));
             Assert.Equal(Second + Second / 4, stream.TimelineToSource(Second / 2 + Second / 4));
             Assert.Equal(Second, stream.TimelineToSource(Second / 2)); // seam → B's in-point
-            Assert.Equal(2 * Second, stream.TimelineToSource(5 * Second)); // past end clamps
+            // past the end clamps to the last KEPT source instant — SrcEnd itself is the
+            // exclusive out-point (the first instant the edit removed) and seeking there would
+            // present a trimmed-away frame.
+            Assert.Equal(2 * Second - 1, stream.TimelineToSource(5 * Second));
 
             // source → timeline (the worker pacing map)
             Assert.Equal(Second / 4, stream.SourceToTimeline(Second / 4));

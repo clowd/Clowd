@@ -52,13 +52,20 @@ namespace Clowd.UI.VideoEditor
     { }
 
     /// <summary>
-    /// Reads and writes <c>videoedit.json</c>. The file is now the v2 <see cref="Project"/> itself
+    /// Reads and writes <c>videoedit.json</c>. The file is the v2 <see cref="Project"/> itself
     /// (<c>ProjectJsonContext</c>) — the same document the compositor plays and the renderer will
     /// take — and version 1 (the flat trim/cut/webcam DTO) is migrated <b>one way</b> on load: its
     /// values go through <see cref="VideoEditDocument"/>'s own setters and the next save writes the
-    /// project the editor built from them. No editor-only sidecar is needed: everything the
-    /// single-row UI can express round-trips through the project itself (see
-    /// <see cref="EditorProject.ApplyToDocument"/>).
+    /// project the editor built from them.
+    ///
+    /// The project is the authority on what is played and rendered, but it is a <i>lossy</i> view
+    /// of the edit surface: it carries only the keep segments, so a cut the trim range currently
+    /// excludes leaves no gap between two items and cannot be read back. That is why the file also
+    /// carries a small <see cref="EditorStateProperty"/> block as a sibling of the project's own
+    /// properties (<see cref="EditorState"/>): the trim range and the unclamped cut list, so
+    /// widening the trim after a reload restores the cuts instead of silently bringing the
+    /// cut-out material back. The block is advisory — a file without one loads exactly as before,
+    /// and one that disagrees with the project's own keep segments is ignored.
     ///
     /// The editor window owns the write scheduling (debounced latest-wins background writes,
     /// synchronous flush on close — the graphics.json pattern); this class is just the format.
@@ -68,11 +75,71 @@ namespace Clowd.UI.VideoEditor
         /// <summary>File name, stored beside session.json in the session directory.</summary>
         public const string FileName = "videoedit.json";
 
-        /// <summary>Serializes the project to UTF-8 JSON bytes (UI thread — reads live values).</summary>
+        /// <summary>Name of the editor-state block, a sibling of the project's own properties.
+        /// Deliberately not a <see cref="Project"/> member: the compositor and the render tool read
+        /// this file as a plain project and ignore it.</summary>
+        public const string EditorStateProperty = "EditorState";
+
+        /// <summary>Version of the editor-state block; a block from the future is skipped rather
+        /// than half-read (the project alone still describes the edit).</summary>
+        private const int EditorStateVersion = 1;
+
+        /// <summary>Serializes the project to UTF-8 JSON bytes (UI thread — reads live values),
+        /// with the editor-state block of the document it was built from when there is one (see
+        /// <see cref="EditorProject.StateOf"/>).</summary>
         public static byte[] Serialize(Project project)
         {
             ArgumentNullException.ThrowIfNull(project);
-            return Encoding.UTF8.GetBytes(project.ToJson());
+
+            var json = project.ToJson();
+            var state = EditorProject.StateOf(project);
+            if (state == null)
+                return Encoding.UTF8.GetBytes(json);
+
+            return WriteWithEditorState(json, state);
+        }
+
+        /// <summary>Re-emits the project's JSON with the editor-state block appended as a sibling
+        /// property. Written by hand rather than through a DTO so the project's own JSON is copied
+        /// through verbatim, whatever the model gains later.</summary>
+        private static byte[] WriteWithEditorState(string projectJson, EditorState state)
+        {
+            using var doc = JsonDocument.Parse(projectJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+                return Encoding.UTF8.GetBytes(projectJson);
+
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+            {
+                writer.WriteStartObject();
+
+                foreach (var property in doc.RootElement.EnumerateObject())
+                {
+                    if (String.Equals(property.Name, EditorStateProperty, StringComparison.Ordinal))
+                        continue; // ours, rewritten below
+                    property.WriteTo(writer);
+                }
+
+                writer.WriteStartObject(EditorStateProperty);
+                writer.WriteNumber("Version", EditorStateVersion);
+                writer.WriteNumber("TrimStartMs", state.TrimStartMs);
+                writer.WriteNumber("TrimEndMs", state.TrimEndMs);
+                writer.WriteStartArray("Cuts");
+                foreach (var cut in state.Cuts ?? (IReadOnlyList<CutRegion>)Array.Empty<CutRegion>())
+                {
+                    writer.WriteStartObject();
+                    writer.WriteNumber("StartMs", cut.StartMs);
+                    writer.WriteNumber("EndMs", cut.EndMs);
+                    writer.WriteEndObject();
+                }
+
+                writer.WriteEndArray();
+                writer.WriteEndObject();
+
+                writer.WriteEndObject();
+            }
+
+            return stream.ToArray();
         }
 
         /// <summary>
@@ -116,6 +183,107 @@ namespace Clowd.UI.VideoEditor
                 return false;
 
             EditorProject.ApplyToDocument(project, document, sourceDurationMs);
+
+            try
+            {
+                ApplyEditorState(bytes, document, sourceDurationMs);
+            }
+            catch (Exception ex)
+            {
+                // the project is the authority; a broken sidecar block must never cost the edit.
+                Debug.WriteLine("Ignoring the videoedit.json editor block: " + ex.Message);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Layers the editor-state block over the document the project just produced: the trim
+        /// range as the user set it and the full, unclamped cut list — including cuts the current
+        /// trim excludes, which the project's keep segments cannot express.
+        ///
+        /// Applied only when it agrees with the project: the block must reproduce exactly the keep
+        /// segments the project describes, or it is discarded and the project-derived edit kept.
+        /// So a hand-edited (or stale) block can add back detail the project cannot carry, but can
+        /// never change what is played or rendered.
+        /// </summary>
+        private static void ApplyEditorState(byte[] bytes, VideoEditDocument document, long sourceDurationMs)
+        {
+            if (!TryReadEditorState(bytes, out long trimStartMs, out long trimEndMs, out var cuts))
+                return;
+
+            var fromProject = document.GetKeepSegments(sourceDurationMs);
+            long restoreTrimStart = document.TrimStartMs;
+            long restoreTrimEnd = document.TrimEndMs;
+            var restoreCuts = document.GetCutRanges();
+
+            document.TrimStartMs = trimStartMs;
+            // the same "to the end" sentinel ApplyToDocument resolves to: a literal end at the
+            // media duration must not out-live a re-probe that reports a slightly different one.
+            document.TrimEndMs = sourceDurationMs > 0 && trimEndMs >= sourceDurationMs ? 0 : trimEndMs;
+            document.SetCuts(cuts);
+
+            if (SameSegments(fromProject, document.GetKeepSegments(sourceDurationMs)))
+                return;
+
+            document.TrimStartMs = restoreTrimStart;
+            document.TrimEndMs = restoreTrimEnd;
+            document.SetCuts(restoreCuts);
+        }
+
+        /// <summary>Reads the editor-state block straight off the JSON (the file is a project, so
+        /// the block is not part of any DTO). False when there is none, or it is not this
+        /// version.</summary>
+        private static bool TryReadEditorState(byte[] bytes, out long trimStartMs, out long trimEndMs,
+            out List<CutRegion> cuts)
+        {
+            trimStartMs = 0;
+            trimEndMs = 0;
+            cuts = null;
+
+            using var doc = JsonDocument.Parse(bytes.AsMemory());
+            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                !doc.RootElement.TryGetProperty(EditorStateProperty, out var state) ||
+                state.ValueKind != JsonValueKind.Object)
+                return false;
+
+            if (ReadNumber(state, "Version") != EditorStateVersion)
+                return false;
+
+            trimStartMs = ReadNumber(state, "TrimStartMs");
+            trimEndMs = ReadNumber(state, "TrimEndMs");
+
+            cuts = new List<CutRegion>();
+            if (state.TryGetProperty("Cuts", out var array) && array.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var cut in array.EnumerateArray())
+                {
+                    if (cut.ValueKind == JsonValueKind.Object)
+                        cuts.Add(new CutRegion(ReadNumber(cut, "StartMs"), ReadNumber(cut, "EndMs")));
+                }
+            }
+
+            return true;
+        }
+
+        private static long ReadNumber(JsonElement element, string name)
+            => element.TryGetProperty(name, out var value) &&
+               value.ValueKind == JsonValueKind.Number &&
+               value.TryGetInt64(out long number)
+                ? number
+                : 0;
+
+        private static bool SameSegments(IReadOnlyList<CutRegion> a, IReadOnlyList<CutRegion> b)
+        {
+            if (a.Count != b.Count)
+                return false;
+
+            for (int i = 0; i < a.Count; i++)
+            {
+                if (a[i].StartMs != b[i].StartMs || a[i].EndMs != b[i].EndMs)
+                    return false;
+            }
+
             return true;
         }
 

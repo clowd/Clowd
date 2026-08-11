@@ -362,9 +362,12 @@ namespace Clowd.VideoSDK.Tests
             player.Play();
             Assert.True(WaitUntil(() => LatestPts(player, cache, sourceId) is not null, 4000));
 
-            // live transform edit (drag the PiP): mapping unchanged, decoders must keep running
+            // live transform edit (drag the PiP): mapping unchanged, decoders must keep running.
+            // Same stream set ⇒ the swap is synchronous and the returned task already completed.
             item.Transform = new Transform { X = 0.25, Y = 0.25, Scale = 0.4 };
-            player.UpdateProject(project);
+            var applied = player.UpdateProject(project);
+            Assert.True(applied.IsCompleted, "same-signature update must apply synchronously");
+            await applied;
 
             Assert.Equal(opens, player.DecoderOpenCount);
             Assert.Equal(PlayerState.Playing, player.State);
@@ -380,7 +383,7 @@ namespace Clowd.VideoSDK.Tests
             // a timeline-structure edit (trim) also keeps the pipelines: only the mapping swaps
             player.Pause();
             item.DurationTicks = Second;
-            player.UpdateProject(project);
+            await player.UpdateProject(project);
             Assert.Equal(opens, player.DecoderOpenCount);
             Assert.Equal(new TimeSpan(Second), player.Duration);
         }
@@ -403,11 +406,108 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(1, player.DecoderOpenCount);
 
             project.Sources[0].Path = fixtureB; // relink → the pipeline set must rebuild
-            player.UpdateProject(project);
+            await player.UpdateProject(project); // rebuild runs on a background task; await it
 
             Assert.Equal(2, player.DecoderOpenCount);
             Assert.True(WaitUntil(() => LatestPts(player, cache, sourceId) is not null, 4000),
                 "no frame surfaced after relinking the source");
+        }
+
+        // ------------------------------------------------------------------------ failure paths
+
+        [Fact]
+        public async Task Failed_open_releases_every_native_resource_including_file_handles()
+        {
+            RequireFFmpeg();
+
+            // Two sources: the first opens fine (its demuxer holds an OS handle on the mp4),
+            // the second does not exist, so BuildPipelines throws part-way through. The failed
+            // build must dispose everything already constructed — a leaked AVFormatContext
+            // keeps the first file locked for the process lifetime on Windows.
+            string fixture = EncodeVideoFixture(2);
+            var project = NewProject();
+            var goodId = AddVideoSource(project, fixture);
+            var missingId = AddVideoSource(project,
+                Path.Combine(Path.GetTempPath(), $"clowd-missing-{Guid.NewGuid():N}.mp4"));
+            var track = AddVideoTrack(project);
+            AddMediaItem(project, track, goodId, 0, Second, 0);
+            AddMediaItem(project, track, missingId, Second, Second, 0);
+
+            using var player = new CompositionPlayer();
+            await Assert.ThrowsAnyAsync<Exception>(
+                () => player.OpenAsync(project, new VideoOpenOptions { EnableHardwareDecode = false }));
+            Assert.Equal(PlayerState.Failed, player.State);
+            Assert.NotNull(player.LastError);
+
+            // proves the handle is released: File.Delete throws IOException on a locked file
+            File.Delete(fixture);
+            Assert.False(File.Exists(fixture));
+        }
+
+        [Fact]
+        public async Task Failed_reopen_lands_in_failed_state_without_throwing_and_releases_the_old_pipelines()
+        {
+            RequireFFmpeg();
+
+            string fixture = EncodeVideoFixture(2);
+            var project = NewProject();
+            var sourceId = AddVideoSource(project, fixture);
+            AddMediaItem(project, AddVideoTrack(project), sourceId, 0, 2 * Second, 0);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, new VideoOpenOptions { EnableHardwareDecode = false });
+            Assert.Equal(PlayerState.Paused, player.State);
+
+            // relink to a missing file: signature changes → background rebuild → the rebuild
+            // fails. The task must complete WITHOUT faulting (the error channel is the Failed
+            // state + LastError, never an exception escaping into the caller's thread).
+            project.Sources[0].Path = Path.Combine(Path.GetTempPath(), $"clowd-missing-{Guid.NewGuid():N}.mp4");
+            await player.UpdateProject(project);
+
+            Assert.True(WaitUntil(() => player.State == PlayerState.Failed, 4000),
+                $"expected Failed after a rebuild against a missing file, got {player.State}");
+            Assert.NotNull(player.LastError);
+
+            // the old pipeline set was torn down before the rebuild and the failed rebuild
+            // must not leave anything holding the original fixture open.
+            File.Delete(fixture);
+            Assert.False(File.Exists(fixture));
+        }
+
+        [Fact]
+        public async Task Seek_to_timeline_end_presents_the_last_kept_frame_not_a_trimmed_one()
+        {
+            RequireFFmpeg();
+
+            // 3s recording trimmed to keep only source [0, 1.5s): seeking to the end of the
+            // timeline must show the last kept frame, never the first frame past the out-point
+            // (material a render does not contain).
+            string fixture = EncodeVideoFixture(3);
+            long keptTicks = Second + Second / 2;
+            var project = NewProject();
+            var sourceId = AddVideoSource(project, fixture);
+            AddMediaItem(project, AddVideoTrack(project), sourceId, 0, keptTicks, 0);
+
+            using var factory = new CpuSurfaceFactory();
+            using var cache = new FrameTextureCache(factory);
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, new VideoOpenOptions { EnableHardwareDecode = false });
+            Assert.Equal(new TimeSpan(keptTicks), player.Duration);
+
+            await player.SeekAsync(player.Duration, SeekMode.Exact);
+
+            Assert.True(WaitUntil(() =>
+            {
+                var pts = LatestPts(player, cache, sourceId);
+                return pts is { } p && p >= keptTicks - 2 * FrameTicks;
+            }, 4000), $"end seek did not land: pts={LatestPts(player, cache, sourceId)}");
+
+            var final = LatestPts(player, cache, sourceId);
+            Assert.NotNull(final);
+            Assert.True(final < keptTicks,
+                $"presented a trimmed-away frame: pts={final} >= out-point {keptTicks}");
+            Assert.True(final >= keptTicks - 2 * FrameTicks,
+                $"end seek landed too early: pts={final}, out-point {keptTicks}");
         }
     }
 }
