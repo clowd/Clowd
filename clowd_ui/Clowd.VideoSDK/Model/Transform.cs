@@ -69,13 +69,19 @@ public sealed class CropRect
     public CropRect Clone() => new CropRect { Left = Left, Top = Top, Right = Right, Bottom = Bottom };
 }
 
-/// <summary>Mirror of the v1 <c>WebcamOverlayShape</c>.</summary>
+/// <summary>Mirror of the v1 <c>WebcamOverlayShape</c>, plus <see cref="Squircle"/> which v1 had no
+/// equivalent for. New members must be appended: the project file writes these as strings, so the
+/// names are the on-disk format.</summary>
 public enum MaskShape
 {
     /// <summary>The ellipse inscribed in the item's rendered rect (a circle when the rect is
     /// square) — the exact semantics of the v1 "Circle" mask PNGs and overlay preview.</summary>
     Circle,
     RoundedRect,
+
+    /// <summary>The superellipse inscribed in the item's rendered rect — a fixed shape with no
+    /// radius to tune, unlike <see cref="RoundedRect"/>. See <see cref="MaskGeometry"/>.</summary>
+    Squircle,
 }
 
 /// <summary>Clips the item to a shape. <see cref="CornerRadius"/> is a fraction of the item's

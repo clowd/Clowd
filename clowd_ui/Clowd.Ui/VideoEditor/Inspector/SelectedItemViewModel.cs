@@ -86,9 +86,10 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _rotation;
         private double _opacity = 1.0;
 
-        private bool _maskNone = true;
+        private bool _maskSquare = true;
         private bool _maskCircle;
         private bool _maskRounded;
+        private bool _maskSquircle;
         private double _cornerRadius = DefaultCornerRadius;
 
         private double _cropLeft;
@@ -277,17 +278,19 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         // -------------------------------------------------------------------------------- mask
 
-        public bool MaskNone
+        /// <summary>The unmasked item: a square-cornered rectangle is what no mask already draws,
+        /// so this writes <c>Mask = null</c> rather than a shape.</summary>
+        public bool MaskSquare
         {
-            get => _maskNone;
+            get => _maskSquare;
             set
             {
-                // radio group: the two it deselects report false, and only the selected one is an
-                // edit — otherwise every flip would write the model twice.
-                if (!Set(ref _maskNone, value) || _syncing || !value)
+                // radio group: the others it deselects report false, and only the selected one is
+                // an edit — otherwise every flip would write the model twice.
+                if (!Set(ref _maskSquare, value) || _syncing || !value)
                     return;
 
-                SetMaskFlags(none: true, circle: false, rounded: false);
+                SetMaskFlags(square: true, circle: false, rounded: false, squircle: false);
                 EditRow("sel:mask", i => TransformOf(i).Mask = null);
             }
         }
@@ -300,7 +303,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (!Set(ref _maskCircle, value) || _syncing || !value)
                     return;
 
-                SetMaskFlags(none: false, circle: true, rounded: false);
+                SetMaskFlags(square: false, circle: true, rounded: false, squircle: false);
                 ApplyMaskShape(MaskShape.Circle);
             }
         }
@@ -313,8 +316,21 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (!Set(ref _maskRounded, value) || _syncing || !value)
                     return;
 
-                SetMaskFlags(none: false, circle: false, rounded: true);
+                SetMaskFlags(square: false, circle: false, rounded: true, squircle: false);
                 ApplyMaskShape(MaskShape.RoundedRect);
+            }
+        }
+
+        public bool MaskSquircle
+        {
+            get => _maskSquircle;
+            set
+            {
+                if (!Set(ref _maskSquircle, value) || _syncing || !value)
+                    return;
+
+                SetMaskFlags(square: false, circle: false, rounded: false, squircle: true);
+                ApplyMaskShape(MaskShape.Squircle);
             }
         }
 
@@ -674,9 +690,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                 var mask = transform.Mask;
                 if (mask != null)
                     _rememberedCornerRadius = mask.CornerRadius;
-                Set(ref _maskNone, mask == null, nameof(MaskNone));
+                Set(ref _maskSquare, mask == null, nameof(MaskSquare));
                 Set(ref _maskCircle, mask is { Shape: MaskShape.Circle }, nameof(MaskCircle));
                 Set(ref _maskRounded, mask is { Shape: MaskShape.RoundedRect }, nameof(MaskRounded));
+                Set(ref _maskSquircle, mask is { Shape: MaskShape.Squircle }, nameof(MaskSquircle));
                 Set(ref _cornerRadius, mask?.CornerRadius ?? _rememberedCornerRadius, nameof(CornerRadius));
                 OnPropertyChanged(nameof(ShowCornerRadius));
 
@@ -768,11 +785,12 @@ namespace Clowd.UI.VideoEditor.Inspector
             }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
         }
 
-        private void SetMaskFlags(bool none, bool circle, bool rounded)
+        private void SetMaskFlags(bool square, bool circle, bool rounded, bool squircle)
         {
-            Set(ref _maskNone, none, nameof(MaskNone));
+            Set(ref _maskSquare, square, nameof(MaskSquare));
             Set(ref _maskCircle, circle, nameof(MaskCircle));
             Set(ref _maskRounded, rounded, nameof(MaskRounded));
+            Set(ref _maskSquircle, squircle, nameof(MaskSquircle));
             OnPropertyChanged(nameof(ShowCornerRadius));
         }
 

@@ -386,6 +386,11 @@ namespace Clowd.VideoSDK.Composition
                     path.AddOval(rect);
                     target.ClipPath(path, SKClipOperation.Intersect, antialias: true);
                 }
+                else if (mask.Shape == MaskShape.Squircle)
+                {
+                    using var path = SquirclePath(rect);
+                    target.ClipPath(path, SKClipOperation.Intersect, antialias: true);
+                }
                 else
                 {
                     float radius = (float)(Clamp01(mask.CornerRadius) * rect.Height);
@@ -401,6 +406,21 @@ namespace Clowd.VideoSDK.Composition
                     rect.Left + (float)(fx.WipeToFrac * rect.Width), rect.Bottom);
                 target.ClipRect(band, SKClipOperation.Intersect, antialias: true);
             }
+        }
+
+        /// <summary>The superellipse inscribed in the item rect, as a closed path — inscribed for
+        /// the same reason <see cref="MaskShape.Circle"/> is, so a wide item gets a wide squircle.</summary>
+        private static SKPath SquirclePath(SKRect rect)
+        {
+            Span<double> xy = stackalloc double[MaskGeometry.SquircleSegments * 2];
+            MaskGeometry.BuildSquircle(rect.MidX, rect.MidY, rect.Width / 2, rect.Height / 2, xy);
+
+            var path = new SKPath();
+            path.MoveTo((float)xy[0], (float)xy[1]);
+            for (int i = 1; i < MaskGeometry.SquircleSegments; i++)
+                path.LineTo((float)xy[i * 2], (float)xy[i * 2 + 1]);
+            path.Close();
+            return path;
         }
 
         // ----------------------------------------------------------------------------- helpers

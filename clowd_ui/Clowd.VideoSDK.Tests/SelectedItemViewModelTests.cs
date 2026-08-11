@@ -386,13 +386,34 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0.4, vm.CornerRadius);
             Assert.Equal(0.4, Live(session, webcamA.Id).Transform.Mask.CornerRadius);
 
+            // rounded -> squircle: also radius-free, and also must not lose the number
+            vm.MaskSquircle = true;
+            Assert.False(vm.ShowCornerRadius);
+            Assert.Equal(MaskShape.Squircle, Live(session, webcamA.Id).Transform.Mask.Shape);
+            Assert.Equal(0.4, Live(session, webcamA.Id).Transform.Mask.CornerRadius);
+
             // masked -> unmasked drops the radius from the model, so the view model remembers it
-            vm.MaskNone = true;
+            vm.MaskSquare = true;
             Assert.Null(Live(session, webcamA.Id).Transform.Mask);
 
             vm.MaskRounded = true;
             Assert.Equal(0.4, vm.CornerRadius);
             Assert.Equal(0.4, Live(session, webcamA.Id).Transform.Mask.CornerRadius);
+        }
+
+        [Fact]
+        public void MaskShape_SelectingOneTileDeselectsTheOthers()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out _, out _, out _);
+            session.Select(webcamA.Id);
+
+            Assert.True(vm.MaskSquare);
+
+            vm.MaskSquircle = true;
+            Assert.False(vm.MaskSquare);
+            Assert.False(vm.MaskCircle);
+            Assert.False(vm.MaskRounded);
+            Assert.Equal(MaskShape.Squircle, Live(session, webcamA.Id).Transform.Mask.Shape);
         }
 
         [Fact]
