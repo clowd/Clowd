@@ -257,6 +257,13 @@ namespace Clowd.VideoRender
             if (HasFFmpeg(baseDirectory))
                 return baseDirectory;
 
+            // Release layout: this exe publishes beside Clowd.Ui, and the FFmpeg DLLs ship in
+            // the obs-express/ subdirectory (ci.yml). The runner also passes CLOWD_FFMPEG_PATH
+            // explicitly; this probe keeps a manually-invoked exe working in that layout too.
+            var obsSubdir = Path.Combine(baseDirectory, "obs-express");
+            if (HasFFmpeg(obsSubdir))
+                return obsSubdir;
+
             var directory = new DirectoryInfo(baseDirectory);
             while (directory != null)
             {
