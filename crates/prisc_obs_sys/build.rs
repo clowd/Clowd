@@ -153,6 +153,10 @@ fn mac_cmake_build(obs_build: &Path, config: &str) {
         // image_source + color_filter: the mouse click tracker (--tracker).
         "image-source",
         "obs-filters",
+        // mp4_output: the hybrid MP4 muxer behind --multi-track.
+        "obs-outputs",
+        // macos-avcapture: webcam capture (--webcam / --list-cameras).
+        "mac-avcapture",
     ];
 
     let marker = obs_build.join(".build_complete");
@@ -343,6 +347,8 @@ fn win_cmake_build(cmake: &Path, build_dir: &Path, config: &str) {
         // image_source + color_filter: the mouse click tracker (--tracker).
         "image-source",
         "obs-filters",
+        // dshow_input: webcam capture (--webcam / --list-cameras).
+        "win-dshow",
     ];
 
     // GPU-vendor hardware encoders (NVIDIA NVENC, Intel QSV, AMD AMF) exist only
@@ -411,17 +417,44 @@ fn win_emit_exports(obs_src: &Path, build_dir: &Path, config: &str) {
 }
 
 fn find_obs_deps_bin(obs_src: &Path) -> Option<PathBuf> {
+    find_obs_deps_subdir(obs_src, "bin")
+}
+
+/// Locates `<obs-deps bundle>/<sub>` for the TARGET architecture.
+///
+/// `.deps` holds several bundles: a Windows build also downloads the x86 one
+/// (and an ARM64 build the x64 one) for the child CMake configures OBS spawns
+/// for its helpers. Directory order is arbitrary, so matching the first
+/// `obs-deps-*` would ship x64 runtime DLLs in an ARM64 bundle, or generate
+/// bindings against the wrong headers.
+fn find_obs_deps_subdir(obs_src: &Path, sub: &str) -> Option<PathBuf> {
     let deps_dir = obs_src.join(".deps");
-    for entry in std::fs::read_dir(&deps_dir).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let bin = entry.path().join("bin");
-            if bin.exists() {
-                return Some(bin);
-            }
-        }
+    std::fs::read_dir(&deps_dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .find(|dir| {
+            let name = dir.file_name().unwrap_or_default().to_string_lossy();
+            name.starts_with("obs-deps-")
+                && !name.contains("qt6")
+                && is_target_arch_bundle(&name)
+                && dir.join(sub).exists()
+        })
+        .map(|dir| dir.join(sub))
+}
+
+/// True for a bundle name built for the target arch. macOS ships one
+/// `-universal` bundle covering both slices; Windows names them `-x64` /
+/// `-arm64` / `-x86`.
+fn is_target_arch_bundle(name: &str) -> bool {
+    if name.contains("universal") {
+        return true;
     }
-    None
+    match target_arch().as_str() {
+        "x86_64" => name.ends_with("-x64"),
+        "aarch64" => name.ends_with("-arm64"),
+        _ => false,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -477,6 +510,12 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         .allowlist_var("OBS_.*")
         .allowlist_var("VIDEO_.*")
         .allowlist_var("AUDIO_.*")
+        // Track-count limits: obs-express asserts its own constants against
+        // these at compile time, so a libobs bump that changes them fails the
+        // build instead of silently dropping tracks.
+        .allowlist_var("MAX_AUDIO_MIXES")
+        .allowlist_var("MAX_OUTPUT_AUDIO_ENCODERS")
+        .allowlist_var("MAX_OUTPUT_VIDEO_ENCODERS")
         .derive_default(true)
         .generate()
         .expect("Failed to generate bindings");
@@ -514,24 +553,10 @@ fn assert_no_opaque_regressions(generated: &str) {
 }
 
 fn find_obs_deps_include(obs_src: &Path) -> Option<PathBuf> {
-    let deps_dir = obs_src.join(".deps");
-    if !deps_dir.exists() {
-        return None;
-    }
-
-    for entry in std::fs::read_dir(&deps_dir).ok()? {
-        let entry = entry.ok()?;
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let include = entry.path().join("include");
-            if include.exists() {
-                println!(
-                    "cargo:warning=Using obs-deps include: {}",
-                    include.display()
-                );
-                return Some(include);
-            }
-        }
-    }
-    None
+    let include = find_obs_deps_subdir(obs_src, "include")?;
+    println!(
+        "cargo:warning=Using obs-deps include: {}",
+        include.display()
+    );
+    Some(include)
 }

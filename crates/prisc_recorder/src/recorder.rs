@@ -33,10 +33,17 @@ use crate::region::{self, Rect};
 use crate::settings::Settings;
 use crate::status::{self, LevelPeaks, RecordingClock};
 use crate::tracker::{self, MouseTracker};
+use crate::tracks::{self, AudioTrack, MAX_AUDIO_TRACKS};
+use crate::webcam::{self, Webcam};
 
 /// Overall deadline waiting for the OBS stop signal after `quit` (§1.4).
 const STOP_DEADLINE: Duration = Duration::from_secs(30);
 const STOP_WARN_INTERVAL: Duration = Duration::from_secs(10);
+/// Deadline waiting for the output's "deactivate" signal after its "stop"
+/// signal — i.e. for the recording file to be flushed and closed (see
+/// [`Recorder::wait_for_flush`]). Generous: mp4_output's buffered serializer
+/// can hold up to 256 MiB that still needs to reach a possibly slow disk.
+const FLUSH_DEADLINE: Duration = Duration::from_secs(30);
 
 fn fail(msg: impl Display) -> ! {
     eprintln!("Fatal: {msg}");
@@ -142,6 +149,35 @@ fn build_mic_sources(devices: &[String]) -> Result<BuiltSide, AudioBuildError> {
     })
 }
 
+/// Routes every audio source to the libobs mixer feeding its output track:
+/// one mixer per device in multi-track mode, mixer 0 for everything in
+/// single-track mode (`tracks::audio_mixer_mask`). Must be re-applied over the
+/// WHOLE list whenever either side changes — a speaker added or removed
+/// shifts every microphone's track index.
+fn apply_audio_mixers(speakers: &[ObsSource], mics: &[ObsSource], multi_track: bool) {
+    for (index, source) in speakers.iter().chain(mics.iter()).enumerate() {
+        source.set_audio_mixers(tracks::audio_mixer_mask(index, multi_track));
+    }
+}
+
+/// Creates one audio encoder per planned track, each bound to the libobs
+/// mixer of the same index and to the global audio output. Nothing is
+/// attached to the output here — the caller commits the whole set at once.
+fn create_audio_encoders(
+    encoder_types: &[String],
+    plan: &[AudioTrack],
+    audio: *mut obs_sys::audio_t,
+) -> Result<Vec<ObsEncoder>, String> {
+    let mut encoders = Vec::with_capacity(plan.len());
+    for (idx, track) in plan.iter().enumerate() {
+        let encoder = encoder_config::create_audio_encoder(encoder_types, &track.name, idx)
+            .map_err(|e| format!("Failed to create the audio encoder for track {idx}: {e}"))?;
+        encoder.set_audio(audio);
+        encoders.push(encoder);
+    }
+    Ok(encoders)
+}
+
 /// Applies the current compensation gain (system software volume inverse; 1.0
 /// where none applies) to each speaker source. The levels thread keeps the
 /// values current afterwards; this makes the very first captured samples
@@ -179,9 +215,31 @@ pub struct Recorder {
     tracker: Option<MouseTracker>,
     scene: ObsScene,
     video_encoder: ObsEncoder,
-    _audio_encoder: ObsEncoder,
+    /// Webcam second-video-track chain (`--webcam` or the `webcam_device`
+    /// settings key), with its own view mix and x264 encoder on output track
+    /// 1. None when no device is configured.
+    webcam: Option<Webcam>,
+    /// The effective webcam device id, kept for the view-mix rebuild any
+    /// `obs_reset_video` path requires (see `configure_full`). Mirrored into
+    /// `settings.webcam_device` (as "" when None).
+    webcam_device: Option<String>,
+    /// True when the device came from `--webcam`: the flag pins the webcam for
+    /// the process lifetime, so `configure` never changes it (the settings
+    /// file the parent re-sends does not contain the flag).
+    webcam_from_cli: bool,
+    /// `--multi-track`: hybrid mp4 output, one track per stream. Session-fixed
+    /// (the output type cannot change once created), so `configure` never
+    /// touches it.
+    multi_track: bool,
+    /// One encoder per audio track, in output track order; each reads the
+    /// libobs mixer of its own index. Single-track mode always has exactly
+    /// one (mixer 0).
+    audio_encoders: Vec<ObsEncoder>,
+    /// The audio track layout `audio_encoders` was built from, for `tracks`.
+    audio_tracks: Vec<AudioTrack>,
     _sig_start: SignalConnection,
     _sig_stop: SignalConnection,
+    _sig_deactivate: SignalConnection,
     context: ObsContext,
     /// Current effective tunable config (defaults overlaid by `--settings`,
     /// or the individual flags); updated by successful `configure`s.
@@ -202,7 +260,30 @@ impl Recorder {
     /// be registered before `obs_reset_video` (graphics init loads
     /// `default.effect` etc. through `obs_find_data_file`, whose built-in
     /// fallback is CWD-relative and resolves nowhere in our layout).
-    pub fn new(cli: &Cli, settings: Settings) -> Recorder {
+    pub fn new(cli: &Cli, mut settings: Settings) -> Recorder {
+        // Effective webcam device: --webcam wins (and pins it for the process
+        // lifetime); otherwise the settings file's `webcam_device` ("" = none).
+        let multi_track = cli.multi_track;
+        let webcam_from_cli = cli.webcam.is_some();
+        let webcam_device: Option<String> = cli
+            .webcam
+            .clone()
+            .or_else(|| (!settings.webcam_device.is_empty()).then(|| settings.webcam_device.clone()));
+        // Both are §1.1 validations `Cli::validate` already made; re-checked
+        // here so a programmatically built Cli cannot silently produce a
+        // recording that drops the webcam or an audio device.
+        if webcam_device.is_some() && !multi_track {
+            fail_args("a webcam requires --multi-track");
+        }
+        if multi_track && settings.speakers.len() + settings.microphones.len() > MAX_AUDIO_TRACKS {
+            fail_args(format_args!(
+                "--multi-track supports at most {MAX_AUDIO_TRACKS} audio devices"
+            ));
+        }
+        // Keep the stored settings reflecting the *effective* device so
+        // `configure` diffs against reality.
+        settings.webcam_device = webcam_device.clone().unwrap_or_default();
+
         // 1. Log/crash handlers were installed first thing in main (stdout must
         //    stay protocol-only from the first libobs line).
         platform::init_process();
@@ -304,6 +385,20 @@ impl Recorder {
                 paths.module_data
             ));
         }
+        // Same registration check for the webcam source, only when requested
+        // (the "test" pseudo-device uses color_source from image-source).
+        if matches!(webcam_device.as_deref(), Some(id) if id != webcam::TEST_DEVICE_ID) {
+            let webcam_c = CString::new(platform::WEBCAM_SOURCE_ID).unwrap();
+            if unsafe { obs_sys::obs_source_get_display_name(webcam_c.as_ptr()) }.is_null() {
+                fail(format_args!(
+                    "Webcam source '{}' is not registered — the camera capture plugin failed \
+                     to load.\n  module bin:  {}\n  module data: {}",
+                    platform::WEBCAM_SOURCE_ID,
+                    paths.module_bin,
+                    paths.module_data
+                ));
+            }
+        }
 
         // 7. Scene: one display-capture item per intersected monitor, offset
         //    onto the region canvas.
@@ -375,6 +470,13 @@ impl Recorder {
             context.set_output_source(channel, Some(source));
             channel += 1;
         }
+        // Output channels carry the sources; the mixer masks decide which
+        // audio *track* each one lands in.
+        apply_audio_mixers(
+            &speakers_built.sources,
+            &mics_built.sources,
+            multi_track,
+        );
         if settings.speaker_volume_compensation {
             apply_speaker_compensation(&speakers_built.sources, &speakers_built.devices);
         }
@@ -389,7 +491,7 @@ impl Recorder {
             compensate: settings.speaker_volume_compensation,
         }));
 
-        // 9. Encoders + ffmpeg_muxer output.
+        // 9. Encoders + output.
         let video_encoder = match encoder_config::create_video_encoder(
             &encoder_types,
             &EncoderConfig {
@@ -402,20 +504,57 @@ impl Recorder {
             Err(e) => fail(format_args!("Failed to create video encoder: {e}")),
         };
         video_encoder.set_video(context.get_video());
-        let audio_encoder = match encoder_config::create_audio_encoder(&encoder_types) {
-            Ok(e) => e,
-            Err(e) => fail(format_args!("Failed to create audio encoder: {e}")),
-        };
-        audio_encoder.set_audio(context.get_audio());
+        // One audio encoder per track: with --multi-track that is one per
+        // configured device (speakers then mics), otherwise a single encoder
+        // reading mixer 0, into which every source is mixed.
+        let audio_tracks =
+            tracks::plan_audio_tracks(&settings.speakers, &settings.microphones, multi_track);
+        let audio_encoders =
+            match create_audio_encoders(&encoder_types, &audio_tracks, context.get_audio()) {
+                Ok(e) => e,
+                Err(e) => fail(e),
+            };
 
+        // Webcam chain (--webcam / settings `webcam_device`): built AFTER the
+        // main pipeline is up but before the output — all fallible work
+        // happens inside create().
+        let webcam_chain = match webcam_device {
+            Some(ref device_id) => match webcam::create(device_id, &settings) {
+                Ok(w) => Some(w),
+                Err(e) => fail(e),
+            },
+            None => None,
+        };
+
+        // Output: "ffmpeg_muxer" (single video track, one mixed audio track)
+        // unless --multi-track opts into "mp4_output" (Hybrid MP4), which
+        // carries a track per stream, fragments continuously
+        // (crash-resilient) and soft-remuxes to a standard mp4 on stop. Both
+        // take the same 'path' setting and emit the same 'stop' signal codes.
+        let output_id = if multi_track {
+            "mp4_output"
+        } else {
+            "ffmpeg_muxer"
+        };
+        let output_path = cli
+            .output
+            .as_ref()
+            .unwrap_or_else(|| fail("--output is required"));
         let output_settings = ObsData::new();
-        output_settings.set_string("path", &cli.output.to_string_lossy());
-        let output = match ObsOutput::create("ffmpeg_muxer", "recording", Some(&output_settings)) {
+        output_settings.set_string("path", &output_path.to_string_lossy());
+        let output = match ObsOutput::create(output_id, "recording", Some(&output_settings)) {
             Ok(o) => o,
-            Err(e) => fail(format_args!("Failed to create FFmpeg muxer output: {e}")),
+            Err(e) => fail(format_args!("Failed to create '{output_id}' output: {e}")),
         };
         output.set_video_encoder(&video_encoder);
-        output.set_audio_encoder(&audio_encoder, 0);
+        if let Some(ref w) = webcam_chain {
+            // Track 1 = webcam. Only honored by multi-track outputs
+            // (mp4_output); ffmpeg_muxer would silently drop it.
+            output.set_video_encoder2(Some(&w.encoder), 1);
+        }
+        for (idx, encoder) in audio_encoders.iter().enumerate() {
+            output.set_audio_encoder(Some(encoder), idx);
+        }
 
         // 10. Signals → command-loop injection.
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
@@ -427,6 +566,11 @@ impl Recorder {
         let sig_stop =
             SignalConnection::connect_with_code(output.signal_handler(), "stop", move |code| {
                 let _ = stop_tx.send(Command::OutputStopped(code));
+            });
+        let deactivate_tx = cmd_tx.clone();
+        let sig_deactivate =
+            SignalConnection::connect(output.signal_handler(), "deactivate", move || {
+                let _ = deactivate_tx.send(Command::OutputDeactivated);
             });
 
         Recorder {
@@ -442,9 +586,15 @@ impl Recorder {
             tracker,
             scene,
             video_encoder,
-            _audio_encoder: audio_encoder,
+            webcam: webcam_chain,
+            webcam_device,
+            webcam_from_cli,
+            multi_track,
+            audio_encoders,
+            audio_tracks,
             _sig_start: sig_start,
             _sig_stop: sig_stop,
+            _sig_deactivate: sig_deactivate,
             context,
             settings,
             capture_region,
@@ -528,10 +678,14 @@ impl Recorder {
                 Command::OutputStarted => {
                     if !started {
                         started = true;
-                        status::emit_simple("started_recording");
+                        status::emit_json(serde_json::json!({
+                            "type": "started_recording",
+                            "tracks": self.tracks_json(),
+                        }));
                         let c = Arc::new(RecordingClock::new());
                         status_handle = Some(status::start_status_thread(
                             self.output.as_ptr(),
+                            1 + self.webcam.is_some() as i64,
                             c.clone(),
                             status_stop.clone(),
                         ));
@@ -557,11 +711,16 @@ impl Recorder {
                         }
                     }
                 }
+                // Only consumed by `wait_for_flush` (it always follows a stop
+                // signal, and every stop path ends in `finish`); ignore the
+                // stray case defensively.
+                Command::OutputDeactivated => {}
                 Command::OutputStopped(code) => {
                     // Spontaneous stop (disk full, encoder error, …): surface it
                     // immediately and exit — do not wait for `quit` (§1.3).
                     self.finish(
                         code,
+                        true,
                         &status_stop,
                         status_handle.take(),
                         levels_handle.take(),
@@ -591,6 +750,7 @@ impl Recorder {
                             // Synthetic timeout stop (§1.4).
                             self.finish(
                                 -99,
+                                false,
                                 &status_stop,
                                 status_handle.take(),
                                 levels_handle.take(),
@@ -600,6 +760,7 @@ impl Recorder {
                             Ok(Command::OutputStopped(code)) => {
                                 self.finish(
                                     code,
+                                    true,
                                     &status_stop,
                                     status_handle.take(),
                                     levels_handle.take(),
@@ -619,6 +780,7 @@ impl Recorder {
                             Err(mpsc::RecvTimeoutError::Disconnected) => {
                                 self.finish(
                                     -99,
+                                    false,
                                     &status_stop,
                                     status_handle.take(),
                                     levels_handle.take(),
@@ -650,8 +812,40 @@ impl Recorder {
     /// before any pipeline mutation, so early failures leave the pipeline
     /// intact (`fatal:false`); once `obs_reset_video` runs, a failure means
     /// the pipeline may match neither config (`fatal:true`).
-    fn configure_full(&mut self, new: Settings) {
+    fn configure_full(&mut self, mut new: Settings) {
         let cur = self.settings.clone();
+
+        // Effective webcam device under the new config: pinned by --webcam
+        // (the settings file never carries the flag, so a re-sent file must
+        // not tear the webcam down), otherwise the file's `webcam_device`
+        // ("" = none).
+        let new_webcam_device: Option<String> = if self.webcam_from_cli {
+            self.webcam_device.clone()
+        } else if new.webcam_device.is_empty() {
+            None
+        } else {
+            Some(new.webcam_device.clone())
+        };
+        let webcam_changed = new_webcam_device != self.webcam_device;
+
+        // The output type is session-fixed, so the two multi-track-only
+        // capabilities are rejected up front rather than half-applied.
+        if new_webcam_device.is_some() && !self.multi_track {
+            return status::emit_configure_error(
+                "`webcam_device` requires --multi-track; the recorder was started without it",
+                false,
+            );
+        }
+        let new_audio_sources = new.speakers.len() + new.microphones.len();
+        if self.multi_track && new_audio_sources > MAX_AUDIO_TRACKS {
+            return status::emit_configure_error(
+                &format!(
+                    "--multi-track records one audio track per device and supports at most \
+                     {MAX_AUDIO_TRACKS} (got {new_audio_sources})"
+                ),
+                false,
+            );
+        }
 
         // -- Fallible preparation (no pipeline mutation on failure).
         let new_speakers = if new.speakers != cur.speakers {
@@ -670,6 +864,21 @@ impl Recorder {
                 Err(AudioBuildError::Args(e)) | Err(AudioBuildError::Create(e)) => {
                     return status::emit_configure_error(&e, false)
                 }
+            }
+        } else {
+            None
+        };
+        // Multi-track puts every device on its own track, so a changed device
+        // list is a changed track layout: rebuild the whole encoder set (also
+        // fallible, hence still in the preparation phase). Single-track keeps
+        // its one mixer-0 encoder no matter what the device lists do.
+        let new_audio_encoders = if self.multi_track
+            && (new_speakers.is_some() || new_mics.is_some())
+        {
+            let plan = tracks::plan_audio_tracks(&new.speakers, &new.microphones, true);
+            match create_audio_encoders(&self.encoder_types, &plan, self.context.get_audio()) {
+                Ok(encoders) => Some((plan, encoders)),
+                Err(e) => return status::emit_configure_error(&e, false),
             }
         } else {
             None
@@ -719,6 +928,17 @@ impl Recorder {
         // -- Point of no return: obs_reset_video invalidates the video_t* the
         // current encoder is bound to.
         if video_changed {
+            // CRITICAL invariant (verified in libobs 32.1.2): obs_reset_video
+            // destroys ALL obs_view video mixes, including the webcam's — its
+            // encoder would keep a dangling video_t. Tear the whole webcam
+            // chain down first (detaching its track-1 encoder), then rebuild
+            // and rebind it after the reset. Phase-2 configure work MUST keep
+            // this ordering for every future obs_reset_video call site.
+            if self.webcam.is_some() {
+                self.output.set_video_encoder2(None, 1);
+                self.webcam = None;
+            }
+
             let (out_w, out_h) =
                 region::compute_output_size(self.canvas, new.max_width, new.max_height);
             let video_info = VideoInfo {
@@ -736,6 +956,61 @@ impl Recorder {
                     true,
                 );
             }
+
+            // (Re)build under the new fps/crf — covers both a chain that was
+            // just torn down and one newly requested via `webcam_device`;
+            // legal because the output is inactive pre-start.
+            if let Some(ref device) = new_webcam_device {
+                match webcam::create(device, &new) {
+                    Ok(w) => {
+                        self.output.set_video_encoder2(Some(&w.encoder), 1);
+                        self.webcam = Some(w);
+                    }
+                    Err(e) => {
+                        // The screen pipeline is intact but the webcam track
+                        // is gone — the recording would not match the
+                        // requested config, so the parent should respawn.
+                        self.webcam_device = None;
+                        self.settings.webcam_device = String::new();
+                        return status::emit_configure_error(
+                            &format!("Failed to rebuild the webcam chain: {e}"),
+                            true,
+                        );
+                    }
+                }
+            }
+        } else if webcam_changed {
+            // No video reset needed: swap the webcam chain alone (legal
+            // pre-start — the output is inactive). Teardown before build:
+            // the outgoing chain may hold the same physical camera.
+            if self.webcam.is_some() {
+                self.output.set_video_encoder2(None, 1);
+                self.webcam = None;
+            }
+            if let Some(ref device) = new_webcam_device {
+                match webcam::create(device, &new) {
+                    Ok(w) => {
+                        self.output.set_video_encoder2(Some(&w.encoder), 1);
+                        self.webcam = Some(w);
+                    }
+                    Err(e) => {
+                        // Screen pipeline intact, but the recording would not
+                        // match the requested config — parent should respawn.
+                        self.webcam_device = None;
+                        self.settings.webcam_device = String::new();
+                        return status::emit_configure_error(
+                            &format!("Failed to build the webcam chain: {e}"),
+                            true,
+                        );
+                    }
+                }
+            }
+        } else if new.crf != cur.crf {
+            // No reset needed: refresh the webcam encoder's quality in place
+            // (safe pre-start — the encoder has not initialized yet).
+            if let Some(ref w) = self.webcam {
+                w.encoder.update(&webcam::encoder_settings(new.crf));
+            }
         }
 
         // -- Infallible commit.
@@ -748,11 +1023,18 @@ impl Recorder {
         }
         if new_speakers.is_some() || new_mics.is_some() {
             self.commit_audio(new_speakers, new_mics, new.speaker_volume_compensation);
+            if let Some((plan, encoders)) = new_audio_encoders {
+                self.commit_audio_encoders(plan, encoders);
+            }
         }
         if let Some(t) = new_tracker {
             self.tracker = Some(t);
         }
         self.apply_live_keys(&new);
+        // Store the *effective* device (differs from the file's value when
+        // --webcam pinned it) so later diffs compare against reality.
+        self.webcam_device = new_webcam_device;
+        new.webcam_device = self.webcam_device.clone().unwrap_or_default();
         self.settings = new;
         status::emit_configure_applied(&[]);
     }
@@ -797,6 +1079,12 @@ impl Recorder {
         if new.microphones != cur.microphones {
             ignored.push("microphones");
         }
+        // The webcam is a pipeline element, never touched post-start. Compare
+        // against the *effective* device: when --webcam pinned it, a file
+        // without the key accurately reports as ignored.
+        if new.webcam_device != cur.webcam_device {
+            ignored.push("webcam_device");
+        }
 
         // Ignored keys keep their current values, so re-sending the same file
         // re-reports the same ignored_keys.
@@ -837,6 +1125,50 @@ impl Recorder {
                 }
             }
         }
+    }
+
+    /// Per-track stream map for `started_recording` / `stopped_recording`:
+    /// `{"screen":{"index":0,..},"webcam":{..},"audio":[{"index":0,..},..]}`.
+    ///
+    /// The `webcam` entry is ABSENT (not null) without a webcam — consumers
+    /// treat a missing key as "no webcam track". Screen dims are the encoded
+    /// output size (canvas after the max_width / max_height downscale — the
+    /// same computation `reset_video` was given); webcam dims are its track-1
+    /// mix canvas. `index` is per media type (video / audio), matching the
+    /// container's per-type stream numbering.
+    ///
+    /// `audio` always has at least one entry: single-track recordings report
+    /// their one `"mixed"` track, multi-track ones a `"speaker"` /
+    /// `"microphone"` entry per device.
+    fn tracks_json(&self) -> serde_json::Value {
+        let (out_w, out_h) = region::compute_output_size(
+            self.canvas,
+            self.settings.max_width,
+            self.settings.max_height,
+        );
+        let audio: Vec<serde_json::Value> = self
+            .audio_tracks
+            .iter()
+            .enumerate()
+            .map(|(idx, track)| {
+                serde_json::json!({
+                    "index": idx,
+                    "kind": track.kind.as_str(),
+                    "device": track.device,
+                    "name": track.name,
+                })
+            })
+            .collect();
+        let mut tracks = serde_json::json!({
+            "screen": { "index": 0, "width": out_w, "height": out_h },
+            "audio": audio,
+        });
+        if let Some(ref w) = self.webcam {
+            tracks["webcam"] = serde_json::json!({
+                "index": 1, "width": w.canvas.0, "height": w.canvas.1,
+            });
+        }
+        tracks
     }
 
     /// Creates the click tracker. Adding it to the scene now — with the
@@ -883,6 +1215,9 @@ impl Recorder {
         for unused in channel..=(MAX_AUDIO_SOURCES as u32) {
             self.context.set_output_source(unused, None);
         }
+        // Over the whole list, not just the replaced side: in multi-track mode
+        // a changed speaker count shifts every microphone's track index.
+        apply_audio_mixers(&self.speakers, &self.mics, self.multi_track);
         if speakers_replaced && compensate {
             apply_speaker_compensation(&self.speakers, &self.speaker_devices);
         }
@@ -891,6 +1226,22 @@ impl Recorder {
         peaks.mic = self.mic_meters.iter().map(|(_, p)| p.clone()).collect();
         peaks.speaker_devices = self.speaker_devices.clone();
         peaks.compensate = compensate;
+    }
+
+    /// Swaps in a freshly built audio encoder set (multi-track only): attaches
+    /// each encoder to its track and clears the tracks a shorter new layout no
+    /// longer uses. Legal only pre-start — libobs refuses encoder changes on an
+    /// active output. The outgoing encoders are released last (the output holds
+    /// its own refs until each `set_audio_encoder` replaces them).
+    fn commit_audio_encoders(&mut self, plan: Vec<AudioTrack>, encoders: Vec<ObsEncoder>) {
+        for (idx, encoder) in encoders.iter().enumerate() {
+            self.output.set_audio_encoder(Some(encoder), idx);
+        }
+        for idx in encoders.len()..self.audio_encoders.len() {
+            self.output.set_audio_encoder(None, idx);
+        }
+        self.audio_encoders = encoders;
+        self.audio_tracks = plan;
     }
 
     /// Starts the output; on failure emits `stopped_recording` code -4 with the
@@ -907,7 +1258,8 @@ impl Recorder {
             if let Some(handle) = levels_handle.take() {
                 let _ = handle.join();
             }
-            status::emit_stopped_recording(-4, self.output.get_last_error());
+            // No tracks object: nothing was ever recorded.
+            status::emit_stopped_recording(-4, self.output.get_last_error(), None);
             platform::exit_process(1);
         }
     }
@@ -921,13 +1273,23 @@ impl Recorder {
 
     /// Emits the final `stopped_recording` line and exits (code 0 → exit 0,
     /// anything else → exit 1). Always the last JSON line before exit.
+    ///
+    /// `wait_flush` is true when the output's "stop" signal was actually
+    /// received: the file is not necessarily flushed yet at that point, so
+    /// [`wait_for_flush`](Self::wait_for_flush) runs first. The synthetic -99
+    /// paths (stop deadline blown / channel dead) pass false — no stop signal
+    /// ever arrived, so there is no flush in progress to wait for.
     fn finish(
         &self,
         code: i64,
+        wait_flush: bool,
         status_stop: &Arc<AtomicBool>,
         status_handle: Option<std::thread::JoinHandle<()>>,
         levels_handle: Option<std::thread::JoinHandle<()>>,
     ) -> ! {
+        if wait_flush {
+            self.wait_for_flush();
+        }
         status_stop.store(true, Ordering::Relaxed);
         for handle in [status_handle, levels_handle].into_iter().flatten() {
             // ≤1 s: guarantees no status/levels line can print after
@@ -939,8 +1301,47 @@ impl Recorder {
         } else {
             self.output.get_last_error()
         };
-        status::emit_stopped_recording(code, error);
+        status::emit_stopped_recording(code, error, Some(self.tracks_json()));
         platform::exit_process(if code == 0 { 0 } else { 1 })
+    }
+
+    /// Blocks (bounded by [`FLUSH_DEADLINE`]) until the output's "deactivate"
+    /// signal arrives. The OBS "stop" signal fires *before* the recording file
+    /// is flushed: mp4_output signals stop from `obs_output_end_data_capture`
+    /// and only afterwards drains and closes its buffered file serializer,
+    /// while libobs emits "deactivate" strictly after the in-flight packet
+    /// callback (which includes that final drain/close) has returned. Exiting
+    /// on "stop" alone can therefore kill the flush mid-write and silently
+    /// truncate the mp4 tail (the final fragment + moov). On timeout we
+    /// proceed anyway — exiting with a possibly-truncated file beats hanging
+    /// the parent forever on a dead disk.
+    fn wait_for_flush(&self) {
+        let deadline = Instant::now() + FLUSH_DEADLINE;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                eprintln!(
+                    "Warning: the output did not deactivate within {FLUSH_DEADLINE:?}; \
+                     the recording file may be incomplete"
+                );
+                return;
+            }
+            match self.cmd_rx.recv_timeout(remaining.min(STOP_WARN_INTERVAL)) {
+                Ok(Command::OutputDeactivated) => return,
+                // An accepted configure still needs its ack (§2.3); nothing is
+                // applied while tearing down (fatal:false).
+                Ok(Command::Configure(_)) => status::emit_configure_error(
+                    "recorder is stopping, configure not applied",
+                    false,
+                ),
+                Ok(_) => {} // ignore anything else while flushing
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    eprintln!("Warning: still waiting for the recording file to be finalized...");
+                }
+                // Unreachable in practice (self holds a sender).
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+        }
     }
 
     /// stdin reader: line-oriented commands; EOF is equivalent to `quit` (the

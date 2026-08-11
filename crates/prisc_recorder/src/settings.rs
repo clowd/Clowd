@@ -60,6 +60,15 @@ pub struct Settings {
     /// devices with hardware volume and on macOS.
     #[serde(default)]
     pub speaker_volume_compensation: bool,
+    /// Webcam device id recorded as video track 1, exactly as printed by
+    /// `--list-cameras`; empty = no webcam. Requires `--multi-track`. The
+    /// `--webcam` CLI flag takes precedence and pins the device for the
+    /// process lifetime. A
+    /// pipeline element rather than a live tunable: applied at build time and
+    /// on pre-start `configure`; ignored (and reported in `ignored_keys`) once
+    /// recording has started.
+    #[serde(default)]
+    pub webcam_device: String,
 }
 
 impl Settings {
@@ -79,6 +88,7 @@ impl Settings {
             speakers: cli.speaker.clone(),
             microphones: cli.microphone.clone(),
             speaker_volume_compensation: cli.speaker_volume_compensation,
+            webcam_device: cli.webcam.clone().unwrap_or_default(),
         }
     }
 
@@ -114,6 +124,9 @@ impl Settings {
                  are supported"
             ));
         }
+        // `webcam_device` also requires --multi-track, but that is a
+        // session-fixed CLI flag this type never sees; `Cli::validate` (and
+        // `Recorder::configure_full`) enforces it.
         Ok(())
     }
 }
@@ -141,6 +154,7 @@ mod tests {
         assert!(s.speakers.is_empty());
         assert!(s.microphones.is_empty());
         assert!(!s.speaker_volume_compensation);
+        assert_eq!(s.webcam_device, "");
         assert!(s.validate().is_ok());
     }
 
@@ -161,7 +175,8 @@ mod tests {
                 "hw_accel": true, "low_cpu": false, "cursor": false,
                 "tracker": true, "tracker_color": "0,128,255",
                 "speakers": ["default"], "microphones": ["mic-id"],
-                "speaker_volume_compensation": true
+                "speaker_volume_compensation": true,
+                "webcam_device": "Live Streamer CAM 313:\\\\?\\usb#vid"
             }"#,
         );
         assert_eq!(s.crf, 23);
@@ -172,7 +187,16 @@ mod tests {
         assert_eq!(s.speakers, vec!["default".to_string()]);
         assert_eq!(s.microphones, vec!["mic-id".to_string()]);
         assert!(s.speaker_volume_compensation);
+        assert_eq!(s.webcam_device, "Live Streamer CAM 313:\\\\?\\usb#vid");
         assert!(s.validate().is_ok());
+    }
+
+    #[test]
+    fn webcam_device_is_platform_neutral_here() {
+        // Webcam capture works on both platforms (DirectShow / AVFoundation);
+        // the only gate is --multi-track, which Settings cannot see.
+        assert!(parse(r#"{"webcam_device": "test"}"#).validate().is_ok());
+        assert!(parse(r#"{"webcam_device": ""}"#).validate().is_ok());
     }
 
     #[test]

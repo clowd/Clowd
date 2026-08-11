@@ -25,13 +25,20 @@ pub fn emit_simple(msg_type: &str) {
     emit_json(serde_json::json!({ "type": msg_type }));
 }
 
-pub fn emit_stopped_recording(code: i64, error: Option<String>) {
-    emit_json(serde_json::json!({
+/// `tracks` is the optional per-track stream map (same shape as in
+/// `started_recording`); omitted entirely when None so consumers that key on
+/// field presence keep their previous value.
+pub fn emit_stopped_recording(code: i64, error: Option<String>, tracks: Option<serde_json::Value>) {
+    let mut msg = serde_json::json!({
         "type": "stopped_recording",
         "code": code,
         "message": stop_code_message(code),
         "error": error,
-    }));
+    });
+    if let Some(tracks) = tracks {
+        msg["tracks"] = tracks;
+    }
+    emit_json(msg);
 }
 
 /// Ack for a successful `configure`. `ignored_keys` is always present (empty
@@ -199,12 +206,20 @@ impl FpsWindow {
 /// Reads the raw output pointer directly (frame counters are thread-safe);
 /// this is sound because the process always terminates via
 /// `platform::exit_process` while the output is still alive.
+///
+/// `video_tracks` is the number of video encoders attached to the output
+/// (1, or 2 with a webcam): `obs_output_get_total_frames` /
+/// `obs_output_get_frames_dropped` count interleaved video *packets* across
+/// ALL attached video encoders, so a two-track recording reads 2x the real
+/// frame rate. Both counters are normalized to per-track values here.
 pub fn start_status_thread(
     output_ptr: *mut obs_sys::obs_output_t,
+    video_tracks: i64,
     clock: Arc<RecordingClock>,
     stop_flag: Arc<AtomicBool>,
 ) -> std::thread::JoinHandle<()> {
     let ptr_addr = output_ptr as usize;
+    let tracks = video_tracks.max(1);
     std::thread::spawn(move || {
         let ptr = ptr_addr as *const obs_sys::obs_output_t;
         let mut fps_window = FpsWindow::default();
@@ -217,13 +232,18 @@ pub fn start_status_thread(
                 continue;
             }
 
-            let total = unsafe { obs_sys::obs_output_get_total_frames(ptr) } as i64;
-            let dropped = unsafe { obs_sys::obs_output_get_frames_dropped(ptr) } as i64;
+            let total_raw = unsafe { obs_sys::obs_output_get_total_frames(ptr) } as i64;
+            let dropped_raw = unsafe { obs_sys::obs_output_get_frames_dropped(ptr) } as i64;
             let time_ms = clock.elapsed_ms();
 
-            let fps = fps_window.push(time_ms, total);
-            let dropped_perc = if total > 0 {
-                (dropped as f64 / total as f64) * 100.0
+            // Feed the window the raw counter and scale the resulting rate:
+            // exact (no per-sample integer-division quantisation), and the
+            // window's samples stay comparable if `tracks` ever varied.
+            let fps = fps_window.push(time_ms, total_raw) / tracks as f64;
+            let dropped = dropped_raw / tracks;
+            // Ratio of raw counters — scale-invariant, so no normalization.
+            let dropped_perc = if total_raw > 0 {
+                (dropped_raw as f64 / total_raw as f64) * 100.0
             } else {
                 0.0
             };

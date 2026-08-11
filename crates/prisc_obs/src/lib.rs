@@ -10,4 +10,5 @@ pub mod scene;
 pub mod signal;
 pub mod source;
 pub mod video;
+pub mod view;
 pub mod volmeter;

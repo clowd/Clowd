@@ -1,7 +1,8 @@
 /// Commands consumed by the recorder's run loop. Most originate from stdin
-/// (§1.2); `OutputStarted` / `OutputStopped` are injected by the OBS output's
-/// start/stop signal handlers, `SetSpeakerVolume` by the levels thread —
-/// none of those are ever parsed from stdin.
+/// (§1.2); `OutputStarted` / `OutputStopped` / `OutputDeactivated` are
+/// injected by the OBS output's start/stop/deactivate signal handlers,
+/// `SetSpeakerVolume` by the levels thread — none of those are ever parsed
+/// from stdin.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
     Start,
@@ -20,6 +21,11 @@ pub enum Command {
     /// OBS "stop" signal fired with the given stop code (spontaneous or in
     /// response to our own `obs_output_stop`).
     OutputStopped(i64),
+    /// OBS "deactivate" signal fired — the output has fully torn down its
+    /// data capture. For mp4_output this is the earliest point at which the
+    /// file is guaranteed flushed and closed: the "stop" signal fires *before*
+    /// the buffered file serializer drains (see `Recorder::wait_for_flush`).
+    OutputDeactivated,
     /// Levels-thread volume-compensation update: set speaker `idx`'s source
     /// volume. Routed through the run loop so source pointers are only ever
     /// touched by the thread that owns their lifetime.

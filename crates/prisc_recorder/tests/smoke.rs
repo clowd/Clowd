@@ -164,6 +164,158 @@ fn record_three_seconds_and_validate_mp4() {
     validate_mp4(&std::fs::read(&out_mp4).expect("read mp4"));
 }
 
+/// `--multi-track`: screen + webcam video tracks and one audio track per
+/// device must all land in the file as separate streams — the headline case
+/// is 4 (screen, webcam, speaker, mic). Uses the `test` webcam device (a solid
+/// color source) so the test runs on machines without a camera.
+#[test]
+#[ignore]
+fn multi_track_records_four_separate_streams() {
+    let out_dir = std::env::temp_dir().join("obs-express-smoke");
+    std::fs::create_dir_all(&out_dir).unwrap();
+    let out_mp4 = out_dir.join("smoke-multi-track.mp4");
+    let _ = std::fs::remove_file(&out_mp4);
+
+    let exe = env!("CARGO_BIN_EXE_obs-express");
+    let mut child = Command::new(exe)
+        .args(["--region", "0,0,640,480"])
+        .args(["--fps", "30"])
+        .arg("--multi-track")
+        .args(["--webcam", "test"])
+        .args(["--speaker", "default"])
+        .args(["--microphone", "default"])
+        .arg("--pause")
+        .arg("--output")
+        .arg(&out_mp4)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn obs-express");
+
+    let reader = ProtocolReader::new(&mut child);
+    let mut stdin = child.stdin.take().expect("stdin piped");
+
+    reader.wait_for("initialized", Duration::from_secs(30));
+    stdin.write_all(b"start\n").unwrap();
+    stdin.flush().unwrap();
+
+    // The tracks payload must describe every stream before a byte is written.
+    let started = reader.wait_for("started_recording", Duration::from_secs(10));
+    let tracks = &started["tracks"];
+    assert_eq!(tracks["screen"]["index"].as_u64(), Some(0), "{started}");
+    assert_eq!(tracks["webcam"]["index"].as_u64(), Some(1), "{started}");
+    let audio = tracks["audio"].as_array().expect("audio track array");
+    assert_eq!(audio.len(), 2, "expected 2 audio tracks: {started}");
+    assert_eq!(audio[0]["kind"].as_str(), Some("speaker"), "{started}");
+    assert_eq!(audio[1]["kind"].as_str(), Some("microphone"), "{started}");
+
+    let statuses = reader.collect_for("status", Duration::from_millis(3500));
+    assert!(statuses.len() >= 2, "got {} status lines", statuses.len());
+
+    stdin.write_all(b"quit\n").unwrap();
+    stdin.flush().unwrap();
+    let stopped = reader.wait_for("stopped_recording", Duration::from_secs(35));
+    assert_eq!(stopped["code"].as_i64(), Some(0), "stop code: {stopped}");
+    assert_eq!(child.wait().expect("wait for exit").code(), Some(0));
+
+    let data = std::fs::read(&out_mp4).expect("read mp4");
+    validate_mp4(&data);
+    let (video, audio) = count_tracks(&data);
+    assert_eq!(video, 2, "expected 2 video tracks (screen + webcam)");
+    assert_eq!(audio, 2, "expected 2 audio tracks (speaker + microphone)");
+}
+
+/// Single-track (the default): everything is mixed down to one video and one
+/// audio stream, and `--webcam` is refused outright.
+#[test]
+#[ignore]
+fn single_track_records_one_stream_per_media_type() {
+    let out_dir = std::env::temp_dir().join("obs-express-smoke");
+    std::fs::create_dir_all(&out_dir).unwrap();
+    let out_mp4 = out_dir.join("smoke-single-track.mp4");
+    let _ = std::fs::remove_file(&out_mp4);
+
+    let exe = env!("CARGO_BIN_EXE_obs-express");
+    let refused = Command::new(exe)
+        .args(["--region", "0,0,640,480"])
+        .args(["--webcam", "test"])
+        .arg("--output")
+        .arg(&out_mp4)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .expect("spawn obs-express");
+    assert_eq!(refused.code(), Some(2), "--webcam without --multi-track");
+
+    let mut child = Command::new(exe)
+        .args(["--region", "0,0,640,480"])
+        .args(["--fps", "30"])
+        .args(["--speaker", "default"])
+        .args(["--microphone", "default"])
+        .arg("--output")
+        .arg(&out_mp4)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .expect("spawn obs-express");
+
+    let reader = ProtocolReader::new(&mut child);
+    let mut stdin = child.stdin.take().expect("stdin piped");
+
+    let started = reader.wait_for("started_recording", Duration::from_secs(30));
+    assert!(started["tracks"]["webcam"].is_null(), "{started}");
+    let audio = started["tracks"]["audio"]
+        .as_array()
+        .expect("audio track array");
+    assert_eq!(audio.len(), 1, "{started}");
+    assert_eq!(audio[0]["kind"].as_str(), Some("mixed"), "{started}");
+
+    let statuses = reader.collect_for("status", Duration::from_millis(3500));
+    assert!(statuses.len() >= 2, "got {} status lines", statuses.len());
+
+    stdin.write_all(b"quit\n").unwrap();
+    stdin.flush().unwrap();
+    let stopped = reader.wait_for("stopped_recording", Duration::from_secs(35));
+    assert_eq!(stopped["code"].as_i64(), Some(0), "stop code: {stopped}");
+    assert_eq!(child.wait().expect("wait for exit").code(), Some(0));
+
+    let data = std::fs::read(&out_mp4).expect("read mp4");
+    validate_mp4(&data);
+    assert_eq!(count_tracks(&data), (1, 1));
+}
+
+/// Counts (video, audio) tracks: every `moov/trak/mdia/hdlr` whose handler
+/// type is `vide` / `soun`.
+fn count_tracks(data: &[u8]) -> (usize, usize) {
+    let boxes = parse_boxes(data);
+    let moov = boxes
+        .iter()
+        .find(|(t, _)| t == b"moov")
+        .expect("no moov box");
+    let mut video = 0;
+    let mut audio = 0;
+    for (typ, trak) in parse_boxes(moov.1) {
+        if &typ != b"trak" {
+            continue;
+        }
+        let Some((_, mdia)) = parse_boxes(trak).into_iter().find(|(t, _)| t == b"mdia") else {
+            continue;
+        };
+        let Some((_, hdlr)) = parse_boxes(mdia).into_iter().find(|(t, _)| t == b"hdlr") else {
+            continue;
+        };
+        // hdlr payload: 4 version/flags + 4 pre_defined + 4 handler_type.
+        match hdlr.get(8..12) {
+            Some(b"vide") => video += 1,
+            Some(b"soun") => audio += 1,
+            _ => {}
+        }
+    }
+    (video, audio)
+}
+
 /// Minimal top-level MP4 box validation: `ftyp` first, `moov` present, a size
 /// floor, and `moov/mvhd` duration >= 2 s (timescale-normalized).
 ///

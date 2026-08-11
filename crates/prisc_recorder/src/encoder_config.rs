@@ -14,6 +14,17 @@ pub struct EncoderConfig {
 
 pub const X264_ID: &str = "obs_x264";
 
+/// Keyframe interval (seconds) for every video encoder, screen and webcam
+/// alike. The hybrid MP4 output ("mp4_output") flushes a fragment to disk at
+/// each track-0 keyframe, so this is also the crash-resilience cadence: with
+/// the encoder default GOP (x264: 250 frames ≈ 8.3 s @ 30 fps) a hard kill
+/// loses up to a whole GOP and a recording killed before the first fragment
+/// (~9 s) is a zero-byte total loss. 2 s bounds crash loss to a few seconds
+/// and keeps editor seeks (which decode forward from the previous keyframe)
+/// fast. The `keyint_sec` key is honored by x264, NVENC, AMF, QSV and
+/// VideoToolbox.
+pub const KEYINT_SEC: i64 = 2;
+
 /// Picks the video encoder id from the available list. Hardware priority
 /// (Windows): NVENC → AMF → QSV; anything else (or `hw_accel == false`) falls
 /// back to x264. macOS scans for a VideoToolbox H.264 encoder instead.
@@ -80,6 +91,8 @@ fn vt_quality_from_crf(crf: u16) -> i64 {
 pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig) -> ObsData {
     let settings = ObsData::new();
     let crf = config.crf as i64;
+    // Uniform across every encoder we select (see the const's rationale).
+    settings.set_int("keyint_sec", KEYINT_SEC);
     match encoder_id {
         "obs_nvenc_h264_tex" => {
             settings.set_string("rate_control", "CQP");
@@ -142,10 +155,20 @@ pub fn create_video_encoder(
         "Using video encoder '{encoder_id}' (crf/cqp={}, low_cpu={})",
         config.crf, config.low_cpu
     );
-    ObsEncoder::create_video(&encoder_id, "video_encoder", Some(&settings))
+    // The encoder name becomes the mp4 track name (mp4_output writes it into
+    // the track's udta box), so it is user-visible in players.
+    ObsEncoder::create_video(&encoder_id, "Screen", Some(&settings))
 }
 
-pub fn create_audio_encoder(available: &[String]) -> Result<ObsEncoder, ObsError> {
+/// Creates one audio encoder reading libobs audio mixer `mixer_idx` — the
+/// mixer whose sources make up output audio track `mixer_idx` (multi-track
+/// mode); single-track recordings only ever use mixer 0. `name` becomes the
+/// mp4 track name.
+pub fn create_audio_encoder(
+    available: &[String],
+    name: &str,
+    mixer_idx: usize,
+) -> Result<ObsEncoder, ObsError> {
     let settings = ObsData::new();
     settings.set_int("bitrate", 128);
     let id = if available.iter().any(|t| t == "CoreAudio_AAC") {
@@ -153,8 +176,8 @@ pub fn create_audio_encoder(available: &[String]) -> Result<ObsEncoder, ObsError
     } else {
         "ffmpeg_aac"
     };
-    eprintln!("Using audio encoder '{id}'");
-    ObsEncoder::create_audio(id, "audio_encoder", 0, Some(&settings))
+    eprintln!("Using audio encoder '{id}' for track {mixer_idx} ('{name}')");
+    ObsEncoder::create_audio(id, name, mixer_idx, Some(&settings))
 }
 
 #[cfg(test)]

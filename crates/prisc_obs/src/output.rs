@@ -32,8 +32,23 @@ impl ObsOutput {
         unsafe { obs_sys::obs_output_set_video_encoder(self.ptr, encoder.ptr) };
     }
 
-    pub fn set_audio_encoder(&self, encoder: &ObsEncoder, idx: usize) {
-        unsafe { obs_sys::obs_output_set_audio_encoder(self.ptr, encoder.ptr, idx) };
+    /// Assigns (or with `None` clears) the video encoder for track `idx`.
+    /// Only outputs with the `OBS_OUTPUT_MULTI_TRACK_VIDEO` capability honor
+    /// `idx > 0` — on others libobs silently ignores the call.
+    pub fn set_video_encoder2(&self, encoder: Option<&ObsEncoder>, idx: usize) {
+        let enc_ptr = encoder.map_or(ptr::null_mut(), |e| e.ptr);
+        unsafe { obs_sys::obs_output_set_video_encoder2(self.ptr, enc_ptr, idx) };
+    }
+
+    /// Assigns (or with `None` clears) the audio encoder for track `idx`.
+    /// Only outputs with the `OBS_OUTPUT_MULTI_TRACK_AUDIO` capability honor
+    /// `idx > 0` — on others libobs silently ignores the call. The encoder's
+    /// mixer index (fixed at creation) selects which audio mix feeds the
+    /// track; it need not equal `idx`, but keeping them equal is the sane
+    /// mapping.
+    pub fn set_audio_encoder(&self, encoder: Option<&ObsEncoder>, idx: usize) {
+        let enc_ptr = encoder.map_or(ptr::null_mut(), |e| e.ptr);
+        unsafe { obs_sys::obs_output_set_audio_encoder(self.ptr, enc_ptr, idx) };
     }
 
     pub fn start(&self) -> Result<(), ObsError> {

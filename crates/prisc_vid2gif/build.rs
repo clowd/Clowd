@@ -10,23 +10,22 @@ use std::path::{Path, PathBuf};
 /// - macOS: add rpaths so the dylibs resolve from the obs-deps bundle during
 ///   development and from `@executable_path/Frameworks` in the shipped
 ///   bundle (the release staging strips the absolute rpath).
+///
+/// The bundle location comes from ffmpeg-sys (`links = "ffmpeg"`), NOT from a
+/// scan of `.deps` here: that ordering guarantee is the point. ffmpeg-sys
+/// waits for the OBS build to download the bundle and picks the one matching
+/// the target arch; a scan in this script could run first, find nothing, and
+/// silently emit no rpath — leaving a test binary that aborts at startup with
+/// `Library not loaded: @rpath/libavformat.dylib`.
 fn main() {
-    let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let repo_root = manifest_dir
-        .ancestors()
-        .find(|p| p.join("obs-studio").exists())
-        .expect("could not find repo root (no obs-studio dir in ancestors)")
-        .to_path_buf();
-    let deps_root = repo_root.join("obs-studio").join(".deps");
-
     match env::var("CARGO_CFG_TARGET_OS").as_deref() {
-        Ok("windows") => windows(&deps_root),
-        Ok("macos") => macos(&deps_root),
+        Ok("windows") => windows(),
+        Ok("macos") => macos(),
         _ => {}
     }
 }
 
-fn windows(deps_root: &Path) {
+fn windows() {
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     // OUT_DIR = target/{debug,release}/build/vid2gif-<hash>/out
     let profile_dir = out_dir
@@ -35,7 +34,7 @@ fn windows(deps_root: &Path) {
         .expect("could not resolve the cargo profile dir from OUT_DIR")
         .to_path_buf();
 
-    let Some(deps_bin) = find_deps_subdir(deps_root, "bin") else {
+    let Some(deps_bin) = env::var_os("DEP_FFMPEG_DEPS_BIN").map(PathBuf::from) else {
         println!("cargo:warning=vid2gif: obs-deps bundle not found; runtime DLLs not copied");
         return;
     };
@@ -71,24 +70,20 @@ fn windows(deps_root: &Path) {
     }
 }
 
-fn macos(deps_root: &Path) {
-    if let Some(deps_lib) = find_deps_subdir(deps_root, "lib") {
-        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
+fn macos() {
+    match env::var_os("DEP_FFMPEG_DEPS_LIB") {
+        Some(deps_lib) => println!(
+            "cargo:rustc-link-arg=-Wl,-rpath,{}",
+            PathBuf::from(deps_lib).display()
+        ),
+        // Hard error, not a warning: a binary linked without this rpath builds
+        // fine and then aborts the moment it runs.
+        None => panic!(
+            "vid2gif: DEP_FFMPEG_DEPS_LIB not set — ffmpeg-sys did not export the obs-deps \
+             bundle path (is its `links = \"ffmpeg\"` key still present?)"
+        ),
     }
     println!("cargo:rustc-link-arg=-Wl,-rpath,@executable_path/Frameworks");
-}
-
-fn find_deps_subdir(deps_root: &Path, sub: &str) -> Option<PathBuf> {
-    for entry in fs::read_dir(deps_root).ok()?.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if name.starts_with("obs-deps-") && !name.contains("qt6") {
-            let dir = entry.path().join(sub);
-            if dir.exists() {
-                return Some(dir);
-            }
-        }
-    }
-    None
 }
 
 /// Copy `src` to `dst` only when it is newer or a different size, keeping
