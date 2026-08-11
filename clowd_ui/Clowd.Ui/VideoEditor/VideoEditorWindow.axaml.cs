@@ -22,17 +22,25 @@ using Clowd.UI.Services;
 using Clowd.VideoSDK;
 using Clowd.VideoSDK.Playback;
 using Path = System.IO.Path;
+using Project = Clowd.VideoSDK.Model.Project;
 
 namespace Clowd.UI.VideoEditor
 {
     /// <summary>
-    /// The video editor window: in-process FFmpeg preview playback of a recording (screen +
-    /// optional webcam track), a non-destructive <see cref="VideoEditDocument"/> (trim / cuts /
-    /// webcam overlay) persisted as <c>videoedit.json</c> beside the session, and a Render button
-    /// handing the document to <see cref="VideoRenderManager"/>. Opened through
-    /// <see cref="ShowSession"/> from the Recents page, or via the hidden dev arg
-    /// <c>--video-edit file.mp4</c> (no session: persistence disabled, render output lands next
-    /// to the file).
+    /// The video editor window: in-process preview of a recording composed by the SDK
+    /// (<c>CompositionPlayer</c> + <c>FrameComposer</c>, so the preview is the render), a
+    /// non-destructive edit (trim / cuts / webcam overlay) held as a <see cref="VideoEditDocument"/>
+    /// and projected onto a v2 <c>Project</c> by <see cref="EditorProject"/>, persisted as the
+    /// project itself in <c>videoedit.json</c> beside the session, and a Render button handing the
+    /// edit to <see cref="VideoRenderManager"/>. Opened through <see cref="ShowSession"/> from the
+    /// Recents page, or via the hidden dev arg <c>--video-edit file.mp4</c> (no session:
+    /// persistence disabled, render output lands next to the file).
+    ///
+    /// Two time domains meet here. The timeline control, the position readout and the document all
+    /// speak <b>source</b> time — the whole recording, including what the edit removes — while the
+    /// player's transport speaks <b>output timeline</b> time, where the kept segments are back to
+    /// back. <see cref="EditTimeMap"/> converts, and every transport call goes through
+    /// <see cref="SeekToSource"/> / <see cref="CurrentSourcePosition"/> so the two cannot drift.
     /// </summary>
     public partial class VideoEditorWindow : SystemThemedWindow
     {
@@ -48,15 +56,14 @@ namespace Clowd.UI.VideoEditor
         private readonly VideoEditDocument _document = new VideoEditDocument();
         private readonly bool _exitOnClose; // dev mode bypasses the tray lifetime entirely
 
-        private FFmpegVideoPlayer _player;
-        private WriteableBitmapFrameSink _screenSink;
-        private WriteableBitmapFrameSink _webcamSink;
-        private MediaInfo _mediaInfo;
+        private CompositionPlayer _player;
+        private EditorProject _edit;
         private bool _hasWebcamTrack;
         private bool _scrubbing;
         private bool _wasPlayingBeforeScrub;
         private bool _sidebarVisible;
         private bool _syncingShape;
+        private bool _suspendEdits; // applying a loaded edit: no persist, no project rebuild
         private bool _closing;
 
         // videoedit.json persistence: debounced (500ms) on the UI thread, then written by a
@@ -117,10 +124,10 @@ namespace Clowd.UI.VideoEditor
 
             DataContext = this;
 
-            // restore the saved edit before InitializeComponent so the sidebar bindings and the
-            // timeline see the loaded values from their first layout onward.
-            if (_editDocPath != null)
-                VideoEditPersistence.TryLoadInto(_editDocPath, _document);
+            // NB: the saved edit is restored in StartPlaybackAsync, not here — resolving a v2
+            // project (or a v1 trim-end sentinel) back onto the document needs the probed
+            // duration. The document raises change notifications, so the sidebar bindings and the
+            // timeline pick the loaded values up as soon as they land.
 
             InitializeComponent();
 
@@ -301,22 +308,82 @@ namespace Clowd.UI.VideoEditor
 
             ShowStatus("Loading video…");
 
-            _screenSink = new WriteableBitmapFrameSink(preview.ScreenImage);
-            _webcamSink = new WriteableBitmapFrameSink(preview.Overlay.Image);
-
-            _player = new FFmpegVideoPlayer(a => Dispatcher.UIThread.Post(a))
+            // probe first: the project (and the saved edit's resolution against the real duration)
+            // is built from it, and it is what the render path is told about the source.
+            MediaProbeResult probe;
+            try
             {
-                ScreenSink = _screenSink,
-                WebcamSink = _webcamSink,
-            };
+                probe = await Task.Run(() => MediaProbe.ProbeDetailed(_videoPath));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Video editor probe failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "videoeditor.open");
+                ShowStatus("Could not open the video: " + ex.Message);
+                return;
+            }
+
+            if (_closing)
+                return;
+
+            if (probe.VideoStreams == null || probe.VideoStreams.Count == 0)
+            {
+                ShowStatus("This file has no video track to edit.");
+                return;
+            }
+
+            _edit = new EditorProject(_videoPath, probe, _document);
+
+            // now that the duration is known, restore the saved edit (v1 files migrate here) and
+            // build the project it describes.
+            _suspendEdits = true;
+            try
+            {
+                if (_editDocPath != null)
+                    VideoEditPersistence.TryLoadInto(_editDocPath, _document, _edit.DurationMs);
+            }
+            finally
+            {
+                _suspendEdits = false;
+            }
+
+            SyncShapeControls();
+            _edit.Rebuild();
+
+            preview.SetVideo(new Size(_edit.ScreenWidth, _edit.ScreenHeight));
+
+            _hasWebcamTrack = _edit.HasWebcam;
+            preview.SetWebcam(_hasWebcamTrack, _edit.WebcamAspect);
+            preview.SetProject(_edit.Current);
+
+            // the webcam panel (and its toggle) only exists for files that carry a webcam track
+            btnWebcamSidebar.IsEnabled = _hasWebcamTrack;
+            if (!_hasWebcamTrack)
+                SidebarVisible = false;
+
+            timeline.Duration = SourceDuration;
+            timeline.Position = TimeSpan.Zero;
+            txtMediaSummary.Text = String.Create(CultureInfo.InvariantCulture,
+                $"{_edit.ScreenWidth}x{_edit.ScreenHeight} · {FormatTime(SourceDuration)}");
+
+            if (_edit.Current == null)
+            {
+                // the saved edit keeps nothing of the recording — nothing to compose or play.
+                ShowStatus("This edit keeps nothing of the recording. Trim or cut less to preview it.");
+                return;
+            }
+
+            _player = new CompositionPlayer(a => Dispatcher.UIThread.Post(a));
             _player.Volume = volumeSlider.Value;
             _player.PositionChanged += Player_PositionChanged;
             _player.StateChanged += Player_StateChanged;
+            preview.AttachPlayer(_player);
 
-            MediaInfo info;
             try
             {
-                info = await _player.OpenAsync(_videoPath, new VideoOpenOptions { MaxPresentHeight = 1080 });
+                // preview decodes at display resolution, not at output resolution (proxy
+                // behaviour); the composer scales the rest of the way.
+                await _player.OpenAsync(_edit.Current, new VideoOpenOptions { MaxPresentHeight = 1080 });
             }
             catch (Exception ex)
             {
@@ -329,40 +396,37 @@ namespace Clowd.UI.VideoEditor
             if (_closing)
                 return; // closed while opening; Closing already disposed the player
 
-            _mediaInfo = info;
             HideStatus();
-
-            var v0 = info.VideoStreams.Count > 0 ? info.VideoStreams[0] : null;
-            if (v0 != null)
-                preview.SetVideo(new Size(v0.Width, v0.Height));
-
-            var v1 = info.VideoStreams.Count > 1 ? info.VideoStreams[1] : null;
-            _hasWebcamTrack = v1 != null && v1.Width > 0 && v1.Height > 0;
-            preview.SetWebcam(_hasWebcamTrack, _hasWebcamTrack ? (double)v1.Height / v1.Width : 0);
-
-            // the webcam panel (and its toggle) only exists for files that carry a webcam track
-            btnWebcamSidebar.IsEnabled = _hasWebcamTrack;
-            if (!_hasWebcamTrack)
-                SidebarVisible = false;
-
-            timeline.Duration = info.Duration;
-            timeline.Position = TimeSpan.Zero;
-
-            if (v0 != null)
-                txtMediaSummary.Text = String.Create(CultureInfo.InvariantCulture,
-                    $"{v0.Width}x{v0.Height} · {FormatTime(info.Duration)}");
-
-            UpdateSkipRanges();
-            UpdatePositionReadout(_player.Position);
+            UpdatePositionReadout(TimeSpan.Zero);
             UpdatePlayPauseButton();
+        }
+
+        /// <summary>Length of the recording — the span the timeline draws and the domain every
+        /// document value is expressed in. The one duration the preview, the timeline and the
+        /// render args all measure against.</summary>
+        private TimeSpan SourceDuration => TimeSpan.FromMilliseconds(_edit?.DurationMs ?? 0);
+
+        /// <summary>True once a project is open and the transport is usable.</summary>
+        private bool PlayerReady =>
+            _player != null && _player.State is PlayerState.Paused or PlayerState.Playing or PlayerState.Ended;
+
+        /// <summary>The playhead in source (recording) time — the domain the timeline, the readout
+        /// and the document all speak.</summary>
+        private TimeSpan CurrentSourcePosition()
+        {
+            if (_player == null || _edit == null)
+                return TimeSpan.Zero;
+
+            return TimeSpan.FromMilliseconds(
+                _edit.TimeMap.ToSourceMs((long)_player.Position.TotalMilliseconds));
         }
 
         private void Player_PositionChanged(object sender, EventArgs e)
         {
-            if (_player == null)
+            if (_player == null || _edit == null)
                 return;
 
-            var pos = _player.Position;
+            var pos = CurrentSourcePosition();
             if (!_scrubbing)
                 timeline.Position = pos;
             UpdatePositionReadout(pos);
@@ -375,7 +439,7 @@ namespace Clowd.UI.VideoEditor
 
         private void TogglePlayPause()
         {
-            if (_player?.Info == null)
+            if (!PlayerReady)
                 return;
 
             if (_player.State == PlayerState.Playing)
@@ -386,7 +450,7 @@ namespace Clowd.UI.VideoEditor
 
         private void StepFrame(int direction)
         {
-            if (_player?.Info == null)
+            if (!PlayerReady)
                 return;
 
             if (_player.State == PlayerState.Playing)
@@ -395,12 +459,15 @@ namespace Clowd.UI.VideoEditor
             _ = _player.StepFrameAsync(direction);
         }
 
-        private void SeekTo(TimeSpan position)
+        /// <summary>Seeks to a <b>source</b> instant: a position inside a cut (or outside the trim)
+        /// lands on the seam it collapsed to, which is where a render would jump too.</summary>
+        private void SeekToSource(TimeSpan sourcePosition, SeekMode mode = SeekMode.Exact)
         {
-            if (_player?.Info == null)
+            if (!PlayerReady || _edit == null)
                 return;
 
-            _ = _player.SeekAsync(position, SeekMode.Exact);
+            var timeline = _edit.TimeMap.ToTimelineMs((long)sourcePosition.TotalMilliseconds);
+            _ = _player.SeekAsync(TimeSpan.FromMilliseconds(timeline), mode);
         }
 
         private void Timeline_ScrubStarted(object sender, EventArgs e)
@@ -413,7 +480,7 @@ namespace Clowd.UI.VideoEditor
         private void Timeline_Scrubbed(object sender, TimeSpan position)
         {
             UpdatePositionReadout(position);
-            _ = _player?.SeekAsync(position, SeekMode.Fast);
+            SeekToSource(position, SeekMode.Fast);
         }
 
         private void Timeline_ScrubCompleted(object sender, TimeSpan position)
@@ -424,12 +491,13 @@ namespace Clowd.UI.VideoEditor
 
         private async Task FinishScrubAsync(TimeSpan position)
         {
-            if (_player == null)
+            if (!PlayerReady || _edit == null)
                 return;
 
             try
             {
-                await _player.SeekAsync(position, SeekMode.Exact);
+                var timelineMs = _edit.TimeMap.ToTimelineMs((long)position.TotalMilliseconds);
+                await _player.SeekAsync(TimeSpan.FromMilliseconds(timelineMs), SeekMode.Exact);
             }
             catch (Exception ex)
             {
@@ -442,11 +510,11 @@ namespace Clowd.UI.VideoEditor
 
         private void AddCutAtPlayhead()
         {
-            if (_player?.Info == null || _mediaInfo == null)
+            if (!PlayerReady || _edit == null)
                 return;
 
-            var durationMs = (long)_mediaInfo.Duration.TotalMilliseconds;
-            var startMs = (long)_player.Position.TotalMilliseconds;
+            var durationMs = _edit.DurationMs;
+            var startMs = (long)CurrentSourcePosition().TotalMilliseconds;
             var endMs = Math.Min(startMs + DefaultCutLengthMs, durationMs);
             // near the end of the media, grow the cut backwards so it is still a real cut
             if (endMs - startMs < VideoEditDocument.MinSegmentMs)
@@ -455,34 +523,41 @@ namespace Clowd.UI.VideoEditor
             _document.AddCut(startMs, endMs);
         }
 
-        /// <summary>Feeds the player the document's cut regions plus the trim-excluded head/tail
-        /// as skip ranges, so preview playback plays exactly what a render would keep.</summary>
-        private void UpdateSkipRanges()
+        /// <summary>
+        /// Rebuilds the project from the document and hands it to the player. Trim/cut/webcam edits
+        /// keep the same source and streams, so this is an atomic mapping swap — no decoder is
+        /// reopened, however fast the user drags. <paramref name="structural"/> edits (anything
+        /// that moves material along the timeline) additionally re-seek, both to refresh a paused
+        /// frame and to keep the playhead on the same source instant it was on before.
+        /// </summary>
+        private void ApplyEdit(bool structural)
         {
-            if (_player?.Info == null || _mediaInfo == null)
+            if (_edit == null)
                 return;
 
-            var duration = _mediaInfo.Duration;
-            var durationMs = (long)duration.TotalMilliseconds;
-            var ranges = new List<TimeRange>();
+            var sourceMs = (long)CurrentSourcePosition().TotalMilliseconds;
 
-            foreach (var cut in _document.GetCutRanges())
+            // an edit that keeps nothing leaves the last playable project in place; the render
+            // path refuses it with a message of its own.
+            if (!_edit.Rebuild())
+                return;
+
+            preview.SetProject(_edit.Current);
+
+            if (!PlayerReady)
+                return;
+
+            _player.UpdateProject(_edit.Current);
+
+            // Paused: re-seek so the shown frame is refreshed (it may be material the edit just
+            // removed) and the playhead stays on the source instant it was on. Playing: leave it —
+            // the player's own seam detection re-syncs the pipelines against the new mapping on
+            // its next tick, and seeking on every pointer move of a drag would stutter.
+            if (structural && _player.State != PlayerState.Playing)
             {
-                // clamp both ends: a persisted cut can lie past the probed duration (stale/hand-
-                // edited json), and TimeRange throws on end < start. Fully-out-of-range cuts
-                // become empty and SkipRangeSchedule drops them.
-                ranges.Add(new TimeRange(
-                    TimeSpan.FromMilliseconds(Math.Min(cut.StartMs, durationMs)),
-                    TimeSpan.FromMilliseconds(Math.Min(cut.EndMs, durationMs))));
+                var target = _edit.TimeMap.ToTimelineMs(sourceMs);
+                _ = _player.SeekAsync(TimeSpan.FromMilliseconds(target), SeekMode.Exact);
             }
-
-            if (_document.TrimStartMs > 0)
-                ranges.Add(new TimeRange(TimeSpan.Zero, TimeSpan.FromMilliseconds(Math.Min(_document.TrimStartMs, durationMs))));
-
-            if (_document.TrimEndMs > 0 && _document.TrimEndMs < durationMs)
-                ranges.Add(new TimeRange(TimeSpan.FromMilliseconds(_document.TrimEndMs), duration));
-
-            _player.SetSkipRanges(ranges);
         }
 
         // ====================================================================
@@ -525,12 +600,11 @@ namespace Clowd.UI.VideoEditor
                         e.Handled = true;
                     return;
                 case Key.Home:
-                    SeekTo(TimeSpan.Zero);
+                    SeekToSource(TimeSpan.Zero);
                     e.Handled = true;
                     return;
                 case Key.End:
-                    if (_mediaInfo != null)
-                        SeekTo(_mediaInfo.Duration);
+                    SeekToSource(SourceDuration);
                     e.Handled = true;
                     return;
             }
@@ -542,22 +616,28 @@ namespace Clowd.UI.VideoEditor
 
         private void Document_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (_suspendEdits)
+                return;
+
             SchedulePersist();
 
-            if (e.PropertyName is nameof(VideoEditDocument.Cuts)
-                or nameof(VideoEditDocument.TrimStartMs)
-                or nameof(VideoEditDocument.TrimEndMs))
-            {
-                UpdateSkipRanges();
-            }
+            // trim/cut move material along the output timeline: rebuild and re-seek.
+            ApplyEdit(structural: true);
         }
 
         private void Webcam_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
+            if (_suspendEdits)
+                return;
+
             SchedulePersist();
 
             if (e.PropertyName == nameof(WebcamOverlay.Shape))
                 SyncShapeControls();
+
+            // geometry/shape only changes the picture; enabling or disabling the row changes which
+            // streams the project references, which the player handles by rebuilding its pipeline.
+            ApplyEdit(structural: e.PropertyName == nameof(WebcamOverlay.Enabled));
         }
 
         /// <summary>Keeps the shape radios and the corner-radius row in step with the document
@@ -639,7 +719,7 @@ namespace Clowd.UI.VideoEditor
 
         private void SchedulePersist()
         {
-            if (_editDocPath == null)
+            if (_editDocPath == null || _edit == null)
                 return;
 
             _persistDebounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) =>
@@ -655,13 +735,19 @@ namespace Clowd.UI.VideoEditor
         /// background writer so overlay drags can never stall the UI on disk writes.</summary>
         private void EnqueueEditDocumentWrite()
         {
-            if (_editDocPath == null)
+            var project = CurrentProjectForSave();
+            if (project == null)
                 return;
 
-            Interlocked.Exchange(ref _pendingEditJson, VideoEditPersistence.Serialize(_document));
+            Interlocked.Exchange(ref _pendingEditJson, VideoEditPersistence.Serialize(project));
             lock (_editWriteLock)
                 _editWriteTask = _editWriteTask.ContinueWith(_ => WritePendingEditJson(), TaskScheduler.Default);
         }
+
+        /// <summary>The project to persist: the current one, or null when there is nothing to save
+        /// (no session, or the media never opened — an unwritable edit must not truncate the file
+        /// a previous session left behind).</summary>
+        private Project CurrentProjectForSave() => _editDocPath == null ? null : _edit?.Current;
 
         private void WritePendingEditJson()
         {
@@ -682,11 +768,12 @@ namespace Clowd.UI.VideoEditor
 
         private void FlushEditDocument()
         {
-            if (_editDocPath == null)
+            var project = CurrentProjectForSave();
+            if (project == null)
                 return;
 
             _persistDebounce?.Stop();
-            Interlocked.Exchange(ref _pendingEditJson, VideoEditPersistence.Serialize(_document));
+            Interlocked.Exchange(ref _pendingEditJson, VideoEditPersistence.Serialize(project));
 
             Task pendingWrite;
             lock (_editWriteLock)
@@ -722,7 +809,7 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            if (_mediaInfo == null || _mediaInfo.VideoStreams.Count == 0)
+            if (_edit == null)
                 return;
 
             if (_session == null)
@@ -736,20 +823,10 @@ namespace Clowd.UI.VideoEditor
                 TrackRenderSession(created);
         }
 
-        /// <summary>What the render needs to know about the source media, from the probe the
-        /// player already did: duration, screen frame size, webcam stream + size.</summary>
-        private VideoRenderSource BuildRenderSource()
-        {
-            var v0 = _mediaInfo.VideoStreams[0];
-            var v1 = _mediaInfo.VideoStreams.Count > 1 ? _mediaInfo.VideoStreams[1] : null;
-
-            return new VideoRenderSource(
-                (long)_mediaInfo.Duration.TotalMilliseconds,
-                v0.Width, v0.Height,
-                v1?.StreamIndex,
-                v1?.Width ?? 0,
-                v1?.Height ?? 0);
-        }
+        /// <summary>What the render needs to know about the source media: duration, screen frame
+        /// size, webcam stream + size. The same description the project was built from, so the
+        /// rendered overlay rect is the one the preview composed.</summary>
+        private VideoRenderSource BuildRenderSource() => _edit.RenderSource;
 
         /// <summary>Points btnRender's ring at <paramref name="renderSession"/>'s ActiveRender and
         /// keeps it in sync as the render finishes (the same tracking shape as the image editor's
@@ -824,7 +901,7 @@ namespace Clowd.UI.VideoEditor
         /// without creating any Recents entry.</summary>
         private async Task RunDevRenderAsync()
         {
-            var segments = _document.GetKeepSegments((long)_mediaInfo.Duration.TotalMilliseconds);
+            var segments = _document.GetKeepSegments(_edit.DurationMs);
             if (segments.Count == 0)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
@@ -976,12 +1053,13 @@ namespace Clowd.UI.VideoEditor
             // detach the progress tracking.
             UntrackRender();
 
+            // stop composing before the player goes away: a draw operation already queued would
+            // otherwise reach a disposed frame source on the render thread.
+            preview.AttachPlayer(null);
+            preview.SetProject(null);
+
             _player?.Dispose();
             _player = null;
-            _screenSink?.Dispose();
-            _screenSink = null;
-            _webcamSink?.Dispose();
-            _webcamSink = null;
         }
 
         protected override void OnClosed(EventArgs e)
@@ -1011,8 +1089,7 @@ namespace Clowd.UI.VideoEditor
 
         private void UpdatePositionReadout(TimeSpan position)
         {
-            var duration = _mediaInfo?.Duration ?? TimeSpan.Zero;
-            txtPosition.Text = FormatTime(position) + " / " + FormatTime(duration);
+            txtPosition.Text = FormatTime(position) + " / " + FormatTime(SourceDuration);
         }
 
         private void UpdatePlayPauseButton()
