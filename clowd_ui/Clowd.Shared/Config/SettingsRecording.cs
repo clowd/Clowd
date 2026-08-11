@@ -253,6 +253,15 @@ namespace Clowd.Config
             set => Set(ref _microphoneDeviceId, value);
         }
 
+        [Category("Audio")]
+        [DisplayName("Separate audio tracks")]
+        [Description("Write each recorded audio device to its own track in the file, so the video editor can trim and mix speakers and microphone independently. Turn it off to record a single track with everything mixed together.")]
+        public bool SeparateAudioTracks
+        {
+            get => _separateAudioTracks;
+            set => Set(ref _separateAudioTracks, value);
+        }
+
         [Category("Webcam")]
         [DisplayName("Capture webcam")]
         [Description("Record a webcam alongside the screen as a second video track. Nothing is composited into the recording itself — the track is only shown once you open the recording in the video editor, where the overlay can be positioned, shaped or dropped entirely.")]
@@ -332,6 +341,7 @@ namespace Clowd.Config
         private bool _speakerVolumeCompensation = true;
         private bool _captureMicrophone = false;
         private string _microphoneDeviceId = "default";
+        private bool _separateAudioTracks = true;
         private bool _captureWebcam = false;
         private string _webcamDeviceId = "";
         private string _outputDirectory = DefaultOutputDirectory;

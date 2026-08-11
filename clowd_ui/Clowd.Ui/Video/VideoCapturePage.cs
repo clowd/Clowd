@@ -54,6 +54,11 @@ namespace Clowd.UI
         // the camera when the camera is the thing that changed.
         private bool _appliedWebcam;
 
+        // whether the recorder currently running was spawned with --multi-track. The flag picks the
+        // libobs output object, so unlike everything in the settings file it cannot be configured
+        // into an existing process: a change means a respawn.
+        private bool _appliedMultiTrack;
+
         private ObsCapturer _obs;
         // shutdown of a capturer being replaced (failed configure) — awaited before the
         // replacement spawns (both write the same video.mp4).
@@ -183,13 +188,16 @@ namespace Clowd.UI
                 ObsArguments.WriteSettingsFile(_settingsPath, _settings);
                 // the file just written is what this process is about to be built from.
                 _appliedWebcam = IsWebcamCaptured();
+                // …and so is the track layout, which is a command-line argument (the output object
+                // is built once), hence remembered here rather than reconfigured later.
+                _appliedMultiTrack = ObsArguments.UsesMultiTrack(_settings);
 
                 _obs = new ObsCapturer();
                 _obs.CriticalError += OnCriticalError;
                 _obs.StatusReceived += OnStatusReceived;
                 _obs.LevelsReceived += OnLevelsReceived;
 
-                await _obs.InitializeAsync(ObsArguments.Build(_region, _outputMp4, _settingsPath), _binaryPath);
+                await _obs.InitializeAsync(ObsArguments.Build(_region, _outputMp4, _settingsPath, _settings), _binaryPath);
             }
             finally
             {
@@ -530,7 +538,11 @@ namespace Clowd.UI
                 // muted camera; the recorder has to build or drop the source, so it falls through
                 // to the configure path below like any other pipeline setting.
                 ApplyCaptureMutes();
-                return;
+
+                // …and the toggles ALSO drive the multi-track spawn decision (an enabled device is
+                // what earns a track), so fall through: ApplySettingsChange respawns the recorder
+                // when UsesMultiTrack changed — ticking the mic during WAIT must actually get it
+                // its own track — and is an acked no-op configure when the layout is unchanged.
             }
 
             if (!ReachesRecorder(e.PropertyName))
@@ -564,6 +576,13 @@ namespace Clowd.UI
             // track-1 encoder, obs_view mix) when it changes — so a change to either must configure.
             nameof(SettingsRecording.CaptureWebcam) => true,
             nameof(SettingsRecording.WebcamDeviceId) => true,
+            // not a settings-file key at all — it picks the recorder's --multi-track argument, which
+            // ApplySettingsChange turns into a respawn.
+            nameof(SettingsRecording.SeparateAudioTracks) => true,
+            // applied as live mutes above, but ALSO part of the --multi-track decision (only an
+            // enabled device earns a track), so they must reach ApplySettingsChange too.
+            nameof(SettingsRecording.CaptureSpeaker) => true,
+            nameof(SettingsRecording.CaptureMicrophone) => true,
             _ => true,
         };
 
@@ -594,6 +613,15 @@ namespace Clowd.UI
                 {
                     _configurePending = false;
                     var obs = _obs;
+
+                    // the track layout is a command-line argument, so a configure could not change
+                    // it — and the recorder refuses a webcam a single-track process cannot carry.
+                    // Replace the process instead, which rewrites the settings file anyway.
+                    if (ObsArguments.UsesMultiTrack(_settings) != _appliedMultiTrack)
+                    {
+                        await RespawnCapturerAsync();
+                        return;
+                    }
 
                     // what this pass is asking the recorder to build, remembered across the await so
                     // a rejection can be blamed on the webcam only when the webcam is what changed.
@@ -903,7 +931,27 @@ namespace Clowd.UI
             session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
             session.OriginalBounds = _region;
             session.WebcamTrack = ResolveWebcamTrack();
+            session.AudioTracks = ResolveAudioTracks();
             return session;
+        }
+
+        /// <summary>
+        /// What the recorder said each audio track of the recording carries, or null when it said
+        /// nothing (an older recorder, or a recording that never started). There is deliberately no
+        /// probe fallback: the file tells you how many audio streams it has, which the editor reads
+        /// for itself, but not which one is the microphone — and that is all this is for.
+        /// </summary>
+        private SessionAudioTrack[] ResolveAudioTracks()
+        {
+            var reported = _obs?.LastTracks?.Audio;
+            if (reported == null || reported.Count == 0)
+                return null;
+
+            var tracks = new SessionAudioTrack[reported.Count];
+            for (var i = 0; i < tracks.Length; i++)
+                tracks[i] = new SessionAudioTrack { Index = reported[i].Index, Kind = reported[i].Kind };
+
+            return tracks;
         }
 
         /// <summary>

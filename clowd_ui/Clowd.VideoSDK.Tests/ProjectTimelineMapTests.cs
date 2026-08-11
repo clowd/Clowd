@@ -42,7 +42,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         private static Item AddMedia(Project project, Track track, long tlStart, long duration,
-            long srcIn, int streamIndex = 0, double volume = 1.0)
+            long srcIn, int streamIndex = 0)
         {
             var item = new Item
             {
@@ -51,7 +51,6 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = tlStart,
                 DurationTicks = duration,
                 Content = new MediaContent { SourceId = SourceId, StreamIndex = streamIndex, SourceInTicks = srcIn },
-                Volume = volume,
             };
             project.Items.Add(item);
             return item;
@@ -129,36 +128,32 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Hidden_video_and_muted_audio_tracks_are_excluded()
+        public void Hidden_video_tracks_are_excluded()
         {
             var project = NewProject();
             var hidden = AddTrack(project, TrackKind.Video, order: 0, hidden: true);
             AddMedia(project, hidden, 0, Second, 0);
-            var muted = AddTrack(project, TrackKind.Audio, order: 1, muted: true);
-            AddMedia(project, muted, 0, Second, 0, streamIndex: 1);
 
             var map = ProjectTimelineMap.Build(project);
             Assert.Empty(map.VideoStreams);
             Assert.Null(map.PrimaryVideo);
-            Assert.Null(map.AudioStream);
-            Assert.Null(map.AudioMap);
         }
 
         [Fact]
-        public void First_audible_audio_stream_is_selected_with_item_volume()
+        public void Audio_tracks_contribute_duration_only()
         {
+            // Audio is mixed in timeline time by AudioMixWorker — the map never sees it, but an
+            // audio item running past the last video frame still stretches the timeline.
             var project = NewProject();
             var video = AddTrack(project, TrackKind.Video, order: 0);
-            AddMedia(project, video, 0, 2 * Second, 0);
+            AddMedia(project, video, 0, Second, 0);
             var audio = AddTrack(project, TrackKind.Audio, order: 1);
-            AddMedia(project, audio, 0, Second, 0, streamIndex: 1, volume: 0.25);
-            AddMedia(project, audio, Second, Second, Second, streamIndex: 1, volume: 0.75);
+            AddMedia(project, audio, 0, 3 * Second, 0, streamIndex: 1);
 
             var map = ProjectTimelineMap.Build(project);
-            Assert.Equal((SourceId, 1), map.AudioStream);
-            Assert.Equal(0.25, map.AudioMap.VolumeAtTimeline(Second / 2));
-            Assert.Equal(0.75, map.AudioMap.VolumeAtTimeline(Second + Second / 2));
-            Assert.Equal(1.0, map.AudioMap.VolumeAtTimeline(3 * Second)); // outside → unity
+            Assert.Single(map.VideoStreams);
+            Assert.Equal((SourceId, 0), map.PrimaryVideo);
+            Assert.Equal(3 * Second, map.DurationTicks);
         }
     }
 }

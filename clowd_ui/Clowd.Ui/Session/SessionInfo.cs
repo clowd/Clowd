@@ -44,6 +44,23 @@ namespace Clowd
         public int Height { get; set; }
     }
 
+    /// <summary>
+    /// One audio track inside a recording's mp4, as the recorder reported it. The file says how many
+    /// audio streams it carries but never what they are, so this is the only place the editor can
+    /// learn that stream 2 is the microphone and stream 3 the system mix — it names the rows, and
+    /// nothing more. Absent (or empty) on recordings made before separate audio tracks existed, or
+    /// by a recorder too old to report them.
+    /// </summary>
+    public sealed record SessionAudioTrack
+    {
+        /// <summary>Index among the mp4's audio streams (0 = the first audio stream).</summary>
+        public int Index { get; set; }
+
+        /// <summary>The recorder's own word for what fed the track: "speaker", "microphone", or
+        /// "mixed" (one track carrying every device). Null when it did not say.</summary>
+        public string Kind { get; set; }
+    }
+
     public class SessionInfo : FileSyncObject
     {
         public SessionInfo(string file) : base(file)
@@ -181,6 +198,15 @@ namespace Clowd
         // a track with no dimensions is not one anything can lay out.
         [JsonIgnore]
         public bool HasWebcamTrack => WebcamTrack != null && WebcamTrack.Width > 0 && WebcamTrack.Height > 0;
+
+        // the recording's audio tracks as the recorder described them, written once when the session
+        // is created (like WebcamTrack). Null on anything it did not report; the video editor still
+        // builds a row per audio stream it probes, and uses these only to name them.
+        public SessionAudioTrack[] AudioTracks
+        {
+            get => Get<SessionAudioTrack[]>();
+            set => Set(value);
+        }
 
         [JsonIgnore] public bool IsVideo => String.Equals(ContentKind, "video", StringComparison.OrdinalIgnoreCase);
 

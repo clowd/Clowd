@@ -180,8 +180,12 @@ namespace Clowd.VideoRender
             {
                 using var document = JsonDocument.Parse(text,
                     new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
+                // JSON lookups are ordinal, and the two file shapes spell it differently: the v1
+                // args file is a snake_case wire contract, a v2 file is the project itself, whose
+                // properties are PascalCase.
                 if (document.RootElement.ValueKind != JsonValueKind.Object ||
-                    !document.RootElement.TryGetProperty("version", out var version) ||
+                    (!document.RootElement.TryGetProperty("version", out var version) &&
+                     !document.RootElement.TryGetProperty("Version", out version)) ||
                     !version.TryGetInt32(out var value))
                     throw new InvalidOperationException("args file has no numeric \"version\" property");
 

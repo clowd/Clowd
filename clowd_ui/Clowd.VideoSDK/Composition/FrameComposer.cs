@@ -57,6 +57,12 @@ namespace Clowd.VideoSDK.Composition
                 return byOrder != 0 ? byOrder : a.Id.CompareTo(b.Id);
             });
 
+            // TextContent.Size is in *output* pixels; composing on a differently-sized canvas (the
+            // preview's letterboxed rect) must scale the font like every other content rule scales
+            // its geometry, or text would be the one item drawn at a window-dependent size. The
+            // factor is exactly 1.0 in the render (canvas == output).
+            double textScale = TextScaleOf(project, canvasHeight);
+
             foreach (var track in tracks)
             {
                 foreach (var item in project.Items)
@@ -65,13 +71,18 @@ namespace Clowd.VideoSDK.Composition
                         continue;
                     if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
                         continue;
-                    ComposeItem(item, timeTicks, frames, target, canvasWidth, canvasHeight);
+                    ComposeItem(item, timeTicks, frames, target, canvasWidth, canvasHeight, textScale);
                 }
             }
         }
 
+        /// <summary>Canvas-height / output-height: what one output pixel of font size measures on
+        /// this canvas (1.0 when composing at output resolution, or when the output is unknown).</summary>
+        private static double TextScaleOf(Project project, double canvasHeight) =>
+            project?.Output is { HeightPx: > 0 } output ? canvasHeight / output.HeightPx : 1.0;
+
         private static void ComposeItem(Item item, long timeTicks, IFrameSource frames,
-            SKCanvas target, int canvasWidth, int canvasHeight)
+            SKCanvas target, int canvasWidth, int canvasHeight, double textScale)
         {
             var transform = item.Transform ?? new Transform();
             var fx = TransitionMath.Evaluate(item, timeTicks);
@@ -110,7 +121,7 @@ namespace Clowd.VideoSDK.Composition
                     break;
 
                 case TextContent text:
-                    DrawText(target, text, transform, fx, opacity, canvasWidth, canvasHeight);
+                    DrawText(target, text, transform, fx, opacity, canvasWidth, canvasHeight, textScale);
                     break;
             }
         }
@@ -203,30 +214,61 @@ namespace Clowd.VideoSDK.Composition
 
         // -------------------------------------------------------------------------------- text
 
+        /// <summary>
+        /// The natural (unscaled-by-<see cref="Transform.Scale"/>) size of a text card's block on a
+        /// canvas of the given height, in canvas pixels — the very measurement
+        /// <see cref="DrawText"/> sizes its dest rect from, exposed so the editor's transform gizmo
+        /// can put a rectangle on drawn text without re-deriving it from another text stack
+        /// (Avalonia's own measurement drifts from Skia's by whole pixels).
+        ///
+        /// <see cref="TextContent.Size"/> is in <b>output</b> pixels, so the block scales by
+        /// <c>canvasHeight / outputHeightPx</c> exactly as <see cref="DrawText"/> scales the font;
+        /// a non-positive <paramref name="outputHeightPx"/> measures at output resolution.
+        /// <see cref="Transform.Scale"/> multiplies the block, so the caller applies the scale
+        /// itself. Returns (0, 0) for text that draws nothing.
+        /// </summary>
+        public static (double Width, double Height) MeasureText(TextContent text,
+            double canvasHeight, double outputHeightPx) =>
+            MeasureTextScaled(text, outputHeightPx > 0 ? canvasHeight / outputHeightPx : 1.0);
+
+        /// <summary>Measures at output resolution (canvas height == output height).</summary>
+        public static (double Width, double Height) MeasureText(TextContent text) =>
+            MeasureTextScaled(text, 1.0);
+
+        private static (double Width, double Height) MeasureTextScaled(TextContent text, double textScale)
+        {
+            if (text == null || string.IsNullOrEmpty(text.Text))
+                return (0, 0);
+
+            using var typeface = CreateTypeface(text);
+            using var font = new SKFont(typeface, (float)(FontSizeOf(text) * textScale)) { Subpixel = true };
+            var block = LayoutText(text.Text, font);
+            return (block.Width, block.Height);
+        }
+
         private static void DrawText(SKCanvas target, TextContent text, Transform transform,
-            ItemEffects fx, double opacity, int canvasWidth, int canvasHeight)
+            ItemEffects fx, double opacity, int canvasWidth, int canvasHeight, double textScale)
         {
             if (string.IsNullOrEmpty(text.Text))
                 return;
 
-            float size = text.Size > 0 ? (float)text.Size : 32f;
-            using var typeface = text.Font != null
-                ? SKTypeface.FromFamilyName(text.Font)
-                : SKTypeface.CreateDefault();
-            using var font = new SKFont(typeface, size) { Subpixel = true };
+            using var typeface = CreateTypeface(text);
+            using var font = new SKFont(typeface, (float)(FontSizeOf(text) * textScale)) { Subpixel = true };
 
-            string[] lines = text.Text.Split('\n');
-            float blockW = 0;
-            foreach (var line in lines)
-                blockW = Math.Max(blockW, font.MeasureText(line));
-            float lineHeight = font.Spacing;
-            float blockH = lines.Length * lineHeight;
+            // the same layout MeasureText hands the editor — the gizmo's rect cannot drift from the
+            // drawn one because there is only one measurement.
+            var block = LayoutText(text.Text, font);
+            string[] lines = block.Lines;
+            float blockW = block.Width;
+            float lineHeight = block.LineHeight;
+            float blockH = block.Height;
             if (blockW <= 0 || blockH <= 0)
                 return;
 
-            // Text sizes in output-canvas pixels (TextContent.Size), so unlike picture content
-            // Scale here multiplies the natural block size rather than mapping to a canvas-width
-            // fraction — Scale 1 draws the text at its font size.
+            // Text sizes in output pixels (TextContent.Size, mapped onto this canvas by textScale
+            // above), so unlike picture content Scale here multiplies the natural block size
+            // rather than mapping to a canvas-width fraction — Scale 1 draws the text at its
+            // font size.
             double destW = blockW * transform.Scale;
             double destH = blockH * transform.Scale;
 
@@ -271,6 +313,41 @@ namespace Clowd.VideoSDK.Composition
             {
                 target.RestoreToCount(save);
             }
+        }
+
+        private static float FontSizeOf(TextContent text) => text.Size > 0 ? (float)text.Size : 32f;
+
+        private static SKTypeface CreateTypeface(TextContent text) =>
+            text.Font != null ? SKTypeface.FromFamilyName(text.Font) : SKTypeface.CreateDefault();
+
+        /// <summary>One measured text block: the lines, the widest line's advance width, and the
+        /// line pitch (<see cref="SKFont.Spacing"/>, which includes the font's leading — the block
+        /// is deliberately taller than the ink).</summary>
+        private readonly struct TextBlock
+        {
+            public TextBlock(string[] lines, float width, float lineHeight)
+            {
+                Lines = lines;
+                Width = width;
+                LineHeight = lineHeight;
+            }
+
+            public string[] Lines { get; }
+
+            public float Width { get; }
+
+            public float LineHeight { get; }
+
+            public float Height => Lines.Length * LineHeight;
+        }
+
+        private static TextBlock LayoutText(string text, SKFont font)
+        {
+            string[] lines = text.Split('\n');
+            float width = 0;
+            foreach (var line in lines)
+                width = Math.Max(width, font.MeasureText(line));
+            return new TextBlock(lines, width, font.Spacing);
         }
 
         // ---------------------------------------------------------------------------- geometry

@@ -81,16 +81,75 @@ namespace Clowd.UI
         /// surfaced as a Clowd setting, but the file must carry every field.</summary>
         private const string TrackerColor = "255,0,0";
 
-        public static IReadOnlyList<string> Build(ScreenRect region, string outputMp4, string settingsPath)
+        /// <summary>Recorder flag selecting the hybrid mp4 output (<c>mp4_output</c>), which writes
+        /// one track per stream: video track 0 = screen, video track 1 = webcam, one audio track per
+        /// configured device (speakers first). Without it the single-track ffmpeg muxer writes one
+        /// video track and mixes every audio device into one.</summary>
+        private const string MultiTrackArg = "--multi-track";
+
+        /// <summary>libobs carries at most six audio tracks (its mixer/encoder limit), and the
+        /// recorder refuses to start when <see cref="MultiTrackArg"/> is given with more devices
+        /// than that. Clowd lists at most one speaker and one microphone, so this is a guard, not a
+        /// case that arises today.</summary>
+        private const int MaxAudioTracks = 6;
+
+        public static IReadOnlyList<string> Build(ScreenRect region, string outputMp4, string settingsPath,
+            SettingsRecording settings)
         {
-            return new List<string>
+            var args = new List<string>
             {
                 "--region", FormattableString.Invariant($"{region.X},{region.Y},{region.Width},{region.Height}"),
                 "--output", outputMp4,
                 "--settings", settingsPath,
                 "--pause",
             };
+
+            // …and the one setting that cannot live in the settings file: the track layout picks the
+            // libobs output object itself, which is built once when the process starts, so the
+            // recorder only accepts it on the command line. A change to it therefore costs a respawn
+            // (see VideoCapturePage), unlike every tunable in WriteSettingsFile.
+            if (UsesMultiTrack(settings))
+                args.Add(MultiTrackArg);
+
+            return args;
         }
+
+        /// <summary>
+        /// Whether this recording is written as one track per stream. Two things ask for it:
+        /// <list type="bullet">
+        /// <item>the user's <see cref="SettingsRecording.SeparateAudioTracks"/> preference, which
+        /// only means anything when the user has an audio device <i>enabled</i> — the recorder
+        /// plans one track per configured device regardless of mute state, so counting the ids
+        /// alone would give every stock install (ids default to "default", toggles default to off)
+        /// a file full of confidently-labelled silent tracks, silent rows in the editor, and a
+        /// waveform pass per silent stream;</item>
+        /// <item>a webcam, unconditionally — it is a second video track, which the single-track
+        /// muxer cannot carry at all, so the recorder rejects a <c>webcam_device</c> without this
+        /// flag rather than dropping the camera.</item>
+        /// </list>
+        /// </summary>
+        internal static bool UsesMultiTrack(SettingsRecording settings)
+        {
+            if (settings == null)
+                return false;
+
+            // the same condition WriteSettingsFile uses to emit a non-empty webcam_device.
+            if (settings.CaptureWebcam && !String.IsNullOrEmpty(settings.WebcamDeviceId))
+                return true;
+
+            var devices = AudioDeviceCount(settings);
+            return settings.SeparateAudioTracks && devices >= 1 && devices <= MaxAudioTracks;
+        }
+
+        /// <summary>The audio devices the user actually asked to record. The settings file still
+        /// lists muted devices (so a live unmute stays possible — see
+        /// <see cref="WriteSettingsFile"/>), but the track layout is a spawn-time choice and should
+        /// reflect the capture toggles: a device that is configured yet off must not earn the file
+        /// a permanent silent track. VideoCapturePage routes toggle changes through the configure
+        /// path, which respawns the recorder when this flips <see cref="UsesMultiTrack"/>.</summary>
+        private static int AudioDeviceCount(SettingsRecording settings)
+            => (settings.CaptureSpeaker ? DeviceList(settings.SpeakerDeviceId).Length : 0)
+             + (settings.CaptureMicrophone ? DeviceList(settings.MicrophoneDeviceId).Length : 0);
 
         /// <summary>
         /// Writes the settings file at <paramref name="path"/> in full. Must run before the

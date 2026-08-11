@@ -7,6 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Clowd.VideoSDK;
 using Clowd.VideoSDK.Model;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI.VideoEditor
 {
@@ -52,245 +53,274 @@ namespace Clowd.UI.VideoEditor
     { }
 
     /// <summary>
-    /// Reads and writes <c>videoedit.json</c>. The file is the v2 <see cref="Project"/> itself
-    /// (<c>ProjectJsonContext</c>) — the same document the compositor plays and the renderer will
-    /// take — and version 1 (the flat trim/cut/webcam DTO) is migrated <b>one way</b> on load: its
-    /// values go through <see cref="VideoEditDocument"/>'s own setters and the next save writes the
-    /// project the editor built from them.
+    /// Reads <c>videoedit.json</c>. The file is the v2 <see cref="Project"/> itself
+    /// (<c>ProjectJsonContext</c>) — the same document the compositor plays and the renderer
+    /// takes — and version 1 (the flat trim/cut/webcam DTO) is migrated <b>one way</b> on load:
+    /// its values go through <see cref="VideoEditDocument"/>'s own math and the next save writes
+    /// the project built from them. Saving is the session's business (a bare
+    /// <c>Project.ToJson</c> through <c>EditorAutosave</c>); this class is just the way in.
     ///
-    /// The project is the authority on what is played and rendered, but it is a <i>lossy</i> view
-    /// of the edit surface: it carries only the keep segments, so a cut the trim range currently
-    /// excludes leaves no gap between two items and cannot be read back. That is why the file also
-    /// carries a small <see cref="EditorStateProperty"/> block as a sibling of the project's own
-    /// properties (<see cref="EditorState"/>): the trim range and the unclamped cut list, so
-    /// widening the trim after a reload restores the cuts instead of silently bringing the
-    /// cut-out material back. The block is advisory — a file without one loads exactly as before,
-    /// and one that disagrees with the project's own keep segments is ignored.
-    ///
-    /// The editor window owns the write scheduling (debounced latest-wins background writes,
-    /// synchronous flush on close — the graphics.json pattern); this class is just the format.
+    /// Files written by the retired single-row editor carry a legacy <c>EditorState</c> sibling
+    /// block beside the project's own properties; it is not part of the model and deserialization
+    /// reads straight past it.
     /// </summary>
     internal static class VideoEditPersistence
     {
         /// <summary>File name, stored beside session.json in the session directory.</summary>
         public const string FileName = "videoedit.json";
 
-        /// <summary>Name of the editor-state block, a sibling of the project's own properties.
-        /// Deliberately not a <see cref="Project"/> member: the compositor and the render tool read
-        /// this file as a plain project and ignore it.</summary>
-        public const string EditorStateProperty = "EditorState";
+        private const long TicksPerMs = TimeSpan.TicksPerMillisecond;
 
-        /// <summary>Version of the editor-state block; a block from the future is skipped rather
-        /// than half-read (the project alone still describes the edit).</summary>
-        private const int EditorStateVersion = 1;
-
-        /// <summary>Serializes the project to UTF-8 JSON bytes (UI thread — reads live values),
-        /// with the editor-state block of the document it was built from when there is one (see
-        /// <see cref="EditorProject.StateOf"/>).</summary>
-        public static byte[] Serialize(Project project)
+        /// <summary>
+        /// The project to edit for <paramref name="videoPath"/>: the saved edit when the file holds
+        /// a usable one, else the whole recording as an identity project. This is the multi-track
+        /// editor's way in — it hands the result to an <c>EditorSession</c> and never sees a
+        /// <see cref="VideoEditDocument"/> again.
+        ///
+        /// <list type="bullet">
+        /// <item>A <b>v2</b> file <i>is</i> the project: it is deserialized as it stands (the
+        /// legacy <c>EditorState</c> block is not a <see cref="Project"/> member, so it is
+        /// skipped), then the recording's own source is pointed back at
+        /// <paramref name="videoPath"/> — session directories get moved and copied, and the file
+        /// the caller opened is by definition the recording the edit describes. Imported media
+        /// keeps the path it was imported from.</item>
+        /// <item>A <b>v1</b> file goes through the same <see cref="VideoEditDocument"/> math it
+        /// always did and is rebuilt as a project, keep segments and pixel-rounded webcam placement
+        /// included, so a migrated edit composes exactly as it used to render — but now with one
+        /// row per probed audio stream rather than the single one v1 knew about.</item>
+        /// <item>Anything else — no file, a corrupt one, one from the future — starts a fresh edit
+        /// of the whole recording. The recording is the authority; the edit is convenience.</item>
+        /// </list>
+        /// </summary>
+        /// <param name="editJsonPath">The <c>videoedit.json</c> beside the recording; may be null
+        /// (the dev harness opens a file with no session directory to save into).</param>
+        /// <param name="videoPath">The recording being edited.</param>
+        /// <param name="probe">Its probe — the output canvas, the streams and the duration.</param>
+        /// <param name="audioTrackNames">Optional row names for the recording's audio streams,
+        /// index-aligned (see <see cref="AudioTrackLabels"/>): the recorder knows which stream is the
+        /// microphone, the probe does not. Decoration only — the probe still decides which rows exist
+        /// — and it applies to a project being built, never to a saved one (which carries the names
+        /// it was built with, and whatever the user renamed them to).</param>
+        public static Project LoadOrCreate(string editJsonPath, string videoPath, MediaProbeResult probe,
+            IReadOnlyList<string> audioTrackNames = null)
         {
-            ArgumentNullException.ThrowIfNull(project);
+            ArgumentNullException.ThrowIfNull(probe);
 
-            var json = project.ToJson();
-            var state = EditorProject.StateOf(project);
-            if (state == null)
-                return Encoding.UTF8.GetBytes(json);
-
-            return WriteWithEditorState(json, state);
-        }
-
-        /// <summary>Re-emits the project's JSON with the editor-state block appended as a sibling
-        /// property. Written by hand rather than through a DTO so the project's own JSON is copied
-        /// through verbatim, whatever the model gains later.</summary>
-        private static byte[] WriteWithEditorState(string projectJson, EditorState state)
-        {
-            using var doc = JsonDocument.Parse(projectJson);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
-                return Encoding.UTF8.GetBytes(projectJson);
-
-            using var stream = new MemoryStream();
-            using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
-            {
-                writer.WriteStartObject();
-
-                foreach (var property in doc.RootElement.EnumerateObject())
-                {
-                    if (String.Equals(property.Name, EditorStateProperty, StringComparison.Ordinal))
-                        continue; // ours, rewritten below
-                    property.WriteTo(writer);
-                }
-
-                writer.WriteStartObject(EditorStateProperty);
-                writer.WriteNumber("Version", EditorStateVersion);
-                writer.WriteNumber("TrimStartMs", state.TrimStartMs);
-                writer.WriteNumber("TrimEndMs", state.TrimEndMs);
-                writer.WriteStartArray("Cuts");
-                foreach (var cut in state.Cuts ?? (IReadOnlyList<CutRegion>)Array.Empty<CutRegion>())
-                {
-                    writer.WriteStartObject();
-                    writer.WriteNumber("StartMs", cut.StartMs);
-                    writer.WriteNumber("EndMs", cut.EndMs);
-                    writer.WriteEndObject();
-                }
-
-                writer.WriteEndArray();
-                writer.WriteEndObject();
-
-                writer.WriteEndObject();
-            }
-
-            return stream.ToArray();
+            return TryLoadProject(editJsonPath, videoPath, probe, audioTrackNames)
+                   ?? BuildFromDocument(FreshDocument(), videoPath, probe, audioTrackNames);
         }
 
         /// <summary>
-        /// Loads <paramref name="path"/> into <paramref name="document"/>, migrating a v1 file on
-        /// the way. Best-effort: a missing, corrupt or future-versioned file leaves the document
-        /// untouched (a fresh edit) and returns false — the recording itself is the authority, the
-        /// edit is only convenience. Values pass through the document's own setters, so anything
-        /// out of range in the file is clamped exactly as a live edit would be.
+        /// The document a <b>fresh</b> edit starts from: the whole recording, with the webcam row
+        /// showing. v1 defaulted the overlay off because the single-bar editor had nowhere to put a
+        /// camera except on top of the screen, and the user had to opt in; the multi-track editor
+        /// has a row for it, and a recording that carries a camera stream was made with the camera
+        /// on purpose — opening it invisible reads as a lost track. The row's eye toggle still hides
+        /// it, and a <b>migrated v1 file</b> is unaffected: it goes through
+        /// <see cref="LoadLegacy"/>, which sets <c>Enabled</c> from the file, so an edit that said
+        /// the overlay was off still opens with the row hidden.
         /// </summary>
-        /// <param name="sourceDurationMs">The probed duration of the recording, needed to resolve
-        /// a v2 project's trailing trim back onto the document's "to the end" sentinel.</param>
-        public static bool TryLoadInto(string path, VideoEditDocument document, long sourceDurationMs)
+        private static VideoEditDocument FreshDocument() =>
+            new VideoEditDocument { Webcam = { Enabled = true } };
+
+        /// <summary>The saved project, or null when there is nothing loadable — best-effort by
+        /// design: a broken edit file must cost the edit, never the recording.</summary>
+        private static Project TryLoadProject(string path, string videoPath, MediaProbeResult probe,
+            IReadOnlyList<string> audioTrackNames)
         {
             try
             {
                 if (String.IsNullOrEmpty(path) || !File.Exists(path))
-                    return false;
+                    return null;
 
                 var bytes = File.ReadAllBytes(path);
                 var version = JsonSerializer.Deserialize(bytes, VideoEditJsonContext.Default.VideoEditVersionDto);
 
                 return version?.Version switch
                 {
-                    VideoEditDocumentDto.CurrentVersion => LoadLegacy(bytes, document),
-                    Project.CurrentVersion => LoadProject(bytes, document, sourceDurationMs),
-                    _ => false,
+                    VideoEditDocumentDto.CurrentVersion => MigrateLegacy(bytes, videoPath, probe, audioTrackNames),
+                    Project.CurrentVersion => LoadSaved(bytes, videoPath),
+                    _ => null,
                 };
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("Failed to load videoedit.json: " + ex.Message);
-                SentryConfig.CaptureHandled(ex, "videoeditor.load-doc");
-                return false;
+                SentryConfig.CaptureHandled(ex, "videoeditor.load-project");
+                return null;
             }
         }
 
-        private static bool LoadProject(byte[] bytes, VideoEditDocument document, long sourceDurationMs)
+        private static Project LoadSaved(byte[] bytes, string videoPath)
         {
             var project = Project.FromJson(Encoding.UTF8.GetString(bytes));
             if (project == null)
-                return false;
+                return null;
 
-            EditorProject.ApplyToDocument(project, document, sourceDurationMs);
+            project.Normalize();
+            ReconcilePrimaryPath(project, videoPath);
+            return project;
+        }
 
-            try
-            {
-                ApplyEditorState(bytes, document, sourceDurationMs);
-            }
-            catch (Exception ex)
-            {
-                // the project is the authority; a broken sidecar block must never cost the edit.
-                Debug.WriteLine("Ignoring the videoedit.json editor block: " + ex.Message);
-            }
-
-            return true;
+        private static Project MigrateLegacy(byte[] bytes, string videoPath, MediaProbeResult probe,
+            IReadOnlyList<string> audioTrackNames)
+        {
+            var document = new VideoEditDocument();
+            return LoadLegacy(bytes, document) ? BuildFromDocument(document, videoPath, probe, audioTrackNames) : null;
         }
 
         /// <summary>
-        /// Layers the editor-state block over the document the project just produced: the trim
-        /// range as the user set it and the full, unclamped cut list — including cuts the current
-        /// trim excludes, which the project's keep segments cannot express.
+        /// Builds the project a document describes over the probed recording. Also the fresh-edit
+        /// path, where the document is <see cref="FreshDocument"/> — untrimmed, uncut, every row
+        /// the recording carries visible.
         ///
-        /// Applied only when it agrees with the project: the block must reproduce exactly the keep
-        /// segments the project describes, or it is discarded and the project-derived edit kept.
-        /// So a hand-edited (or stale) block can add back detail the project cannot carry, but can
-        /// never change what is played or rendered.
+        /// An edit that keeps nothing yields a project with rows and no items rather than a
+        /// failure: the session treats an empty project as legal (and undoable), and it is the
+        /// window that refuses to hand one to the player or the renderer.
         /// </summary>
-        private static void ApplyEditorState(byte[] bytes, VideoEditDocument document, long sourceDurationMs)
+        private static Project BuildFromDocument(VideoEditDocument document, string videoPath,
+            MediaProbeResult probe, IReadOnlyList<string> audioTrackNames)
         {
-            if (!TryReadEditorState(bytes, out long trimStartMs, out long trimEndMs, out var cuts))
-                return;
+            var videoStreams = probe.VideoStreams ?? Array.Empty<VideoStreamProbe>();
+            if (videoStreams.Count == 0)
+                throw new InvalidOperationException("The recording has no video stream.");
 
-            var fromProject = document.GetKeepSegments(sourceDurationMs);
-            long restoreTrimStart = document.TrimStartMs;
-            long restoreTrimEnd = document.TrimEndMs;
-            var restoreCuts = document.GetCutRanges();
+            var screen = videoStreams[0];
 
-            document.TrimStartMs = trimStartMs;
-            // the same "to the end" sentinel ApplyToDocument resolves to: a literal end at the
-            // media duration must not out-live a re-probe that reports a slightly different one.
-            document.TrimEndMs = sourceDurationMs > 0 && trimEndMs >= sourceDurationMs ? 0 : trimEndMs;
-            document.SetCuts(cuts);
+            // the webcam is the second video stream, the same "track 1" rule the recorder writes
+            // and the render tool reads.
+            var cam = videoStreams.Count > 1 ? videoStreams[1] : null;
+            if (cam is not { Width: > 0, Height: > 0 })
+                cam = null;
 
-            if (SameSegments(fromProject, document.GetKeepSegments(sourceDurationMs)))
-                return;
+            var audioStreams = probe.AudioStreams ?? Array.Empty<AudioStreamProbe>();
 
-            document.TrimStartMs = restoreTrimStart;
-            document.TrimEndMs = restoreTrimEnd;
-            document.SetCuts(restoreCuts);
+            // the container's duration, exactly as the export path has always taken it; a file
+            // whose container declares none falls back to the screen stream's own.
+            long durationTicks = probe.DurationTicks > 0 ? probe.DurationTicks : screen.DurationTicks;
+
+            var keep = document.GetKeepSegments(durationTicks / TicksPerMs);
+            var segments = new List<KeepSegment>(keep.Count);
+            foreach (var region in keep)
+                segments.Add(new KeepSegment(region.StartMs * TicksPerMs, region.DurationMs * TicksPerMs));
+
+            var (fpsNum, fpsDen) = RecordingProject.ChooseFrameRate(screen);
+
+            return RecordingProject.Build(new RecordingProjectSpec
+            {
+                InputPath = videoPath,
+                Screen = screen,
+                Webcam = cam,
+                AudioStreams = audioStreams,
+                // a v1 file predates separate audio tracks entirely, so in practice only a fresh
+                // create has labels to apply — but they belong to the recording, not to the edit.
+                AudioTrackNames = audioTrackNames,
+                FpsNum = fpsNum,
+                FpsDen = fpsDen,
+                Segments = segments,
+                WebcamTransform = cam != null ? WebcamTransformOf(document.Webcam, screen, cam) : null,
+                WebcamHidden = !document.Webcam.Enabled,
+                Ids = RecordingIds.New(audioStreams.Count),
+            });
         }
 
-        /// <summary>Reads the editor-state block straight off the JSON (the file is a project, so
-        /// the block is not part of any DTO). False when there is none, or it is not this
-        /// version.</summary>
-        private static bool TryReadEditorState(byte[] bytes, out long trimStartMs, out long trimEndMs,
-            out List<CutRegion> cuts)
+        /// <summary>The webcam items' placement, taken through the very pixel rect the v1 render
+        /// path was handed (<see cref="ComputeWebcamRect"/>) — its rounding and edge clamping are
+        /// part of what a migrated edit composed to, so they have to survive the migration.</summary>
+        private static Transform WebcamTransformOf(WebcamOverlay overlay, VideoStreamProbe screen, VideoStreamProbe cam)
         {
-            trimStartMs = 0;
-            trimEndMs = 0;
-            cuts = null;
+            var rect = ComputeWebcamRect(overlay, screen.Width, screen.Height, cam.Width, cam.Height);
 
-            using var doc = JsonDocument.Parse(bytes.AsMemory());
-            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
-                !doc.RootElement.TryGetProperty(EditorStateProperty, out var state) ||
-                state.ValueKind != JsonValueKind.Object)
-                return false;
-
-            if (ReadNumber(state, "Version") != EditorStateVersion)
-                return false;
-
-            trimStartMs = ReadNumber(state, "TrimStartMs");
-            trimEndMs = ReadNumber(state, "TrimEndMs");
-
-            cuts = new List<CutRegion>();
-            if (state.TryGetProperty("Cuts", out var array) && array.ValueKind == JsonValueKind.Array)
+            var mask = new Mask
             {
-                foreach (var cut in array.EnumerateArray())
+                Shape = overlay.Shape == WebcamOverlayShape.Circle ? MaskShape.Circle : MaskShape.RoundedRect,
+                // kept even for a circle (where it has no effect) so switching shapes back and
+                // forth — including across a save/reload — does not lose the user's radius.
+                CornerRadius = overlay.CornerRadius,
+            };
+
+            return RecordingProject.WebcamTransform(rect.X, rect.Y, rect.W, rect.H,
+                screen.Width, screen.Height, mask);
+        }
+
+        /// <summary>
+        /// Turns the v1 document's normalized overlay geometry into output pixels. The width is a
+        /// fraction of the screen frame; the height follows the webcam track's own aspect ratio
+        /// (the document does not know it), and the whole rect is nudged back inside the frame
+        /// rather than clipped.
+        ///
+        /// Pixel-exact rather than normalized because this is the rect the v1 render path handed
+        /// the tool: rounding and edge-clamping are part of what a migrated edit composes to, so
+        /// the transform derived from it has to keep them. (Relocated from the retired
+        /// <c>EditorProject</c> — migration is the last thing that needs it.)
+        /// </summary>
+        internal static (int X, int Y, int W, int H) ComputeWebcamRect(WebcamOverlay overlay,
+            int screenWidth, int screenHeight, int webcamWidth, int webcamHeight)
+        {
+            var frameW = Math.Max(1, screenWidth);
+            var frameH = Math.Max(1, screenHeight);
+
+            var w = (int)Math.Round(overlay.Width * frameW);
+            w = Math.Clamp(w, 2, frameW);
+
+            var aspect = (double)webcamHeight / webcamWidth;
+            var h = (int)Math.Round(w * aspect);
+            h = Math.Clamp(h, 2, frameH);
+
+            var x = (int)Math.Round(overlay.CenterX * frameW - w / 2.0);
+            var y = (int)Math.Round(overlay.CenterY * frameH - h / 2.0);
+            x = Math.Clamp(x, 0, frameW - w);
+            y = Math.Clamp(y, 0, frameH - h);
+
+            return (x, y, w, h);
+        }
+
+        /// <summary>Points the recording's own source back at <paramref name="videoPath"/>. The
+        /// primary source is the one the lowest video row's items reference — every other source in
+        /// the project was imported and keeps its own path.</summary>
+        private static void ReconcilePrimaryPath(Project project, string videoPath)
+        {
+            if (String.IsNullOrEmpty(videoPath))
+                return;
+
+            var primary = PrimarySource(project);
+            if (primary != null)
+                primary.Path = videoPath;
+        }
+
+        private static Source PrimarySource(Project project)
+        {
+            Track lowestVideo = null;
+            foreach (var track in project.Tracks)
+            {
+                if (track.Kind == TrackKind.Video && (lowestVideo == null || track.Order < lowestVideo.Order))
+                    lowestVideo = track;
+            }
+
+            if (lowestVideo != null)
+            {
+                foreach (var item in project.Items)
                 {
-                    if (cut.ValueKind == JsonValueKind.Object)
-                        cuts.Add(new CutRegion(ReadNumber(cut, "StartMs"), ReadNumber(cut, "EndMs")));
+                    if (item.TrackId != lowestVideo.Id || item.Content is not MediaContent media)
+                        continue;
+
+                    foreach (var source in project.Sources)
+                    {
+                        if (source.Id == media.SourceId)
+                            return source;
+                    }
                 }
             }
 
-            return true;
+            // no video row, or one whose items point at nothing: the first source is the best guess
+            // left, and it is the recording's for every project this editor has ever written.
+            return project.Sources.Count > 0 ? project.Sources[0] : null;
         }
 
-        private static long ReadNumber(JsonElement element, string name)
-            => element.TryGetProperty(name, out var value) &&
-               value.ValueKind == JsonValueKind.Number &&
-               value.TryGetInt64(out long number)
-                ? number
-                : 0;
-
-        private static bool SameSegments(IReadOnlyList<CutRegion> a, IReadOnlyList<CutRegion> b)
-        {
-            if (a.Count != b.Count)
-                return false;
-
-            for (int i = 0; i < a.Count; i++)
-            {
-                if (a[i].StartMs != b[i].StartMs || a[i].EndMs != b[i].EndMs)
-                    return false;
-            }
-
-            return true;
-        }
-
-        /// <summary>The one-way v1 migration: the legacy DTO is exactly the editor's document, so
-        /// applying it and letting the editor rebuild its project from it <i>is</i> the migration —
-        /// the mapping onto items/tracks lives in one place (<see cref="EditorProject"/>) rather
-        /// than being duplicated here.</summary>
+        /// <summary>The one-way v1 migration: the legacy DTO is exactly the old editor's document,
+        /// so applying it and rebuilding the project from it <i>is</i> the migration. Values pass
+        /// through the document's own setters, so anything out of range in the file is clamped
+        /// exactly as a live edit would have been.</summary>
         private static bool LoadLegacy(byte[] bytes, VideoEditDocument document)
         {
             var dto = JsonSerializer.Deserialize(bytes, VideoEditJsonContext.Default.VideoEditDocumentDto);

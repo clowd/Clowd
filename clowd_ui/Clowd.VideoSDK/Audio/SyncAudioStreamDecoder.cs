@@ -7,7 +7,8 @@ namespace Clowd.VideoSDK.Audio
 {
     /// <summary>
     /// Synchronous forward-only decode of one audio stream for the render path — the audio twin
-    /// of <c>SyncStreamDecoder</c>: no threads, no queues, no seeking. <see cref="DecodeNext"/>
+    /// of <c>SyncStreamDecoder</c>: no threads, no queues. The render path never seeks; preview
+    /// (<see cref="SeekableAudioSource"/>) may reposition with <see cref="Seek"/>. <see cref="DecodeNext"/>
     /// blocks until the next chunk of samples is decoded and swr_converted to interleaved float
     /// stereo at the output rate (the ONE spot where resample/layout conversion happens; per the
     /// design, only float <i>mixing</i> is managed — decode and resample stay native).
@@ -161,6 +162,59 @@ namespace Clowd.VideoSDK.Audio
 
                 FeedPacket();
             }
+        }
+
+        /// <summary>
+        /// Repositions the container to the nearest packet at or before
+        /// <paramref name="targetTicks"/> (normalized stream time — the same domain
+        /// <see cref="DecodeNext"/> reports) and resets every piece of decode state, so the next
+        /// <see cref="DecodeNext"/> resumes there. Audio packets are self-contained sync points,
+        /// so a caller reaches an exact sample by decoding and discarding forward from here; a
+        /// short preroll before the wanted position restores the first kept frame's transform
+        /// overlap, which is what makes the samples land where a forward decode put them (see
+        /// <see cref="SeekableAudioSource"/>).
+        ///
+        /// <para>
+        /// Additive: the render path never calls this and stays strictly forward-only.
+        /// </para>
+        /// </summary>
+        public void Seek(long targetTicks)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            bool tbValid = _timeBase.num > 0 && _timeBase.den > 0;
+            long target = Math.Max(0, targetTicks);
+            long ts = tbValid
+                ? TimeBase.TicksToStreamTime(target + _startTimeTicks, _timeBase.num, _timeBase.den)
+                : TimeBase.Rescale(target, 1, TimeBase.TicksPerSecond, 1, ffmpeg.AV_TIME_BASE);
+
+            // without a usable stream time base the seek has to go through the container's
+            // AV_TIME_BASE domain (stream index -1), exactly as Demuxer does.
+            int seekStream = tbValid ? _streamIndex : -1;
+            int err = ffmpeg.av_seek_frame(_fmt, seekStream, ts, ffmpeg.AVSEEK_FLAG_BACKWARD);
+            if (err < 0)
+                ffmpeg.av_seek_frame(_fmt, seekStream, ts, 0); // some containers reject BACKWARD near 0/EOF
+
+            ffmpeg.avcodec_flush_buffers(_ctx);
+            ffmpeg.av_packet_unref(_pkt);
+            ffmpeg.av_frame_unref(_frame);
+
+            // swr_init on the live context drops its buffered delay without reallocating (same
+            // reset AudioDecodeWorker performs on a seek serial); if it somehow fails, drop the
+            // context so EnsureResampler rebuilds it from the next frame's format.
+            if (_swr != null && ffmpeg.swr_init(_swr) < 0)
+            {
+                var s = _swr;
+                ffmpeg.swr_free(&s);
+                _swr = null;
+                _swrInFormat = -1;
+            }
+
+            _lastPtsTicks = long.MinValue;
+            _lastDurTicks = 0;
+            _draining = false;
+            _codecDone = false;
+            _swrFlushed = false;
         }
 
         /// <summary>Reads packets until one of this stream is fed to the decoder (or EOF starts

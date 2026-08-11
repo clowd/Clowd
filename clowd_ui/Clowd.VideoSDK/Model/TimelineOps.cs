@@ -7,14 +7,17 @@ namespace Clowd.VideoSDK.Model;
 /// <summary>
 /// The editing operations, and the <b>only</b> place <see cref="Item.LinkGroupId"/> semantics
 /// live — timeline control, keyboard shortcuts and tests all come through here, so link behaviour
-/// cannot drift between entry points. Every operation resolves the target item's link group first
-/// and applies to all members (an unlinked item is a group of one).
+/// cannot drift between entry points. The operations that change <i>when</i> content plays
+/// (<see cref="Move"/>, <see cref="Split"/>, <see cref="RippleDelete"/>) resolve the target item's
+/// link group first and apply to all members (an unlinked item is a group of one); the operations
+/// that change how much of an item is shown (<see cref="TrimStart"/>, <see cref="TrimEnd"/>) or
+/// remove a lone item (<see cref="Delete"/>) are single-item.
 ///
-/// Operations clamp rather than corrupt: a move or trim that would push any group member out of
-/// bounds — before the timeline origin, under <see cref="MinSegmentTicks"/>, or before the start
-/// of its source — is reduced to the largest amount every member can absorb, and the applied
+/// Operations clamp rather than corrupt: a move that would push a group member before the
+/// timeline origin, or a trim that would take an item under <see cref="MinSegmentTicks"/> or
+/// before the start of its source, is reduced to the largest amount that fits, and the applied
 /// amount is returned so callers can reflect it. Operations that cannot be partially applied
-/// (<see cref="Split"/>) reject instead.
+/// (<see cref="Split"/>, <see cref="TryRelinkTrack"/>) reject instead.
 /// </summary>
 public static class TimelineOps
 {
@@ -56,68 +59,61 @@ public static class TimelineOps
     }
 
     /// <summary>
-    /// Moves the in-point of the item's link group: positive <paramref name="deltaTicks"/> shrinks
-    /// the items from the start, negative extends them earlier. Clamped so every member keeps at
-    /// least <see cref="MinSegmentTicks"/>, starts at or after 0, and — for media — never rewinds
-    /// before the start of its source (<see cref="MediaContent.SourceInTicks"/> stays ≥ 0).
-    /// Media in-points move with the trim so the same source frame stays under the cut. Returns
-    /// the delta actually applied.
+    /// Moves the in-point of a <b>single</b> item, link group or not: positive
+    /// <paramref name="deltaTicks"/> shrinks it from the start, negative extends it earlier.
+    /// Clamped so the item keeps at least <see cref="MinSegmentTicks"/>, starts at or after 0,
+    /// and — for media — never rewinds before the start of its source
+    /// (<see cref="MediaContent.SourceInTicks"/> stays ≥ 0). The media in-point moves with the
+    /// trim, so every instant the item still covers maps to the source frame it mapped to before:
+    /// trimming one member of a group cannot desync it from the others, which is why trim needs
+    /// no group scope. Returns the delta actually applied.
     /// </summary>
     public static long TrimStart(Project project, Guid itemId, long deltaTicks)
     {
-        var members = GetLinkedItems(project, itemId);
+        var item = Require(project, itemId);
+        var media = item.Content as MediaContent;
 
-        foreach (var m in members)
-        {
-            var maxShrink = m.DurationTicks - MinSegmentTicks;
-            if (deltaTicks > maxShrink)
-                deltaTicks = Math.Max(0, maxShrink);
+        var maxShrink = item.DurationTicks - MinSegmentTicks;
+        if (deltaTicks > maxShrink)
+            deltaTicks = Math.Max(0, maxShrink);
 
-            var maxExtend = m.TimelineStartTicks;
-            if (m.Content is MediaContent media)
-                maxExtend = Math.Min(maxExtend, media.SourceInTicks);
-            if (deltaTicks < -maxExtend)
-                deltaTicks = -maxExtend;
-        }
+        var maxExtend = media == null
+            ? item.TimelineStartTicks
+            : Math.Min(item.TimelineStartTicks, media.SourceInTicks);
+        if (deltaTicks < -maxExtend)
+            deltaTicks = -maxExtend;
 
         if (deltaTicks == 0)
             return 0;
 
-        foreach (var m in members)
-        {
-            m.TimelineStartTicks += deltaTicks;
-            m.DurationTicks -= deltaTicks;
-            if (m.Content is MediaContent media)
-                media.SourceInTicks += deltaTicks;
-        }
+        item.TimelineStartTicks += deltaTicks;
+        item.DurationTicks -= deltaTicks;
+        if (media != null)
+            media.SourceInTicks += deltaTicks;
 
         return deltaTicks;
     }
 
     /// <summary>
-    /// Moves the out-point of the item's link group: positive <paramref name="deltaTicks"/>
-    /// lengthens the items, negative shortens them, clamped so every member keeps at least
-    /// <see cref="MinSegmentTicks"/>. Extension past the end of a media source is allowed — the
-    /// compositor holds the last frame, matching VFR gap behaviour. Returns the delta actually
-    /// applied.
+    /// Moves the out-point of a <b>single</b> item, link group or not: positive
+    /// <paramref name="deltaTicks"/> lengthens it, negative shortens it, clamped so it keeps at
+    /// least <see cref="MinSegmentTicks"/>. Extension past the end of a media source is allowed —
+    /// the compositor holds the last frame, matching VFR gap behaviour. The item's start and
+    /// in-point are untouched, so the source↔timeline mapping of every instant it still covers is
+    /// unchanged and linked rows stay in sync. Returns the delta actually applied.
     /// </summary>
     public static long TrimEnd(Project project, Guid itemId, long deltaTicks)
     {
-        var members = GetLinkedItems(project, itemId);
+        var item = Require(project, itemId);
 
-        foreach (var m in members)
-        {
-            var maxShrink = m.DurationTicks - MinSegmentTicks;
-            if (deltaTicks < -maxShrink)
-                deltaTicks = Math.Min(0, -maxShrink);
-        }
+        var maxShrink = item.DurationTicks - MinSegmentTicks;
+        if (deltaTicks < -maxShrink)
+            deltaTicks = Math.Min(0, -maxShrink);
 
         if (deltaTicks == 0)
             return 0;
 
-        foreach (var m in members)
-            m.DurationTicks += deltaTicks;
-
+        item.DurationTicks += deltaTicks;
         return deltaTicks;
     }
 
@@ -202,6 +198,19 @@ public static class TimelineOps
         }
     }
 
+    /// <summary>Removes a single item, leaving a gap where it was: no ripple, and link group
+    /// members are left alone (<see cref="RippleDelete"/> is the synced-segment delete). Returns
+    /// false when the id is not in the project.</summary>
+    public static bool Delete(Project project, Guid itemId)
+    {
+        var item = project.Items.FirstOrDefault(i => i.Id == itemId);
+        if (item == null)
+            return false;
+
+        project.Items.Remove(item);
+        return true;
+    }
+
     /// <summary>Clears <see cref="Item.LinkGroupId"/> on the given items so they edit
     /// independently. Items not in the project throw; the rest of their old group is left
     /// linked.</summary>
@@ -221,6 +230,63 @@ public static class TimelineOps
 
         return group;
     }
+
+    /// <summary>Clears <see cref="Item.LinkGroupId"/> on every item of a track — the row's sync
+    /// toggle turned off. The other members of those groups stay linked to each other;
+    /// <see cref="TryRelinkTrack"/> is the inverse while the row is still aligned.</summary>
+    public static void UnlinkTrack(Project project, Guid trackId)
+    {
+        foreach (var item in project.Items)
+        {
+            if (item.TrackId == trackId)
+                item.LinkGroupId = null;
+        }
+    }
+
+    /// <summary>
+    /// Puts a track back into the link groups it was unlinked from, but only when that is still
+    /// true: every item of the row must overlap exactly one group on the other tracks, and must
+    /// agree with it on source alignment — same <c>TimelineStartTicks - SourceInTicks</c> offset,
+    /// the invariant a trim preserves and a move breaks. Items of the row may resolve to
+    /// <i>different</i> groups: after a <see cref="Split"/> each contiguous segment is its own
+    /// group, and each of the row's segments re-joins the one that covers it. Returns false
+    /// leaving the project untouched when any item overlaps no group, more than one, or a group it
+    /// has drifted from; a track with no items trivially succeeds.
+    /// </summary>
+    public static bool TryRelinkTrack(Project project, Guid trackId)
+    {
+        var row = project.Items.Where(i => i.TrackId == trackId).ToList();
+        var candidates = project.Items.Where(i => i.TrackId != trackId && i.LinkGroupId != null).ToList();
+
+        var resolved = new List<(Item Item, Guid Group)>(row.Count);
+        foreach (var item in row)
+        {
+            var overlapping = candidates.Where(c => Overlaps(item, c)).ToList();
+            var groups = overlapping.Select(c => c.LinkGroupId.Value).Distinct().ToList();
+            if (groups.Count != 1)
+                return false;
+
+            // one dissenting member is enough to make the row's claim of sync a lie.
+            if (!overlapping.All(c => Aligned(item, c)))
+                return false;
+
+            resolved.Add((item, groups[0]));
+        }
+
+        foreach (var (item, group) in resolved)
+            item.LinkGroupId = group;
+
+        return true;
+    }
+
+    private static bool Overlaps(Item a, Item b) =>
+        a.TimelineStartTicks < b.TimelineEndTicks && b.TimelineStartTicks < a.TimelineEndTicks;
+
+    /// <summary>Whether two items map source time to timeline time identically. Only media carries
+    /// such a mapping — text, images and solids have nothing to disagree about.</summary>
+    private static bool Aligned(Item a, Item b) =>
+        a.Content is not MediaContent ma || b.Content is not MediaContent mb ||
+        a.TimelineStartTicks - ma.SourceInTicks == b.TimelineStartTicks - mb.SourceInTicks;
 
     private static bool Covers(Item item, long timelineTicks) =>
         timelineTicks >= item.TimelineStartTicks && timelineTicks < item.TimelineEndTicks;

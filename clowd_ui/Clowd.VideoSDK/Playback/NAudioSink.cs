@@ -24,12 +24,14 @@ namespace Clowd.VideoSDK.Playback
         private float _volume = 1.0f;
         private bool _disposed;
 
-        public NAudioSink(int sampleRate, int channels, AudioRingBuffer ring)
+        /// <param name="output">Audio backend; null picks the platform default. Injected by tests
+        /// (and embedders) that must not touch a real device.</param>
+        public NAudioSink(int sampleRate, int channels, AudioRingBuffer ring, IAudioOutput output = null)
         {
             _sampleRate = sampleRate;
             _channels = channels;
             _ring = ring;
-            _out = AudioOutputFactory.Create();
+            _out = output ?? AudioOutputFactory.Create();
             _out.Initialize(sampleRate, channels, LatencyMs, RenderRead);
         }
 

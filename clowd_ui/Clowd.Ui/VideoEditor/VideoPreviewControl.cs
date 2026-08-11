@@ -1,40 +1,42 @@
 using System;
-using System.ComponentModel;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
-using Clowd.VideoSDK;
+using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
-
-// Avalonia.Media has a Transform of its own, and this file needs both.
-using ModelTransform = Clowd.VideoSDK.Model.Transform;
 
 namespace Clowd.UI.VideoEditor
 {
     /// <summary>
     /// The letterboxed preview surface. It computes the video rectangle by hand (the
     /// Stretch.Uniform math) rather than letting an Image do it, because the composed picture and
-    /// the webcam gizmo must both be positioned against the *video* rectangle, not the control
+    /// the transform gizmo must both be positioned against the *video* rectangle, not the control
     /// bounds. The picture itself is drawn by <see cref="PreviewDrawOperation"/> — the whole
     /// project composed by the SDK's <c>FrameComposer</c>, which is the same code the render runs,
     /// so the preview is WYSIWYG by construction.
     ///
     /// Hosts, in z-order: the composed video (this control's own render), an optional poster image
-    /// (shown until the first decoded frame lands) and the <see cref="WebcamOverlayControl"/>
-    /// gizmo, which is re-positioned on every layout pass, every document change and every project
-    /// change — that is what keeps gizmo drags and the sidebar numerics in lockstep.
+    /// (shown until the first decoded frame lands) and the <see cref="Gizmo"/>, which is
+    /// re-positioned on every layout pass — and the preview re-runs that pass on every project
+    /// change, selection change and playhead move. That is what keeps gizmo drags, the inspector's
+    /// numerics and the composed picture in lockstep: all three read the one model in
+    /// <see cref="Session"/>, and none of them caches an item.
+    ///
+    /// A press that reaches the panel itself (not the gizmo) selects whatever item is composed under
+    /// the pointer at the playhead, or clears the selection on bare canvas.
     /// </summary>
     public sealed class VideoPreviewControl : Panel
     {
         private readonly PreviewGpuState _gpu = new PreviewGpuState();
-        private VideoEditDocument _document;
         private CompositionPlayer _player;
+        private EditorSession _session;
         private Project _project;
         private Size _videoPixelSize;
-        private bool _hasWebcam;
+        private long _positionTicks;
         private int _renderPending;
         private bool _sawFirstFrame;
 
@@ -46,59 +48,80 @@ namespace Clowd.UI.VideoEditor
             Background = Brushes.Transparent;
 
             // the gizmo follows the composed picture, which the composer does NOT bound to the
-            // frame (see ComputeOverlayRect), so an overlay taller than the frame really is
-            // arranged past this control's edges — clip it here rather than letting the chrome
-            // draw over the timeline and the sidebar.
+            // frame (see ResolveGizmoRect), so an item taller than the frame really is arranged
+            // past this control's edges — clip it here rather than letting the chrome draw over
+            // the timeline and the sidebar.
             ClipToBounds = true;
 
             // Panel.Render is sealed, so the composed picture is drawn by a dedicated (bottom)
             // child rather than by the panel itself.
             _surface = new PreviewSurface(this) { IsHitTestVisible = false };
             PosterImage = new Image { Stretch = Stretch.Uniform };
-            Overlay = new WebcamOverlayControl { IsVisible = false };
+            Gizmo = new TransformGizmoControl();
 
             Children.Add(_surface);
             Children.Add(PosterImage);
-            Children.Add(Overlay);
+            Children.Add(Gizmo);
 
-            // a press that reaches the panel itself did not hit the gizmo (it handles its own)
-            PointerPressed += (_, _) => Overlay.IsSelected = false;
+            PointerPressed += OnCanvasPressed;
         }
 
         /// <summary>Poster/loading image shown until the first decoded frame lands.</summary>
         public Image PosterImage { get; }
 
-        /// <summary>The webcam placement gizmo (outline + handles only — the picture is composed).</summary>
-        public WebcamOverlayControl Overlay { get; }
+        /// <summary>The transform gizmo (outline + handles only — the picture is composed). It has
+        /// no geometry of its own: this control resolves the selected item's composed rect and
+        /// arranges the gizmo onto it, or onto nothing when there is no gizmo to show.</summary>
+        public TransformGizmoControl Gizmo { get; }
 
         /// <summary>The letterboxed video rectangle from the last arrange, in local coordinates.</summary>
         public Rect VideoRect { get; private set; }
 
-        /// <summary>The edit document; gizmo geometry/visibility follows it. Set once.</summary>
-        public VideoEditDocument Document
+        /// <summary>
+        /// The editing session the gizmo and the click hit-test read. The preview follows its
+        /// project and selection changes itself (the window only feeds it composed snapshots and the
+        /// playhead), because gizmo placement depends on all three.
+        /// </summary>
+        public EditorSession Session
         {
-            get => _document;
+            get => _session;
             set
             {
-                if (ReferenceEquals(_document, value))
+                if (ReferenceEquals(_session, value))
                     return;
 
-                if (_document != null)
+                if (_session != null)
                 {
-                    _document.PropertyChanged -= Document_PropertyChanged;
-                    _document.Webcam.PropertyChanged -= Document_PropertyChanged;
+                    _session.ProjectChanged -= Session_ProjectChanged;
+                    _session.SelectionChanged -= Session_SelectionChanged;
                 }
 
-                _document = value;
-                Overlay.Document = value;
+                _session = value;
 
-                if (_document != null)
+                if (_session != null)
                 {
-                    _document.PropertyChanged += Document_PropertyChanged;
-                    _document.Webcam.PropertyChanged += Document_PropertyChanged;
+                    _session.ProjectChanged += Session_ProjectChanged;
+                    _session.SelectionChanged += Session_SelectionChanged;
                 }
 
-                UpdateOverlayVisibility();
+                Gizmo.Session = value;
+                InvalidateArrange();
+            }
+        }
+
+        /// <summary>The playhead, in timeline ticks — the gizmo only shows while the selected item's
+        /// span covers it (an item that is not on screen must not be draggable on screen). Pushed by
+        /// the window's position readout, which is the one funnel every position change passes
+        /// through.</summary>
+        public long PositionTicks
+        {
+            get => _positionTicks;
+            set
+            {
+                if (_positionTicks == value)
+                    return;
+
+                _positionTicks = value;
                 InvalidateArrange();
             }
         }
@@ -121,13 +144,11 @@ namespace Clowd.UI.VideoEditor
             RequestRender();
         }
 
-        /// <summary>Points the preview at the current project (every edit rebuilds it).</summary>
+        /// <summary>Points the preview at the current project snapshot (every edit produces a
+        /// fresh one).</summary>
         public void SetProject(Project project)
         {
             _project = project;
-            // the gizmo is placed from the project's own webcam transform, so a new project moves
-            // it even when the document did not change (a reload, or an edit that only rebuilt).
-            InvalidateArrange();
             RequestRender();
         }
 
@@ -164,35 +185,54 @@ namespace Clowd.UI.VideoEditor
             RequestRender();
         }
 
-        /// <summary>Declares whether the media has a usable webcam track and its aspect (h/w).</summary>
-        public void SetWebcam(bool hasWebcam, double aspectHeightOverWidth)
+        // ====================================================================
+        // Session reactions
+        // ====================================================================
+
+        /// <summary>Any change can move the selected item, resize it, mask it or delete it — and an
+        /// undo can do all four — so the gizmo is re-resolved from the model on every one, including
+        /// mid-gesture previews (that is how a drag's own writes come back to it, and how the
+        /// inspector and the gizmo stay in step during either one's drag).</summary>
+        private void Session_ProjectChanged(object sender, ProjectChangedEventArgs e)
         {
-            _hasWebcam = hasWebcam;
-            if (aspectHeightOverWidth > 0)
-                Overlay.WebcamAspect = aspectHeightOverWidth;
-
-            UpdateOverlayVisibility();
-            InvalidateArrange();
-            RequestRender();
-        }
-
-        private void Document_PropertyChanged(object sender, PropertyChangedEventArgs e)
-        {
-            if (e.PropertyName == nameof(WebcamOverlay.Enabled))
-                UpdateOverlayVisibility();
-
-            // shape/radius changes do not move the gizmo, so its arrange (where the outline is
-            // refreshed) would be skipped — refresh it explicitly
-            if (e.PropertyName is nameof(WebcamOverlay.Shape) or nameof(WebcamOverlay.CornerRadius))
-                Overlay.RefreshShape();
-
-            // any webcam geometry (or trim/cut, harmlessly) change re-positions the gizmo
+            Gizmo.RefreshChrome(); // a mask change alone does not move the gizmo
             InvalidateArrange();
         }
 
-        private void UpdateOverlayVisibility()
+        private void Session_SelectionChanged(object sender, EventArgs e) => InvalidateArrange();
+
+        /// <summary>Click-to-select: a press reaches the panel when the gizmo did not claim it —
+        /// either it landed outside the gizmo, or the gizmo declined it because another item is
+        /// composed over it there (a full-frame selection must not swallow a click aimed at an
+        /// overlay). It then selects the topmost item composed under the pointer at the playhead,
+        /// and clears the selection when it lands on bare canvas.</summary>
+        private void OnCanvasPressed(object sender, PointerPressedEventArgs e)
         {
-            Overlay.IsVisible = _hasWebcam && _document?.Webcam.Enabled == true;
+            if (_session == null || !e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
+                return;
+
+            var videoRect = VideoRect;
+            if (videoRect.Width <= 0 || videoRect.Height <= 0)
+                return;
+
+            var p = e.GetPosition(this);
+            var hit = ItemPlacement.HitTest(_session.Project, ComposedTicks(_session.Project),
+                p.X - videoRect.X, p.Y - videoRect.Y, videoRect.Width, videoRect.Height);
+
+            if (hit != null)
+                _session.Select(hit.Id);
+            else
+                _session.ClearSelection();
+        }
+
+        /// <summary>The instant the preview is composing: the playhead, held one tick inside the
+        /// last item at the very end of the timeline — items are half-open, so composing at the
+        /// duration itself would draw nothing (see <see cref="PreviewDrawOperation"/>, which holds
+        /// the same frame).</summary>
+        private long ComposedTicks(Project project)
+        {
+            var duration = project?.GetDurationTicks() ?? 0;
+            return duration > 0 && _positionTicks >= duration ? duration - 1 : _positionTicks;
         }
 
         /// <summary>The composed picture, drawn under the poster and the gizmo. It reads the
@@ -235,6 +275,8 @@ namespace Clowd.UI.VideoEditor
                 _player = null;
             }
 
+            Session = null;
+
             // drops the control's reference; the last draw operation Avalonia disposes releases
             // the textures on its own thread.
             _gpu.Shutdown();
@@ -259,8 +301,8 @@ namespace Clowd.UI.VideoEditor
             var videoRect = ComputeVideoRect(finalSize);
             VideoRect = videoRect;
 
-            Overlay.VideoRect = videoRect;
-            Overlay.Arrange(ComputeOverlayRect(videoRect));
+            Gizmo.CanvasRect = videoRect;
+            Gizmo.Arrange(ResolveGizmoRect(videoRect));
 
             return finalSize;
         }
@@ -283,76 +325,67 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>
-        /// The gizmo rectangle inside <paramref name="videoRect"/>: exactly where the composer
-        /// draws the webcam row, taken from the very <see cref="ModelTransform"/> it draws it with
-        /// (<see cref="EditorProject.WebcamTransformOf"/> — the project the preview is composing,
-        /// not the document, so no placement math is duplicated here and the two cannot drift).
+        /// Where the gizmo belongs this pass, in local coordinates — exactly where the composer
+        /// draws the primary selection (<see cref="ItemPlacement.TryResolve"/> reads the very
+        /// <c>Transform</c> the picture is drawn with, so no placement math is duplicated here and
+        /// the two cannot drift). An empty rect is how "no gizmo" is expressed: a zero-sized panel
+        /// draws nothing and cannot be hit.
         ///
-        /// Deliberately unclamped: <c>FrameComposer</c> bounds the picture to nothing
-        /// (<c>destH = Scale * canvasWidth * imgH / imgW</c>, placed on the normalized centre), so
-        /// an overlay taller than the frame — a 4:3 camera at width &gt; 0.75 of a 16:9 recording,
-        /// or any wide-strip region capture — really does bleed past the top and bottom edges and
-        /// is merely clipped. Clamping the gizmo's height (as this used to) put the outline, the
-        /// mask preview and the corner handles on a rectangle shorter than the composed picture.
+        /// Deliberately unclamped: <c>FrameComposer</c> bounds a picture to nothing (its height
+        /// follows the content's aspect from a canvas-width fraction), so an item taller than the
+        /// frame — a 4:3 camera at width &gt; 0.75 of a 16:9 recording — really does bleed past the
+        /// edges and is merely clipped. Clamping the gizmo (as v1 did) put the outline, the mask
+        /// preview and the corner handles on a rectangle shorter than the composed picture.
         /// </summary>
-        private Rect ComputeOverlayRect(Rect videoRect)
+        private Rect ResolveGizmoRect(Rect videoRect)
         {
-            if (videoRect.Width <= 0 || videoRect.Height <= 0)
-                return new Rect(0, 0, 0, 0);
+            var empty = new Rect(0, 0, 0, 0);
+            var session = _session;
+            if (session == null || videoRect.Width <= 0 || videoRect.Height <= 0)
+            {
+                Gizmo.SetTarget(Guid.Empty, default);
+                return empty;
+            }
 
-            // no project yet (or no webcam row in it) means nothing is being composed for the
-            // gizmo to sit on.
-            var transform = EditorProject.WebcamTransformOf(_project);
-            if (transform == null)
-                return new Rect(0, 0, 0, 0);
+            var project = session.Project;
+            var item = session.PrimarySelectedItem;
 
-            var aspect = Overlay.WebcamAspect > 0 ? Overlay.WebcamAspect : 9.0 / 16.0;
-            var placed = WebcamPlacement.Compose(transform, aspect, videoRect.Width, videoRect.Height);
-            // Arrange rejects a non-finite or negative rect, and a project loaded from disk carries
-            // whatever numbers the file did.
-            if (!(placed.W > 0) || !(placed.H > 0) || !Double.IsFinite(placed.X) || !Double.IsFinite(placed.Y))
-                return new Rect(0, 0, 0, 0);
+            // visual content only, on a row that is actually being composed and editable, and only
+            // while the playhead is inside the item's span — dragging a picture that is not on
+            // screen would move something the user cannot see. A locked row gets no gizmo for the
+            // same reason the timeline gives its items no drag affordance; clicking still selects
+            // it, exactly as the timeline does.
+            Track track = null;
+            if (item != null)
+            {
+                foreach (var candidate in project.Tracks)
+                {
+                    if (candidate.Id == item.TrackId)
+                    {
+                        track = candidate;
+                        break;
+                    }
+                }
+            }
 
-            return new Rect(videoRect.X + placed.X, videoRect.Y + placed.Y, placed.W, placed.H);
-        }
-    }
+            var ticks = ComposedTicks(project);
+            Gizmo.ComposedTicks = ticks;
 
-    /// <summary>
-    /// Where <c>FrameComposer</c> puts a picture item on a canvas — the placement half of
-    /// <c>FrameComposer.DrawPicture</c>/<c>PlaceRect</c>, as pure geometry so the preview chrome
-    /// can be positioned (and unit-tested against composed pixels) without a renderer.
-    ///
-    /// This exists because the webcam gizmo has to land on the composed picture to the pixel: the
-    /// picture's placement is <b>not</b> the frame-clamped rect
-    /// <c>VideoRenderManager.ComputeWebcamRect</c> computes — that rect is only normalized into the
-    /// item's <see cref="ModelTransform"/> (centre + width fraction, its height discarded by
-    /// <c>RecordingProject.WebcamTransform</c>), and the composer then re-derives the height from
-    /// the camera's own aspect with no canvas bound at all.
-    /// </summary>
-    internal static class WebcamPlacement
-    {
-        /// <param name="transform">The item's transform — normalized centre and width fraction.</param>
-        /// <param name="pictureAspect">The drawn picture's height/width (the camera's own aspect;
-        /// the composer takes it from the decoded frame).</param>
-        /// <param name="canvasWidth">Canvas width; for the preview, the letterboxed video rect.</param>
-        /// <param name="canvasHeight">Canvas height.</param>
-        /// <returns>The dest rect in canvas coordinates. Its top/bottom may fall outside the
-        /// canvas — exactly as the composed picture does, which is then simply clipped.</returns>
-        public static (double X, double Y, double W, double H) Compose(
-            ModelTransform transform, double pictureAspect, double canvasWidth, double canvasHeight)
-        {
-            ArgumentNullException.ThrowIfNull(transform);
+            if (item == null || track is not { Kind: TrackKind.Video, Hidden: false, Locked: false } ||
+                ticks < item.TimelineStartTicks || ticks >= item.TimelineEndTicks ||
+                !ItemPlacement.TryResolve(project, item, videoRect.Width, videoRect.Height, out var placed))
+            {
+                Gizmo.SetTarget(Guid.Empty, default);
+                return empty;
+            }
 
-            // FrameComposer.DrawPicture: Scale is a fraction of the canvas *width*, the height
-            // follows the picture's aspect …
-            double w = transform.Scale * canvasWidth;
-            double h = w * pictureAspect;
+            Gizmo.SetTarget(item.Id, placed);
 
-            // … and PlaceRect centres that size on the normalized transform.
-            double cx = transform.X * canvasWidth;
-            double cy = transform.Y * canvasHeight;
-
-            return (cx - w / 2, cy - h / 2, w, h);
+            // inflated by the gizmo's handle pad: a control only receives presses inside its own
+            // bounds, and the corner handles straddle the item's corners (the gizmo deflates this
+            // again for everything it draws and hit-tests).
+            return new Rect(videoRect.X + placed.X, videoRect.Y + placed.Y, placed.W, placed.H)
+                .Inflate(TransformGizmoControl.HandlePad);
         }
     }
 }

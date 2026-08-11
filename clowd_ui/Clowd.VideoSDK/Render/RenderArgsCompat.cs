@@ -254,7 +254,8 @@ namespace Clowd.VideoSDK.Render
                 InputPath = args.Input,
                 Screen = screen,
                 Webcam = cam,
-                Audio = audio,
+                // v1 knew exactly one audio row, so a v1 file must keep producing exactly one.
+                AudioStreams = audio != null ? new[] { audio } : Array.Empty<AudioStreamProbe>(),
                 FpsNum = fpsNum,
                 FpsDen = fpsDen,
                 Segments = keep,

@@ -37,7 +37,9 @@ namespace Clowd.UI.Services
     /// line-delimited plain text on stdout (<c>progress &lt;0-100&gt;</c> repeatedly, then exactly one
     /// of <c>done &lt;path&gt; &lt;bytes&gt;</c> / <c>cancelled</c> / <c>error &lt;message&gt;</c>),
     /// free-form FFmpeg chatter on stderr, and <c>quit</c> on stdin to cancel. The whole job is
-    /// described by a render-args JSON file (<see cref="Clowd.VideoSDK.RenderArgs"/>), which is the
+    /// described by a render-args JSON file (a serialized <see cref="Clowd.VideoSDK.Model.Project"/> plus
+    /// sibling output/crf properties, written by <see cref="Clowd.VideoSDK.Editing.ProjectFileWriter"/>,
+    /// which the tool dispatches on by version), which is the
     /// tool's single argument — there is no init handshake, the process starts rendering the moment
     /// it is spawned, so the whole lifecycle is one <see cref="RunAsync"/> call that resolves when
     /// the process has exited. <see cref="ProgressChanged"/> is raised on the UI thread. One
