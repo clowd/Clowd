@@ -233,7 +233,16 @@
                                                     <MenuItem Header="Copy" Click="CopyItemClicked" IsVisible="{Binding CanCopy}"
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Edit video" Click="EditVideoClicked" IsVisible="{Binding ShowEditVideo}"
-                                                              IsEnabled="{Binding IsIdle}" />
+                                                              ToolTip.Tip="{Binding EditVideoTooltip}" ToolTip.ShowOnDisabled="True">
+                                                        <!-- idle like every other item, AND actually editable: a single-track
+                                                             capture has no tracks to compose. -->
+                                                        <MenuItem.IsEnabled>
+                                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                                <Binding Path="IsIdle" />
+                                                                <Binding Path="CanEditVideo" />
+                                                            </MultiBinding>
+                                                        </MenuItem.IsEnabled>
+                                                    </MenuItem>
                                                     <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding IsVideo}"
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Create GIF" Click="CreateGifClicked" IsVisible="{Binding CanCreateGif}"
@@ -320,10 +329,15 @@
                                                         <!-- leads the video actions because it is also what double-click and
                                                              Enter do: editing is the default thing to do with a recording,
                                                              playing it is the secondary one. -->
+                                                        <!-- shown but disabled for a single-track capture, with the tooltip
+                                                             saying why (ShowOnDisabled — Avalonia hides tooltips on disabled
+                                                             controls otherwise, and the explanation is the whole point). -->
                                                         <Button Classes="rowAction"
                                                                 Click="EditVideoClicked"
                                                                 IsVisible="{Binding ShowEditVideo}"
-                                                                ToolTip.Tip="Edit video"
+                                                                IsEnabled="{Binding CanEditVideo}"
+                                                                ToolTip.Tip="{Binding EditVideoTooltip}"
+                                                                ToolTip.ShowOnDisabled="True"
                                                                 AutomationProperties.Name="Edit video">
                                                             <Viewbox>
                                                                 <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconNavEditor}" />

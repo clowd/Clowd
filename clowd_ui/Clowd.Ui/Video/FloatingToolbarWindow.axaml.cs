@@ -249,7 +249,9 @@ namespace Clowd.UI
         {
             if (e.PropertyName is not (null
                 or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)
-                or nameof(SettingsRecording.CaptureWebcam) or nameof(SettingsRecording.WebcamDeviceId)))
+                or nameof(SettingsRecording.CaptureWebcam) or nameof(SettingsRecording.WebcamDeviceId)
+                // gates the webcam entirely: switching composition off unlights CAM.
+                or nameof(SettingsRecording.EnableComposition)))
                 return;
 
             _micEnabled = _settings.CaptureMicrophone;
@@ -264,11 +266,12 @@ namespace Clowd.UI
             UpdateMeterVisibility();
         }
 
-        /// <summary>A webcam is only captured when the box is ticked AND a camera has been chosen
-        /// — <see cref="ObsArguments.WriteSettingsFile"/> writes an empty device id (i.e. no
-        /// webcam source at all) for either half being missing, so the button says the same.</summary>
+        /// <summary>A webcam is only captured when the box is ticked, a camera has been chosen and
+        /// composition is on — <see cref="ObsArguments.WriteSettingsFile"/> writes an empty device
+        /// id (i.e. no webcam source at all) when any of those is missing, so the button says the
+        /// same rather than lighting up for a camera that will not be recorded.</summary>
         private static bool IsWebcamCaptured(SettingsRecording settings)
-            => settings.CaptureWebcam && !String.IsNullOrEmpty(settings.WebcamDeviceId);
+            => ObsArguments.UsesWebcam(settings);
 
         protected override void OnClosed(EventArgs e)
         {
@@ -553,19 +556,21 @@ namespace Clowd.UI
         /// CAM toggle. Unlike MIC/SPK this is not a mute: the recorder builds (or drops) a whole
         /// webcam source and a second encoder for it, which it will only do while it is still
         /// waiting — hence <see cref="UpdateWebcamEnabled"/> locking the button once frames flow.
-        /// Turning it on with no camera chosen would silently record nothing (the settings file
-        /// writes an empty device id), so that click opens the recording settings page instead of
-        /// ticking a box with no effect.
+        /// Turning it on with no camera chosen — or with composition off, which leaves the camera no
+        /// track to be recorded into — would silently record nothing (the settings file writes an
+        /// empty device id), so that click opens the recording settings page instead of ticking a
+        /// box with no effect.
         /// </summary>
         private void WebcamClicked(object sender, RoutedEventArgs e)
         {
             if (_recording)
                 return;
 
-            if (!_camEnabled && String.IsNullOrEmpty(_settings.WebcamDeviceId))
+            if (!_camEnabled && (!_settings.EnableComposition || String.IsNullOrEmpty(_settings.WebcamDeviceId)))
             {
-                // no camera picked yet: send the user to the picker rather than tick a dead box.
-                // The page's own handler owns the navigation (the toolbar never touches PageManager).
+                // nothing to turn on yet: send the user to the settings page to pick a camera or
+                // switch composition on, rather than tick a dead box. The page's own handler owns
+                // the navigation (the toolbar never touches PageManager).
                 SettingsClicked?.Invoke(this, EventArgs.Empty);
                 return;
             }

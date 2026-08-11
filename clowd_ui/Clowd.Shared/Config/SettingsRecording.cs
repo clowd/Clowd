@@ -253,32 +253,44 @@ namespace Clowd.Config
             set => Set(ref _microphoneDeviceId, value);
         }
 
-        [Category("Audio")]
-        [DisplayName("Separate audio tracks")]
-        [Description("Write each recorded audio device to its own track in the file, so the video editor can trim and mix speakers and microphone independently. Turn it off to record a single track with everything mixed together.")]
-        public bool SeparateAudioTracks
+        [Category("Composition")]
+        [DisplayName("Enable composition and editing")]
+        [Description("Splits recording into multiple tracks so it can be edited. Each audio device and the webcam get their own track, which the video editor can trim, place and mix independently. Turn it off to record a single flattened track — smaller and simpler, but the recording cannot be edited afterwards.")]
+        public bool EnableComposition
         {
-            get => _separateAudioTracks;
-            set => Set(ref _separateAudioTracks, value);
+            get => _enableComposition;
+            set => Set(ref _enableComposition, value);
         }
 
-        [Category("Webcam")]
+        [Category("Composition")]
         [DisplayName("Capture webcam")]
         [Description("Record a webcam alongside the screen as a second video track. Nothing is composited into the recording itself — the track is only shown once you open the recording in the video editor, where the overlay can be positioned, shaped or dropped entirely.")]
+        [DisabledWhen(nameof(EnableComposition), false)]
         public bool CaptureWebcam
         {
             get => _captureWebcam;
             set => Set(ref _captureWebcam, value);
         }
 
-        [Category("Webcam")]
+        [Category("Composition")]
         [DisplayName("Webcam device")]
         [Description("Camera to record. Empty means no camera, which is also what an unplugged one falls back to.")]
         [CameraDeviceSelector]
+        [DisabledWhen(nameof(EnableComposition), false)]
         public string WebcamDeviceId
         {
             get => _webcamDeviceId;
             set => Set(ref _webcamDeviceId, value);
+        }
+
+        [Category("Composition")]
+        [DisplayName("Render automatically when capture finished")]
+        [Description("Flatten the recording to a single shareable video as soon as capture stops, without waiting for you to open the editor. The multi-track original is kept, so you can still edit and re-render it.")]
+        [DisabledWhen(nameof(EnableComposition), false)]
+        public bool RenderWhenFinished
+        {
+            get => _renderWhenFinished;
+            set => Set(ref _renderWhenFinished, value);
         }
 
         [Category("GIF")]
@@ -341,9 +353,10 @@ namespace Clowd.Config
         private bool _speakerVolumeCompensation = true;
         private bool _captureMicrophone = false;
         private string _microphoneDeviceId = "default";
-        private bool _separateAudioTracks = true;
+        private bool _enableComposition = true;
         private bool _captureWebcam = false;
         private string _webcamDeviceId = "";
+        private bool _renderWhenFinished = false;
         private string _outputDirectory = DefaultOutputDirectory;
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private RecordingFinishAction _openWhenFinished = RecordingFinishAction.VideoEditor;

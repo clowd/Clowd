@@ -154,21 +154,31 @@ namespace Clowd.UI.Config
             // [DisabledWhen] rows stay visible but stop responding (and dim) while the bool they
             // defer to holds the disabling value — e.g. the manual accent colour while the OS
             // accent is followed, or the scroll rewind while scrolling capture is switched off.
+            // The whole row dims, label and caption included: a greyed control beside a bright
+            // label reads as a broken control rather than as a switched-off option, and a run of
+            // gated rows (the composition section) makes that especially obvious.
             var disabledWhen = GetFirstAttributeOrDefault<DisabledWhenAttribute>(pd);
-            if (disabledWhen != null)
+
+            // enabledOpacity is what the target would have shown anyway — the caption is already
+            // dimmed to 0.65, and binding Opacity replaces that local value rather than scaling it.
+            void ApplyDisabledWhen(Control target, double enabledOpacity = 1.0)
             {
+                if (disabledWhen == null)
+                    return;
+
                 var disablingValue = disabledWhen.DisablingValue;
-                editor.Bind(InputElement.IsEnabledProperty, new Binding(disabledWhen.PropertyName)
+                target.Bind(InputElement.IsEnabledProperty, new Binding(disabledWhen.PropertyName)
                 {
                     Source = _obj,
                     Mode = BindingMode.OneWay,
                     Converter = new FuncValueConverter<bool, bool>(v => v != disablingValue),
                 });
-                editor.Bind(Visual.OpacityProperty, new Binding(disabledWhen.PropertyName)
+                target.Bind(Visual.OpacityProperty, new Binding(disabledWhen.PropertyName)
                 {
                     Source = _obj,
                     Mode = BindingMode.OneWay,
-                    Converter = new FuncValueConverter<bool, double>(v => v == disablingValue ? 0.4 : 1.0),
+                    Converter = new FuncValueConverter<bool, double>(
+                        v => v == disablingValue ? enabledOpacity * 0.4 : enabledOpacity),
                 });
             }
 
@@ -200,6 +210,10 @@ namespace Clowd.UI.Config
             grid.Children.Add(rowLabel);
             grid.Children.Add(rowContent);
 
+            // the Border carries the gate for the editor inside it, so IsEnabled cascades.
+            ApplyDisabledWhen(rowLabel);
+            ApplyDisabledWhen(rowContent);
+
             row++;
 
             if (!String.IsNullOrEmpty(description))
@@ -218,6 +232,7 @@ namespace Clowd.UI.Config
                 Grid.SetRow(caption, row);
                 Grid.SetColumnSpan(caption, 2);
                 grid.Children.Add(caption);
+                ApplyDisabledWhen(caption, enabledOpacity: 0.65);
                 row++;
             }
         }

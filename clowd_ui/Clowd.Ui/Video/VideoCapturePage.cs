@@ -333,13 +333,13 @@ namespace Clowd.UI
                 // *is* the "open when finished" action for those — it overrides the setting rather
                 // than dropping the user on a Recents row whose thumbnail shows no webcam at all.
                 // Recordings without one honour the setting.
-                if (session != null && session.HasWebcamTrack && session.ShowEditVideo)
+                if (session != null && session.HasWebcamTrack && session.CanEditVideo)
                     finishAction = RecordingFinishAction.VideoEditor;
 
-                // the editor cannot open every entry (it is Windows-only for now, and CreateSession
-                // can return null), so that choice degrades to the Recents page rather than to
-                // nothing at all.
-                if (finishAction == RecordingFinishAction.VideoEditor && session?.ShowEditVideo != true)
+                // the editor cannot open every entry (it is Windows-only for now, CreateSession can
+                // return null, and a capture made with composition off has no tracks to compose),
+                // so that choice degrades to the Recents page rather than to nothing at all.
+                if (finishAction == RecordingFinishAction.VideoEditor && session?.CanEditVideo != true)
                     finishAction = RecordingFinishAction.RecentsPage;
 
                 switch (finishAction)
@@ -577,8 +577,9 @@ namespace Clowd.UI
             nameof(SettingsRecording.CaptureWebcam) => true,
             nameof(SettingsRecording.WebcamDeviceId) => true,
             // not a settings-file key at all — it picks the recorder's --multi-track argument, which
-            // ApplySettingsChange turns into a respawn.
-            nameof(SettingsRecording.SeparateAudioTracks) => true,
+            // ApplySettingsChange turns into a respawn. It also gates "webcam_device", so a flip
+            // has to rewrite the settings file as well.
+            nameof(SettingsRecording.EnableComposition) => true,
             // applied as live mutes above, but ALSO part of the --multi-track decision (only an
             // enabled device earns a track), so they must reach ApplySettingsChange too.
             nameof(SettingsRecording.CaptureSpeaker) => true,
@@ -735,12 +736,10 @@ namespace Clowd.UI
             await InitializeCapturerAsync();
         }
 
-        /// <summary>True when the current settings will actually produce a webcam track: the box
-        /// ticked AND a camera picked, which is exactly the condition
-        /// <see cref="ObsArguments.WriteSettingsFile"/> uses to emit a non-empty
+        /// <summary>True when the current settings will actually produce a webcam track — exactly
+        /// the condition <see cref="ObsArguments.WriteSettingsFile"/> uses to emit a non-empty
         /// <c>webcam_device</c>.</summary>
-        private bool IsWebcamCaptured()
-            => _settings != null && _settings.CaptureWebcam && !String.IsNullOrEmpty(_settings.WebcamDeviceId);
+        private bool IsWebcamCaptured() => ObsArguments.UsesWebcam(_settings);
 
         /// <summary>
         /// The CAM button was pressed. The toolbar has already written
@@ -921,7 +920,7 @@ namespace Clowd.UI
         private SessionInfo CreateSession()
         {
             var session = SessionManager.Current.CreateSessionInDirectory(_sessionDir);
-            session.Name = "Recording";
+            session.Name = "Screen Capture Session";
             session.CreatedUtc = DateTime.UtcNow;
             session.ContentKind = "video"; // IsUploadOnly=true → no *image* editor affordance (correct); the video editor is offered through CanEditVideo
             // usually outside the session dir now (issue #50), so the recording survives the
@@ -932,6 +931,10 @@ namespace Clowd.UI
             session.OriginalBounds = _region;
             session.WebcamTrack = ResolveWebcamTrack();
             session.AudioTracks = ResolveAudioTracks();
+            // the track layout is fixed when the recorder is spawned, so this reports what the file
+            // actually got — not what the settings say now, which a mid-recording edit can no
+            // longer act on (a respawn is refused once frames are flowing).
+            session.SingleTrack = !_appliedMultiTrack;
             return session;
         }
 

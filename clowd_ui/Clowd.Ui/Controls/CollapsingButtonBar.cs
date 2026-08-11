@@ -15,7 +15,7 @@ namespace Clowd.UI.Controls
     /// <summary>
     /// A right-aligned strip of icon buttons that collapses into a single ⋮ button when the space it
     /// is given cannot hold them all. The ⋮ button opens a menu listing the same actions: each item
-    /// takes its label from the button's ToolTip.Tip (falling back to its automation name), clones
+    /// takes its label from the button's automation name (falling back to its ToolTip.Tip), clones
     /// the button's icon, tracks its IsVisible/IsEnabled, and on click re-raises Click on the button
     /// it came from — so a caller declares its buttons once and the overflow menu follows.
     /// </summary>
@@ -307,12 +307,15 @@ namespace Clowd.UI.Controls
             _flyout.ItemsSource = items;
         }
 
+        /// <summary>The menu item's text. The automation name comes first because it is always the
+        /// short action label; a tooltip is free to be a sentence explaining why the button is
+        /// disabled, which is no kind of menu item.</summary>
         private static string LabelOf(Control action)
         {
-            if (ToolTip.GetTip(action) is string tip && !String.IsNullOrEmpty(tip))
-                return tip;
+            if (AutomationProperties.GetName(action) is { Length: > 0 } name)
+                return name;
 
-            return AutomationProperties.GetName(action) ?? "";
+            return ToolTip.GetTip(action) as string ?? "";
         }
 
         /// <summary>A fresh copy of the button's glyph for its menu item — a Path can only live in

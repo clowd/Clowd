@@ -107,16 +107,16 @@ namespace Clowd.UI.Services
     /// <summary>
     /// Renders an edited recording beside its source (<c>video.mp4</c> → <c>video-edited.mp4</c>)
     /// in the out-of-process <c>Clowd.VideoRender</c> tool. The render is surfaced as its own Recent-page entry
-    /// named "Edited" carrying a <see cref="SessionInfo.ActiveRender"/> while it runs; when it
+    /// named "Rendered Video" carrying a <see cref="SessionInfo.ActiveRender"/> while it runs; when it
     /// finishes the entry drops the render and behaves like any other video entry, and when it is
     /// cancelled or fails the entry is removed again. Re-rendering the same recording replaces the
     /// entry it made last time rather than accumulating them.
     /// </summary>
     public static class VideoRenderManager
     {
-        /// <summary>The name every rendered entry carries; also how <see cref="FindExisting"/>
-        /// spots one.</summary>
-        public const string EditedSessionName = "Edited";
+        /// <summary>The name every rendered entry carries in Recents, to tell it apart from the
+        /// multi-track "Screen Capture Session" it was rendered from.</summary>
+        public const string EditedSessionName = "Rendered Video";
 
         /// <summary>Name of the render-args file written into the session directory. Unchanged
         /// from the v1 days: the tool dispatches on the file's version, not on its name.</summary>
@@ -132,8 +132,10 @@ namespace Clowd.UI.Services
             if (String.IsNullOrEmpty(sourceVideoPath))
                 return null;
 
+            // matched on EditSourceVideoPath alone: it is set on rendered entries and nothing else,
+            // so it identifies them without tying the lookup to the display name (entries written
+            // before that name last changed would otherwise never be found, and would pile up).
             return SessionManager.Current.Sessions.FirstOrDefault(s =>
-                String.Equals(s.Name, EditedSessionName, StringComparison.Ordinal) &&
                 !String.IsNullOrEmpty(s.EditSourceVideoPath) &&
                 String.Equals(s.EditSourceVideoPath, sourceVideoPath, StringComparison.OrdinalIgnoreCase));
         }
