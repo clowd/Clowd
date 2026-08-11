@@ -459,6 +459,10 @@ namespace Clowd.UI.VideoEditor
                     // the ellipse inscribed in the item rect — FrameComposer.ApplyClips' own quirk.
                     context.DrawEllipse(null, outline, bounds.Center, bounds.Width / 2, bounds.Height / 2);
                 }
+                else if (mask.Shape == MaskShape.Squircle)
+                {
+                    context.DrawGeometry(null, outline, MaskOutlines.Squircle(bounds));
+                }
                 else
                 {
                     var radius = Math.Clamp(mask.CornerRadius, 0, 0.5) * size.Height;

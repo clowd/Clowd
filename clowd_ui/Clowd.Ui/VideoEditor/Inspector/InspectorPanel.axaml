@@ -2,7 +2,75 @@
     x:Class="Clowd.UI.VideoEditor.Inspector.InspectorPanel"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="clr-namespace:Clowd.UI.Controls">
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:ve="clr-namespace:Clowd.UI.VideoEditor">
+
+    <UserControl.Resources>
+        <!--  Shape-picker icons. All four share a 100x100 box so Stretch="Uniform" renders them at
+              matching sizes; the squircle is traced from the same MaskGeometry the compositor
+              clips with, so the icon is the shape you get.  -->
+        <RectangleGeometry x:Key="MaskIconSquare" Rect="0,0,100,100" />
+        <EllipseGeometry x:Key="MaskIconCircle" Rect="0,0,100,100" />
+        <RectangleGeometry
+            x:Key="MaskIconRounded"
+            RadiusX="26"
+            RadiusY="26"
+            Rect="0,0,100,100" />
+
+        <!--  A shape-picker tile: the icon (Tag) over its name (Content), in a rounded box that
+              borrows the Semi RadioButton's own brushes — grey ring unselected, a thicker accent
+              ring selected — so it stays in step with the theme's other radio controls. The
+              padding drops by 1 when selected, keeping the content box the same size as the
+              border thickens.  -->
+        <ControlTheme x:Key="MaskShapeTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Padding="7"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <DockPanel>
+                            <TextBlock
+                                Name="_label"
+                                Margin="0,6,0,0"
+                                DockPanel.Dock="Bottom"
+                                FontSize="11"
+                                Foreground="#CCCCCC"
+                                Text="{TemplateBinding Content}"
+                                TextAlignment="Center" />
+                            <Path
+                                Name="_icon"
+                                Width="28"
+                                Height="28"
+                                HorizontalAlignment="Center"
+                                Data="{TemplateBinding Tag}"
+                                Fill="#CCCCCC"
+                                Stretch="Uniform" />
+                        </DockPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="Padding" Value="6" />
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:checked /template/ Path#_icon">
+                <Setter Property="Fill" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+            </Style>
+            <Style Selector="^:checked /template/ TextBlock#_label">
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
 
     <!--  The editor window's chrome is a fixed dark palette (NOT Semi tokens), so this panel is
           hand-coloured to match the sidebar it lives in — the same trade LayersPanel makes.  -->
@@ -28,6 +96,11 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="MinWidth" Value="120" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <!--  wider than the 70px the shared spinner theme picks: this panel puts a spinner on
+              nearly every row, and 70px truncates the longer values (e.g. "-360 °").  -->
+        <Style Selector="controls|SpinnerTextBox">
+            <Setter Property="Width" Value="100" />
         </Style>
         <Style Selector="TextBox.field">
             <Setter Property="Foreground" Value="White" />
@@ -142,25 +215,46 @@
                 <StackPanel Classes="section" IsVisible="{Binding ShowMask}">
                     <TextBlock Classes="section" Text="SHAPE" />
 
-                    <!--  wraps: all three fit side by side once the sidebar is dragged wider than
-                          its 230px default, and stack instead of clipping when it is not  -->
-                    <WrapPanel>
+                    <!--  a 2x2 grid of tiles rather than a row of radios: the shape is the thing
+                          being chosen, so each option shows it. Stretches with the sidebar.  -->
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="6"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="6">
                         <RadioButton
-                            Margin="0,0,12,2"
-                            Content="None"
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Content="Square"
                             GroupName="ItemMask"
-                            IsChecked="{Binding MaskNone, Mode=TwoWay}" />
+                            IsChecked="{Binding MaskSquare, Mode=TwoWay}"
+                            Tag="{StaticResource MaskIconSquare}"
+                            Theme="{StaticResource MaskShapeTile}" />
                         <RadioButton
-                            Margin="0,0,12,2"
+                            Grid.Row="0"
+                            Grid.Column="1"
                             Content="Circle"
                             GroupName="ItemMask"
-                            IsChecked="{Binding MaskCircle, Mode=TwoWay}" />
+                            IsChecked="{Binding MaskCircle, Mode=TwoWay}"
+                            Tag="{StaticResource MaskIconCircle}"
+                            Theme="{StaticResource MaskShapeTile}" />
                         <RadioButton
-                            Margin="0,0,0,2"
+                            Grid.Row="1"
+                            Grid.Column="0"
                             Content="Rounded"
                             GroupName="ItemMask"
-                            IsChecked="{Binding MaskRounded, Mode=TwoWay}" />
-                    </WrapPanel>
+                            IsChecked="{Binding MaskRounded, Mode=TwoWay}"
+                            Tag="{StaticResource MaskIconRounded}"
+                            Theme="{StaticResource MaskShapeTile}" />
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Content="Squircle"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskSquircle, Mode=TwoWay}"
+                            Tag="{x:Static ve:MaskOutlines.SquircleIcon}"
+                            Theme="{StaticResource MaskShapeTile}" />
+                    </Grid>
 
                     <StackPanel Classes="row" IsVisible="{Binding ShowCornerRadius}">
                         <TextBlock Classes="label" Text="Corners" />
