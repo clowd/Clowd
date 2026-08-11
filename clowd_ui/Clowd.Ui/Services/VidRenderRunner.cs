@@ -139,6 +139,11 @@ namespace Clowd.UI.Services
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                // the child writes the protocol as UTF-8 (Program.cs wraps stdout explicitly);
+                // without this the runner decodes with the ANSI code page and a non-ASCII output
+                // path corrupts the `done <path>` line.
+                StandardOutputEncoding = new System.Text.UTF8Encoding(false),
+                StandardErrorEncoding = new System.Text.UTF8Encoding(false),
             };
 
             // The render tool self-locates FFmpeg (beside itself, then the dev walk-up), but in

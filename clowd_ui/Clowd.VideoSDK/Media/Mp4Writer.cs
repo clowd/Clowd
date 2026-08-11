@@ -91,6 +91,7 @@ namespace Clowd.VideoSDK.Media
         private bool _headerWritten;
         private bool _trailerWritten;
         private bool _finished;
+        private bool _abandoned;
         private bool _disposed;
 
         // audio FIFO: interleaved floats not yet chunked into an encoder frame
@@ -447,6 +448,18 @@ namespace Clowd.VideoSDK.Media
             Check(ffmpeg.avio_closep(&_fmt->pb), "could not close the output file");
         }
 
+        /// <summary>
+        /// Marks the writer abandoned: <see cref="Dispose"/> skips the mp4 trailer and just
+        /// closes the file handle and frees the contexts. The muxer runs with
+        /// <c>movflags=+faststart</c>, so the trailer is not a small moov append — movenc's
+        /// shift_data() re-reads and rewrites the <b>entire</b> mdat to relocate moov, which on
+        /// a multi-GB partial render blocks the caller for tens of seconds. Callers that are
+        /// about to delete the partial output anyway (render cancellation, render error) must
+        /// abandon instead of finalizing. The resulting file has no moov and is unreadable —
+        /// deleting it is the caller's contract. No effect once <see cref="Finish"/> has run.
+        /// </summary>
+        public void Abandon() => _abandoned = true;
+
         public void Dispose()
         {
             if (_disposed)
@@ -492,7 +505,9 @@ namespace Clowd.VideoSDK.Media
             {
                 // Abort path (Finish not reached): a header without a trailer would leave an
                 // unreadable mp4 — try once, and never after a failed Finish (see Finish).
-                if (_headerWritten && !_trailerWritten)
+                // An Abandon()ed writer skips the trailer entirely: with +faststart it would
+                // rewrite the whole file, and the caller is deleting the output anyway.
+                if (_headerWritten && !_trailerWritten && !_abandoned)
                 {
                     ffmpeg.av_write_trailer(_fmt);
                     _trailerWritten = true;

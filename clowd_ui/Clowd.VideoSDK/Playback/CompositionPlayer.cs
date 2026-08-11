@@ -28,7 +28,8 @@ namespace Clowd.VideoSDK.Playback
     ///
     /// <see cref="UpdateProject"/> applies live edits: as long as the set of referenced streams is
     /// unchanged (every trim/cut/transform/volume edit), the new mapping is swapped in atomically
-    /// and no decoder is reopened; only adding/removing/relinking streams rebuilds pipelines.
+    /// and no decoder is reopened; only adding/removing/relinking streams rebuilds pipelines,
+    /// which happens on a background task (latest update wins) — never on the caller's thread.
     ///
     /// Phase 1 parity limits (see <see cref="ProjectTimelineMap"/> for the mapping's own):
     /// only the first audible audio stream plays; streams are paced correctly when their items
@@ -68,6 +69,14 @@ namespace Clowd.VideoSDK.Playback
         private bool _hasPendingSeek;
         private bool _seekLoopActive;
         private Task _seekTask = Task.CompletedTask;
+
+        // update coalescing — a changed stream set rebuilds pipelines on a background task
+        // (mirroring how OpenAsync offloads OpenCore); overlapping updates coalesce, latest
+        // project wins. Lock order: _updateSync outer, _lifecycleSync inner.
+        private readonly object _updateSync = new object();
+        private Project _pendingUpdate;
+        private bool _updateLoopActive;
+        private Task _updateTask = Task.CompletedTask;
 
         /// <param name="eventDispatcher">Marshals <see cref="PositionChanged"/> /
         /// <see cref="StateChanged"/> onto the UI thread. Null = raise on the calling thread.</param>
@@ -124,6 +133,12 @@ namespace Clowd.VideoSDK.Playback
         public event EventHandler PositionChanged;
         public event EventHandler<PlayerState> StateChanged;
 
+        /// <summary>The exception behind the most recent transition to
+        /// <see cref="PlayerState.Failed"/> (a failed open or live rebuild); null otherwise.
+        /// Read it from a <see cref="StateChanged"/> handler — a failed background rebuild
+        /// surfaces exclusively through the Failed state, never as a thrown exception.</summary>
+        public Exception LastError { get; private set; }
+
         public TimeSpan Position
         {
             get
@@ -175,8 +190,9 @@ namespace Clowd.VideoSDK.Playback
                     OpenCore(project, options ?? new VideoOpenOptions());
                     SetState(PlayerState.Paused);
                 }
-                catch
+                catch (Exception ex)
                 {
+                    LastError = ex;
                     SetState(PlayerState.Failed);
                     throw;
                 }
@@ -263,63 +279,83 @@ namespace Clowd.VideoSDK.Playback
             var files = new List<FilePipe>();
             var allVideo = new List<VideoPipe>();
 
-            foreach (var (sourceId, videoKeys) in bySource)
+            try
             {
-                var source = FindSource(project, sourceId)
-                    ?? throw new InvalidOperationException($"Project has no source {sourceId}.");
-
-                var file = new FilePipe { Demuxer = new Demuxer() };
-                file.Demuxer.Open(source.Path);
-
-                // primary first so it lands in stats slot 0 (parity with screen-track-first today)
-                videoKeys.Sort((a, b) =>
+                foreach (var (sourceId, videoKeys) in bySource)
                 {
-                    int pa = map.PrimaryVideo == a ? 0 : 1;
-                    int pb = map.PrimaryVideo == b ? 0 : 1;
-                    return pa != pb ? pa.CompareTo(pb) : a.StreamIndex.CompareTo(b.StreamIndex);
-                });
+                    var source = FindSource(project, sourceId)
+                        ?? throw new InvalidOperationException($"Project has no source {sourceId}.");
 
-                foreach (var key in videoKeys)
-                {
-                    var queue = new PacketQueue(32);
-                    file.Queues.Add(queue);
-                    file.Demuxer.AttachQueue(key.StreamIndex, queue);
+                    // registered in files BEFORE any native open, so a failure part-way through
+                    // the build leaves everything reachable for the catch block's cleanup.
+                    var file = new FilePipe { Demuxer = new Demuxer() };
+                    files.Add(file);
+                    file.Demuxer.Open(source.Path);
 
-                    var sink = new PooledFrameSink();
-                    var keyCopy = key;
-                    var worker = new VideoDecodeWorker(
-                        file.Demuxer, key.StreamIndex, queue, _options, _clock,
-                        () => sink,
-                        () => _state == PlayerState.Playing,
-                        OnImmediatePresented,
-                        srcPts => MapVideoPtsToClock(keyCopy, srcPts));
-                    Interlocked.Increment(ref _decoderOpens);
+                    // primary first so it lands in stats slot 0 (parity with screen-track-first today)
+                    videoKeys.Sort((a, b) =>
+                    {
+                        int pa = map.PrimaryVideo == a ? 0 : 1;
+                        int pb = map.PrimaryVideo == b ? 0 : 1;
+                        return pa != pb ? pa.CompareTo(pb) : a.StreamIndex.CompareTo(b.StreamIndex);
+                    });
 
-                    var pipe = new VideoPipe { Key = key, Worker = worker, Sink = sink };
-                    file.Video.Add(pipe);
-                    allVideo.Add(pipe);
-                    _frameSource.RegisterStream(key, sink);
-                    if (map.PrimaryVideo == key)
-                        set.Primary = pipe;
+                    foreach (var key in videoKeys)
+                    {
+                        var queue = new PacketQueue(32);
+                        file.Queues.Add(queue);
+                        file.Demuxer.AttachQueue(key.StreamIndex, queue);
+
+                        var sink = new PooledFrameSink();
+                        var keyCopy = key;
+                        var worker = new VideoDecodeWorker(
+                            file.Demuxer, key.StreamIndex, queue, _options, _clock,
+                            () => sink,
+                            () => _state == PlayerState.Playing,
+                            OnImmediatePresented,
+                            srcPts => MapVideoPtsToClock(keyCopy, srcPts));
+                        Interlocked.Increment(ref _decoderOpens);
+
+                        var pipe = new VideoPipe { Key = key, Worker = worker, Sink = sink };
+                        file.Video.Add(pipe);
+                        allVideo.Add(pipe);
+                        _frameSource.RegisterStream(key, sink);
+                        if (map.PrimaryVideo == key)
+                            set.Primary = pipe;
+                    }
+
+                    if (map.AudioStream is { } ak && ak.Item1 == sourceId)
+                    {
+                        var queue = new PacketQueue(64);
+                        file.Queues.Add(queue);
+                        file.Demuxer.AttachQueue(ak.Item2, queue);
+
+                        set.AudioRing = new AudioRingBuffer(_options.AudioSampleRate); // ~500ms float stereo
+                        set.AudioSink = new NAudioSink(_options.AudioSampleRate, 2, set.AudioRing);
+                        set.AudioSink.Volume = _volume;
+                        set.AudioWorker = new AudioDecodeWorker(
+                            file.Demuxer, ak.Item2, queue, set.AudioRing, set.AudioSink, _options,
+                            MapAudioPtsToClock);
+                        Interlocked.Increment(ref _decoderOpens);
+                        _clock.SetAudioSource(set.AudioSink);
+                    }
                 }
-
-                if (map.AudioStream is { } ak && ak.Item1 == sourceId)
-                {
-                    var queue = new PacketQueue(64);
-                    file.Queues.Add(queue);
-                    file.Demuxer.AttachQueue(ak.Item2, queue);
-
-                    set.AudioRing = new AudioRingBuffer(_options.AudioSampleRate); // ~500ms float stereo
-                    set.AudioSink = new NAudioSink(_options.AudioSampleRate, 2, set.AudioRing);
-                    set.AudioSink.Volume = _volume;
-                    set.AudioWorker = new AudioDecodeWorker(
-                        file.Demuxer, ak.Item2, queue, set.AudioRing, set.AudioSink, _options,
-                        MapAudioPtsToClock);
-                    Interlocked.Increment(ref _decoderOpens);
-                    _clock.SetAudioSource(set.AudioSink);
-                }
-
-                files.Add(file);
+            }
+            catch
+            {
+                // Construction failed part-way (missing/corrupt file, decoder init failure).
+                // Everything built so far lives only in these locals — _pipelines is never
+                // assigned, so DisposeCore could never reach it: open AVFormatContexts (each
+                // holding an OS file handle on the source mp4), decoder contexts and sinks
+                // already registered with the frame source would all leak for the process
+                // lifetime. FFmpegVideoPlayer kept partial state reachable in fields; here the
+                // partial build must be torn down eagerly instead, before the throw escapes.
+                set.Files = files.ToArray();
+                set.AllVideo = allVideo.ToArray();
+                _frameSource.Clear();
+                _clock?.SetAudioSource(null);
+                DisposePipelineSet(set);
+                throw;
             }
 
             set.Files = files.ToArray();
@@ -333,42 +369,122 @@ namespace Clowd.VideoSDK.Playback
         /// <summary>
         /// Applies an edited project. When the set of referenced media streams is unchanged (all
         /// trim/cut/move/transform/volume edits), the timeline mapping and cut schedules are
-        /// swapped atomically — decoders keep running and, while playing, the seam logic re-syncs
-        /// the pipelines to the new mapping on the next tick. Only a changed stream set (streams
-        /// added/removed, files relinked) rebuilds the pipelines, preserving position and state.
+        /// swapped atomically on the calling thread — decoders keep running and, while playing,
+        /// the seam logic re-syncs the pipelines to the new mapping on the next tick; the
+        /// returned task is already completed. Only a changed stream set (streams added/removed,
+        /// files relinked) rebuilds the pipelines, preserving position and state — and that
+        /// rebuild runs on a background task, because it tears decoder threads down and re-runs
+        /// avformat/avcodec opens (hundreds of ms of blocking work that must never execute on
+        /// the caller's UI thread). The returned task completes once the rebuild has been
+        /// applied; overlapping updates coalesce (latest project wins). A failed rebuild lands
+        /// the player in <see cref="PlayerState.Failed"/> (see <see cref="LastError"/>) instead
+        /// of faulting the task.
         /// </summary>
-        public void UpdateProject(Project project)
+        public Task UpdateProject(Project project)
         {
             ArgumentNullException.ThrowIfNull(project);
 
-            lock (_lifecycleSync)
+            lock (_updateSync)
             {
-                if (_disposed)
-                    return;
-                if (_state is PlayerState.Idle or PlayerState.Opening or PlayerState.Failed)
-                    throw new InvalidOperationException("UpdateProject requires an open player (await OpenAsync first).");
-
-                var map = ProjectTimelineMap.Build(project);
-                var set = _pipelines;
-                string signature = StreamSignature(project, map);
-
-                if (set != null && signature == set.Signature)
+                // The synchronous fast path is only safe while no rebuild is queued or in
+                // flight — once one is, every update must funnel through the queue so the
+                // latest project always wins (a cheap edit racing ahead of a queued rebuild
+                // would otherwise be clobbered by the stale rebuild finishing after it).
+                if (!_updateLoopActive)
                 {
-                    _project = project;
-                    _map = map;
-                    _frameSource.SetCutSchedules(BuildCutSchedules(map));
-                    ApplyAudioVolume(set, map);
-                    // _activeOffsetTicks intentionally kept: if the current position's segment
-                    // offset changed under the new map (e.g. a cut moved past the playhead), the
-                    // next tick's seam check sees the mismatch and hops the pipelines.
-                    return;
+                    lock (_lifecycleSync)
+                    {
+                        if (_disposed)
+                            return Task.CompletedTask;
+                        if (_state is PlayerState.Idle or PlayerState.Opening or PlayerState.Failed)
+                            throw new InvalidOperationException("UpdateProject requires an open player (await OpenAsync first).");
+
+                        var map = ProjectTimelineMap.Build(project);
+                        var set = _pipelines;
+                        if (set != null && StreamSignature(project, map) == set.Signature)
+                        {
+                            ApplyMappingSwap(project, map, set);
+                            return Task.CompletedTask;
+                        }
+                    }
                 }
 
-                ReopenCore(project, map);
+                _pendingUpdate = project;
+                if (!_updateLoopActive)
+                {
+                    _updateLoopActive = true;
+                    _updateTask = Task.Run(UpdateLoop);
+                }
+
+                return _updateTask;
             }
         }
 
-        /// <summary>Full pipeline rebuild for a changed stream set, preserving position/state.</summary>
+        /// <summary>The stream-set-unchanged edit path: swap mapping + cut schedules atomically,
+        /// no decoder touched. Caller holds <see cref="_lifecycleSync"/>.</summary>
+        private void ApplyMappingSwap(Project project, ProjectTimelineMap map, PipelineSet set)
+        {
+            _project = project;
+            _map = map;
+            _frameSource.SetCutSchedules(BuildCutSchedules(map));
+            ApplyAudioVolume(set, map);
+            // _activeOffsetTicks intentionally kept: if the current position's segment
+            // offset changed under the new map (e.g. a cut moved past the playhead), the
+            // next tick's seam check sees the mismatch and hops the pipelines.
+        }
+
+        /// <summary>Drains queued project updates on a background task, same discipline as
+        /// <see cref="SeekLoop"/>: coalesced latest-wins, serialized under
+        /// <see cref="_lifecycleSync"/>. Re-checks the stream signature per iteration — a
+        /// queued rebuild superseded by an edit that restored the current stream set collapses
+        /// back into the cheap mapping swap.</summary>
+        private void UpdateLoop()
+        {
+            while (true)
+            {
+                Project project;
+                lock (_updateSync)
+                {
+                    project = _pendingUpdate;
+                    _pendingUpdate = null;
+                    if (project == null || _disposed)
+                    {
+                        _updateLoopActive = false;
+                        return;
+                    }
+                }
+
+                try
+                {
+                    lock (_lifecycleSync)
+                    {
+                        if (_disposed)
+                            continue; // next iteration clears the loop flag and exits
+
+                        var map = ProjectTimelineMap.Build(project);
+                        var set = _pipelines;
+                        if (set != null && StreamSignature(project, map) == set.Signature)
+                            ApplyMappingSwap(project, map, set);
+                        else
+                            ReopenCore(project, map); // contains its own failures (Failed state)
+                    }
+                }
+                catch
+                {
+                    // a malformed project failed mapping; drop this update — a later one can
+                    // still supersede it, and faulting the shared task would tear the loop down.
+                }
+            }
+        }
+
+        /// <summary>Full pipeline rebuild for a changed stream set, preserving position/state.
+        /// Runs on the update loop's background task, under <see cref="_lifecycleSync"/>.
+        /// Never throws: the old set is already gone when the rebuild starts, so a failure
+        /// (source file deleted/moved, decoder init error) disposes anything partially built
+        /// (see <see cref="BuildPipelines"/>), records <see cref="LastError"/> and lands the
+        /// player in <see cref="PlayerState.Failed"/> — surfaced through
+        /// <see cref="StateChanged"/>, never as an exception escaping into a caller's
+        /// PropertyChanged handler. A later update retries the rebuild (self-heal).</summary>
         private void ReopenCore(Project project, ProjectTimelineMap map)
         {
             var pos = Position;
@@ -393,10 +509,23 @@ namespace Clowd.VideoSDK.Playback
             if (pos.Ticks > map.DurationTicks)
                 pos = new TimeSpan(map.DurationTicks);
 
-            var set = BuildPipelines(project, map);
+            PipelineSet set;
+            try
+            {
+                set = BuildPipelines(project, map); // disposes its own partial build on failure
+            }
+            catch (Exception ex)
+            {
+                LastError = ex;
+                SetState(PlayerState.Failed);
+                return;
+            }
+
             _pipelines = set;
             PrimeAndStart(set, map, pos.Ticks);
             _clock.SetPosition(pos);
+            if (_state == PlayerState.Failed)
+                SetState(PlayerState.Paused); // a retried rebuild succeeded — transport is back
 
             // land the position with a real container seek (PrimeAndStart decodes from the file
             // head otherwise), then resume if we interrupted playback.

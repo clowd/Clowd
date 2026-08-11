@@ -43,6 +43,8 @@ namespace Clowd.VideoSDK.Playback
         private AVBufferRef* _hwDeviceRef;
         private AVFrame* _decFrame;
         private AVFrame* _swFrame;
+        private AVFrame* _heldSeekFrame; // newest at-or-before-target frame during an exact seek
+        private long _heldSeekTicks = long.MinValue;
         private AVPacket* _pkt;
         private SwsContext* _sws;
         private AVCodecContext_get_format _getFormatDelegate; // rooted for the codec's lifetime
@@ -111,10 +113,22 @@ namespace Clowd.VideoSDK.Playback
             _frameDurTicks = (long)(TimeSpan.TicksPerSecond / fps);
             _dropThresholdTicks = Math.Max(_frameDurTicks, 10 * TimeSpan.TicksPerMillisecond);
 
-            OpenDecoder(tryHardware: options.EnableHardwareDecode);
+            try
+            {
+                OpenDecoder(tryHardware: options.EnableHardwareDecode);
+            }
+            catch
+            {
+                // OpenDecoder can throw after avcodec_alloc_context3 succeeded (parameters_to_
+                // context / avcodec_open2); the caller never sees this instance, so free the
+                // partial native state here or it leaks for the process lifetime.
+                Dispose();
+                throw;
+            }
 
             _decFrame = ffmpeg.av_frame_alloc();
             _swFrame = ffmpeg.av_frame_alloc();
+            _heldSeekFrame = ffmpeg.av_frame_alloc();
             _pkt = ffmpeg.av_packet_alloc();
             _statsStampTicks = Stopwatch.GetTimestamp();
         }
@@ -274,9 +288,12 @@ namespace Clowd.VideoSDK.Playback
                 if (eof)
                 {
                     // drain the codec, then queue an EOF marker so the present thread knows the
-                    // last real frame has passed through.
+                    // last real frame has passed through. A seek targeted at/past the last frame
+                    // may still be holding that frame as its floor candidate — flush it first.
                     ffmpeg.avcodec_send_packet(_ctx, null);
                     ReceiveFrames(serial);
+                    if (!CommitHeldSeekFrame(serial))
+                        break;
                     int slot = _frames.Reserve();
                     if (slot < 0)
                         break;
@@ -316,9 +333,37 @@ namespace Clowd.VideoSDK.Playback
             Interlocked.Exchange(ref _activeSerial, serial);
             _lastPtsTicks = long.MinValue;
 
+            // a floor candidate held for the previous seek is stale now
+            ffmpeg.av_frame_unref(_heldSeekFrame);
+            _heldSeekTicks = long.MinValue;
+
             long target = Interlocked.Read(ref _pendingSeekTargetTicks);
             bool exact = Volatile.Read(ref _pendingSeekExact) == 1;
             _exactDiscardTicks = (target != long.MinValue && exact) ? target : long.MinValue;
+        }
+
+        /// <summary>Commits the exact-seek floor candidate (the newest decoded frame with
+        /// <c>pts &lt;= target</c>) to the frame queue and ends the discard phase. Returns false
+        /// only when the queue was stopped. Decode thread only.</summary>
+        private bool CommitHeldSeekFrame(int serial)
+        {
+            _exactDiscardTicks = long.MinValue;
+            if (_heldSeekTicks == long.MinValue)
+                return true;
+
+            long heldPts = _heldSeekTicks;
+            _heldSeekTicks = long.MinValue;
+
+            int slot = _frames.Reserve();
+            if (slot < 0)
+            {
+                ffmpeg.av_frame_unref(_heldSeekFrame);
+                return false;
+            }
+
+            ffmpeg.av_frame_move_ref(_frames.GetFrame(slot), _heldSeekFrame);
+            _frames.Commit(slot, serial, heldPts, eof: false);
+            return true;
         }
 
         private void ReceiveFrames(int serial)
@@ -364,14 +409,30 @@ namespace Clowd.VideoSDK.Playback
                 long ptsTicks = PtsToTicks(src);
                 _lastPtsTicks = ptsTicks;
 
-                if (_exactDiscardTicks != long.MinValue && ptsTicks + _frameDurTicks / 2 < _exactDiscardTicks)
+                if (_exactDiscardTicks != long.MinValue)
                 {
-                    // exact seek: decode-forward from the keyframe, discard until the target.
-                    ffmpeg.av_frame_unref(src);
-                    continue;
-                }
+                    // Exact seek: decode forward from the keyframe with floor semantics — the
+                    // frame to present is the NEWEST one with pts <= target (the frame whose
+                    // span covers the target, matching the composer's hold-last lookup). It is
+                    // held rather than committed so a later, closer at-or-before frame can
+                    // replace it; the first frame past the target flushes it. Nearest-frame
+                    // rounding here would overshoot: an end-of-timeline seek targets the last
+                    // kept source instant (out-point − 1), and rounding up would present the
+                    // first frame the edit trimmed away.
+                    if (ptsTicks <= _exactDiscardTicks)
+                    {
+                        ffmpeg.av_frame_unref(_heldSeekFrame);
+                        ffmpeg.av_frame_move_ref(_heldSeekFrame, src);
+                        _heldSeekTicks = ptsTicks;
+                        continue;
+                    }
 
-                _exactDiscardTicks = long.MinValue;
+                    if (!CommitHeldSeekFrame(serial))
+                    {
+                        ffmpeg.av_frame_unref(src);
+                        return;
+                    }
+                }
 
                 int slot = _frames.Reserve();
                 if (slot < 0)
@@ -609,6 +670,13 @@ namespace Clowd.VideoSDK.Playback
                 var f = _swFrame;
                 ffmpeg.av_frame_free(&f);
                 _swFrame = null;
+            }
+
+            if (_heldSeekFrame != null)
+            {
+                var f = _heldSeekFrame;
+                ffmpeg.av_frame_free(&f);
+                _heldSeekFrame = null;
             }
 
             if (_pkt != null)

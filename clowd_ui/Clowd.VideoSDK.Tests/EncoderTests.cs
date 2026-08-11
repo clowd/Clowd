@@ -337,6 +337,40 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Abandon_skips_the_trailer_and_releases_the_file()
+        {
+            RequireFFmpeg();
+
+            const int W = 320, H = 240;
+            string path = TempMp4();
+            try
+            {
+                using (var writer = new Mp4Writer(path, new Mp4WriterOptions
+                {
+                    Width = W,
+                    Height = H,
+                    FpsNum = 30,
+                }))
+                {
+                    SubmitSolidFrames(writer, W, H, 30);
+                    writer.Abandon(); // cancel/error path: the caller deletes the output next
+                }
+
+                // No trailer ran: with +faststart the trailer is a whole-file rewrite (moov
+                // relocation), pure wasted I/O before a delete. An abandoned file therefore has
+                // no moov box at all — it is deliberately unreadable.
+                byte[] bytes = File.ReadAllBytes(path);
+                Assert.True(bytes.Length > 0, "abandoned writer wrote nothing at all");
+                Assert.True(IndexOfAscii(bytes, "moov") < 0,
+                    "abandoned writer still wrote a moov box — the +faststart trailer rewrite ran");
+            }
+            finally
+            {
+                File.Delete(path); // also proves Dispose released the handle
+            }
+        }
+
+        [Fact]
         public void Rejects_invalid_options()
         {
             RequireFFmpeg();

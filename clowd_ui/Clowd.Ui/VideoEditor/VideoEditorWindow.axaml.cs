@@ -64,6 +64,7 @@ namespace Clowd.UI.VideoEditor
         private bool _sidebarVisible;
         private bool _syncingShape;
         private bool _suspendEdits; // applying a loaded edit: no persist, no project rebuild
+        private bool _playerFailedShown; // the status overlay currently shows a player failure
         private bool _closing;
 
         // videoedit.json persistence: debounced (500ms) on the UI thread, then written by a
@@ -435,6 +436,21 @@ namespace Clowd.UI.VideoEditor
         private void Player_StateChanged(object sender, PlayerState state)
         {
             UpdatePlayPauseButton();
+
+            // A failed live rebuild (webcam toggle while the source file went away, decoder
+            // init failure) surfaces here as the Failed state rather than as an exception on
+            // the UI thread. A later edit retries the rebuild; hide the notice if it heals.
+            if (state == PlayerState.Failed)
+            {
+                _playerFailedShown = true;
+                var reason = _player?.LastError?.Message;
+                ShowStatus("Video playback failed" + (String.IsNullOrEmpty(reason) ? "." : ": " + reason));
+            }
+            else if (_playerFailedShown && state is PlayerState.Paused or PlayerState.Playing)
+            {
+                _playerFailedShown = false;
+                HideStatus();
+            }
         }
 
         private void TogglePlayPause()
@@ -526,11 +542,15 @@ namespace Clowd.UI.VideoEditor
         /// <summary>
         /// Rebuilds the project from the document and hands it to the player. Trim/cut/webcam edits
         /// keep the same source and streams, so this is an atomic mapping swap — no decoder is
-        /// reopened, however fast the user drags. <paramref name="structural"/> edits (anything
-        /// that moves material along the timeline) additionally re-seek, both to refresh a paused
+        /// reopened, however fast the user drags. Toggling the webcam overlay changes which streams
+        /// the project references, which the player rebuilds on a background task — the decoder
+        /// teardown and file/codec reopen must never run on the UI thread, so this awaits the
+        /// rebuild (overlapping toggles coalesce inside the player, latest project wins) and only
+        /// then refreshes the shown frame. <paramref name="structural"/> edits (anything that
+        /// moves material along the timeline) additionally re-seek, both to refresh a paused
         /// frame and to keep the playhead on the same source instant it was on before.
         /// </summary>
-        private void ApplyEdit(bool structural)
+        private async void ApplyEdit(bool structural)
         {
             if (_edit == null)
                 return;
@@ -547,12 +567,31 @@ namespace Clowd.UI.VideoEditor
             if (!PlayerReady)
                 return;
 
-            _player.UpdateProject(_edit.Current);
+            var update = _player.UpdateProject(_edit.Current);
+            if (!update.IsCompleted)
+            {
+                // stream set changed (webcam toggled): the rebuild runs on a background task.
+                // A failed rebuild does not fault the task — it lands the player in Failed,
+                // which Player_StateChanged surfaces; PlayerReady turns false below.
+                try
+                {
+                    await update;
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Video editor project update failed: " + ex);
+                    return;
+                }
+
+                if (_closing || !PlayerReady)
+                    return;
+            }
 
             // Paused: re-seek so the shown frame is refreshed (it may be material the edit just
-            // removed) and the playhead stays on the source instant it was on. Playing: leave it —
-            // the player's own seam detection re-syncs the pipelines against the new mapping on
-            // its next tick, and seeking on every pointer move of a drag would stutter.
+            // removed — after an async rebuild this also replaces the stale held frame) and the
+            // playhead stays on the source instant it was on. Playing: leave it — the player's
+            // own seam detection re-syncs the pipelines against the new mapping on its next
+            // tick, and seeking on every pointer move of a drag would stutter.
             if (structural && _player.State != PlayerState.Playing)
             {
                 var target = _edit.TimeMap.ToTimelineMs(sourceMs);

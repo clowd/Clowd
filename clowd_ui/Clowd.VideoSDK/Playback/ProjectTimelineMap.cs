@@ -65,7 +65,8 @@ namespace Clowd.VideoSDK.Playback
 
             /// <summary>Timeline instant → source instant, mirroring the composer's per-item
             /// mapping. Clamps: before the first segment → its in-point, inside a timeline gap →
-            /// the next segment's in-point, past the last segment → its source end.</summary>
+            /// the next segment's in-point, past the last segment → its last kept source
+            /// instant (source end − 1).</summary>
             public long TimelineToSource(long tlTicks)
             {
                 if (_segments.Length == 0)
@@ -79,7 +80,13 @@ namespace Clowd.VideoSDK.Playback
                         return seg.SrcIn + (tlTicks - seg.TlStart);
                 }
 
-                return _segments[^1].SrcEnd;
+                // Past the last segment: clamp to the last KEPT source instant, not to SrcEnd.
+                // SrcEnd is the exclusive out-point — the first instant the edit removed — and
+                // seeking a decode pipeline there presents the first trimmed-away frame (the
+                // preview would show material a render never contains). SrcEnd − 1 combined
+                // with the workers' floor-to-covering-frame exact-seek discard resolves to the
+                // last kept frame instead.
+                return Math.Max(_segments[^1].SrcIn, _segments[^1].SrcEnd - 1);
             }
 
             /// <summary>Source instant → timeline instant (the pacing map handed to the decode
