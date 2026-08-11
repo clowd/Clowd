@@ -30,6 +30,13 @@ namespace Clowd.VideoSDK.Playback
         private readonly Func<bool> _isPlaying;
         /// <summary>Invoked (decode-side threads) when a seek's immediate frame was presented.</summary>
         private readonly Action<VideoDecodeWorker, TimeSpan> _immediatePresented;
+        /// <summary>Optional map from source pts ticks to the clock's time domain, used only for
+        /// present pacing/drop decisions. Null = identity (the clock runs in source time, as in
+        /// <see cref="FFmpegVideoPlayer"/>). <c>CompositionPlayer</c> passes its timeline mapping
+        /// here so one shared clock in output-timeline time paces every stream. Frames are still
+        /// committed/presented with their source pts. Called on the present thread; must be cheap
+        /// and thread-safe.</summary>
+        private readonly Func<long, long> _sourceToClock;
 
         private AVCodecContext* _ctx;
         private AVCodec* _codec;
@@ -79,7 +86,8 @@ namespace Clowd.VideoSDK.Playback
         public VideoDecodeWorker(
             Demuxer demuxer, int streamIndex, PacketQueue packets, VideoOpenOptions options,
             PlaybackClock clock, Func<IFrameSink> sinkAccessor, Func<bool> isPlaying,
-            Action<VideoDecodeWorker, TimeSpan> immediatePresented)
+            Action<VideoDecodeWorker, TimeSpan> immediatePresented,
+            Func<long, long> sourceToClockTicks = null)
         {
             _demuxer = demuxer;
             _streamIndex = streamIndex;
@@ -89,6 +97,7 @@ namespace Clowd.VideoSDK.Playback
             _sinkAccessor = sinkAccessor;
             _isPlaying = isPlaying;
             _immediatePresented = immediatePresented;
+            _sourceToClock = sourceToClockTicks;
             _frames = new FrameQueue(4);
 
             var st = demuxer.GetStream(streamIndex);
@@ -435,8 +444,9 @@ namespace Clowd.VideoSDK.Playback
                         continue;
                     }
 
+                    long clockPtsTicks = _sourceToClock == null ? ptsTicks : _sourceToClock(ptsTicks);
                     long now = _clock.Position.Ticks;
-                    long wait = ptsTicks - now;
+                    long wait = clockPtsTicks - now;
                     if (wait > 2 * TimeSpan.TicksPerMillisecond)
                     {
                         _presentWake.Reset();
@@ -445,7 +455,7 @@ namespace Clowd.VideoSDK.Playback
                         continue; // re-evaluate: clock/seek/pause may have changed
                     }
 
-                    if (now - ptsTicks > _dropThresholdTicks)
+                    if (now - clockPtsTicks > _dropThresholdTicks)
                     {
                         Interlocked.Increment(ref _droppedTotal);
                         _frames.Release(slot);

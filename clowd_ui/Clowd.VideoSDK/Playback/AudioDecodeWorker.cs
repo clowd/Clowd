@@ -20,6 +20,12 @@ namespace Clowd.VideoSDK.Playback
         private readonly NAudioSink _sink;
         private readonly int _outRate;
         private readonly AVRational _timeBase;
+        /// <summary>Optional map from source pts ticks to the clock's time domain, applied only to
+        /// the timing base handed to the sink (<see cref="NAudioSink.TrySetBasePts"/>). Null =
+        /// identity. Within one contiguous source span timeline and source time advance at the
+        /// same rate, so mapping the base alone keeps the audio-master clock correct until the
+        /// next flush (a seek or a cut hop re-bases). Called on the decode thread.</summary>
+        private readonly Func<long, long> _sourceToClock;
 
         private AVCodecContext* _ctx;
         private AVFrame* _frame;
@@ -42,7 +48,8 @@ namespace Clowd.VideoSDK.Playback
         private bool _disposed;
 
         public AudioDecodeWorker(Demuxer demuxer, int streamIndex, PacketQueue packets,
-            AudioRingBuffer ring, NAudioSink sink, VideoOpenOptions options)
+            AudioRingBuffer ring, NAudioSink sink, VideoOpenOptions options,
+            Func<long, long> sourceToClockTicks = null)
         {
             _demuxer = demuxer;
             _streamIndex = streamIndex;
@@ -50,6 +57,7 @@ namespace Clowd.VideoSDK.Playback
             _ring = ring;
             _sink = sink;
             _outRate = options.AudioSampleRate;
+            _sourceToClock = sourceToClockTicks;
 
             var st = demuxer.GetStream(streamIndex);
             _timeBase = st->time_base;
@@ -195,7 +203,10 @@ namespace Clowd.VideoSDK.Playback
                 long effectivePtsTicks = ptsTicks + skipFrames * TimeSpan.TicksPerSecond / _outRate;
                 if (effectivePtsTicks < minBaseTicks)
                     effectivePtsTicks = minBaseTicks;
-                _sink.TrySetBasePts(new TimeSpan(effectivePtsTicks));
+                long clockBaseTicks = _sourceToClock == null
+                    ? effectivePtsTicks
+                    : _sourceToClock(effectivePtsTicks);
+                _sink.TrySetBasePts(new TimeSpan(clockBaseTicks));
 
                 var span = new ReadOnlySpan<float>(_convBuffer, skipFrames * Channels,
                     (outSamples - skipFrames) * Channels);
