@@ -321,8 +321,10 @@ fn scroll_action_point(point: ScreenPoint, _monitors: &[MonitorInfo]) -> (i32, i
 }
 
 /// macOS: physical pixels → CG points through the monitor the point sits
-/// on, matching [`video_action_rect`]'s conversion. Untested;
-/// compile-guarded (DESIGN §3.2).
+/// on, matching [`video_action_rect`]'s conversion. CG points are what the
+/// driver's `CGWarpMouseCursorPosition`, `kCGWindowBounds` and
+/// `CGWindowListCreateImage` all take, so the marker hands it numbers it can
+/// use unchanged (`clowd_scroll_driver`'s `input`/`frame` modules).
 #[cfg(target_os = "macos")]
 fn scroll_action_point(point: ScreenPoint, monitors: &[MonitorInfo]) -> (i32, i32) {
     match monitor_for_selection(ScreenRect::from_xy_size(point.x, point.y, 1, 1), monitors) {

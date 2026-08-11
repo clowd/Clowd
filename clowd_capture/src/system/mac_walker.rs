@@ -80,20 +80,29 @@ impl WindowWalker {
             .map(|w| w.rect)
     }
 
-    /// Windows counterpart of the scrolling-capture target lookup. There
-    /// are no HWNDs on macOS and no scroll driver to consume one, so this
-    /// always reports "unresolved"; callers already tolerate that.
-    #[allow(dead_code)]
-    pub fn top_level_hwnd_at(&self, _point: ScreenPoint) -> Option<isize> {
-        None
+    /// The scrolling-capture target under `point`: the topmost enumerated
+    /// window, as a `CGWindowID` widened to the `isize` the `scroll` marker
+    /// carries on both platforms (`win_walker` puts an `HWND` in the same
+    /// field). The driver re-validates whatever it is given, and `0` — which
+    /// is what "no window here" becomes at the call site — tells it to
+    /// resolve the target from the point itself.
+    pub fn top_level_hwnd_at(&self, point: ScreenPoint) -> Option<isize> {
+        self.windows
+            .iter()
+            .find(|w| w.rect.contains(point))
+            .map(|w| w.window_id as isize)
     }
 
-    /// Windows counterpart of the peeked-window handle lookup — same story
-    /// as [`top_level_hwnd_at`]: no HWNDs here, and no driver to consume
-    /// one.
-    #[allow(dead_code)]
-    pub fn hwnd_at_index(&self, _window_index: usize) -> Option<isize> {
-        None
+    /// Window id at `window_index` — the index [`Self::hit_test_full`]
+    /// reports and a peek carries.
+    ///
+    /// The scrolling capture needs it: a peeked window is by definition
+    /// partly covered, so asking what is at the scroll point would name the
+    /// window on top instead of the one the user selected.
+    pub fn hwnd_at_index(&self, window_index: usize) -> Option<isize> {
+        self.windows
+            .get(window_index)
+            .map(|w| w.window_id as isize)
     }
 
     /// Full hit-test returning window index and obstruction info.

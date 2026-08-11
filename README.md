@@ -64,8 +64,6 @@ https://user-images.githubusercontent.com/1287295/177042825-48707490-ae67-4a75-a
 
 ## Scrolling Capture
 
-*Windows only.*
-
 Some things don't fit on screen — a long article, a chat history, a settings page. Scrolling
 capture takes the picture anyway.
 
@@ -86,7 +84,9 @@ capture takes the picture anyway.
 
 A capture is capped at 120 frames, 20,000 pixels tall, or two minutes, whichever comes first.
 Scrolling a pane *inside* a window (a sidebar, a chat column) is not supported yet — for now, aim
-it at something that scrolls as a whole window.
+it at something that scrolls as a whole window. On macOS this needs Accessibility permission (to
+scroll the window for you) alongside the Screen Recording permission capture already uses — Clowd
+asks for both, and *Settings → General → Permissions* shows where they stand.
 
 ----
 

@@ -352,15 +352,12 @@ mod tests {
     /// Each added button widens `long_edge_px` by one `svg_button_size`
     /// and therefore shifts the centred panel left by half of that. The
     /// original single-set capture (7 buttons) was area x=597 with
-    /// buttons at 650/703/…/953; macOS (8 buttons, + OCR) is that shifted
-    /// left by 25; Windows (9 buttons, + OCR and SCROLL) by another 25.
-    /// Nothing else about the math has moved since the capture.
+    /// buttons at 650/703/…/953; the strip as it stands (9 buttons, + OCR
+    /// and SCROLL) is that shifted left by 50. Nothing else about the
+    /// math has moved since the capture.
     #[test]
     fn panel_geometry_is_pinned() {
-        #[cfg(windows)]
         const EXPECTED: (i32, [i32; 9]) = (547, [600, 653, 703, 753, 803, 853, 903, 953, 1003]);
-        #[cfg(not(windows))]
-        const EXPECTED: (i32, [i32; 8]) = (572, [625, 678, 728, 778, 828, 878, 928, 978]);
 
         let l = layout_for(PanelButtonSet::Normal, 1.0);
         let (area_left, button_lefts) = EXPECTED;

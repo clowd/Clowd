@@ -58,6 +58,18 @@ namespace Clowd.UI
                 ActiveInstance = this;
                 _sessionDir = sessionDir;
 
+                // macOS drops synthetic scroll events from a process it does not trust, without
+                // telling it: the driver would raise the target, photograph one frame, find that
+                // nothing ever moved and report `no_movement`. It checks for itself and refuses
+                // with a message, but asking here is what gets the user a button to the right
+                // System Settings pane instead of a sentence about one.
+                if (!await EnsureAccessibilityPermissionAsync())
+                {
+                    CaptureSessionDispatcher.DeleteSessionDir(_sessionDir);
+                    Close();
+                    return;
+                }
+
                 var binary = CaptureBinaryLocator.ResolveScrollDriver();
                 if (binary == null)
                 {
@@ -149,6 +161,30 @@ namespace Clowd.UI
                 if (!_closing)
                     OnCriticalError(ex.Message, ex, null);
             }
+        }
+
+        /// <summary>
+        /// Returns whether the run may go ahead. True on every platform without an Accessibility
+        /// permission; on macOS the first attempt is where the OS may still have its own one-tap
+        /// prompt to offer, and every later one falls through to the dialog, since by then the
+        /// only route left is System Settings plus a restart. Mirrors
+        /// <c>ScreenCaptureService.EnsureScreenRecordingPermissionAsync</c>, which gates the
+        /// overlay on the other of the two permissions.
+        /// </summary>
+        private static async Task<bool> EnsureAccessibilityPermissionAsync()
+        {
+            if (MacPermissions.HasAccessibility || MacPermissions.Request(MacPermission.Accessibility))
+                return true;
+
+            var openSettings = await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,
+                "Clowd needs Accessibility permission to scroll the window for you.\n\n"
+                + "Enable Clowd under Privacy & Security → Accessibility, then restart Clowd.",
+                "Accessibility permission required", "Open System Settings", "Cancel");
+
+            if (openSettings)
+                MacPermissions.OpenSettings(MacPermission.Accessibility);
+
+            return false;
         }
 
         /// <summary>Stops the run and keeps everything captured so far (the HUD's FINISH button —
@@ -375,8 +411,9 @@ namespace Clowd.UI
             {
                 ScrollDriverResult.MaxReached =>
                     "The scrolling capture hit its length limit — everything up to that point was kept.",
-                ScrollDriverResult.NoMovement =>
-                    "That window did not scroll, so only one screen was captured. Windows running as administrator ignore synthetic scrolling.",
+                ScrollDriverResult.NoMovement => OperatingSystem.IsWindows()
+                    ? "That window did not scroll, so only one screen was captured. Windows running as administrator ignore synthetic scrolling."
+                    : "That window did not scroll, so only one screen was captured. Try aiming the scroll point at a part of the page that scrolls.",
                 _ => null,
             };
 

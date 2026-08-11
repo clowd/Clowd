@@ -31,11 +31,9 @@ use crate::ui::command::Command;
 /// in its set, because the two sets share icons (UPLOAD/COPY/EXIT appear
 /// in both) and the atlas is built once for all of them.
 ///
-/// The `#[cfg(windows)]` entry is deliberately **last**: an index is
-/// baked into every `ButtonDef` at compile time, and putting a
-/// conditional entry anywhere earlier would silently renumber every
-/// icon after it on macOS. With it at the end, indices 0..=9 mean the
-/// same icon on both platforms and only the tail differs.
+/// The order is load-bearing: an index is baked into every `ButtonDef`
+/// at compile time, so inserting an entry anywhere but the end
+/// renumbers every icon after it.
 pub const PANEL_ICONS: &[&[u8]] = &[
     super::assets::SVG_UPLOAD,
     super::assets::SVG_EDIT,
@@ -47,7 +45,6 @@ pub const PANEL_ICONS: &[&[u8]] = &[
     super::assets::SVG_SEARCH,
     super::assets::SVG_BACK,
     super::assets::SVG_OCR,
-    #[cfg(windows)]
     super::assets::SVG_SCROLL,
 ];
 
@@ -65,9 +62,6 @@ pub const ICON_EXIT: usize = 6;
 pub const ICON_SEARCH: usize = 7;
 pub const ICON_BACK: usize = 8;
 pub const ICON_OCR: usize = 9;
-// Windows-only tail — see the `PANEL_ICONS` doc comment for why this
-// must stay after every shared entry.
-#[cfg(windows)]
 pub const ICON_SCROLL: usize = 10;
 
 /// Which of the optional panel buttons the shell has left switched on.
@@ -88,8 +82,7 @@ pub struct PanelFeatures {
     /// switch, because both are "hand this to the upload provider" and a
     /// user who turned uploading off did not mean "except for text".
     pub upload: bool,
-    /// SCROLL in the capture strip. Already `#[cfg(windows)]` at the
-    /// table level — this is the user's switch on top of that.
+    /// SCROLL in the capture strip.
     pub scroll_capture: bool,
     /// OCR in the capture strip. Switching it off makes the OCR strip
     /// unreachable, since OCR mode is the only thing that raises it.
@@ -209,13 +202,9 @@ pub struct ButtonDef {
 
 /// The capture-mode panel buttons in C++ order.
 ///
-/// SCROLL carries `#[cfg(windows)]` on its array element rather than
-/// duplicating the whole table behind two cfg'd copies — the element
-/// vanishes on macOS and every other button stays defined once.
 /// SCROLL sits after VIDEO because it is the other "hand off to a
 /// capture driver" action; OCR follows it as the other "do something
-/// smarter than a bitmap" action. The indices below are therefore the
-/// Windows ones.
+/// smarter than a bitmap" action.
 ///
 /// A slice (`&[ButtonDef]`) rather than a fixed-size array so the
 /// per-element `#[cfg]` doesn't have to be mirrored in a length
@@ -257,7 +246,6 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         icon_id: ICON_VIDEO,
         svg_bytes: super::assets::SVG_VIDEO,
     },
-    #[cfg(windows)]
     ButtonDef {
         command: Command::ScrollCapture,
         label: "SCROLL",
@@ -590,7 +578,6 @@ mod tests {
         }
     }
 
-    #[cfg(windows)]
     #[test]
     fn scroll_button_answers_to_l() {
         let all = PanelFeatures::ALL;
@@ -602,17 +589,6 @@ mod tests {
             lookup_command_by_key(PanelButtonSet::Normal, all, 'L'),
             Some(Command::ScrollCapture)
         );
-    }
-
-    /// The scrolling-capture driver is Win32-only, so macOS must not
-    /// render a button that leads nowhere.
-    #[cfg(not(windows))]
-    #[test]
-    fn scroll_button_is_absent_off_windows() {
-        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, PanelFeatures::ALL, 'l'), None);
-        for def in PanelButtonSet::Normal.defs() {
-            assert_ne!(def.command, Command::ScrollCapture);
-        }
     }
 
     #[test]
