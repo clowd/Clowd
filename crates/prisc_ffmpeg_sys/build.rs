@@ -100,7 +100,7 @@ fn find_deps(deps_dir: &Path) -> Option<PathBuf> {
         .ok()?
         .flatten()
         .map(|e| e.path())
-        .filter(|dir| {
+        .find(|dir| {
             let name = dir.file_name().unwrap_or_default().to_string_lossy();
             name.starts_with("obs-deps-")
                 && !name.contains("qt6")
@@ -108,7 +108,6 @@ fn find_deps(deps_dir: &Path) -> Option<PathBuf> {
                 && dir.join("include").join("libavcodec").exists()
                 && dir.join("lib").exists()
         })
-        .next()
 }
 
 /// True for a bundle name built for the target arch. macOS ships one

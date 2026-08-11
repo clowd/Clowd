@@ -8,6 +8,13 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 #![allow(clippy::all)]
+// bindgen emits `transmute` for every bitfield accessor of an enum-typed
+// field (AVCodecContext's, here). rustc 1.88's `unnecessary_transmutes` lint
+// flags all of them — 10 warnings on every build of generated code we do not
+// own and cannot edit. `unknown_lints` keeps older toolchains, which have no
+// such lint, quiet about the allow itself.
+#![allow(unknown_lints)]
+#![allow(unnecessary_transmutes)]
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
