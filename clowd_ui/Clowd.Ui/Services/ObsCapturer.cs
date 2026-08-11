@@ -22,12 +22,19 @@ namespace Clowd.UI
     /// was encoded at.</summary>
     public sealed record ObsTrackInfo(int Index, int Width, int Height);
 
-    /// <summary>The video tracks the recorder wrote, reported on <c>started_recording</c> and
-    /// again on <c>stopped_recording</c> as an optional <c>tracks</c> object. The video editor
-    /// needs it to place the webcam overlay (which stream, and what aspect ratio). Null on a
-    /// recorder too old to send it, and <see cref="Webcam"/> is null whenever no camera was
-    /// captured.</summary>
-    public sealed record ObsTracks(ObsTrackInfo Screen, ObsTrackInfo Webcam);
+    /// <summary>One audio track inside the recorded mp4: its index among the audio streams, and
+    /// what the recorder put on it — <c>"speaker"</c> (the system mix), <c>"microphone"</c>, or
+    /// <c>"mixed"</c> when a single-track recording carried every device on one track. Only the
+    /// recorder knows this; the file itself does not say, which is the whole point of keeping it.
+    /// <see cref="Kind"/> is null when the report did not name one.</summary>
+    public sealed record ObsAudioTrackInfo(int Index, string Kind);
+
+    /// <summary>The tracks the recorder wrote, reported on <c>started_recording</c> and again on
+    /// <c>stopped_recording</c> as an optional <c>tracks</c> object. The video editor needs it to
+    /// place the webcam overlay (which stream, and what aspect ratio) and to label the audio rows.
+    /// Null on a recorder too old to send it; <see cref="Webcam"/> is null whenever no camera was
+    /// captured, and <see cref="Audio"/> is empty when the report named no audio tracks.</summary>
+    public sealed record ObsTracks(ObsTrackInfo Screen, ObsTrackInfo Webcam, IReadOnlyList<ObsAudioTrackInfo> Audio);
 
 /// <summary>The recorder's answer to a <c>configure</c> command (DESIGN §1.3): either
 /// <c>configure_applied</c>, whose <see cref="IgnoredKeys"/> names the settings the recorder
@@ -547,21 +554,65 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             return values;
         }
 
-        /// <summary>Reads the optional <c>tracks</c> object
-        /// (<c>{"screen":{"index":0,"width":W,"height":H},"webcam":{...}|null}</c>) into
-        /// <see cref="LastTracks"/>. An absent field leaves the previous value alone rather than
-        /// clearing it: <c>stopped_recording</c> is the second report, and a recorder that sends
-        /// tracks on start but not on stop must not lose them.</summary>
-        private void ReadTracks(JsonElement root)
+        /// <summary>Reads the optional <c>tracks</c> object into <see cref="LastTracks"/>. An absent
+        /// field leaves the previous value alone rather than clearing it: <c>stopped_recording</c> is
+        /// the second report, and a recorder that sends tracks on start but not on stop must not
+        /// lose them.</summary>
+        private void ReadTracks(JsonElement root) => LastTracks = ParseTracks(root, LastTracks);
+
+        /// <summary>
+        /// The pure half of <see cref="ReadTracks"/>: the tracks a protocol message describes, or
+        /// <paramref name="previous"/> when it describes none.
+        ///
+        /// <code>
+        /// {"screen": {"index":0,"width":W,"height":H},
+        ///  "webcam": {"index":1,"width":W,"height":H},          // absent, not null, without one
+        ///  "audio":  [{"index":0,"kind":"speaker","device":"default","name":"Speaker 1"}, …]}
+        /// </code>
+        ///
+        /// Every part of it is optional as far as this reader is concerned: an older recorder sends
+        /// no <c>audio</c> array at all (single mixed track, nothing to say about it), and the
+        /// editor's rows come from probing the file either way — the report only decorates them.
+        /// So anything unparseable is dropped, never thrown on.
+        /// </summary>
+        internal static ObsTracks ParseTracks(JsonElement root, ObsTracks previous)
         {
             if (!root.TryGetProperty("tracks", out var tracksEl) || tracksEl.ValueKind != JsonValueKind.Object)
-                return;
+                return previous;
 
             var screen = ReadTrack(tracksEl, "screen");
             if (screen == null)
-                return; // a tracks object without a screen track is not one we can use
+                return previous; // a tracks object without a screen track is not one we can use
 
-            LastTracks = new ObsTracks(screen, ReadTrack(tracksEl, "webcam"));
+            return new ObsTracks(screen, ReadTrack(tracksEl, "webcam"), ReadAudioTracks(tracksEl));
+        }
+
+        /// <summary>The <c>audio</c> array of a tracks report, in the order it was written. An entry
+        /// without a numeric index says nothing about a stream and is skipped; a missing
+        /// <c>kind</c> leaves the label to the editor's own fallback.</summary>
+        private static IReadOnlyList<ObsAudioTrackInfo> ReadAudioTracks(JsonElement tracks)
+        {
+            if (!tracks.TryGetProperty("audio", out var el) || el.ValueKind != JsonValueKind.Array)
+                return Array.Empty<ObsAudioTrackInfo>();
+
+            var list = new List<ObsAudioTrackInfo>(el.GetArrayLength());
+            foreach (var entry in el.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object
+                    || !entry.TryGetProperty("index", out var indexEl)
+                    || indexEl.ValueKind != JsonValueKind.Number
+                    || !indexEl.TryGetInt32(out var index)
+                    || index < 0)
+                    continue;
+
+                var kind = entry.TryGetProperty("kind", out var kindEl) && kindEl.ValueKind == JsonValueKind.String
+                    ? kindEl.GetString()
+                    : null;
+
+                list.Add(new ObsAudioTrackInfo(index, kind));
+            }
+
+            return list;
         }
 
         private static ObsTrackInfo ReadTrack(JsonElement tracks, string name)

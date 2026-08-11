@@ -197,8 +197,25 @@ namespace Clowd.UI.Controls
             if (!string.IsNullOrEmpty(suffix) && text.EndsWith(suffix, StringComparison.Ordinal))
                 text = text.Substring(0, text.Length - suffix.Length).Trim();
 
-            if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsed))
-                SetCurrentValue(ValueProperty, parsed / GetDisplayScaleSafe());
+            // Commit only a real edit: the box shows a 2-decimal rounding of Value, so re-writing
+            // what it already displays (a focus-and-leave with no typing) would push a lossy value
+            // — and, through the binding, a phantom undo entry — for an edit the user never made.
+            // The tolerance compare (not ==) absorbs any last-bit disagreement between Math.Round
+            // and double.Parse of the formatted text; a NaN parse compares false and never commits.
+            var scale = GetDisplayScaleSafe();
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsed) &&
+                Math.Abs(parsed - Math.Round(Value * scale, 2)) > 1e-9)
+            {
+                // clamp exactly as Spin does — without this a typed out-of-range number leaves the
+                // control's Value outside Min/Max while a clamping binding source silently absorbs
+                // it, and the box then displays a number the model does not hold.
+                var value = parsed / scale;
+                if (Max.HasValue)
+                    value = Math.Min(Max.Value, value);
+                if (Min.HasValue)
+                    value = Math.Max(Min.Value, value);
+                SetCurrentValue(ValueProperty, value);
+            }
 
             // refresh the text; this also reverts it when parsing failed or the value was unchanged
             UpdateDisplay();

@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
@@ -55,7 +56,8 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>A realistic v1 args file: two keep segments, a webcam overlay with a mask, a crf.
-        /// Field names mirror <c>Clowd.Shared/Video/RenderArgs.cs</c> — that JSON is the contract.</summary>
+        /// The literal JSON here <i>is</i> the v1 contract — the writer that produced these files is
+        /// gone, so nothing else pins the field names.</summary>
         private static string ArgsJson(string input = "C:/in.mp4", string output = "C:/out.mp4",
             string segments = null, string webcam = null, string crf = null)
         {
@@ -551,8 +553,8 @@ namespace Clowd.VideoSDK.Tests
 
         // -------------------------------------------------------------------------------- mask
 
-        /// <summary>Writes the same mask the UI's <c>WebcamMaskRenderer</c> produces: black ground,
-        /// white shape, antialiased edge, corner radius as a fraction of the height.</summary>
+        /// <summary>Writes the mask the v1 UI wrote beside its render args: black ground, white
+        /// shape, antialiased edge, corner radius as a fraction of the height.</summary>
         private string WriteMask(int width, int height, MaskShape shape, double cornerRadiusFraction = 0)
         {
             string path = TempPath(".png");
@@ -682,7 +684,11 @@ namespace Clowd.VideoSDK.Tests
                 var project = Path.Combine(dir.FullName, "Clowd.VideoRender");
                 if (Directory.Exists(project))
                 {
+                    // A sibling runtimeconfig.json is what makes a dll runnable: it filters out the
+                    // intermediate and reference-assembly copies under obj/, which are frequently the
+                    // newest matches and would fail host startup rather than the protocol under test.
                     var hit = Directory.GetFiles(project, "Clowd.VideoRender.dll", SearchOption.AllDirectories)
+                                       .Where(p => File.Exists(Path.ChangeExtension(p, ".runtimeconfig.json")))
                                        .OrderByDescending(File.GetLastWriteTimeUtc)
                                        .FirstOrDefault();
                     if (hit != null)
@@ -847,6 +853,48 @@ namespace Clowd.VideoSDK.Tests
             Assert.StartsWith("error ", line, StringComparison.Ordinal);
             Assert.Contains("input path is empty", line, StringComparison.Ordinal);
             Assert.DoesNotContain('\n', line);
+        }
+
+        /// <summary>The editor's own path: a v2 job file written by <see cref="ProjectFileWriter"/>
+        /// — the project plus its output/crf siblings — must be picked up by the same tool, which
+        /// dispatches on the file's version rather than on how the UI named it.</summary>
+        [Fact]
+        public void The_tool_renders_a_v2_project_file()
+        {
+            Assert.SkipUnless(FFmpegAvailable,
+                $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
+
+            const int Fps = 30, Rate = 48000;
+            string input = WriteFixtureMp4(64, 64, Fps, seconds: 2, sampleRate: Rate);
+            string output = TempPath(".mp4");
+            string argsPath = TempPath(".json");
+
+            var probe = MediaProbe.ProbeDetailed(input);
+            var project = RecordingProject.Build(new RecordingProjectSpec
+            {
+                InputPath = input,
+                Screen = probe.VideoStreams[0],
+                AudioStreams = probe.AudioStreams,
+                FpsNum = Fps,
+                FpsDen = 1,
+                // the same 1s-out-of-2s edit the v1 test renders.
+                Segments = new[] { new KeepSegment(0, 500 * Ms), new KeepSegment(1000 * Ms, 500 * Ms) },
+            });
+            File.WriteAllBytes(argsPath, ProjectFileWriter.Serialize(project, output, 30));
+
+            var run = RunTool(argsPath, FindFFmpegDirectory());
+
+            Assert.Equal(0, run.ExitCode);
+            string terminal = run.Stdout[^1];
+            Assert.StartsWith("done ", terminal, StringComparison.Ordinal);
+            Assert.Contains(output, terminal, StringComparison.Ordinal);
+            Assert.True(File.Exists(output));
+
+            var rendered = MediaProbe.ProbeDetailed(output);
+            Assert.True(rendered.HasAudio);
+            var video = Assert.Single(rendered.VideoStreams);
+            Assert.Equal(64, video.Width);
+            Assert.InRange(rendered.DurationTicks, Second - Second / Fps, Second + Second / Fps);
         }
 
         [Fact]

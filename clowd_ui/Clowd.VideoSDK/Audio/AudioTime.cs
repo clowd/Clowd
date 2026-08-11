@@ -34,6 +34,22 @@ namespace Clowd.VideoSDK.Audio
             return CeilDiv((Int128)ticks * sampleRate, TimeBase.TicksPerSecond);
         }
 
+        /// <summary>
+        /// The sample frame nearest <paramref name="ticks"/> (half rounds up). For a timestamp
+        /// that IS a sample position rendered into ticks — a decoder pts from a sample-aligned
+        /// stream time base — this recovers the exact sample where <see cref="SamplesFloor"/>
+        /// does not: <see cref="TimeBase.Rescale"/> renders sample <c>s</c> as
+        /// <c>round(s·10^7/rate)</c>, which can fall a fraction of a tick short, and flooring
+        /// that back re-reads it as <c>s − 1</c> (at 48 kHz, every <c>s ≡ 1 (mod 3)</c>).
+        /// Use it to anchor positions on pts; keep the floor/ceil forms for instant lookups.
+        /// </summary>
+        public static long SamplesNearest(long ticks, int sampleRate)
+        {
+            ValidateRate(sampleRate);
+            Int128 n = (Int128)ticks * sampleRate * 2 + TimeBase.TicksPerSecond;
+            return FloorDiv(n, (Int128)TimeBase.TicksPerSecond * 2);
+        }
+
         /// <summary>The instant sample frame <paramref name="samples"/> starts, in ticks:
         /// <c>floor(samples * 10^7 / rate)</c>.</summary>
         public static long TicksFloor(long samples, int sampleRate)

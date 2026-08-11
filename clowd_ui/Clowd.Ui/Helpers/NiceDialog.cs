@@ -105,7 +105,8 @@ namespace Clowd.UI.Helpers
         }
 
         public static async Task<string[]> ShowSelectFilesDialog(Visual parent, string title = null, string initialDirectory = null,
-                                                                 bool multiSelect = false, FilePickerFileType[] filter = null)
+                                                                 bool multiSelect = false, FilePickerFileType[] filter = null,
+                                                                 string suggestedFileName = null)
         {
             var provider = GetStorageProvider(parent);
             if (provider == null)
@@ -115,6 +116,11 @@ namespace Clowd.UI.Helpers
 
             if (!String.IsNullOrWhiteSpace(title))
                 options.Title = title;
+
+            // pre-fills the name box — how the "locate a moved file" prompt says which file it is
+            // after (the shell still lets the user pick anything).
+            if (!String.IsNullOrWhiteSpace(suggestedFileName))
+                options.SuggestedFileName = suggestedFileName;
 
             if (filter != null)
                 options.FileTypeFilter = filter;

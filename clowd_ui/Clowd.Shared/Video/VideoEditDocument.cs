@@ -4,8 +4,9 @@ using System.Linq;
 
 namespace Clowd.VideoSDK
 {
-    /// <summary>The outline the webcam overlay is masked to. The mask itself is rasterized by the
-    /// UI (it needs a renderer) and handed to the render tool as a PNG.</summary>
+    /// <summary>The outline the webcam overlay is masked to. Migrates onto the v2 model's
+    /// <c>MaskShape</c>, which the compositor rasterizes itself (v1 handed the render tool a
+    /// pre-rendered PNG).</summary>
     public enum WebcamOverlayShape
     {
         Circle,
@@ -100,9 +101,10 @@ namespace Clowd.VideoSDK
 
     /// <summary>
     /// The non-destructive edit applied to one recording: a trim range, a set of cut-out regions
-    /// inside it, and the webcam overlay. Nothing here touches pixels — the document is turned
-    /// into a <see cref="RenderArgs"/> (a keep-segment list plus an overlay rect) and handed to the
-    /// external render tool.
+    /// inside it, and the webcam overlay. This is the <b>version 1</b> document, kept only because
+    /// the editor still migrates v1 <c>videoedit.json</c> files one way: its keep-segment math (and
+    /// the overlay geometry) is what a migrated edit is rebuilt from, so it has to keep behaving
+    /// exactly as it did. Nothing writes it any more.
     ///
     /// Cut regions are kept normalized at all times: clamped to non-negative and correctly
     /// ordered, sorted, merged where they overlap or touch, and with anything shorter than

@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
@@ -94,6 +95,53 @@ namespace Clowd.VideoSDK.Tests
             return path;
         }
 
+        /// <summary>A/V fixture: video plus a steady stereo sine (audio stream 1). Audio playback
+        /// tests pair it with <see cref="SilentOptions"/> so no real device is ever opened.</summary>
+        private string EncodeAvFixture(int seconds, double freq = 440, float amplitude = 0.3f)
+        {
+            string path = TempMp4();
+            using var writer = new Mp4Writer(path, new Mp4WriterOptions
+            {
+                Width = W,
+                Height = H,
+                FpsNum = Fps,
+                FpsDen = 1,
+                Audio = new Mp4AudioOptions { SampleRate = 48000, Channels = 2 },
+            });
+
+            var bgra = new byte[W * H * 4];
+            var pin = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+            try
+            {
+                for (int n = 0; n < seconds * Fps; n++)
+                    writer.SubmitVideoFrame(pin.AddrOfPinnedObject(), W * 4, W, H, n);
+            }
+            finally
+            {
+                pin.Free();
+            }
+
+            int total = 48000 * seconds;
+            var buf = new float[total * 2];
+            for (int i = 0; i < total; i++)
+            {
+                float s = amplitude * (float)Math.Sin(2 * Math.PI * freq * i / 48000);
+                buf[i * 2] = s;
+                buf[i * 2 + 1] = s;
+            }
+            writer.SubmitAudioSamples(buf, total);
+            writer.Finish();
+            return path;
+        }
+
+        /// <summary>Software decode + silent audio output: playback runs on real timing (the
+        /// silent output pulls the ring like a device) without touching audio hardware.</summary>
+        private static VideoOpenOptions SilentOptions() => new VideoOpenOptions
+        {
+            EnableHardwareDecode = false,
+            CreateAudioOutput = () => new SilentAudioOutput(),
+        };
+
         private static Project NewProject() => new Project
         {
             Output = new OutputSettings { WidthPx = W, HeightPx = H, FpsNum = Fps, FpsDen = 1, SampleRate = 48000 },
@@ -116,6 +164,35 @@ namespace Clowd.VideoSDK.Tests
                 Streams = { new SourceStream { Index = 0, Kind = StreamKind.Video, Width = W, Height = H, AvgFrameRateNum = Fps, AvgFrameRateDen = 1 } },
             });
             return id;
+        }
+
+        private static Guid AddAvSource(Project project, string path)
+        {
+            var id = AddVideoSource(project, path);
+            project.Sources[^1].Streams.Add(new SourceStream { Index = 1, Kind = StreamKind.Audio });
+            return id;
+        }
+
+        private static Item AddAudioItem(Project project, Guid sourceId, long tlStart, long duration,
+            long srcIn = 0)
+        {
+            var track = new Track
+            {
+                Id = Guid.NewGuid(),
+                Kind = TrackKind.Audio,
+                Order = project.Tracks.Count,
+            };
+            project.Tracks.Add(track);
+            var item = new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = track.Id,
+                TimelineStartTicks = tlStart,
+                DurationTicks = duration,
+                Content = new MediaContent { SourceId = sourceId, StreamIndex = 1, SourceInTicks = srcIn },
+            };
+            project.Items.Add(item);
+            return item;
         }
 
         private static Item AddMediaItem(Project project, Track track, Guid sourceId,
@@ -508,6 +585,226 @@ namespace Clowd.VideoSDK.Tests
                 $"presented a trimmed-away frame: pts={final} >= out-point {keptTicks}");
             Assert.True(final >= keptTicks - 2 * FrameTicks,
                 $"end seek landed too early: pts={final}, out-point {keptTicks}");
+        }
+
+        // ------------------------------------------------------------------ mixed audio playback
+
+        [Fact]
+        public async Task Two_audio_track_project_plays_through_the_state_machine()
+        {
+            RequireFFmpeg();
+
+            var project = NewProject();
+            var a = AddAvSource(project, EncodeAvFixture(2, 440, 0.3f));
+            var b = AddAvSource(project, EncodeAvFixture(2, 1000, 0.2f));
+            AddMediaItem(project, AddVideoTrack(project), a, 0, 2 * Second, 0);
+            AddAudioItem(project, a, 0, 2 * Second);
+            AddAudioItem(project, b, 0, 2 * Second);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, SilentOptions());
+
+            Assert.Equal(PlayerState.Paused, player.State);
+            Assert.Equal(new TimeSpan(2 * Second), player.Duration);
+            Assert.True(player.GetStatistics().HasAudio);
+
+            // the mixed audio masters the clock: position advances against the (silent) device
+            player.Play();
+            Assert.True(WaitUntil(() => player.Position.Ticks > Second / 2, 5000),
+                $"position did not advance under the audio master (pos={player.Position})");
+
+            Assert.True(WaitUntil(() => player.State == PlayerState.Ended, 15000),
+                $"did not end (state={player.State}, pos={player.Position})");
+            Assert.Equal(player.Duration, player.Position);
+
+            // Play from Ended rewinds — the mix worker seeks back to zero and produces again
+            player.Play();
+            Assert.True(WaitUntil(
+                () => player.State == PlayerState.Playing && player.Position < player.Duration, 5000));
+        }
+
+        [Fact]
+        public async Task Volume_and_transition_edits_ride_the_cheap_update_path()
+        {
+            RequireFFmpeg();
+
+            var project = NewProject();
+            var a = AddAvSource(project, EncodeAvFixture(2, 440, 0.3f));
+            var b = AddAvSource(project, EncodeAvFixture(2, 1000, 0.2f));
+            AddMediaItem(project, AddVideoTrack(project), a, 0, 2 * Second, 0);
+            AddAudioItem(project, a, 0, 2 * Second);
+            AddAudioItem(project, b, 0, 2 * Second);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, SilentOptions());
+
+            int opens = player.DecoderOpenCount;
+            Assert.Equal(2, opens); // one video pipeline + the mixed-audio pipeline (as one)
+
+            // a volume edit swaps the mixer snapshot at a chunk boundary: same stream set, so the
+            // update is synchronous and no decoder is reopened.
+            var volumeEdit = Project.FromJson(project.ToJson());
+            volumeEdit.Items[1].Volume = 0.25;
+            var applied = player.UpdateProject(volumeEdit);
+            Assert.True(applied.IsCompleted, "volume edit must take the synchronous cheap path");
+            await applied;
+            Assert.Equal(opens, player.DecoderOpenCount);
+
+            // a transition (audio ramp) edit is just as cheap
+            var fadeEdit = Project.FromJson(volumeEdit.ToJson());
+            fadeEdit.Items[1].Entry = new Transition
+            {
+                Kind = TransitionKind.Fade,
+                DurationTicks = Second / 2,
+                Easing = TransitionEasing.Linear,
+            };
+            applied = player.UpdateProject(fadeEdit);
+            Assert.True(applied.IsCompleted, "transition edit must take the synchronous cheap path");
+            await applied;
+            Assert.Equal(opens, player.DecoderOpenCount);
+            Assert.True(player.GetStatistics().HasAudio);
+
+            // muting a track changes the referenced stream set: that IS a rebuild
+            var muteEdit = Project.FromJson(fadeEdit.ToJson());
+            foreach (var track in muteEdit.Tracks)
+            {
+                if (track.Kind == TrackKind.Audio)
+                    track.Muted = true;
+            }
+            await player.UpdateProject(muteEdit);
+            Assert.True(player.DecoderOpenCount > opens);
+            Assert.False(player.GetStatistics().HasAudio);
+        }
+
+        [Fact]
+        public async Task Ended_fires_when_audio_ends_before_video()
+        {
+            RequireFFmpeg();
+
+            // audio item [0, 1s), video runs to 3s: the mix worker hits EOF at 1s, the clock
+            // detaches to the stopwatch, and video plays out to the whole-timeline end.
+            var project = NewProject();
+            var a = AddAvSource(project, EncodeAvFixture(3));
+            AddMediaItem(project, AddVideoTrack(project), a, 0, 3 * Second, 0);
+            AddAudioItem(project, a, 0, Second);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, SilentOptions());
+            Assert.Equal(new TimeSpan(3 * Second), player.Duration);
+
+            player.Play();
+            Assert.True(WaitUntil(() => player.State == PlayerState.Ended, 20000),
+                $"did not end (state={player.State}, pos={player.Position})");
+            Assert.Equal(player.Duration, player.Position);
+        }
+
+        [Fact]
+        public async Task Extending_audio_after_eof_while_playing_never_rewinds_the_clock()
+        {
+            RequireFFmpeg();
+
+            // audio item [0, 1s), video to 3s: past 1s the mix worker EOFs and the clock detaches
+            // to the stopwatch. An edit that extends the audio item (cheap path — stream set
+            // unchanged) revives the worker; the player must re-base production on the playhead
+            // instead of resuming at the old audio end and re-attaching the sink's frozen timing
+            // (which snapped Position back to ~0.9s before the fix).
+            var project = NewProject();
+            var a = AddAvSource(project, EncodeAvFixture(3));
+            AddMediaItem(project, AddVideoTrack(project), a, 0, 3 * Second, 0);
+            AddAudioItem(project, a, 0, Second);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, SilentOptions());
+
+            player.Play();
+            Assert.True(WaitUntil(() => player.Position.Ticks > 2 * Second, 15000),
+                $"did not play past the audio end (pos={player.Position})");
+
+            int opens = player.DecoderOpenCount;
+            var edited = Project.FromJson(project.ToJson());
+            foreach (var item in edited.Items)
+            {
+                if (item.Content is MediaContent m && m.StreamIndex == 1)
+                    item.DurationTicks = 3 * Second;
+            }
+
+            // generous slack under the floor: a legitimate re-attach may pull the clock back by
+            // the sink latency + reattach tolerance, never by seconds toward the old audio end.
+            var floor = player.Position - new TimeSpan(Second / 2);
+            var applied = player.UpdateProject(edited);
+            Assert.True(applied.IsCompleted, "audio-extend edit must take the synchronous cheap path");
+            await applied;
+            Assert.Equal(opens, player.DecoderOpenCount);
+
+            // sample the clock across the revive + re-attach window: it must never snap back
+            var sw = Stopwatch.StartNew();
+            while (sw.ElapsedMilliseconds < 1200 && player.State == PlayerState.Playing)
+            {
+                Assert.True(player.Position >= floor,
+                    $"clock rewound to {player.Position} (floor {floor})");
+                Thread.Sleep(15);
+            }
+
+            Assert.True(WaitUntil(() => player.State == PlayerState.Ended, 20000),
+                $"did not end (state={player.State}, pos={player.Position})");
+            Assert.Equal(player.Duration, player.Position);
+        }
+
+        [Fact]
+        public async Task Cut_seam_hop_does_not_flush_the_audio_mix()
+        {
+            RequireFFmpeg();
+
+            // the seam hop is a video-pipeline correction: the timeline position is unchanged
+            // across a video cut, so the timeline-domain mix is already producing the right
+            // samples. Hopping the video must not container-seek the audio — that would dump
+            // the ring's buffered lead (audible dropout at every cut) and leave the
+            // decode-discard path that keeps preview seams sample-exact with render.
+            var project = NewProject();
+            var a = AddAvSource(project, EncodeAvFixture(3));
+            var track = AddVideoTrack(project);
+            // video: [0, 1s) ← src [0, 1s), then [1s, 2.5s) ← src [1.5s, 3s) — seam at 1s
+            AddMediaItem(project, track, a, 0, Second, 0);
+            AddMediaItem(project, track, a, Second, 3 * Second / 2, 3 * Second / 2);
+            AddAudioItem(project, a, 0, 5 * Second / 2);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, SilentOptions());
+
+            player.Play();
+            Assert.True(WaitUntil(() => player.Position.Ticks > Second / 2, 5000),
+                $"did not start playing (pos={player.Position})");
+
+            int repositions = player.AudioRepositionCount;
+            Assert.True(WaitUntil(() => player.Position.Ticks > 3 * Second / 2, 10000),
+                $"did not cross the seam (pos={player.Position})");
+
+            Assert.Equal(repositions, player.AudioRepositionCount);
+            Assert.Equal(PlayerState.Playing, player.State);
+        }
+
+        [Fact]
+        public async Task Ended_fires_when_audio_outlasts_video()
+        {
+            RequireFFmpeg();
+
+            // video item [0, 1s), audio item [0, 2s): the timeline (and the audio master) run to
+            // 2s — audio does not get cut short by video finishing first.
+            var project = NewProject();
+            var a = AddAvSource(project, EncodeAvFixture(3));
+            AddMediaItem(project, AddVideoTrack(project), a, 0, Second, 0);
+            AddAudioItem(project, a, 0, 2 * Second);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, SilentOptions());
+            Assert.Equal(new TimeSpan(2 * Second), player.Duration);
+
+            player.Play();
+            Assert.True(WaitUntil(() => player.Position.Ticks > 3 * Second / 2, 15000),
+                $"clock stopped with the video instead of following the audio (pos={player.Position})");
+            Assert.True(WaitUntil(() => player.State == PlayerState.Ended, 15000),
+                $"did not end (state={player.State}, pos={player.Position})");
+            Assert.Equal(player.Duration, player.Position);
         }
     }
 }

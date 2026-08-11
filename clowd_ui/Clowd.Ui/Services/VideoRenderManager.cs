@@ -7,6 +7,8 @@ using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Helpers;
 using Clowd.VideoSDK;
+using Clowd.VideoSDK.Editing;
+using Clowd.VideoSDK.Model;
 
 namespace Clowd.UI.Services
 {
@@ -103,43 +105,8 @@ namespace Clowd.UI.Services
     }
 
     /// <summary>
-    /// Everything about the source recording the edit document deliberately does not know: how long
-    /// it is, how big track 0 (the screen) is, and which stream — if any — carries the webcam and
-    /// at what size. Comes from the <c>tracks</c> object the recorder reports
-    /// (<see cref="ObsTracks"/>), or from probing the file when the recording predates it.
-    /// </summary>
-    public sealed record VideoRenderSource(
-        long DurationMs,
-        int ScreenWidth,
-        int ScreenHeight,
-        int? WebcamStreamIndex,
-        int WebcamWidth,
-        int WebcamHeight)
-    {
-        /// <summary>Whether an overlay can be rendered at all: there must be a webcam stream and a
-        /// usable aspect ratio for it.</summary>
-        public bool HasWebcam => WebcamStreamIndex.HasValue && WebcamWidth > 0 && WebcamHeight > 0;
-
-        /// <summary>Builds the source description from a recorder <c>tracks</c> report.</summary>
-        public static VideoRenderSource FromTracks(long durationMs, ObsTracks tracks)
-        {
-            if (tracks?.Screen == null)
-                return new VideoRenderSource(durationMs, 0, 0, null, 0, 0);
-
-            var webcam = tracks.Webcam;
-            return new VideoRenderSource(
-                durationMs,
-                tracks.Screen.Width,
-                tracks.Screen.Height,
-                webcam?.Index,
-                webcam?.Width ?? 0,
-                webcam?.Height ?? 0);
-        }
-    }
-
-    /// <summary>
     /// Renders an edited recording beside its source (<c>video.mp4</c> → <c>video-edited.mp4</c>)
-    /// using the external vid-render tool. The render is surfaced as its own Recent-page entry
+    /// in the out-of-process <c>Clowd.VideoRender</c> tool. The render is surfaced as its own Recent-page entry
     /// named "Edited" carrying a <see cref="SessionInfo.ActiveRender"/> while it runs; when it
     /// finishes the entry drops the render and behaves like any other video entry, and when it is
     /// cancelled or fails the entry is removed again. Re-rendering the same recording replaces the
@@ -151,11 +118,9 @@ namespace Clowd.UI.Services
         /// spots one.</summary>
         public const string EditedSessionName = "Edited";
 
-        /// <summary>Name of the render-args file written into the session directory.</summary>
+        /// <summary>Name of the render-args file written into the session directory. Unchanged
+        /// from the v1 days: the tool dispatches on the file's version, not on its name.</summary>
         public const string RenderArgsFileName = "render-args.json";
-
-        /// <summary>Name of the webcam overlay mask written into the session directory.</summary>
-        public const string MaskFileName = "mask.png";
 
         /// <summary>The edited entry already made (or being made) from <paramref name="source"/>,
         /// or null.</summary>
@@ -181,9 +146,9 @@ namespace Clowd.UI.Services
         /// same recording is already in flight. Any *finished* entry for this recording is replaced,
         /// file and all. Must be called on the UI thread.
         /// </summary>
-        public static async Task<SessionInfo> StartRenderAsync(SessionInfo source, VideoEditDocument document, VideoRenderSource sourceInfo)
+        public static async Task<SessionInfo> StartRenderAsync(SessionInfo source, Project project)
         {
-            if (source == null || document == null)
+            if (source == null || project == null)
                 return null;
 
             // an edited entry's own video is the render output; re-editing it is fine, but it is
@@ -200,12 +165,35 @@ namespace Clowd.UI.Services
                 return null;
             }
 
-            var durationMs = sourceInfo?.DurationMs > 0 ? sourceInfo.DurationMs : source.DurationMs;
-            var segments = document.GetKeepSegments(durationMs);
-            if (segments.Count == 0)
+            var durationTicks = project.GetDurationTicks();
+            if (durationTicks <= 0)
             {
                 await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
                     "This edit keeps nothing of the recording — trim or cut less and try again.",
+                    "Can't render the video");
+                return null;
+            }
+
+            var problems = project.Validate();
+            if (problems.Count > 0)
+            {
+                // the model is checked here rather than in the tool's error line because only the
+                // editor can say what to do about it; the whole list goes to Sentry, the first
+                // problem to the user.
+                SentryConfig.CaptureHandled(
+                    new InvalidOperationException(String.Join(Environment.NewLine, problems)), "render.invalid-project");
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                    "This edit can't be rendered: " + problems[0],
+                    "Can't render the video");
+                return null;
+            }
+
+            var missing = FindMissingSource(project);
+            if (missing != null)
+            {
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                    "A file this edit uses could not be found. It may have been moved or deleted:" +
+                    Environment.NewLine + missing,
                     "Can't render the video");
                 return null;
             }
@@ -225,7 +213,7 @@ namespace Clowd.UI.Services
             SessionInfo session;
             try
             {
-                session = CreateEditedSession(source, outputPath, SumDuration(segments));
+                session = CreateEditedSession(source, outputPath, durationTicks / TimeSpan.TicksPerMillisecond);
             }
             catch (Exception ex)
             {
@@ -238,7 +226,7 @@ namespace Clowd.UI.Services
             string renderArgsPath;
             try
             {
-                renderArgsPath = WriteRenderArgs(session, document, sourceInfo, videoPath, outputPath, segments);
+                renderArgsPath = WriteProjectArgs(session, project, outputPath);
             }
             catch (Exception ex)
             {
@@ -277,68 +265,40 @@ namespace Clowd.UI.Services
             return session;
         }
 
-        /// <summary>Writes render-args.json (and, when the overlay is on, mask.png beside it) into
-        /// the session directory and returns the args path. Runs on the UI thread — the mask needs
-        /// a renderer.</summary>
-        private static string WriteRenderArgs(SessionInfo session, VideoEditDocument document, VideoRenderSource sourceInfo,
-            string inputPath, string outputPath, System.Collections.Generic.IReadOnlyList<CutRegion> segments)
+        /// <summary>Writes the render job — the project itself, plus the output path and the
+        /// encoder quality it cannot carry — into the session directory and returns its path.</summary>
+        private static string WriteProjectArgs(SessionInfo session, Project project, string outputPath)
         {
-            var dir = Path.GetDirectoryName(session.FilePath);
+            var argsPath = Path.Combine(Path.GetDirectoryName(session.FilePath), RenderArgsFileName);
 
-            var args = new RenderArgs
-            {
-                Input = inputPath,
-                Output = outputPath,
-                Segments = RenderArgs.ToSegments(segments),
-                // a snapshot: settings edited while the render runs apply to the next one. The
-                // VideoQuality enum members are the CRF values (Low=29, Medium=23, High=16).
-                Crf = (int)(SettingsRoot.Current?.Recording?.Quality ?? VideoQuality.Medium),
-            };
-
-            var overlay = document.Webcam;
-            if (overlay.Enabled && sourceInfo != null && sourceInfo.HasWebcam)
-            {
-                var rect = ComputeWebcamRect(overlay, sourceInfo);
-                var maskPath = Path.Combine(dir, MaskFileName);
-                WebcamMaskRenderer.WriteMask(maskPath, rect.W, rect.H, overlay);
-
-                args.Webcam = new RenderWebcam
-                {
-                    StreamIndex = sourceInfo.WebcamStreamIndex.Value,
-                    Rect = rect,
-                    MaskPng = maskPath,
-                };
-            }
-
-            var argsPath = Path.Combine(dir, RenderArgsFileName);
-            File.WriteAllText(argsPath, args.ToJson());
-            return argsPath;
+            // a snapshot: settings edited while the render runs apply to the next one. The
+            // VideoQuality enum members are the CRF values (Low=29, Medium=23, High=16).
+            var crf = (int)(SettingsRoot.Current?.Recording?.Quality ?? VideoQuality.Medium);
+            return ProjectFileWriter.Write(argsPath, project, outputPath, crf);
         }
 
-        /// <summary>
-        /// Turns the document's normalized overlay geometry into output pixels. The width is a
-        /// fraction of the screen frame; the height follows the webcam track's own aspect ratio
-        /// (the document does not know it), and the whole rect is nudged back inside the frame
-        /// rather than clipped, so a mask rendered at rect.w x rect.h always lands whole.
-        /// </summary>
-        internal static RenderRect ComputeWebcamRect(WebcamOverlay overlay, VideoRenderSource source)
+        /// <summary>The path of the first media file the project <b>references</b> that is not on
+        /// disk, or null when they are all there. The tool would fail on it too, but only after the
+        /// entry has been created and the user has watched a render start. A source no item plays —
+        /// an import whose items were all deleted — is never opened, so its file being gone is not
+        /// a reason to refuse (the same definition the editor's missing-media prompt uses).</summary>
+        private static string FindMissingSource(Project project)
         {
-            var frameW = Math.Max(1, source.ScreenWidth);
-            var frameH = Math.Max(1, source.ScreenHeight);
+            if (project.Sources == null)
+                return null;
 
-            var w = (int)Math.Round(overlay.Width * frameW);
-            w = Math.Clamp(w, 2, frameW);
+            foreach (var media in project.Sources)
+            {
+                if (!EditorSession.IsSourceReferenced(project, media.Id))
+                    continue;
 
-            var aspect = (double)source.WebcamHeight / source.WebcamWidth;
-            var h = (int)Math.Round(w * aspect);
-            h = Math.Clamp(h, 2, frameH);
+                if (String.IsNullOrEmpty(media.Path))
+                    return "(no path)";
+                if (!File.Exists(media.Path))
+                    return media.Path;
+            }
 
-            var x = (int)Math.Round(overlay.CenterX * frameW - w / 2.0);
-            var y = (int)Math.Round(overlay.CenterY * frameH - h / 2.0);
-            x = Math.Clamp(x, 0, frameW - w);
-            y = Math.Clamp(y, 0, frameH - h);
-
-            return new RenderRect { X = x, Y = y, W = w, H = h };
+            return null;
         }
 
         /// <summary>"<c>name</c>-edited.mp4" beside the source, uniquified with a counter when that
@@ -353,15 +313,6 @@ namespace Clowd.UI.Services
                 candidate = Path.Combine(dir, stem + "-" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + ".mp4");
 
             return candidate;
-        }
-
-        private static long SumDuration(System.Collections.Generic.IReadOnlyList<CutRegion> segments)
-        {
-            long total = 0;
-            foreach (var s in segments)
-                total += s.DurationMs;
-
-            return total;
         }
 
         /// <summary>Copies the source recording's thumbnail into the new session directory so the

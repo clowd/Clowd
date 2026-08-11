@@ -16,19 +16,30 @@ public sealed class RecordingIds
 
     public Guid WebcamTrackId { get; init; }
 
-    public Guid AudioTrackId { get; init; }
+    /// <summary>One id per audio stream, in the order the streams become rows. A recording with
+    /// separate mic/system tracks has one entry each; a silent one has none.</summary>
+    public IReadOnlyList<Guid> AudioTrackIds { get; init; } = Array.Empty<Guid>();
 
     /// <summary>One recording is one link group: every row it produced trims/cuts as one.</summary>
     public Guid LinkGroupId { get; init; }
 
-    public static RecordingIds New() => new RecordingIds
+    public static RecordingIds New(int audioTrackCount)
     {
-        SourceId = Guid.NewGuid(),
-        ScreenTrackId = Guid.NewGuid(),
-        WebcamTrackId = Guid.NewGuid(),
-        AudioTrackId = Guid.NewGuid(),
-        LinkGroupId = Guid.NewGuid(),
-    };
+        ArgumentOutOfRangeException.ThrowIfNegative(audioTrackCount);
+
+        var audioTrackIds = new Guid[audioTrackCount];
+        for (var i = 0; i < audioTrackIds.Length; i++)
+            audioTrackIds[i] = Guid.NewGuid();
+
+        return new RecordingIds
+        {
+            SourceId = Guid.NewGuid(),
+            ScreenTrackId = Guid.NewGuid(),
+            WebcamTrackId = Guid.NewGuid(),
+            AudioTrackIds = audioTrackIds,
+            LinkGroupId = Guid.NewGuid(),
+        };
+    }
 }
 
 /// <summary>One kept slice of the recording, in source time: <c>[SourceInTicks, +DurationTicks)</c>.
@@ -47,8 +58,14 @@ public sealed class RecordingProjectSpec
     /// <summary>The webcam stream, or null when the recording carries none.</summary>
     public VideoStreamProbe Webcam { get; set; }
 
-    /// <summary>The audio stream, or null.</summary>
-    public AudioStreamProbe Audio { get; set; }
+    /// <summary>The audio streams, in the order they become rows — one row each. Null or empty
+    /// when the recording carries no audio.</summary>
+    public IReadOnlyList<AudioStreamProbe> AudioStreams { get; set; }
+
+    /// <summary>Row names for <see cref="AudioStreams"/>, index-aligned (the recorder knows which
+    /// stream is the microphone and which the system mix; the probe does not). Null — or a blank
+    /// entry — falls back to "Audio"/"Audio N".</summary>
+    public IReadOnlyList<string> AudioTrackNames { get; set; }
 
     public int FpsNum { get; set; }
 
@@ -71,8 +88,8 @@ public sealed class RecordingProjectSpec
 
 /// <summary>
 /// The one mapping from "a Clowd recording plus a keep-segment list" onto a v2
-/// <see cref="Project"/>: three rows (screen video, optional webcam video, optional audio) over a
-/// single source file, one item per kept slice per row, all sharing one
+/// <see cref="Project"/>: a screen video row, an optional webcam video row and one row per audio
+/// stream, over a single source file, one item per kept slice per row, all sharing one
 /// <see cref="Item.LinkGroupId"/>.
 ///
 /// Both entry points into the editor's world go through here so they cannot drift: the v1 args
@@ -139,8 +156,14 @@ public static class RecordingProject
 
         var screen = spec.Screen;
         var cam = spec.Webcam;
-        var audio = spec.Audio;
-        var ids = spec.Ids ?? RecordingIds.New();
+        var audioStreams = spec.AudioStreams ?? Array.Empty<AudioStreamProbe>();
+        var ids = spec.Ids ?? RecordingIds.New(audioStreams.Count);
+
+        // the output carries every audio row, so it runs at the highest rate any of them has:
+        // upsampling a stream is lossless, downsampling the others is not.
+        int sampleRate = 0;
+        foreach (var audio in audioStreams)
+            sampleRate = Math.Max(sampleRate, audio.SampleRate);
 
         var project = new Project
         {
@@ -150,7 +173,7 @@ public static class RecordingProject
                 HeightPx = screen.Height,
                 FpsNum = spec.FpsNum,
                 FpsDen = spec.FpsDen,
-                SampleRate = audio != null && audio.SampleRate > 0 ? audio.SampleRate : FallbackSampleRate,
+                SampleRate = sampleRate > 0 ? sampleRate : FallbackSampleRate,
             },
         };
 
@@ -158,7 +181,7 @@ public static class RecordingProject
         source.Streams.Add(ToSourceStream(screen));
         if (cam != null)
             source.Streams.Add(ToSourceStream(cam));
-        if (audio != null)
+        foreach (var audio in audioStreams)
             source.Streams.Add(new SourceStream
             {
                 Index = audio.StreamIndex,
@@ -171,9 +194,17 @@ public static class RecordingProject
         var camTrack = cam != null
             ? AddTrack(project, ids.WebcamTrackId, TrackKind.Video, "Webcam", 1, spec.WebcamHidden)
             : null;
-        var audioTrack = audio != null
-            ? AddTrack(project, ids.AudioTrackId, TrackKind.Audio, "Audio", 2, hidden: false)
-            : null;
+
+        var audioTracks = new Track[audioStreams.Count];
+        for (var i = 0; i < audioTracks.Length; i++)
+        {
+            // an id the caller did not supply is fresh, which costs a decoder rebuild on the next
+            // rebuild — the caller mints ids per recording, so that only happens if it got the
+            // stream count wrong.
+            var trackId = i < ids.AudioTrackIds.Count ? ids.AudioTrackIds[i] : Guid.NewGuid();
+            audioTracks[i] = AddTrack(project, trackId, TrackKind.Audio,
+                AudioTrackName(spec.AudioTrackNames, i, audioTracks.Length), 2 + i, hidden: false);
+        }
 
         var camTransform = spec.WebcamTransform;
 
@@ -192,16 +223,18 @@ public static class RecordingProject
                 AddItem(project, camTrack, source.Id, cam.StreamIndex, timelineStart, durationTicks,
                     startTicks, ids.LinkGroupId, camTransform?.Clone());
 
-            if (audioTrack != null)
+            for (var i = 0; i < audioTracks.Length; i++)
             {
                 // Audio only where the source audio exists: real recordings' audio track ends a
                 // few hundredths of a second before the video, and the v1 atrim chain ended the
-                // output audio there rather than padding silence to the video's end.
+                // output audio there rather than padding silence to the video's end. Each stream
+                // is clamped to its own end — they need not agree.
+                var audio = audioStreams[i];
                 long audioDuration = durationTicks;
                 if (audio.DurationTicks > 0)
                     audioDuration = Math.Clamp(audio.DurationTicks - startTicks, 0, durationTicks);
                 if (audioDuration > 0)
-                    AddItem(project, audioTrack, source.Id, audio.StreamIndex, timelineStart,
+                    AddItem(project, audioTracks[i], source.Id, audio.StreamIndex, timelineStart,
                         audioDuration, startTicks, ids.LinkGroupId, null);
             }
 
@@ -210,6 +243,17 @@ public static class RecordingProject
 
         project.Normalize();
         return project;
+    }
+
+    /// <summary>The row name for audio stream <paramref name="index"/> of <paramref name="count"/>:
+    /// the caller's label when it has one, else "Audio" for a lone stream and "Audio 1"/"Audio 2"/…
+    /// when there are several.</summary>
+    private static string AudioTrackName(IReadOnlyList<string> names, int index, int count)
+    {
+        if (names != null && index < names.Count && !String.IsNullOrWhiteSpace(names[index]))
+            return names[index];
+
+        return count == 1 ? "Audio" : $"Audio {index + 1}";
     }
 
     private static SourceStream ToSourceStream(VideoStreamProbe s) => new SourceStream

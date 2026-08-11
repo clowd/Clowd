@@ -1,0 +1,329 @@
+<UserControl
+    x:Class="Clowd.UI.VideoEditor.Inspector.InspectorPanel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls">
+
+    <!--  The editor window's chrome is a fixed dark palette (NOT Semi tokens), so this panel is
+          hand-coloured to match the sidebar it lives in — the same trade LayersPanel makes.  -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#9A9A9A" />
+        </Style>
+        <Style Selector="TextBlock.label">
+            <Setter Property="Width" Value="60" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#CCCCCC" />
+        </Style>
+        <Style Selector="StackPanel.row">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="6" />
+        </Style>
+        <Style Selector="StackPanel.section">
+            <Setter Property="Spacing" Value="6" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="TextBox.field">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#454545" />
+            <Setter Property="BorderBrush" Value="#666666" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Padding" Value="4,2" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <TextBlock
+            Margin="10"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Foreground="#88FFFFFF"
+            IsVisible="{Binding !HasSelection}"
+            Text="Nothing selected"
+            TextAlignment="Center"
+            TextWrapping="Wrap" />
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasSelection}">
+            <StackPanel Margin="10" Spacing="12">
+
+                <!--  subject: which row/kind the numbers below belong to  -->
+                <StackPanel Spacing="2">
+                    <TextBlock
+                        FontWeight="Bold"
+                        Foreground="White"
+                        Text="{Binding SubjectName}"
+                        TextTrimming="CharacterEllipsis" />
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="#999999"
+                        Text="{Binding SubjectKind}" />
+                </StackPanel>
+
+                <StackPanel Classes="section">
+                    <CheckBox Content="Hide row" IsChecked="{Binding TrackHidden, Mode=TwoWay}" IsVisible="{Binding ShowTrackHidden}" />
+                    <CheckBox Content="Mute row" IsChecked="{Binding TrackMuted, Mode=TwoWay}" IsVisible="{Binding ShowTrackMuted}" />
+                    <Button
+                        Command="{Binding CommandUnlink}"
+                        Content="Unlink from recording"
+                        IsVisible="{Binding IsLinked}"
+                        ToolTip.Tip="Stops this row moving and splitting with the rest of the recording" />
+                </StackPanel>
+
+                <!--  transform  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowTransform}">
+                    <TextBlock Classes="section" Text="PLACEMENT" />
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Center X" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding PositionX, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Center Y" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding PositionY, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <StackPanel Classes="row" IsVisible="{Binding ShowScale}">
+                        <!--  "Size" for pictures, "Text scale" for text — the TEXT section below
+                              has its own font-size "Size" row, and the gizmo writes this Scale
+                              for text too, so it must be visible (and distinguishable) there  -->
+                        <TextBlock Classes="label" Text="{Binding ScaleLabel}" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.01"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding Scale, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Rotation" />
+                        <controls:SpinnerTextBox
+                            Max="360"
+                            Min="-360"
+                            SnapToWholeNumber="True"
+                            SpinAmount="5"
+                            Suffix="°"
+                            Value="{Binding Rotation, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Opacity" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding Opacity, Mode=TwoWay}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!--  mask  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowMask}">
+                    <TextBlock Classes="section" Text="SHAPE" />
+
+                    <!--  wraps: all three fit side by side once the sidebar is dragged wider than
+                          its 230px default, and stack instead of clipping when it is not  -->
+                    <WrapPanel>
+                        <RadioButton
+                            Margin="0,0,12,2"
+                            Content="None"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskNone, Mode=TwoWay}" />
+                        <RadioButton
+                            Margin="0,0,12,2"
+                            Content="Circle"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskCircle, Mode=TwoWay}" />
+                        <RadioButton
+                            Margin="0,0,0,2"
+                            Content="Rounded"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskRounded, Mode=TwoWay}" />
+                    </WrapPanel>
+
+                    <StackPanel Classes="row" IsVisible="{Binding ShowCornerRadius}">
+                        <TextBlock Classes="label" Text="Corners" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.5"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CornerRadius, Mode=TwoWay}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!--  crop  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowCrop}">
+                    <TextBlock Classes="section" Text="CROP" />
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Left" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropLeft, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Top" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropTop, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Right" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropRight, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Bottom" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropBottom, Mode=TwoWay}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!--  text  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowText}">
+                    <TextBlock Classes="section" Text="TEXT" />
+
+                    <TextBox
+                        x:Name="txtText"
+                        Classes="field"
+                        AcceptsReturn="True"
+                        MaxHeight="120"
+                        Text="{Binding Text, Mode=TwoWay}"
+                        TextWrapping="Wrap"
+                        PlaceholderText="Text" />
+
+                    <TextBox
+                        x:Name="txtFont"
+                        Classes="field"
+                        Text="{Binding FontFamily, Mode=TwoWay}"
+                        PlaceholderText="Default font" />
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Size" />
+                        <controls:SpinnerTextBox
+                            Max="2000"
+                            Min="1"
+                            SnapToWholeNumber="True"
+                            SpinAmount="2"
+                            Suffix="px"
+                            Value="{Binding FontSize, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <TextBox
+                        x:Name="txtColor"
+                        Classes="field"
+                        Text="{Binding TextColorHex, Mode=TwoWay}"
+                        PlaceholderText="#AARRGGBB" />
+
+                    <ComboBox x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
+                </StackPanel>
+
+                <!--  audio  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowAudio}">
+                    <TextBlock Classes="section" Text="AUDIO" />
+
+                    <StackPanel Classes="row">
+                        <TextBlock Classes="label" Text="Volume" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="2"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding Volume, Mode=TwoWay}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <!--  transitions  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowTransitions}">
+                    <TextBlock Classes="section" Text="ENTRY" />
+                    <ComboBox x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
+
+                    <StackPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding EntryDurationMs, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <ComboBox
+                        x:Name="comboEntryEasing"
+                        IsVisible="{Binding ShowEntryOptions}"
+                        SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
+
+                    <TextBlock
+                        Classes="section"
+                        Margin="0,6,0,0"
+                        Text="EXIT" />
+                    <ComboBox x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
+
+                    <StackPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding ExitDurationMs, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <ComboBox
+                        x:Name="comboExitEasing"
+                        IsVisible="{Binding ShowExitOptions}"
+                        SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Panel>
+
+</UserControl>
