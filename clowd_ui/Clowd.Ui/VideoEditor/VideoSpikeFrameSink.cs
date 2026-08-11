@@ -16,8 +16,14 @@ namespace Clowd.UI.VideoEditor
     /// Image.Source swap. With one bitmap displayed and at most one swap pending, a third is
     /// always available — BeginFrame blocking briefly is the natural backpressure when the UI
     /// thread stalls.
+    ///
+    /// <b>Dev harness only.</b> The editor's preview has no intermediate bitmap at all: it
+    /// composes the whole project onto Avalonia's own canvas (<see cref="PreviewDrawOperation"/>)
+    /// from the SDK's pooled CPU staging buffers. This sink survives solely because
+    /// <see cref="VideoSpikeWindow"/> — the <c>--video-spike</c> performance harness for the raw
+    /// <c>FFmpegVideoPlayer</c> — presents into plain <see cref="Image"/>s.
     /// </summary>
-    public sealed class WriteableBitmapFrameSink : IFrameSink, IDisposable
+    internal sealed class VideoSpikeFrameSink : IFrameSink, IDisposable
     {
         private const int PoolSize = 3;
 
@@ -30,7 +36,7 @@ namespace Clowd.UI.VideoEditor
         private int _version; // bumped when the pool is rebuilt at a new size
         private bool _disposed;
 
-        public WriteableBitmapFrameSink(Image image)
+        public VideoSpikeFrameSink(Image image)
         {
             _image = image;
         }
