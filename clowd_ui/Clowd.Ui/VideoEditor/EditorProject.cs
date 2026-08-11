@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Clowd.UI.Services;
 using Clowd.VideoSDK;
 using Clowd.VideoSDK.Model;
@@ -7,6 +8,17 @@ using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI.VideoEditor
 {
+    /// <summary>
+    /// The part of the edit document the v2 <see cref="Project"/> cannot express: the trim range as
+    /// the user set it, and the cut list <b>unclamped</b> by that range. The project only carries
+    /// the keep segments, so a cut that currently falls outside the trim leaves no gap between two
+    /// items and cannot be read back — widening the trim after a reload would silently bring the
+    /// cut-out material back. This travels beside the project (see
+    /// <see cref="VideoEditPersistence"/>), never inside it: the project stays the one authority on
+    /// what is rendered.
+    /// </summary>
+    internal sealed record EditorState(long TrimStartMs, long TrimEndMs, IReadOnlyList<CutRegion> Cuts);
+
     /// <summary>
     /// The seam between the editor's Phase-1 edit surface (<see cref="VideoEditDocument"/>: one
     /// trim range, a cut list, one webcam overlay — the single-row timeline and the sidebar) and
@@ -38,6 +50,16 @@ namespace Clowd.UI.VideoEditor
     internal sealed class EditorProject
     {
         private const long TicksPerMs = TimeSpan.TicksPerMillisecond;
+
+        /// <summary>
+        /// The document state each built project came from, keyed by the exact <see cref="Project"/>
+        /// instance <see cref="Rebuild"/> produced. The save path is handed only that project (the
+        /// window serializes <see cref="Current"/>), but the project is a lossy projection of the
+        /// document — see <see cref="EditorState"/> — so the missing piece has to be findable from
+        /// it. The table holds its keys weakly, so nothing here keeps a closed editor's projects
+        /// alive.
+        /// </summary>
+        private static readonly ConditionalWeakTable<Project, EditorState> StateByProject = new();
 
         private readonly string _path;
         private readonly VideoStreamProbe _screen;
@@ -141,9 +163,20 @@ namespace Clowd.UI.VideoEditor
                 Ids = _ids,
             });
 
+            // remember what the document looked like when this project was built, so the save path
+            // can write the part the project cannot carry (see EditorState).
+            StateByProject.AddOrUpdate(Current, new EditorState(
+                Document.TrimStartMs, Document.TrimEndMs, Document.GetCutRanges()));
+
             TimeMap = EditTimeMap.FromKeepSegments(keepMs);
             return true;
         }
+
+        /// <summary>The document state <see cref="Rebuild"/> built <paramref name="project"/> from,
+        /// or null for a project this process did not build (a file just loaded from disk, say).
+        /// </summary>
+        public static EditorState StateOf(Project project)
+            => project != null && StateByProject.TryGetValue(project, out var state) ? state : null;
 
         /// <summary>The webcam items' placement, or null when the recording has no camera track.</summary>
         private Transform BuildWebcamTransform()
@@ -182,25 +215,7 @@ namespace Clowd.UI.VideoEditor
             ArgumentNullException.ThrowIfNull(project);
             ArgumentNullException.ThrowIfNull(document);
 
-            var tracks = new List<Track>(project.Tracks ?? new List<Track>());
-            tracks.Sort((a, b) =>
-            {
-                int byOrder = a.Order.CompareTo(b.Order);
-                return byOrder != 0 ? byOrder : a.Id.CompareTo(b.Id);
-            });
-
-            Track screenTrack = null;
-            Track webcamTrack = null;
-            foreach (var track in tracks)
-            {
-                if (track.Kind != TrackKind.Video)
-                    continue;
-                if (screenTrack == null)
-                    screenTrack = track;
-                else if (webcamTrack == null)
-                    webcamTrack = track;
-            }
-
+            FindVideoRows(project, out var screenTrack, out var webcamTrack);
             if (screenTrack == null)
                 return;
 
@@ -248,6 +263,53 @@ namespace Clowd.UI.VideoEditor
                     ? WebcamOverlayShape.Circle
                     : WebcamOverlayShape.RoundedRect;
                 document.Webcam.CornerRadius = mask.CornerRadius;
+            }
+        }
+
+        /// <summary>
+        /// The webcam row's placement in <paramref name="project"/>: the transform on the first
+        /// item of the second video row (the row <see cref="ApplyToDocument"/> reads the overlay
+        /// back from). Null when the project carries no webcam row, or no items on it.
+        ///
+        /// This is the exact <see cref="Transform"/> <c>FrameComposer</c> draws that row with, so
+        /// UI chrome that must line up with the composed picture places itself from here rather
+        /// than re-deriving a rect from the document.
+        /// </summary>
+        public static Transform WebcamTransformOf(Project project)
+        {
+            if (project == null)
+                return null;
+
+            FindVideoRows(project, out _, out var webcamTrack);
+            if (webcamTrack == null)
+                return null;
+
+            var camItems = MediaItemsOf(project, webcamTrack.Id);
+            return camItems.Count > 0 ? camItems[0].Transform : null;
+        }
+
+        /// <summary>The single-row UI's view of a project's video rows, in stacking order: the
+        /// lowest is the screen, the next one up (if any) is the webcam.</summary>
+        private static void FindVideoRows(Project project, out Track screenTrack, out Track webcamTrack)
+        {
+            screenTrack = null;
+            webcamTrack = null;
+
+            var tracks = new List<Track>(project.Tracks ?? new List<Track>());
+            tracks.Sort((a, b) =>
+            {
+                int byOrder = a.Order.CompareTo(b.Order);
+                return byOrder != 0 ? byOrder : a.Id.CompareTo(b.Id);
+            });
+
+            foreach (var track in tracks)
+            {
+                if (track.Kind != TrackKind.Video)
+                    continue;
+                if (screenTrack == null)
+                    screenTrack = track;
+                else if (webcamTrack == null)
+                    webcamTrack = track;
             }
         }
 

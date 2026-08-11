@@ -151,6 +151,7 @@ namespace Clowd.VideoSDK.Render
             Mp4Writer writer = null;
 
             bool cancelled = false;
+            bool finished = false; // writer.Finish() completed — the output is a real mp4
             long encoded = 0, outputBytes = 0;
             string backend = null;
 
@@ -280,6 +281,7 @@ namespace Clowd.VideoSDK.Render
                         if (mixer != null && audioPos < totalAudioFrames)
                             MixUpTo(mixer, writer, mixBuffer, audioPos, totalAudioFrames);
                         writer.Finish();
+                        finished = true;
                         outputBytes = new FileInfo(outputPath).Length;
                         progress?.Report(100);
                     }
@@ -311,7 +313,13 @@ namespace Clowd.VideoSDK.Render
                         stage?.Return();
                     pool.Dispose();
                     audioSource?.Dispose();
-                    writer?.Dispose(); // abort path finalizes the container; the file is deleted below when needed
+                    // Every path that reaches Dispose without Finish() (cancellation, any error)
+                    // deletes the partial output below — abandon the writer so Dispose skips the
+                    // +faststart trailer, which would otherwise re-read and rewrite the entire
+                    // partial mdat (tens of seconds on a long render) just before the delete.
+                    if (writer != null && !finished)
+                        writer.Abandon();
+                    writer?.Dispose();
                 }
             }
             catch
