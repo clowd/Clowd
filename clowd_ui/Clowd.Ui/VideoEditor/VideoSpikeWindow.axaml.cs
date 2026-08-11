@@ -22,8 +22,8 @@ namespace Clowd.UI.VideoEditor
 
         private readonly string _file;
         private FFmpegVideoPlayer _player;
-        private WriteableBitmapFrameSink _screenSink;
-        private WriteableBitmapFrameSink _webcamSink;
+        private VideoSpikeFrameSink _screenSink;
+        private VideoSpikeFrameSink _webcamSink;
         private DispatcherTimer _statsTimer;
         private readonly StringBuilder _sb = new StringBuilder(512);
         private double _spikeSeconds;
@@ -73,8 +73,8 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            _screenSink = new WriteableBitmapFrameSink(ScreenImage);
-            _webcamSink = new WriteableBitmapFrameSink(WebcamImage);
+            _screenSink = new VideoSpikeFrameSink(ScreenImage);
+            _webcamSink = new VideoSpikeFrameSink(WebcamImage);
 
             _player = new FFmpegVideoPlayer(a => Dispatcher.UIThread.Post(a))
             {

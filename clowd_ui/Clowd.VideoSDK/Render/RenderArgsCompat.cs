@@ -55,11 +55,11 @@ namespace Clowd.VideoSDK.Render
         /// <summary>Frame rate used when the input declares none at all (neither avg_frame_rate nor
         /// r_frame_rate). Output is CFR, so a rate must be picked; 30/1 matches the recorder's
         /// default.</summary>
-        public const int FallbackFpsNum = 30;
+        public const int FallbackFpsNum = RecordingProject.FallbackFpsNum;
 
         /// <summary>Output sample rate used when the input has no audio stream to take one from.
         /// Only reached for a video-only render, where no audio stream is written at all.</summary>
-        public const int FallbackSampleRate = 48000;
+        public const int FallbackSampleRate = RecordingProject.FallbackSampleRate;
 
         private const long TicksPerMs = TimeBase.TicksPerSecond / 1000;
 
@@ -224,7 +224,7 @@ namespace Clowd.VideoSDK.Render
             // First audio stream, if any — vid-render took the first decodable one.
             var audio = probe.AudioStreams is { Count: > 0 } ? probe.AudioStreams[0] : null;
 
-            var (fpsNum, fpsDen) = ChooseFrameRate(screen);
+            var (fpsNum, fpsDen) = RecordingProject.ChooseFrameRate(screen);
 
             long sourceDurationTicks = MaxDuration(probe, screen);
             bool wholeFile = args.Segments == null || args.Segments.Count == 0;
@@ -242,66 +242,24 @@ namespace Clowd.VideoSDK.Render
             if (segments.Count == 0)
                 throw new InvalidOperationException("the edit keeps nothing of the recording");
 
-            var project = new Project
-            {
-                Output = new OutputSettings
-                {
-                    WidthPx = screen.Width,
-                    HeightPx = screen.Height,
-                    FpsNum = fpsNum,
-                    FpsDen = fpsDen,
-                    SampleRate = audio != null && audio.SampleRate > 0 ? audio.SampleRate : FallbackSampleRate,
-                },
-            };
-
-            var source = new Source { Id = Guid.NewGuid(), Path = args.Input };
-            source.Streams.Add(ToSourceStream(screen));
-            if (cam != null)
-                source.Streams.Add(ToSourceStream(cam));
-            if (audio != null)
-                source.Streams.Add(new SourceStream
-                {
-                    Index = audio.StreamIndex,
-                    Kind = StreamKind.Audio,
-                    DurationTicks = audio.DurationTicks,
-                });
-            project.Sources.Add(source);
-
-            var screenTrack = AddTrack(project, TrackKind.Video, "Screen", 0);
-            var camTrack = cam != null ? AddTrack(project, TrackKind.Video, "Webcam", 1) : null;
-            var audioTrack = audio != null ? AddTrack(project, TrackKind.Audio, "Audio", 2) : null;
-
-            // one recording => one link group across every row it produced.
-            var linkGroup = Guid.NewGuid();
-            var camTransform = cam != null ? BuildWebcamTransform(args.Webcam, screen) : null;
-
-            long timelineStart = 0;
+            // The row/item layout is shared with the editor's own import (one recording => three
+            // rows over one source, one link group); only the v1-specific geometry — the pixel
+            // rect and the rasterized mask — is recovered here.
+            var keep = new List<KeepSegment>(segments.Count);
             foreach (var (startTicks, durationTicks) in segments)
+                keep.Add(new KeepSegment(startTicks, durationTicks));
+
+            var project = RecordingProject.Build(new RecordingProjectSpec
             {
-                AddItem(project, screenTrack, source.Id, screen.StreamIndex, timelineStart, durationTicks,
-                    startTicks, linkGroup, null);
-
-                if (camTrack != null)
-                    AddItem(project, camTrack, source.Id, cam.StreamIndex, timelineStart, durationTicks,
-                        startTicks, linkGroup, camTransform.Clone());
-
-                if (audioTrack != null)
-                {
-                    // Audio only where the source audio exists: real recordings' audio track ends
-                    // a few hundredths of a second before the video, and vid-render's atrim chain
-                    // ended the output audio there rather than padding silence to the video's end.
-                    long audioDuration = durationTicks;
-                    if (audio.DurationTicks > 0)
-                        audioDuration = Math.Clamp(audio.DurationTicks - startTicks, 0, durationTicks);
-                    if (audioDuration > 0)
-                        AddItem(project, audioTrack, source.Id, audio.StreamIndex, timelineStart,
-                            audioDuration, startTicks, linkGroup, null);
-                }
-
-                timelineStart += durationTicks;
-            }
-
-            project.Normalize();
+                InputPath = args.Input,
+                Screen = screen,
+                Webcam = cam,
+                Audio = audio,
+                FpsNum = fpsNum,
+                FpsDen = fpsDen,
+                Segments = keep,
+                WebcamTransform = cam != null ? BuildWebcamTransform(args.Webcam, screen) : null,
+            });
 
             var problems = project.Validate();
             if (problems.Count > 0)
@@ -366,16 +324,11 @@ namespace Clowd.VideoSDK.Render
         /// uses, and recovers the mask shape from the rasterized PNG.</summary>
         private static Transform BuildWebcamTransform(LegacyWebcam webcam, VideoStreamProbe screen)
         {
+            // height follows the camera's aspect ratio, exactly as WebcamOverlay defined it —
+            // the UI derived rect.h from that same ratio when it wrote these args.
             var r = webcam.Rect;
-            return new Transform
-            {
-                X = (r.X + r.W / 2.0) / screen.Width,
-                Y = (r.Y + r.H / 2.0) / screen.Height,
-                // height follows the camera's aspect ratio, exactly as WebcamOverlay defined it —
-                // the UI derived rect.h from that same ratio when it wrote these args.
-                Scale = r.W / (double)screen.Width,
-                Mask = InferMask(webcam.MaskPng),
-            };
+            return RecordingProject.WebcamTransform(r.X, r.Y, r.W, r.H, screen.Width, screen.Height,
+                InferMask(webcam.MaskPng));
         }
 
         /// <summary>
@@ -544,17 +497,6 @@ namespace Clowd.VideoSDK.Render
             return result.ToArray();
         }
 
-        /// <summary>Output is CFR (the model composes N sources, so no source timing survives):
-        /// take avg_frame_rate, fall back to r_frame_rate, then to <see cref="FallbackFpsNum"/>.</summary>
-        private static (int Num, int Den) ChooseFrameRate(VideoStreamProbe screen)
-        {
-            if (screen.AvgFrameRateNum > 0 && screen.AvgFrameRateDen > 0)
-                return (screen.AvgFrameRateNum, screen.AvgFrameRateDen);
-            if (screen.RFrameRateNum > 0 && screen.RFrameRateDen > 0)
-                return (screen.RFrameRateNum, screen.RFrameRateDen);
-            return (FallbackFpsNum, 1);
-        }
-
         private static long MaxDuration(MediaProbeResult probe, VideoStreamProbe screen)
         {
             long duration = Math.Max(probe.DurationTicks, screen.DurationTicks);
@@ -566,46 +508,6 @@ namespace Clowd.VideoSDK.Render
             return duration;
         }
 
-        private static SourceStream ToSourceStream(VideoStreamProbe s) => new SourceStream
-        {
-            Index = s.StreamIndex,
-            Kind = StreamKind.Video,
-            Width = s.Width,
-            Height = s.Height,
-            AvgFrameRateNum = s.AvgFrameRateNum,
-            AvgFrameRateDen = s.AvgFrameRateDen,
-            IsVariableFrameRate = s.IsVariableFrameRate,
-            StartTimeTicks = s.StartTimeTicks,
-            DurationTicks = s.DurationTicks,
-        };
-
-        private static Track AddTrack(Project project, TrackKind kind, string name, int order)
-        {
-            var track = new Track { Id = Guid.NewGuid(), Kind = kind, Name = name, Order = order };
-            project.Tracks.Add(track);
-            return track;
-        }
-
-        private static void AddItem(Project project, Track track, Guid sourceId, int streamIndex,
-            long timelineStartTicks, long durationTicks, long sourceInTicks, Guid linkGroup,
-            Transform transform)
-        {
-            project.Items.Add(new Item
-            {
-                Id = Guid.NewGuid(),
-                TrackId = track.Id,
-                TimelineStartTicks = timelineStartTicks,
-                DurationTicks = durationTicks,
-                Content = new MediaContent
-                {
-                    SourceId = sourceId,
-                    StreamIndex = streamIndex,
-                    SourceInTicks = sourceInTicks,
-                },
-                Transform = transform ?? new Transform(),
-                LinkGroupId = linkGroup,
-            });
-        }
     }
 
     /// <summary>What a v1 args file describes once mapped: the project to render, where it goes,
