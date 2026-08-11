@@ -11,19 +11,24 @@
 //! editor.
 //!
 //! It is a separate binary from the overlay because it shares nothing with
-//! it at runtime: no window, no event loop, no GPU, no screen-recording
-//! permission dance. Starting any of that would put pixels on screen in
-//! front of the very content it is about to photograph.
+//! it at runtime: no window, no event loop, no GPU. Starting any of that
+//! would put pixels on screen in front of the very content it is about to
+//! photograph.
 //!
-//! Windows-only. Everything it does (synthetic wheel input, GDI region
-//! capture, `WM_MOUSEWHEEL`) is Win32; macOS would need the CGEvent/AX
-//! equivalents, so the five driver modules are `#[cfg(windows)]` and the
-//! entry point elsewhere refuses.
+//! Windows and macOS. The loop, the caps, the stitcher, the protocol and the
+//! session output are the same code on both; everything that touches the OS
+//! — injecting a wheel, parking the cursor, resolving and raising the target
+//! window, photographing the region — lives behind [`input`] and [`frame`],
+//! which each have a `win` and a `mac` half. The two platforms differ in one
+//! way that reaches the shared code: on Windows the region and the point are
+//! physical virtual-desktop pixels, on macOS they are CG points, so nothing
+//! here may compare a coordinate against a *pixel* count taken from a
+//! captured frame (see `drive`'s note on the viewport height).
 //!
 //! Layout:
 //! - [`drive`] — the loop, the caps, and the NDJSON conversation with the shell.
 //! - [`input`] — synthetic wheel injection, cursor parking, abort polling.
-//! - [`frame`] — one BitBlt of the fixed region.
+//! - [`frame`] — one screenshot of the fixed region.
 //! - [`stitch`] — frame registration and the composite.
 //! - [`output`] — `desktop.png` / `cropped.png` / `session.json`.
 //!
@@ -31,27 +36,22 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod cli;
+// Clowd ships on Windows and macOS only (the overlay's `system` module has no
+// third backend either), and a driver that compiled elsewhere without an
+// input or capture path would be a binary that cannot do anything.
+#[cfg(not(any(windows, target_os = "macos")))]
+compile_error!("clowd_scroll_driver supports Windows and macOS only");
 
-#[cfg(windows)]
+mod cli;
 mod drive;
-#[cfg(windows)]
 mod frame;
-#[cfg(windows)]
 mod input;
-#[cfg(windows)]
 mod output;
-#[cfg(windows)]
 mod stitch;
 
 #[macro_use]
 extern crate log;
 
-// Every `anyhow!`/`bail!` in this crate lives in the five `#[cfg(windows)]`
-// modules, so off Windows the import is unused and `-D warnings` in CI would
-// fail the macOS leg. `anyhow::Result` is a path, not a macro, and needs no
-// import either way.
-#[cfg(windows)]
 #[macro_use]
 extern crate anyhow;
 
@@ -88,27 +88,9 @@ fn main() -> anyhow::Result<()> {
     // held for the rest of main: dropping the guard flushes anything still queued
     let _sentry = clowd_rust_core::telemetry::init("clowd_scroll_driver");
 
-    let result = run(args);
+    let result = drive::run(args);
     if let Err(err) = &result {
         clowd_rust_core::telemetry::capture_error(err);
     }
     result
-}
-
-#[cfg(windows)]
-fn run(args: cli::CliArgs) -> anyhow::Result<()> {
-    drive::run(args)
-}
-
-/// macOS stub. The shell never routes a `scroll` action here (the overlay's
-/// panel button is compiled out), so reaching this means something upstream
-/// is confused — exit with the same code a failed capture uses rather than
-/// pretending to have produced a session.
-#[cfg(not(windows))]
-fn run(_args: cli::CliArgs) -> anyhow::Result<()> {
-    error!("the scrolling capture driver is not implemented on this platform");
-    // `process::exit` skips the init guard's drop, so without this the one
-    // event this stub exists to report is queued and silently dropped.
-    clowd_rust_core::telemetry::flush();
-    std::process::exit(clowd_rust_core::exit::CAPTURE_FAILED);
 }

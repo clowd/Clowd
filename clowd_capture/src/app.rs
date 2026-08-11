@@ -1515,9 +1515,9 @@ impl App {
         //
         // Without a peek, whatever is under the point is exactly what the
         // user saw when they clicked, and it is the right target. No walker
-        // (snapshot still in flight, or macOS) is not an error either: `0`
-        // tells the driver to resolve the target itself with WindowFromPoint
-        // once the overlay is out of the way.
+        // (its snapshot is still in flight) is not an error either: `0` tells
+        // the driver to resolve the target itself, from the point, once the
+        // overlay is out of the way.
         let hwnd = cycle
             .walker
             .as_ref()

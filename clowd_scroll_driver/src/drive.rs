@@ -46,11 +46,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use windows::Win32::UI::HiDpi::{GetAwarenessFromDpiAwarenessContext, GetThreadDpiAwarenessContext, DPI_AWARENESS_PER_MONITOR_AWARE};
 
 use crate::cli::CliArgs;
 use crate::frame::{self, Frame};
-use crate::input::{self, HWND};
+use crate::input::{self, Target};
 use crate::output;
 use crate::stitch::{AppendResult, Stitcher};
 use clowd_rust_core::geometry::{ScreenPoint, ScreenRect};
@@ -91,7 +90,9 @@ const START_DELAY: Duration = Duration::from_millis(350);
 
 /// How far the cursor may drift from the parked scroll point before the run
 /// pauses. Generous enough to survive a nudged desk, small enough that an
-/// intentional move always registers.
+/// intentional move always registers. In capture-space units, so on a Retina
+/// display it is ten points rather than ten pixels — a threshold about
+/// hand movement, not about image detail.
 const CURSOR_DRIFT_PX: i32 = 10;
 
 /// How long the cursor must hold still before a paused run parks it back on
@@ -190,7 +191,7 @@ const ZERO_STREAK_END: u32 = 2;
 
 /// Consecutive steps with no new content — *when nothing has ever moved* —
 /// before concluding the wheel is not reaching the target at all and
-/// dropping to the `WM_MOUSEWHEEL` rung. Higher than `ZERO_STREAK_END`
+/// dropping to [`input::wheel_message`]'s rung. Higher than `ZERO_STREAK_END`
 /// because this one is diagnosing a broken input path, not the bottom of a
 /// page, and the cost of being wrong is a wasted rung rather than a wasted
 /// run.
@@ -366,7 +367,10 @@ pub fn run(args: CliArgs) -> anyhow::Result<()> {
 }
 
 fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
-    check_dpi_awareness();
+    // Refuse before the border window and the HUD are on screen for a run
+    // that cannot work — on macOS a missing permission means every wheel
+    // event we post is discarded in silence.
+    input::preflight()?;
 
     let target = input::resolve_target(cfg.hwnd, cfg.point).ok_or_else(|| anyhow!("no window at scroll point {:?}", cfg.point))?;
     // Sampled once: a window that moves or resizes mid-run has invalidated
@@ -396,7 +400,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
 
     // Before anything is photographed: the target has to actually be the
     // window at the scroll point. The wheel is routed by cursor position and
-    // the capture is a BitBlt of the screen, so a window covering the point
+    // the capture is a screenshot of the screen, so a window covering the point
     // would receive every scroll *and* be the thing in every frame — a tall,
     // plausible-looking picture of entirely the wrong window. Refusing is the
     // only honest outcome.
@@ -423,6 +427,12 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     }
 
     let frame0 = frame::capture_region(cfg.region)?;
+    // The viewport, in the units the stitcher measures displacement in. Taken
+    // from the frame and never from `cfg.region`: on a Retina display the
+    // region is in CG points and the frame is twice its size in pixels, so
+    // the region's height would make every step look like a small one and
+    // wind the burst size up to its ceiling (see `crate::frame`).
+    let viewport_px = frame0.height;
     let mut stitcher = Stitcher::new(frame0);
 
     let started = Instant::now();
@@ -494,7 +504,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
                     break DriveResult::NoMovement;
                 }
             } else {
-                input::wheel_burst(ticks, input::WheelDir::Down);
+                input::wheel_burst(cfg.point, ticks, input::WheelDir::Down);
             }
         }
 
@@ -555,7 +565,21 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
         if dy > 0 {
             zero_streak = 0;
             total_dy = total_dy.saturating_add(dy);
-            ticks = adapt_ticks(ticks, dy, cfg.region.height().max(0) as u32);
+            let next_ticks = adapt_ticks(ticks, dy, viewport_px);
+            // One line per registered step, because the two ways a capture
+            // goes subtly wrong are both invisible in the finished image
+            // unless you can see this sequence: a step that moves most of a
+            // viewport leaves the stitcher almost no overlap to register
+            // against, and a dy near a multiple of the viewport on periodic
+            // content (lined text, a chat log) is what a mis-registration
+            // looks like. `wheeled` is here so the free re-captures are not
+            // mistaken for scrolls that moved nothing.
+            info!(
+                "step {}: {ticks} notch(es){} moved {dy}px of a {viewport_px}px viewport; next burst {next_ticks}",
+                stitcher.frames(),
+                if wheeled { "" } else { " (no wheel)" }
+            );
+            ticks = next_ticks;
             continue;
         }
 
@@ -578,13 +602,14 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
         }
 
         // Nothing has *ever* moved. That is not a short document, it is an
-        // input path that is not landing: an elevated target eating our
-        // SendInput, or a surface that ignores synthetic wheel entirely.
+        // input path that is not landing: an elevated Windows target whose
+        // UIPI eats our SendInput, a macOS window that never came forward, or
+        // a surface that ignores synthetic wheel entirely.
         if zero_streak >= ZERO_STREAK_FALLBACK {
             if use_message_wheel {
                 break DriveResult::NoMovement;
             }
-            info!("no movement after {zero_streak} wheel bursts; falling back to WM_MOUSEWHEEL");
+            info!("no movement after {zero_streak} wheel bursts; posting the wheel to the target instead");
             use_message_wheel = true;
             zero_streak = 0;
         }
@@ -638,8 +663,8 @@ enum Rewind {
 /// that loads history upward forever, a target that ignores synthetic
 /// wheel entirely — hits a cap and the capture starts from wherever it
 /// got to, which is exactly what would have happened without a rewind.
-/// That is also why the `WM_MOUSEWHEEL` fallback ladder is deliberately
-/// *not* run here: "nothing moved going up" is ambiguous (already at the
+/// That is also why the [`input::wheel_message`] fallback rung is
+/// deliberately *not* run here: "nothing moved going up" is ambiguous (already at the
 /// top, or input is being ignored) and the downward phase is where that
 /// distinction can actually be drawn.
 ///
@@ -681,7 +706,7 @@ fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
             resume_in_s: None,
         });
 
-        input::wheel_burst(REWIND_TICKS, input::WheelDir::Up);
+        input::wheel_burst(run.cfg.point, REWIND_TICKS, input::WheelDir::Up);
         let current = settle(run.cfg.region, run.esc_latch)?;
 
         if band_equal(&previous, &current) {
@@ -725,7 +750,7 @@ struct Run<'a> {
     cfg: &'a DriveArgs,
     signals: &'a Signals,
     esc_latch: &'a AtomicBool,
-    target: HWND,
+    target: Target,
     target_rect: Option<ScreenRect>,
 }
 
@@ -1009,29 +1034,20 @@ fn side_ignore(width: u32) -> u32 {
 /// large enough not to spend the frame budget on one article. Notches are
 /// never assumed to mean a distance — this reacts to the distance the
 /// target actually moved.
-fn adapt_ticks(ticks: u32, dy: u32, region_height: u32) -> u32 {
-    if region_height == 0 {
+///
+/// `viewport_px` is the captured frame's height, not the region's: the two
+/// differ by the display's scale factor on macOS, and a comparison in mixed
+/// units would peg the burst size at one end of its range.
+fn adapt_ticks(ticks: u32, dy: u32, viewport_px: u32) -> u32 {
+    if viewport_px == 0 {
         return ticks;
     }
-    if dy < region_height / 8 {
+    if dy < viewport_px / 8 {
         (ticks * 2).min(TICKS_MAX)
-    } else if dy > region_height * 2 / 3 {
+    } else if dy > viewport_px * 2 / 3 {
         (ticks / 2).max(TICKS_MIN)
     } else {
         ticks
-    }
-}
-
-/// Everything in this driver — the region rect, `SetCursorPos`, the BitBlt,
-/// the `WM_MOUSEWHEEL` lParam — is in physical virtual-desktop pixels, and
-/// that only holds while the process is per-monitor DPI aware. Otherwise
-/// Windows silently virtualises coordinates and every one of those lands on
-/// the wrong pixel on a scaled monitor. `app.manifest` declares PerMonitorV2;
-/// this reports if it somehow did not take.
-fn check_dpi_awareness() {
-    let awareness = unsafe { GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) };
-    if awareness != DPI_AWARENESS_PER_MONITOR_AWARE {
-        warn!("process is not per-monitor DPI aware ({awareness:?}); coordinates may be virtualised");
     }
 }
 

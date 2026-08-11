@@ -21,18 +21,9 @@ pub enum Command {
     /// Enter scroll-point pick mode for the current selection: the next
     /// click inside it hands the region + point off to the scrolling
     /// capture driver.
-    ///
-    /// The variant itself is platform-independent — the dispatcher arm
-    /// compiles everywhere — but the only thing that *emits* it is the
-    /// SCROLL panel button, which is `#[cfg(windows)]` because the driver
-    /// is. On macOS nothing constructs it, and `-D warnings` would call
-    /// that dead code; the arm is kept rather than cfg'd out so the two
-    /// platforms share one dispatcher.
-    #[cfg_attr(not(windows), allow(dead_code))]
     ScrollCapture,
     /// Run OCR over the current selection and lift the recognised lines
-    /// off the desktop. The PaddleOCR backend is platform-independent, so
-    /// unlike `ScrollCapture` this is emitted on every platform.
+    /// off the desktop.
     Ocr,
     /// Copy the recognised text to the clipboard.
     OcrCopy,

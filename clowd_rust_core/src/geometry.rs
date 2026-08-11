@@ -1,10 +1,13 @@
 //! The coordinate spaces every Clowd process speaks.
 //!
 //! `ScreenUnit` — physical pixels in virtual-desktop space — is the one that
-//! crosses process boundaries: the `action.txt` marker, the driver's
-//! `--region`/`--point` flags, `session.json` and every Win32 call agree on
-//! it. The others are local conveniences that live here because they convert
-//! to and from it.
+//! crosses process boundaries: `session.json` and every Win32 call agree on
+//! it, and so do the `action.txt` marker and the scrolling driver's
+//! `--region`/`--point` flags *on Windows*. Those two carry the platform
+//! capture space rather than this one (CAPTURE_PROTOCOL.md §1.2), which on
+//! macOS is CG points — the overlay converts on the way out and the driver
+//! consumes them as-is. The other units here are local conveniences that live
+//! in this module because they convert to and from `ScreenUnit`.
 
 use euclid::{Point2D, Rect, Size2D};
 use std::ops;

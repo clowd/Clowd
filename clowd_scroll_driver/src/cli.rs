@@ -25,13 +25,13 @@ pub struct CliArgs {
     #[arg(long, value_name = "PATH")]
     pub session_dir: Option<PathBuf>,
 
-    /// Capture region, `X,Y,W,H` in physical virtual-desktop pixels — the
-    /// same space and format the overlay's `scroll` action marker uses,
-    /// passed through verbatim by the shell. `allow_hyphen_values`: a
-    /// monitor left of or above the primary puts the whole region at
-    /// negative coordinates, and without it clap reads a separate-token
-    /// value like `-1920,0,…` as an unknown flag and refuses the command
-    /// line.
+    /// Capture region, `X,Y,W,H` in the platform capture space — physical
+    /// virtual-desktop pixels on Windows, CG points on macOS. The same space
+    /// and format the overlay's `scroll` action marker uses, passed through
+    /// verbatim by the shell. `allow_hyphen_values`: a monitor left of or
+    /// above the primary puts the whole region at negative coordinates, and
+    /// without it clap reads a separate-token value like `-1920,0,…` as an
+    /// unknown flag and refuses the command line.
     #[arg(long, value_name = "X,Y,W,H", value_parser = parse_region, allow_hyphen_values = true)]
     pub region: Option<ScreenRect>,
 
@@ -43,9 +43,13 @@ pub struct CliArgs {
     pub point: Option<ScreenPoint>,
 
     /// Target window handle as a decimal integer, as resolved by the
-    /// overlay when the user picked the scroll point. `0` (the default) or
-    /// a handle that no longer holds up means "work it out from
-    /// `--point`" — the driver re-validates it either way.
+    /// overlay when the user picked the scroll point: an `HWND` on Windows, a
+    /// `CGWindowID` on macOS. `0` (the default) or a handle that no longer
+    /// holds up means "work it out from `--point`" — the driver re-validates
+    /// it either way. The flag keeps its Win32 name on both platforms
+    /// because it is a wire contract with the shell
+    /// (`ScrollDriver.BuildArguments`), and one spelling is easier to keep
+    /// honest than two.
     #[arg(long, value_name = "N", default_value_t = 0, allow_hyphen_values = true)]
     pub hwnd: i64,
 
@@ -63,8 +67,8 @@ pub struct CliArgs {
 }
 
 /// `--region X,Y,W,H`. Zero-area regions are rejected here rather than
-/// deeper in the driver: a BitBlt of a 0-wide rect fails with a Win32 error
-/// that says nothing about where the bad rect came from.
+/// deeper in the driver: a 0-wide capture fails with an OS error that says
+/// nothing about where the bad rect came from.
 fn parse_region(s: &str) -> Result<ScreenRect, String> {
     let n = parse_i32_list::<4>(s)?;
     if n[2] <= 0 || n[3] <= 0 {

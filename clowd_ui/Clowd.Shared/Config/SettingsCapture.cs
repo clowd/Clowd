@@ -40,16 +40,14 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// Whether the capture overlay offers SCROLL. Windows-only: the scrolling-capture driver
-        /// (<c>clowd_scroll_driver</c>) is Win32, and the capturer compiles the button out
-        /// elsewhere — so the row is hidden on macOS rather than offering to switch off something
-        /// that is not there.
+        /// Whether the capture overlay offers SCROLL. On both platforms: the driver
+        /// (<c>clowd_scroll_driver</c>) has a Win32 and a macOS backend, and the overlay shows the
+        /// button wherever this is on.
         /// </summary>
         [Category("Optional features")]
         [DisplayName("Scrolling capture")]
         [Description("Show the SCROLL button in the capture window, which captures a whole scrolling " +
                      "page by scrolling it and stitching the frames together")]
-        [HiddenOnMacOS]
         public bool ScrollingCaptureEnabled
         {
             get => _scrollingCaptureEnabled;
@@ -71,7 +69,6 @@ namespace Clowd.Config
         [Description("Before a scrolling capture starts, wind the page back to the top so the whole " +
                      "document is captured. Turn this off to capture from wherever the page is sitting.")]
         [DisabledWhen(nameof(ScrollingCaptureEnabled), false)]
-        [HiddenOnMacOS]
         public bool ScrollCaptureRewindToTop
         {
             get => _scrollCaptureRewindToTop;
