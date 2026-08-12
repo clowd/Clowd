@@ -26,8 +26,20 @@ public sealed class Transform
     public double Y { get; set; } = 0.5;
 
     /// <summary>Item width as a fraction of the canvas width; height follows the content's
-    /// aspect ratio (after <see cref="Crop"/>).</summary>
+    /// aspect ratio (after <see cref="Crop"/>) unless <see cref="ScaleY"/> overrides it.</summary>
     public double Scale { get; set; } = 1.0;
+
+    /// <summary>
+    /// Item height as a fraction of the canvas height, or null — the default — to keep the
+    /// content's own aspect ratio. Only set when the user unlocks the aspect ratio in the editor
+    /// and sizes the two axes apart; a recording, a webcam and an import all want the lock, so the
+    /// common case writes nothing to the project file at all.
+    ///
+    /// For text, where <see cref="Scale"/> multiplies the natural block width instead of mapping to
+    /// a canvas fraction, this multiplies the natural block height the same way: ScaleY is to the
+    /// height exactly what Scale is to the width, whichever rule the content follows.
+    /// </summary>
+    public double? ScaleY { get; set; }
 
     /// <summary>Clockwise rotation about the item centre, in degrees.</summary>
     public double Rotation { get; set; }
@@ -47,6 +59,7 @@ public sealed class Transform
         X = X,
         Y = Y,
         Scale = Scale,
+        ScaleY = ScaleY,
         Rotation = Rotation,
         Opacity = Opacity,
         Crop = Crop?.Clone(),

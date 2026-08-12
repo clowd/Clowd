@@ -177,7 +177,8 @@
                     <StackPanel Classes="row" IsVisible="{Binding ShowScale}">
                         <!--  "Size" for pictures, "Text scale" for text — the TEXT section below
                               has its own font-size "Size" row, and the gizmo writes this Scale
-                              for text too, so it must be visible (and distinguishable) there  -->
+                              for text too, so it must be visible (and distinguishable) there.
+                              Unlocking the aspect ratio splits it into Width and Height.  -->
                         <TextBlock Classes="label" Text="{Binding ScaleLabel}" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -187,6 +188,23 @@
                             Suffix="%"
                             Value="{Binding Scale, Mode=TwoWay}" />
                     </StackPanel>
+
+                    <StackPanel Classes="row" IsVisible="{Binding ShowScaleHeight}">
+                        <TextBlock Classes="label" Text="{Binding ScaleHeightLabel}" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.01"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding ScaleHeight, Mode=TwoWay}" />
+                    </StackPanel>
+
+                    <CheckBox
+                        Content="Locked aspect ratio"
+                        IsChecked="{Binding AspectLocked, Mode=TwoWay}"
+                        IsVisible="{Binding ShowScale}"
+                        ToolTip.Tip="Keep the item's own proportions. Unlock it to size the width and height apart." />
 
                     <StackPanel Classes="row">
                         <TextBlock Classes="label" Text="Rotation" />

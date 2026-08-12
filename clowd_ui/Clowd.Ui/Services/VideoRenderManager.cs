@@ -6,9 +6,11 @@ using System.Threading.Tasks;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Helpers;
+using Clowd.UI.VideoEditor;
 using Clowd.VideoSDK;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI.Services
 {
@@ -138,6 +140,66 @@ namespace Clowd.UI.Services
             return SessionManager.Current.Sessions.FirstOrDefault(s =>
                 !String.IsNullOrEmpty(s.EditSourceVideoPath) &&
                 String.Equals(s.EditSourceVideoPath, sourceVideoPath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// Renders <paramref name="source"/> with no editor in the loop — the "Render automatically
+        /// when capture finished" setting. The project is the identity edit the editor itself would
+        /// open the recording with (whole recording, webcam row visible), built through the same
+        /// <see cref="VideoEditPersistence.LoadOrCreate"/>, so the file this produces is what the
+        /// user would have got by opening the editor and pressing Render without touching anything.
+        ///
+        /// This runs unattended, so the failures it can foresee — no FFmpeg, an unprobeable file, a
+        /// recording with no video stream — are logged and dropped rather than raised as a dialog
+        /// over whatever the user has since moved on to. The capture itself is safe either way, and
+        /// the Recents row is still there to render by hand. Must be called on the UI thread.
+        /// </summary>
+        public static async Task<SessionInfo> StartAutoRenderAsync(SessionInfo source)
+        {
+            if (source == null || !source.CanEditVideo)
+                return null;
+
+            var videoPath = source.VideoPath;
+            if (String.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
+                return null;
+
+            if (!FFmpegLoader.TryInitialize(FFmpegDirectory))
+            {
+                Debug.WriteLine("Auto-render skipped, no FFmpeg: " + FFmpegLoader.FailureReason);
+                return null;
+            }
+
+            Project project;
+            try
+            {
+                var probe = await Task.Run(() => MediaProbe.ProbeDetailed(videoPath));
+                if (probe.VideoStreams == null || probe.VideoStreams.Count == 0)
+                    return null;
+
+                var sessionDir = Path.GetDirectoryName(source.FilePath);
+                var editDocPath = String.IsNullOrEmpty(sessionDir)
+                    ? null
+                    : Path.Combine(sessionDir, VideoEditPersistence.FileName);
+
+                project = VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe,
+                    AudioTrackLabels.From(source.AudioTracks));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Auto-render could not build a project: " + ex);
+                SentryConfig.CaptureHandled(ex, "render.auto-build");
+                return null;
+            }
+
+            return await StartRenderAsync(source, project);
+        }
+
+        /// <summary>Where the FFmpeg natives live in a shipped build: beside the obs-express binary.
+        /// Dev machines set CLOWD_FFMPEG_PATH, which FFmpegLoader checks before calling this.</summary>
+        private static string FFmpegDirectory()
+        {
+            var obs = ObsBinaryLocator.Resolve();
+            return obs != null ? Path.GetDirectoryName(obs) : null;
         }
 
         /// <summary>

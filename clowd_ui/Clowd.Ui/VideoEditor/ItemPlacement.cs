@@ -14,10 +14,12 @@ namespace Clowd.UI.VideoEditor
     /// that <see cref="ModelTransform.Scale"/> == 1 stands for
     /// (<see cref="ScaleDenominatorPx"/> — the canvas width for picture content, the text block's
     /// own natural width for a text card, which is exactly where the composer's two sizing rules
-    /// differ).
+    /// differ). <see cref="ScaleDenominatorYPx"/> is the same number for the height, which only a
+    /// free (aspect-unlocked) resize needs.
     /// </summary>
     internal readonly record struct PlacedItem(
-        double X, double Y, double W, double H, double Aspect, double ScaleDenominatorPx)
+        double X, double Y, double W, double H, double Aspect,
+        double ScaleDenominatorPx, double ScaleDenominatorYPx)
     {
         public double Right => X + W;
 
@@ -60,9 +62,9 @@ namespace Clowd.UI.VideoEditor
             ArgumentNullException.ThrowIfNull(transform);
 
             // FrameComposer.DrawPicture: Scale is a fraction of the canvas *width*, the height
-            // follows the picture's aspect …
+            // follows the picture's aspect — or its own canvas fraction when the user unlocked it.
             double w = transform.Scale * canvasWidth;
-            double h = w * pictureAspect;
+            double h = transform.ScaleY is { } scaleY ? scaleY * canvasHeight : w * pictureAspect;
 
             return Place(transform, w, h, canvasWidth, canvasHeight);
         }
@@ -76,7 +78,9 @@ namespace Clowd.UI.VideoEditor
         {
             ArgumentNullException.ThrowIfNull(transform);
 
-            return Place(transform, naturalWidth * transform.Scale, naturalHeight * transform.Scale,
+            return Place(transform,
+                naturalWidth * transform.Scale,
+                naturalHeight * (transform.ScaleY ?? transform.Scale),
                 canvasWidth, canvasHeight);
         }
 
@@ -107,7 +111,7 @@ namespace Clowd.UI.VideoEditor
 
             var transform = item.Transform ?? new ModelTransform();
 
-            double x, y, w, h, aspect, denominator;
+            double x, y, w, h, aspect, denominator, denominatorY;
             if (item.Content is TextContent text)
             {
                 var (naturalW, naturalH) = FrameComposer.MeasureText(text, canvasHeight,
@@ -117,6 +121,7 @@ namespace Clowd.UI.VideoEditor
 
                 aspect = naturalH / naturalW;
                 denominator = naturalW;
+                denominatorY = naturalH;
                 (x, y, w, h) = ComposeNatural(transform, naturalW, naturalH, canvasWidth, canvasHeight);
             }
             else
@@ -127,13 +132,14 @@ namespace Clowd.UI.VideoEditor
 
                 aspect = resolved.Value;
                 denominator = canvasWidth;
+                denominatorY = canvasHeight;
                 (x, y, w, h) = Compose(transform, aspect, canvasWidth, canvasHeight);
             }
 
             if (!(w > 0) || !(h > 0) || !Double.IsFinite(x) || !Double.IsFinite(y))
                 return false;
 
-            placed = new PlacedItem(x, y, w, h, aspect, denominator);
+            placed = new PlacedItem(x, y, w, h, aspect, denominator, denominatorY);
             return true;
         }
 
@@ -334,6 +340,49 @@ namespace Clowd.UI.VideoEditor
             var x = canvasWidth > 0 ? (centerX - canvasX) / canvasWidth : 0.5;
             var y = canvasHeight > 0 ? (centerY - canvasY) / canvasHeight : 0.5;
             return (scale, Clamp(x, 0, 1), Clamp(y, 0, 1));
+        }
+
+        /// <summary>
+        /// One axis of an anchored resize, for an item whose aspect ratio the user unlocked: the
+        /// dragged edge follows the pointer, the opposite edge stays put, and the other axis is not
+        /// touched at all. This is the whole of an edge-handle drag and half of a corner one.
+        /// </summary>
+        /// <param name="pointer">Pointer position on this axis, in preview-control pixels.</param>
+        /// <param name="anchor">The opposite edge, which stays put.</param>
+        /// <param name="draggingPositive">Whether the dragged edge is right of / below the anchor.</param>
+        /// <param name="denominatorPx">Pixel extent that a scale of 1 means on this axis: the canvas
+        /// width/height for pictures, the natural block width/height for text.</param>
+        /// <returns>The scale for this axis and the item's new normalized centre on it.</returns>
+        public static (double Scale, double Center) ResizeAxis(
+            double pointer, double anchor, bool draggingPositive, double denominatorPx,
+            double canvasOrigin, double canvasExtent, double minScale, double maxScale)
+        {
+            var scale = Clamp(denominatorPx > 0 ? Math.Abs(pointer - anchor) / denominatorPx : minScale,
+                minScale, maxScale);
+
+            var center = anchor + (draggingPositive ? 1 : -1) * scale * denominatorPx / 2;
+            var normalized = canvasExtent > 0 ? (center - canvasOrigin) / canvasExtent : 0.5;
+            return (scale, Clamp(normalized, 0, 1));
+        }
+
+        /// <summary>
+        /// Anchored <b>free</b> corner resize: <see cref="ResizeAxis"/> on both axes at once, so the
+        /// dragged corner really lands under the cursor instead of following whichever axis is being
+        /// pulled hardest (which is what the aspect-locked <see cref="Resize"/> must do).
+        /// </summary>
+        public static (double ScaleX, double ScaleY, double X, double Y) ResizeFree(
+            double pointerX, double pointerY, double anchorX, double anchorY,
+            bool draggingRight, bool draggingDown,
+            double scaleDenominatorPx, double scaleDenominatorYPx,
+            double canvasX, double canvasY, double canvasWidth, double canvasHeight,
+            double minScale, double maxScale)
+        {
+            var (scaleX, x) = ResizeAxis(pointerX, anchorX, draggingRight, scaleDenominatorPx,
+                canvasX, canvasWidth, minScale, maxScale);
+            var (scaleY, y) = ResizeAxis(pointerY, anchorY, draggingDown, scaleDenominatorYPx,
+                canvasY, canvasHeight, minScale, maxScale);
+
+            return (scaleX, scaleY, x, y);
         }
 
         /// <summary>Math.Clamp with NaN collapsing to the lower bound — a NaN pointer delta must not

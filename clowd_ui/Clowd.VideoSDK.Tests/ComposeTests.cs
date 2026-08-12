@@ -110,6 +110,23 @@ namespace Clowd.VideoSDK.Tests
             AssertColor(Px(px, 10, 32), 0, 0, 0);         // outside it
         }
 
+        /// <summary>An unlocked aspect ratio stretches the item: ScaleY is read as its own fraction
+        /// of the canvas height, so a square canvas region becomes a wide band.</summary>
+        [Fact]
+        public void Solid_with_ScaleY_stretches_independently_of_the_width()
+        {
+            var p = NewProject();
+            var item = AddItem(p, AddVideoTrack(p), new SolidContent { Color = "#FFFF0000" });
+            item.Transform.Scale = 1.0;    // full canvas width
+            item.Transform.ScaleY = 0.25;  // …but a quarter of its height: rows 24..40 of 64
+
+            var px = Render(p, 5 * Sec);
+            AssertColor(Px(px, 2, H / 2), 0, 0, 255);   // left edge, vertically centred: red
+            AssertColor(Px(px, W - 3, H / 2), 0, 0, 255);
+            AssertColor(Px(px, W / 2, 2), 0, 0, 0);     // top and bottom fall outside the band
+            AssertColor(Px(px, W / 2, H - 3), 0, 0, 0);
+        }
+
         [Fact]
         public void Item_outside_its_time_span_does_not_draw()
         {
