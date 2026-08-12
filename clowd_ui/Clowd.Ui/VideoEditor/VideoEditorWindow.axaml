@@ -266,7 +266,7 @@
                         Padding="7"
                         Command="{Binding CommandSplit}"
                         IconPath="{StaticResource IconSplit}"
-                        ToolTip.Tip="Split at playhead (Ctrl+K)" />
+                        ToolTip.Tip="Split every track at playhead (Ctrl+K) — right-click a clip to split just that one" />
                 </StackPanel>
 
                 <StackPanel

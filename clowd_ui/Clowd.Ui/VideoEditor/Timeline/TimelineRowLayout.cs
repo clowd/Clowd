@@ -77,9 +77,15 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>
-        /// Builds the rows for a project, ordered by <see cref="Track.Order"/> then
-        /// <see cref="Track.Id"/> — the identical total order <c>Project.Normalize</c> imposes, so
-        /// the rows always match the item ordering the surface iterates.
+        /// Builds the rows top to bottom: the video tracks <b>highest layer first</b>, then the
+        /// audio tracks below them.
+        ///
+        /// <para>The video rows are the exact reverse of the order <c>FrameComposer</c> paints in
+        /// (which is ascending <see cref="Track.Order"/> then <see cref="Track.Id"/>, last painted
+        /// on top), so the row nearer the top of the timeline is the picture nearer the front —
+        /// the convention every other editor uses, and the one "move up" has to mean if it is to
+        /// read as raising a clip. Audio has no stacking, so it keeps its natural ascending order
+        /// and stays pinned underneath.</para>
         /// </summary>
         public static IReadOnlyList<TimelineRow> Build(Project project)
         {
@@ -90,8 +96,13 @@ namespace Clowd.UI.VideoEditor.Timeline
             var byTrack = items.GroupBy(i => i.TrackId).ToDictionary(g => g.Key, g => (IEnumerable<Item>)g);
 
             var ordered = project.Tracks
-                .OrderBy(t => t.Order)
-                .ThenBy(t => t.Id)
+                .Where(t => t.Kind != TrackKind.Audio)
+                .OrderByDescending(t => t.Order)
+                .ThenByDescending(t => t.Id)
+                .Concat(project.Tracks
+                    .Where(t => t.Kind == TrackKind.Audio)
+                    .OrderBy(t => t.Order)
+                    .ThenBy(t => t.Id))
                 .ToList();
 
             var rows = new List<TimelineRow>(ordered.Count);

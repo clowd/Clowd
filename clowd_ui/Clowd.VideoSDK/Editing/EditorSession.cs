@@ -350,16 +350,20 @@ namespace Clowd.VideoSDK.Editing
             Mutate("Split", ProjectChangeKind.Mapping, null, origin,
                 p => TimelineOps.Split(p, itemId, timelineTicks));
 
-        /// <summary>The split command: splits the primary selected item's group when it covers the
-        /// playhead, else every item covering it (each link group once) — the multi-track
-        /// generalization of the v1 cut-at-playhead. Returns true when anything split.</summary>
+        /// <summary>Wraps <see cref="TimelineOps.SplitItem"/>: cuts this clip and nothing else, not
+        /// even the rest of its recording. The timeline's right-click split.</summary>
+        public bool SplitItemAt(Guid itemId, long timelineTicks, object origin = null) =>
+            Mutate("Split", ProjectChangeKind.Mapping, null, origin,
+                p => TimelineOps.SplitItem(p, itemId, timelineTicks));
+
+        /// <summary>The split-everything command: cuts every item covering the playhead — video,
+        /// audio, text and image rows alike — taking each link group once. Deliberately ignores the
+        /// selection: this is the "cut straight down the timeline" gesture, and a selected clip must
+        /// not quietly narrow it to one row (the right-click menu is what cuts a single clip).
+        /// Returns true when anything split.</summary>
         public bool SplitAtPlayhead(long playheadTicks, object origin = null) =>
             Mutate("Split", ProjectChangeKind.Mapping, null, origin, p =>
             {
-                var primary = PrimarySelectedItem;
-                if (primary != null && Covers(primary, playheadTicks))
-                    return TimelineOps.Split(p, primary.Id, playheadTicks);
-
                 // snapshot the candidates first: right halves produced by a split start exactly at
                 // the playhead, so they cover it and must not themselves be split.
                 var candidates = p.Items.Where(i => Covers(i, playheadTicks))
@@ -453,6 +457,63 @@ namespace Clowd.VideoSDK.Editing
         public void SetTrackLocked(Guid trackId, bool value, object origin = null) =>
             Mutate(value ? "Lock Track" : "Unlock Track", ProjectChangeKind.Structural, null, origin,
                 p => RequireTrack(p, trackId).Locked = value);
+
+        /// <summary>
+        /// Moves a video row one place through the composite stack: <paramref name="towardsFront"/>
+        /// raises it over the row it passes, otherwise it drops behind. Returns false — changing
+        /// nothing — for an audio row (audio does not stack), a row already at the end it is being
+        /// pushed towards, or an unknown id.
+        ///
+        /// <para>Because <see cref="Track.Order"/> is neither required to be unique nor contiguous,
+        /// this renumbers every row rather than swapping two values: a swap between rows that
+        /// happen to share an <c>Order</c> would be a no-op, and the <c>(Order, Id)</c> tie-break
+        /// would silently decide the stacking instead of the user. Order is presentation-only, so
+        /// renumbering costs nothing.</para>
+        /// </summary>
+        public bool MoveTrackLayer(Guid trackId, bool towardsFront, object origin = null) =>
+            Mutate(towardsFront ? "Move Row Up" : "Move Row Down", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                var video = p.Tracks.Where(t => t.Kind != TrackKind.Audio)
+                                    .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+
+                var index = video.FindIndex(t => t.Id == trackId);
+                if (index < 0)
+                    return false;
+
+                // ascending Order paints later, so "towards the front" is the next index up.
+                var target = towardsFront ? index + 1 : index - 1;
+                if (target < 0 || target >= video.Count)
+                    return false;
+
+                (video[index], video[target]) = (video[target], video[index]);
+
+                var audio = p.Tracks.Where(t => t.Kind == TrackKind.Audio)
+                                    .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+
+                var order = 0;
+                foreach (var track in video)
+                    track.Order = order++;
+                // audio keeps its relative order and stays above every video Order, which is what
+                // puts those rows at the bottom of the timeline.
+                foreach (var track in audio)
+                    track.Order = order++;
+
+                return true;
+            }, failureValue: false);
+
+        /// <summary>Whether <see cref="MoveTrackLayer"/> would do anything — the enablement the
+        /// timeline's context menu needs, without a speculative mutation.</summary>
+        public bool CanMoveTrackLayer(Guid trackId, bool towardsFront)
+        {
+            var video = Project.Tracks.Where(t => t.Kind != TrackKind.Audio)
+                                      .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+
+            var index = video.FindIndex(t => t.Id == trackId);
+            if (index < 0)
+                return false;
+
+            return towardsFront ? index + 1 < video.Count : index > 0;
+        }
 
         /// <summary>Renames a row. Coalesced per track so typing in the header textbox is one undo
         /// entry, not one per keystroke.</summary>
@@ -1009,22 +1070,29 @@ namespace Clowd.VideoSDK.Editing
 
         // ----------------------------------------------------------------------- model helpers
 
-        /// <summary>The topmost (highest <see cref="Track.Order"/>) video track with
-        /// <c>[startTicks, startTicks + durationTicks)</c> free, or a fresh "Overlay" track above
-        /// every video row when they are all occupied. Hidden and locked rows are never candidates:
-        /// an item added to a hidden row is composed by nothing and reads as an add that silently
-        /// failed (the webcam row is Hidden on every fresh edit that never enabled the overlay).</summary>
+        /// <summary>
+        /// Where a newly added text card or image goes: the <b>frontmost</b> video row when it has
+        /// <c>[startTicks, startTicks + durationTicks)</c> free, otherwise a fresh "Overlay" row
+        /// above everything. A new item is always composed in front of what is already there —
+        /// dropping it onto a lower free row instead would put it behind content the user can see,
+        /// which reads as an add that did nothing.
+        ///
+        /// <para>Hidden and locked rows are never candidates, for the same reason: an item added to
+        /// a hidden row is composed by nothing (the webcam row is Hidden on every fresh edit that
+        /// never enabled the overlay). Reuse is still the common case — a second card at a
+        /// different time lands on the same overlay row rather than stacking up empty ones.</para>
+        /// </summary>
         private static Track FindOrCreateFreeVideoTrack(Project project, long startTicks, long durationTicks)
         {
             var end = startTicks + durationTicks;
-            foreach (var track in project.Tracks.Where(t => t.Kind == TrackKind.Video && !t.Hidden && !t.Locked)
-                                                .OrderByDescending(t => t.Order))
-            {
-                var busy = project.Items.Any(i => i.TrackId == track.Id &&
-                    i.TimelineStartTicks < end && startTicks < i.TimelineEndTicks);
-                if (!busy)
-                    return track;
-            }
+            var frontmost = project.Tracks.Where(t => t.Kind == TrackKind.Video && !t.Hidden && !t.Locked)
+                                          .OrderByDescending(t => t.Order)
+                                          .ThenByDescending(t => t.Id)
+                                          .FirstOrDefault();
+
+            if (frontmost != null && !project.Items.Any(i => i.TrackId == frontmost.Id &&
+                    i.TimelineStartTicks < end && startTicks < i.TimelineEndTicks))
+                return frontmost;
 
             return InsertVideoTrackOnTop(project, "Overlay");
         }

@@ -100,8 +100,10 @@ namespace Clowd.VideoSDK.Tests
 
         // -------------------------------------------------------------------------------- layout
 
+        /// <summary>Video rows run highest layer first — the reverse of the paint order — and the
+        /// audio rows sit below all of them whatever their Order says.</summary>
         [Fact]
-        public void Build_stacks_rows_in_track_order_with_the_kind_heights()
+        public void Build_stacks_video_rows_front_first_with_audio_underneath()
         {
             var project = BuildProject(out var screen, out var webcam, out var titles, out var logo,
                 out var mic, out var empty);
@@ -109,21 +111,25 @@ namespace Clowd.VideoSDK.Tests
             var rows = TimelineRowLayout.Build(project);
 
             Assert.Equal(6, rows.Count);
-            Assert.Equal(new[] { screen.Id, webcam.Id, titles.Id, logo.Id, mic.Id, empty.Id },
+            // Orders are Screen 0, Webcam 1, Titles 2, Logo 3, Mic 4 (audio), Overlay 5.
+            Assert.Equal(new[] { empty.Id, logo.Id, titles.Id, webcam.Id, screen.Id, mic.Id },
                 rows.Select(r => r.TrackId).ToArray());
             Assert.Equal(new[]
             {
-                TimelineRowKind.Video, TimelineRowKind.Video, TimelineRowKind.Text,
-                TimelineRowKind.Image, TimelineRowKind.Audio, TimelineRowKind.Video,
+                TimelineRowKind.Video, TimelineRowKind.Image, TimelineRowKind.Text,
+                TimelineRowKind.Video, TimelineRowKind.Video, TimelineRowKind.Audio,
             }, rows.Select(r => r.Kind).ToArray());
 
-            Assert.Equal(new[] { 56d, 56d, 26d, 26d, 36d, 56d }, rows.Select(r => r.Height).ToArray());
-            Assert.Equal(new[] { 0d, 56d, 112d, 138d, 164d, 200d }, rows.Select(r => r.Top).ToArray());
+            Assert.Equal(new[] { 56d, 26d, 26d, 56d, 56d, 36d }, rows.Select(r => r.Height).ToArray());
+            Assert.Equal(new[] { 0d, 56d, 82d, 108d, 164d, 220d }, rows.Select(r => r.Top).ToArray());
             Assert.Equal(256d, TimelineRowLayout.TotalHeight(rows));
         }
 
+        /// <summary>The video rows are exactly <c>Project.Normalize</c>'s order reversed, ties
+        /// included — the composer paints that sequence and the last one painted is the one the
+        /// timeline must show at the top.</summary>
         [Fact]
-        public void Build_orders_ties_exactly_as_project_normalize_does()
+        public void Build_reverses_the_paint_order_ties_included()
         {
             var a = NewTrack(TrackKind.Video, 3, "A");
             var b = NewTrack(TrackKind.Video, 3, "B");
@@ -133,7 +139,8 @@ namespace Clowd.VideoSDK.Tests
             var rows = TimelineRowLayout.Build(project);
 
             project.Normalize();
-            Assert.Equal(project.Tracks.Select(t => t.Id).ToArray(), rows.Select(r => r.TrackId).ToArray());
+            Assert.Equal(project.Tracks.Select(t => t.Id).Reverse().ToArray(),
+                rows.Select(r => r.TrackId).ToArray());
         }
 
         [Fact]
@@ -164,10 +171,11 @@ namespace Clowd.VideoSDK.Tests
             var project = BuildProject(out _, out _, out _, out _, out _, out _);
             var rows = TimelineRowLayout.Build(project);
 
+            // row tops are 0, 56, 82, 108, 164, 220 (see the stacking test above)
             Assert.Equal(0, TimelineRowLayout.RowIndexAtY(rows, 0));
             Assert.Equal(0, TimelineRowLayout.RowIndexAtY(rows, 55.9));
             Assert.Equal(1, TimelineRowLayout.RowIndexAtY(rows, 56));      // rows own their top edge
-            Assert.Equal(2, TimelineRowLayout.RowIndexAtY(rows, 112));
+            Assert.Equal(3, TimelineRowLayout.RowIndexAtY(rows, 112));
             Assert.Equal(4, TimelineRowLayout.RowIndexAtY(rows, 164 + 35));
             Assert.Equal(5, TimelineRowLayout.RowIndexAtY(rows, 255.9));
         }

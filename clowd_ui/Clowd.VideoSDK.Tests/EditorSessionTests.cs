@@ -261,6 +261,166 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0, historyEvents);
         }
 
+        // ------------------------------------------------------------------------------ splits
+
+        /// <summary>The toolbar's Ctrl+K cuts straight down the timeline: every row covering the
+        /// playhead, text rows included, whatever happens to be selected. A selected clip used to
+        /// narrow it to that one group, which made the button's behaviour depend on invisible
+        /// state.</summary>
+        [Fact]
+        public void SplitAtPlayhead_cuts_every_row_regardless_of_the_selection()
+        {
+            var session = NewSession(out var screen, out var webcam, out var audio, out _);
+            var text = session.AddText(0, Ms(8_000));
+            session.Select(screen.Id);
+
+            Assert.True(session.SplitAtPlayhead(Ms(4_000)));
+
+            foreach (var id in new[] { screen.Id, webcam.Id, audio.Id, text.Id })
+            {
+                var left = session.Project.Items.First(i => i.Id == id);
+                Assert.Equal(Ms(4_000), left.DurationTicks);
+                Assert.Contains(session.Project.Items,
+                    i => i.TrackId == left.TrackId && i.TimelineStartTicks == Ms(4_000));
+            }
+        }
+
+        /// <summary>…while the right-click split cuts the one clip, leaving the rest of its
+        /// recording whole.</summary>
+        [Fact]
+        public void SplitItemAt_cuts_one_clip_out_of_a_linked_recording()
+        {
+            var session = NewSession(out var screen, out var webcam, out var audio, out _);
+
+            Assert.True(session.SplitItemAt(screen.Id, Ms(4_000)));
+
+            Assert.Equal(Ms(4_000), session.Project.Items.First(i => i.Id == screen.Id).DurationTicks);
+            Assert.Equal(Ms(10_000), session.Project.Items.First(i => i.Id == webcam.Id).DurationTicks);
+            Assert.Equal(Ms(10_000), session.Project.Items.First(i => i.Id == audio.Id).DurationTicks);
+            Assert.Equal(4, session.Project.Items.Count);
+        }
+
+        // --------------------------------------------------------------------------- z ordering
+
+        /// <summary>Screen is Order 0 and Webcam Order 1, so the webcam composites over the screen.
+        /// Moving the screen towards the front swaps that.</summary>
+        [Fact]
+        public void MoveTrackLayer_swaps_a_row_with_the_one_it_passes()
+        {
+            var session = NewSession(out var screen, out var webcam, out var audio, out _);
+
+            Assert.True(session.MoveTrackLayer(screen.TrackId, towardsFront: true));
+
+            Assert.Equal(1, Track(session, screen.TrackId).Order);
+            Assert.Equal(0, Track(session, webcam.TrackId).Order);
+            // audio keeps its place above every video row, which is what keeps it at the bottom
+            Assert.Equal(2, Track(session, audio.TrackId).Order);
+        }
+
+        [Fact]
+        public void MoveTrackLayer_refuses_to_walk_off_either_end()
+        {
+            var session = NewSession(out var screen, out var webcam, out var audio, out _);
+
+            Assert.False(session.MoveTrackLayer(screen.TrackId, towardsFront: false)); // already last
+            Assert.False(session.MoveTrackLayer(webcam.TrackId, towardsFront: true));  // already first
+            Assert.False(session.CanMoveTrackLayer(screen.TrackId, towardsFront: false));
+            Assert.False(session.CanMoveTrackLayer(webcam.TrackId, towardsFront: true));
+            Assert.True(session.CanMoveTrackLayer(screen.TrackId, towardsFront: true));
+            Assert.True(session.CanMoveTrackLayer(webcam.TrackId, towardsFront: false));
+
+            // audio does not stack at all
+            Assert.False(session.CanMoveTrackLayer(audio.TrackId, towardsFront: true));
+            Assert.False(session.MoveTrackLayer(audio.TrackId, towardsFront: true));
+
+            Assert.False(session.CanMoveTrackLayer(Guid.NewGuid(), towardsFront: true));
+            Assert.False(session.CanUndo); // nothing above changed the project
+        }
+
+        /// <summary>Order is neither unique nor contiguous, so the move renumbers instead of
+        /// swapping two values — a swap between rows that share an Order would do nothing.</summary>
+        [Fact]
+        public void MoveTrackLayer_separates_rows_that_shared_an_order()
+        {
+            var session = NewSession(out var screen, out var webcam, out _, out _);
+            session.EditItem(screen.Id, _ => { }, structural: true); // no-op, keeps the fixture honest
+
+            Track(session, screen.TrackId).Order = 1; // now tied with the webcam row
+            Track(session, webcam.TrackId).Order = 1;
+
+            // the tie-break is (Order, Id), so whichever id sorts first is at the back
+            var backId = Track(session, screen.TrackId).Id.CompareTo(Track(session, webcam.TrackId).Id) < 0
+                ? screen.TrackId
+                : webcam.TrackId;
+
+            Assert.True(session.MoveTrackLayer(backId, towardsFront: true));
+
+            var orders = new[] { Track(session, screen.TrackId).Order, Track(session, webcam.TrackId).Order };
+            Assert.Equal(new[] { 0, 1 }, orders.OrderBy(o => o).ToArray()); // separated, not still tied
+            Assert.Equal(1, Track(session, backId).Order);                  // …and it really moved forward
+        }
+
+        [Fact]
+        public void MoveTrackLayer_is_structural_and_undoable()
+        {
+            var session = NewSession(out var screen, out _, out _, out _);
+            var seen = new List<ProjectChangeKind>();
+            session.ProjectChanged += (_, e) => seen.Add(e.Kind);
+
+            session.MoveTrackLayer(screen.TrackId, towardsFront: true);
+            Assert.Equal(new[] { ProjectChangeKind.Structural }, seen.ToArray());
+
+            session.Undo();
+            Assert.Equal(0, Track(session, screen.TrackId).Order);
+        }
+
+        /// <summary>Text and image rows are video rows, so they share the one stack: a text card
+        /// can sit behind a video simply by having the lower Order.</summary>
+        [Fact]
+        public void MoveTrackLayer_puts_a_text_row_behind_a_video_row()
+        {
+            var session = NewSession(out var screen, out _, out _, out _);
+            var text = session.AddText(0, Ms(2_000));
+            var textTrack = Track(session, text.TrackId);
+
+            // a new card is frontmost, so it starts ahead of the screen
+            Assert.True(textTrack.Order > Track(session, screen.TrackId).Order);
+
+            Assert.True(session.MoveTrackLayer(text.TrackId, towardsFront: false));
+            Assert.True(session.MoveTrackLayer(text.TrackId, towardsFront: false));
+
+            Assert.True(Track(session, text.TrackId).Order < Track(session, screen.TrackId).Order);
+        }
+
+        /// <summary>A new card goes in front of everything, and a second one at a free time reuses
+        /// that same row rather than stacking up a new one.</summary>
+        [Fact]
+        public void AddedItems_land_on_the_frontmost_row()
+        {
+            var session = NewSession(out _, out var webcam, out _, out _);
+            var tracksBefore = session.Project.Tracks.Count;
+
+            var first = session.AddText(0, Ms(2_000));
+            Assert.Equal(tracksBefore + 1, session.Project.Tracks.Count);
+            Assert.Equal(session.Project.Tracks.Where(t => t.Kind == TrackKind.Video).Max(t => t.Order),
+                Track(session, first.TrackId).Order);
+
+            // free span on the frontmost row: reuse it
+            var second = session.AddText(Ms(3_000), Ms(2_000));
+            Assert.Equal(first.TrackId, second.TrackId);
+            Assert.Equal(tracksBefore + 1, session.Project.Tracks.Count);
+
+            // …overlapping it earns a new row in front, never a lower free one
+            var third = session.AddText(0, Ms(1_000));
+            Assert.NotEqual(first.TrackId, third.TrackId);
+            Assert.NotEqual(webcam.TrackId, third.TrackId);
+            Assert.Equal(session.Project.Tracks.Where(t => t.Kind == TrackKind.Video).Max(t => t.Order),
+                Track(session, third.TrackId).Order);
+        }
+
+        private static Track Track(EditorSession session, Guid trackId) =>
+            session.Project.Tracks.First(t => t.Id == trackId);
+
         // -------------------------------------------------------------------------------- kinds
 
         [Fact]

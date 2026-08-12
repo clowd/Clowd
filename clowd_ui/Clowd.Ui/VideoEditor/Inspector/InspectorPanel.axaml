@@ -80,14 +80,19 @@
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="#9A9A9A" />
         </Style>
+        <!--  MinWidth, not Width: the labels still line up as a column, but a long one ("Text
+              scale") grows instead of being clipped now that the editor beside it is no longer
+              packed against it.  -->
         <Style Selector="TextBlock.label">
-            <Setter Property="Width" Value="60" />
+            <Setter Property="MinWidth" Value="60" />
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="#CCCCCC" />
         </Style>
-        <Style Selector="StackPanel.row">
-            <Setter Property="Orientation" Value="Horizontal" />
-            <Setter Property="Spacing" Value="6" />
+        <!--  a label docked left and the editor filling the rest, so every row's editor can put
+              its right edge on the panel's — where the full-width text boxes and combo boxes
+              already end. A horizontal StackPanel cannot do that: it sizes to content.  -->
+        <Style Selector="DockPanel.row">
+            <Setter Property="LastChildFill" Value="True" />
         </Style>
         <Style Selector="StackPanel.section">
             <Setter Property="Spacing" Value="6" />
@@ -98,9 +103,13 @@
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
         <!--  wider than the 70px the shared spinner theme picks: this panel puts a spinner on
-              nearly every row, and 70px truncates the longer values (e.g. "-360 °").  -->
+              nearly every row, and 70px truncates the longer values (e.g. "-360 °"). Right-aligned
+              inside the row's fill column so it lines up with the text boxes below it; the theme's
+              4px left margin would otherwise push it off that edge.  -->
         <Style Selector="controls|SpinnerTextBox">
             <Setter Property="Width" Value="100" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="6,0,0,0" />
         </Style>
         <Style Selector="TextBox.field">
             <Setter Property="Foreground" Value="White" />
@@ -152,7 +161,7 @@
                 <StackPanel Classes="section" IsVisible="{Binding ShowTransform}">
                     <TextBlock Classes="section" Text="PLACEMENT" />
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Center X" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -161,9 +170,9 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding PositionX, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Center Y" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -172,9 +181,9 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding PositionY, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
-                    <StackPanel Classes="row" IsVisible="{Binding ShowScale}">
+                    <DockPanel Classes="row" IsVisible="{Binding ShowScale}">
                         <!--  "Size" for pictures, "Text scale" for text — the TEXT section below
                               has its own font-size "Size" row, and the gizmo writes this Scale
                               for text too, so it must be visible (and distinguishable) there.
@@ -187,9 +196,9 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding Scale, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
-                    <StackPanel Classes="row" IsVisible="{Binding ShowScaleHeight}">
+                    <DockPanel Classes="row" IsVisible="{Binding ShowScaleHeight}">
                         <TextBlock Classes="label" Text="{Binding ScaleHeightLabel}" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -198,7 +207,7 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding ScaleHeight, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
                     <CheckBox
                         Content="Locked aspect ratio"
@@ -206,7 +215,7 @@
                         IsVisible="{Binding ShowScale}"
                         ToolTip.Tip="Keep the item's own proportions. Unlock it to size the width and height apart." />
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Rotation" />
                         <controls:SpinnerTextBox
                             Max="360"
@@ -215,9 +224,9 @@
                             SpinAmount="5"
                             Suffix="°"
                             Value="{Binding Rotation, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Opacity" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -226,7 +235,7 @@
                             SpinAmount="0.05"
                             Suffix="%"
                             Value="{Binding Opacity, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
                 </StackPanel>
 
                 <!--  mask  -->
@@ -274,7 +283,7 @@
                             Theme="{StaticResource MaskShapeTile}" />
                     </Grid>
 
-                    <StackPanel Classes="row" IsVisible="{Binding ShowCornerRadius}">
+                    <DockPanel Classes="row" IsVisible="{Binding ShowCornerRadius}">
                         <TextBlock Classes="label" Text="Corners" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -283,14 +292,14 @@
                             SpinAmount="0.05"
                             Suffix="%"
                             Value="{Binding CornerRadius, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
                 </StackPanel>
 
                 <!--  crop  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowCrop}">
                     <TextBlock Classes="section" Text="CROP" />
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Left" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -299,9 +308,9 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding CropLeft, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Top" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -310,9 +319,9 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding CropTop, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Right" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -321,9 +330,9 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding CropRight, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Bottom" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -332,7 +341,7 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding CropBottom, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
                 </StackPanel>
 
                 <!--  text  -->
@@ -354,7 +363,7 @@
                         Text="{Binding FontFamily, Mode=TwoWay}"
                         PlaceholderText="Default font" />
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Size" />
                         <controls:SpinnerTextBox
                             Max="2000"
@@ -363,7 +372,7 @@
                             SpinAmount="2"
                             Suffix="px"
                             Value="{Binding FontSize, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
                     <TextBox
                         x:Name="txtColor"
@@ -378,7 +387,7 @@
                 <StackPanel Classes="section" IsVisible="{Binding ShowAudio}">
                     <TextBlock Classes="section" Text="AUDIO" />
 
-                    <StackPanel Classes="row">
+                    <DockPanel Classes="row">
                         <TextBlock Classes="label" Text="Volume" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -387,7 +396,7 @@
                             SpinAmount="0.05"
                             Suffix="%"
                             Value="{Binding Volume, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
                 </StackPanel>
 
                 <!--  transitions  -->
@@ -395,7 +404,7 @@
                     <TextBlock Classes="section" Text="ENTRY" />
                     <ComboBox x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
 
-                    <StackPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
                         <TextBlock Classes="label" Text="Length" />
                         <controls:SpinnerTextBox
                             Max="10000"
@@ -404,7 +413,7 @@
                             SpinAmount="50"
                             Suffix="ms"
                             Value="{Binding EntryDurationMs, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
                     <ComboBox
                         x:Name="comboEntryEasing"
@@ -417,7 +426,7 @@
                         Text="EXIT" />
                     <ComboBox x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
 
-                    <StackPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
+                    <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
                         <TextBlock Classes="label" Text="Length" />
                         <controls:SpinnerTextBox
                             Max="10000"
@@ -426,7 +435,7 @@
                             SpinAmount="50"
                             Suffix="ms"
                             Value="{Binding ExitDurationMs, Mode=TwoWay}" />
-                    </StackPanel>
+                    </DockPanel>
 
                     <ComboBox
                         x:Name="comboExitEasing"
