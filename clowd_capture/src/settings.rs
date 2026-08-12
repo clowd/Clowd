@@ -223,8 +223,7 @@ pub struct CliArgs {
     #[arg(long)]
     pub no_upload: bool,
 
-    /// Hide the SCROLL (scrolling capture) button. Windows-only button;
-    /// the flag parses everywhere so one command line serves both.
+    /// Hide the SCROLL (scrolling capture) button.
     #[arg(long)]
     pub no_scroll_capture: bool,
 

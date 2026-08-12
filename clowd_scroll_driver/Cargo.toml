@@ -25,12 +25,30 @@ serde_json.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     # SendInput / GetAsyncKeyState for the wheel injection and the Esc poll
-    # (input.rs).
+    # (input/win.rs).
     "Win32_UI_Input_KeyboardAndMouse",
-    # Window resolution, cursor parking, WM_MOUSEWHEEL (input.rs).
+    # Window resolution, cursor parking, WM_MOUSEWHEEL (input/win.rs).
     "Win32_UI_WindowsAndMessaging",
-    # The per-monitor-DPI-awareness assertion (drive.rs).
+    # The per-monitor-DPI-awareness assertion (input/win.rs::preflight).
     "Win32_UI_HiDpi",
-    # BitBlt of the capture region (frame.rs) and ScreenToClient (input.rs).
+    # BitBlt of the capture region (frame/win.rs) and ScreenToClient
+    # (input/win.rs).
     "Win32_Graphics_Gdi",
 ] }
+
+# The macOS half of the same two modules. core-graphics carries all of it
+# except activation: the window list (input/mac.rs), the synthetic scroll
+# events, the cursor warp and CGWindowListCreateImage (frame/mac.rs).
+# core-foundation is how the window-list dictionaries are read, and
+# objc2-app-kit provides the one AppKit call there is — NSRunningApplication,
+# which is what brings the target's app to the front.
+#
+# Both crates' feature flags here are OS-version gates on bindings the driver
+# cannot do without, all long past our minimum: "highsierra" is
+# CGEventCreateScrollWheelEvent2 (the wheel), "elcapitan" is CGEventPostToPid
+# (the second rung), and objc2-app-kit's "libc" is what exposes
+# NSRunningApplication's by-pid lookup.
+[target.'cfg(target_os = "macos")'.dependencies]
+core-graphics = { workspace = true, features = ["highsierra", "elcapitan"] }
+core-foundation.workspace = true
+objc2-app-kit = { workspace = true, features = ["libc"] }

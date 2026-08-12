@@ -319,8 +319,17 @@ bringing any of that up would put pixels on screen in front of the content it
 is about to photograph. It ships beside `clowd_capture_wgpu`, which is where
 `CaptureBinaryLocator.ResolveScrollDriver` looks for it.
 
-**Windows-only**; elsewhere it logs and exits 4 (the SCROLL button is compiled
-out, so nothing should ever route there).
+**Windows and macOS.** The loop, the caps, the stitcher, this protocol and the
+session output are one implementation; the OS half — injecting a wheel,
+parking the cursor, resolving and raising the target, photographing the region
+— has a Win32 and a Core Graphics backend. macOS needs **two permissions** and
+refuses without them (`fatal_error`): Screen Recording to photograph the
+region, and Accessibility, because the window server silently discards
+synthetic events from a process it does not trust. TCC records both against
+`Clowd.app`, which is what makes the shell's own grants cover this executable
+(`MacPermissions`); `ScrollCapturePage` asks for Accessibility before it
+spawns anything, so the usual path to a missing grant is a dialog with a button
+to the right Settings pane rather than a driver refusal.
 
 ### 3.1 Spawn
 
@@ -331,17 +340,18 @@ clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N 
 | Flag | Required | Meaning |
 |---|---|---|
 | `--session-dir` | yes | The directory the overlay was given. It is empty by the time the driver starts (the shell consumed `action.txt`), and the driver owns it from here. |
-| `--region X,Y,W,H` | yes | The rect to photograph, physical virtual-desktop px — the same space and the same numbers as the marker. Rejected if W or H is 0. |
+| `--region X,Y,W,H` | yes | The rect to photograph, in the marker's platform capture space (§1.2) — physical virtual-desktop px on Windows, CG points on macOS — and the same numbers. Rejected if W or H is 0. **Not** the unit the captured frames are in: `kCGWindowImageBestResolution` returns a Retina region at 2×, so the composite is in pixels while the region is in points. |
 | `--point PX,PY` | yes | Where the cursor is parked and the wheel is aimed, same space. Re-clamped into `--region`; a point outside it is a caller bug and is logged. |
 | `--no-rewind` | no | Start capturing from wherever the document is sitting instead of winding it back to the top first. Negative because rewinding is the default — the shell passes this only when the user turns "Scroll to top first" off, which is the deliberate "capture from here" intent. |
-| `--hwnd N` | no (default 0) | Decimal top-level handle from the marker: **the window the user's selection snapped to**, not whatever is topmost at the scroll point. Re-validated at drive time (`IsWindow` + `GetAncestor(GA_ROOT)` + rect contains the point); `0` or a stale handle falls back to `WindowFromPoint`. Whichever wins is then raised over the scroll point and *verified* there before the first frame — see §3.5. |
+| `--hwnd N` | no (default 0) | Decimal window handle from the marker: **the window the user's selection snapped to**, not whatever is topmost at the scroll point. An `HWND` on Windows, a `CGWindowID` on macOS — one flag name for both, because it is the same field of the same marker. Re-validated at drive time (still a window, still covering the point); `0` or a stale handle falls back to whatever is topmost at the point. Whichever wins is then raised over the scroll point and *verified* there before the first frame — see §3.5. |
 
 The shell must redirect **all three** stdio streams. Stdin in particular: the
 driver reads a closed stdin as "the shell is gone" and cancels, which is what
 keeps a crashed Clowd.Ui from leaving something scrolling the user's window.
-The shell also calls `AllowSetForegroundWindow(driver pid)` right after spawn —
-without it `SetForegroundWindow` in the driver is refused and the run relies on
-Win10+ scroll-inactive-windows routing alone.
+On Windows the shell also calls `AllowSetForegroundWindow(driver pid)` right
+after spawn — without it `SetForegroundWindow` in the driver is refused and the
+run relies on Win10+ scroll-inactive-windows routing alone. macOS has no
+equivalent grant to pass on.
 
 ### 3.2 Events (driver → shell)
 
@@ -371,7 +381,7 @@ may treat any line starting `{` and ending `}` as an event (the same rule as
 | `complete` | Two consecutive steps produced no new content: the document ended. | yes |
 | `stopped` | Esc, a `stop` command, the target window closing/moving, the stitcher giving up, or a pause the user never came back from (§3.5). The partial capture is kept. | yes |
 | `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock — the clock excludes time spent paused. | yes |
-| `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated window silently eating `SendInput`. Reported whatever else ended the run, and a single-screen session is still written. | yes |
+| `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated Windows target whose UIPI eats `SendInput`, or a surface that ignores a synthetic wheel. Reported whatever else ended the run, and a single-screen session is still written. | yes |
 | `failed` | Defined for completeness; the driver has no failure it can recognise *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
 
 ### 3.3 Commands (shell → driver)
@@ -402,29 +412,37 @@ every other session; the shell renames it to "Scrolling Capture".
 
 The process **exits 0 for every outcome the shell can act on**, `fatal_error`
 included — the shell reads the event, not the code. A non-zero exit therefore
-means a crash (or exit 4 on macOS, where the mode does not exist), and the
-shell reports it with the stderr tail attached.
+means a crash, and the shell reports it with the stderr tail attached.
 
 ### 3.5 The target window and the user's mouse
 
 Both halves of the run depend on the same fact: **whatever window is at the
 scroll point gets the wheel and gets photographed.** Wheel input is routed by
-cursor position, and each frame is a `BitBlt` of the screen.
+cursor position on both platforms, and each frame is a screenshot of that
+region of the screen.
 
 So before frame 0 the driver raises the target over the scroll point and then
-checks that it worked — `WindowFromPoint` at the point must resolve to the
-target or to a window it owns. `SetForegroundWindow` first, then
-`SetWindowPos(HWND_TOP, SWP_NOACTIVATE)` if that is not enough. Failing the
-check is a `fatal_error`, not a warning: a run against a covered window
-produces a tall, entirely plausible picture of the wrong thing, and there is
-no way for the user to tell.
+checks that it worked — the window at the point must be the target or another
+window of the same application (an owned popup on Windows, a sheet or panel on
+macOS). Failing the check is a `fatal_error`, not a warning: a run against a
+covered window produces a tall, entirely plausible picture of the wrong thing,
+and there is no way for the user to tell.
 
-The second rung carries the common case unaided: restacking a window that is
-not the foreground one is not gated by the foreground lock, so a target
-buried under an *inactive* window comes up even when `SetForegroundWindow`
-was refused. What neither rung can do without foreground rights is get past a
-window that holds the foreground itself. Those rights arrive along a chain,
-and every link is required:
+How it raises differs, and macOS has less to work with:
+
+| | Windows | macOS |
+|---|---|---|
+| Already at the point | proves itself in the verification below | short-circuits — the point came off a screenshot of the user's own desktop, so the target is usually already there, and activating anything would take their focus for nothing |
+| Rung 1 | `SetForegroundWindow` — activates as well as restacks, so the target behaves as though the user clicked it | `NSRunningApplication.activate(.activateAllWindows)`, so a target that is not the app's key window comes up with the rest |
+| Rung 2 | `SetWindowPos(HWND_TOP, SWP_NOACTIVATE)` — Z-order without focus, which is all the capture strictly needs | none. There is no `SetWindowPos` for another process's windows, and raising one specific `AXWindow` means guessing which of an app's windows we photographed |
+| Refusals | the foreground lock (see the chain below) | macOS 14+ may refuse a cross-application activation outright |
+
+On Windows the second rung carries the common case unaided: restacking a
+window that is not the foreground one is not gated by the foreground lock, so
+a target buried under an *inactive* window comes up even when
+`SetForegroundWindow` was refused. What neither rung can do without foreground
+rights is get past a window that holds the foreground itself. Those rights
+arrive along a chain, and every link is required:
 
 | Link | Where | Why |
 |---|---|---|
@@ -436,10 +454,12 @@ Deliberately **not** used: `AttachThreadInput` to borrow the foreground
 thread's input queue. It defeats the lock reliably, and it also couples the
 driver to another application's input state — a driver left attached to a
 hung foreground thread is a much worse outcome than a capture that declines
-to run.
+to run. macOS has no such chain: there is nothing to hand on and nothing to
+borrow, which is why the verification is the whole of the guarantee there.
 
 During the run, the cursor stays parked on the scroll point, and moving it
-more than 10 px **pauses** the run rather than ending it — a wheel injected
+more than 10 units (px or points, per the region's space) **pauses** the run
+rather than ending it — a wheel injected
 while the user is pointing somewhere else scrolls whatever they are pointing
 at, and a frame taken while they are moving picks up hover highlights and
 selections it can never lose again. A pause emits `status.state = paused`,
