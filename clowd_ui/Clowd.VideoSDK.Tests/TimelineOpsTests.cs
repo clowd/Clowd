@@ -261,6 +261,65 @@ namespace Clowd.VideoSDK.Tests
             Assert.All(lefts, i => Assert.Equal(0, i.TimelineStartTicks));
         }
 
+        /// <summary>The right-click split: cutting the screen row must leave the webcam and audio
+        /// rows of the same recording untouched — the exact complaint that motivated it.</summary>
+        [Fact]
+        public void SplitItem_cuts_only_the_item_it_is_given()
+        {
+            var project = RecordingProject(out var screen, out var webcam, out var audio);
+            var originalGroup = screen.LinkGroupId;
+
+            Assert.True(TimelineOps.SplitItem(project, screen.Id, Ms(4_000)));
+
+            Assert.Equal(4, project.Items.Count); // one new segment, not three
+            Assert.Equal(Ms(10_000), webcam.DurationTicks);
+            Assert.Equal(Ms(10_000), audio.DurationTicks);
+
+            var right = project.Items.Single(i => i.Id != screen.Id && i.TrackId == screen.TrackId);
+            Assert.Equal(Ms(4_000), screen.DurationTicks);
+            Assert.Equal(Ms(4_000), right.TimelineStartTicks);
+            Assert.Equal(Ms(6_000), right.DurationTicks);
+            Assert.Equal(Ms(6_000), SourceIn(right));
+
+            // both halves stay in the recording: the clip was cut, not unlinked.
+            Assert.Equal(originalGroup, right.LinkGroupId);
+            Assert.Equal(originalGroup, screen.LinkGroupId);
+        }
+
+        /// <summary>A later group split still behaves, because it only ever acts on the members
+        /// that cover the instant — the half that does not is simply left alone.</summary>
+        [Fact]
+        public void SplitItem_leaves_the_group_splittable_afterwards()
+        {
+            var project = RecordingProject(out var screen, out var webcam, out var audio);
+            Assert.True(TimelineOps.SplitItem(project, screen.Id, Ms(4_000)));
+
+            Assert.True(TimelineOps.Split(project, webcam.Id, Ms(6_000)));
+
+            Assert.Equal(Ms(4_000), screen.DurationTicks);   // the untouched left half stays put
+            Assert.Equal(Ms(6_000), webcam.DurationTicks);
+            Assert.Equal(Ms(6_000), audio.DurationTicks);
+
+            // the screen's right half covered 6s too, so it was cut as a group member
+            var screenSegments = project.Items.Where(i => i.TrackId == screen.TrackId)
+                                              .OrderBy(i => i.TimelineStartTicks).ToList();
+            Assert.Equal(3, screenSegments.Count);
+            Assert.Equal(new[] { 0, Ms(4_000), Ms(6_000) },
+                screenSegments.Select(i => i.TimelineStartTicks).ToArray());
+        }
+
+        [Fact]
+        public void SplitItem_refuses_a_cut_that_is_off_the_item_or_too_short()
+        {
+            var project = RecordingProject(out var screen, out _, out _);
+
+            Assert.False(TimelineOps.SplitItem(project, screen.Id, 0));
+            Assert.False(TimelineOps.SplitItem(project, screen.Id, Ms(10_000)));
+            Assert.False(TimelineOps.SplitItem(project, screen.Id, TimelineOps.MinSegmentTicks - 1));
+            Assert.False(TimelineOps.SplitItem(project, screen.Id, Ms(10_000) - 1));
+            Assert.Equal(3, project.Items.Count);
+        }
+
         [Fact]
         public void Split_keeps_entry_on_the_left_and_moves_exit_to_the_right()
         {

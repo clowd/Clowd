@@ -64,6 +64,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private Cursor _cursorResize;
         private Cursor _cursorHand;
         private Guid _contextItemId; // the item the pending right-click landed on
+        private long _contextTicks;  // …and where along the timeline it landed
 
         public event EventHandler ScrubStarted;
 
@@ -88,9 +89,6 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Runs the parent control's <c>DeleteSelection</c> — the context menu must not
         /// carry a second copy of the ripple/group/lock rules the Delete key follows.</summary>
         public Func<bool> DeleteSelection { get; set; }
-
-        /// <summary>Runs the parent control's <c>SplitAtPlayhead</c> (the toolbar's Ctrl+K).</summary>
-        public Func<bool> SplitAtPlayhead { get; set; }
 
         // ------------------------------------------------------------------------------- wiring
 
@@ -585,10 +583,15 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>Right-press: selects the item under the pointer (the menu acts on the
         /// selection, so what it will do has to be visible before it opens) and remembers it for
-        /// <see cref="ContextMenu_Opening"/>, which builds the entries from it.</summary>
+        /// <see cref="ContextMenu_Opening"/>, which builds the entries from it. The instant the
+        /// pointer was over is remembered too — <c>Opening</c> is handed a bare
+        /// <see cref="CancelEventArgs"/> with no pointer in it, and this is the only place the
+        /// position is known. Nothing can zoom or scroll between the press and the open, so the
+        /// cached tick is still true when the menu reads it.</summary>
         private void PrepareContextMenu(Point pos)
         {
             _contextItemId = Guid.Empty;
+            _contextTicks = 0;
             if (_session == null || _dragMode != DragMode.None || _session.IsGestureActive)
                 return;
 
@@ -601,6 +604,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 return;
 
             _contextItemId = item.Id;
+            _contextTicks = _viewport.XToTicksClamped(pos.X);
             _session.Select(item.Id);
         }
 
@@ -619,19 +623,46 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             menu.Items.Clear();
 
-            // splitting is only meaningful strictly inside the span: on an edge it would make a
+            // Both cuts act on THIS clip alone — not its recording, not the rows beside it. The
+            // pointer picked one clip out; cutting its neighbours too would be an edit nobody
+            // asked for. The toolbar's "Split every track at playhead" is the other gesture.
+            // Splitting is only meaningful strictly inside the span: on an edge it would make a
             // zero-length half, which TimelineOps refuses anyway.
+            var itemId = item.Id;
             var playhead = Math.Clamp(_positionTicks, 0, Math.Max(0, _viewport.DurationTicks));
             menu.Items.Add(NewMenuItem("Split at Playhead",
                 !track.Locked && playhead > item.TimelineStartTicks && playhead < item.TimelineEndTicks,
-                () => SplitAtPlayhead?.Invoke()));
+                () => _session.SplitItemAt(itemId, playhead, this)));
+
+            // …and the same cut where the user actually right-clicked, which is usually the frame
+            // they were looking at.
+            var cursorTicks = _contextTicks;
+            menu.Items.Add(NewMenuItem("Split at Cursor",
+                !track.Locked && cursorTicks > item.TimelineStartTicks && cursorTicks < item.TimelineEndTicks,
+                () => _session.SplitItemAt(itemId, cursorTicks, this)));
 
             menu.Items.Add(NewMenuItem("Delete", !track.Locked, () => DeleteSelection?.Invoke()));
+
+            var trackId = track.Id;
+
+            // Z order. Row-level like Unlink below — the whole row moves, because stacking is a
+            // property of the row and not of one clip on it. The timeline draws video rows highest
+            // layer first, so moving up the panel and moving towards the viewer are the same
+            // direction (see TimelineRowLayout.Build).
+            if (track.Kind != TrackKind.Audio)
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(NewMenuItem("Move Up",
+                    !track.Locked && _session.CanMoveTrackLayer(trackId, towardsFront: true),
+                    () => _session.MoveTrackLayer(trackId, towardsFront: true, this)));
+                menu.Items.Add(NewMenuItem("Move Down",
+                    !track.Locked && _session.CanMoveTrackLayer(trackId, towardsFront: false),
+                    () => _session.MoveTrackLayer(trackId, towardsFront: false, this)));
+            }
 
             // unlinking is a row-level action (it is the header's link toggle), offered here
             // because that toggle is easy to miss and this is where the sync is felt: a synced
             // item has no move affordance.
-            var trackId = track.Id;
             if (_session.Project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null))
             {
                 menu.Items.Add(new Separator());

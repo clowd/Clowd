@@ -130,12 +130,42 @@ public static class TimelineOps
     public static bool Split(Project project, Guid itemId, long timelineTicks)
     {
         var target = Require(project, itemId);
-        var members = GetLinkedItems(project, itemId);
-
         if (!Covers(target, timelineTicks))
             return false;
 
-        var covered = members.Where(m => Covers(m, timelineTicks)).ToList();
+        var covered = GetLinkedItems(project, itemId).Where(m => Covers(m, timelineTicks)).ToList();
+
+        // the right halves become a link group of their own, so the two sides of the cut stay
+        // synced within themselves without the left side dragging the right one around.
+        return SplitCore(project, covered, timelineTicks,
+            target.LinkGroupId == null ? (Guid?)null : Guid.NewGuid());
+    }
+
+    /// <summary>
+    /// Cuts <b>one</b> item, leaving the rest of its link group alone — the timeline's right-click
+    /// split, where the pointer picked out a single clip and cutting its neighbours with it would
+    /// be an edit the user did not ask for.
+    ///
+    /// <para>Both halves keep the item's existing <see cref="Item.LinkGroupId"/>: the clip is still
+    /// part of the same recording, it simply has two segments on its row now. Group operations
+    /// cope with that already — they only ever act on the members that cover the instant in
+    /// question (see <see cref="Split"/>).</para>
+    /// </summary>
+    public static bool SplitItem(Project project, Guid itemId, long timelineTicks)
+    {
+        var target = Require(project, itemId);
+        if (!Covers(target, timelineTicks))
+            return false;
+
+        return SplitCore(project, new[] { target }, timelineTicks, target.LinkGroupId);
+    }
+
+    /// <summary>Cuts every item in <paramref name="covered"/> at the instant, all-or-nothing: a cut
+    /// that would leave any half shorter than <see cref="MinSegmentTicks"/> is refused outright
+    /// rather than applied to some rows and not others.</summary>
+    private static bool SplitCore(Project project, IReadOnlyList<Item> covered, long timelineTicks,
+        Guid? rightGroup)
+    {
         foreach (var m in covered)
         {
             if (timelineTicks - m.TimelineStartTicks < MinSegmentTicks ||
@@ -143,7 +173,6 @@ public static class TimelineOps
                 return false;
         }
 
-        var rightGroup = target.LinkGroupId == null ? (Guid?)null : Guid.NewGuid();
         foreach (var m in covered)
         {
             var leftLength = timelineTicks - m.TimelineStartTicks;

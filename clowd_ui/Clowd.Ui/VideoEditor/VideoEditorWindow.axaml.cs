@@ -138,7 +138,7 @@ namespace Clowd.UI.VideoEditor
             CommandPlayPause = new RelayCommand { Executed = _ => TogglePlayPause(), Text = "Play/Pause" };
             CommandStepBack = new RelayCommand { Executed = _ => StepFrame(-1), Text = "Previous frame" };
             CommandStepForward = new RelayCommand { Executed = _ => StepFrame(1), Text = "Next frame" };
-            CommandSplit = new RelayCommand { Executed = _ => SplitAtPlayhead(), Text = "_Split", Gesture = new SimpleKeyGesture(Key.K, KeyModifiers.Control) };
+            CommandSplit = new RelayCommand { Executed = _ => SplitAtPlayhead(), Text = "_Split Every Track at Playhead", Gesture = new SimpleKeyGesture(Key.K, KeyModifiers.Control) };
             CommandUndo = new RelayCommand
             {
                 Executed = _ => Undo(),

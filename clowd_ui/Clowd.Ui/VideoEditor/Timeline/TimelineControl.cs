@@ -158,10 +158,10 @@ namespace Clowd.UI.VideoEditor.Timeline
             _surface.Scrubbed += Child_Scrubbed;
             _surface.ScrubCompleted += Child_ScrubCompleted;
 
-            // the row context menu runs the very commands the keyboard does, rather than a second
-            // copy of the ripple/group rules.
+            // the row context menu runs the very command the Delete key does, rather than a second
+            // copy of the ripple/group rules. (Its two Split entries do NOT delegate here: they cut
+            // the clicked clip alone, where this one cuts every row at once.)
             _surface.DeleteSelection = DeleteSelection;
-            _surface.SplitAtPlayhead = SplitAtPlayhead;
 
             ActualThemeVariantChanged += (_, _) =>
             {
@@ -272,9 +272,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             return true;
         }
 
-        /// <summary>Splits at the playhead (the selected item's group when it covers it, otherwise
-        /// every covering group — see <see cref="EditorSession.SplitAtPlayhead"/>). The window's
-        /// Ctrl+K. Returns true when anything split.</summary>
+        /// <summary>Splits every row that covers the playhead — see
+        /// <see cref="EditorSession.SplitAtPlayhead"/>. The window's Ctrl+K. Returns true when
+        /// anything split.</summary>
         public bool SplitAtPlayhead()
         {
             if (_session == null)
