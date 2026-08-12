@@ -83,6 +83,8 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _positionX = 0.5;
         private double _positionY = 0.5;
         private double _scale = 1.0;
+        private double _scaleHeight = 1.0;
+        private bool _aspectLocked = true;
         private double _rotation;
         private double _opacity = 1.0;
 
@@ -175,8 +177,16 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The PLACEMENT scale row's label: "Size" for pictures (canvas-width fraction),
         /// "Text scale" for text (multiplier of the natural block) — so it cannot be confused with
-        /// the TEXT section's own font-size "Size".</summary>
-        public string ScaleLabel => _showText ? "Text scale" : "Size";
+        /// the TEXT section's own font-size "Size". Unlocking the aspect ratio splits the row into
+        /// two, at which point the one number becomes the width.</summary>
+        public string ScaleLabel => _showText
+            ? (_aspectLocked ? "Text scale" : "Text width")
+            : (_aspectLocked ? "Size" : "Width");
+
+        /// <summary>The second size row, shown only while the aspect ratio is unlocked.</summary>
+        public bool ShowScaleHeight => _showScale && !_aspectLocked;
+
+        public string ScaleHeightLabel => _showText ? "Text height" : "Height";
 
         public bool ShowMask => _showMask;
 
@@ -247,6 +257,79 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 EditRow("sel:scale", i => TransformOf(i).Scale = value);
             }
+        }
+
+        /// <summary>Item height as a fraction of the canvas height. Only meaningful — and only
+        /// shown — while <see cref="AspectLocked"/> is off; a locked item derives its height from
+        /// the content and stores no <c>ScaleY</c> at all.</summary>
+        public double ScaleHeight
+        {
+            get => _scaleHeight;
+            set
+            {
+                value = Clamp(value, MinScale, MaxScale);
+                if (!Set(ref _scaleHeight, value) || _syncing || _aspectLocked)
+                    return;
+
+                EditRow("sel:scaleY", i => TransformOf(i).ScaleY = value);
+            }
+        }
+
+        /// <summary>
+        /// Whether the item keeps its content's aspect ratio (the default) or sizes its two axes
+        /// apart. Unlocking seeds the height from what the item is drawn at right now, so the
+        /// picture does not jump the instant the box is unticked; locking drops
+        /// <c>Transform.ScaleY</c> entirely and the height goes back to following the content.
+        /// </summary>
+        public bool AspectLocked
+        {
+            get => _aspectLocked;
+            set
+            {
+                if (!Set(ref _aspectLocked, value) || _syncing)
+                    return;
+
+                OnPropertyChanged(nameof(ShowScaleHeight));
+                OnPropertyChanged(nameof(ScaleLabel));
+
+                if (value)
+                {
+                    EditRow("sel:aspect", i => TransformOf(i).ScaleY = null);
+                    return;
+                }
+
+                // per item, not per row: linked segments of one row share a transform's worth of
+                // numbers but each resolves its own content aspect.
+                EditRow("sel:aspect", i => TransformOf(i).ScaleY = CurrentHeightFraction(i));
+                Set(ref _scaleHeight, CurrentHeightFraction(SelectedItem) ?? _scale, nameof(ScaleHeight));
+            }
+        }
+
+        /// <summary>The height an item is drawn at now, as the canvas fraction <c>ScaleY</c> stores
+        /// — so unticking the lock is a no-op on the picture. Null when the content's aspect cannot
+        /// be resolved, which leaves the item locked in all but name (the composer keeps deriving
+        /// the height) rather than snapping it to a guess.</summary>
+        private double? CurrentHeightFraction(Item item)
+        {
+            var transform = item?.Transform;
+            if (transform == null)
+                return null;
+
+            // text scales off its own natural block, so its two axes already share one unit.
+            if (item.Content is TextContent)
+                return transform.Scale;
+
+            var output = _session?.Project?.Output;
+            double canvasW = output?.WidthPx ?? 0;
+            double canvasH = output?.HeightPx ?? 0;
+            if (!(canvasW > 0) || !(canvasH > 0))
+                return null;
+
+            var aspect = ItemPlacement.ContentAspect(_session.Project, item, canvasW, canvasH);
+            if (aspect is not > 0)
+                return null;
+
+            return transform.Scale * canvasW * aspect.Value / canvasH;
         }
 
         /// <summary>Clockwise rotation in degrees.</summary>
@@ -684,6 +767,12 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _positionX, transform.X, nameof(PositionX));
                 Set(ref _positionY, transform.Y, nameof(PositionY));
                 Set(ref _scale, transform.Scale, nameof(Scale));
+                Set(ref _aspectLocked, transform.ScaleY == null, nameof(AspectLocked));
+                // a locked item keeps the last height shown, so ticking the box off again offers
+                // the number the user was working with rather than a fresh reading.
+                Set(ref _scaleHeight, transform.ScaleY ?? _scaleHeight, nameof(ScaleHeight));
+                OnPropertyChanged(nameof(ShowScaleHeight));
+                OnPropertyChanged(nameof(ScaleHeightLabel));
                 Set(ref _rotation, transform.Rotation, nameof(Rotation));
                 Set(ref _opacity, transform.Opacity, nameof(Opacity));
 
