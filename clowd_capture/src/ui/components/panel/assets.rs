@@ -8,10 +8,6 @@
 pub const SVG_UPLOAD: &[u8] = include_bytes!("../../../../assets/icons/clowd-white.svg");
 pub const SVG_EDIT: &[u8] = include_bytes!("../../../../assets/icons/edit_image.svg");
 pub const SVG_VIDEO: &[u8] = include_bytes!("../../../../assets/icons/video_camera.svg");
-/// Windows-only: the SCROLL button is compiled out on macOS (see
-/// `model::NORMAL_DEFS`), and an unreferenced `include_bytes!` would
-/// warn there.
-#[cfg(windows)]
 pub const SVG_SCROLL: &[u8] = include_bytes!("../../../../assets/icons/scroll.svg");
 pub const SVG_OCR: &[u8] = include_bytes!("../../../../assets/icons/ocr.svg");
 pub const SVG_COPY: &[u8] = include_bytes!("../../../../assets/icons/copy_to_clipboard.svg");

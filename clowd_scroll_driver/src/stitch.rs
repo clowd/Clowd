@@ -518,6 +518,25 @@ impl Stitcher {
     }
 
     /// One registration attempt within an explicit chrome band.
+    ///
+    /// Every peak is verified and the **best-agreeing** candidate wins, not
+    /// the first one that merely passes. The distinction only shows up when
+    /// two hypotheses both verify, and then it is the whole ball game: on
+    /// text whose lines are told apart by little more than their line
+    /// numbers, a strip laid over the *wrong* multiple of the line pitch
+    /// disagrees in a few glyphs out of a full row — a MAD of one or two,
+    /// comfortably inside [`VERIFY_MAD_MAX`] — while the true displacement
+    /// reads ~0. Since correlation cannot rank near-identical multiples
+    /// either (their NCC differs in the third decimal, so noise decides the
+    /// order), taking the first passing peak is taking a coin flip, and
+    /// losing it composites a screen of duplicated content that nothing
+    /// downstream can detect. Measured on a 400-line document scrolled three
+    /// lines at a time: every step registered ~18 lines out, and every seam
+    /// in the composite jumped back a screen.
+    ///
+    /// Ties go to the smaller displacement — with equal evidence, the
+    /// hypothesis that claims less is the one that leaves the *next* pair
+    /// something to register against.
     fn register_in_band(&self, cur_profile: &[f32], cur: &Frame, header: usize, footer: usize) -> Option<u32> {
         let h = self.frame_h as usize;
         let n = h - header - footer;
@@ -525,12 +544,10 @@ impl Stitcher {
             return None;
         }
         let max_dy = n - MIN_OVERLAP;
+        // The profiles locate a seam to within a row or two; raw pixels pick
+        // the exact one, over every peak's dy and its ±2 neighbours.
+        let mut chosen: Option<(usize, f32)> = None;
         for (peak_dy, _) in self.coarse_peaks(cur_profile, header, footer) {
-            // The profiles locate a seam to within a row or two; raw
-            // pixels pick the exact one. Candidates are tried in a fixed
-            // order but the *minimum* MAD wins, so the order only matters
-            // for ties.
-            let mut chosen: Option<(usize, f32)> = None;
             for delta in [0isize, -1, 1, -2, 2] {
                 let Some(dy) = peak_dy
                     .checked_add_signed(delta)
@@ -539,15 +556,12 @@ impl Stitcher {
                     continue;
                 };
                 let mad = self.strip_mad(cur, header, footer, dy);
-                if mad <= VERIFY_MAD_MAX && chosen.is_none_or(|(_, m)| mad < m) {
+                if mad <= VERIFY_MAD_MAX && chosen.is_none_or(|(cdy, m)| mad < m || (mad == m && dy < cdy)) {
                     chosen = Some((dy, mad));
                 }
             }
-            if let Some((dy, _)) = chosen {
-                return Some(dy as u32);
-            }
         }
-        None
+        chosen.map(|(dy, _)| dy as u32)
     }
 
     /// Step 3 alone: the correlation sweep, reduced to the dy hypotheses
@@ -1192,6 +1206,85 @@ mod tests {
         let composite = st.finish();
         assert_eq!(composite.quality, Quality::Exact);
         assert_eq!(composite.height, HDR + PAGE_H + FTR);
+        assert_eq!(composite.rgba, expected_composite(&page, BOTTOM));
+    }
+
+    /// The same trap with a faint discriminator, which is the shape real
+    /// lined text takes: the lines are identical except for a line number,
+    /// so a strip laid over the *wrong* pitch multiple disagrees only
+    /// slightly and passes verification too. Nothing then separates the
+    /// hypotheses but which agrees *better* — measured against a 400-line
+    /// document on macOS, taking the first passing peak instead registered
+    /// ~18 lines out on every step and composited a screen of duplicated
+    /// content per seam.
+    fn faint_tint(line: u32) -> i32 {
+        [0, 2, 4, 6, 8][(line % 5) as usize]
+    }
+
+    fn build_faintly_lined_page() -> Vec<u8> {
+        let mut page = Vec::with_capacity((PAGE_H * W * 4) as usize);
+        for y in 0..PAGE_H {
+            let (line, r) = (y / PITCH, y % PITCH);
+            for _ in 0..W {
+                // Strong structure *within* a line, so the row profiles have
+                // real variance to correlate — and a faint per-line tint,
+                // which is all that distinguishes one pitch multiple from
+                // another. A wrong multiple therefore disagrees by a couple
+                // of luma levels: enough to be seen, nowhere near enough to
+                // be rejected.
+                let v = if r >= LINE_TEXT {
+                    230 - faint_tint(line)
+                } else {
+                    30 + 24 * (r % 8) as i32 + faint_tint(line)
+                };
+                let v = v as u8;
+                page.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        page
+    }
+
+    #[test]
+    fn faintly_lined_text_registers_the_best_agreeing_peak_not_the_first_passing_one() {
+        let page = build_faintly_lined_page();
+        let mut st = Stitcher::new(render(&page, 0));
+
+        // Two lines: the small step a real wheel notch produces, which is
+        // the case that leaves the most ambiguity — every one of the pitch
+        // multiples that fits the overlap looks nearly as good.
+        let dy_true = 2 * PITCH;
+        let mut cur = render(&page, dy_true);
+        dampen_true_alignment(&mut cur);
+
+        let cur_profile = profile(&cur, st.c0, st.c1);
+        let (ph, pf) = st
+            .pair_chrome(&cur)
+            .expect("a scrolled pair must not read as static");
+        let peaks = st.coarse_peaks(&cur_profile, ph as usize, pf as usize);
+
+        // The trap: a wrong multiple ranks first *and* verifies, so a search
+        // that stopped at the first passing peak would return it.
+        let first = peaks[0].0;
+        assert!(
+            !(dy_true as usize - 2..=dy_true as usize + 2).contains(&first),
+            "the decoy failed: the true dy won the coarse pass outright: {peaks:?}"
+        );
+        assert!(
+            st.strip_mad(&cur, ph as usize, pf as usize, first) <= VERIFY_MAD_MAX,
+            "the decoy failed: the leading wrong peak does not verify, so first-passing would have skipped it"
+        );
+
+        // …and the truth is what comes out, exactly.
+        assert_eq!(append_dy(&mut st, cur), dy_true);
+
+        let mut prev = dy_true;
+        while prev < BOTTOM {
+            let pos = (prev + dy_true).min(BOTTOM);
+            assert_eq!(append_dy(&mut st, render(&page, pos)), pos - prev, "step to {pos}");
+            prev = pos;
+        }
+        let composite = st.finish();
+        assert_eq!(composite.height, HDR + BOTTOM + C_LEN + FTR);
         assert_eq!(composite.rgba, expected_composite(&page, BOTTOM));
     }
 
