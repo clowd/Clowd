@@ -310,6 +310,103 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(SelectedItemViewModel.MinScale, Live(session, screen.Id).Transform.Scale);
         }
 
+        // --------------------------------------------------------------------- aspect ratio lock
+
+        [Fact]
+        public void AspectRatio_StartsLockedAndStoresNoHeight()
+        {
+            var (session, vm) = NewInspector(out var screen, out _, out _, out _, out _);
+            session.Select(screen.Id);
+
+            Assert.True(vm.AspectLocked);
+            Assert.False(vm.ShowScaleHeight);
+            Assert.Equal("Size", vm.ScaleLabel);
+            Assert.Null(Live(session, screen.Id).Transform.ScaleY);
+        }
+
+        /// <summary>Unticking the lock must not move the picture: the seeded ScaleY is the height
+        /// the item is drawn at right now, which for a 640x480 camera on a 1920x1080 canvas is not
+        /// the same number as its width fraction.</summary>
+        [Fact]
+        public void UnlockingAspectRatio_SeedsTheHeightFromTheDrawnPicture()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
+            session.Select(webcamA.Id);
+            vm.Scale = 0.25;
+
+            vm.AspectLocked = false;
+
+            // 0.25 * 1920 = 480px wide; 480 * (480/640) = 360px tall; 360 / 1080 = 1/3.
+            Assert.Equal(1 / 3.0, Live(session, webcamA.Id).Transform.ScaleY.Value, 9);
+            Assert.Equal(1 / 3.0, vm.ScaleHeight, 9);
+
+            // the whole linked row moves together, exactly as every other placement edit does
+            Assert.Equal(1 / 3.0, Live(session, webcamB.Id).Transform.ScaleY.Value, 9);
+
+            Assert.True(vm.ShowScaleHeight);
+            Assert.Equal("Width", vm.ScaleLabel);
+            Assert.Equal("Height", vm.ScaleHeightLabel);
+        }
+
+        [Fact]
+        public void RelockingAspectRatio_DropsTheHeightBackToTheContent()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out _, out _, out _);
+            session.Select(webcamA.Id);
+            vm.AspectLocked = false;
+            vm.ScaleHeight = 0.8;
+
+            vm.AspectLocked = true;
+
+            Assert.Null(Live(session, webcamA.Id).Transform.ScaleY);
+            Assert.False(vm.ShowScaleHeight);
+        }
+
+        /// <summary>The height field is inert while the lock is on — the lock, not the spinner, is
+        /// what decides whether the item has a height of its own.</summary>
+        [Fact]
+        public void ScaleHeight_DoesNothingWhileTheAspectRatioIsLocked()
+        {
+            var (session, vm) = NewInspector(out var screen, out _, out _, out _, out _);
+            session.Select(screen.Id);
+
+            vm.ScaleHeight = 0.8;
+
+            Assert.Null(Live(session, screen.Id).Transform.ScaleY);
+        }
+
+        /// <summary>Text scales off its own natural block on both axes, so there is nothing to
+        /// convert — unlocking seeds the height with the scale the text already has.</summary>
+        [Fact]
+        public void UnlockingAspectRatio_OnText_SeedsFromTheTextScale()
+        {
+            var (session, vm) = NewInspector(out _, out _, out _, out _, out var text);
+            session.Select(text.Id);
+            vm.Scale = 1.5;
+
+            vm.AspectLocked = false;
+
+            Assert.Equal(1.5, Live(session, text.Id).Transform.ScaleY.Value, 9);
+            Assert.Equal("Text width", vm.ScaleLabel);
+            Assert.Equal("Text height", vm.ScaleHeightLabel);
+        }
+
+        /// <summary>Selecting an item re-reads the lock from the model rather than keeping whatever
+        /// the last selection had.</summary>
+        [Fact]
+        public void SelectingAnItem_ReadsItsOwnAspectLock()
+        {
+            var (session, vm) = NewInspector(out var screen, out var webcamA, out _, out _, out _);
+            session.Select(webcamA.Id);
+            vm.AspectLocked = false;
+
+            session.Select(screen.Id);
+            Assert.True(vm.AspectLocked);
+
+            session.Select(webcamA.Id);
+            Assert.False(vm.AspectLocked);
+        }
+
         // -------------------------------------------------------------------------- row fan-out
 
         [Fact]

@@ -486,6 +486,84 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(2.0, scale, 6); // 200px drawn / a 100px natural block
         }
 
+        // ------------------------------------------------------------- unlocked aspect ratio
+
+        /// <summary>With ScaleY set the height stops following the content: the composer reads it as
+        /// a fraction of the canvas height, and the placement the gizmo lands on must agree.</summary>
+        [Fact]
+        public void ScaleY_overrides_the_content_aspect()
+        {
+            var transform = new ModelTransform { Scale = 0.5, ScaleY = 0.25 };
+
+            var rect = ItemPlacement.Compose(transform, pictureAspect: 1.0, 800, 400);
+
+            Assert.Equal(400, rect.W, 6);  // 0.5 of the canvas width
+            Assert.Equal(100, rect.H, 6);  // 0.25 of the canvas height, NOT 400 (aspect 1.0)
+            Assert.Equal(200, rect.X, 6);  // still centred
+            Assert.Equal(150, rect.Y, 6);
+        }
+
+        /// <summary>Text scales off its own natural block on both axes, so ScaleY multiplies the
+        /// natural height exactly as Scale multiplies the natural width.</summary>
+        [Fact]
+        public void ScaleY_multiplies_the_natural_block_for_text()
+        {
+            var transform = new ModelTransform { Scale = 2.0, ScaleY = 0.5 };
+
+            var rect = ItemPlacement.ComposeNatural(transform, naturalWidth: 100, naturalHeight: 40, 800, 400);
+
+            Assert.Equal(200, rect.W, 6);
+            Assert.Equal(20, rect.H, 6);
+        }
+
+        /// <summary>A free corner drag puts the dragged corner under the pointer on BOTH axes —
+        /// unlike the locked resize, which follows whichever axis is pulling hardest.</summary>
+        [Fact]
+        public void ResizeFree_follows_the_pointer_on_both_axes()
+        {
+            var (scaleX, scaleY, x, y) = GizmoMath.ResizeFree(
+                pointerX: 500, pointerY: 150, anchorX: 100, anchorY: 50,
+                draggingRight: true, draggingDown: true,
+                scaleDenominatorPx: 800, scaleDenominatorYPx: 450,
+                canvasX: 100, canvasY: 50, canvasWidth: 800, canvasHeight: 450,
+                minScale: 0.01, maxScale: 4);
+
+            Assert.Equal(0.5, scaleX, 6);        // 400px of an 800px canvas
+            Assert.Equal(100 / 450.0, scaleY, 6); // 100px of a 450px canvas
+
+            // the anchor is still stationary on both axes
+            var rect = ItemPlacement.Compose(
+                new ModelTransform { X = x, Y = y, Scale = scaleX, ScaleY = scaleY }, 1.0, 800, 450);
+            Assert.Equal(0, rect.X, 6);
+            Assert.Equal(0, rect.Y, 6);
+        }
+
+        /// <summary>An edge handle moves one axis and leaves the other alone — which is the whole
+        /// point of offering them only once the aspect ratio is unlocked.</summary>
+        [Fact]
+        public void ResizeAxis_anchors_the_opposite_edge()
+        {
+            var (scale, center) = GizmoMath.ResizeAxis(
+                pointer: 500, anchor: 100, draggingPositive: true, denominatorPx: 800,
+                canvasOrigin: 100, canvasExtent: 800, minScale: 0.01, maxScale: 4);
+
+            Assert.Equal(0.5, scale, 6);
+            Assert.Equal(0.25, center, 6); // centre 200px right of an anchor at the canvas origin
+        }
+
+        /// <summary>…and a clamped edge drag still anchors, for the same reason the corner one
+        /// does: the centre is computed from the size the clamp allowed, not the pointer.</summary>
+        [Fact]
+        public void ResizeAxis_anchors_the_clamped_size()
+        {
+            var (scale, center) = GizmoMath.ResizeAxis(
+                pointer: 101, anchor: 100, draggingPositive: true, denominatorPx: 800,
+                canvasOrigin: 100, canvasExtent: 800, minScale: 0.05, maxScale: 4);
+
+            Assert.Equal(0.05, scale, 6);
+            Assert.Equal(0.025, center, 6); // half of the clamped 40px width, off the anchor
+        }
+
         // ------------------------------------------------------------------------------- helpers
 
         private static Project NewProject() => new Project

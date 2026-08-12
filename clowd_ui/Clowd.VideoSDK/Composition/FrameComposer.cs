@@ -151,11 +151,14 @@ namespace Clowd.VideoSDK.Composition
                 (float)(cl * imgW), (float)(ct * imgH),
                 (float)((1 - cr) * imgW), (float)((1 - cb) * imgH));
 
-            // Scale = width fraction of the canvas; height follows the (cropped) content aspect.
+            // Scale = width fraction of the canvas; height follows the (cropped) content aspect,
+            // unless the user unlocked the aspect ratio and gave the height its own fraction.
             double croppedW = imgW * (1 - cl - cr);
             double croppedH = imgH * (1 - ct - cb);
             double destW = transform.Scale * canvasWidth;
-            double destH = destW * croppedH / croppedW;
+            double destH = transform.ScaleY is { } scaleY
+                ? scaleY * canvasHeight
+                : destW * croppedH / croppedW;
 
             var rect = PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
             if (rect.Width <= 0 || rect.Height <= 0)
@@ -187,7 +190,7 @@ namespace Clowd.VideoSDK.Composition
             // A solid has no intrinsic picture; its natural size is the canvas itself, so the
             // default transform (centred, Scale 1) fills the whole frame.
             double destW = transform.Scale * canvasWidth;
-            double destH = destW * canvasHeight / (double)canvasWidth;
+            double destH = (transform.ScaleY ?? transform.Scale) * canvasHeight;
 
             var rect = PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
             if (rect.Width <= 0 || rect.Height <= 0)
@@ -268,9 +271,11 @@ namespace Clowd.VideoSDK.Composition
             // Text sizes in output pixels (TextContent.Size, mapped onto this canvas by textScale
             // above), so unlike picture content Scale here multiplies the natural block size
             // rather than mapping to a canvas-width fraction — Scale 1 draws the text at its
-            // font size.
-            double destW = blockW * transform.Scale;
-            double destH = blockH * transform.Scale;
+            // font size. ScaleY does the same to the height when the aspect ratio is unlocked.
+            double scaleX = transform.Scale;
+            double scaleY = transform.ScaleY ?? transform.Scale;
+            double destW = blockW * scaleX;
+            double destH = blockH * scaleY;
 
             var rect = PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
             if (rect.Width <= 0 || rect.Height <= 0)
@@ -283,8 +288,7 @@ namespace Clowd.VideoSDK.Composition
             {
                 ApplyClips(target, transform, fx, rect);
                 target.Translate(rect.Left, rect.Top);
-                float s = (float)transform.Scale;
-                target.Scale(s, s);
+                target.Scale((float)scaleX, (float)scaleY);
 
                 using var paint = new SKPaint
                 {

@@ -14,7 +14,8 @@ namespace Clowd.UI.VideoEditor
     /// <summary>
     /// The on-preview transform <b>gizmo</b>: a transparent, hit-testable rectangle sitting over the
     /// composed preview on whatever item is selected, drawing only the selection chrome (an outline
-    /// following the item's mask, the true rectangular extent, and four corner handles). The picture
+    /// following the item's mask, the true rectangular extent, and the resize handles — four
+    /// corners, plus the four edge midpoints once the item's aspect ratio is unlocked). The picture
     /// itself is composed by the SDK's <c>FrameComposer</c> underneath — that is the deliberate cost
     /// of WYSIWYG: the gizmo can no longer disagree with the render, because it does not draw the
     /// item at all.
@@ -44,8 +45,18 @@ namespace Clowd.UI.VideoEditor
     /// </summary>
     public sealed class TransformGizmoControl : Panel
     {
-        private const double HandleSize = 8;
-        private const double HandleHitSize = 14;
+        /// <summary>Diameter of a handle, matching the image editor's
+        /// <c>GraphicBase.UnscaledControlSize</c> — the two editors draw the same control, so they
+        /// are the same size as well as the same shape.</summary>
+        private const double HandleSize = 12;
+
+        private const double HandleHitSize = 16;
+
+        /// <summary>Handle indices. 0-3 are the corners (the only ones an aspect-locked item has);
+        /// 4-7 are the edge midpoints, which appear once the aspect ratio is unlocked and there is
+        /// a single axis worth resizing on its own.</summary>
+        private const int HandleTopLeft = 0, HandleTopRight = 1, HandleBottomLeft = 2, HandleBottomRight = 3;
+        private const int HandleLeft = 4, HandleTop = 5, HandleRight = 6, HandleBottom = 7;
 
         /// <summary>How far outside the item's rect this control is arranged, so a corner handle is
         /// grabbable on <i>both</i> sides of the corner. Avalonia routes a press only to a control
@@ -61,6 +72,8 @@ namespace Clowd.UI.VideoEditor
         private static readonly Cursor ArrowCursor = new Cursor(StandardCursorType.Arrow);
         private static readonly Cursor NwseCursor = new Cursor(StandardCursorType.TopLeftCorner);
         private static readonly Cursor NeswCursor = new Cursor(StandardCursorType.TopRightCorner);
+        private static readonly Cursor EwCursor = new Cursor(StandardCursorType.SizeWestEast);
+        private static readonly Cursor NsCursor = new Cursor(StandardCursorType.SizeNorthSouth);
 
         private readonly ChromeControl _chrome;
 
@@ -68,6 +81,7 @@ namespace Clowd.UI.VideoEditor
         private Guid _itemId;
         private double _aspect = 9.0 / 16.0;
         private double _scaleDenominatorPx;
+        private double _scaleDenominatorYPx;
 
         private enum DragKind
         {
@@ -83,7 +97,8 @@ namespace Clowd.UI.VideoEditor
         private IPointer _dragPointer;
         private Point _dragStart;
         private double _startX, _startY;
-        private Point _resizeAnchor; // opposite corner, parent coords
+        private Point _resizeAnchor; // opposite corner (or edge midpoint), parent coords
+        private int _dragHandle = -1;
         private bool _dragRight, _dragDown;
 
         public TransformGizmoControl()
@@ -142,6 +157,7 @@ namespace Clowd.UI.VideoEditor
             {
                 _aspect = placed.Aspect;
                 _scaleDenominatorPx = placed.ScaleDenominatorPx;
+                _scaleDenominatorYPx = placed.ScaleDenominatorYPx;
             }
 
             _chrome.InvalidateVisual();
@@ -204,19 +220,19 @@ namespace Clowd.UI.VideoEditor
 
             var origin = e.GetPosition(ParentVisual);
             var local = e.GetPosition(this);
-            var corner = HitCorner(local);
+            var handle = HitHandle(local);
 
             // The pad around the item is handle room only — a press in it that missed a handle is
             // outside the item, so it falls through to the preview's hit-test like any other miss.
-            if (corner < 0 && !ItemRect(Bounds.Size).Contains(local))
+            if (handle < 0 && !ItemRect(Bounds.Size).Contains(local))
                 return;
 
             // A body press is only ours while nothing is composed on top of us there: a full-frame
             // background item's gizmo covers the whole preview, and it must not swallow the click
             // that was aimed at the overlay drawn over it. Leaving the press unhandled drops it
             // through to the preview panel, whose top-down hit-test then selects that overlay.
-            // (Corner handles are chrome of their own and always win.)
-            if (corner < 0 && !IsTopmostAt(origin))
+            // (Resize handles are chrome of their own and always win.)
+            if (handle < 0 && !IsTopmostAt(origin))
                 return;
 
             Focus();
@@ -226,24 +242,31 @@ namespace Clowd.UI.VideoEditor
             _startX = transform.X;
             _startY = transform.Y;
 
-            if (corner >= 0)
+            if (handle >= 0)
             {
                 _drag = DragKind.Resize;
-                // the opposite corner stays put; everything is computed from it
+                _dragHandle = handle;
+
+                // the opposite corner (or edge) stays put; everything is computed from it
                 var b = Bounds.Deflate(HandlePad); // the item's rect in parent coordinates
-                _resizeAnchor = corner switch
+                _resizeAnchor = handle switch
                 {
-                    0 => b.BottomRight,
-                    1 => b.BottomLeft,
-                    2 => b.TopRight,
-                    _ => b.TopLeft,
+                    HandleTopLeft => b.BottomRight,
+                    HandleTopRight => b.BottomLeft,
+                    HandleBottomLeft => b.TopRight,
+                    HandleBottomRight => b.TopLeft,
+                    HandleLeft => new Point(b.Right, b.Center.Y),
+                    HandleTop => new Point(b.Center.X, b.Bottom),
+                    HandleRight => new Point(b.Left, b.Center.Y),
+                    _ => new Point(b.Center.X, b.Top),
                 };
-                _dragRight = corner is 1 or 3; // dragged corner right of the anchor?
-                _dragDown = corner is 2 or 3;  // below it?
+                _dragRight = handle is HandleTopRight or HandleBottomRight or HandleRight;
+                _dragDown = handle is HandleBottomLeft or HandleBottomRight or HandleBottom;
             }
             else
             {
                 _drag = DragKind.Move;
+                _dragHandle = -1;
             }
 
             _gesture = _session.BeginGesture(_drag == DragKind.Resize ? "Resize item" : "Move item", this);
@@ -279,6 +302,46 @@ namespace Clowd.UI.VideoEditor
                     CanvasRect.Width, CanvasRect.Height);
                 WriteRow(item, "gizmo:move", t =>
                 {
+                    t.X = x;
+                    t.Y = y;
+                });
+            }
+            // a horizontal edge handle: width only, the height and vertical centre untouched.
+            else if (_dragHandle is HandleLeft or HandleRight)
+            {
+                var (scaleX, x) = GizmoMath.ResizeAxis(p.X, _resizeAnchor.X, _dragRight,
+                    _scaleDenominatorPx, CanvasRect.X, CanvasRect.Width,
+                    SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+                WriteRow(item, "gizmo:resize", t =>
+                {
+                    t.Scale = scaleX;
+                    t.X = x;
+                });
+            }
+            // …and a vertical one: height only.
+            else if (_dragHandle is HandleTop or HandleBottom)
+            {
+                var (scaleY, y) = GizmoMath.ResizeAxis(p.Y, _resizeAnchor.Y, _dragDown,
+                    _scaleDenominatorYPx, CanvasRect.Y, CanvasRect.Height,
+                    SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+                WriteRow(item, "gizmo:resize", t =>
+                {
+                    t.ScaleY = scaleY;
+                    t.Y = y;
+                });
+            }
+            // a corner on an item whose aspect ratio the user unlocked resizes each axis on its
+            // own; one that still has the lock keeps the content's aspect and derives its height.
+            else if (item.Transform?.ScaleY is not null)
+            {
+                var (scaleX, scaleY, x, y) = GizmoMath.ResizeFree(p.X, p.Y, _resizeAnchor.X, _resizeAnchor.Y,
+                    _dragRight, _dragDown, _scaleDenominatorPx, _scaleDenominatorYPx,
+                    CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height,
+                    SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+                WriteRow(item, "gizmo:resize", t =>
+                {
+                    t.Scale = scaleX;
+                    t.ScaleY = scaleY;
                     t.X = x;
                     t.Y = y;
                 });
@@ -381,27 +444,46 @@ namespace Clowd.UI.VideoEditor
             return hit == null || hit.Id == _itemId;
         }
 
-        /// <summary>Which corner handle (0=TL 1=TR 2=BL 3=BR) the point is over, or -1. Measured
-        /// against the item's corners, which the pad keeps a full <see cref="HandleHitSize"/> box
-        /// away from this control's edges.</summary>
-        private int HitCorner(Point local)
+        /// <summary>Whether this item sizes its axes apart, which is what earns it edge handles: an
+        /// aspect-locked item derives its height, so an edge drag would have nothing to write.</summary>
+        private bool AspectUnlocked => CurrentItem()?.Transform?.ScaleY is not null;
+
+        /// <summary>The handle positions in this control's coordinates, indexed by the Handle*
+        /// constants. Edge handles are included only when the item has them.</summary>
+        private static Point[] HandlePoints(Rect b, bool withEdges)
+        {
+            var points = new Point[withEdges ? 8 : 4];
+            points[HandleTopLeft] = b.TopLeft;
+            points[HandleTopRight] = b.TopRight;
+            points[HandleBottomLeft] = b.BottomLeft;
+            points[HandleBottomRight] = b.BottomRight;
+
+            if (withEdges)
+            {
+                points[HandleLeft] = new Point(b.Left, b.Center.Y);
+                points[HandleTop] = new Point(b.Center.X, b.Top);
+                points[HandleRight] = new Point(b.Right, b.Center.Y);
+                points[HandleBottom] = new Point(b.Center.X, b.Bottom);
+            }
+
+            return points;
+        }
+
+        /// <summary>Which handle the point is over, or -1. Measured against the item's own rect,
+        /// which the pad keeps a full <see cref="HandleHitSize"/> box away from this control's
+        /// edges. Corners are tested first, so they win where an edge handle would overlap one on a
+        /// very small item.</summary>
+        private int HitHandle(Point local)
         {
             var b = ItemRect(Bounds.Size);
             if (b.Width <= 0 || b.Height <= 0)
                 return -1;
 
-            var corners = new[]
+            var points = HandlePoints(b, AspectUnlocked);
+            for (int i = 0; i < points.Length; i++)
             {
-                b.TopLeft,
-                b.TopRight,
-                b.BottomLeft,
-                b.BottomRight,
-            };
-
-            for (int i = 0; i < corners.Length; i++)
-            {
-                if (Math.Abs(local.X - corners[i].X) <= HandleHitSize / 2 &&
-                    Math.Abs(local.Y - corners[i].Y) <= HandleHitSize / 2)
+                if (Math.Abs(local.X - points[i].X) <= HandleHitSize / 2 &&
+                    Math.Abs(local.Y - points[i].Y) <= HandleHitSize / 2)
                     return i;
             }
 
@@ -409,22 +491,25 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>Hover feedback that tells the truth about what a press will do: the resize
-        /// corners, the move body, and the plain arrow where the press will fall through to select
+        /// handles, the move body, and the plain arrow where the press will fall through to select
         /// whatever is drawn over this item.</summary>
         private void UpdateHoverCursor(Point local, Point parentPoint)
         {
-            var corner = HitCorner(local);
-            Cursor = corner switch
+            var handle = HitHandle(local);
+            Cursor = handle switch
             {
-                0 or 3 => NwseCursor,
-                1 or 2 => NeswCursor,
+                HandleTopLeft or HandleBottomRight => NwseCursor,
+                HandleTopRight or HandleBottomLeft => NeswCursor,
+                HandleLeft or HandleRight => EwCursor,
+                HandleTop or HandleBottom => NsCursor,
                 _ when !ItemRect(Bounds.Size).Contains(local) => ArrowCursor,
                 _ => IsTopmostAt(parentPoint) ? MoveCursor : ArrowCursor,
             };
         }
 
         /// <summary>Selection chrome drawn over the composed picture: an accent outline following
-        /// the item's mask plus four square corner handles on the rectangle corners.</summary>
+        /// the item's mask plus the resize handles on the rectangle it is inscribed in — drawn as
+        /// the image editor draws its own, so a selection looks the same in both editors.</summary>
         private sealed class ChromeControl : Control
         {
             private readonly TransformGizmoControl _owner;
@@ -447,7 +532,6 @@ namespace Clowd.UI.VideoEditor
                 var bounds = new Rect(size);
                 var accent = new SolidColorBrush(AppStyles.AccentColor);
                 var outline = new Pen(accent, 1.5);
-                var handleBorder = new Pen(Brushes.White, 1);
 
                 var mask = _owner.CurrentItem()?.Transform?.Mask;
                 if (mask == null)
@@ -475,19 +559,21 @@ namespace Clowd.UI.VideoEditor
                 if (mask != null)
                     context.DrawRectangle(null, new Pen(new SolidColorBrush(Colors.White, 0.35), 1), bounds);
 
-                foreach (var corner in new[]
-                         {
-                             new Point(0, 0),
-                             new Point(size.Width, 0),
-                             new Point(0, size.Height),
-                             new Point(size.Width, size.Height),
-                         })
-                {
-                    var handle = new Rect(
-                        corner.X - HandleSize / 2, corner.Y - HandleSize / 2,
-                        HandleSize, HandleSize);
-                    context.DrawRectangle(accent, handleBorder, handle);
-                }
+                // Edge handles only where an edge drag has something to write: an aspect-locked
+                // item derives its height, so the four corners are the whole of its resize.
+                foreach (var point in HandlePoints(bounds, _owner.AspectUnlocked))
+                    DrawHandle(context, point, accent);
+            }
+
+            /// <summary>The image editor's tracker, so the two editors' selection chrome reads as
+            /// one control: three concentric circles — accent, a white ring 1px in, accent again
+            /// (see <c>GraphicBase.DrawSingleTracker</c>).</summary>
+            private static void DrawHandle(DrawingContext context, Point center, IBrush accent)
+            {
+                var radius = HandleSize / 2;
+                context.DrawEllipse(accent, null, center, radius, radius);
+                context.DrawEllipse(Brushes.White, null, center, radius - 1, radius - 1);
+                context.DrawEllipse(accent, null, center, radius - 3, radius - 3);
             }
         }
     }

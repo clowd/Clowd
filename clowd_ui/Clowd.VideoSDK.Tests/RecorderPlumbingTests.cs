@@ -24,15 +24,13 @@ namespace Clowd.VideoSDK.Tests
     {
         // ------------------------------------------------------------------ arguments
 
-        /// <summary>By default a configured device is also captured — the toggles, not the ids,
-        /// decide the track layout (a stock install has both ids set to "default" with both
-        /// toggles off, and must not get multi-track silent rows). The captureSpeaker/captureMic
+        /// <summary>By default a configured device is also captured — the captureSpeaker/captureMic
         /// overrides express "configured but turned off".</summary>
-        private static SettingsRecording Settings(bool separate = true, string speaker = "default",
+        private static SettingsRecording Settings(bool composition = true, string speaker = "default",
             string mic = "default", bool webcam = false, bool? captureSpeaker = null, bool? captureMic = null)
             => new SettingsRecording
             {
-                SeparateAudioTracks = separate,
+                EnableComposition = composition,
                 SpeakerDeviceId = speaker,
                 CaptureSpeaker = captureSpeaker ?? !String.IsNullOrEmpty(speaker),
                 MicrophoneDeviceId = mic,
@@ -59,69 +57,49 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("--pause", args[6]);
         }
 
+        /// <summary>Composition IS the multi-track layout, so the switch decides the flag on its
+        /// own — whatever audio the user happens to have configured. A composed recording with no
+        /// audio at all is still editable (trims, text, a placed webcam), so "no audio device" is
+        /// no longer a reason to withhold it.</summary>
         [Fact]
-        public void Separate_audio_tracks_adds_multi_track_when_a_device_is_captured()
+        public void Composition_asks_for_multi_track_whatever_the_audio_devices_are()
         {
             Assert.Contains("--multi-track", Build(Settings()));
             Assert.Contains("--multi-track", Build(Settings(speaker: "default", mic: "")));
             Assert.Contains("--multi-track", Build(Settings(speaker: "", mic: "default")));
+            Assert.Contains("--multi-track", Build(Settings(speaker: "", mic: "")));
+            Assert.Contains("--multi-track", Build(Settings(captureSpeaker: false, captureMic: false)));
         }
 
-        /// <summary>With no audio device there are no tracks to separate — the recorder writes its
-        /// one silent track either way, so the single-track muxer (which is also the more compatible
-        /// file) is left alone.</summary>
+        /// <summary>…and composition off is the single-track muxer, with no exceptions: this is
+        /// what makes the finished recording non-editable, so nothing may quietly re-enable it.</summary>
         [Fact]
-        public void With_no_audio_device_the_flag_is_left_off()
+        public void Composition_off_records_one_flattened_track()
         {
-            Assert.DoesNotContain("--multi-track", Build(Settings(speaker: "", mic: "")));
-            Assert.DoesNotContain("--multi-track", Build(Settings(speaker: null, mic: null)));
+            Assert.DoesNotContain("--multi-track", Build(Settings(composition: false)));
+            Assert.DoesNotContain("--multi-track", Build(Settings(composition: false, webcam: true)));
         }
 
-        /// <summary>The stock install: both device ids default to "default" but neither capture
-        /// toggle is on. The recorder plans one track per configured device regardless of mute
-        /// state, so gating on the ids would give every default recording two confidently-named
-        /// silent audio rows — the toggles are what earn a track.</summary>
+        /// <summary>A webcam is a second video track, which only the hybrid mp4 output carries — the
+        /// recorder refuses to start on a webcam device without the flag. So composition off must
+        /// drop the camera rather than pass a device the recorder would reject.</summary>
         [Fact]
-        public void Devices_configured_but_not_captured_do_not_ask_for_multi_track()
+        public void A_webcam_needs_composition_a_camera_and_the_tick()
         {
-            Assert.DoesNotContain("--multi-track", Build(Settings(captureSpeaker: false, captureMic: false)));
-        }
+            Assert.True(ObsArguments.UsesWebcam(Settings(webcam: true)));
+            Assert.False(ObsArguments.UsesWebcam(Settings(composition: false, webcam: true)));
+            Assert.False(ObsArguments.UsesWebcam(Settings(webcam: false)));
 
-        /// <summary>The common speaker-only case: the mic id stays configured (a live unmute needs
-        /// the device listed) but its toggle is off, so it must not add a silent "Microphone" track
-        /// — while the captured speaker still gets the multi-track layout.</summary>
-        [Fact]
-        public void A_captured_speaker_with_the_mic_configured_but_off_still_separates_tracks()
-        {
-            Assert.Contains("--multi-track", Build(Settings(captureMic: false)));
-            Assert.DoesNotContain("--multi-track", Build(Settings(captureSpeaker: false, mic: "")));
-        }
-
-        [Fact]
-        public void The_setting_turned_off_records_one_mixed_track()
-        {
-            Assert.DoesNotContain("--multi-track", Build(Settings(separate: false)));
-        }
-
-        /// <summary>A webcam is a second video track, which only the hybrid mp4 output carries: the
-        /// recorder refuses to start on a webcam device without the flag, so it is not the audio
-        /// setting's to withhold.</summary>
-        [Fact]
-        public void A_webcam_forces_multi_track_whatever_the_audio_setting_says()
-        {
-            Assert.Contains("--multi-track", Build(Settings(separate: false, speaker: "", mic: "", webcam: true)));
-
-            // …but only when a camera is actually picked, which is the same condition the settings
-            // file's webcam_device uses.
-            var ticked = Settings(separate: false, speaker: "", mic: "", webcam: true);
+            var ticked = Settings(webcam: true);
             ticked.WebcamDeviceId = "";
-            Assert.DoesNotContain("--multi-track", Build(ticked));
+            Assert.False(ObsArguments.UsesWebcam(ticked));
         }
 
         [Fact]
         public void Null_settings_never_ask_for_multi_track()
         {
             Assert.False(ObsArguments.UsesMultiTrack(null));
+            Assert.False(ObsArguments.UsesWebcam(null));
         }
 
         // ------------------------------------------------------------------ tracks report
