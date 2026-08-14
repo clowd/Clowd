@@ -324,7 +324,6 @@ namespace Clowd.Drawing
         // teleport the dragged geometry — the same reason ToolPointer keeps its own drag
         // bookkeeping in root space.
         private Point? _lastPointerRoot;
-        private double _wheelDeltaAccumulator;
 
         // guards the synthetic move replay against key auto-repeat (see OnKeyDown)
         private bool _shiftReplayed;
@@ -1470,17 +1469,27 @@ namespace Clowd.Drawing
             if (IsPanning)
                 return;
 
-            // decision table #16: accumulate fractional deltas (trackpads); one zoom stop per ±1.0,
-            // remainder kept for the next event.
-            _wheelDeltaAccumulator += e.Delta.Y;
-            while (Math.Abs(_wheelDeltaAccumulator) >= 1.0)
+            // decision table #16, revised for issue #68: integer deltas are classic wheel notches
+            // (±1 per notch on Windows) and step through the discrete zoom stops. Fractional deltas
+            // must NOT be pooled toward a ±1.0 threshold — on macOS every external mouse delivers
+            // small accelerated line fractions (the native backend divides non-precise deltas by 5
+            // and precise/trackpad streams by 50), so the old accumulator silently swallowed dozens
+            // of notches and then lurched a whole stop. Fractional input instead zooms smoothly and
+            // proportionally, anchored at the pointer like the stepped path.
+            var delta = e.Delta.Y;
+            if (delta == Math.Floor(delta))
             {
-                var direction = _wheelDeltaAccumulator > 0 ? 1 : -1;
-                _wheelDeltaAccumulator -= direction;
-                ZoomStep(direction, e.GetPosition(this));
+                for (var i = 0; i < Math.Abs(delta); i++)
+                    ZoomStep(Math.Sign(delta), e.GetPosition(this));
+            }
+            else
+            {
+                var newZoom = Math.Clamp(ContentScale * Math.Pow(2, delta), _zoomStops[0], MaxZoom);
+                ApplyZoomAnchored(newZoom, e.GetPosition(this));
             }
         }
 
+        private const double MaxZoom = 10;
         private static readonly double[] _zoomStops = { 0.1, 0.25, 0.50, 0.75, 1, 1.5, 2, 3 };
 
         private void ZoomStep(int direction, Point relativeMouse)
@@ -1490,7 +1499,7 @@ namespace Clowd.Drawing
             if (ContentScale > 2.99)
             {
                 newZoom = ContentScale + (direction > 0 ? 1 : -1);
-                if (newZoom > 10) newZoom = 0; // max zoom
+                if (newZoom > MaxZoom) newZoom = 0;
             }
             else if (direction > 0)
             {
@@ -1504,6 +1513,11 @@ namespace Clowd.Drawing
             if (newZoom == 0)
                 return;
 
+            ApplyZoomAnchored(newZoom, relativeMouse);
+        }
+
+        private void ApplyZoomAnchored(double newZoom, Point relativeMouse)
+        {
             // Wheel zoom is anchored at the pointer position: the viewport point under the cursor
             // must not move. The render transform scales canvas-local coordinates by
             // ContentScale/DpiZoom (see UpdateScaleTransform), NOT by ContentScale — anchoring with
