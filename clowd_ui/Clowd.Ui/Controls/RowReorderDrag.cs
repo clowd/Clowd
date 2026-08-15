@@ -111,11 +111,14 @@ namespace Clowd.UI.Controls
         private readonly Border _indicator;
         private readonly IRowReorderDragHost _host;
 
+        private const string GripTip = "Drag to reorder";
+
         private int _fromRow = -1;   // -1 = no press being tracked
         private int _dropSlot;       // insertion slot in display space, in [groupStart, groupEnd + 1]
         private bool _dragging;      // …and past the threshold, so the drop indicator is up
         private double _originY;
         private IPointer _pointer;
+        private Control _pressedGrip;
 
         /// <summary>
         /// <paramref name="owner"/> takes the pointer capture, the grabbing cursor and the move/
@@ -172,7 +175,7 @@ namespace Clowd.UI.Controls
             // The browsers' grab hand, not Hand (the click cursor) and not SizeAll — grab is the
             // one cursor that only ever means "this can be dragged".
             grip.Cursor = DragCursors.Grab;
-            ToolTip.SetTip(grip, "Drag to reorder");
+            ToolTip.SetTip(grip, GripTip);
 
             // the hover cue is the dots themselves brightening to full-contrast — a background
             // behind them would read as a button, and this is a handle
@@ -201,6 +204,12 @@ namespace Clowd.UI.Controls
                 _dragging = false;
                 _originY = e.GetPosition(_coordinateSpace).Y;
                 _pointer = e.Pointer;
+
+                // no tooltip while the button is down — clearing the tip (not just closing) keeps
+                // the hover timer from re-opening it mid-drag; EndDrag puts it back
+                ToolTip.SetIsOpen(grip, false);
+                ToolTip.SetTip(grip, null);
+                _pressedGrip = grip;
                 e.Pointer.Capture(_owner); // the owner, not the grip: the drag leaves the row at once
                 _owner.Cursor = DragCursors.Grabbing; // the capture makes the owner's cursor the shown one
                 e.Handled = true; // rows may select on press; a grab is not a click
@@ -299,6 +308,12 @@ namespace Clowd.UI.Controls
             _indicator.IsVisible = false;
             _owner.Cursor = null;
             HookEscape(false);
+
+            if (_pressedGrip != null)
+            {
+                ToolTip.SetTip(_pressedGrip, GripTip);
+                _pressedGrip = null;
+            }
         }
 
         private void SetDropSlot(int slot, int start, int end)
