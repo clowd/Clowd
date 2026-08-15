@@ -471,35 +471,77 @@ namespace Clowd.VideoSDK.Editing
         /// renumbering costs nothing.</para>
         /// </summary>
         public bool MoveTrackLayer(Guid trackId, bool towardsFront, object origin = null) =>
-            Mutate(towardsFront ? "Move Row Up" : "Move Row Down", ProjectChangeKind.Structural, null, origin, p =>
-            {
-                var video = p.Tracks.Where(t => t.Kind != TrackKind.Audio)
-                                    .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+            Mutate(towardsFront ? "Move Row Up" : "Move Row Down", ProjectChangeKind.Structural, null, origin,
+                // ascending Order paints later, so "towards the front" is the next index up.
+                p => Reorder(p, trackId, index => towardsFront ? index + 1 : index - 1, audioMoves: false),
+                failureValue: false);
 
-                var index = video.FindIndex(t => t.Id == trackId);
+        /// <summary>
+        /// Moves a row to an absolute position among the rows of its own kind — the drop of the
+        /// track headers' drag-reorder, which cannot express itself as a run of one-step moves
+        /// without pushing one undo entry per step. <paramref name="index"/> counts in the model's
+        /// canonical ascending <c>(Order, Id)</c> order, so for video that is back-to-front (the
+        /// <i>reverse</i> of the top-to-bottom rows the timeline draws — see
+        /// <c>TimelineRowLayout.Build</c>) and 0 is the backmost layer.
+        ///
+        /// <para>Unlike <see cref="MoveTrackLayer"/> this accepts audio rows: their order is not a
+        /// stacking order (audio does not composite) but it is the order the timeline lists them
+        /// in, which is worth arranging. Returns false — changing nothing — for an unknown id, an
+        /// index outside its group, or a move that lands where the row already is.</para>
+        /// </summary>
+        public bool MoveTrackToIndex(Guid trackId, int index, object origin = null) =>
+            Mutate("Reorder Row", ProjectChangeKind.Structural, null, origin,
+                p => Reorder(p, trackId, _ => index, audioMoves: true),
+                failureValue: false);
+
+        /// <summary>
+        /// The shared body of both moves: lifts the row out of its kind's list, puts it back at
+        /// <paramref name="targetOf"/>(current index) and renumbers.
+        ///
+        /// <para>Because <see cref="Track.Order"/> is neither required to be unique nor contiguous,
+        /// this renumbers every row rather than swapping two values: a swap between rows that
+        /// happen to share an <c>Order</c> would be a no-op, and the <c>(Order, Id)</c> tie-break
+        /// would silently decide the stacking instead of the user. Order is presentation-only, so
+        /// renumbering costs nothing.</para>
+        /// </summary>
+        private static bool Reorder(Project project, Guid trackId, Func<int, int> targetOf, bool audioMoves)
+        {
+            var video = project.Tracks.Where(t => t.Kind != TrackKind.Audio)
+                                      .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+            var audio = project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+                                      .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+
+            var group = video;
+            var index = video.FindIndex(t => t.Id == trackId);
+            if (index < 0)
+            {
+                if (!audioMoves)
+                    return false;
+
+                group = audio;
+                index = audio.FindIndex(t => t.Id == trackId);
                 if (index < 0)
                     return false;
+            }
 
-                // ascending Order paints later, so "towards the front" is the next index up.
-                var target = towardsFront ? index + 1 : index - 1;
-                if (target < 0 || target >= video.Count)
-                    return false;
+            var target = targetOf(index);
+            if (target < 0 || target >= group.Count || target == index)
+                return false;
 
-                (video[index], video[target]) = (video[target], video[index]);
+            var moved = group[index];
+            group.RemoveAt(index);
+            group.Insert(target, moved);
 
-                var audio = p.Tracks.Where(t => t.Kind == TrackKind.Audio)
-                                    .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+            var order = 0;
+            foreach (var track in video)
+                track.Order = order++;
+            // audio keeps its relative order and stays above every video Order, which is what
+            // puts those rows at the bottom of the timeline.
+            foreach (var track in audio)
+                track.Order = order++;
 
-                var order = 0;
-                foreach (var track in video)
-                    track.Order = order++;
-                // audio keeps its relative order and stays above every video Order, which is what
-                // puts those rows at the bottom of the timeline.
-                foreach (var track in audio)
-                    track.Order = order++;
-
-                return true;
-            }, failureValue: false);
+            return true;
+        }
 
         /// <summary>Whether <see cref="MoveTrackLayer"/> would do anything — the enablement the
         /// timeline's context menu needs, without a speculative mutation.</summary>

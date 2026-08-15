@@ -58,7 +58,17 @@
                    Foreground="#88FFFFFF"
                    Text="No objects yet" />
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="rowsHost" />
+            <!-- the indicator is a sibling laid over the rows (not a Render call) so it paints on
+                 top of the row backgrounds, and lives inside the ScrollViewer so it scrolls with
+                 the rows it points into -->
+            <Panel>
+                <StackPanel x:Name="rowsHost" />
+                <Border x:Name="dropIndicator"
+                        Height="2"
+                        VerticalAlignment="Top"
+                        IsHitTestVisible="False"
+                        IsVisible="False" />
+            </Panel>
         </ScrollViewer>
     </Panel>
 

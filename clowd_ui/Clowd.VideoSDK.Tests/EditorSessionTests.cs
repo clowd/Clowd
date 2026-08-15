@@ -392,6 +392,55 @@ namespace Clowd.VideoSDK.Tests
             Assert.True(Track(session, text.TrackId).Order < Track(session, screen.TrackId).Order);
         }
 
+        /// <summary>The headers' drag-reorder drop: one move over any distance, so the drag is one
+        /// undo entry rather than one per row it crossed. Index 0 is the backmost layer.</summary>
+        [Fact]
+        public void MoveTrackToIndex_lifts_a_row_to_an_absolute_layer()
+        {
+            var session = NewSession(out var screen, out var webcam, out var audio, out _);
+            var text = session.AddText(0, Ms(2_000)); // a third video row, frontmost
+
+            Assert.True(session.MoveTrackToIndex(screen.TrackId, 2)); // screen to the front
+
+            Assert.Equal(0, Track(session, webcam.TrackId).Order);
+            Assert.Equal(1, Track(session, text.TrackId).Order);
+            Assert.Equal(2, Track(session, screen.TrackId).Order);
+            Assert.Equal(3, Track(session, audio.TrackId).Order); // still above every video row
+
+            session.Undo();
+            Assert.Equal(0, Track(session, screen.TrackId).Order);
+        }
+
+        [Fact]
+        public void MoveTrackToIndex_refuses_a_no_op_or_an_index_outside_the_row_kind()
+        {
+            var session = NewSession(out var screen, out _, out var audio, out _);
+
+            Assert.False(session.MoveTrackToIndex(screen.TrackId, 0));  // where it already is
+            Assert.False(session.MoveTrackToIndex(screen.TrackId, 2));  // past the last video row
+            Assert.False(session.MoveTrackToIndex(screen.TrackId, -1));
+            Assert.False(session.MoveTrackToIndex(audio.TrackId, 1));   // one audio row, one slot
+            Assert.False(session.MoveTrackToIndex(Guid.NewGuid(), 0));
+            Assert.False(session.CanUndo); // nothing above changed the project
+        }
+
+        /// <summary>Audio does not stack, so <see cref="EditorSession.MoveTrackLayer"/> refuses it —
+        /// but the audio rows' order is still the order the timeline lists them in, and dragging one
+        /// under the video it belongs to is a real edit.</summary>
+        [Fact]
+        public void MoveTrackToIndex_reorders_audio_rows_that_MoveTrackLayer_will_not()
+        {
+            var session = NewSession(out _, out _, out var audio, out _);
+            var mic = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Audio, Name = "Mic", Order = 9 };
+            session.Project.Tracks.Add(mic);
+
+            Assert.False(session.MoveTrackLayer(mic.Id, towardsFront: false));
+
+            Assert.True(session.MoveTrackToIndex(mic.Id, 0));
+            Assert.Equal(2, Track(session, mic.Id).Order);            // first of the audio block…
+            Assert.Equal(3, Track(session, audio.TrackId).Order);     // …which still sits above the video rows
+        }
+
         /// <summary>A new card goes in front of everything, and a second one at a free time reuses
         /// that same row rather than stacking up a new one.</summary>
         [Fact]
