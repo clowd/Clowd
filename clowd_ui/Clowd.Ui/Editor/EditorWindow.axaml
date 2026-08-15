@@ -317,11 +317,18 @@
 
         <Grid x:Name="contentGrid" Grid.Row="1">
             <Grid.Styles>
-                <Style Selector="GridSplitter#sidebarSplitter">
-                    <Setter Property="Background" Value="#666666" />
+                <!--  The splitter is an invisible 8px grab zone straddling the sidebar's edge (its
+                      column is 2px wide; negative margins overlap the neighbours) drawing only the
+                      2px edge line — resizing should feel like grabbing the panel edge, not a
+                      separate handle. Hover/drag brighten the line.  -->
+                <Style Selector="GridSplitter#sidebarSplitter /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#666666" />
                 </Style>
-                <Style Selector="GridSplitter#sidebarSplitter:pointerover">
-                    <Setter Property="Background" Value="#808080" />
+                <Style Selector="GridSplitter#sidebarSplitter:pointerover /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#999999" />
+                </Style>
+                <Style Selector="GridSplitter#sidebarSplitter:pressed /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#B8B8B8" />
                 </Style>
             </Grid.Styles>
 
@@ -392,18 +399,30 @@
             <GridSplitter
                 x:Name="sidebarSplitter"
                 Grid.Column="2"
-                Width="5"
+                Width="8"
+                Margin="-3,0"
+                ZIndex="1"
+                Background="Transparent"
                 IsVisible="False"
                 ResizeBehavior="PreviousAndNext"
                 ResizeDirection="Columns"
-                DragCompleted="sidebarSplitter_DragCompleted" />
+                DragCompleted="sidebarSplitter_DragCompleted">
+                <GridSplitter.Template>
+                    <ControlTemplate>
+                        <Panel Name="splitterZone" Background="{TemplateBinding Background}">
+                            <Rectangle
+                                Name="splitterLine"
+                                Width="2"
+                                HorizontalAlignment="Center" />
+                        </Panel>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
 
             <Border
                 x:Name="sidebarBorder"
                 Grid.Column="3"
                 Background="#454545"
-                BorderBrush="#666666"
-                BorderThickness="1,0,0,0"
                 IsVisible="False">
                 <Grid>
                     <Grid.RowDefinitions>

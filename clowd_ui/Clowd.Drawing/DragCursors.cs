@@ -3,18 +3,22 @@ using Avalonia.Input;
 namespace Clowd.Drawing
 {
     /// <summary>
-    /// The open/closed hand pair browsers show on a draggable handle (CSS <c>grab</c> /
-    /// <c>grabbing</c>) — Windows ships no equivalent among its system cursors. The glyphs are
-    /// Mozilla's <c>grab.cur</c>/<c>grabbing.cur</c> (gecko-dev <c>widget/windows/res</c>, MPL 2.0),
-    /// repacked with PNG frames (32px original plus a nearest-neighbour 64px for high DPI) because
-    /// <see cref="CursorResources"/> only decodes PNG-frame .cur files.
+    /// Drag cursors browsers provide but Windows does not ship among its system cursors. All
+    /// three are Mozilla's (gecko-dev <c>widget/windows/res</c>, MPL 2.0), repacked by
+    /// CursorGenerator (see <c>ConvertMozillaCursor</c> there, and the vendored sources under
+    /// <c>CursorGenerator/Mozilla</c>) into the PNG-frame .cur form <see cref="CursorResources"/>
+    /// decodes.
     /// </summary>
     public static class DragCursors
     {
         /// <summary>Open hand: this can be grabbed.</summary>
-        public static Cursor Grab => CursorResources.GetCursor("Grab.cur");
+        public static Cursor Grab => CursorResources.Grab;
 
         /// <summary>Closed hand: it is being held.</summary>
-        public static Cursor Grabbing => CursorResources.GetCursor("Grabbing.cur");
+        public static Cursor Grabbing => CursorResources.Grabbing;
+
+        /// <summary>Two parallel bars with an arrow out each side (CSS <c>col-resize</c>): this
+        /// edge resizes the columns either side of it.</summary>
+        public static Cursor ColResize => CursorResources.ColResize;
     }
 }
