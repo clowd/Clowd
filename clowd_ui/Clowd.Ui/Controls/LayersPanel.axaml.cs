@@ -26,7 +26,7 @@ namespace Clowd.UI.Controls
     /// panel seam (ToggleHidden/ToggleLocked/SetPanelSelection/MoveGraphicToIndex) so every
     /// change is committed to undo history by the canvas itself.
     /// </summary>
-    public partial class LayersPanel : UserControl
+    public partial class LayersPanel : UserControl, IRowReorderDragHost
     {
         private static readonly Dictionary<Type, string> _typeNameCache = new Dictionary<Type, string>();
         private static readonly SolidColorBrush _badgeBrush = new SolidColorBrush(Color.FromUInt32(0xFF666666));
@@ -37,10 +37,18 @@ namespace Clowd.UI.Controls
         private bool _rebuildQueued;
         private ControlTheme _rowButtonTheme;
 
+        /// <summary>The graphics of the current build, in display order (0 = top of the panel =
+        /// front of the z-stack) — index i is row i of <c>rowsHost</c>. The reorder drag works in
+        /// this space.</summary>
+        private readonly List<GraphicBase> _rowGraphics = new List<GraphicBase>();
+        private readonly RowReorderDrag _drag;
+
         public LayersPanel()
         {
             DataContext = this;
             InitializeComponent();
+            dropIndicator.Background = new SolidColorBrush(AppStyles.AccentColor);
+            _drag = new RowReorderDrag(this, rowsHost, dropIndicator, this);
             Rebuild();
         }
 
@@ -181,7 +189,13 @@ namespace Clowd.UI.Controls
         private void Rebuild()
         {
             _rebuildQueued = false;
+
+            // a rebuild from elsewhere (undo, a canvas edit) destroys the row visuals the drag is
+            // holding on to — end it before, not after, its indexes go stale
+            _drag.Cancel();
+
             rowsHost.Children.Clear();
+            _rowGraphics.Clear();
 
             var graphics = _canvas?.GraphicsList?.GetGraphicList(false);
             bool empty = graphics == null || graphics.Length == 0;
@@ -191,10 +205,13 @@ namespace Clowd.UI.Controls
 
             // reversed: index 0 is the back of the z-stack, the panel shows the top first
             for (int i = graphics.Length - 1; i >= 0; i--)
-                rowsHost.Children.Add(BuildRow(graphics[i], isTopmost: i == graphics.Length - 1, isBottommost: i == 0));
+            {
+                _rowGraphics.Add(graphics[i]);
+                rowsHost.Children.Add(BuildRow(graphics[i], displayIndex: graphics.Length - 1 - i, draggable: graphics.Length > 1));
+            }
         }
 
-        private Control BuildRow(GraphicBase g, bool isTopmost, bool isBottommost)
+        private Control BuildRow(GraphicBase g, int displayIndex, bool draggable)
         {
             var canvas = _canvas;
 
@@ -229,7 +246,15 @@ namespace Clowd.UI.Controls
             if (g is GraphicImage)
                 left.Children.Add(BuildRasterBadge());
 
-            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto,Auto,Auto,Auto") };
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto,Auto") };
+
+            // drag grip, leftmost — the cell is reserved on every row so the names stay on one
+            // left edge; the dots (and the drag) are only there when there is somewhere to go
+            var grip = _drag.BuildGrip(displayIndex, draggable, _gripBrush, _gripHoverBrush,
+                new Thickness(0, 2, 5, 2));
+            grid.Children.Add(grip);
+
+            Grid.SetColumn(left, 1);
             grid.Children.Add(left);
 
             // eye + lock toggles route through the canvas seam (each is one undo step). The seam
@@ -239,7 +264,7 @@ namespace Clowd.UI.Controls
                 canvas.ToggleHidden(g);
                 ScheduleRebuild();
             });
-            Grid.SetColumn(eye, 1);
+            Grid.SetColumn(eye, 2);
             grid.Children.Add(eye);
 
             var lockBtn = BuildRowButton(g.Locked ? "IconLock" : "IconLockOpen", g.Locked ? "Unlock" : "Lock", () =>
@@ -247,22 +272,11 @@ namespace Clowd.UI.Controls
                 canvas.ToggleLocked(g);
                 ScheduleRebuild();
             }, iconOpacity: g.Locked ? 1.0 : 0.6);
-            Grid.SetColumn(lockBtn, 2);
+            Grid.SetColumn(lockBtn, 3);
             grid.Children.Add(lockBtn);
 
             if (g.IsSelected)
             {
-                // up in the panel = toward the top of the z-stack = HIGHER collection index
-                var up = BuildRowButton("IconChevronUp", "Move up", () => canvas.MoveGraphicToIndex(g, canvas.GraphicsList.IndexOf(g) + 1));
-                up.IsEnabled = !isTopmost;
-                Grid.SetColumn(up, 3);
-                grid.Children.Add(up);
-
-                var down = BuildRowButton("IconChevronDown", "Move down", () => canvas.MoveGraphicToIndex(g, canvas.GraphicsList.IndexOf(g) - 1));
-                down.IsEnabled = !isBottommost;
-                Grid.SetColumn(down, 4);
-                grid.Children.Add(down);
-
                 // sole-select first so CommandDelete's "delete selected" semantics remove only
                 // this row even when the canvas has a wider multi-selection
                 var delete = BuildRowButton("IconDelete", "Delete", () =>
@@ -270,7 +284,7 @@ namespace Clowd.UI.Controls
                     canvas.SetPanelSelection(g, false);
                     ((ICommand)canvas.CommandDelete).Execute(null);
                 });
-                Grid.SetColumn(delete, 5);
+                Grid.SetColumn(delete, 4);
                 grid.Children.Add(delete);
             }
 
@@ -286,6 +300,43 @@ namespace Clowd.UI.Controls
             };
             row.ContextMenu = BuildContextMenu(g);
             return row;
+        }
+
+        // ====================================================================
+        // Reorder drag (RowReorderDrag host)
+        // ====================================================================
+
+        /// <summary>Grip dots at rest (the fixed dark editor palette, like the rest of this
+        /// panel's chrome); hover brightens them to white.</summary>
+        private static readonly SolidColorBrush _gripBrush = new SolidColorBrush(Color.FromRgb(215, 215, 218));
+        private static readonly SolidColorBrush _gripHoverBrush = new SolidColorBrush(Colors.White);
+
+        int IRowReorderDragHost.RowCount => rowsHost.Children.Count;
+
+        (double Top, double Height) IRowReorderDragHost.RowExtent(int row)
+        {
+            var bounds = rowsHost.Children[row].Bounds;
+            return (bounds.Top, bounds.Height);
+        }
+
+        /// <summary>One flat list — every row may land anywhere in it.</summary>
+        (int Start, int End) IRowReorderDragHost.SlotGroup(int row) => (0, rowsHost.Children.Count - 1);
+
+        bool IRowReorderDragHost.CanBeginDrag => _canvas != null;
+
+        void IRowReorderDragHost.SetRowLifted(int row, bool lifted) =>
+            rowsHost.Children[row].Opacity = lifted ? 0.45 : 1;
+
+        void IRowReorderDragHost.Drop(int fromRow, int dropSlot)
+        {
+            // display order is the reverse of the collection's z-order, so the display index flips
+            // into a collection index; the mutation raises StructureChanged, which rebuilds this
+            // whole panel (one undo step, committed by the canvas seam)
+            var target = RowReorderMath.TargetRow(fromRow, dropSlot);
+            if (target == fromRow)
+                return;
+
+            _canvas?.MoveGraphicToIndex(_rowGraphics[fromRow], _rowGraphics.Count - 1 - target);
         }
 
         private Button BuildRowButton(string iconKey, string tip, Action action, double iconOpacity = 1.0)
