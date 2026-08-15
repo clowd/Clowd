@@ -203,6 +203,111 @@ namespace Clowd.Config
                 .ToList();
         }
 
+        /// <summary>Looks up the runtime wrapper for a provider by its type name (the key used in
+        /// <see cref="ProviderConfig"/> and in exported strings).</summary>
+        public UploadProviderInfo GetProviderByTypeName(string typeName)
+        {
+            return _providers.FirstOrDefault(p => String.Equals(p.Provider.GetType().Name, typeName, StringComparison.Ordinal));
+        }
+
+        /// <summary>Builds an export payload containing the current state of the named providers.
+        /// Names that match no discovered provider are skipped.</summary>
+        public UploadTransferPayload ExportProviders(IEnumerable<string> typeNames, string appVersion, DateTimeOffset exported)
+        {
+            var payload = new UploadTransferPayload
+            {
+                App = appVersion,
+                Exported = exported,
+            };
+
+            foreach (var typeName in typeNames)
+            {
+                var info = GetProviderByTypeName(typeName);
+                if (info == null)
+                    continue;
+
+                // read from the live provider rather than ProviderConfig: a provider the user has
+                // never touched has no entry there yet.
+                var config = BuildConfig(info);
+
+                payload.Providers[typeName] = new UploadTransferEntry
+                {
+                    Name = info.Provider.Name,
+                    IsEnabled = config.IsEnabled,
+                    DefaultFor = UploadSettingsTransfer.FormatUploadTypes(config.DefaultFor),
+                    Settings = new Dictionary<string, string>(config.Settings, StringComparer.Ordinal),
+                };
+            }
+
+            return payload;
+        }
+
+        /// <summary>
+        /// Replaces one provider's settings with an imported entry, overwriting everything the
+        /// entry carries. Returns false when this build has no provider of that type.
+        /// </summary>
+        /// <remarks>
+        /// Settings keys the entry omits are left alone rather than reset — an export written by an
+        /// older Clowd should not blank out a field it never knew about. Any upload type the entry
+        /// claims a default for is taken away from whichever provider currently holds it, because
+        /// two defaults for the same type is not a state the rest of the code expects.
+        /// </remarks>
+        public bool ImportProvider(string typeName, UploadTransferEntry entry)
+        {
+            if (entry == null)
+                return false;
+
+            var info = GetProviderByTypeName(typeName);
+            if (info == null)
+                return false;
+
+            ApplyConfig(info, new UploadProviderConfig
+            {
+                IsEnabled = entry.IsEnabled,
+                // applied below through SetDefaultProvider so other providers give up the slot
+                DefaultFor = SupportedUploadType.None,
+                Settings = entry.Settings,
+            });
+
+            var defaultFor = UploadSettingsTransfer.ParseUploadTypes(entry.DefaultFor);
+            foreach (var uploadType in _defaultableTypes)
+            {
+                if (defaultFor.HasFlag(uploadType))
+                    SetDefaultProvider(info, uploadType);
+                else
+                    ClearDefaultProvider(info, uploadType);
+            }
+
+            // ApplyConfig/SetDefaultProvider raise PropertyChanged on the wrapper and the provider,
+            // which SyncToConfig mirrors into ProviderConfig — but only for providers that changed.
+            // Sync explicitly so an import that happens to be a no-op still writes the key.
+            SyncToConfig(info);
+            return true;
+        }
+
+        private static UploadProviderConfig BuildConfig(UploadProviderInfo info)
+        {
+            var config = new UploadProviderConfig
+            {
+                IsEnabled = info.IsEnabled,
+                DefaultFor = info.DefaultFor,
+            };
+
+            foreach (PropertyDescriptor pd in TypeDescriptor.GetProperties(info.Provider))
+            {
+                if (pd.IsReadOnly || !pd.IsBrowsable)
+                    continue;
+
+                var value = pd.GetValue(info.Provider);
+                if (value == null)
+                    continue;
+
+                config.Settings[pd.Name] = pd.Converter.ConvertToInvariantString(value);
+            }
+
+            return config;
+        }
+
         private static void ApplyConfig(UploadProviderInfo info, UploadProviderConfig config)
         {
             info.IsEnabled = config.IsEnabled;
@@ -234,25 +339,7 @@ namespace Clowd.Config
         /// and raises PropertyChanged so the UI layer's auto-save persists it.</summary>
         private void SyncToConfig(UploadProviderInfo info)
         {
-            var config = new UploadProviderConfig
-            {
-                IsEnabled = info.IsEnabled,
-                DefaultFor = info.DefaultFor,
-            };
-
-            foreach (PropertyDescriptor pd in TypeDescriptor.GetProperties(info.Provider))
-            {
-                if (pd.IsReadOnly || !pd.IsBrowsable)
-                    continue;
-
-                var value = pd.GetValue(info.Provider);
-                if (value == null)
-                    continue;
-
-                config.Settings[pd.Name] = pd.Converter.ConvertToInvariantString(value);
-            }
-
-            ProviderConfig[info.Provider.GetType().Name] = config;
+            ProviderConfig[info.Provider.GetType().Name] = BuildConfig(info);
             OnPropertyChanged(nameof(ProviderConfig));
         }
 
