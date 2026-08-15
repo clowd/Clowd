@@ -16,7 +16,7 @@ namespace Clowd.UI.Helpers
     {
         private static readonly ConditionalWeakTable<Window, WindowNotificationManager> _managers = new();
 
-        public static void Show(Window window, string message)
+        public static void Show(Window window, string message, NotificationType type = NotificationType.Success)
         {
             if (window == null || String.IsNullOrEmpty(message))
                 return;
@@ -27,7 +27,7 @@ namespace Clowd.UI.Helpers
                 MaxItems = 3,
             });
 
-            manager.Show(new Notification(null, message, NotificationType.Success, TimeSpan.FromSeconds(2.5)));
+            manager.Show(new Notification(null, message, type, TimeSpan.FromSeconds(2.5)));
         }
 
         /// <summary>A reasonable window to host a toast or borrow a clipboard from when the caller
