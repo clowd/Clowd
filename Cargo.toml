@@ -73,7 +73,13 @@ sentry = { version = "0.48", default-features = false, features = [
 # default to small, optimized workspace release binaries
 [profile.release]
 opt-level = 3            # optimize for performance
-lto = true               # link-time optimization
+# Thin rather than fat LTO. Fat LTO's link is largely single-threaded and was ~70% of
+# CI's wall clock; thin keeps cross-crate inlining and dead-code elimination while
+# parallelizing the link. The binaries that matter here get little from the difference:
+# libblur already runtime-dispatches its AVX2/SSE4.1 kernels rather than relying on
+# cross-crate inlining, wgpu work lands on the GPU, and clowd_ocr's inference is inside
+# a prebuilt C++ MNN that Rust LTO cannot see into at all.
+lto = "thin"
 # Debug info exists for one reason: readable Sentry stack traces. "1" is line tables
 # only — file and line for every frame, without the type/variable DWARF that full
 # debug info would add. "packed" collects it into a companion debug file (.dSYM on
@@ -87,5 +93,9 @@ overflow-checks = false  # disable overflow checks
 # thread instead of taking the whole capture down with it, and Drop still runs. The
 # panic hook — and so Sentry reporting — fires identically either way.
 incremental = false      # disable incremental compilation
-codegen-units = 1        # compile all code into a single unit
+# 2 rather than 1: a single unit serializes all codegen for a crate, and with thin LTO
+# above the cross-unit inlining that codegen-units=1 used to guarantee happens at link
+# time anyway. Raising it further would buy more build parallelism — worth measuring if
+# CI is still the constraint.
+codegen-units = 2
 rpath = false            # disable rpath

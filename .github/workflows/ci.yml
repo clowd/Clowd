@@ -164,10 +164,16 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # The release profile and the rustflags are both part of cargo's fingerprint, so a
+      # change to either invalidates every compiled artifact. rust-cache already hashes
+      # Cargo.toml into its own key, but .cargo/config.toml is named here explicitly so
+      # that a rustflags-only edit — a target-cpu bump, say — cannot restore a cache
+      # built with the previous flags. rust-cache writes only on a key miss, so a key
+      # that failed to move would rebuild the world every run and never save the result.
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.rid }}
+          key: ${{ matrix.rid }}-${{ hashFiles('Cargo.toml', '.cargo/config.toml') }}
 
       # SDK 10 is required twice over: the projects target net10.0 (current LTS),
       # and Avalonia 12's XAML source generators are built against Roslyn 4.14,
@@ -195,25 +201,28 @@ jobs:
           dotnet tool update -g nbgv
           echo "CLOWD_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
 
-      - name: Build capture binary
-        run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
-
-      # The OCR recognizer, spawned per request by the overlay (which looks for
-      # it beside itself). Unlike the scrolling-capture driver this ships on
-      # every platform — the overlay's OCR button is not compiled out anywhere.
-      - name: Build OCR recognizer
-        run: cargo build --release -p clowd_ocr --target ${{ matrix.target }}
-
-      # The scrolling-capture driver, spawned by Clowd.Ui once the user has
-      # picked the region and the scroll point. Ships on every platform: it has
-      # a Win32 and a Core Graphics backend, and the overlay's SCROLL button is
-      # compiled out nowhere.
-      - name: Build scrolling capture driver
-        run: cargo build --release -p clowd_scroll_driver --target ${{ matrix.target }}
-
-      - name: Build shell extension (Windows)
-        if: runner.os == 'Windows'
-        run: cargo build --release -p clowd_shell_ext --target ${{ matrix.target }}
+      # One invocation rather than one per crate. Built separately, cargo can only
+      # saturate the runner during a single crate's codegen and each binary's LTO link
+      # runs with the rest of the machine idle; together they overlap.
+      #
+      #   clowd_capture_wgpu    the overlay itself
+      #   clowd_ocr             the recognizer, spawned per request by the overlay
+      #                         (which looks for it beside itself)
+      #   clowd_scroll_driver   spawned by Clowd.Ui once the user has picked the region
+      #                         and the scroll point
+      #
+      # The first three ship on every platform: the driver has both a Win32 and a Core
+      # Graphics backend, and neither the OCR nor the SCROLL button is compiled out
+      # anywhere. The shell extension is a Windows COM dll and an empty crate elsewhere,
+      # so it only joins on the Windows legs.
+      - name: Build rust binaries
+        shell: bash
+        run: |
+          PKGS="-p clowd_capture_wgpu -p clowd_ocr -p clowd_scroll_driver"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            PKGS="$PKGS -p clowd_shell_ext"
+          fi
+          cargo build --release --target ${{ matrix.target }} $PKGS
 
       # Sentry symbolicates the capturer's stack traces server-side from these. Without
       # them an LTO'd release build reports mangled frames with no file or line, which is
