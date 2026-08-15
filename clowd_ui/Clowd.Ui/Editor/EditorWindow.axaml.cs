@@ -100,6 +100,18 @@ namespace Clowd.UI
 
             InitializeComponent();
 
+            // the browsers' col-resize (bars + arrows), not the plain SizeWestEast — which
+            // GridSplitter assigns to its own Cursor on attach, so the custom cursor has to sit
+            // on the template's panel, where the innermost non-null cursor wins
+            sidebarSplitter.TemplateApplied += (_, e) =>
+            {
+                if (e.NameScope.Find("splitterZone") is InputElement zone)
+                    zone.Cursor = DragCursors.ColResize;
+            };
+            // …and on the splitter itself (after its own attach-time assignment), because a drag
+            // in progress captures the pointer and shows the captured control's cursor
+            sidebarSplitter.AttachedToVisualTree += (_, _) => sidebarSplitter.Cursor = DragCursors.ColResize;
+
             drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.HandleColor = AppStyles.AccentColor;
             drawingCanvas.StateUpdated += drawingCanvas_StateUpdated;
