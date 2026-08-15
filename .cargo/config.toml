@@ -23,6 +23,26 @@
 [target.'cfg(windows)']
 rustflags = ["-Clink-arg=/IGNORE:4099", "-Clink-arg=/IGNORE:4104", "-Ctarget-feature=+crt-static"]
 
+# Raise the x86-64 baseline from the default (SSE2, 2003) to v2: SSE3/SSSE3/SSE4.1/
+# SSE4.2/POPCNT, i.e. Intel Nehalem 2009+ and AMD Bulldozer 2011+. Every machine that
+# can run a supported Windows or macOS clears that bar — Windows 11 requires 8th-gen
+# Intel or Zen+, and the oldest Mac Sequoia supports is a 2018 Haswell-or-later — so
+# this costs no user and lets the autovectorizer use more than SSE2 in our own loops.
+#
+# Deliberately NOT v3 (AVX2): Goldmont/Tremont Atom, Celeron and Pentium Silver parts
+# shipped in cheap laptops into ~2021 without it, and the failure mode is SIGILL at
+# launch rather than slow. The dependencies that would gain most from a wider baseline
+# do not need one anyway — libblur runtime-detects avx2/sse4.1 and picks its kernel per
+# machine (src/stackblur/stack_blur.rs, src/box_filter/box_blur.rs).
+#
+# Cargo concatenates these with the cfg(windows) flags above rather than replacing them,
+# so crt-static still applies on the Windows target.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-Ctarget-cpu=x86-64-v2"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-Ctarget-cpu=x86-64-v2"]
+
 [alias]
 r = "run -p clowd_capture_wgpu"
 b = "build -p clowd_capture_wgpu"

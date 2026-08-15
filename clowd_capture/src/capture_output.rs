@@ -285,6 +285,13 @@ mod tests {
 
         // 15 + 30 + 60 + 120 = 225ms of backoff across 5 attempts, with no sleep after the last.
         assert!(elapsed >= Duration::from_millis(225), "backed off too little: {elapsed:?}");
-        assert!(elapsed < Duration::from_millis(600), "backed off too much: {elapsed:?}");
+        // A loaded CI runner overshoots every thread::sleep: this took 697ms on a macOS
+        // runner against the 600ms ceiling it used to have. A trailing sleep after the
+        // final attempt would only reach 465ms, well inside that noise, so wall clock
+        // cannot be what rules one out — retry_clipboard_write_gives_up_and_reports_the_
+        // last_error asserts the exact attempt count and does that job precisely. What is
+        // left here is a guard against a runaway retry loop, so the ceiling is set at
+        // roughly 5x the intended backoff rather than just above it.
+        assert!(elapsed < Duration::from_millis(1200), "backed off too much: {elapsed:?}");
     }
 }
