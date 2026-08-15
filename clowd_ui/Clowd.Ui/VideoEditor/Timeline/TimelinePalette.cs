@@ -73,6 +73,16 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public IBrush LabelBrush { get; private init; }
 
+        /// <summary>The track headers' drag grip. Deliberately stronger than
+        /// <see cref="LabelBrush"/>: the dots are a small target and the only thing saying a row can
+        /// be dragged, so at label weight they read as dirt on the screen rather than a handle.</summary>
+        public IBrush GripBrush { get; private init; }
+
+        /// <summary>The grip's dots under the pointer — the hover cue is the dots themselves
+        /// brightening (near-white in the dark theme, near-black in the light), not a background
+        /// behind them.</summary>
+        public IBrush GripHoverBrush { get; private init; }
+
         // ---------------------------------------------------------------------------------- items
 
         private IBrush _videoFill;
@@ -134,6 +144,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Vertical guide shown while a drag is snapped to a target.</summary>
         public Pen SnapGuidePen { get; private init; }
 
+        /// <summary>The line the track headers lay across a row boundary to show where a row being
+        /// dragged by its grip would land.</summary>
+        public IBrush DropIndicatorBrush { get; private init; }
+
         public Pen PlayheadPen { get; private init; }
 
         public Pen PlayheadOutlinePen { get; private init; }
@@ -170,6 +184,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                 TickPen = new Pen(new SolidColorBrush(text2, 0.6), 1),
                 MinorTickPen = new Pen(new SolidColorBrush(text3, 0.45), 1),
                 LabelBrush = new SolidColorBrush(text3),
+                GripBrush = new SolidColorBrush(dark ? Color.FromRgb(215, 215, 218) : Color.FromRgb(70, 72, 78)),
+                GripHoverBrush = new SolidColorBrush(dark ? Colors.White : Color.FromRgb(20, 22, 26)),
 
                 _videoFill = new SolidColorBrush(accent, dark ? 0.85 : 0.9),
                 _audioFill = new SolidColorBrush(audio, dark ? 0.85 : 0.9),
@@ -190,6 +206,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 TransitionFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.35),
                 TransitionEdgePen = new Pen(new SolidColorBrush(dark ? Colors.White : Colors.Black, 0.55), 1),
                 SnapGuidePen = new Pen(new SolidColorBrush(accent), 1, new DashStyle(new double[] { 3, 3 }, 0)),
+                DropIndicatorBrush = new SolidColorBrush(accent),
 
                 PlayheadPen = new Pen(new SolidColorBrush(playheadColor), 1.5),
                 PlayheadOutlinePen = new Pen(new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.6), 1),
