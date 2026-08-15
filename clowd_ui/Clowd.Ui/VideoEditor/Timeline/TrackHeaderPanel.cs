@@ -338,45 +338,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             "15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1," +
             "13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z");
 
-        /// <summary>
-        /// A control drawing <paramref name="key"/>'s glyph centred in a <paramref name="box"/>
-        /// square. Not a <see cref="Path"/> with <c>Stretch.Uniform</c>: that stretches the
-        /// geometry's <i>bounds</i>, and a glyph whose ink sits off-centre in its own viewbox
-        /// (IconVideo's camera is 26 x 14 of a 26-tall box) then hangs above the row's text on the
-        /// short axis. Here the ink is centred whatever box it was drawn in.
-        /// </summary>
+        /// <summary>A <see cref="GlyphIcon"/> drawing <paramref name="key"/>'s glyph centred in a
+        /// <paramref name="box"/> square — see that class for why a <see cref="Path"/> with
+        /// <c>Stretch.Uniform</c> would hang wide glyphs (IconVideo's 26 x 14 camera) above the
+        /// row's text.</summary>
         public static Control NewIcon(string key, double box, IBrush brush) =>
             new GlyphIcon(Find(key), brush) { Width = box, Height = box };
-
-        private sealed class GlyphIcon : Control
-        {
-            private readonly Geometry _geometry;
-            private readonly IBrush _brush;
-
-            public GlyphIcon(Geometry geometry, IBrush brush)
-            {
-                _geometry = geometry;
-                _brush = brush;
-            }
-
-            public override void Render(DrawingContext context)
-            {
-                var bounds = _geometry?.Bounds ?? default;
-                if (bounds.Width <= 0 || bounds.Height <= 0)
-                    return; // a missing icon simply draws nothing, as the resource lookup does
-
-                var scale = Math.Min(Bounds.Width / bounds.Width, Bounds.Height / bounds.Height);
-                var offset = new Point(
-                    (Bounds.Width - bounds.Width * scale) / 2 - bounds.X * scale,
-                    (Bounds.Height - bounds.Height * scale) / 2 - bounds.Y * scale);
-
-                using (context.PushTransform(Matrix.CreateScale(scale, scale) *
-                                             Matrix.CreateTranslation(offset.X, offset.Y)))
-                {
-                    context.DrawGeometry(_brush, null, _geometry);
-                }
-            }
-        }
 
         /// <summary>The named StreamGeometry from the application resources, or null (a Path with
         /// null Data simply draws nothing — the headers stay usable even if an icon goes missing).</summary>

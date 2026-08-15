@@ -215,13 +215,12 @@ namespace Clowd.UI.Controls
         {
             var canvas = _canvas;
 
-            var icon = new Path
+            // GlyphIcon, not Path + Stretch.Uniform — that leaves wide glyphs hanging above the
+            // vertical centre (see GlyphIcon)
+            var icon = new GlyphIcon(FindIcon(GetIconKey(g)), Brushes.White)
             {
-                Data = FindIcon(GetIconKey(g)),
                 Width = 14,
                 Height = 14,
-                Stretch = Stretch.Uniform,
-                Fill = Brushes.White,
                 VerticalAlignment = VerticalAlignment.Center,
             };
 
@@ -251,7 +250,7 @@ namespace Clowd.UI.Controls
             // drag grip, leftmost — the cell is reserved on every row so the names stay on one
             // left edge; the dots (and the drag) are only there when there is somewhere to go
             var grip = _drag.BuildGrip(displayIndex, draggable, _gripBrush, _gripHoverBrush,
-                new Thickness(0, 2, 5, 2));
+                new Thickness(3, 2, 8, 2));
             grid.Children.Add(grip);
 
             Grid.SetColumn(left, 1);
@@ -347,13 +346,10 @@ namespace Clowd.UI.Controls
                 Theme = _rowButtonTheme,
                 Margin = new Thickness(1, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
-                Content = new Path
+                Content = new GlyphIcon(FindIcon(iconKey), Brushes.White)
                 {
-                    Data = FindIcon(iconKey),
                     Width = 12,
                     Height = 12,
-                    Stretch = Stretch.Uniform,
-                    Fill = Brushes.White,
                     Opacity = iconOpacity,
                 },
             };
