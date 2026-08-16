@@ -6,6 +6,7 @@
     xmlns:insp="clr-namespace:Clowd.UI.VideoEditor.Inspector"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:tl="clr-namespace:Clowd.UI.VideoEditor.Timeline"
+    xmlns:util="clr-namespace:Clowd.Util"
     xmlns:ve="clr-namespace:Clowd.UI.VideoEditor"
     Title="Edit Video - Clowd"
     Width="1100"
@@ -197,11 +198,30 @@
                     x:Name="txtSessionName"
                     VerticalAlignment="Center"
                     FontWeight="Bold" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Resolution:" />
+                <controls:DropDownButton
+                    x:Name="ddResolution"
+                    MinWidth="104"
+                    VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Zoom:" />
                 <TextBlock
-                    x:Name="txtMediaSummary"
-                    Margin="8,0,0,0"
+                    x:Name="txtZoom"
+                    Margin="4,0,0,0"
+                    MinWidth="38"
                     VerticalAlignment="Center"
                     Foreground="#CCCCCC" />
+                <controls:CaptionedCheckBox
+                    x:Name="chkFit"
+                    Margin="8,0,0,0"
+                    Caption="Fit"
+                    IsChecked="{Binding ElementName=preview, Path=FitToWindow, Mode=TwoWay}"
+                    ToolTip.Tip="Scale the preview to fill the window; off caps it at 100%" />
             </StackPanel>
 
             <controls:ToolButton
@@ -281,6 +301,16 @@
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 
+                <!--  the strip is all "add something to the timeline" (the undo/redo pair docked at
+                      the bottom aside), which the icons alone do not say  -->
+                <TextBlock
+                    Margin="0,2,0,4"
+                    HorizontalAlignment="Center"
+                    FontSize="9"
+                    FontWeight="SemiBold"
+                    Foreground="#999999"
+                    Text="ADD" />
+
                 <controls:ToolButton
                     x:Name="btnImportMedia"
                     Padding="6"
@@ -302,14 +332,17 @@
                     IconPath="{StaticResource IconToolText}"
                     ToolTip.Tip="Add text at the playhead" />
 
+                <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton
                     Padding="6"
+                    controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding CommandUndo}"
                     IconPath="{StaticResource IconUndo}"
                     ToolTip.Tip="Undo (Ctrl+Z)" />
 
                 <controls:ToolButton
                     Padding="6"
+                    controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding CommandRedo}"
                     IconPath="{StaticResource IconRedo}"
                     ToolTip.Tip="Redo (Ctrl+Y)" />
@@ -321,6 +354,9 @@
                 Background="#1e1e1e"
                 ClipToBounds="True">
                 <Panel>
+                    <!--  the same checker the image editor draws behind the artwork; the preview
+                          sits on top of it and the letterbox shows it through  -->
+                    <Panel Background="{x:Static util:CheckerBrushes.Canvas}" IsHitTestVisible="False" />
                     <ve:VideoPreviewControl x:Name="preview" />
                     <Border
                         x:Name="statusOverlay"

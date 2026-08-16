@@ -324,6 +324,75 @@ namespace Clowd.VideoSDK.Editing
             RaiseProjectChanged(gesture.Kind, gesture.Origin);
         }
 
+        // ------------------------------------------------------------------------------ output box
+
+        /// <summary>The largest and smallest output dimension a canvas may take. The lower bound is
+        /// two rather than one because the encoder only accepts even sizes (yuv420p).</summary>
+        public const int MinOutputDimension = 2;
+
+        public const int MaxOutputDimension = 16384;
+
+        /// <summary>
+        /// Resizes the output canvas, in one undo entry. Items are placed as fractions of the
+        /// canvas, so this rescales the whole composition rather than cropping it — an aspect change
+        /// therefore re-letterboxes the material inside the new frame.
+        ///
+        /// The size is clamped and rounded to even (<see cref="ClampOutputDimension"/>) before it is
+        /// applied, so a hand-typed odd size cannot reach the encoder. False means nothing changed
+        /// (the clamped size is the one already set) or validation rolled the change back.
+        /// </summary>
+        public bool SetOutputSize(int widthPx, int heightPx, object origin = null) =>
+            Mutate("Resize Canvas", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                var w = ClampOutputDimension(widthPx);
+                var h = ClampOutputDimension(heightPx);
+                if (p.Output.WidthPx == w && p.Output.HeightPx == h)
+                    return false;
+
+                p.Output.WidthPx = w;
+                p.Output.HeightPx = h;
+                return true;
+            }, failureValue: false);
+
+        /// <summary>Brings one canvas dimension into range and onto an even number (yuv420p), which
+        /// is what <see cref="SetOutputSize"/> stores and what the resolution picker offers.</summary>
+        public static int ClampOutputDimension(int value)
+        {
+            var clamped = Math.Clamp(value, MinOutputDimension, MaxOutputDimension);
+            return clamped - (clamped % 2);
+        }
+
+        /// <summary>
+        /// The natural size of the material: the largest video stream among the sources the timeline
+        /// actually plays — for a screen recording, the recording itself, and for an edit whose
+        /// second track is a webcam, still the recording. Null when nothing video is referenced (an
+        /// edit built only from text, audio, or nothing at all), which is why the picker's native
+        /// entry is optional.
+        /// </summary>
+        public static (int WidthPx, int HeightPx)? GetNativeSize(Project project)
+        {
+            if (project?.Sources == null)
+                return null;
+
+            (int W, int H)? best = null;
+            foreach (var source in project.Sources)
+            {
+                if (source.Streams == null || !IsSourceReferenced(project, source.Id))
+                    continue;
+
+                foreach (var stream in source.Streams)
+                {
+                    if (stream.Kind != StreamKind.Video || stream.Width <= 0 || stream.Height <= 0)
+                        continue;
+
+                    if (best == null || (long)stream.Width * stream.Height > (long)best.Value.W * best.Value.H)
+                        best = (stream.Width, stream.Height);
+                }
+            }
+
+            return best;
+        }
+
         // --------------------------------------------------------------------------- timeline ops
 
         /// <summary>Wraps <see cref="TimelineOps.Move"/> (whole link group, clamped at the

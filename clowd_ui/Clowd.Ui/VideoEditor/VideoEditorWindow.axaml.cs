@@ -105,6 +105,12 @@ namespace Clowd.UI.VideoEditor
         private readonly List<MenuItem> _speedItems = new List<MenuItem>();
         private double _playbackRate = 1.0; // survives player rebuilds (see OpenPlayerAsync)
 
+        // the top bar's resolution picker: rebuilt from the project on every change (the native
+        // entry follows the media, and a Custom… size has to join the list), so the flag keeps that
+        // refresh from reading back as a user pick.
+        private List<ResolutionOption> _resolutionOptions = new List<ResolutionOption>();
+        private bool _syncingResolution;
+
         // the sidebar's ColumnDefinition (contentGrid column 3). Avalonia's XAML compiler does not
         // emit a field for an x:Named ColumnDefinition, so reach it through the named grid.
         private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
@@ -210,6 +216,13 @@ namespace Clowd.UI.VideoEditor
             };
 
             BuildSpeedMenu();
+
+            ddResolution.PropertyChanged += Resolution_PropertyChanged;
+
+            // the zoom readout is derived, not set: the preview owns the letterbox maths and
+            // reports what it landed on (a resize, a Fit toggle or a resolution change all move it).
+            preview.ZoomChanged += (_, _) => UpdateZoomReadout();
+            UpdateZoomReadout();
 
             // the properties panel opens itself on the first selection (see AutoShowSidebar)
             ApplySidebarVisible(false);
@@ -434,8 +447,7 @@ namespace Clowd.UI.VideoEditor
             preview.SetVideo(new Size(project.Output.WidthPx, project.Output.HeightPx));
 
             // resolution only: the duration lives on the transport readout, beside the playhead.
-            txtMediaSummary.Text = String.Create(CultureInfo.InvariantCulture,
-                $"{project.Output.WidthPx}x{project.Output.HeightPx}");
+            RefreshResolutionPicker();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -524,6 +536,12 @@ namespace Clowd.UI.VideoEditor
                 return;
 
             UpdatePositionReadout(_player?.Position ?? TimeSpan.Zero);
+
+            // the canvas size is editable (and undoable), so the letterbox and the picker follow the
+            // model on every change rather than only at open.
+            var output = _editor.Project.Output;
+            preview.SetVideo(new Size(output.WidthPx, output.HeightPx));
+            RefreshResolutionPicker();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -1369,6 +1387,82 @@ namespace Clowd.UI.VideoEditor
 
         private static string FormatRate(double rate)
             => rate.ToString("0.##", CultureInfo.InvariantCulture) + "x";
+
+        /// <summary>The preview's current magnification, as a percentage of the frame's own pixels.
+        /// Whole percent only: a fractional digit changes the readout's width as the window is
+        /// resized or Fit is toggled, which shoves the Fit box sideways. Blank until the frame size
+        /// is known (an editor opened on an empty edit), and never rounded down to 0%.</summary>
+        private void UpdateZoomReadout()
+        {
+            var zoom = preview.ZoomScale;
+            txtZoom.Text = zoom > 0
+                ? Math.Max(1, Math.Round(zoom * 100)).ToString("0", CultureInfo.InvariantCulture) + "%"
+                : "";
+        }
+
+        /// <summary>Rebuilds the resolution picker from the project and re-selects the size it is
+        /// actually set to — the list depends on the media (the native entry) and on the current
+        /// size, so undo, a Custom… size and an import all have to be able to change it.</summary>
+        private void RefreshResolutionPicker()
+        {
+            if (_editor == null)
+                return;
+
+            _syncingResolution = true;
+            try
+            {
+                _resolutionOptions = ResolutionOptions.Build(_editor.Project);
+                ddResolution.ItemsSource = _resolutionOptions;
+                ddResolution.SelectedItem = ResolutionOptions.FindCurrent(_resolutionOptions, _editor.Project);
+            }
+            finally
+            {
+                _syncingResolution = false;
+            }
+        }
+
+        private void Resolution_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            // qualified: Avalonia has a DropDownButton of its own, and this is not it
+            if (_syncingResolution || _editor == null ||
+                e.Property != Clowd.UI.Controls.DropDownButton.SelectedItemProperty)
+                return;
+
+            if (e.GetNewValue<object>() is not ResolutionOption option)
+                return;
+
+            if (option.IsCustomPrompt)
+            {
+                _ = PromptCustomResolutionAsync();
+                return;
+            }
+
+            // a committed resize raises ProjectChanged, which re-selects this entry anyway; a pick
+            // of the size already set changes nothing and needs no refresh.
+            _editor.SetOutputSize(option.WidthPx, option.HeightPx, this);
+        }
+
+        /// <summary>The "Custom…" row. The picker is showing that row as its label while the dialog
+        /// is up, so the refresh at the end is what puts the real size back on the button —
+        /// including when the user cancels.</summary>
+        private async Task PromptCustomResolutionAsync()
+        {
+            var output = _editor.Project.Output;
+            try
+            {
+                var size = await CustomResolutionDialog.ShowAsync(this, output.WidthPx, output.HeightPx);
+                if (size != null && !_closing && _editor != null)
+                    _editor.SetOutputSize(size.Value.WidthPx, size.Value.HeightPx, this);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Custom resolution dialog failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "videoeditor.custom-resolution");
+            }
+
+            if (!_closing)
+                RefreshResolutionPicker();
+        }
 
         private void UpdatePlayPauseButton()
         {
