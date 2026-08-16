@@ -11,10 +11,16 @@ namespace Clowd.VideoSDK.Audio
 
     /// <summary>
     /// The platform audio device, behind the minimum surface <see cref="Playback.NAudioSink"/>
-    /// actually uses: configure the format once, then start/stop the pull and set the volume.
-    /// Implementations own their own device lifetime — the device may be created lazily on the
-    /// first <see cref="Play"/> (enumeration is not free) and must be torn down by
-    /// <see cref="IDisposable.Dispose"/>.
+    /// actually uses: configure the format once, then start and stop the pull. Implementations own
+    /// their own device lifetime — the device may be created lazily on the first <see cref="Play"/>
+    /// (enumeration is not free) and must be torn down by <see cref="IDisposable.Dispose"/>.
+    /// <para>
+    /// There is deliberately no volume on this interface. The device-level volume knobs are the
+    /// user's, not ours: NAudio's <c>WasapiOut.Volume</c> writes the endpoint's master scalar (the
+    /// Windows system volume) and even a per-session volume would move the app's slider in the
+    /// volume mixer. Preview volume is a gain the sink applies to the samples instead, which is
+    /// what every other player does.
+    /// </para>
     /// </summary>
     public interface IAudioOutput : IDisposable
     {
@@ -35,8 +41,5 @@ namespace Clowd.VideoSDK.Audio
 
         /// <summary>Stops pulling and resets the device's playback position to zero.</summary>
         void Stop();
-
-        /// <summary>Linear output volume in [0, 1].</summary>
-        float Volume { get; set; }
     }
 }

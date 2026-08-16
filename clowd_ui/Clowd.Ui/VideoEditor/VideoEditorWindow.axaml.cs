@@ -98,9 +98,9 @@ namespace Clowd.UI.VideoEditor
         private const string RenderTooltip = "Render edited video";
         private const string CancelRenderTooltip = "Cancel render";
 
-        // the sidebar's ColumnDefinition (contentGrid column 2). Avalonia's XAML compiler does not
+        // the sidebar's ColumnDefinition (contentGrid column 3). Avalonia's XAML compiler does not
         // emit a field for an x:Named ColumnDefinition, so reach it through the named grid.
-        private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[2];
+        private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
 
         private static SettingsVideoEditor Settings => SettingsRoot.Current?.VideoEditor;
 
@@ -189,7 +189,13 @@ namespace Clowd.UI.VideoEditor
             timeline.Scrubbed += Timeline_Scrubbed;
             timeline.ScrubCompleted += Timeline_ScrubCompleted;
 
-            volumeSlider.Value = Math.Clamp(Settings?.Volume ?? 1.0, 0, 1);
+            volumeIconHost.Children.Add(TimelineIcons.NewIcon("IconSpeakerEnabled", 16,
+                new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC))));
+
+            // preview volume is per-session and always opens wide open, like a video player's:
+            // it attenuates our own samples only (see NAudioSink.Volume), so there is nothing
+            // here the user could have left turned down on the system.
+            volumeSlider.Value = 1.0;
             volumeSlider.PropertyChanged += (_, e) =>
             {
                 if (e.Property == RangeBase.ValueProperty && _player != null)
@@ -1253,7 +1259,6 @@ namespace Clowd.UI.VideoEditor
                     $"{Position.X},{Position.Y},{Width},{Height}");
             }
 
-            settings.Volume = Math.Clamp(volumeSlider.Value, 0, 1);
             UpdateSidebarWidthSetting();
         }
 

@@ -340,7 +340,7 @@ namespace Clowd.UI.Controls
 
         private Button BuildRowButton(string iconKey, string tip, Action action, double iconOpacity = 1.0)
         {
-            _rowButtonTheme ??= this.FindResource("LayerRowButtonTheme") as ControlTheme;
+            _rowButtonTheme ??= RowIconButton.Theme;
             var button = new Button
             {
                 Theme = _rowButtonTheme,

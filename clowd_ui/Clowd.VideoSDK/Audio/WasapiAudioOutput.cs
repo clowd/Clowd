@@ -8,7 +8,13 @@ namespace Clowd.VideoSDK.Audio
 {
     /// <summary>
     /// WASAPI shared-mode output. The device is created on the first <see cref="Play"/> because
-    /// endpoint enumeration is not free, and volume set before that point is applied then.
+    /// endpoint enumeration is not free.
+    /// <para>
+    /// Nothing here touches <c>WasapiOut.Volume</c>: that property writes the endpoint's master
+    /// volume scalar, i.e. the Windows system volume, so a preview slider bound to it drags the
+    /// whole machine's volume with it. Attenuation is the sink's job (see
+    /// <see cref="Playback.NAudioSink"/>).
+    /// </para>
     /// </summary>
     [SupportedOSPlatform("windows")]
     public sealed class WasapiAudioOutput : IAudioOutput
@@ -26,7 +32,6 @@ namespace Clowd.VideoSDK.Audio
         private AudioRenderCallback _render;
         private int _latencyMs;
         private WasapiOut _device;
-        private float _volume = 1.0f;
         private bool _disposed;
 
         public void Initialize(int sampleRate, int channels, int latencyMs, AudioRenderCallback render)
@@ -34,21 +39,6 @@ namespace Clowd.VideoSDK.Audio
             _render = render ?? throw new ArgumentNullException(nameof(render));
             _format = WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, channels);
             _latencyMs = latencyMs;
-        }
-
-        public float Volume
-        {
-            get => _volume;
-            set
-            {
-                _volume = Math.Clamp(value, 0.0f, 1.0f);
-                var device = _device;
-                if (device != null)
-                {
-                    try { device.Volume = _volume; }
-                    catch { }
-                }
-            }
         }
 
         public void Play()
@@ -62,8 +52,6 @@ namespace Clowd.VideoSDK.Audio
             {
                 _device = new WasapiOut(AudioClientShareMode.Shared, true, _latencyMs);
                 _device.Init(new CallbackWaveProvider(this));
-                try { _device.Volume = _volume; }
-                catch { }
             }
 
             _device.Play();

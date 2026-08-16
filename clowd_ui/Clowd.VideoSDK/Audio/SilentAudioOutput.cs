@@ -42,15 +42,6 @@ namespace Clowd.VideoSDK.Audio
             _time = time ?? new StopwatchTime();
         }
 
-        private float _volume = 1.0f;
-
-        /// <summary>Tracked for the contract only — there is nothing to attenuate.</summary>
-        public float Volume
-        {
-            get => _volume;
-            set => _volume = Math.Clamp(value, 0.0f, 1.0f);
-        }
-
         /// <summary>
         /// The device's playback position: time pulled through the render callback since the
         /// last <see cref="Stop"/>, advancing with wall time while playing and frozen otherwise.

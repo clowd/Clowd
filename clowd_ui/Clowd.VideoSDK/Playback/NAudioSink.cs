@@ -57,14 +57,16 @@ namespace Clowd.VideoSDK.Playback
             }
         }
 
+        /// <summary>
+        /// Master preview gain in [0, 1], applied to the samples in the render callback. It is
+        /// deliberately not handed to the device: the platform volume knobs (WASAPI's endpoint
+        /// master, a mixer session) belong to the user, and a player that moves them changes what
+        /// every other app sounds like. See <see cref="Audio.IAudioOutput"/>.
+        /// </summary>
         public double Volume
         {
-            get => _volume;
-            set
-            {
-                _volume = (float)Math.Clamp(value, 0.0, 1.0);
-                _out.Volume = _volume;
-            }
+            get => Volatile.Read(ref _volume);
+            set => Volatile.Write(ref _volume, (float)Math.Clamp(value, 0.0, 1.0));
         }
 
         /// <summary>The output opens its device lazily on this first call (device enumeration is
@@ -102,6 +104,16 @@ namespace Clowd.VideoSDK.Playback
             {
                 buffer.Slice(read).Clear();
                 Interlocked.Add(ref _underrunSamples, buffer.Length - read);
+            }
+
+            // gain rides on top of the read, not on the clock: the frames counted below are the
+            // frames handed to the device whatever their amplitude, so muting does not stop time.
+            float volume = Volatile.Read(ref _volume);
+            if (volume != 1.0f)
+            {
+                var samples = buffer.Slice(0, read);
+                for (int i = 0; i < samples.Length; i++)
+                    samples[i] *= volume;
             }
 
             Interlocked.Add(ref _consumedFrames, read / _channels);
