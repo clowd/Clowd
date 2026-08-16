@@ -635,5 +635,86 @@ namespace Clowd.VideoSDK.Tests
             Assert.False(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
             Assert.Equal(before, project.ToJson());
         }
+
+        // ---- playback speed ----
+
+        [Fact]
+        public void SetSpeed_scales_duration_and_keeps_the_source_span()
+        {
+            var project = RecordingProject(out _, out var webcam, out _);
+            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+
+            // 10s of timeline at 2x plays the same 10s of source in 5s.
+            Assert.Equal(2.0, TimelineOps.SetSpeed(project, webcam.Id, 2.0));
+            Assert.Equal(Ms(5_000), webcam.DurationTicks);
+            Assert.Equal(Ms(2_000), SourceIn(webcam));
+
+            // back to normal restores the original timeline length.
+            TimelineOps.SetSpeed(project, webcam.Id, 1.0);
+            Assert.Equal(Ms(10_000), webcam.DurationTicks);
+        }
+
+        [Fact]
+        public void SetSpeed_clamps_against_the_next_item_on_the_track()
+        {
+            var project = RecordingProject(out _, out var webcam, out _);
+            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            Assert.True(TimelineOps.SplitItem(project, webcam.Id, Ms(4_000)));
+
+            // halving the left segment's speed wants 8s of timeline, but the right half starts
+            // at 4s — the clip is end-trimmed into the gap instead of overlapping.
+            TimelineOps.SetSpeed(project, webcam.Id, 0.5);
+            Assert.Equal(Ms(4_000), webcam.DurationTicks);
+            Assert.Equal(0.5, ((MediaContent)webcam.Content).Speed);
+            Assert.Empty(project.Validate());
+        }
+
+        [Fact]
+        public void Trim_and_split_scale_source_movement_by_the_speed()
+        {
+            var project = RecordingProject(out _, out var webcam, out _);
+            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.SetSpeed(project, webcam.Id, 2.0); // 5s timeline over source [2s, 12s)
+
+            // trimming 1s off the start advances the source in-point by 2s.
+            Assert.Equal(Ms(1_000), TimelineOps.TrimStart(project, webcam.Id, Ms(1_000)));
+            Assert.Equal(Ms(4_000), SourceIn(webcam));
+            Assert.Equal(Ms(4_000), webcam.DurationTicks);
+
+            // splitting 2s in puts the right half's in-point 4s further into the source.
+            Assert.True(TimelineOps.SplitItem(project, webcam.Id, webcam.TimelineStartTicks + Ms(2_000)));
+            var right = project.Items.Single(i =>
+                i.TrackId == webcam.TrackId && i.TimelineStartTicks > webcam.TimelineStartTicks);
+            Assert.Equal(Ms(8_000), SourceIn(right));
+            Assert.Equal(2.0, ((MediaContent)right.Content).Speed);
+        }
+
+        [Fact]
+        public void TrimEnd_extension_is_bounded_by_the_source_at_the_item_speed()
+        {
+            var project = RecordingProject(out _, out var webcam, out _);
+            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.SetSpeed(project, webcam.Id, 2.0); // 5s timeline over source [2s, 12s), stream 60s
+
+            // remaining source is 48s, which at 2x is 24s of timeline extension.
+            Assert.Equal(Ms(24_000), TimelineOps.TrimEnd(project, webcam.Id, Ms(60_000)));
+        }
+
+        [Fact]
+        public void TryRelinkTrack_refuses_a_retimed_row()
+        {
+            var project = RecordingProject(out _, out var webcam, out _);
+            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.SetSpeed(project, webcam.Id, 2.0);
+            TimelineOps.SetSpeed(project, webcam.Id, 1.0);
+
+            // the round-trip restored the row's geometry exactly, so only the speed history
+            // separates it — and with speed 1 restored it may relink again.
+            Assert.True(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+
+            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.SetSpeed(project, webcam.Id, 2.0);
+            Assert.False(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+        }
     }
 }
