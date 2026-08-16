@@ -49,6 +49,17 @@ namespace Clowd.VideoSDK.Playback
         /// snap the clock backwards.</summary>
         private static readonly TimeSpan AudioReattachTolerance = TimeSpan.FromMilliseconds(250);
 
+        /// <summary>
+        /// The transport tick, which is also the rate <see cref="PositionChanged"/> is raised at
+        /// while playing. Display rate, not "often enough to notice": the position comes from a
+        /// clock that interpolates continuously, so there is no event to wait for — a subscriber
+        /// drawing a playhead can only be as smooth as this timer, and at the old 100ms it visibly
+        /// hopped. The work per tick is a handful of array walks (seam offset, audio attach state,
+        /// end-of-timeline), nothing next to decoding, and the whole callback returns immediately
+        /// unless the player is playing.
+        /// </summary>
+        private const int TickIntervalMs = 16;
+
         private readonly Action<Action> _dispatch;
         private readonly object _stateSync = new object();
         private readonly object _lifecycleSync = new object(); // serializes seeks vs update/reopen/dispose
@@ -289,7 +300,7 @@ namespace Clowd.VideoSDK.Playback
                 _ = SeekAsync(TimeSpan.Zero, SeekMode.Exact);
             }
 
-            _tickTimer = new Timer(OnTick, null, 100, 100);
+            _tickTimer = new Timer(OnTick, null, TickIntervalMs, TickIntervalMs);
         }
 
         /// <summary>Serial-0 Prepare/OnSeeked pairing + thread start, mirroring

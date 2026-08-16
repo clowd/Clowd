@@ -170,7 +170,6 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public Pen PlayheadPen { get; private init; }
 
-        public Pen PlayheadOutlinePen { get; private init; }
 
         /// <summary>The ghost playhead the ruler draws under the pointer — where a click would put
         /// the real one. Blue, so it never reads as the (red) playhead itself.</summary>
@@ -243,10 +242,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                 SnapGuidePen = new Pen(new SolidColorBrush(accent), 1, new DashStyle(new double[] { 3, 3 }, 0)),
                 DropIndicatorBrush = new SolidColorBrush(accent),
 
-                PlayheadPen = new Pen(new SolidColorBrush(playheadColor), 1.5),
-                PlayheadOutlinePen = new Pen(new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.6), 1),
+                // fully opaque, and an even whole-pixel width so the snapped centre puts both
+                // halves of the stroke on real pixels (1.5 could only ever be antialiased).
+                PlayheadPen = new Pen(new SolidColorBrush(playheadColor), 2),
                 HoverPlayheadBrush = new SolidColorBrush(hoverPlayheadColor),
-                HoverPlayheadPen = new Pen(new SolidColorBrush(hoverPlayheadColor), 1.5),
+                HoverPlayheadPen = new Pen(new SolidColorBrush(hoverPlayheadColor), 2),
             };
         }
 

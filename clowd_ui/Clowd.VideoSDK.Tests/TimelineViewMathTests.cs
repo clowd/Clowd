@@ -148,6 +148,34 @@ namespace Clowd.VideoSDK.Tests
                 TimelineViewMath.FitTicksPerPixel(TimeSpan.TicksPerMillisecond, 800));
         }
 
+        // --------------------------------------------------------------------- pixel alignment
+
+        [Fact]
+        public void SnapToPixel_puts_even_strokes_and_fill_edges_on_the_pixel_boundary()
+        {
+            // 100% scaling: a 2 px stroke centred at a whole coordinate covers two whole pixels.
+            Assert.Equal(412, TimelineViewMath.SnapToPixel(411.6, 1, 2));
+            Assert.Equal(412, TimelineViewMath.SnapToPixel(411.6, 1));
+
+            // 150% scaling: whole DEVICE pixels, so the result can be a fraction of a DIP.
+            Assert.Equal(411 + 2 / 3.0, TimelineViewMath.SnapToPixel(411.6, 1.5, 2), 9);
+        }
+
+        [Fact]
+        public void SnapToPixel_straddles_the_pixel_centre_for_odd_strokes()
+        {
+            // a 1 px hairline centred on a boundary would light two half pixels
+            Assert.Equal(411.5, TimelineViewMath.SnapToPixel(411.6, 1, 1));
+            Assert.Equal(411.5, TimelineViewMath.SnapToPixel(411.2, 1, 1));
+        }
+
+        [Fact]
+        public void SnapToPixel_treats_a_missing_scaling_as_one_to_one()
+        {
+            Assert.Equal(412, TimelineViewMath.SnapToPixel(411.6, 0, 2));
+            Assert.Equal(412, TimelineViewMath.SnapToPixel(411.6, Double.NaN, 2));
+        }
+
         // ---------------------------------------------------------------------- scroll clamping
 
         [Fact]
