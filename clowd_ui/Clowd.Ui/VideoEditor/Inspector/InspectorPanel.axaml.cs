@@ -45,6 +45,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotExitKind.DefaultValue = TransitionKind.None;
             dotEntryEasing.DefaultValue = SelectedItemViewModel.DefaultTransitionEasing;
             dotExitEasing.DefaultValue = SelectedItemViewModel.DefaultTransitionEasing;
+            dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
 
             btnFont.Click += async (_, _) => await PickFontAsync();
             btnDesync.Click += async (_, _) => await ConfirmDesyncAsync();
