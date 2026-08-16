@@ -193,7 +193,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Regressing_request_throws_and_unknown_source_throws()
+        public void Regressing_request_repositions_and_unknown_source_throws()
         {
             RequireFFmpeg();
             string path = EncodeFixture();
@@ -204,7 +204,18 @@ namespace Clowd.VideoSDK.Tests
             using var source = new SequentialFrameSource(project, cache);
 
             Assert.True(source.TryGetFrame(sourceId, 0, FrameTicks(5), out _));
-            Assert.Throws<InvalidOperationException>(() => source.TryGetFrame(sourceId, 0, FrameTicks(1), out _));
+            Assert.Equal(0, source.RepositionCount);
+
+            // a timeline that reads this stream out of source order seeks back instead of failing
+            Assert.True(source.TryGetFrame(sourceId, 0, FrameTicks(1), out var frame));
+            Assert.Equal(1, source.RepositionCount);
+            Assert.InRange(frame.PtsTicks, FrameTicks(1) - 10_000, FrameTicks(1) + 10_000);
+            Assert.InRange(GrayOf(frame.Image), GrayStep - 12, GrayStep + 12);
+
+            // forward again from there, no further seek
+            Assert.True(source.TryGetFrame(sourceId, 0, FrameTicks(2), out frame));
+            Assert.Equal(1, source.RepositionCount);
+            Assert.InRange(GrayOf(frame.Image), 2 * GrayStep - 12, 2 * GrayStep + 12);
 
             Assert.Throws<ArgumentException>(() => source.TryGetFrame(Guid.NewGuid(), 0, 0, out _));
         }

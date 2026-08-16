@@ -37,8 +37,8 @@ namespace Clowd.VideoSDK.Audio
         /// <paramref name="framesRead"/> is the count of frames at or before the stream's end
         /// (== <paramref name="frames"/> until end of stream is reached). Returns false only
         /// when the stream yields no audio at all.
-        /// Sequential (render) implementations require non-decreasing, non-overlapping requests
-        /// per stream — a regression throws.
+        /// Decoding implementations are built for non-decreasing, non-overlapping requests per
+        /// stream and pay a container seek for a request that goes backwards.
         /// </summary>
         bool ReadSamples(Guid sourceId, int streamIndex, long sourcePosFrames, float[] dst,
             int frames, out int framesRead);

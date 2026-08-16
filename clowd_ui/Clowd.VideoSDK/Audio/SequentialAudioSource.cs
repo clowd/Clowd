@@ -19,10 +19,15 @@ namespace Clowd.VideoSDK.Audio
     /// </para>
     ///
     /// <para>
-    /// Requests per stream must be non-decreasing and non-overlapping (each read consumes
-    /// through its end) — a regression throws, exactly like the video source. The mixer's
-    /// per-item forward runs satisfy this by construction; two items reading the same stream at
-    /// conflicting times is the same unsupported shape as on the video side.
+    /// Requests per stream are expected to run forward and not overlap (each read consumes through
+    /// its end) — the mixer's per-item forward runs satisfy that by construction, and the whole
+    /// stream then decodes exactly once. A request that goes backwards means the timeline reads the
+    /// stream out of source order (a clip moved behind an earlier one, split halves swapped, the
+    /// same span used twice): the decoder container-seeks to <see cref="SeekPrerollTicks"/> before
+    /// the wanted position and decode-discards to the exact sample, the same reposition
+    /// <see cref="SeekableAudioSource"/> performs, so the samples land where a forward decode put
+    /// them. Forward requests never seek — they keep the decode-discard path this class has always
+    /// used, which is what keeps cut seams identical to earlier renders.
     /// </para>
     /// </summary>
     public sealed class SequentialAudioSource : IAudioSource, IDisposable
@@ -37,10 +42,16 @@ namespace Clowd.VideoSDK.Audio
         /// flooding the pending buffer with silence.</summary>
         private const long MaxGapTicks = 60L * 10_000_000; // 60 s
 
+        /// <summary>How far before the wanted position a backwards reposition lands, so the first
+        /// kept sample carries the previous packet's transform overlap and matches a forward decode
+        /// (see <see cref="SeekableAudioSource"/>, which uses the same preroll).</summary>
+        private const long SeekPrerollTicks = 2_500_000; // 250 ms
+
         private readonly Project _project;
         private readonly int _rate;
         private readonly Dictionary<(Guid SourceId, int StreamIndex), StreamState> _streams
             = new Dictionary<(Guid, int), StreamState>();
+        private int _repositions;
         private bool _disposed;
 
         private sealed class StreamState : IDisposable
@@ -56,7 +67,7 @@ namespace Clowd.VideoSDK.Audio
             public long WriteAbs;
             public bool Positioned;
             public bool Eof;
-            public long NextReadPos = long.MinValue; // monotonic guard
+            public long NextReadPos = long.MinValue; // end of the last read; earlier = reposition
 
             public void Dispose() => Decoder?.Dispose();
         }
@@ -71,6 +82,10 @@ namespace Clowd.VideoSDK.Audio
             _project = project;
             _rate = project.Output.SampleRate;
         }
+
+        /// <summary>Container seeks performed so far because a stream was read out of source order
+        /// (test/diagnostic; a project whose items run forward never repositions).</summary>
+        internal int RepositionCount => _repositions;
 
         public bool ReadSamples(Guid sourceId, int streamIndex, long sourcePosFrames, float[] dst,
             int frames, out int framesRead)
@@ -91,8 +106,8 @@ namespace Clowd.VideoSDK.Audio
             }
 
             if (sourcePosFrames < state.NextReadPos)
-                throw new InvalidOperationException(
-                    $"Sequential audio requests must be non-decreasing (got {sourcePosFrames} after {state.NextReadPos}).");
+                Reposition(state, sourcePosFrames);
+
             long end = sourcePosFrames + frames;
             state.NextReadPos = end;
 
@@ -132,6 +147,22 @@ namespace Clowd.VideoSDK.Audio
 
             framesRead = (int)Math.Clamp(Math.Min(end, state.WriteAbs) - sourcePosFrames, 0, frames);
             return true;
+        }
+
+        /// <summary>Container-seeks the stream back to <paramref name="pos"/> (less the preroll)
+        /// and drops the retained window, so the read that follows re-anchors from the decoder's
+        /// new position and decode-discards to the exact sample.</summary>
+        private void Reposition(StreamState state, long pos)
+        {
+            state.Decoder.Seek(Math.Max(0, AudioTime.TicksFloor(pos, _rate) - SeekPrerollTicks));
+            _repositions++;
+
+            state.OffsetFloats = 0;
+            state.Frames = 0;
+            state.BaseAbs = 0;
+            state.WriteAbs = 0;
+            state.Positioned = false;
+            state.Eof = false;
         }
 
         /// <summary>Appends a decoded chunk, anchoring the stream position on the first chunk

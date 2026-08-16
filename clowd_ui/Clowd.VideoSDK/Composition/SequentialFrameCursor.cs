@@ -17,8 +17,10 @@ namespace Clowd.VideoSDK.Composition
     ///
     /// Ownership: frames the caller never sees (skipped, or replaced before delivery) go to the
     /// discard callback exactly once. A frame handed out through <c>newFrame</c> belongs to the
-    /// caller and is never discarded by the cursor. Requests must be non-decreasing; a
-    /// regression throws (render is monotonic — seeking is the playback source's job).
+    /// caller and is never discarded by the cursor. Requests must be non-decreasing; a regression
+    /// throws — the owner repositions the puller and calls <see cref="Rewind"/> first, which is how
+    /// <see cref="SequentialFrameSource"/> serves a project that reads one stream out of source
+    /// order (a clip moved behind an earlier one).
     /// </summary>
     internal sealed class SequentialFrameCursor<T> : IDisposable where T : class
     {
@@ -102,6 +104,37 @@ namespace Clowd.VideoSDK.Composition
             newFrame = _undelivered;
             _undelivered = null;
             return true;
+        }
+
+        /// <summary>
+        /// Drops every held frame and forgets the position, so the next <see cref="TryAdvance"/>
+        /// starts the stream over from wherever the puller now stands (its owner has just
+        /// repositioned it). Requests are non-decreasing again from that call on.
+        /// </summary>
+        public void Rewind()
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            if (_undelivered != null)
+            {
+                _discard(_undelivered);
+                _undelivered = null;
+            }
+
+            if (_next != null)
+            {
+                _discard(_next);
+                _next = null;
+            }
+
+            _started = false;
+            _eof = false;
+            _hasCurrent = false;
+            _hasNext = false;
+            _currentPts = 0;
+            _nextPts = 0;
+            _lastRequestTicks = long.MinValue;
+            _lastPulledPts = long.MinValue;
         }
 
         private bool Pull(out long ptsTicks, out T frame)
