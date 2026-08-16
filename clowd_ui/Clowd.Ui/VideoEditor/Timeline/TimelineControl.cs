@@ -31,7 +31,9 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// </summary>
     public class TimelineControl : Decorator
     {
-        internal const double HeaderWidth = 150;
+        // just enough for the header rows' grip + kind icon + four-button cluster (and the corner
+        // cell's four buttons above them) — wider only buys blank space between the two.
+        internal const double HeaderWidth = 130;
 
         private const double ZoomStepPerNotch = 1.25;
         private const double WheelScrollPxPerNotch = 60;
@@ -47,6 +49,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private readonly TrackHeaderPanel _headers;
         private readonly ScrollBar _hscroll;
         private readonly Border _corner;
+        private readonly ToolButton _snap;
         private readonly ToolButton _split;
         private readonly ToolButton _zoomToFit;
         private readonly ToolButton _resetZoom;
@@ -79,10 +82,23 @@ namespace Clowd.UI.VideoEditor.Timeline
             _headers = new TrackHeaderPanel();
 
             // the corner cell sits over the header column, level with the ruler — the one piece of
-            // timeline chrome with room for buttons, and these three are the ones that belong to
-            // the timeline rather than to playback: split at the playhead, and the two escapes from
-            // a wheel-zoom that has taken the view somewhere the user cannot find their way back
-            // from (fit everything / back to the default scale).
+            // timeline chrome with room for buttons, and these four are the ones that belong to
+            // the timeline rather than to playback: the snap toggle, split at the playhead, and
+            // the two escapes from a wheel-zoom that has taken the view somewhere the user cannot
+            // find their way back from (fit everything / back to the default scale).
+            _snap = NewCornerButton(TimelineIcons.SnapGeometry,
+                "Snap dragged clips to other edges and the playhead (hold Alt to bypass once)",
+                () => { });
+            _snap.CanToggle = true;
+            _snap.IsChecked = true;
+            _snap.IsCheckedChanged += (_, _) =>
+            {
+                var on = _snap.IsChecked == true;
+                _surface.SnapEnabled = on;
+                // the state is the icon's weight, not the theme's checked veil (a white wash,
+                // invisible over the light corner cell): lit when on, faded back when off.
+                _snap.Opacity = on ? 1.0 : 0.4;
+            };
             _split = NewCornerButton(TimelineIcons.SplitGeometry,
                 "Split every track at playhead (Ctrl+K) — right-click a clip to split just that one",
                 () => SplitAtPlayhead());
@@ -99,6 +115,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            cornerButtons.Children.Add(_snap);
             cornerButtons.Children.Add(_split);
             cornerButtons.Children.Add(_zoomToFit);
             cornerButtons.Children.Add(_resetZoom);
@@ -465,9 +482,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             var palette = TimelinePalette.ForVariant(ActualThemeVariant);
             _corner.Background = palette.RulerBackground;
-            _split.Foreground = palette.LabelBrush;
-            _zoomToFit.Foreground = palette.LabelBrush;
-            _resetZoom.Foreground = palette.LabelBrush;
+            // full-weight text colour, not LabelBrush: at the muted label weight these read as
+            // disabled buttons rather than as controls.
+            _snap.Foreground = palette.RulerLabelBrush;
+            _split.Foreground = palette.RulerLabelBrush;
+            _zoomToFit.Foreground = palette.RulerLabelBrush;
+            _resetZoom.Foreground = palette.RulerLabelBrush;
             _spacer.Background = palette.RulerBackground;
             _scrollHost.Background = palette.SurfaceBackground;
         }

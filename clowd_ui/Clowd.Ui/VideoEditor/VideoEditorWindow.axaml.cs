@@ -128,6 +128,7 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandAddText { get; }
         public RelayCommand CommandAddImage { get; }
         public RelayCommand CommandImportMedia { get; }
+        public RelayCommand CommandImportAudio { get; }
         public RelayCommand CommandRender { get; }
 
         /// <summary>The property sidebar's view model. Created eagerly (before the session exists)
@@ -173,7 +174,16 @@ namespace Clowd.UI.VideoEditor
             };
             CommandAddText = new RelayCommand { Executed = _ => AddText(), Text = "Add _Text" };
             CommandAddImage = new RelayCommand { Executed = _ => _ = AddImageAsync(), Text = "Add _Image" };
-            CommandImportMedia = new RelayCommand { Executed = _ => _ = ImportMediaAsync(), Text = "_Import Media" };
+            CommandImportMedia = new RelayCommand
+            {
+                Executed = _ => _ = ImportMediaAsync("Import media", MediaFileTypes.AnyMedia),
+                Text = "_Import Media",
+            };
+            CommandImportAudio = new RelayCommand
+            {
+                Executed = _ => _ = ImportMediaAsync("Import audio", MediaFileTypes.Audio),
+                Text = "Import _Audio",
+            };
             CommandRender = new RelayCommand { Executed = _ => RenderClicked(), Text = "_Render" };
 
             DataContext = this;
@@ -828,14 +838,16 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>Imports an external file as an overlay: probed off the UI thread (the same
         /// probe the recording itself goes through), then handed to the session, which builds the
-        /// source, its rows and its items in one undo entry.</summary>
-        private async Task ImportMediaAsync()
+        /// source, its rows and its items in one undo entry. The import-media and import-audio
+        /// buttons are this one flow with a different picker title and filter — a video container
+        /// picked through either maps the same streams.</summary>
+        private async Task ImportMediaAsync(string title, FilePickerFileType filter)
         {
             if (!CanAddToProject)
                 return;
 
-            var picked = await NiceDialog.ShowSelectFilesDialog(this, "Import media",
-                filter: new[] { MediaFileTypes.AnyMedia, FilePickerFileTypes.All });
+            var picked = await NiceDialog.ShowSelectFilesDialog(this, title,
+                filter: new[] { filter, FilePickerFileTypes.All });
             if (picked is not { Length: > 0 } || _closing)
                 return;
 

@@ -21,5 +21,14 @@ namespace Clowd.UI.VideoEditor
             Patterns = new[] { "*.mp4", "*.mkv", "*.mov", "*.webm", "*.mp3", "*.wav", "*.m4a", "*.flac" },
             MimeTypes = new[] { "video/*", "audio/*" },
         };
+
+        /// <summary>Bare audio files, for the audio-import button. (A video container's audio still
+        /// comes in through <see cref="AnyMedia"/> — the import maps every stream either way; this
+        /// filter only aims the picker at music/voiceover files.)</summary>
+        public static FilePickerFileType Audio { get; } = new FilePickerFileType("Audio")
+        {
+            Patterns = new[] { "*.mp3", "*.wav", "*.m4a", "*.flac", "*.ogg", "*.aac" },
+            MimeTypes = new[] { "audio/*" },
+        };
     }
 }

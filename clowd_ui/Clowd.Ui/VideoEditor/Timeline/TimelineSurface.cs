@@ -161,6 +161,11 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
         }
 
+        /// <summary>Whether move/trim drags snap to other items' edges, the playhead and the
+        /// origin. The parent's corner toggle sets it; Alt still bypasses snapping per-drag when
+        /// it is on.</summary>
+        public bool SnapEnabled { get; set; } = true;
+
         /// <summary>Rebuilds the row layout from the live project — the parent calls this on
         /// Structural changes (and session swaps). Also prunes caches keyed by item ids that no
         /// longer exist.</summary>
@@ -435,7 +440,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             var desired = Math.Max(0, _viewport.XToTicks(x) - _grabOffsetTicks);
             long? guide = null;
 
-            if (!modifiers.HasFlag(KeyModifiers.Alt))
+            if (SnapEnabled && !modifiers.HasFlag(KeyModifiers.Alt))
             {
                 // both edges of the dragged item reach for targets; the nearer snap wins.
                 var targets = BuildSnapTargets(item.Id);
@@ -483,7 +488,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             var desired = _viewport.XToTicks(x) - _grabOffsetTicks;
             long? guide = null;
 
-            if (!modifiers.HasFlag(KeyModifiers.Alt))
+            if (SnapEnabled && !modifiers.HasFlag(KeyModifiers.Alt))
             {
                 var snapped = TimelineViewMath.Snap(desired, BuildSnapTargets(item.Id), _viewport.ToleranceTicks);
                 if (snapped != null)
@@ -807,24 +812,33 @@ namespace Clowd.UI.VideoEditor.Timeline
             context.DrawRectangle(palette.ItemFill(row.Kind), palette.ItemBorderPen, body,
                 ItemCornerRadius, ItemCornerRadius);
 
+            // Media content sits UNDER the transition ramps (the ramp shows what the picture/audio
+            // fades over), but a text/image card's glyph label goes ON TOP — an entry ramp covers
+            // the card's left edge, which is exactly where the label lives, and an unreadable
+            // label defeats its purpose.
             switch (item.Content)
             {
                 case MediaContent media when row.Kind == TimelineRowKind.Audio:
                     RenderWaveform(context, palette, item, media, body);
+                    RenderTransitions(context, palette, item, body);
                     break;
                 case MediaContent media:
                     RenderFilmstrip(context, palette, project, item, media, body);
+                    RenderTransitions(context, palette, item, body);
                     break;
                 case TextContent text:
+                    RenderTransitions(context, palette, item, body);
                     RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconToolText"), text.Text);
                     break;
                 case ImageContent image:
-                    RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconPhoto"),
+                    RenderTransitions(context, palette, item, body);
+                    RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconImage"),
                         System.IO.Path.GetFileName(image.Path));
                     break;
+                default:
+                    RenderTransitions(context, palette, item, body);
+                    break;
             }
-
-            RenderTransitions(context, palette, item, body);
 
             var dimmed = row.Kind == TimelineRowKind.Audio ? track.Muted : track.Hidden;
             if (dimmed)
@@ -1000,7 +1014,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
             {
-                var x = body.X + 6;
+                // inset past the trim handles (they draw inside the body on hover/selection) so
+                // the glyph and text never sit under a handle — and never shift when one appears.
+                var x = body.X + TrimHandleWidth + 3;
                 if (glyph != null)
                 {
                     DrawGlyph(context, glyph, palette.ItemLabelBrush,
@@ -1011,7 +1027,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 if (String.IsNullOrEmpty(label))
                     return;
 
-                var maxWidth = body.Right - 4 - x;
+                var maxWidth = body.Right - TrimHandleWidth - 3 - x;
                 if (maxWidth <= 8)
                     return;
 
@@ -1069,6 +1085,15 @@ namespace Clowd.UI.VideoEditor.Timeline
             using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
             {
                 context.DrawGeometry(palette.TransitionFill, null, geo);
+
+                // the hidden-row hatch inside the triangle too — the wash alone was too faint to
+                // read as "this stretch is attenuated" against a busy filmstrip.
+                var span = isEntry
+                    ? new Rect(body.X, body.Y, w, body.Height)
+                    : new Rect(body.Right - w, body.Y, w, body.Height);
+                using (context.PushGeometryClip(geo))
+                    DrawHatchLines(context, palette.HatchPen, span);
+
                 context.DrawLine(palette.TransitionEdgePen, top, bottom);
             }
         }
@@ -1076,11 +1101,14 @@ namespace Clowd.UI.VideoEditor.Timeline
         private static void RenderHatch(DrawingContext context, Pen pen, Rect rect)
         {
             using (context.PushClip(rect))
-            {
-                const double spacing = 6;
-                for (var x = rect.X - rect.Height; x < rect.Right; x += spacing)
-                    context.DrawLine(pen, new Point(x, rect.Bottom), new Point(x + rect.Height, rect.Y));
-            }
+                DrawHatchLines(context, pen, rect);
+        }
+
+        private static void DrawHatchLines(DrawingContext context, Pen pen, Rect rect)
+        {
+            const double spacing = 6;
+            for (var x = rect.X - rect.Height; x < rect.Right; x += spacing)
+                context.DrawLine(pen, new Point(x, rect.Bottom), new Point(x + rect.Height, rect.Y));
         }
 
         private static void DrawGlyph(DrawingContext context, Geometry glyph, IBrush brush, Point topLeft, double size)

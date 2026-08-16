@@ -528,6 +528,73 @@ namespace Clowd.VideoSDK.Editing
                 p => RequireTrack(p, trackId).Locked = value);
 
         /// <summary>
+        /// Duplicates a row: a new track of the same kind and enable state directly above the
+        /// original, carrying a copy of every item on it. The copies are unlinked — a duplicate is
+        /// its own material, not a new member of the recording's group (a linked copy would make
+        /// every group move/split apply twice to the same content). The copy is never locked: a
+        /// duplicate exists to be edited. Returns false for an unknown id.
+        /// </summary>
+        public bool DuplicateTrack(Guid trackId, object origin = null) =>
+            Mutate("Duplicate Track", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+                if (track == null)
+                    return false;
+
+                // slot the copy in directly above the original: everything at or past that order
+                // steps down one, exactly as InsertVideoTrackOnTop renumbers.
+                var order = track.Order + 1;
+                foreach (var t in p.Tracks)
+                {
+                    if (t.Order >= order)
+                        t.Order++;
+                }
+
+                var copy = new Track
+                {
+                    Id = Guid.NewGuid(),
+                    Kind = track.Kind,
+                    Name = String.IsNullOrEmpty(track.Name) ? track.Name : track.Name + " copy",
+                    Order = order,
+                    Hidden = track.Hidden,
+                    Muted = track.Muted,
+                };
+                p.Tracks.Add(copy);
+
+                foreach (var item in p.Items.Where(i => i.TrackId == trackId).ToList())
+                {
+                    p.Items.Add(new Item
+                    {
+                        Id = Guid.NewGuid(),
+                        TrackId = copy.Id,
+                        TimelineStartTicks = item.TimelineStartTicks,
+                        DurationTicks = item.DurationTicks,
+                        Content = item.Content?.Clone(),
+                        Transform = item.Transform?.Clone() ?? new Transform(),
+                        Entry = item.Entry?.Clone(),
+                        Exit = item.Exit?.Clone(),
+                        Volume = item.Volume,
+                    });
+                }
+
+                return true;
+            }, failureValue: false);
+
+        /// <summary>Deletes a row and every item on it — no ripple, the span just empties. Link
+        /// group members on <i>other</i> rows are untouched: this is the row's delete, not the
+        /// group's (that is <see cref="RippleDeleteItem"/>/<see cref="DeleteGroup"/>). Returns
+        /// false for an unknown id.</summary>
+        public bool DeleteTrack(Guid trackId, object origin = null) =>
+            Mutate("Delete Track", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                if (p.Tracks.RemoveAll(t => t.Id == trackId) == 0)
+                    return false;
+
+                p.Items.RemoveAll(i => i.TrackId == trackId);
+                return true;
+            }, failureValue: false);
+
+        /// <summary>
         /// Moves a video row one place through the composite stack: <paramref name="towardsFront"/>
         /// raises it over the row it passes, otherwise it drops behind. Returns false — changing
         /// nothing — for an audio row (audio does not stack), a row already at the end it is being
