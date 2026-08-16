@@ -281,7 +281,12 @@
                       keeps the recording's clock (see SelectedItemViewModel.ShowSpeed). Sits
                       under the title because it re-times the whole clip, not one property.  -->
                 <DockPanel Classes="row" IsVisible="{Binding ShowSpeed}">
-                    <Panel Classes="dot" DockPanel.Dock="Left" />
+                    <!--  the dot's default is the 1.0 option object, assigned in code-behind: an
+                          attribute would be a string, which neither the equality nor the reset
+                          write-back can hand to a SpeedOption binding  -->
+                    <Panel Classes="dot" DockPanel.Dock="Left">
+                        <controls:ResetDefaultButton x:Name="dotSpeed" CurrentValue="{Binding SpeedChoice, Mode=TwoWay}" />
+                    </Panel>
                     <TextBlock Classes="label" Text="Speed" />
                     <controls:DropDownButton x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
                 </DockPanel>

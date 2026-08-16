@@ -80,6 +80,11 @@ namespace Clowd.UI.VideoEditor.Inspector
             new SpeedOption(10.0, "10"),
         };
 
+        /// <summary>Normal playback — the Speed row's default, and what its reset dot writes back.
+        /// The singleton from <see cref="SpeedOptions"/>, so reference equality holds.</summary>
+        public static readonly SpeedOption DefaultSpeedOption =
+            SpeedOptions.First(o => o.Value == 1.0);
+
         public const double MinScale = 0.01;
         public const double MaxScale = 4.0;
         public const double MaxVolume = 2.0;
