@@ -274,6 +274,19 @@ namespace Clowd.UI.VideoEditor
             if (session == null || !session.CanEditVideo)
                 return;
 
+            // a rendered entry is an *output* — editing it means reopening the project it was
+            // rendered from (the recording session and its videoedit.json), not starting a fresh
+            // edit over the flattened mp4. With the source gone the entry edits as itself, which
+            // is all that is left.
+            if (!String.IsNullOrEmpty(session.EditSourceVideoPath))
+            {
+                var source = SessionManager.Current.Sessions.FirstOrDefault(s =>
+                    String.IsNullOrEmpty(s.EditSourceVideoPath) && s.CanEditVideo &&
+                    String.Equals(s.VideoPath, session.EditSourceVideoPath, StringComparison.OrdinalIgnoreCase));
+                if (source != null)
+                    session = source;
+            }
+
             // check if there is already a window open with this session in it
             var openWnd = GetOpenEditors().FirstOrDefault(w => ReferenceEquals(w._session, session));
             if (openWnd != null)

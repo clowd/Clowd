@@ -375,7 +375,29 @@ namespace Clowd.UI
                         // the container only exists once the scroll has realized it; bringing it into
                         // view a second time is what scrolls the *outer* viewer down to its group.
                         Dispatcher.UIThread.Post(
-                            () => (listBox.ContainerFromItem(session) as Control)?.BringIntoView(),
+                            () =>
+                            {
+                                if (listBox.ContainerFromItem(session) is not Control container)
+                                    return;
+
+                                var scroller = container.FindAncestorOfType<FadeEdgeScrollViewer>();
+
+                                // the newest row sits just under the group header — scrolling the
+                                // page all the way up shows it with its context instead of leaving
+                                // the header cut off above the row.
+                                if (ReferenceEquals(Groups.FirstOrDefault()?.Items.FirstOrDefault(), session)
+                                    && scroller != null)
+                                {
+                                    scroller.Offset = scroller.Offset.WithY(0);
+                                    return;
+                                }
+
+                                // ask for the row plus the fade band: a minimal scroll parks the row
+                                // at the viewport edge, exactly under the scroller's dissolve mask.
+                                var fade = scroller?.FadeSize ?? 0;
+                                container.BringIntoView(
+                                    new Rect(container.Bounds.Size).Inflate(new Thickness(0, fade + 4)));
+                            },
                             DispatcherPriority.Loaded);
                     }
 
