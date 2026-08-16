@@ -470,6 +470,12 @@ namespace Clowd.VideoSDK.Editing
             Mutate("Trim", ProjectChangeKind.Mapping, null, origin,
                 p => TimelineOps.TrimEnd(p, itemId, deltaTicks));
 
+        /// <summary>Wraps <see cref="TimelineOps.SetSpeed"/> (single media item, re-timed in
+        /// place). Returns the speed actually stored.</summary>
+        public double SetItemSpeed(Guid itemId, double speed, object origin = null) =>
+            Mutate("Speed", ProjectChangeKind.Mapping, null, origin,
+                p => TimelineOps.SetSpeed(p, itemId, speed), failureValue: 1.0);
+
         /// <summary>Wraps <see cref="TimelineOps.Split"/> (whole link group, all-or-nothing).</summary>
         public bool SplitAt(Guid itemId, long timelineTicks, object origin = null) =>
             Mutate("Split", ProjectChangeKind.Mapping, null, origin,

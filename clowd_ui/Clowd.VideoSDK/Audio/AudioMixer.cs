@@ -40,10 +40,10 @@ namespace Clowd.VideoSDK.Audio
         private readonly List<ActiveItem> _items = new List<ActiveItem>();
         private float[] _scratch = Array.Empty<float>();
 
-        private readonly struct ActiveItem
+        private sealed class ActiveItem
         {
             public ActiveItem(Item item, MediaContent media, long firstSample, long endSample,
-                long sourceOffset, bool ramped)
+                long sourceOffset, bool ramped, double speed, long srcBase)
             {
                 Item = item;
                 Media = media;
@@ -51,14 +51,26 @@ namespace Clowd.VideoSDK.Audio
                 EndSample = endSample;
                 SourceOffset = sourceOffset;
                 Ramped = ramped;
+                Speed = speed;
+                SrcBase = srcBase;
             }
 
             public Item Item { get; }
             public MediaContent Media { get; }
             public long FirstSample { get; }     // first output sample the item covers
             public long EndSample { get; }       // exclusive
-            public long SourceOffset { get; }    // source sample = output sample + offset
+            public long SourceOffset { get; }    // source sample = output sample + offset (speed 1)
             public bool Ramped { get; }          // any active entry/exit transition
+            public double Speed { get; }         // source frames one output frame consumes
+            public long SrcBase { get; }         // source frame under FirstSample (speed ≠ 1 path)
+
+            // Speed ≠ 1 resample window: source frames [BufStart, BufStart + BufFrames) held for
+            // interpolation. Kept per item so the underlying forward-only source is asked for each
+            // frame exactly once — the fractional cursor needs its left neighbour again on the
+            // next chunk, and re-requesting it would be a backwards read.
+            public float[] Buf = Array.Empty<float>();
+            public long BufStart;
+            public int BufFrames;
         }
 
         /// <summary>Snapshots the project's audible items; the project must not be mutated while
@@ -91,7 +103,9 @@ namespace Clowd.VideoSDK.Audio
                     AudioTime.SamplesCeil(item.TimelineStartTicks, _rate),
                     AudioTime.SamplesCeil(item.TimelineEndTicks, _rate),
                     AudioTime.SourceSampleOffset(media.SourceInTicks, item.TimelineStartTicks, _rate),
-                    IsActive(item.Entry) || IsActive(item.Exit)));
+                    IsActive(item.Entry) || IsActive(item.Exit),
+                    TimelineOps.SpeedOf(media),
+                    AudioTime.SamplesNearest(media.SourceInTicks, _rate)));
             }
         }
 
@@ -170,6 +184,13 @@ namespace Clowd.VideoSDK.Audio
                     continue;
 
                 int runFrames = (int)(runEnd - runStart);
+
+                if (active.Speed != 1.0)
+                {
+                    MixResampledRun(active, runStart, runFrames, firstFrame, dst);
+                    continue;
+                }
+
                 int runFloats = runFrames * Channels;
                 if (_scratch.Length < runFloats)
                     _scratch = new float[runFloats];
@@ -215,6 +236,96 @@ namespace Clowd.VideoSDK.Audio
                     dst[i] = 1f;
                 else if (v < -1f)
                     dst[i] = -1f;
+            }
+        }
+
+        /// <summary>
+        /// The speed ≠ 1 run: output frame <c>o</c> samples source frame
+        /// <c>SrcBase + (o - FirstSample) · Speed</c>, linearly interpolated between its two
+        /// neighbours — pitch rides with the speed, matching the preview's rate control
+        /// (<c>AudioMixWorker.MixResampledChunk</c>). The item's window buffer keeps every frame
+        /// already read so the forward-only source is asked for each source frame exactly once;
+        /// per-sample gain (volume × ramps) is evaluated in timeline time exactly like the
+        /// realtime path.
+        /// </summary>
+        private void MixResampledRun(ActiveItem active, long runStart, int runFrames,
+            long chunkFirstFrame, float[] dst)
+        {
+            double volume = Math.Max(0, active.Item.Volume);
+            if (volume <= 0)
+                return;
+
+            double p0 = active.SrcBase + (runStart - active.FirstSample) * active.Speed;
+            long f0 = Math.Max(0, (long)Math.Floor(p0));
+            long needEnd = (long)Math.Floor(p0 + (runFrames - 1) * active.Speed) + 2; // right neighbour, exclusive
+
+            // drop window frames the cursor has passed; a jump backwards (only possible on a
+            // rebuilt preview mixer) restarts the window — the seekable source underneath copes.
+            if (active.BufFrames > 0 && f0 > active.BufStart)
+            {
+                int drop = (int)Math.Min(f0 - active.BufStart, active.BufFrames);
+                Array.Copy(active.Buf, drop * Channels, active.Buf, 0, (active.BufFrames - drop) * Channels);
+                active.BufStart += drop;
+                active.BufFrames -= drop;
+            }
+            if (active.BufFrames == 0 || f0 < active.BufStart)
+            {
+                active.BufStart = f0;
+                active.BufFrames = 0;
+            }
+
+            long readStart = active.BufStart + active.BufFrames;
+            int readCount = (int)Math.Max(0, needEnd - readStart);
+            if (readCount > 0)
+            {
+                int haveFloats = active.BufFrames * Channels;
+                int needFloats = haveFloats + readCount * Channels;
+                if (active.Buf.Length < needFloats)
+                {
+                    var grown = new float[Math.Max(needFloats, active.Buf.Length * 2)];
+                    Array.Copy(active.Buf, grown, haveFloats);
+                    active.Buf = grown;
+                }
+
+                if (_scratch.Length < readCount * Channels)
+                    _scratch = new float[readCount * Channels];
+                _source.ReadSamples(active.Media.SourceId, active.Media.StreamIndex,
+                    readStart, _scratch, readCount, out _);
+                Array.Copy(_scratch, 0, active.Buf, haveFloats, readCount * Channels);
+                active.BufFrames += readCount;
+            }
+
+            long avail = active.BufStart + active.BufFrames; // exclusive
+            for (int s = 0; s < runFrames; s++)
+            {
+                double p = p0 + s * active.Speed;
+                long i0 = (long)Math.Floor(p);
+                if (i0 < active.BufStart)
+                    i0 = active.BufStart;
+                if (i0 >= avail)
+                    break;
+                long i1 = Math.Min(i0 + 1, avail - 1);
+                float frac = (float)(p - i0);
+
+                double gain = volume;
+                if (active.Ramped)
+                {
+                    long tick = AudioTime.TicksFloor(runStart + s, _rate);
+                    gain *= TransitionMath.EntryProgress(active.Item, tick)
+                          * TransitionMath.ExitProgress(active.Item, tick);
+                    if (gain <= 0)
+                        continue;
+                }
+
+                int di = (int)(runStart - chunkFirstFrame + s) * Channels;
+                int b0 = (int)(i0 - active.BufStart) * Channels;
+                int b1 = (int)(i1 - active.BufStart) * Channels;
+                for (int ch = 0; ch < Channels; ch++)
+                {
+                    float a = active.Buf[b0 + ch];
+                    float b = active.Buf[b1 + ch];
+                    dst[di + ch] += (float)((a + (b - a) * frac) * gain);
+                }
             }
         }
 

@@ -47,6 +47,39 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// is chosen — the v1 webcam overlay's default.</summary>
         public const double DefaultCornerRadius = 0.25;
 
+        /// <summary>The playback-speed picker's fixed menu. A class (not a bare double) so the
+        /// dropdown's label can say "1.0 (normal)" while the value stays numeric; instances are
+        /// singletons so reference equality works for list selection.</summary>
+        public sealed class SpeedOption
+        {
+            public SpeedOption(double value, string label)
+            {
+                Value = value;
+                Label = label;
+            }
+
+            public double Value { get; }
+
+            public string Label { get; }
+
+            public override string ToString() => Label;
+        }
+
+        public static readonly IReadOnlyList<SpeedOption> SpeedOptions = new[]
+        {
+            new SpeedOption(0.25, "0.25"),
+            new SpeedOption(0.5, "0.5"),
+            new SpeedOption(0.75, "0.75"),
+            new SpeedOption(1.0, "1.0 (normal)"),
+            new SpeedOption(1.25, "1.25"),
+            new SpeedOption(1.5, "1.5"),
+            new SpeedOption(1.75, "1.75"),
+            new SpeedOption(2.0, "2"),
+            new SpeedOption(3.0, "3"),
+            new SpeedOption(4.0, "4"),
+            new SpeedOption(10.0, "10"),
+        };
+
         public const double MinScale = 0.01;
         public const double MaxScale = 4.0;
         public const double MaxVolume = 2.0;
@@ -159,6 +192,9 @@ namespace Clowd.UI.VideoEditor.Inspector
         private bool _trackHidden;
         private bool _trackMuted;
         private bool _isLinked;
+
+        private bool _showSpeed;
+        private double _speed = 1.0;
 
         public SelectedItemViewModel()
         {
@@ -1010,6 +1046,43 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// <summary>True when the selected item still moves with the rest of its recording.</summary>
         public bool IsLinked => _isLinked;
 
+        /// <summary>The Speed row: media items (video or audio) only, and only once the row is
+        /// desynced — a linked segment keeps the recording's own clock, so re-timing it is not
+        /// offered until the user cuts it loose.</summary>
+        public bool ShowSpeed => _showSpeed;
+
+        /// <summary>The playback-speed dropdown's selection, as one of <see cref="SpeedOptions"/>.
+        /// Writing goes through <see cref="EditorSession.SetItemSpeed"/>, which re-times the item
+        /// on the timeline (duration scales with the speed) — origin null, because the write moves
+        /// state the setters do not mirror (the item's duration), so the inspector wants its own
+        /// re-read, and the timeline needs the change event either way.</summary>
+        public SpeedOption SpeedChoice
+        {
+            get
+            {
+                SpeedOption best = null;
+                foreach (var option in SpeedOptions)
+                {
+                    if (best == null || Math.Abs(option.Value - _speed) < Math.Abs(best.Value - _speed))
+                        best = option;
+                }
+                return best;
+            }
+            set
+            {
+                if (value == null || _syncing)
+                    return;
+
+                var item = SelectedItem;
+                if (item == null || value.Value == _speed)
+                    return;
+
+                _speed = value.Value;
+                OnPropertyChanged(nameof(SpeedChoice));
+                _session.SetItemSpeed(item.Id, value.Value, origin: null);
+            }
+        }
+
         // ---------------------------------------------------------------------- session events
 
         private void Session_SelectionChanged(object sender, EventArgs e)
@@ -1065,6 +1138,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _trackMuted, track?.Muted ?? false, nameof(TrackMuted));
                 Set(ref _isLinked, item?.LinkGroupId != null, nameof(IsLinked));
                 CommandUnlink.RaiseCanExecuteChanged();
+
+                var media = item?.Content as MediaContent;
+                Set(ref _showSpeed, media != null && item.LinkGroupId == null, nameof(ShowSpeed));
+                Set(ref _speed, TimelineOps.SpeedOf(media), nameof(SpeedChoice));
 
                 var transform = item?.Transform ?? new Transform();
                 Set(ref _positionX, transform.X, nameof(PositionX));
