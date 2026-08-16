@@ -23,6 +23,22 @@ namespace Clowd.UI.Dialogs
 
         private readonly System.Collections.Generic.List<string> _allFamilies;
 
+        /// <summary>
+        /// Family-only variant, for callers whose model stores just a face name (the video
+        /// editor's text card): the size/bold/italic column is hidden — showing controls whose
+        /// values would be thrown away would be a lie — and the preview renders at a fixed
+        /// comfortable size.
+        /// </summary>
+        public FontDialog(string fontFamily, bool familyOnly)
+            : this(fontFamily, 16, FontStyle.Normal, FontWeight.Normal)
+        {
+            if (!familyOnly)
+                return;
+
+            SizeStyleHeader.IsVisible = false;
+            SizeStylePanel.IsVisible = false;
+        }
+
         public FontDialog(string fontFamily, double fontSize, FontStyle fontStyle, FontWeight fontWeight)
         {
             InitializeComponent();

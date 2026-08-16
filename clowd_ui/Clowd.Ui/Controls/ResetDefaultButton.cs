@@ -39,13 +39,16 @@ namespace Clowd.UI.Controls
                 EvaluateIsDefault();
         }
 
-        // The WPF equality cascade kept verbatim: reference equality, then string equality,
-        // then Convert.ToDouble equality (swallowing conversion failures).
+        // The WPF equality cascade, with the first step upgraded from reference equality to
+        // Equals so a boxed value set from code compares by value: then string equality, then
+        // Convert.ToDouble equality (swallowing conversion failures). The string step only runs
+        // when a string is actually involved — two non-string values would both cast to null and
+        // compare "equal", permanently hiding the dot (bit every enum-valued binding).
         private void EvaluateIsDefault()
         {
-            bool isDefault = CurrentValue == DefaultValue;
+            bool isDefault = Equals(CurrentValue, DefaultValue);
 
-            if (!isDefault)
+            if (!isDefault && (CurrentValue is string || DefaultValue is string))
             {
                 isDefault = (CurrentValue as string) == (DefaultValue as string);
             }

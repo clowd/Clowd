@@ -363,6 +363,62 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>
+        /// Sets the output frame rate, in one undo entry. Output is CFR, so this is the grid every
+        /// composed frame lands on when the edit is rendered; the preview composes on demand and is
+        /// unaffected, which is why this is a mapping rather than a structural change. The rate is a
+        /// rational so 29.97 (30000/1001) survives exactly.
+        ///
+        /// False means the rational was not positive, nothing changed (that rate is already set), or
+        /// validation rolled the change back.
+        /// </summary>
+        public bool SetOutputFrameRate(int fpsNum, int fpsDen, object origin = null)
+        {
+            if (fpsNum <= 0 || fpsDen <= 0)
+                return false;
+
+            return Mutate("Change Frame Rate", ProjectChangeKind.Mapping, null, origin, p =>
+            {
+                if (p.Output.FpsNum == fpsNum && p.Output.FpsDen == fpsDen)
+                    return false;
+
+                p.Output.FpsNum = fpsNum;
+                p.Output.FpsDen = fpsDen;
+                return true;
+            }, failureValue: false);
+        }
+
+        /// <summary>
+        /// The natural frame rate of the material: the first video stream that declares one, among
+        /// the sources the timeline actually plays — the recording that started the session, or the
+        /// first video imported into an edit built from scratch. Deliberately <i>first</i> rather
+        /// than largest (<see cref="GetNativeSize"/>'s rule): a 30fps recording carrying a 60fps
+        /// webcam on track 2 is still a 30fps edit. Null when nothing referenced declares a rate,
+        /// which is why the picker's native entry is optional.
+        /// </summary>
+        public static (int Num, int Den)? GetNativeFrameRate(Project project)
+        {
+            if (project?.Sources == null)
+                return null;
+
+            foreach (var source in project.Sources)
+            {
+                if (source.Streams == null || !IsSourceReferenced(project, source.Id))
+                    continue;
+
+                foreach (var stream in source.Streams)
+                {
+                    if (stream.Kind != StreamKind.Video ||
+                        stream.AvgFrameRateNum <= 0 || stream.AvgFrameRateDen <= 0)
+                        continue;
+
+                    return (stream.AvgFrameRateNum, stream.AvgFrameRateDen);
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// The natural size of the material: the largest video stream among the sources the timeline
         /// actually plays — for a screen recording, the recording itself, and for an edit whose
         /// second track is a webcam, still the recording. Null when nothing video is referenced (an

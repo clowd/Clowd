@@ -2,6 +2,7 @@
     x:Class="Clowd.UI.VideoEditor.Inspector.InspectorPanel"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:colors="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
     xmlns:ve="clr-namespace:Clowd.UI.VideoEditor">
 
@@ -17,40 +18,48 @@
             RadiusY="26"
             Rect="0,0,100,100" />
 
-        <!--  A shape-picker tile: the icon (Tag) over its name (Content), in a rounded box that
-              borrows the Semi RadioButton's own brushes — grey ring unselected, a thicker accent
-              ring selected — so it stays in step with the theme's other radio controls. The
-              padding drops by 1 when selected, keeping the content box the same size as the
-              border thickens.  -->
+        <!--  Fit-mode icons — Fill: an arrow pushing through the frame's bounds (user-supplied,
+              Icons8 width/24); Stretch: Icons8 fluent-systems-filled "fullscreen" diagonal spread.  -->
+        <StreamGeometry x:Key="FitIconFill">M 2 5 L 2 19 L 4 19 L 4 5 Z M 4 12 L 8 15 L 8 13 L 16 13 L 16 15 L 20 12 L 16 9 L 16 11 L 8 11 L 8 9 Z M 20 12 L 20 19 L 22 19 L 22 5 Z M 6 5 C 5.449219 5 5 5.449219 5 6 C 5 6.550781 5.449219 7 6 7 C 6.550781 7 7 6.550781 7 6 C 7 5.449219 6.550781 5 6 5 Z M 10 5 C 9.449219 5 9 5.449219 9 6 C 9 6.550781 9.449219 7 10 7 C 10.550781 7 11 6.550781 11 6 C 11 5.449219 10.550781 5 10 5 Z M 14 5 C 13.449219 5 13 5.449219 13 6 C 13 6.550781 13.449219 7 14 7 C 14.550781 7 15 6.550781 15 6 C 15 5.449219 14.550781 5 14 5 Z M 18 5 C 17.449219 5 17 5.449219 17 6 C 17 6.550781 17.449219 7 18 7 C 18.550781 7 19 6.550781 19 6 C 19 5.449219 18.550781 5 18 5 Z M 6 17 C 5.449219 17 5 17.449219 5 18 C 5 18.550781 5.449219 19 6 19 C 6.550781 19 7 18.550781 7 18 C 7 17.449219 6.550781 17 6 17 Z M 10 17 C 9.449219 17 9 17.449219 9 18 C 9 18.550781 9.449219 19 10 19 C 10.550781 19 11 18.550781 11 18 C 11 17.449219 10.550781 17 10 17 Z M 14 17 C 13.449219 17 13 17.449219 13 18 C 13 18.550781 13.449219 19 14 19 C 14.550781 19 15 18.550781 15 18 C 15 17.449219 14.550781 17 14 17 Z M 18 17 C 17.449219 17 17 17.449219 17 18 C 17 18.550781 17.449219 19 18 19 C 18.550781 19 19 18.550781 19 18 C 19 17.449219 18.550781 17 18 17 Z</StreamGeometry>
+        <StreamGeometry x:Key="FitIconStretch">M 39.960938 5.9804688 A 2.0002 2.0002 0 0 0 39.740234 6 L 31 6 A 2.0002 2.0002 0 1 0 31 10 L 35.171875 10 L 10 35.171875 L 10 31 A 2.0002 2.0002 0 1 0 6 31 L 6 39.753906 A 2.0002 2.0002 0 0 0 8.2597656 42 L 17 42 A 2.0002 2.0002 0 1 0 17 38 L 12.828125 38 L 38 12.828125 L 38 17 A 2.0002 2.0002 0 1 0 42 17 L 42 8.2460938 A 2.0002 2.0002 0 0 0 39.960938 5.9804688 z M 8 6 A 2.0002 2.0002 0 0 0 7.6171875 6.0371094 A 2.0002 2.0002 0 0 0 7.2734375 6.1386719 C 7.2615997 6.1432867 7.2500467 6.1474949 7.2382812 6.1523438 A 2.0002 2.0002 0 0 0 6.9140625 6.3222656 C 6.9069283 6.3268963 6.8996655 6.3312065 6.8925781 6.3359375 A 2.0002 2.0002 0 0 0 6.5976562 6.5761719 C 6.5939662 6.5798106 6.589606 6.5822643 6.5859375 6.5859375 C 6.5842493 6.5876257 6.5837121 6.5901042 6.5820312 6.5917969 A 2.0002 2.0002 0 0 0 6.3339844 6.8945312 C 6.3322166 6.8971884 6.3298787 6.89968 6.328125 6.9023438 A 2.0002 2.0002 0 0 0 6.1601562 7.2226562 C 6.1543298 7.2364493 6.148081 7.2497775 6.1425781 7.2636719 A 2.0002 2.0002 0 0 0 6.0429688 7.5957031 C 6.0405497 7.6074921 6.0373611 7.6190367 6.0351562 7.6308594 A 2.0002 2.0002 0 0 0 6 8 L 6 17 A 2.0002 2.0002 0 1 0 10 17 L 10 12.828125 L 19.757812 22.585938 L 22.585938 19.757812 L 12.828125 10 L 17 10 A 2.0002 2.0002 0 1 0 17 6 L 8 6 z M 28.242188 25.414062 L 25.414062 28.242188 L 35.171875 38 L 31 38 A 2.0002 2.0002 0 1 0 31 42 L 40 42 A 2.0002 2.0002 0 0 0 40.382812 41.962891 A 2.0002 2.0002 0 0 0 40.726562 41.861328 C 40.7384 41.856713 40.749953 41.852505 40.761719 41.847656 A 2.0002 2.0002 0 0 0 41.085938 41.677734 A 2.0002 2.0002 0 0 0 41.107422 41.664062 A 2.0002 2.0002 0 0 0 41.402344 41.423828 A 2.0002 2.0002 0 0 0 41.417969 41.408203 A 2.0002 2.0002 0 0 0 41.666016 41.105469 A 2.0002 2.0002 0 0 0 41.669922 41.099609 C 41.670413 41.098865 41.671385 41.098401 41.671875 41.097656 A 2.0002 2.0002 0 0 0 41.839844 40.777344 C 41.84567 40.763551 41.851919 40.750222 41.857422 40.736328 A 2.0002 2.0002 0 0 0 41.957031 40.404297 C 41.95945 40.392508 41.962639 40.380963 41.964844 40.369141 A 2.0002 2.0002 0 0 0 42 40 L 42 31 A 2.0002 2.0002 0 0 0 39.970703 28.972656 A 2.0002 2.0002 0 0 0 38 31 L 38 35.171875 L 28.242188 25.414062 z</StreamGeometry>
+
+        <!--  A shape-picker tile: icon beside its name in a rounded box that borrows the Semi
+              RadioButton's own brushes — grey ring unselected, a thicker accent ring selected. A
+              fixed height shared with the aspect tiles keeps the two grids reading as one family.  -->
         <ControlTheme x:Key="MaskShapeTile" TargetType="RadioButton">
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Height" Value="42" />
             <Setter Property="Template">
                 <ControlTemplate>
                     <Border
                         Name="_box"
-                        Padding="7"
                         Background="Transparent"
                         BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="4">
-                        <DockPanel>
-                            <TextBlock
-                                Name="_label"
-                                Margin="0,6,0,0"
-                                DockPanel.Dock="Bottom"
-                                FontSize="11"
-                                Foreground="#CCCCCC"
-                                Text="{TemplateBinding Content}"
-                                TextAlignment="Center" />
+                        <!--  Width only on the icon, never a fixed Height: a Uniform-stretched
+                              Path anchors its ink to the top of a taller box, so the height must
+                              come from the ink for VerticalAlignment to mean anything.  -->
+                        <StackPanel
+                            Margin="10,0,0,0"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
                             <Path
                                 Name="_icon"
-                                Width="28"
-                                Height="28"
-                                HorizontalAlignment="Center"
+                                Width="22"
+                                VerticalAlignment="Center"
                                 Data="{TemplateBinding Tag}"
                                 Fill="#CCCCCC"
                                 Stretch="Uniform" />
-                        </DockPanel>
+                            <TextBlock
+                                Name="_label"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#CCCCCC"
+                                Text="{TemplateBinding Content}" />
+                        </StackPanel>
                     </Border>
                 </ControlTemplate>
             </Setter>
@@ -59,7 +68,6 @@
                 <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
             </Style>
             <Style Selector="^:checked /template/ Border#_box">
-                <Setter Property="Padding" Value="6" />
                 <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
                 <Setter Property="BorderThickness" Value="2" />
             </Style>
@@ -68,6 +76,45 @@
             </Style>
             <Style Selector="^:checked /template/ TextBlock#_label">
                 <Setter Property="Foreground" Value="White" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!--  An aspect tile: the same ring box, but the content is supplied per tile — a little
+              rectangle drawn AT the ratio it applies with the ratio's name inside it (the icon is
+              the label, so it can be big and obvious). Content colouring lives in the panel styles
+              below (Rectangle.ratio / TextBlock.ratioText / Path.ratioGlyph), because a template
+              style cannot reach into supplied content.  -->
+        <ControlTheme x:Key="RatioTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <ContentPresenter
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
             </Style>
         </ControlTheme>
     </UserControl.Resources>
@@ -80,9 +127,16 @@
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="#9A9A9A" />
         </Style>
-        <!--  MinWidth, not Width: the labels still line up as a column, but a long one ("Text
-              scale") grows instead of being clipped now that the editor beside it is no longer
-              packed against it.  -->
+        <!--  the rule that runs from a section title to the panel edge  -->
+        <Style Selector="Rectangle.sectionRule">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Fill" Value="#5C5C5C" />
+            <Setter Property="Margin" Value="8,1,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!--  MinWidth, not Width: the labels still line up as a column, but a long one grows
+              instead of being clipped now that the editor beside it is no longer packed against
+              it.  -->
         <Style Selector="TextBlock.label">
             <Setter Property="MinWidth" Value="60" />
             <Setter Property="VerticalAlignment" Value="Center" />
@@ -94,12 +148,21 @@
         <Style Selector="DockPanel.row">
             <Setter Property="LastChildFill" Value="True" />
         </Style>
+        <!--  the reset-dot slot: fixed width whether or not a dot is showing, so the label column
+              cannot shift when a value leaves (or returns to) its default.  -->
+        <Style Selector="Panel.dot">
+            <Setter Property="Width" Value="14" />
+        </Style>
+        <Style Selector="controls|ResetDefaultButton">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
         <Style Selector="StackPanel.section">
             <Setter Property="Spacing" Value="6" />
         </Style>
         <Style Selector="ComboBox">
             <Setter Property="Foreground" Value="White" />
-            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="MinWidth" Value="100" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
         </Style>
         <!--  wider than the 70px the shared spinner theme picks: this panel puts a spinner on
@@ -118,6 +181,41 @@
             <Setter Property="MinHeight" Value="24" />
             <Setter Property="Padding" Value="4,2" />
         </Style>
+
+        <!--  the aspect tiles' inner visuals (see RatioTile). Ratio tiles are a FILLED block with
+              the ratio's name knocked out of it: the text wears the sidebar's own background
+              colour, so it reads as cut from the block. The ratio-free tiles (Original / W:H /
+              Unlocked) draw no block — just their label or glyph.  -->
+        <Style Selector="RadioButton.ratioTile Rectangle.ratio">
+            <Setter Property="Fill" Value="#CCCCCC" />
+            <Setter Property="RadiusX" Value="3" />
+            <Setter Property="RadiusY" Value="3" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile:checked Rectangle.ratio">
+            <Setter Property="Fill" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile TextBlock.ratioText">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#454545" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile TextBlock.plainText">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="#CCCCCC" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile:checked TextBlock.plainText">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile Path.ratioGlyph">
+            <Setter Property="Fill" Value="#CCCCCC" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile:checked Path.ratioGlyph">
+            <Setter Property="Fill" Value="White" />
+        </Style>
     </UserControl.Styles>
 
     <Panel>
@@ -132,36 +230,100 @@
             TextWrapping="Wrap" />
 
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasSelection}">
-            <StackPanel Margin="10" Spacing="12">
+            <StackPanel Margin="10" Spacing="14">
 
-                <!--  subject: which row/kind the numbers below belong to  -->
-                <StackPanel Spacing="2">
-                    <TextBlock
-                        FontWeight="Bold"
-                        Foreground="White"
-                        Text="{Binding SubjectName}"
-                        TextTrimming="CharacterEllipsis" />
-                    <TextBlock
-                        FontSize="11"
-                        Foreground="#999999"
-                        Text="{Binding SubjectKind}" />
-                </StackPanel>
+                <!--  subject: which row/kind the numbers below belong to, with the row's own
+                      hide/mute switches beside it — they are about the track, not any one value,
+                      so they live in the title, not in a section.  -->
+                <DockPanel>
+                    <StackPanel
+                        DockPanel.Dock="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="2">
+                        <controls:ToolButton
+                            x:Name="btnHide"
+                            Width="24"
+                            Height="24"
+                            Padding="4"
+                            CanToggle="True"
+                            IconPath="{StaticResource IconEye}"
+                            IsChecked="{Binding TrackHidden, Mode=TwoWay}"
+                            IsVisible="{Binding ShowTrackHidden}"
+                            ToolTip.Tip="Hide this track" />
+                        <controls:ToolButton
+                            x:Name="btnMute"
+                            Width="24"
+                            Height="24"
+                            Padding="4"
+                            CanToggle="True"
+                            IconPath="{StaticResource IconSpeakerEnabled}"
+                            IsChecked="{Binding TrackMuted, Mode=TwoWay}"
+                            IsVisible="{Binding ShowTrackMuted}"
+                            ToolTip.Tip="Mute this track" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <TextBlock
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="{Binding SubjectName}"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="#999999"
+                            Text="{Binding SubjectKind}" />
+                    </StackPanel>
+                </DockPanel>
 
-                <StackPanel Classes="section">
-                    <CheckBox Content="Hide row" IsChecked="{Binding TrackHidden, Mode=TwoWay}" IsVisible="{Binding ShowTrackHidden}" />
-                    <CheckBox Content="Mute row" IsChecked="{Binding TrackMuted, Mode=TwoWay}" IsVisible="{Binding ShowTrackMuted}" />
-                    <Button
-                        Command="{Binding CommandUnlink}"
-                        Content="Unlink from recording"
-                        IsVisible="{Binding IsLinked}"
-                        ToolTip.Tip="Stops this row moving and splitting with the rest of the recording" />
-                </StackPanel>
+                <!--  synced-object banner: shown only while the row still moves with its recording.
+                      An unsynced row shows nothing at all — "not linked" is the unremarkable state.  -->
+                <Border
+                    Padding="8"
+                    Background="#3d3d3d"
+                    CornerRadius="4"
+                    IsVisible="{Binding IsLinked}">
+                    <StackPanel Spacing="6">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                            <!--  the timeline's link-badge orange (TimelinePalette.LinkBadgeBrush,
+                                  dark) — the banner and the badge are the same mark. Width only:
+                                  a fixed Height would top-align the Uniform-stretched ink.  -->
+                            <Path
+                                Grid.Column="0"
+                                Width="14"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconLink}"
+                                Fill="#FF9F43"
+                                Stretch="Uniform" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                FontWeight="Bold"
+                                Foreground="White"
+                                Text="Synced object" />
+                        </Grid>
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="#BBBBBB"
+                            Text="This object's position in the timeline is locked to the original recording."
+                            TextWrapping="Wrap" />
+                        <Button
+                            x:Name="btnDesync"
+                            HorizontalAlignment="Left"
+                            Content="Desync…" />
+                    </StackPanel>
+                </Border>
 
-                <!--  transform  -->
+                <!--  placement  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowTransform}">
-                    <TextBlock Classes="section" Text="PLACEMENT" />
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="PLACEMENT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
 
                     <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding PositionX, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Center X" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -173,6 +335,9 @@
                     </DockPanel>
 
                     <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding PositionY, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Center Y" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -184,10 +349,11 @@
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowScale}">
-                        <!--  "Size" for pictures, "Text scale" for text — the TEXT section below
-                              has its own font-size "Size" row, and the gizmo writes this Scale
-                              for text too, so it must be visible (and distinguishable) there.
-                              Unlocking the aspect ratio splits it into Width and Height.  -->
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Scale, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <!--  "Size" while the height follows the content; "Width" once the item
+                              carries a height of its own (the row below appears).  -->
                         <TextBlock Classes="label" Text="{Binding ScaleLabel}" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -199,7 +365,8 @@
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowScaleHeight}">
-                        <TextBlock Classes="label" Text="{Binding ScaleHeightLabel}" />
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Height" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
                             Max="4"
@@ -209,13 +376,10 @@
                             Value="{Binding ScaleHeight, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <CheckBox
-                        Content="Locked aspect ratio"
-                        IsChecked="{Binding AspectLocked, Mode=TwoWay}"
-                        IsVisible="{Binding ShowScale}"
-                        ToolTip.Tip="Keep the item's own proportions. Unlock it to size the width and height apart." />
-
                     <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Rotation, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Rotation" />
                         <controls:SpinnerTextBox
                             Max="360"
@@ -227,6 +391,9 @@
                     </DockPanel>
 
                     <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Opacity, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Opacity" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -238,17 +405,268 @@
                     </DockPanel>
                 </StackPanel>
 
+                <!--  aspect ratio + crop  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowCrop}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ASPECT RATIO" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  Original is the way back (no reset dot needed); Unlocked frees both axes
+                          and puts the edge handles on the preview gizmo. Each tile's icon is a
+                          rectangle drawn at the very ratio it applies, named inside it.  -->
+                    <Grid
+                        ColumnDefinitions="*,*,*,*"
+                        ColumnSpacing="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="4">
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding AspectOriginal, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="The picture's own aspect ratio">
+                            <TextBlock Classes="plainText" Text="Original" />
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect169, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="16:9 — widescreen">
+                            <Panel>
+                                <Rectangle
+                                    Width="43"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="16:9" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="2"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect11, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="1:1 — square">
+                            <Panel>
+                                <Rectangle
+                                    Width="24"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="1:1" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="3"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect45, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="4:5 — portrait">
+                            <Panel>
+                                <Rectangle
+                                    Width="22"
+                                    Height="27"
+                                    Classes="ratio" />
+                                <TextBlock
+                                    Classes="ratioText"
+                                    FontSize="9"
+                                    Text="4:5" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect32, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="3:2 — classic photo">
+                            <Panel>
+                                <Rectangle
+                                    Width="36"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="3:2" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect43, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="4:3 — standard">
+                            <Panel>
+                                <Rectangle
+                                    Width="32"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="4:3" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="2"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding AspectCustom, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="Custom ratio — type your own W:H below">
+                            <TextBlock Classes="plainText" Text="W:H" />
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="3"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding AspectUnlocked, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="Unlocked — size the width and height freely (adds edge handles on the preview)">
+                            <!--  Width only, height from the ink — a fixed Height would top-align
+                                  the Uniform-stretched glyph (see the shape-tile note)  -->
+                            <Path
+                                Width="15"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Classes="ratioGlyph"
+                                Data="{StaticResource IconLockOpen}"
+                                Stretch="Uniform" />
+                        </RadioButton>
+                    </Grid>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowCustomAspect}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Ratio" />
+                        <StackPanel
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal"
+                            Spacing="4">
+                            <controls:SpinnerTextBox
+                                Width="56"
+                                Margin="0"
+                                Max="1000"
+                                Min="0.1"
+                                SpinAmount="1"
+                                Value="{Binding CustomAspectW, Mode=TwoWay}" />
+                            <TextBlock VerticalAlignment="Center" Foreground="#CCCCCC" Text=":" />
+                            <controls:SpinnerTextBox
+                                Width="56"
+                                Margin="0"
+                                Max="1000"
+                                Min="0.1"
+                                SpinAmount="1"
+                                Value="{Binding CustomAspectH, Mode=TwoWay}" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!--  fit mode: how the picture reaches the chosen box. Inert without a ratio.  -->
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="4"
+                        IsEnabled="{Binding AspectSelected}">
+                        <RadioButton
+                            Grid.Column="0"
+                            Content="Fill"
+                            GroupName="ItemFit"
+                            IsChecked="{Binding AspectFill, Mode=TwoWay}"
+                            Tag="{StaticResource FitIconFill}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Crop the edges so the picture covers the new shape" />
+                        <RadioButton
+                            Grid.Column="1"
+                            Content="Stretch"
+                            GroupName="ItemFit"
+                            IsChecked="{Binding AspectStretch, Mode=TwoWay}"
+                            Tag="{StaticResource FitIconStretch}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Distort the picture to fit the new shape exactly" />
+                    </Grid>
+
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBlock Classes="section" Text="CROP" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropLeft, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Left" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropLeft, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropTop, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Top" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropTop, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropRight, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Right" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropRight, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropBottom, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Bottom" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropBottom, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
                 <!--  mask  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowMask}">
-                    <TextBlock Classes="section" Text="SHAPE" />
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="SHAPE" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
 
                     <!--  a 2x2 grid of tiles rather than a row of radios: the shape is the thing
                           being chosen, so each option shows it. Stretches with the sidebar.  -->
                     <Grid
                         ColumnDefinitions="*,*"
-                        ColumnSpacing="6"
+                        ColumnSpacing="4"
                         RowDefinitions="Auto,Auto"
-                        RowSpacing="6">
+                        RowSpacing="4">
                         <RadioButton
                             Grid.Row="0"
                             Grid.Column="0"
@@ -284,6 +702,9 @@
                     </Grid>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowCornerRadius}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CornerRadius, Mode=TwoWay}" DefaultValue="0.25" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Corners" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -295,58 +716,12 @@
                     </DockPanel>
                 </StackPanel>
 
-                <!--  crop  -->
-                <StackPanel Classes="section" IsVisible="{Binding ShowCrop}">
-                    <TextBlock Classes="section" Text="CROP" />
-
-                    <DockPanel Classes="row">
-                        <TextBlock Classes="label" Text="Left" />
-                        <controls:SpinnerTextBox
-                            DisplayScale="100"
-                            Max="0.95"
-                            Min="0"
-                            SpinAmount="0.01"
-                            Suffix="%"
-                            Value="{Binding CropLeft, Mode=TwoWay}" />
-                    </DockPanel>
-
-                    <DockPanel Classes="row">
-                        <TextBlock Classes="label" Text="Top" />
-                        <controls:SpinnerTextBox
-                            DisplayScale="100"
-                            Max="0.95"
-                            Min="0"
-                            SpinAmount="0.01"
-                            Suffix="%"
-                            Value="{Binding CropTop, Mode=TwoWay}" />
-                    </DockPanel>
-
-                    <DockPanel Classes="row">
-                        <TextBlock Classes="label" Text="Right" />
-                        <controls:SpinnerTextBox
-                            DisplayScale="100"
-                            Max="0.95"
-                            Min="0"
-                            SpinAmount="0.01"
-                            Suffix="%"
-                            Value="{Binding CropRight, Mode=TwoWay}" />
-                    </DockPanel>
-
-                    <DockPanel Classes="row">
-                        <TextBlock Classes="label" Text="Bottom" />
-                        <controls:SpinnerTextBox
-                            DisplayScale="100"
-                            Max="0.95"
-                            Min="0"
-                            SpinAmount="0.01"
-                            Suffix="%"
-                            Value="{Binding CropBottom, Mode=TwoWay}" />
-                    </DockPanel>
-                </StackPanel>
-
                 <!--  text  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowText}">
-                    <TextBlock Classes="section" Text="TEXT" />
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="TEXT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
 
                     <TextBox
                         x:Name="txtText"
@@ -357,13 +732,21 @@
                         TextWrapping="Wrap"
                         PlaceholderText="Text" />
 
-                    <TextBox
-                        x:Name="txtFont"
-                        Classes="field"
-                        Text="{Binding FontFamily, Mode=TwoWay}"
-                        PlaceholderText="Default font" />
+                    <!--  the button previews the face itself; clicking opens the font picker.
+                          Content is kept in step by the code-behind (this project binds at
+                          runtime, and a FontFamily needs converting anyway).  -->
+                    <Button
+                        x:Name="btnFont"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        ToolTip.Tip="Choose a font">
+                        <TextBlock x:Name="txtFontName" Text="Default font" />
+                    </Button>
 
                     <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding FontSize, Mode=TwoWay}" DefaultValue="48" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Size" />
                         <controls:SpinnerTextBox
                             Max="2000"
@@ -374,20 +757,55 @@
                             Value="{Binding FontSize, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <TextBox
-                        x:Name="txtColor"
-                        Classes="field"
-                        Text="{Binding TextColorHex, Mode=TwoWay}"
-                        PlaceholderText="#AARRGGBB" />
+                    <!--  swatch + hex, one click target: opens the mini colour picker in place  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="colorWell"
+                            Padding="5,3"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            CornerRadius="3"
+                            Cursor="Hand">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="colorSwatch" Fill="White" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#FFFFFFFF" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
 
-                    <ComboBox x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Align" />
+                        <ComboBox x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
+                    </DockPanel>
                 </StackPanel>
 
                 <!--  audio  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowAudio}">
-                    <TextBlock Classes="section" Text="AUDIO" />
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="AUDIO" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
 
                     <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Volume, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Volume" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -399,12 +817,28 @@
                     </DockPanel>
                 </StackPanel>
 
-                <!--  transitions  -->
+                <!--  animation (entry/exit transitions)  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowTransitions}">
-                    <TextBlock Classes="section" Text="ENTRY" />
-                    <ComboBox x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ANIMATION" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  enum defaults are assigned in code-behind: a XAML DefaultValue is
+                                  a string, and the reset dot's equality (and its reset write-back)
+                                  needs the real enum value  -->
+                            <controls:ResetDefaultButton x:Name="dotEntryKind" CurrentValue="{Binding EntryKind, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Entry" />
+                        <ComboBox x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
+                    </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding EntryDurationMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Length" />
                         <controls:SpinnerTextBox
                             Max="10000"
@@ -415,18 +849,26 @@
                             Value="{Binding EntryDurationMs, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <ComboBox
-                        x:Name="comboEntryEasing"
-                        IsVisible="{Binding ShowEntryOptions}"
-                        SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotEntryEasing" CurrentValue="{Binding EntryEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <ComboBox x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
+                    </DockPanel>
 
-                    <TextBlock
-                        Classes="section"
-                        Margin="0,6,0,0"
-                        Text="EXIT" />
-                    <ComboBox x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
+                    <DockPanel Classes="row" Margin="0,6,0,0">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotExitKind" CurrentValue="{Binding ExitKind, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Exit" />
+                        <ComboBox x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
+                    </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ExitDurationMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Length" />
                         <controls:SpinnerTextBox
                             Max="10000"
@@ -437,14 +879,31 @@
                             Value="{Binding ExitDurationMs, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <ComboBox
-                        x:Name="comboExitEasing"
-                        IsVisible="{Binding ShowExitOptions}"
-                        SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                    <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotExitEasing" CurrentValue="{Binding ExitEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <ComboBox x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                    </DockPanel>
                 </StackPanel>
 
             </StackPanel>
         </ScrollViewer>
+
+        <!--  the in-place colour picker the Color row opens; light-dismiss like the image
+              editor's, realtime so the preview tracks every slider move  -->
+        <Popup
+            x:Name="colorPopup"
+            HorizontalOffset="-5"
+            IsLightDismissEnabled="True"
+            Placement="Pointer"
+            VerticalOffset="-5">
+            <colors:MiniColorDialog
+                x:Name="miniColor"
+                Margin="10"
+                Realtime="True" />
+        </Popup>
     </Panel>
 
 </UserControl>

@@ -15,7 +15,8 @@ namespace Clowd.UI.Controls
     /// reflection): the displayed text is $"{Math.Round(Value * DisplayScale, 2)} {Suffix}",
     /// edits commit on Enter/LostFocus (suffix stripped, divided by DisplayScale, reverted on
     /// parse failure), and spinning (buttons, wheel, Up/PageUp/Down/PageDown) snaps, steps by
-    /// SpinAmount, then wraps when BOTH Min and Max are set, otherwise clamps.
+    /// SpinAmount and clamps to Min/Max — spinning past an end stops there rather than wrapping
+    /// to the other end.
     /// </summary>
     public class SpinnerTextBox : TemplatedControl
     {
@@ -167,22 +168,10 @@ namespace Clowd.UI.Controls
 
             currentValue += SpinAmount * direction;
 
-            if (Max.HasValue && Min.HasValue && direction > 0 && currentValue > Max.Value)
-            {
-                // if both min and max are set, lets let the spinner loop around
-                currentValue = Min.Value + (currentValue - Max.Value);
-            }
-            else if (Max.HasValue && Min.HasValue && direction < 0 && currentValue < Min.Value)
-            {
-                currentValue = Max.Value + (currentValue - Min.Value);
-            }
-            else
-            {
-                if (Max.HasValue)
-                    currentValue = Math.Min(Max.Value, currentValue);
-                if (Min.HasValue)
-                    currentValue = Math.Max(Min.Value, currentValue);
-            }
+            if (Max.HasValue)
+                currentValue = Math.Min(Max.Value, currentValue);
+            if (Min.HasValue)
+                currentValue = Math.Max(Min.Value, currentValue);
 
             SetCurrentValue(ValueProperty, currentValue);
         }
