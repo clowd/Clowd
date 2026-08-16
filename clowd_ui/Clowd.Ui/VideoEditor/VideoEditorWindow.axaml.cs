@@ -98,6 +98,13 @@ namespace Clowd.UI.VideoEditor
         private const string RenderTooltip = "Render edited video";
         private const string CancelRenderTooltip = "Cancel render";
 
+        /// <summary>The speeds the transport's picker offers. Audio follows the speed with its
+        /// pitch shifted (no time stretching), as in any player's speed menu.</summary>
+        private static readonly double[] PlaybackRates = { 0.25, 0.5, 1.0, 1.5, 2.0, 4.0 };
+
+        private readonly List<MenuItem> _speedItems = new List<MenuItem>();
+        private double _playbackRate = 1.0; // survives player rebuilds (see OpenPlayerAsync)
+
         // the sidebar's ColumnDefinition (contentGrid column 3). Avalonia's XAML compiler does not
         // emit a field for an x:Named ColumnDefinition, so reach it through the named grid.
         private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
@@ -201,6 +208,8 @@ namespace Clowd.UI.VideoEditor
                 if (e.Property == RangeBase.ValueProperty && _player != null)
                     _player.Volume = volumeSlider.Value;
             };
+
+            BuildSpeedMenu();
 
             // the properties panel opens itself on the first selection (see AutoShowSidebar)
             ApplySidebarVisible(false);
@@ -424,8 +433,9 @@ namespace Clowd.UI.VideoEditor
             preview.Session = _editor;
             preview.SetVideo(new Size(project.Output.WidthPx, project.Output.HeightPx));
 
+            // resolution only: the duration lives on the transport readout, beside the playhead.
             txtMediaSummary.Text = String.Create(CultureInfo.InvariantCulture,
-                $"{project.Output.WidthPx}x{project.Output.HeightPx} · {FormatTime(Duration)}");
+                $"{project.Output.WidthPx}x{project.Output.HeightPx}");
 
             if (_editor.DurationTicks <= 0)
             {
@@ -463,6 +473,7 @@ namespace Clowd.UI.VideoEditor
 
             _player = new CompositionPlayer(a => Dispatcher.UIThread.Post(a));
             _player.Volume = volumeSlider.Value;
+            _player.PlaybackRate = _playbackRate; // set before the open so the clock starts scaled
             _player.PositionChanged += Player_PositionChanged;
             _player.StateChanged += Player_StateChanged;
             preview.AttachPlayer(_player);
@@ -1318,6 +1329,46 @@ namespace Clowd.UI.VideoEditor
             txtPosition.Text = FormatTime(position) + " / " + FormatTime(Duration);
             preview.PositionTicks = position.Ticks;
         }
+
+        /// <summary>Fills the speed button's drop-down once; the entries are radio items so the
+        /// menu itself shows which speed is live, and the button's label repeats it closed.</summary>
+        private void BuildSpeedMenu()
+        {
+            var flyout = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedLeft };
+            foreach (var rate in PlaybackRates)
+            {
+                var item = new MenuItem
+                {
+                    Header = FormatRate(rate),
+                    ToggleType = MenuItemToggleType.Radio,
+                    GroupName = "videoEditorPlaybackRate",
+                    IsChecked = rate == _playbackRate,
+                    Tag = rate,
+                };
+                item.Click += (s, _) => SetPlaybackRate((double)((MenuItem)s).Tag);
+                flyout.Items.Add(item);
+                _speedItems.Add(item);
+            }
+
+            btnSpeed.Flyout = flyout;
+            btnSpeed.Content = FormatRate(_playbackRate);
+        }
+
+        /// <summary>Applies a speed to the live player and to the picker. Kept on the window (not
+        /// only on the player) so a pipeline rebuild or a re-opened player inherits it.</summary>
+        private void SetPlaybackRate(double rate)
+        {
+            _playbackRate = rate;
+            btnSpeed.Content = FormatRate(rate);
+            foreach (var item in _speedItems)
+                item.IsChecked = (double)item.Tag == rate;
+
+            if (_player != null)
+                _player.PlaybackRate = rate;
+        }
+
+        private static string FormatRate(double rate)
+            => rate.ToString("0.##", CultureInfo.InvariantCulture) + "x";
 
         private void UpdatePlayPauseButton()
         {

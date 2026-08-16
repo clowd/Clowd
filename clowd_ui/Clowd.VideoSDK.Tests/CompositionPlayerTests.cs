@@ -292,6 +292,28 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(PlayerState.Paused, player.State);
         }
 
+        [Fact]
+        public async Task Playback_rate_scales_the_clock_and_clamps_to_its_bounds()
+        {
+            var project = SolidProject(60 * Second); // no media: the clock alone drives the rate
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project);
+
+            player.PlaybackRate = 1000;
+            Assert.Equal(CompositionPlayer.MaxPlaybackRate, player.PlaybackRate);
+
+            player.PlaybackRate = 4.0;
+            player.Play();
+            var sw = Stopwatch.StartNew();
+            Assert.True(WaitUntil(() => player.Position >= TimeSpan.FromSeconds(2), 3000),
+                $"position only reached {player.Position} at 4x");
+            player.Pause();
+
+            // 2s of timeline at 4x is half a second of wall time — realtime could not have.
+            Assert.True(sw.ElapsedMilliseconds < 1500,
+                $"2s of timeline took {sw.ElapsedMilliseconds}ms at 4x");
+        }
+
         // ------------------------------------------------------------------------ media playback
 
         [Fact]

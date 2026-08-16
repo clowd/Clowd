@@ -308,6 +308,36 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
+        [Theory]
+        [InlineData(2.0)]
+        [InlineData(0.5)]
+        public void Speed_resamples_the_timeline_into_the_device_chunk(double speed)
+        {
+            RequireFFmpeg();
+
+            // a 2s item at 2x is 1s of device audio (and 4s at 0.5x): the worker consumes the
+            // timeline at the speed and resamples it back onto the device's own rate.
+            var project = NewProject();
+            var a = AddSource(project, SineFixture(440, 0.30f, 2));
+            AddAudioItem(project, a, 0, 2 * Second);
+
+            var (ring, sink) = NewSink();
+            using (sink)
+            using (var worker = new AudioMixWorker(project, ring, sink, Rate))
+            {
+                worker.SetSpeed(speed);
+                worker.Start();
+
+                int expected = (int)(2 * Rate / speed);
+                var mix = DrainToEof(ring, worker, expected + Rate, out int frames);
+
+                // the tail rounds within one 20ms chunk of the resampler's cursor
+                Assert.InRange(frames, expected - Chunk, expected + Chunk);
+                Assert.InRange(Rms(mix, Rate / 4, Rate / 2), 0.18, 0.24); // resampled, not silence
+                Assert.Null(worker.Error);
+            }
+        }
+
         [Fact]
         public void PrepareSeek_restarts_the_base_pts_at_the_target()
         {

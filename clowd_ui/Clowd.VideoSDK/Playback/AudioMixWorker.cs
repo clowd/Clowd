@@ -42,6 +42,12 @@ namespace Clowd.VideoSDK.Playback
     {
         private const int Channels = AudioMixer.Channels;
 
+        /// <summary>Timeline frames carried between resampled chunks. The overlap is at most two
+        /// frames (the interpolation reads one frame past the last output sample); the rest is
+        /// slack so a rounding surprise degrades to a carry reset, not to reading past the
+        /// buffer.</summary>
+        private const int CarryFrames = 8;
+
         private readonly AudioRingBuffer _ring;
         private readonly NAudioSink _sink;
         private readonly int _rate;
@@ -51,10 +57,12 @@ namespace Clowd.VideoSDK.Playback
         private readonly SeekableAudioSource _source;
         private readonly FaultIsolatingSource _readSource;
 
-        // request slots (any thread); long.MinValue / null = empty. The initial pending seek to 0
-        // makes the first chunk after Start establish flush + timing even without a PrepareSeek.
+        // request slots (any thread); long.MinValue / null / 0 = empty. The initial pending seek
+        // to 0 makes the first chunk after Start establish flush + timing even without a
+        // PrepareSeek.
         private long _pendingSeekTicks;
         private Project _pendingProject;
+        private double _pendingSpeed;
         private Exception _error;
         private volatile bool _running;
         private volatile bool _eofReached;
@@ -65,6 +73,18 @@ namespace Clowd.VideoSDK.Playback
         private long _nextFrame;
         private long _endFrame;
         private bool _basePtsPending = true;
+
+        // playback speed state (mix-thread-owned; all unused while _speed == 1). _srcPos is the
+        // fractional timeline frame the next output frame samples at, _carry holds the tail
+        // timeline frames of the previous chunk that the next one still interpolates from — the
+        // mixer's sources are forward-only, so an overlapping frame must be carried, never
+        // re-requested.
+        private double _speed = 1.0;
+        private double _srcPos;
+        private float[] _src = Array.Empty<float>();
+        private readonly float[] _carry = new float[CarryFrames * Channels];
+        private long _carryStart;
+        private int _carryCount;
 
         private Thread _thread;
         private bool _disposed;
@@ -129,6 +149,17 @@ namespace Clowd.VideoSDK.Playback
             _eofReached = false;
         }
 
+        /// <summary>Controller thread: change playback speed (media time per device frame). The
+        /// mix thread adopts it at the next chunk boundary and flushes — production restarts at
+        /// the current position so the sink's timing describes the new mapping from its first
+        /// sample. Samples are linearly resampled, so pitch rides with the speed (no time
+        /// stretching), exactly like a player's speed control.</summary>
+        public void SetSpeed(double speed)
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(speed, 0.0);
+            Interlocked.Exchange(ref _pendingSpeed, speed);
+        }
+
         /// <summary>Controller thread: swap in an edited project at the next chunk boundary
         /// (latest wins). Builds a fresh mixer snapshot over the SAME source — decoders are never
         /// touched, which is what keeps volume/transition edits cheap. The caller must hand over a
@@ -164,13 +195,26 @@ namespace Clowd.VideoSDK.Playback
                 ApplyProject(project);
 
             long seek = Interlocked.Exchange(ref _pendingSeekTicks, long.MinValue);
+
+            double speed = Interlocked.Exchange(ref _pendingSpeed, 0);
+            if (speed > 0 && speed != _speed)
+            {
+                _speed = speed;
+                // the sink maps device frames to media time through the speed, so the change
+                // only makes sense from a flushed stream on: force one if none was asked for.
+                if (seek == long.MinValue)
+                    seek = AudioTime.TicksFloor(_nextFrame, _rate);
+            }
+
             if (seek != long.MinValue)
             {
                 _ring.Clear(); // mix thread IS the producer — legal here and nowhere else
-                _sink.ResetTiming();
+                _sink.ResetTiming(_speed);
                 _source.Reset(); // the timeline moved: every stream repositions on its next read
                 _mixer = new AudioMixer(_project, _readSource);
                 _nextFrame = AudioTime.SamplesFloor(seek, _rate);
+                _srcPos = _nextFrame;
+                _carryCount = 0;
                 _basePtsPending = true;
             }
 
@@ -185,6 +229,12 @@ namespace Clowd.VideoSDK.Playback
             if (_ring.Available >= _maxBufferedFloats)
             {
                 Thread.Sleep(5); // enough lead buffered; wait for the device to drain
+                return;
+            }
+
+            if (_speed != 1.0)
+            {
+                MixResampledChunk();
                 return;
             }
 
@@ -210,9 +260,130 @@ namespace Clowd.VideoSDK.Playback
             }
 
             if (WriteToRing(new ReadOnlySpan<float>(_chunk, 0, frames * Channels)))
+            {
                 _nextFrame += frames;
+                _srcPos = _nextFrame;
+            }
             // an abandoned write means a newer seek superseded this chunk — the next iteration
             // flushes and re-mixes from the new position, so the partial samples never play.
+        }
+
+        /// <summary>
+        /// The speed != 1 chunk: mix the stretch of timeline the device chunk covers, then
+        /// linearly resample it down (or up) to one device chunk. The mixer is asked only for
+        /// frames it has not produced yet — the one or two frames of overlap the interpolation
+        /// still needs are carried in <see cref="_carry"/>, because the sources underneath are
+        /// forward-only and re-requesting a frame would reposition them.
+        /// </summary>
+        private void MixResampledChunk()
+        {
+            int outFrames = _chunkFrames;
+            long mixStart = _carryCount > 0 ? _carryStart + _carryCount : (long)Math.Floor(_srcPos);
+            // the last timeline frame the chunk's final output sample interpolates against
+            long lastNeeded = (long)Math.Floor(_srcPos + (outFrames - 1) * _speed) + 1;
+            long needed = Math.Min(lastNeeded + 1 - mixStart, _endFrame - mixStart);
+            if (needed < 0)
+                needed = 0;
+
+            if (needed > 0)
+            {
+                EnsureSrcCapacity((int)needed);
+                try
+                {
+                    _mixer.MixChunk(mixStart, (int)needed, _src);
+                }
+                catch (Exception ex)
+                {
+                    RecordError(ex);
+                    Array.Clear(_src, 0, (int)needed * Channels);
+                }
+            }
+
+            long avail = mixStart + needed; // exclusive: frames below it are readable
+            int produced = 0;
+            for (int i = 0; i < outFrames; i++)
+            {
+                double p = _srcPos + i * _speed;
+                long f0 = (long)Math.Floor(p);
+                if (f0 >= avail)
+                    break; // ran out of audio inside this chunk
+
+                long f1 = Math.Min(f0 + 1, avail - 1);
+                float frac = (float)(p - f0);
+                for (int ch = 0; ch < Channels; ch++)
+                {
+                    float a = SampleAt(f0, mixStart, ch);
+                    float b = SampleAt(f1, mixStart, ch);
+                    _chunk[i * Channels + ch] = a + (b - a) * frac;
+                }
+
+                produced++;
+            }
+
+            if (produced == 0)
+            {
+                _nextFrame = _endFrame; // the cursor sits past the last sample: end of audio
+                _eofReached = true;
+                Thread.Sleep(10);
+                return;
+            }
+
+            if (_basePtsPending)
+            {
+                _sink.TrySetBasePts(new TimeSpan(AudioTime.TicksFloor((long)Math.Floor(_srcPos), _rate)));
+                _basePtsPending = false;
+            }
+
+            if (!WriteToRing(new ReadOnlySpan<float>(_chunk, 0, produced * Channels)))
+                return; // superseded by a seek — cursor and carry stay where they were
+
+            double nextPos = _srcPos + produced * _speed;
+            long nextCursor = Math.Min((long)Math.Floor(nextPos), avail);
+            int overlap = (int)(avail - nextCursor);
+            if (overlap > 0 && overlap <= CarryFrames)
+            {
+                for (int i = 0; i < overlap; i++)
+                {
+                    for (int ch = 0; ch < Channels; ch++)
+                        _carry[i * Channels + ch] = SampleAt(nextCursor + i, mixStart, ch);
+                }
+
+                _carryStart = nextCursor;
+                _carryCount = overlap;
+            }
+            else
+            {
+                // no overlap (or, defensively, more than the carry holds): the next chunk starts
+                // its mix at the cursor itself.
+                _carryCount = 0;
+                if (overlap > CarryFrames)
+                    nextPos = avail;
+            }
+
+            _srcPos = nextPos;
+            _nextFrame = (long)Math.Floor(nextPos);
+        }
+
+        /// <summary>One timeline frame of the resampler's window: carried tail frames first, then
+        /// the freshly mixed chunk starting at <paramref name="mixStart"/>.</summary>
+        private float SampleAt(long frame, long mixStart, int channel)
+        {
+            if (frame < mixStart)
+            {
+                long index = frame - _carryStart;
+                if (index < 0)
+                    index = 0; // unreachable: the cursor never moves behind the carry
+                return _carry[index * Channels + channel];
+            }
+
+            return _src[(frame - mixStart) * Channels + channel];
+        }
+
+        private void EnsureSrcCapacity(int frames)
+        {
+            int floats = frames * Channels;
+            if (_src.Length < floats)
+                _src = new float[floats];
         }
 
         private void ApplyProject(Project project)
