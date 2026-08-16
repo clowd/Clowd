@@ -42,6 +42,11 @@ namespace Clowd.UI.VideoEditor
 
         private readonly PreviewSurface _surface;
 
+        static VideoPreviewControl()
+        {
+            AffectsArrange<VideoPreviewControl>(FitToWindowProperty);
+        }
+
         public VideoPreviewControl()
         {
             // hit-testable background so a click on the letterbox (not the gizmo) can deselect
@@ -76,6 +81,29 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>The letterboxed video rectangle from the last arrange, in local coordinates.</summary>
         public Rect VideoRect { get; private set; }
+
+        public static readonly StyledProperty<bool> FitToWindowProperty =
+            AvaloniaProperty.Register<VideoPreviewControl, bool>(nameof(FitToWindow), true);
+
+        /// <summary>
+        /// True (the default) letterboxes the frame into whatever room the preview has, magnifying a
+        /// small video past 100% to fill it. False caps the picture at 100% — one video pixel per
+        /// device pixel — but still shrinks it when the window is too small to show the frame whole,
+        /// so the picture is never cropped either way.
+        /// </summary>
+        public bool FitToWindow
+        {
+            get => GetValue(FitToWindowProperty);
+            set => SetValue(FitToWindowProperty, value);
+        }
+
+        /// <summary>Device pixels per video pixel as of the last arrange — 1.0 is 100%. Zero until
+        /// the frame size is known. Changes raise <see cref="ZoomChanged"/>.</summary>
+        public double ZoomScale { get; private set; }
+
+        /// <summary>Raised (off the layout pass) when <see cref="ZoomScale"/> changes, so the top
+        /// bar's readout can follow a resize, a Fit toggle or an output-resolution change.</summary>
+        public event EventHandler ZoomChanged;
 
         /// <summary>
         /// The editing session the gizmo and the click hit-test read. The preview follows its
@@ -299,7 +327,13 @@ namespace Clowd.UI.VideoEditor
             PosterImage.Arrange(full);
 
             var videoRect = ComputeVideoRect(finalSize);
-            VideoRect = videoRect;
+            if (videoRect != VideoRect)
+            {
+                // the surface's own bounds do not change when only the letterbox does (a Fit
+                // toggle), so nothing else would repaint the picture into its new rectangle.
+                VideoRect = videoRect;
+                RequestRender();
+            }
 
             Gizmo.CanvasRect = videoRect;
             Gizmo.Arrange(ResolveGizmoRect(videoRect));
@@ -307,21 +341,49 @@ namespace Clowd.UI.VideoEditor
             return finalSize;
         }
 
-        /// <summary>Stretch.Uniform of the video frame into the control bounds, centred.</summary>
+        /// <summary>Stretch.Uniform of the video frame into the control bounds, centred — capped at
+        /// 100% when <see cref="FitToWindow"/> is off. Also publishes <see cref="ZoomScale"/>: the
+        /// cap is expressed in device pixels, so 100% means one video pixel per device pixel on a
+        /// scaled display too, not one per DIP.</summary>
         private Rect ComputeVideoRect(Size finalSize)
         {
             if (_videoPixelSize.Width <= 0 || _videoPixelSize.Height <= 0 ||
                 finalSize.Width <= 0 || finalSize.Height <= 0)
+            {
+                SetZoomScale(0);
                 return new Rect(finalSize);
+            }
+
+            var renderScaling = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
+            if (renderScaling <= 0)
+                renderScaling = 1.0;
 
             var scale = Math.Min(
                 finalSize.Width / _videoPixelSize.Width,
                 finalSize.Height / _videoPixelSize.Height);
 
+            if (!FitToWindow)
+                scale = Math.Min(scale, 1.0 / renderScaling);
+
+            SetZoomScale(scale * renderScaling);
+
             var w = _videoPixelSize.Width * scale;
             var h = _videoPixelSize.Height * scale;
 
             return new Rect((finalSize.Width - w) / 2, (finalSize.Height - h) / 2, w, h);
+        }
+
+        /// <summary>The change is announced off the layout pass: the readout that listens lives in
+        /// the window's top bar, and touching it from inside arrange would invalidate layout while
+        /// it runs.</summary>
+        private void SetZoomScale(double value)
+        {
+            if (ZoomScale == value)
+                return;
+
+            ZoomScale = value;
+            Dispatcher.UIThread.Post(() => ZoomChanged?.Invoke(this, EventArgs.Empty),
+                DispatcherPriority.Render);
         }
 
         /// <summary>
