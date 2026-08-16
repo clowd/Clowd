@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using Clowd.Drawing;
 using Clowd.UI.VideoEditor.Inspector;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
@@ -15,7 +16,8 @@ namespace Clowd.UI.VideoEditor
     /// The on-preview transform <b>gizmo</b>: a transparent, hit-testable rectangle sitting over the
     /// composed preview on whatever item is selected, drawing only the selection chrome (an outline
     /// following the item's mask, the true rectangular extent, and the resize handles — four
-    /// corners, plus the four edge midpoints once the item's aspect ratio is unlocked). The picture
+    /// corners, plus the four edge midpoints once the item's aspect ratio is unlocked, plus the
+    /// rotate handle floating off the right edge, exactly as the image editor's). The picture
     /// itself is composed by the SDK's <c>FrameComposer</c> underneath — that is the deliberate cost
     /// of WYSIWYG: the gizmo can no longer disagree with the render, because it does not draw the
     /// item at all.
@@ -54,9 +56,15 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>Handle indices. 0-3 are the corners (the only ones an aspect-locked item has);
         /// 4-7 are the edge midpoints, which appear once the aspect ratio is unlocked and there is
-        /// a single axis worth resizing on its own.</summary>
+        /// a single axis worth resizing on its own; 8 is the rotate handle floating off the right
+        /// edge (the image editor's handle 9).</summary>
         private const int HandleTopLeft = 0, HandleTopRight = 1, HandleBottomLeft = 2, HandleBottomRight = 3;
         private const int HandleLeft = 4, HandleTop = 5, HandleRight = 6, HandleBottom = 7;
+        private const int HandleRotate = 8;
+
+        /// <summary>How far past the right edge the rotate handle's centre floats — the image
+        /// editor's 32px (<c>GraphicRectangle.GetHandle</c> case 9).</summary>
+        private const double RotateHandleOffset = 32;
 
         /// <summary>How far outside the item's rect this control is arranged, so a corner handle is
         /// grabbable on <i>both</i> sides of the corner. Avalonia routes a press only to a control
@@ -66,28 +74,33 @@ namespace Clowd.UI.VideoEditor
         /// <see cref="ItemRect"/>, the deflated rectangle that is the item.</summary>
         internal const double HandlePad = HandleHitSize / 2;
 
+        /// <summary>Extra arrange room on the right side only, so the floating rotate handle also
+        /// falls inside this control's bounds and can be pressed.</summary>
+        internal const double RotatePad = RotateHandleOffset + HandleHitSize / 2;
+
         // cached: the cursor is re-evaluated on every pointer move, and each Cursor is a native
-        // handle.
+        // handle. The resize cursors come from the image editor's angle-aware set
+        // (CursorResources.GetResizeCursor, cached there) so a rotated item shows a cursor whose
+        // angle matches the edge it will drag.
         private static readonly Cursor MoveCursor = new Cursor(StandardCursorType.SizeAll);
         private static readonly Cursor ArrowCursor = new Cursor(StandardCursorType.Arrow);
-        private static readonly Cursor NwseCursor = new Cursor(StandardCursorType.TopLeftCorner);
-        private static readonly Cursor NeswCursor = new Cursor(StandardCursorType.TopRightCorner);
-        private static readonly Cursor EwCursor = new Cursor(StandardCursorType.SizeWestEast);
-        private static readonly Cursor NsCursor = new Cursor(StandardCursorType.SizeNorthSouth);
 
         private readonly ChromeControl _chrome;
+        private readonly RotateTransform _rotate = new RotateTransform();
 
         private EditorSession _session;
         private Guid _itemId;
         private double _aspect = 9.0 / 16.0;
         private double _scaleDenominatorPx;
         private double _scaleDenominatorYPx;
+        private double _rotation;
 
         private enum DragKind
         {
             None,
             Move,
             Resize,
+            Rotate,
         }
 
         // drag state (pointer positions are in the parent preview's coordinate space, so the gizmo
@@ -97,7 +110,10 @@ namespace Clowd.UI.VideoEditor
         private IPointer _dragPointer;
         private Point _dragStart;
         private double _startX, _startY;
-        private Point _resizeAnchor; // opposite corner (or edge midpoint), parent coords
+        private Point _resizeAnchor; // opposite corner (or edge midpoint), unrotated parent coords
+        private Point _anchorVis; // where that anchor is actually drawn (rotated), parent coords
+        private Point _rotationCenter; // item centre at press time, parent coords
+        private double _rotationAtPress;
         private int _dragHandle = -1;
         private bool _dragRight, _dragDown;
 
@@ -158,6 +174,28 @@ namespace Clowd.UI.VideoEditor
                 _aspect = placed.Aspect;
                 _scaleDenominatorPx = placed.ScaleDenominatorPx;
                 _scaleDenominatorYPx = placed.ScaleDenominatorYPx;
+                _rotation = CurrentItem()?.Transform?.Rotation ?? 0;
+            }
+            else
+            {
+                _rotation = 0;
+            }
+
+            // The whole control (outline, handles, hit area) rotates the way the composer rotates
+            // the picture: about the item's centre — which is not this control's centre, because
+            // the arrange rect carries the asymmetric rotate-handle pad. Avalonia hit-tests through
+            // render transforms, so local coordinates stay unrotated and all the handle math below
+            // is untouched by this.
+            if (_rotation != 0)
+            {
+                _rotate.Angle = _rotation;
+                RenderTransform = _rotate;
+                RenderTransformOrigin = new RelativePoint(
+                    HandlePad + placed.W / 2, HandlePad + placed.H / 2, RelativeUnit.Absolute);
+            }
+            else
+            {
+                RenderTransform = null;
             }
 
             _chrome.InvalidateVisual();
@@ -168,12 +206,23 @@ namespace Clowd.UI.VideoEditor
         public void RefreshChrome() => _chrome.InvalidateVisual();
 
         /// <summary>The item's own rectangle inside this padded control, in local coordinates —
-        /// where the outline, the handles and the body live. Collapses to empty for the zero-sized
-        /// "no gizmo" arrange, which is what makes that state draw and hit nothing.</summary>
+        /// where the outline, the handles and the body live. The pad is <see cref="HandlePad"/> all
+        /// round plus <see cref="RotatePad"/> on the right, where the rotate handle floats.
+        /// Collapses to empty for the zero-sized "no gizmo" arrange, which is what makes that state
+        /// draw and hit nothing.</summary>
         private static Rect ItemRect(Size size) => new Rect(
             HandlePad, HandlePad,
-            Math.Max(0, size.Width - 2 * HandlePad),
+            Math.Max(0, size.Width - 2 * HandlePad - RotatePad),
             Math.Max(0, size.Height - 2 * HandlePad));
+
+        /// <summary>Same rectangle in the parent preview's coordinates (unrotated — the arrange
+        /// rect; the render transform is what the eye sees). All press-time geometry is captured
+        /// off this.</summary>
+        private Rect ItemRectInParent()
+        {
+            var r = ItemRect(Bounds.Size);
+            return new Rect(Bounds.X + r.X, Bounds.Y + r.Y, r.Width, r.Height);
+        }
 
         protected override Size ArrangeOverride(Size finalSize)
         {
@@ -242,13 +291,25 @@ namespace Clowd.UI.VideoEditor
             _startX = transform.X;
             _startY = transform.Y;
 
-            if (handle >= 0)
+            // Rotation is about the item centre, which a rotation cannot move — so this centre is
+            // stable for a rotate drag, and for a resize it is the fixed frame the pointer is
+            // unrotated in (rotation is rigid, so distances to the press-time anchor survive the
+            // centre itself moving mid-drag).
+            _rotationAtPress = _rotation;
+            _rotationCenter = ItemRectInParent().Center;
+
+            if (handle == HandleRotate)
+            {
+                _drag = DragKind.Rotate;
+                _dragHandle = handle;
+            }
+            else if (handle >= 0)
             {
                 _drag = DragKind.Resize;
                 _dragHandle = handle;
 
                 // the opposite corner (or edge) stays put; everything is computed from it
-                var b = Bounds.Deflate(HandlePad); // the item's rect in parent coordinates
+                var b = ItemRectInParent(); // unrotated parent coordinates
                 _resizeAnchor = handle switch
                 {
                     HandleTopLeft => b.BottomRight,
@@ -262,6 +323,11 @@ namespace Clowd.UI.VideoEditor
                 };
                 _dragRight = handle is HandleTopRight or HandleBottomRight or HandleRight;
                 _dragDown = handle is HandleBottomLeft or HandleBottomRight or HandleBottom;
+
+                // where that anchor is actually drawn — what a rotated resize holds fixed on screen
+                var (avx, avy) = GizmoMath.RotateAbout(_resizeAnchor.X, _resizeAnchor.Y,
+                    _rotationCenter.X, _rotationCenter.Y, _rotationAtPress);
+                _anchorVis = new Point(avx, avy);
             }
             else
             {
@@ -269,7 +335,12 @@ namespace Clowd.UI.VideoEditor
                 _dragHandle = -1;
             }
 
-            _gesture = _session.BeginGesture(_drag == DragKind.Resize ? "Resize item" : "Move item", this);
+            _gesture = _session.BeginGesture(_drag switch
+            {
+                DragKind.Resize => "Resize item",
+                DragKind.Rotate => "Rotate item",
+                _ => "Move item",
+            }, this);
             _dragPointer = e.Pointer;
             e.Pointer.Capture(this);
             e.Handled = true;
@@ -305,39 +376,99 @@ namespace Clowd.UI.VideoEditor
                     t.X = x;
                     t.Y = y;
                 });
+                e.Handled = true;
+                return;
             }
-            // a horizontal edge handle: width only, the height and vertical centre untouched.
-            else if (_dragHandle is HandleLeft or HandleRight)
+
+            if (_drag == DragKind.Rotate)
             {
-                var (scaleX, x) = GizmoMath.ResizeAxis(p.X, _resizeAnchor.X, _dragRight,
+                // the handle sits on the item's 0° axis (right-edge midpoint), so the pointer's
+                // bearing from the centre *is* the rotation — the image editor's handle-9 rule.
+                var degrees = Math.Atan2(p.Y - _rotationCenter.Y, p.X - _rotationCenter.X)
+                    * 180 / Math.PI;
+                WriteRow(item, "gizmo:rotate", t => t.Rotation = degrees);
+                e.Handled = true;
+                return;
+            }
+
+            // Resize. The axis-aligned math below is only valid in the item's own unrotated space,
+            // so the pointer is unrotated about the press-time centre first (rotation is rigid, so
+            // the anchor distances survive the centre itself moving mid-drag). For a rotated item
+            // the centre those helpers return is then discarded: the composer rotates about the
+            // centre a resize moves, so the anchored corner would orbit — AnchoredCenter solves for
+            // the centre that pins the anchor's *drawn* position instead.
+            var (pux, puy) = GizmoMath.RotateAbout(p.X, p.Y,
+                _rotationCenter.X, _rotationCenter.Y, -_rotationAtPress);
+            var rotated = _rotationAtPress != 0;
+
+            // a horizontal edge handle: width only, the height untouched.
+            if (_dragHandle is HandleLeft or HandleRight)
+            {
+                var (scaleX, x) = GizmoMath.ResizeAxis(pux, _resizeAnchor.X, _dragRight,
                     _scaleDenominatorPx, CanvasRect.X, CanvasRect.Width,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
-                WriteRow(item, "gizmo:resize", t =>
+                if (rotated)
                 {
-                    t.Scale = scaleX;
-                    t.X = x;
-                });
+                    var w = scaleX * _scaleDenominatorPx;
+                    var (cx, cy) = AnchoredCenter(_dragRight ? -w / 2 : w / 2, 0);
+                    WriteRow(item, "gizmo:resize", t =>
+                    {
+                        t.Scale = scaleX;
+                        t.X = cx;
+                        t.Y = cy;
+                    });
+                }
+                else
+                {
+                    WriteRow(item, "gizmo:resize", t =>
+                    {
+                        t.Scale = scaleX;
+                        t.X = x;
+                    });
+                }
             }
             // …and a vertical one: height only.
             else if (_dragHandle is HandleTop or HandleBottom)
             {
-                var (scaleY, y) = GizmoMath.ResizeAxis(p.Y, _resizeAnchor.Y, _dragDown,
+                var (scaleY, y) = GizmoMath.ResizeAxis(puy, _resizeAnchor.Y, _dragDown,
                     _scaleDenominatorYPx, CanvasRect.Y, CanvasRect.Height,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
-                WriteRow(item, "gizmo:resize", t =>
+                if (rotated)
                 {
-                    t.ScaleY = scaleY;
-                    t.Y = y;
-                });
+                    var h = scaleY * _scaleDenominatorYPx;
+                    var (cx, cy) = AnchoredCenter(0, _dragDown ? -h / 2 : h / 2);
+                    WriteRow(item, "gizmo:resize", t =>
+                    {
+                        t.ScaleY = scaleY;
+                        t.X = cx;
+                        t.Y = cy;
+                    });
+                }
+                else
+                {
+                    WriteRow(item, "gizmo:resize", t =>
+                    {
+                        t.ScaleY = scaleY;
+                        t.Y = y;
+                    });
+                }
             }
             // a corner on an item whose aspect ratio the user unlocked resizes each axis on its
             // own; one that still has the lock keeps the content's aspect and derives its height.
             else if (item.Transform?.ScaleY is not null)
             {
-                var (scaleX, scaleY, x, y) = GizmoMath.ResizeFree(p.X, p.Y, _resizeAnchor.X, _resizeAnchor.Y,
+                var (scaleX, scaleY, x, y) = GizmoMath.ResizeFree(pux, puy, _resizeAnchor.X, _resizeAnchor.Y,
                     _dragRight, _dragDown, _scaleDenominatorPx, _scaleDenominatorYPx,
                     CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+                if (rotated)
+                {
+                    var w = scaleX * _scaleDenominatorPx;
+                    var h = scaleY * _scaleDenominatorYPx;
+                    var (cx, cy) = AnchoredCenter(_dragRight ? -w / 2 : w / 2, _dragDown ? -h / 2 : h / 2);
+                    (x, y) = (cx, cy);
+                }
+
                 WriteRow(item, "gizmo:resize", t =>
                 {
                     t.Scale = scaleX;
@@ -348,10 +479,18 @@ namespace Clowd.UI.VideoEditor
             }
             else
             {
-                var (scale, x, y) = GizmoMath.Resize(p.X, p.Y, _resizeAnchor.X, _resizeAnchor.Y,
+                var (scale, x, y) = GizmoMath.Resize(pux, puy, _resizeAnchor.X, _resizeAnchor.Y,
                     _dragRight, _dragDown, _aspect, _scaleDenominatorPx,
                     CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+                if (rotated)
+                {
+                    var w = scale * _scaleDenominatorPx;
+                    var h = w * _aspect;
+                    var (cx, cy) = AnchoredCenter(_dragRight ? -w / 2 : w / 2, _dragDown ? -h / 2 : h / 2);
+                    (x, y) = (cx, cy);
+                }
+
                 WriteRow(item, "gizmo:resize", t =>
                 {
                     t.Scale = scale;
@@ -394,6 +533,13 @@ namespace Clowd.UI.VideoEditor
                 e.Handled = true;
             }
         }
+
+        /// <summary>The centre that keeps the resize anchor's drawn position fixed for a rotated
+        /// item — press-time capture and canvas plumbed in, the maths in
+        /// <see cref="GizmoMath.AnchoredCenter"/>.</summary>
+        private (double X, double Y) AnchoredCenter(double toAnchorX, double toAnchorY) =>
+            GizmoMath.AnchoredCenter(_anchorVis.X, _anchorVis.Y, toAnchorX, toAnchorY,
+                _rotationAtPress, CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height);
 
         /// <summary>One mutation for the whole row: a drag writes at pointer-move rate, and a
         /// per-item call would pay the serialize/validate/notify pipeline once per segment per
@@ -469,6 +615,12 @@ namespace Clowd.UI.VideoEditor
             return points;
         }
 
+        /// <summary>The rotate handle's centre: floating <see cref="RotateHandleOffset"/> past the
+        /// right-edge midpoint (the image editor's handle 9). Rotates with the whole control, so it
+        /// orbits the item exactly as the image editor's does.</summary>
+        private static Point RotateHandleCenter(Rect b) =>
+            new Point(b.Right + RotateHandleOffset, b.Center.Y);
+
         /// <summary>Which handle the point is over, or -1. Measured against the item's own rect,
         /// which the pad keeps a full <see cref="HandleHitSize"/> box away from this control's
         /// edges. Corners are tested first, so they win where an edge handle would overlap one on a
@@ -487,24 +639,54 @@ namespace Clowd.UI.VideoEditor
                     return i;
             }
 
+            var rotate = RotateHandleCenter(b);
+            if (Math.Abs(local.X - rotate.X) <= HandleHitSize / 2 &&
+                Math.Abs(local.Y - rotate.Y) <= HandleHitSize / 2)
+                return HandleRotate;
+
             return -1;
         }
 
         /// <summary>Hover feedback that tells the truth about what a press will do: the resize
-        /// handles, the move body, and the plain arrow where the press will fall through to select
-        /// whatever is drawn over this item.</summary>
+        /// handles (angled to match the item's rotation), the rotate handle, the move body, and the
+        /// plain arrow where the press will fall through to select whatever is drawn over this
+        /// item.</summary>
         private void UpdateHoverCursor(Point local, Point parentPoint)
         {
             var handle = HitHandle(local);
             Cursor = handle switch
             {
-                HandleTopLeft or HandleBottomRight => NwseCursor,
-                HandleTopRight or HandleBottomLeft => NeswCursor,
-                HandleLeft or HandleRight => EwCursor,
-                HandleTop or HandleBottom => NsCursor,
+                HandleRotate => CursorResources.Rotate,
+                >= 0 => ResizeCursor(handle),
                 _ when !ItemRect(Bounds.Size).Contains(local) => ArrowCursor,
                 _ => IsTopmostAt(parentPoint) ? MoveCursor : ArrowCursor,
             };
+        }
+
+        /// <summary>The image editor's angle-aware resize cursor for this handle
+        /// (<c>GraphicRectangle.GetHandleCursor</c>): its 36-step set is indexed by the handle's
+        /// compass direction plus the item's rotation, so the cursor's angle matches the edge it
+        /// drags. The handle index is first mapped onto the image editor's clockwise-from-top-left
+        /// numbering the formula was written for.</summary>
+        private Cursor ResizeCursor(int handle)
+        {
+            int imageEditorHandle = handle switch
+            {
+                HandleTopLeft => 1,
+                HandleTop => 2,
+                HandleTopRight => 3,
+                HandleRight => 4,
+                HandleBottomRight => 5,
+                HandleBottom => 6,
+                HandleBottomLeft => 7,
+                _ => 8, // HandleLeft
+            };
+
+            var angle = (45 * imageEditorHandle + _rotation + 272.5) % 360;
+            if (angle < 0)
+                angle += 360;
+
+            return CursorResources.GetResizeCursor((int)(angle / 5) % 36);
         }
 
         /// <summary>Selection chrome drawn over the composed picture: an accent outline following
@@ -563,6 +745,16 @@ namespace Clowd.UI.VideoEditor
                 // item derives its height, so the four corners are the whole of its resize.
                 foreach (var point in HandlePoints(bounds, _owner.AspectUnlocked))
                     DrawHandle(context, point, accent);
+
+                // The rotate handle, drawn as the image editor draws its own
+                // (GraphicRectangle.DrawRotationTracker): a line from the right-edge midpoint out
+                // to a green circle. The whole control render-rotates with the item, so this
+                // orbits exactly as the image editor's does.
+                var rotateCenter = RotateHandleCenter(bounds);
+                context.DrawLine(new Pen(Brushes.Green, 1),
+                    new Point(bounds.Right, bounds.Center.Y), rotateCenter);
+                context.DrawEllipse(Brushes.Green, null, rotateCenter,
+                    HandleSize / 2 - 1, HandleSize / 2 - 1);
             }
 
             /// <summary>The image editor's tracker, so the two editors' selection chrome reads as

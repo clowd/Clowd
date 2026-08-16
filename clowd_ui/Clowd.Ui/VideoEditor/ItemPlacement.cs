@@ -44,9 +44,11 @@ namespace Clowd.UI.VideoEditor
     /// and <c>Scale</c> multiplies that measured block rather than mapping to a canvas-width
     /// fraction.
     ///
-    /// Rotation is deliberately not modelled: the composer rotates about the item centre, so the
-    /// unrotated rect is still the item's extent — the gizmo (and the click hit-test) work on it,
-    /// which is honest for the 0° case and a documented approximation otherwise.
+    /// Rotation is deliberately not modelled in the <b>placement</b>: the composer rotates about
+    /// the item centre, so the unrotated rect is still the item's extent — the gizmo is arranged on
+    /// it and then visually rotated as a whole. The click hit-test <i>is</i> rotation-aware: it
+    /// unrotates the point about each candidate's centre, so a click lands on what is actually
+    /// drawn there.
     /// </summary>
     internal static class ItemPlacement
     {
@@ -217,8 +219,18 @@ namespace Clowd.UI.VideoEditor
                         continue;
                     if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
                         continue;
-                    if (TryResolve(project, item, canvasWidth, canvasHeight, out var placed) &&
-                        placed.Contains(x, y))
+                    if (!TryResolve(project, item, canvasWidth, canvasHeight, out var placed))
+                        continue;
+
+                    // the composer rotates the picture about its centre, so test the point in the
+                    // item's unrotated space — otherwise a rotated item claims its empty AABB
+                    // corners and disowns the pixels it actually covers.
+                    double hx = x, hy = y;
+                    if (item.Transform is { Rotation: not 0 } t)
+                        (hx, hy) = GizmoMath.RotateAbout(x, y,
+                            placed.X + placed.W / 2, placed.Y + placed.H / 2, -t.Rotation);
+
+                    if (placed.Contains(hx, hy))
                         return item;
                 }
             }
@@ -383,6 +395,42 @@ namespace Clowd.UI.VideoEditor
                 canvasY, canvasHeight, minScale, maxScale);
 
             return (scaleX, scaleY, x, y);
+        }
+
+        /// <summary>Rotates a point about a centre by <paramref name="degrees"/> (clockwise, the
+        /// composer's <c>Transform.Rotation</c> sense). Pass the negated angle to unrotate — a
+        /// pointer position is mapped into a rotated item's own space this way before any of the
+        /// axis-aligned resize math above sees it.</summary>
+        public static (double X, double Y) RotateAbout(double x, double y,
+            double centerX, double centerY, double degrees)
+        {
+            var rad = degrees * Math.PI / 180;
+            double cos = Math.Cos(rad), sin = Math.Sin(rad);
+            double dx = x - centerX, dy = y - centerY;
+            return (centerX + dx * cos - dy * sin, centerY + dy * cos + dx * sin);
+        }
+
+        /// <summary>
+        /// The centre a rotated resize must land on so the anchor stays put <i>on screen</i>: the
+        /// composer rotates about the item centre, and a resize moves that centre — so the anchored
+        /// corner would orbit if the centre were derived in unrotated space alone. Solving
+        /// <c>anchorVis == centre + Rot(toAnchor)</c> for the centre pins it exactly.
+        /// </summary>
+        /// <param name="anchorVisX">Where the anchor is drawn (rotated space, preview px).</param>
+        /// <param name="toAnchorX">Centre-to-anchor vector in the item's own (unrotated) space —
+        /// ±width/2, and 0 on the axis an edge handle does not touch.</param>
+        /// <param name="degrees">The item's rotation.</param>
+        /// <returns>The new normalized centre, clamped to the canvas like every other write.</returns>
+        public static (double X, double Y) AnchoredCenter(
+            double anchorVisX, double anchorVisY, double toAnchorX, double toAnchorY, double degrees,
+            double canvasX, double canvasY, double canvasWidth, double canvasHeight)
+        {
+            var (ax, ay) = RotateAbout(toAnchorX, toAnchorY, 0, 0, degrees);
+            double cx = anchorVisX - ax, cy = anchorVisY - ay;
+
+            var x = canvasWidth > 0 ? (cx - canvasX) / canvasWidth : 0.5;
+            var y = canvasHeight > 0 ? (cy - canvasY) / canvasHeight : 0.5;
+            return (Clamp(x, 0, 1), Clamp(y, 0, 1));
         }
 
         /// <summary>Math.Clamp with NaN collapsing to the lower bound — a NaN pointer delta must not

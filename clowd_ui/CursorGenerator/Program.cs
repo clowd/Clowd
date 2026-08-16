@@ -66,7 +66,7 @@ internal class Program
         CsEmbed.AppendLine();
         CsEmbed.AppendLine("namespace Clowd.Drawing;");
         CsEmbed.AppendLine();
-        CsEmbed.AppendLine("internal partial class CursorResources {");
+        CsEmbed.AppendLine("public partial class CursorResources {");
 
         DrawSizes(sizes, "Default", DrawBaseCursor);
         DrawSizes(sizes, "Rect", DrawBaseCursor, DrawRect);
