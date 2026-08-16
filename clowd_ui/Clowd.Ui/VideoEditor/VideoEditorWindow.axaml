@@ -21,6 +21,12 @@
         <!--  transport icons not in VectorIcons: frame-step (bar + triangle)  -->
         <StreamGeometry x:Key="IconFrameNext">M2,2 L2,14 L11,8 Z M12,2 L14,2 L14,14 L12,14 Z</StreamGeometry>
         <StreamGeometry x:Key="IconFramePrev">M14,2 L14,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
+        <!--  jump-to-end / jump-to-start: bar + two overlapping triangles (fast-forward style). The
+              ink bounds are the frame-step icons' 12x12 exactly — ToolButton stretches the icon
+              Uniform over its ink, so a wider box would scale the whole glyph down and sit visibly
+              short next to them.  -->
+        <StreamGeometry x:Key="IconJumpEnd">M2,2 L2,14 L7.5,8 Z M5.5,2 L5.5,14 L11,8 Z M12,2 L14,2 L14,14 L12,14 Z</StreamGeometry>
+        <StreamGeometry x:Key="IconJumpStart">M14,2 L14,14 L8.5,8 Z M10.5,2 L10.5,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
         <!--  split-at-playhead: a vertical cut line between two half-blocks  -->
         <StreamGeometry x:Key="IconSplit">M7,1 L9,1 L9,15 L7,15 Z M1,4 L5,4 L5,12 L1,12 Z M11,4 L15,4 L15,12 L11,12 Z</StreamGeometry>
 
@@ -301,16 +307,6 @@
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 
-                <!--  the strip is all "add something to the timeline" (the undo/redo pair docked at
-                      the bottom aside), which the icons alone do not say  -->
-                <TextBlock
-                    Margin="0,2,0,4"
-                    HorizontalAlignment="Center"
-                    FontSize="9"
-                    FontWeight="SemiBold"
-                    Foreground="#999999"
-                    Text="ADD" />
-
                 <controls:ToolButton
                     x:Name="btnImportMedia"
                     Padding="6"
@@ -444,12 +440,25 @@
                     DockPanel.Dock="Left"
                     Orientation="Horizontal"
                     Spacing="2">
+                    <!--  the four secondary transport buttons carry a dimmed icon (Foreground alpha,
+                          not Opacity, so the hover veil stays full strength) — play/pause is the
+                          one the eye should land on.  -->
+                    <controls:ToolButton
+                        x:Name="btnJumpStart"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandJumpStart}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconJumpStart}"
+                        ToolTip.Tip="Jump to start (Home)" />
                     <controls:ToolButton
                         x:Name="btnStepBack"
                         Width="30"
                         Height="30"
                         Padding="8"
                         Command="{Binding CommandStepBack}"
+                        Foreground="#BFFFFFFF"
                         IconPath="{StaticResource IconFramePrev}"
                         ToolTip.Tip="Previous frame (Left)" />
                     <controls:ToolButton
@@ -466,8 +475,18 @@
                         Height="30"
                         Padding="8"
                         Command="{Binding CommandStepForward}"
+                        Foreground="#BFFFFFFF"
                         IconPath="{StaticResource IconFrameNext}"
                         ToolTip.Tip="Next frame (Right)" />
+                    <controls:ToolButton
+                        x:Name="btnJumpEnd"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandJumpEnd}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconJumpEnd}"
+                        ToolTip.Tip="Jump to end (End)" />
 
                     <!--  the extra top margin is an optical centering nudge: digits have no
                           descenders, so centering the font's full line box (ascent + a descent
