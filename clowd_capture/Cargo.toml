@@ -27,19 +27,16 @@ rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
 sentry.workspace = true
 
-# NOTE there is deliberately no OCR engine here. Recognition runs in the
-# `clowd_ocr` binary (spawned per request by src/ocr/client.rs) so that an
-# abort or segfault inside its static C++ MNN runtime cannot take a capture
-# down with it. Adding `ocr-rs` back to this manifest would undo that and put
-# ~18 MB of embedded models back in the overlay's start-up path.
+# Deliberately no OCR engine: recognition runs in the clowd_ocr binary so an abort or
+# segfault in its static C++ MNN cannot take a capture down, and its ~18 MB of embedded
+# models stay out of the overlay's start-up path.
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
     "Win32_UI_Shell",
-    # SendInput / GetAsyncKeyState — the scrolling-capture driver's wheel
-    # injection and Esc poll (src/scroll/input.rs).
+    # SendInput / GetAsyncKeyState for the wheel injection and Esc poll (src/scroll/input.rs).
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",

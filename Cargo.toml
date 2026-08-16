@@ -54,10 +54,7 @@ objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
 objc2-quartz-core = "0.3"
 block2 = "0.6"
-# rustls rather than the default native-tls: keeps the capturer off OpenSSL/schannel and
-# builds identically on every target we ship. "debug-images" ships the loaded-module list
-# Sentry needs to symbolicate native frames; "log" bridges the log crate (see
-# clowd_rust_core/src/telemetry.rs) and "anyhow" preserves the error chain when main bails out.
+# rustls keeps every target off OpenSSL/schannel, and debug-images/log/anyhow are what make the reports symbolicated and readable.
 sentry = { version = "0.48", default-features = false, features = [
     "anyhow",
     "backtrace",
@@ -70,32 +67,17 @@ sentry = { version = "0.48", default-features = false, features = [
     "rustls",
 ] }
 
-# default to small, optimized workspace release binaries
 [profile.release]
-opt-level = 3            # optimize for performance
-# Thin rather than fat LTO. Fat LTO's link is largely single-threaded and was ~70% of
-# CI's wall clock; thin keeps cross-crate inlining and dead-code elimination while
-# parallelizing the link. The binaries that matter here get little from the difference:
-# libblur already runtime-dispatches its AVX2/SSE4.1 kernels rather than relying on
-# cross-crate inlining, wgpu work lands on the GPU, and clowd_ocr's inference is inside
-# a prebuilt C++ MNN that Rust LTO cannot see into at all.
+opt-level = 3
+# Thin rather than fat: fat LTO's single-threaded link was ~70% of CI wall clock, and these binaries gain little from it (libblur runtime-dispatches its SIMD, wgpu work lands on the GPU, MNN is prebuilt C++).
 lto = "thin"
-# Debug info exists for one reason: readable Sentry stack traces. "1" is line tables
-# only — file and line for every frame, without the type/variable DWARF that full
-# debug info would add. "packed" collects it into a companion debug file (.dSYM on
-# macOS, .pdb on Windows) that CI uploads to Sentry; it is the only value Windows-MSVC
-# supports, so it is safe to set for every target in the matrix.
+# Line tables only, in a companion .pdb/.dSYM that CI uploads to Sentry — enough for readable stack traces, and the only split mode Windows-MSVC supports.
 debug = 1
 split-debuginfo = "packed"
-debug-assertions = false # disable debug assertions
-overflow-checks = false  # disable overflow checks
-# unwind (the default) rather than abort: a panic in one render worker unwinds that
-# thread instead of taking the whole capture down with it, and Drop still runs. The
-# panic hook — and so Sentry reporting — fires identically either way.
-incremental = false      # disable incremental compilation
-# 2 rather than 1: a single unit serializes all codegen for a crate, and with thin LTO
-# above the cross-unit inlining that codegen-units=1 used to guarantee happens at link
-# time anyway. Raising it further would buy more build parallelism — worth measuring if
-# CI is still the constraint.
-codegen-units = 2
-rpath = false            # disable rpath
+debug-assertions = false
+overflow-checks = false
+incremental = false
+# One unit per crate, so nothing is left to cross-unit inlining that the optimizer could have done directly.
+codegen-units = 1
+rpath = false
+# panic stays at the default unwind so one render worker's panic cannot take the whole capture down.
