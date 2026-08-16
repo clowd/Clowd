@@ -209,16 +209,26 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>The playhead marker: a <see cref="HeadWidth"/> x <see cref="HeadHeight"/> block
         /// in the top half of the strip with a line dropping from it to the rows below (the surface
-        /// carries that line on down).</summary>
+        /// carries that line on down). Every edge is snapped to whole device pixels — see
+        /// <see cref="TimelineViewMath.SnapToPixel"/> for why a hairline that is not costs the
+        /// playhead its colour.</summary>
         private void RenderHead(DrawingContext context, double x, IBrush fill, IPen linePen)
         {
             if (x < -HeadWidth || x > Bounds.Width + HeadWidth)
                 return;
 
-            var head = new Rect(x - HeadWidth / 2, 0, HeadWidth, HeadHeight);
+            var scaling = TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0;
+            var left = TimelineViewMath.SnapToPixel(x - HeadWidth / 2, scaling);
+            var right = TimelineViewMath.SnapToPixel(x + HeadWidth / 2, scaling);
+            var bottom = TimelineViewMath.SnapToPixel(HeadHeight, scaling);
+
             context.DrawRectangle(fill, null,
-                new RoundedRect(head, 0, 0, HeadCornerRadius, HeadCornerRadius));
-            context.DrawLine(linePen, new Point(x, HeadHeight), new Point(x, RulerHeight));
+                new RoundedRect(new Rect(left, 0, right - left, bottom), 0, 0,
+                    HeadCornerRadius, HeadCornerRadius));
+
+            var lineX = TimelineViewMath.SnapToPixel(x, scaling, linePen.Thickness);
+            context.DrawLine(linePen, new Point(lineX, bottom),
+                new Point(lineX, TimelineViewMath.SnapToPixel(RulerHeight, scaling)));
         }
     }
 }

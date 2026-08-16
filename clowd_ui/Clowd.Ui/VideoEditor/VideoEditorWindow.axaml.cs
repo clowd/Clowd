@@ -633,12 +633,13 @@ namespace Clowd.UI.VideoEditor
 
         private void Player_PositionChanged(object sender, EventArgs e)
         {
-            if (_player == null)
+            if (_player == null || _closing)
                 return;
 
+            var position = _player.Position;
             if (!_scrubbing)
-                timeline.Position = _player.Position;
-            UpdatePositionReadout(_player.Position);
+                timeline.Position = position;
+            UpdatePositionReadout(position);
         }
 
         private void Player_StateChanged(object sender, PlayerState state)
