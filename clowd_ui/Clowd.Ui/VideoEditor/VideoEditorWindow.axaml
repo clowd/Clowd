@@ -233,7 +233,7 @@
                 Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 CanToggle="True"
-                IconPath="{StaticResource IconCustomize}"
+                IconPath="{StaticResource IconProperties}"
                 IsChecked="{Binding SidebarVisible, Mode=TwoWay}"
                 ToolTip.Tip="Properties panel" />
 
@@ -251,7 +251,7 @@
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{Binding CommandRender}"
                 Content="Render"
-                IconPath="{StaticResource IconExport}"
+                IconPath="{StaticResource IconProcess}"
                 Theme="{StaticResource RenderButtonTheme}"
                 ToolTip.Tip="Render edited video" />
 
@@ -309,14 +309,21 @@
                     x:Name="btnImportMedia"
                     Padding="6"
                     Command="{Binding CommandImportMedia}"
-                    IconPath="{StaticResource IconVideo}"
+                    IconPath="{StaticResource IconVideoClip}"
                     ToolTip.Tip="Import video or audio at the playhead" />
+
+                <controls:ToolButton
+                    x:Name="btnImportAudio"
+                    Padding="6"
+                    Command="{Binding CommandImportAudio}"
+                    IconPath="{StaticResource IconMusicNote}"
+                    ToolTip.Tip="Import an audio track at the playhead" />
 
                 <controls:ToolButton
                     x:Name="btnAddImage"
                     Padding="6"
                     Command="{Binding CommandAddImage}"
-                    IconPath="{StaticResource IconPhoto}"
+                    IconPath="{StaticResource IconImage}"
                     ToolTip.Tip="Add an image at the playhead" />
 
                 <controls:ToolButton

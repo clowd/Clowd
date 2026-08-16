@@ -77,7 +77,13 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public IBrush RulerLabelBrush { get; private init; }
 
-        /// <summary>Muted chrome text: the track headers' names and the corner buttons.</summary>
+        /// <summary>The track headers' link badge — orange, so the "this row moves with the
+        /// recording" mark stands out from the neutral button cluster around it (and from the
+        /// accent, which selection owns).</summary>
+        public IBrush LinkBadgeBrush { get; private init; }
+
+        /// <summary>Muted chrome text: the track headers' names. (The corner buttons use
+        /// <see cref="RulerLabelBrush"/> — at this weight they read as disabled.)</summary>
         public IBrush LabelBrush { get; private init; }
 
         /// <summary>The track headers' drag grip. Deliberately stronger than
@@ -215,6 +221,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 RulerMinorTickPen = new Pen(new SolidColorBrush(text2, 0.75), 1),
                 RulerLabelBrush = new SolidColorBrush(text1),
                 LabelBrush = new SolidColorBrush(text3),
+                LinkBadgeBrush = new SolidColorBrush(dark ? Color.FromRgb(255, 159, 67) : Color.FromRgb(224, 113, 22)),
                 GripBrush = new SolidColorBrush(dark ? Color.FromRgb(215, 215, 218) : Color.FromRgb(70, 72, 78)),
                 GripHoverBrush = new SolidColorBrush(dark ? Colors.White : Color.FromRgb(20, 22, 26)),
 
@@ -237,7 +244,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 DimFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.5),
                 HatchPen = new Pen(new SolidColorBrush(dark ? Colors.White : Colors.Black, 0.18), 1),
 
-                TransitionFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.35),
+                TransitionFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.45),
                 TransitionEdgePen = new Pen(new SolidColorBrush(dark ? Colors.White : Colors.Black, 0.55), 1),
                 SnapGuidePen = new Pen(new SolidColorBrush(accent), 1, new DashStyle(new double[] { 3, 3 }, 0)),
                 DropIndicatorBrush = new SolidColorBrush(accent),

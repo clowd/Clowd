@@ -17,11 +17,12 @@ namespace Clowd.UI.VideoEditor.Timeline
 {
     /// <summary>
     /// The native column to the left of the drawing surface: one header per row (heights from
-    /// <see cref="TimelineRowLayout"/>, so the two columns stay pixel-aligned) with the drag grip,
-    /// the track's kind icon and name, the enable button (eye → <c>Track.Hidden</c> for picture
-    /// rows, speaker → <c>Track.Muted</c> for audio rows) and, on rows whose items are
-    /// link-grouped, a static chain badge. Rebuilt wholesale on Structural project changes — under
-    /// ten rows, so there is nothing to diff.
+    /// <see cref="TimelineRowLayout"/>, so the two columns stay pixel-aligned) with the drag grip
+    /// and the track's kind icon on the left, and on the right — reading left to right — the link
+    /// badge (on rows whose items are link-grouped), a duplicate button, the enable button (eye →
+    /// <c>Track.Hidden</c> for picture rows, speaker → <c>Track.Muted</c> for audio rows) and a
+    /// delete button. Rebuilt wholesale on Structural project changes — under ten rows, so there
+    /// is nothing to diff.
     ///
     /// <para>The badge is a label, not a button: unlinking is a rare, consequential edit, so it
     /// lives in the inspector ("Unlink from recording") where it can carry an explanation, rather
@@ -138,7 +139,10 @@ namespace Clowd.UI.VideoEditor.Timeline
             var isAudio = row.Kind == TimelineRowKind.Audio;
             var buttonSize = Math.Min(20, row.Height - 4);
 
-            var dock = new DockPanel { LastChildFill = true };
+            // no fill child: the row is grip + kind icon on the left, the button cluster on the
+            // right, and empty space between (the track name labels said nothing the kind icon
+            // does not).
+            var dock = new DockPanel { LastChildFill = false };
 
             // ------- drag grip, leftmost. Its cell is reserved on every row; the dots (and the
             // drag) are only there when the row has somewhere to go — a locked row is one the
@@ -151,16 +155,26 @@ namespace Clowd.UI.VideoEditor.Timeline
             DockPanel.SetDock(grip, Dock.Left);
             dock.Children.Add(grip);
 
-            // ------- enable button (eye / speaker), rightmost — the layers panel's row button, so
-            // the two panels' rows read the same. SetTrackHidden/Muted raise a Structural change,
-            // which rebuilds this whole panel: the fresh button carries the fresh glyph, so nothing
-            // here updates its own icon, and the state is the glyph rather than a checked fill.
+            // ------- the right-side cluster, docked right so the FIRST added is the RIGHTMOST.
+            // Reading order on screen is link badge → duplicate → enable (eye/speaker) → delete.
+            // Delete/duplicate/enable all raise Structural changes, which rebuild this whole
+            // panel — nothing here updates its own icon.
+            // the same brush the corner buttons above these rows use (RulerLabelBrush), so the
+            // two clusters carry one weight — plain white read brighter than the ruler row.
+            var buttonBrush = palette.RulerLabelBrush;
+            var delete = RowIconButton.Build(TimelineIcons.Find("IconDelete"), buttonBrush,
+                track.Locked ? "Row is locked" : "Delete this row and everything on it", buttonSize);
+            delete.IsEnabled = !track.Locked;
+            delete.Click += (_, _) => _session?.DeleteTrack(trackId, this);
+            DockPanel.SetDock(delete, Dock.Right);
+            dock.Children.Add(delete);
+
             var enabled = isAudio ? !track.Muted : !track.Hidden;
             var enable = RowIconButton.Build(
                 TimelineIcons.Find(isAudio
                     ? (enabled ? "IconSpeakerEnabled" : "IconSpeakerDisabled")
                     : (enabled ? "IconEye" : "IconEyeOff")),
-                Brushes.White,
+                buttonBrush,
                 isAudio
                     ? (enabled ? "Mute this row" : "Include this audio in the mix")
                     : (enabled ? "Hide this row" : "Show this track in the picture"),
@@ -181,6 +195,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             DockPanel.SetDock(enable, Dock.Right);
             dock.Children.Add(enable);
 
+            var duplicate = RowIconButton.Build(TimelineIcons.Find("IconCopy"), buttonBrush,
+                "Duplicate this row and its clips", buttonSize);
+            duplicate.Click += (_, _) => _session?.DuplicateTrack(trackId, this);
+            DockPanel.SetDock(duplicate, Dock.Right);
+            dock.Children.Add(duplicate);
+
             // ------- link badge: a label saying the row's items move with the recording, not a
             // control. Built on every row and collapsed when unlinked, so RefreshLinkBadges can
             // flip it either way without a rebuild (unlink/relink are Mapping changes).
@@ -189,8 +209,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 Width = buttonSize,
                 VerticalAlignment = VerticalAlignment.Center,
                 IsVisible = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null),
-                Child = TimelineIcons.NewIcon(TimelineIcons.LinkGeometry, buttonSize * 0.6, palette.LabelBrush),
-                Opacity = 0.7,
+                Child = TimelineIcons.NewIcon(TimelineIcons.LinkGeometry, buttonSize * 0.6, palette.LinkBadgeBrush),
                 Background = Brushes.Transparent, // a null background is not hit-testable — no tooltip
             };
             ToolTip.SetTip(badge, SyncedTip);
@@ -198,22 +217,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             dock.Children.Add(badge);
             _linkBadges.Add((trackId, badge));
 
-            // ------- kind icon + name
+            // ------- kind icon (the row's only left-side label — see LastChildFill above)
             var icon = TimelineIcons.NewIcon(KindIconKey(row.Kind), 13, palette.LabelBrush);
             icon.VerticalAlignment = VerticalAlignment.Center;
             icon.Margin = new Thickness(0, 0, 6, 0);
             DockPanel.SetDock(icon, Dock.Left);
             dock.Children.Add(icon);
-
-            var name = new TextBlock
-            {
-                Text = String.IsNullOrEmpty(track.Name) ? (isAudio ? "Audio" : "Video") : track.Name,
-                FontSize = 11,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = palette.LabelBrush,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-            dock.Children.Add(name);
 
             return new Border
             {
@@ -255,10 +264,10 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private static string KindIconKey(TimelineRowKind kind) => kind switch
         {
-            TimelineRowKind.Audio => "IconMicrophoneEnabled",
+            TimelineRowKind.Audio => "IconMusicNote",
             TimelineRowKind.Text => "IconToolText",
-            TimelineRowKind.Image => "IconPhoto",
-            _ => "IconVideo",
+            TimelineRowKind.Image => "IconImage",
+            _ => "IconVideoClip",
         };
     }
 
@@ -286,6 +295,22 @@ namespace Clowd.UI.VideoEditor.Timeline
         public static readonly Geometry SplitGeometry = StreamGeometry.Parse(
             "M7,1 L9,1 L9,15 L7,15 Z M1,4 L5,4 L5,12 L1,12 Z M11,4 L15,4 L15,12 L11,12 Z");
 
+        /// <summary>"Snap while dragging": two clips butting together with spark marks (24x24 box;
+        /// Icons8 "Clip Snapping", Material Filled #DyQBg200VjCa) — the toggle in the timeline's
+        /// corner cell. VectorIcons has no snap glyph.</summary>
+        public static readonly Geometry SnapGeometry = StreamGeometry.Parse(
+            "M 11 2 L 11 5 L 13 5 L 13 2 L 11 2 z M 6.6992188 3.2851562 L 5.3007812 4.7148438 " +
+            "L 7.3007812 6.671875 L 8.6992188 5.2441406 L 6.6992188 3.2851562 z " +
+            "M 17.300781 3.2851562 L 15.300781 5.2441406 L 16.699219 6.671875 " +
+            "L 18.699219 4.7148438 L 17.300781 3.2851562 z M 3 8 C 1.895 8 1 8.895 1 10 L 1 14 " +
+            "C 1 15.105 1.895 16 3 16 L 9 16 C 10.105 16 11 15.105 11 14 L 11 10 " +
+            "C 11 8.895 10.105 8 9 8 L 3 8 z M 15 8 C 13.895 8 13 8.895 13 10 L 13 14 " +
+            "C 13 15.105 13.895 16 15 16 L 21 16 C 22.105 16 23 15.105 23 14 L 23 10 " +
+            "C 23 8.895 22.105 8 21 8 L 15 8 z M 7.3007812 17.328125 L 5.3007812 19.285156 " +
+            "L 6.6992188 20.714844 L 8.6992188 18.755859 L 7.3007812 17.328125 z " +
+            "M 16.699219 17.328125 L 15.300781 18.755859 L 17.300781 20.714844 " +
+            "L 18.699219 19.285156 L 16.699219 17.328125 z M 11 19 L 11 22 L 13 22 L 13 19 L 11 19 z");
+
         /// <summary>A simple chain-link glyph (24x24 box); VectorIcons has no link icon.</summary>
         public static readonly Geometry LinkGeometry = StreamGeometry.Parse(
             "M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29," +
@@ -294,7 +319,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>A <see cref="GlyphIcon"/> drawing <paramref name="key"/>'s glyph centred in a
         /// <paramref name="box"/> square — see that class for why a <see cref="Path"/> with
-        /// <c>Stretch.Uniform</c> would hang wide glyphs (IconVideo's 26 x 14 camera) above the
+        /// <c>Stretch.Uniform</c> would hang wide glyphs (the old 26 x 14 camera icon) above the
         /// row's text.</summary>
         public static Control NewIcon(string key, double box, IBrush brush) =>
             NewIcon(Find(key), box, brush);
