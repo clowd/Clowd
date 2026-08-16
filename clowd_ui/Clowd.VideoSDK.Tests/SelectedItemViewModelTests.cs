@@ -158,18 +158,16 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void TextItem_ShowsTextAndScaleButNoMask()
+        public void TextItem_ShowsTextWithoutAScaleRow()
         {
             var (session, vm) = NewInspector(out var screen, out _, out _, out _, out var text);
             session.Select(text.Id);
 
             Assert.True(vm.ShowText);
             Assert.True(vm.ShowTransform);
-            // the gizmo's corner drag writes Transform.Scale for text too, so the field must be
-            // on show — relabelled, because for text it multiplies the natural block rather than
-            // mapping to a canvas fraction and must not collide with the font-size "Size".
-            Assert.True(vm.ShowScale);
-            Assert.Equal("Text scale", vm.ScaleLabel);
+            // text sizes through FontSize alone — the gizmo's corner drag writes the font size for
+            // text too, so a second scale field would be a duplicate of the same knob.
+            Assert.False(vm.ShowScale);
             Assert.False(vm.ShowMask);
             Assert.False(vm.ShowCrop);
             Assert.False(vm.ShowAudio);
@@ -178,6 +176,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(TextAlign.Center, vm.TextAlign);
 
             session.Select(screen.Id);
+            Assert.True(vm.ShowScale);
             Assert.Equal("Size", vm.ScaleLabel);
         }
 
@@ -310,62 +309,170 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(SelectedItemViewModel.MinScale, Live(session, screen.Id).Transform.Scale);
         }
 
-        // --------------------------------------------------------------------- aspect ratio lock
+        // -------------------------------------------------------------------------- aspect ratio
 
         [Fact]
-        public void AspectRatio_StartsLockedAndStoresNoHeight()
+        public void AspectRatio_StartsOnTheOriginalTile()
         {
             var (session, vm) = NewInspector(out var screen, out _, out _, out _, out _);
             session.Select(screen.Id);
 
-            Assert.True(vm.AspectLocked);
+            Assert.True(vm.AspectOriginal);
+            Assert.False(vm.Aspect169 || vm.Aspect11 || vm.Aspect45 || vm.Aspect32 || vm.Aspect43
+                         || vm.AspectCustom || vm.AspectUnlocked);
+            Assert.False(vm.AspectSelected); // no ratio in force — the fit buttons are inert
+            Assert.True(vm.AspectFill); // fill is the default fit mode
             Assert.False(vm.ShowScaleHeight);
             Assert.Equal("Size", vm.ScaleLabel);
             Assert.Null(Live(session, screen.Id).Transform.ScaleY);
         }
 
-        /// <summary>Unticking the lock must not move the picture: the seeded ScaleY is the height
-        /// the item is drawn at right now, which for a 640x480 camera on a 1920x1080 canvas is not
-        /// the same number as its width fraction.</summary>
+        /// <summary>Fill crops the source to the target ratio, centred, on every linked segment.
+        /// The 640x480 camera is 4:3; bringing it to 16:9 shaves (1 - (4/3)/(16/9))/2 = 12.5% off
+        /// the top and bottom.</summary>
         [Fact]
-        public void UnlockingAspectRatio_SeedsTheHeightFromTheDrawnPicture()
+        public void AspectFill_WritesACenteredCropOverTheWholeRow()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
+            session.Select(webcamA.Id);
+
+            vm.Aspect169 = true;
+
+            foreach (var id in new[] { webcamA.Id, webcamB.Id })
+            {
+                var crop = Live(session, id).Transform.Crop;
+                Assert.Equal(0.125, crop.Top, 9);
+                Assert.Equal(0.125, crop.Bottom, 9);
+                Assert.Equal(0, crop.Left);
+                Assert.Equal(0, crop.Right);
+                Assert.Null(Live(session, id).Transform.ScaleY);
+            }
+
+            Assert.True(vm.Aspect169);
+            Assert.False(vm.AspectOriginal);
+
+            // and the tile survives a re-read from the model: selecting away and back re-derives
+            // "16:9 fill" from the crop itself.
+            session.ClearSelection();
+            session.Select(webcamA.Id);
+            Assert.True(vm.Aspect169);
+            Assert.True(vm.AspectFill);
+        }
+
+        /// <summary>Stretch writes an explicit height instead of a crop: the box gets the target
+        /// ratio, the pixels distort. 0.25 wide on a 1920x1080 canvas at 16:9 is 480x270px —
+        /// ScaleY 0.25.</summary>
+        [Fact]
+        public void AspectStretch_WritesAnExplicitHeightAndNoCrop()
         {
             var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
             session.Select(webcamA.Id);
             vm.Scale = 0.25;
 
-            vm.AspectLocked = false;
+            vm.AspectStretch = true; // no tile yet — mode alone writes nothing
+            Assert.Null(Live(session, webcamA.Id).Transform.ScaleY);
 
-            // 0.25 * 1920 = 480px wide; 480 * (480/640) = 360px tall; 360 / 1080 = 1/3.
-            Assert.Equal(1 / 3.0, Live(session, webcamA.Id).Transform.ScaleY.Value, 9);
-            Assert.Equal(1 / 3.0, vm.ScaleHeight, 9);
+            vm.Aspect169 = true;
 
-            // the whole linked row moves together, exactly as every other placement edit does
-            Assert.Equal(1 / 3.0, Live(session, webcamB.Id).Transform.ScaleY.Value, 9);
+            foreach (var id in new[] { webcamA.Id, webcamB.Id })
+            {
+                Assert.Equal(0.25, Live(session, id).Transform.ScaleY.Value, 9);
+                Assert.Null(Live(session, id).Transform.Crop);
+            }
 
             Assert.True(vm.ShowScaleHeight);
             Assert.Equal("Width", vm.ScaleLabel);
-            Assert.Equal("Height", vm.ScaleHeightLabel);
+
+            // re-derived from the model on a fresh read, exactly like the fill case
+            session.ClearSelection();
+            session.Select(webcamA.Id);
+            Assert.True(vm.Aspect169);
+            Assert.True(vm.AspectStretch);
         }
 
+        /// <summary>Selecting Original IS the reset: everything the previous tile wrote leaves the
+        /// model and the picture is back on its native ratio.</summary>
         [Fact]
-        public void RelockingAspectRatio_DropsTheHeightBackToTheContent()
+        public void SelectingOriginal_ClearsTheCropAndTheStretch()
         {
             var (session, vm) = NewInspector(out _, out var webcamA, out _, out _, out _);
             session.Select(webcamA.Id);
-            vm.AspectLocked = false;
-            vm.ScaleHeight = 0.8;
+            vm.Aspect169 = true;
 
-            vm.AspectLocked = true;
+            vm.AspectOriginal = true;
 
+            Assert.Null(Live(session, webcamA.Id).Transform.Crop);
+            Assert.Null(Live(session, webcamA.Id).Transform.ScaleY);
+            Assert.True(vm.AspectOriginal);
+            Assert.False(vm.AspectSelected);
+        }
+
+        /// <summary>A hand-made crop that matches no preset lights no ratio tile — the grid falls
+        /// back to Original rather than lying about a ratio.</summary>
+        [Fact]
+        public void ArbitraryCrop_FallsBackToTheOriginalTile()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out _, out _, out _);
+            session.EditItem(webcamA.Id, i => i.Transform.Crop = new CropRect { Left = 0.07 }, origin: null);
+
+            session.Select(webcamA.Id);
+
+            Assert.True(vm.AspectOriginal);
+            Assert.False(vm.AspectSelected);
+        }
+
+        /// <summary>The Custom tile is sticky: typing a ratio that equals a preset must not steal
+        /// the selection over to that preset's tile.</summary>
+        [Fact]
+        public void CustomTile_KeepsItsSelectionWhenItsRatioEqualsAPreset()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out _, out _, out _);
+            session.Select(webcamA.Id);
+
+            vm.AspectCustom = true; // the default custom ratio is 16:9 — the same as a preset
+            Assert.True(vm.AspectCustom);
+            Assert.False(vm.Aspect169);
+
+            // survives a full re-read too (the model alone cannot tell 16:9 from Custom@16:9)
+            vm.CustomAspectW = 32;
+            vm.CustomAspectH = 18;
+            Assert.True(vm.AspectCustom);
+            Assert.False(vm.Aspect169);
+        }
+
+        /// <summary>Unlocked frees both axes: the seeded height is what the item is drawn at right
+        /// now (no visual jump), and the tile sticks whatever ratio the free handles land on.</summary>
+        [Fact]
+        public void UnlockedTile_SeedsTheDrawnHeightAndSticks()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
+            session.Select(webcamA.Id);
+            vm.Scale = 0.25;
+
+            vm.AspectUnlocked = true;
+
+            // 0.25 * 1920 = 480px wide; 480 * (480/640) = 360px tall; 360 / 1080 = 1/3.
+            Assert.Equal(1 / 3.0, Live(session, webcamA.Id).Transform.ScaleY.Value, 9);
+            Assert.Equal(1 / 3.0, Live(session, webcamB.Id).Transform.ScaleY.Value, 9);
+            Assert.True(vm.ShowScaleHeight);
+            Assert.Equal("Width", vm.ScaleLabel);
+
+            // a free resize lands on 4:3 exactly — Unlocked keeps the selection anyway
+            session.EditItems(new[] { webcamA.Id, webcamB.Id },
+                i => i.Transform.ScaleY = 0.25 * 1920 / ((4 / 3.0) * 1080), origin: null);
+            Assert.True(vm.AspectUnlocked);
+            Assert.False(vm.Aspect43);
+
+            // and back to Original drops the explicit height again
+            vm.AspectOriginal = true;
             Assert.Null(Live(session, webcamA.Id).Transform.ScaleY);
             Assert.False(vm.ShowScaleHeight);
         }
 
-        /// <summary>The height field is inert while the lock is on — the lock, not the spinner, is
-        /// what decides whether the item has a height of its own.</summary>
+        /// <summary>The height field is inert while the item derives its height from the content —
+        /// only an explicit height (a stretch) makes it writable.</summary>
         [Fact]
-        public void ScaleHeight_DoesNothingWhileTheAspectRatioIsLocked()
+        public void ScaleHeight_IsInertWithoutAnExplicitHeight()
         {
             var (session, vm) = NewInspector(out var screen, out _, out _, out _, out _);
             session.Select(screen.Id);
@@ -373,38 +480,6 @@ namespace Clowd.VideoSDK.Tests
             vm.ScaleHeight = 0.8;
 
             Assert.Null(Live(session, screen.Id).Transform.ScaleY);
-        }
-
-        /// <summary>Text scales off its own natural block on both axes, so there is nothing to
-        /// convert — unlocking seeds the height with the scale the text already has.</summary>
-        [Fact]
-        public void UnlockingAspectRatio_OnText_SeedsFromTheTextScale()
-        {
-            var (session, vm) = NewInspector(out _, out _, out _, out _, out var text);
-            session.Select(text.Id);
-            vm.Scale = 1.5;
-
-            vm.AspectLocked = false;
-
-            Assert.Equal(1.5, Live(session, text.Id).Transform.ScaleY.Value, 9);
-            Assert.Equal("Text width", vm.ScaleLabel);
-            Assert.Equal("Text height", vm.ScaleHeightLabel);
-        }
-
-        /// <summary>Selecting an item re-reads the lock from the model rather than keeping whatever
-        /// the last selection had.</summary>
-        [Fact]
-        public void SelectingAnItem_ReadsItsOwnAspectLock()
-        {
-            var (session, vm) = NewInspector(out var screen, out var webcamA, out _, out _, out _);
-            session.Select(webcamA.Id);
-            vm.AspectLocked = false;
-
-            session.Select(screen.Id);
-            Assert.True(vm.AspectLocked);
-
-            session.Select(webcamA.Id);
-            Assert.False(vm.AspectLocked);
         }
 
         // -------------------------------------------------------------------------- row fan-out
@@ -558,6 +633,49 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(Live(session, webcamA.Id).Transform.Crop);
             Assert.Null(Live(session, webcamB.Id).Transform.Crop);
             Assert.Equal(before, session.Project.ToJson());
+        }
+
+        /// <summary>The crop row's reset dot: writing 0 into CropTotal removes the crop from every
+        /// linked segment, and the project is byte-identical to one that never had a crop ("no
+        /// crop" has one representation on disk).</summary>
+        [Fact]
+        public void CropReset_RemovesTheCropFromTheWholeRow()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
+            session.Select(webcamA.Id);
+            var before = session.Project.ToJson();
+
+            // a crop from elsewhere (the gizmo's crop mode)
+            session.EditItems(new[] { webcamA.Id, webcamB.Id },
+                i => i.Transform.Crop = new CropRect { Left = 0.1, Bottom = 0.25 }, origin: null);
+            Assert.Equal(0.35, vm.CropTotal, 9);
+
+            vm.CropTotal = 0;
+
+            Assert.Null(Live(session, webcamA.Id).Transform.Crop);
+            Assert.Null(Live(session, webcamB.Id).Transform.Crop);
+            Assert.Equal(before, session.Project.ToJson());
+        }
+
+        /// <summary>Crop mode is per-selection UI state: changing the selection (or losing it)
+        /// always leaves the mode.</summary>
+        [Fact]
+        public void CropMode_EndsWhenTheSelectionChanges()
+        {
+            var (session, vm) = NewInspector(out var screen, out var webcamA, out _, out _, out _);
+            session.Select(webcamA.Id);
+
+            vm.CropModeActive = true;
+            Assert.True(vm.CropModeActive);
+
+            session.Select(screen.Id);
+            Assert.False(vm.CropModeActive);
+
+            // and a non-picture selection can never be in crop mode at all
+            session.Select(webcamA.Id);
+            vm.CropModeActive = true;
+            session.Select(session.Project.Items.First(i => i.Content is TextContent).Id);
+            Assert.False(vm.CropModeActive);
         }
 
         // ------------------------------------------------------------------------- transitions

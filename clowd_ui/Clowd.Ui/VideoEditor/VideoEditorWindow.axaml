@@ -213,6 +213,14 @@
             </StackPanel>
 
             <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Fps:" />
+                <controls:DropDownButton
+                    x:Name="ddFrameRate"
+                    MinWidth="76"
+                    VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel>
                 <TextBlock VerticalAlignment="Center" Text="Zoom:" />
                 <TextBlock
                     x:Name="txtZoom"

@@ -115,6 +115,11 @@ namespace Clowd.UI.VideoEditor
         private List<ResolutionOption> _resolutionOptions = new List<ResolutionOption>();
         private bool _syncingResolution;
 
+        // the frame-rate picker, on the same terms: its native entry follows the media too, so it is
+        // rebuilt from the project rather than filled once.
+        private List<FrameRateOption> _frameRateOptions = new List<FrameRateOption>();
+        private bool _syncingFrameRate;
+
         // the sidebar's ColumnDefinition (contentGrid column 3). Avalonia's XAML compiler does not
         // emit a field for an x:Named ColumnDefinition, so reach it through the named grid.
         private ColumnDefinition SidebarColumn => contentGrid.ColumnDefinitions[3];
@@ -208,8 +213,8 @@ namespace Clowd.UI.VideoEditor
 
             // Modifier-carrying command gestures become Window.KeyBindings; bare gestures
             // (Space/Left/Right/Delete/Home/End) are routed by the tunnel KeyDown handler below.
-            // Escape is deliberately not handled anywhere in the window: the timeline surface
-            // uses it to cancel a drag in progress.
+            // Escape is handled there only to leave crop mode when no drag is in flight — the
+            // timeline surface and gizmo keep it for cancelling a drag in progress.
             AddCommandKeyBinding(CommandSplit);
             AddCommandKeyBinding(CommandUndo);
             AddCommandKeyBinding(CommandRedo);
@@ -219,6 +224,16 @@ namespace Clowd.UI.VideoEditor
             timeline.ScrubStarted += Timeline_ScrubStarted;
             timeline.Scrubbed += Timeline_Scrubbed;
             timeline.ScrubCompleted += Timeline_ScrubCompleted;
+
+            // the inspector owns crop mode and the Unlocked (free-resize) aspect tile; the
+            // preview's gizmo follows both
+            Inspector.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(SelectedItemViewModel.CropModeActive))
+                    preview.Gizmo.CropMode = Inspector.CropModeActive;
+                else if (e.PropertyName == nameof(SelectedItemViewModel.AspectUnlocked))
+                    preview.Gizmo.FreeResize = Inspector.AspectUnlocked;
+            };
 
             btnMute.Click += (_, _) => ToggleMute();
 
@@ -246,6 +261,7 @@ namespace Clowd.UI.VideoEditor
             BuildSpeedMenu();
 
             ddResolution.PropertyChanged += Resolution_PropertyChanged;
+            ddFrameRate.PropertyChanged += FrameRate_PropertyChanged;
 
             // the zoom readout is derived, not set: the preview owns the letterbox maths and
             // reports what it landed on (a resize, a Fit toggle or a resolution change all move it).
@@ -487,8 +503,10 @@ namespace Clowd.UI.VideoEditor
             preview.Session = _editor;
             preview.SetVideo(new Size(project.Output.WidthPx, project.Output.HeightPx));
 
-            // resolution only: the duration lives on the transport readout, beside the playhead.
+            // resolution and frame rate only: the duration lives on the transport readout, beside
+            // the playhead.
             RefreshResolutionPicker();
+            RefreshFrameRatePicker();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -578,11 +596,12 @@ namespace Clowd.UI.VideoEditor
 
             UpdatePositionReadout(_player?.Position ?? TimeSpan.Zero);
 
-            // the canvas size is editable (and undoable), so the letterbox and the picker follow the
-            // model on every change rather than only at open.
+            // the canvas size and the frame rate are editable (and undoable), so the letterbox and
+            // both pickers follow the model on every change rather than only at open.
             var output = _editor.Project.Output;
             preview.SetVideo(new Size(output.WidthPx, output.HeightPx));
             RefreshResolutionPicker();
+            RefreshFrameRatePicker();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -940,6 +959,16 @@ namespace Clowd.UI.VideoEditor
 
         private void OnTunnelKeyDown(object sender, KeyEventArgs e)
         {
+            // Escape leaves crop mode from anywhere — checked ahead of the guards below because
+            // the crop toggle itself lives in the sidebar. A drag in progress keeps its own
+            // Escape (the gizmo/timeline cancel the drag; a second press then exits the mode).
+            if (e.Key == Key.Escape && Inspector.CropModeActive && _editor?.IsGestureActive != true)
+            {
+                Inspector.CropModeActive = false;
+                e.Handled = true;
+                return;
+            }
+
             if (e.Source is TextBox)
                 return; // spinner edits own the keyboard
 
@@ -1525,6 +1554,42 @@ namespace Clowd.UI.VideoEditor
             // a committed resize raises ProjectChanged, which re-selects this entry anyway; a pick
             // of the size already set changes nothing and needs no refresh.
             _editor.SetOutputSize(option.WidthPx, option.HeightPx, this);
+        }
+
+        /// <summary>Rebuilds the frame-rate picker from the project and re-selects the rate it is
+        /// actually set to — like the resolution picker, the list depends on the media (the native
+        /// entry) and on the current rate, so undo and an import both have to be able to change
+        /// it.</summary>
+        private void RefreshFrameRatePicker()
+        {
+            if (_editor == null)
+                return;
+
+            _syncingFrameRate = true;
+            try
+            {
+                _frameRateOptions = FrameRateOptions.Build(_editor.Project);
+                ddFrameRate.ItemsSource = _frameRateOptions;
+                ddFrameRate.SelectedItem = FrameRateOptions.FindCurrent(_frameRateOptions, _editor.Project);
+            }
+            finally
+            {
+                _syncingFrameRate = false;
+            }
+        }
+
+        private void FrameRate_PropertyChanged(object sender, AvaloniaPropertyChangedEventArgs e)
+        {
+            if (_syncingFrameRate || _editor == null ||
+                e.Property != Clowd.UI.Controls.DropDownButton.SelectedItemProperty)
+                return;
+
+            if (e.GetNewValue<object>() is not FrameRateOption option)
+                return;
+
+            // as above: the committed change raises ProjectChanged and re-selects this entry, and
+            // picking the rate already set is a no-op.
+            _editor.SetOutputFrameRate(option.Num, option.Den, this);
         }
 
         /// <summary>The "Custom…" row. The picker is showing that row as its label while the dialog
