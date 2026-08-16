@@ -94,6 +94,13 @@ namespace Clowd.UI.VideoEditor
         private double _scaleDenominatorPx;
         private double _scaleDenominatorYPx;
         private double _rotation;
+        private bool _cropMode;
+        private bool _freeResize;
+
+        /// <summary>Smallest fraction of the source picture a crop drag can leave on either axis —
+        /// stops a handle from crossing its opposite edge (and a 0-sized item from killing the
+        /// gizmo mid-drag).</summary>
+        private const double MinCropRemain = 0.05;
 
         private enum DragKind
         {
@@ -101,6 +108,7 @@ namespace Clowd.UI.VideoEditor
             Move,
             Resize,
             Rotate,
+            Crop,
         }
 
         // drag state (pointer positions are in the parent preview's coordinate space, so the gizmo
@@ -116,6 +124,18 @@ namespace Clowd.UI.VideoEditor
         private double _rotationAtPress;
         private int _dragHandle = -1;
         private bool _dragRight, _dragDown;
+
+        // press-time geometry a resize/crop computes against. The live _scaleDenominator*/_aspect
+        // fields are refreshed by SetTarget on every arrange — which a text resize itself moves
+        // (the natural block grows with the font size), so a drag must read the values it started
+        // with, not the ones its own writes produce.
+        private double _pressDenominatorPx, _pressDenominatorYPx, _pressAspect;
+        private double _pressFontSize, _pressScale;
+        private bool _pressIsText;
+        private Rect _pressItemRect; // ItemRectInParent at press (unrotated parent coords)
+        private double _cropL0, _cropT0, _cropR0, _cropB0; // crop insets at press
+        private double _pressScaleY; // NaN when the item derives its height
+        private double _pressFullW, _pressFullH; // drawn size of the UNcropped source, press-time px
 
         public TransformGizmoControl()
         {
@@ -156,6 +176,47 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>True while a pointer drag owns the model (an <see cref="EditGesture"/> is open).</summary>
         public bool IsDragging => _drag != DragKind.None;
+
+        /// <summary>
+        /// Crop mode: the handles adjust <c>Transform.Crop</c> instead of the size — dragging an
+        /// edge inward shaves the source picture while the rest of it holds still on screen (the
+        /// scale and centre are compensated per move), dragging back out restores it. The inspector
+        /// owns this flag; the gizmo only reads it. Rotate is parked while it is on.
+        /// </summary>
+        public bool CropMode
+        {
+            get => _cropMode;
+            set
+            {
+                if (_cropMode == value)
+                    return;
+
+                if (_drag != DragKind.None)
+                    CancelDrag();
+
+                _cropMode = value;
+                _chrome.InvalidateVisual();
+            }
+        }
+
+        /// <summary>
+        /// Free resize: the inspector's "Unlocked" aspect tile. Only then do the edge handles
+        /// appear and the corners size each axis on its own; any other tile keeps four corner
+        /// handles that preserve the item's current box ratio (the content's own, or whatever an
+        /// explicit height has made it). The inspector owns this flag; the gizmo only reads it.
+        /// </summary>
+        public bool FreeResize
+        {
+            get => _freeResize;
+            set
+            {
+                if (_freeResize == value)
+                    return;
+
+                _freeResize = value;
+                _chrome.InvalidateVisual();
+            }
+        }
 
         /// <summary>
         /// Points the gizmo at the item the preview just placed, with the geometry a resize needs.
@@ -298,9 +359,34 @@ namespace Clowd.UI.VideoEditor
             _rotationAtPress = _rotation;
             _rotationCenter = ItemRectInParent().Center;
 
+            // Everything a resize/crop computes against is captured now: a text resize moves its
+            // own denominator (the natural block grows with the font), and a crop moves the item
+            // rect — reading them live would corrupt the very deltas being dragged.
+            _pressAspect = _aspect;
+            _pressDenominatorPx = _scaleDenominatorPx;
+            _pressDenominatorYPx = _scaleDenominatorYPx;
+            _pressIsText = item.Content is TextContent;
+            _pressFontSize = (item.Content as TextContent)?.Size ?? 0;
+            _pressScale = transform.Scale;
+            _pressScaleY = transform.ScaleY ?? Double.NaN;
+            _pressItemRect = ItemRectInParent();
+
+            var pressCrop = transform.Crop;
+            _cropL0 = pressCrop?.Left ?? 0;
+            _cropT0 = pressCrop?.Top ?? 0;
+            _cropR0 = pressCrop?.Right ?? 0;
+            _cropB0 = pressCrop?.Bottom ?? 0;
+            _pressFullW = _pressItemRect.Width / Math.Max(1 - _cropL0 - _cropR0, MinCropRemain);
+            _pressFullH = _pressItemRect.Height / Math.Max(1 - _cropT0 - _cropB0, MinCropRemain);
+
             if (handle == HandleRotate)
             {
                 _drag = DragKind.Rotate;
+                _dragHandle = handle;
+            }
+            else if (handle >= 0 && _cropMode)
+            {
+                _drag = DragKind.Crop;
                 _dragHandle = handle;
             }
             else if (handle >= 0)
@@ -339,6 +425,7 @@ namespace Clowd.UI.VideoEditor
             {
                 DragKind.Resize => "Resize item",
                 DragKind.Rotate => "Rotate item",
+                DragKind.Crop => "Crop item",
                 _ => "Move item",
             }, this);
             _dragPointer = e.Pointer;
@@ -391,25 +478,33 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            // Resize. The axis-aligned math below is only valid in the item's own unrotated space,
-            // so the pointer is unrotated about the press-time centre first (rotation is rigid, so
-            // the anchor distances survive the centre itself moving mid-drag). For a rotated item
-            // the centre those helpers return is then discarded: the composer rotates about the
-            // centre a resize moves, so the anchored corner would orbit — AnchoredCenter solves for
-            // the centre that pins the anchor's *drawn* position instead.
+            // Crop and resize share the unrotated pointer: the axis-aligned math below is only
+            // valid in the item's own unrotated space, so the pointer is unrotated about the
+            // press-time centre first (rotation is rigid, so the anchor distances survive the
+            // centre itself moving mid-drag). For a rotated item the centre those helpers return is
+            // then discarded: the composer rotates about the centre a resize moves, so the anchored
+            // corner would orbit — AnchoredCenter solves for the centre that pins the anchor's
+            // *drawn* position instead.
             var (pux, puy) = GizmoMath.RotateAbout(p.X, p.Y,
                 _rotationCenter.X, _rotationCenter.Y, -_rotationAtPress);
             var rotated = _rotationAtPress != 0;
+
+            if (_drag == DragKind.Crop)
+            {
+                DragCrop(item, pux, puy);
+                e.Handled = true;
+                return;
+            }
 
             // a horizontal edge handle: width only, the height untouched.
             if (_dragHandle is HandleLeft or HandleRight)
             {
                 var (scaleX, x) = GizmoMath.ResizeAxis(pux, _resizeAnchor.X, _dragRight,
-                    _scaleDenominatorPx, CanvasRect.X, CanvasRect.Width,
+                    _pressDenominatorPx, CanvasRect.X, CanvasRect.Width,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
                 if (rotated)
                 {
-                    var w = scaleX * _scaleDenominatorPx;
+                    var w = scaleX * _pressDenominatorPx;
                     var (cx, cy) = AnchoredCenter(_dragRight ? -w / 2 : w / 2, 0);
                     WriteRow(item, "gizmo:resize", t =>
                     {
@@ -431,11 +526,11 @@ namespace Clowd.UI.VideoEditor
             else if (_dragHandle is HandleTop or HandleBottom)
             {
                 var (scaleY, y) = GizmoMath.ResizeAxis(puy, _resizeAnchor.Y, _dragDown,
-                    _scaleDenominatorYPx, CanvasRect.Y, CanvasRect.Height,
+                    _pressDenominatorYPx, CanvasRect.Y, CanvasRect.Height,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
                 if (rotated)
                 {
-                    var h = scaleY * _scaleDenominatorYPx;
+                    var h = scaleY * _pressDenominatorYPx;
                     var (cx, cy) = AnchoredCenter(0, _dragDown ? -h / 2 : h / 2);
                     WriteRow(item, "gizmo:resize", t =>
                     {
@@ -453,18 +548,17 @@ namespace Clowd.UI.VideoEditor
                     });
                 }
             }
-            // a corner on an item whose aspect ratio the user unlocked resizes each axis on its
-            // own; one that still has the lock keeps the content's aspect and derives its height.
-            else if (item.Transform?.ScaleY is not null)
+            // a corner in free-resize (Unlocked) sizes each axis on its own …
+            else if (_freeResize && item.Transform?.ScaleY is not null)
             {
                 var (scaleX, scaleY, x, y) = GizmoMath.ResizeFree(pux, puy, _resizeAnchor.X, _resizeAnchor.Y,
-                    _dragRight, _dragDown, _scaleDenominatorPx, _scaleDenominatorYPx,
+                    _dragRight, _dragDown, _pressDenominatorPx, _pressDenominatorYPx,
                     CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
                 if (rotated)
                 {
-                    var w = scaleX * _scaleDenominatorPx;
-                    var h = scaleY * _scaleDenominatorYPx;
+                    var w = scaleX * _pressDenominatorPx;
+                    var h = scaleY * _pressDenominatorYPx;
                     var (cx, cy) = AnchoredCenter(_dragRight ? -w / 2 : w / 2, _dragDown ? -h / 2 : h / 2);
                     (x, y) = (cx, cy);
                 }
@@ -477,16 +571,31 @@ namespace Clowd.UI.VideoEditor
                     t.Y = y;
                 });
             }
-            else
+            // … but with a ratio tile in force (an explicit height that is NOT free), the corners
+            // preserve the box as it stands: both scales move together, so a 16:9 stretch stays
+            // 16:9 under the drag.
+            else if (item.Transform?.ScaleY is not null)
             {
+                var boxAspect = _pressItemRect.Width > 0
+                    ? _pressItemRect.Height / _pressItemRect.Width
+                    : _pressAspect;
+
                 var (scale, x, y) = GizmoMath.Resize(pux, puy, _resizeAnchor.X, _resizeAnchor.Y,
-                    _dragRight, _dragDown, _aspect, _scaleDenominatorPx,
+                    _dragRight, _dragDown, boxAspect, _pressDenominatorPx,
                     CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+
+                // ScaleY follows Scale by the press-time factor — H/W is constant iff ScaleY/Scale is
+                var ratioYX = Double.IsNaN(_pressScaleY)
+                    ? 1
+                    : _pressScaleY / Math.Max(_pressScale, SelectedItemViewModel.MinScale);
+                var scaleY = Math.Clamp(scale * ratioYX,
+                    SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+
                 if (rotated)
                 {
-                    var w = scale * _scaleDenominatorPx;
-                    var h = w * _aspect;
+                    var w = scale * _pressDenominatorPx;
+                    var h = w * boxAspect;
                     var (cx, cy) = AnchoredCenter(_dragRight ? -w / 2 : w / 2, _dragDown ? -h / 2 : h / 2);
                     (x, y) = (cx, cy);
                 }
@@ -494,9 +603,44 @@ namespace Clowd.UI.VideoEditor
                 WriteRow(item, "gizmo:resize", t =>
                 {
                     t.Scale = scale;
+                    t.ScaleY = scaleY;
                     t.X = x;
                     t.Y = y;
                 });
+            }
+            else
+            {
+                var (scale, x, y) = GizmoMath.Resize(pux, puy, _resizeAnchor.X, _resizeAnchor.Y,
+                    _dragRight, _dragDown, _pressAspect, _pressDenominatorPx,
+                    CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height,
+                    SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+                if (rotated)
+                {
+                    var w = scale * _pressDenominatorPx;
+                    var h = w * _pressAspect;
+                    var (cx, cy) = AnchoredCenter(_dragRight ? -w / 2 : w / 2, _dragDown ? -h / 2 : h / 2);
+                    (x, y) = (cx, cy);
+                }
+
+                // Text sizes through its font size, not Transform.Scale: the same drag geometry is
+                // converted into the font size that draws the block at the dragged width, so the
+                // inspector's one Size field tracks the gizmo and there is no second, hidden scale.
+                if (_pressIsText && _pressFontSize > 0)
+                {
+                    var fontSize = Math.Clamp(
+                        _pressFontSize * scale / Math.Max(_pressScale, SelectedItemViewModel.MinScale),
+                        SelectedItemViewModel.MinFontSize, SelectedItemViewModel.MaxFontSize);
+                    WriteTextResize(item, fontSize, x, y);
+                }
+                else
+                {
+                    WriteRow(item, "gizmo:resize", t =>
+                    {
+                        t.Scale = scale;
+                        t.X = x;
+                        t.Y = y;
+                    });
+                }
             }
 
             e.Handled = true;
@@ -541,6 +685,65 @@ namespace Clowd.UI.VideoEditor
             GizmoMath.AnchoredCenter(_anchorVis.X, _anchorVis.Y, toAnchorX, toAnchorY,
                 _rotationAtPress, CanvasRect.X, CanvasRect.Y, CanvasRect.Width, CanvasRect.Height);
 
+        /// <summary>
+        /// One crop-drag move: the dragged edges' insets follow the pointer, and the scale and
+        /// centre are compensated so the surviving pixels hold still on screen — the drawn box
+        /// simply shrinks (or grows) from the dragged edge, which is what a crop handle visually
+        /// promises. All computed from press-time state; only the per-axis rules differ (an
+        /// explicit height scales <c>ScaleY</c>, a derived one follows the cropped aspect free).
+        /// </summary>
+        private void DragCrop(Item item, double pux, double puy)
+        {
+            double l = _cropL0, t = _cropT0, r = _cropR0, b = _cropB0;
+
+            if (_dragHandle is HandleTopLeft or HandleBottomLeft or HandleLeft)
+                l = Math.Clamp(_cropL0 + (pux - _pressItemRect.Left) / _pressFullW,
+                    0, Math.Max(0, 1 - _cropR0 - MinCropRemain));
+            if (_dragHandle is HandleTopRight or HandleBottomRight or HandleRight)
+                r = Math.Clamp(_cropR0 + (_pressItemRect.Right - pux) / _pressFullW,
+                    0, Math.Max(0, 1 - _cropL0 - MinCropRemain));
+            if (_dragHandle is HandleTopLeft or HandleTopRight or HandleTop)
+                t = Math.Clamp(_cropT0 + (puy - _pressItemRect.Top) / _pressFullH,
+                    0, Math.Max(0, 1 - _cropB0 - MinCropRemain));
+            if (_dragHandle is HandleBottomLeft or HandleBottomRight or HandleBottom)
+                b = Math.Clamp(_cropB0 + (_pressItemRect.Bottom - puy) / _pressFullH,
+                    0, Math.Max(0, 1 - _cropT0 - MinCropRemain));
+
+            // the drawn width is Scale * canvas, covering the surviving horizontal fraction — so
+            // the scale shrinks with it (and an explicit height likewise); a derived height already
+            // follows the cropped aspect and needs no write.
+            var survivedX0 = Math.Max(1 - _cropL0 - _cropR0, MinCropRemain);
+            var survivedY0 = Math.Max(1 - _cropT0 - _cropB0, MinCropRemain);
+            var scale = Math.Clamp(_pressScale * (1 - l - r) / survivedX0,
+                SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+            var scaleY = Double.IsNaN(_pressScaleY)
+                ? Double.NaN
+                : Math.Clamp(_pressScaleY * (1 - t - b) / survivedY0,
+                    SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
+
+            // the surviving region's centre moves by half of what each edge gave up, along the
+            // item's own axes — rotated into canvas space for a rotated item.
+            var shiftLocalX = ((l - _cropL0) - (r - _cropR0)) * _pressFullW / 2;
+            var shiftLocalY = ((t - _cropT0) - (b - _cropB0)) * _pressFullH / 2;
+            var (shiftX, shiftY) = GizmoMath.RotateAbout(shiftLocalX, shiftLocalY, 0, 0, _rotationAtPress);
+
+            var x = Math.Clamp(_startX + shiftX / CanvasRect.Width, 0, 1);
+            var y = Math.Clamp(_startY + shiftY / CanvasRect.Height, 0, 1);
+
+            WriteRow(item, "gizmo:crop", transform =>
+            {
+                // all-zero collapses to null: "no crop" has one representation on disk
+                transform.Crop = l == 0 && t == 0 && r == 0 && b == 0
+                    ? null
+                    : new CropRect { Left = l, Top = t, Right = r, Bottom = b };
+                transform.Scale = scale;
+                if (!Double.IsNaN(scaleY))
+                    transform.ScaleY = scaleY;
+                transform.X = x;
+                transform.Y = y;
+            });
+        }
+
         /// <summary>One mutation for the whole row: a drag writes at pointer-move rate, and a
         /// per-item call would pay the serialize/validate/notify pipeline once per segment per
         /// move.</summary>
@@ -548,6 +751,20 @@ namespace Clowd.UI.VideoEditor
             _session.EditItems(ItemRowScope.RowItemIds(_session, item),
                 i => apply(i.Transform ??= new ModelTransform()),
                 coalesceKey, structural: false, origin: this);
+
+        /// <summary>The text-card resize write: the font size that draws the dragged width plus the
+        /// anchored centre, in one mutation (a text card is a row of one, but the row scope keeps
+        /// the coalescing identical to every other gizmo write).</summary>
+        private void WriteTextResize(Item item, double fontSize, double x, double y) =>
+            _session.EditItems(ItemRowScope.RowItemIds(_session, item), i =>
+            {
+                if (i.Content is TextContent text)
+                    text.Size = fontSize;
+
+                var transform = i.Transform ??= new ModelTransform();
+                transform.X = x;
+                transform.Y = y;
+            }, "gizmo:resize", structural: false, origin: this);
 
         /// <summary>Ends the drag. Commit pushes one undo entry for the whole drag (none when
         /// nothing net-changed — a no-op drag costs nothing); cancel restores the pre-drag
@@ -590,9 +807,9 @@ namespace Clowd.UI.VideoEditor
             return hit == null || hit.Id == _itemId;
         }
 
-        /// <summary>Whether this item sizes its axes apart, which is what earns it edge handles: an
-        /// aspect-locked item derives its height, so an edge drag would have nothing to write.</summary>
-        private bool AspectUnlocked => CurrentItem()?.Transform?.ScaleY is not null;
+        /// <summary>Edge handles appear only in crop mode (every edge crops on its own) or free
+        /// resize (the Unlocked tile) — a ratio-holding item resizes by its corners alone.</summary>
+        private bool ShowEdgeHandles => _cropMode || _freeResize;
 
         /// <summary>The handle positions in this control's coordinates, indexed by the Handle*
         /// constants. Edge handles are included only when the item has them.</summary>
@@ -631,7 +848,9 @@ namespace Clowd.UI.VideoEditor
             if (b.Width <= 0 || b.Height <= 0)
                 return -1;
 
-            var points = HandlePoints(b, AspectUnlocked);
+            // crop mode always offers all eight handles (every edge is croppable on its own) and
+            // parks the rotate handle.
+            var points = HandlePoints(b, ShowEdgeHandles);
             for (int i = 0; i < points.Length; i++)
             {
                 if (Math.Abs(local.X - points[i].X) <= HandleHitSize / 2 &&
@@ -639,10 +858,13 @@ namespace Clowd.UI.VideoEditor
                     return i;
             }
 
-            var rotate = RotateHandleCenter(b);
-            if (Math.Abs(local.X - rotate.X) <= HandleHitSize / 2 &&
-                Math.Abs(local.Y - rotate.Y) <= HandleHitSize / 2)
-                return HandleRotate;
+            if (!_cropMode)
+            {
+                var rotate = RotateHandleCenter(b);
+                if (Math.Abs(local.X - rotate.X) <= HandleHitSize / 2 &&
+                    Math.Abs(local.Y - rotate.Y) <= HandleHitSize / 2)
+                    return HandleRotate;
+            }
 
             return -1;
         }
@@ -715,6 +937,21 @@ namespace Clowd.UI.VideoEditor
                 var accent = new SolidColorBrush(AppStyles.AccentColor);
                 var outline = new Pen(accent, 1.5);
 
+                // crop mode: a dashed marquee with all eight handles and no rotate affordance —
+                // visually distinct from the solid selection chrome, so the mode is legible at a
+                // glance.
+                if (_owner._cropMode)
+                {
+                    context.DrawRectangle(null,
+                        new Pen(accent, 1.5) { DashStyle = new DashStyle(new double[] { 4, 3 }, 0) },
+                        bounds);
+
+                    foreach (var point in HandlePoints(bounds, withEdges: true))
+                        DrawHandle(context, point, accent);
+
+                    return;
+                }
+
                 var mask = _owner.CurrentItem()?.Transform?.Mask;
                 if (mask == null)
                 {
@@ -741,9 +978,9 @@ namespace Clowd.UI.VideoEditor
                 if (mask != null)
                     context.DrawRectangle(null, new Pen(new SolidColorBrush(Colors.White, 0.35), 1), bounds);
 
-                // Edge handles only where an edge drag has something to write: an aspect-locked
-                // item derives its height, so the four corners are the whole of its resize.
-                foreach (var point in HandlePoints(bounds, _owner.AspectUnlocked))
+                // Edge handles only in free-resize (Unlocked) mode: a ratio-holding item resizes
+                // by its four corners alone.
+                foreach (var point in HandlePoints(bounds, _owner.ShowEdgeHandles))
                     DrawHandle(context, point, accent);
 
                 // The rotate handle, drawn as the image editor draws its own

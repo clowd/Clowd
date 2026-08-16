@@ -238,6 +238,39 @@ namespace Clowd.UI.VideoEditor
             return null;
         }
 
+        /// <summary>
+        /// The content's own height/width with any crop ignored — what the inspector's aspect-ratio
+        /// presets need: a "16:9 fill" crop is computed against the full source picture, not against
+        /// whatever crop is being replaced. Null when the dimensions are unknown (same cases as
+        /// <see cref="ContentAspect"/>); solids have no intrinsic picture and also answer null.
+        /// </summary>
+        public static double? UncroppedContentAspect(Project project, Item item)
+        {
+            switch (item?.Content)
+            {
+                case MediaContent media:
+                {
+                    var source = project?.Sources?.FirstOrDefault(s => s.Id == media.SourceId);
+                    var stream = source?.Streams?.FirstOrDefault(s => s.Index == media.StreamIndex);
+                    if (stream is not { Kind: StreamKind.Video, Width: > 0, Height: > 0 })
+                        return null;
+
+                    return (double)stream.Height / stream.Width;
+                }
+
+                case ImageContent image:
+                {
+                    if (ImageSizeCache.Get(image.Path) is not { } size)
+                        return null;
+
+                    return (double)size.Height / size.Width;
+                }
+
+                default:
+                    return null;
+            }
+        }
+
         private static double? CroppedAspect(double width, double height, CropRect crop)
         {
             double left = 0, top = 0, right = 0, bottom = 0;

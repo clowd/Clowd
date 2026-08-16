@@ -1291,5 +1291,102 @@ namespace Clowd.VideoSDK.Tests
             Assert.Empty(session.Project.Items);
             Assert.Empty(session.Project.Tracks);
         }
+
+        // ------------------------------------------------------------------------ output frame rate
+
+        [Fact]
+        public void SetOutputFrameRate_stores_the_rational_and_is_undoable()
+        {
+            var session = NewSession(out _, out _, out _, out var persist);
+
+            Assert.True(session.SetOutputFrameRate(60, 1));
+
+            Assert.Equal(60, session.Project.Output.FpsNum);
+            Assert.Equal(1, session.Project.Output.FpsDen);
+            Assert.Empty(session.Project.Validate());
+            Assert.Equal(1, persist.Writes);
+
+            session.Undo();
+            Assert.Equal(30, session.Project.Output.FpsNum);
+            Assert.Equal(1, session.Project.Output.FpsDen);
+        }
+
+        /// <summary>29.97 must survive as 30000/1001 rather than collapsing onto 30.</summary>
+        [Fact]
+        public void SetOutputFrameRate_keeps_a_broadcast_rate_exact()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+
+            Assert.True(session.SetOutputFrameRate(30_000, 1001));
+
+            Assert.Equal(30_000, session.Project.Output.FpsNum);
+            Assert.Equal(1001, session.Project.Output.FpsDen);
+        }
+
+        [Fact]
+        public void SetOutputFrameRate_rejects_a_non_positive_rational()
+        {
+            var session = NewSession(out _, out _, out _, out var persist);
+            var before = session.Project.ToJson();
+
+            Assert.False(session.SetOutputFrameRate(0, 1));
+            Assert.False(session.SetOutputFrameRate(30, 0));
+            Assert.False(session.SetOutputFrameRate(-30, 1));
+
+            Assert.Equal(before, session.Project.ToJson());
+            Assert.False(session.CanUndo);
+            Assert.Equal(0, persist.Writes);
+        }
+
+        [Fact]
+        public void SetOutputFrameRate_to_the_rate_already_set_changes_nothing()
+        {
+            var session = NewSession(out _, out _, out _, out var persist);
+
+            Assert.False(session.SetOutputFrameRate(30, 1));
+
+            Assert.False(session.CanUndo);
+            Assert.Equal(0, persist.Writes);
+        }
+
+        /// <summary>First referenced video stream, not the largest or the fastest: the recording's
+        /// own rate is the native one even when a faster webcam shares the file.</summary>
+        [Fact]
+        public void GetNativeFrameRate_takes_the_first_referenced_video_stream()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+            session.Project.Sources[0].Streams[1].AvgFrameRateNum = 60;
+
+            var native = EditorSession.GetNativeFrameRate(session.Project);
+
+            Assert.Equal((30, 1), native);
+        }
+
+        [Fact]
+        public void GetNativeFrameRate_ignores_a_source_nothing_plays()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+            session.Project.Sources.Insert(0, new Source
+            {
+                Id = Guid.NewGuid(),
+                Path = @"C:\media\unused.mp4",
+                Streams =
+                {
+                    new SourceStream { Index = 0, Kind = StreamKind.Video, Width = 1280, Height = 720, AvgFrameRateNum = 24, AvgFrameRateDen = 1 },
+                },
+            });
+
+            Assert.Equal((30, 1), EditorSession.GetNativeFrameRate(session.Project));
+        }
+
+        [Fact]
+        public void GetNativeFrameRate_is_null_when_nothing_declares_a_rate()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+            foreach (var stream in session.Project.Sources[0].Streams)
+                stream.AvgFrameRateNum = 0;
+
+            Assert.Null(EditorSession.GetNativeFrameRate(session.Project));
+        }
     }
 }

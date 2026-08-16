@@ -55,6 +55,42 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// <summary>Largest inset per side: a crop that reached 1 would leave nothing to draw.</summary>
         public const double MaxCropInset = 0.95;
 
+        public const double MinFontSize = 1;
+        public const double MaxFontSize = 2000;
+
+        /// <summary>How close a derived ratio must be to a preset to light its tile — covers the
+        /// rounding a crop/scale round-trip through the model introduces without ever matching a
+        /// neighbouring preset (the closest pair, 4:3 and 3:2, differ by ~12%).</summary>
+        private const double AspectMatchTolerance = 0.01;
+
+        /// <summary>The aspect-ratio tiles, in display order. Ratios are width/height.</summary>
+        private static readonly (AspectTile Tile, double Ratio)[] AspectPresets =
+        {
+            (AspectTile.R169, 16 / 9.0),
+            (AspectTile.R11, 1.0),
+            (AspectTile.R45, 4 / 5.0),
+            (AspectTile.R32, 3 / 2.0),
+            (AspectTile.R43, 4 / 3.0),
+        };
+
+        private enum AspectTile
+        {
+            /// <summary>The content's own ratio — the default, and the way back from any other
+            /// tile (there is no reset dot; Original IS the reset).</summary>
+            Original,
+            R169,
+            R11,
+            R45,
+            R32,
+            R43,
+            Custom,
+
+            /// <summary>Free sizing: an explicit height with no ratio held, which is what gives
+            /// the gizmo its edge handles. Sticky — dragging the box to a ratio that happens to
+            /// match a preset must not steal the selection.</summary>
+            Unlocked,
+        }
+
         private EditorSession _session;
 
         /// <summary>True while <see cref="Sync"/> is pushing model values into the backing fields —
@@ -84,9 +120,15 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _positionY = 0.5;
         private double _scale = 1.0;
         private double _scaleHeight = 1.0;
-        private bool _aspectLocked = true;
+        private bool _hasScaleY;
         private double _rotation;
         private double _opacity = 1.0;
+
+        private AspectTile _aspectTile = AspectTile.Original;
+        private bool _aspectStretch;
+        private double _customAspectW = 16;
+        private double _customAspectH = 9;
+        private bool _cropModeActive;
 
         private bool _maskSquare = true;
         private bool _maskCircle;
@@ -168,25 +210,19 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// <summary>Position/scale/rotation/opacity — anything the compositor draws.</summary>
         public bool ShowTransform => _showTransform;
 
-        /// <summary>Shown for every visual item, text included: the gizmo's corner drag writes
-        /// <c>Transform.Scale</c> for text too, and a value no field shows is a value the user
-        /// cannot see or reset. For text it multiplies the natural block size rather than mapping
-        /// to a canvas-width fraction (see <c>FrameComposer.DrawText</c>), which is what
-        /// <see cref="ScaleLabel"/> distinguishes.</summary>
+        /// <summary>Shown for pictures only. Text sizes through <see cref="FontSize"/> alone — the
+        /// gizmo's corner drag writes the font size for text too, so a text card never needs (or
+        /// shows) a second size number.</summary>
         public bool ShowScale => _showScale;
 
-        /// <summary>The PLACEMENT scale row's label: "Size" for pictures (canvas-width fraction),
-        /// "Text scale" for text (multiplier of the natural block) — so it cannot be confused with
-        /// the TEXT section's own font-size "Size". Unlocking the aspect ratio splits the row into
-        /// two, at which point the one number becomes the width.</summary>
-        public string ScaleLabel => _showText
-            ? (_aspectLocked ? "Text scale" : "Text width")
-            : (_aspectLocked ? "Size" : "Width");
+        /// <summary>The PLACEMENT scale row's label: "Size" while the height follows the content,
+        /// "Width" once a stretch has given the item a height of its own (which adds the Height
+        /// row below).</summary>
+        public string ScaleLabel => _hasScaleY ? "Width" : "Size";
 
-        /// <summary>The second size row, shown only while the aspect ratio is unlocked.</summary>
-        public bool ShowScaleHeight => _showScale && !_aspectLocked;
-
-        public string ScaleHeightLabel => _showText ? "Text height" : "Height";
+        /// <summary>The second size row, shown only while the item carries an explicit height
+        /// (<c>Transform.ScaleY</c>) — the Stretch fit mode, or a free edge-handle resize.</summary>
+        public bool ShowScaleHeight => _showScale && _hasScaleY;
 
         public bool ShowMask => _showMask;
 
@@ -260,76 +296,19 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>Item height as a fraction of the canvas height. Only meaningful — and only
-        /// shown — while <see cref="AspectLocked"/> is off; a locked item derives its height from
-        /// the content and stores no <c>ScaleY</c> at all.</summary>
+        /// shown — while the item already carries an explicit height; an item whose height follows
+        /// the content stores no <c>ScaleY</c> at all and this field is inert.</summary>
         public double ScaleHeight
         {
             get => _scaleHeight;
             set
             {
                 value = Clamp(value, MinScale, MaxScale);
-                if (!Set(ref _scaleHeight, value) || _syncing || _aspectLocked)
+                if (!Set(ref _scaleHeight, value) || _syncing || !_hasScaleY)
                     return;
 
                 EditRow("sel:scaleY", i => TransformOf(i).ScaleY = value);
             }
-        }
-
-        /// <summary>
-        /// Whether the item keeps its content's aspect ratio (the default) or sizes its two axes
-        /// apart. Unlocking seeds the height from what the item is drawn at right now, so the
-        /// picture does not jump the instant the box is unticked; locking drops
-        /// <c>Transform.ScaleY</c> entirely and the height goes back to following the content.
-        /// </summary>
-        public bool AspectLocked
-        {
-            get => _aspectLocked;
-            set
-            {
-                if (!Set(ref _aspectLocked, value) || _syncing)
-                    return;
-
-                OnPropertyChanged(nameof(ShowScaleHeight));
-                OnPropertyChanged(nameof(ScaleLabel));
-
-                if (value)
-                {
-                    EditRow("sel:aspect", i => TransformOf(i).ScaleY = null);
-                    return;
-                }
-
-                // per item, not per row: linked segments of one row share a transform's worth of
-                // numbers but each resolves its own content aspect.
-                EditRow("sel:aspect", i => TransformOf(i).ScaleY = CurrentHeightFraction(i));
-                Set(ref _scaleHeight, CurrentHeightFraction(SelectedItem) ?? _scale, nameof(ScaleHeight));
-            }
-        }
-
-        /// <summary>The height an item is drawn at now, as the canvas fraction <c>ScaleY</c> stores
-        /// — so unticking the lock is a no-op on the picture. Null when the content's aspect cannot
-        /// be resolved, which leaves the item locked in all but name (the composer keeps deriving
-        /// the height) rather than snapping it to a guess.</summary>
-        private double? CurrentHeightFraction(Item item)
-        {
-            var transform = item?.Transform;
-            if (transform == null)
-                return null;
-
-            // text scales off its own natural block, so its two axes already share one unit.
-            if (item.Content is TextContent)
-                return transform.Scale;
-
-            var output = _session?.Project?.Output;
-            double canvasW = output?.WidthPx ?? 0;
-            double canvasH = output?.HeightPx ?? 0;
-            if (!(canvasW > 0) || !(canvasH > 0))
-                return null;
-
-            var aspect = ItemPlacement.ContentAspect(_session.Project, item, canvasW, canvasH);
-            if (aspect is not > 0)
-                return null;
-
-            return transform.Scale * canvasW * aspect.Value / canvasH;
         }
 
         /// <summary>Clockwise rotation in degrees.</summary>
@@ -437,8 +416,97 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        // -------------------------------------------------------------------------------- crop
+        // ------------------------------------------------------------------ aspect ratio + crop
 
+        /// <summary>The tile bools the aspect grid's radio buttons bind. Selecting one applies the
+        /// ratio (via crop or stretch — see <see cref="ApplyAspect"/>); deselection is what a radio
+        /// group does to the losers and writes nothing, exactly like the mask tiles.</summary>
+        public bool AspectOriginal { get => _aspectTile == AspectTile.Original; set => SetAspectTile(AspectTile.Original, value); }
+
+        public bool AspectUnlocked { get => _aspectTile == AspectTile.Unlocked; set => SetAspectTile(AspectTile.Unlocked, value); }
+
+        public bool Aspect169 { get => _aspectTile == AspectTile.R169; set => SetAspectTile(AspectTile.R169, value); }
+
+        public bool Aspect11 { get => _aspectTile == AspectTile.R11; set => SetAspectTile(AspectTile.R11, value); }
+
+        public bool Aspect45 { get => _aspectTile == AspectTile.R45; set => SetAspectTile(AspectTile.R45, value); }
+
+        public bool Aspect32 { get => _aspectTile == AspectTile.R32; set => SetAspectTile(AspectTile.R32, value); }
+
+        public bool Aspect43 { get => _aspectTile == AspectTile.R43; set => SetAspectTile(AspectTile.R43, value); }
+
+        public bool AspectCustom { get => _aspectTile == AspectTile.Custom; set => SetAspectTile(AspectTile.Custom, value); }
+
+        /// <summary>The Custom ratio row, shown only while the Custom tile is selected.</summary>
+        public bool ShowCustomAspect => _aspectTile == AspectTile.Custom;
+
+        /// <summary>Whether a ratio-bearing tile (a preset or Custom) is selected — the fit-mode
+        /// buttons are inert (and disabled) for Original and Unlocked, which hold no ratio.</summary>
+        public bool AspectSelected => _aspectTile is not (AspectTile.Original or AspectTile.Unlocked);
+
+        /// <summary>Fill keeps the picture's own pixels square and crops the excess (the default);
+        /// its partner <see cref="AspectStretch"/> distorts instead. A radio pair.</summary>
+        public bool AspectFill
+        {
+            get => !_aspectStretch;
+            set => SetFitMode(stretch: false, value);
+        }
+
+        /// <summary>Stretch fits the target box exactly by distorting the picture — no pixels are
+        /// cropped away, circles become ellipses.</summary>
+        public bool AspectStretch
+        {
+            get => _aspectStretch;
+            set => SetFitMode(stretch: true, value);
+        }
+
+        private void SetFitMode(bool stretch, bool selected)
+        {
+            if (!selected || _aspectStretch == stretch)
+                return; // radio deselection, or no change
+
+            _aspectStretch = stretch;
+            OnPropertyChanged(nameof(AspectFill));
+            OnPropertyChanged(nameof(AspectStretch));
+
+            // reapply only when a ratio is in force — flipping the mode on Original/Unlocked must
+            // not clear a hand-made crop or the free height.
+            if (!_syncing && AspectSelected)
+                ApplyAspect();
+        }
+
+        /// <summary>Custom ratio numerator (width part of W:H).</summary>
+        public double CustomAspectW
+        {
+            get => _customAspectW;
+            set
+            {
+                value = Clamp(value, 0.1, 1000);
+                if (!Set(ref _customAspectW, value) || _syncing)
+                    return;
+
+                if (_aspectTile == AspectTile.Custom)
+                    ApplyAspect();
+            }
+        }
+
+        /// <summary>Custom ratio denominator (height part of W:H).</summary>
+        public double CustomAspectH
+        {
+            get => _customAspectH;
+            set
+            {
+                value = Clamp(value, 0.1, 1000);
+                if (!Set(ref _customAspectH, value) || _syncing)
+                    return;
+
+                if (_aspectTile == AspectTile.Custom)
+                    ApplyAspect();
+            }
+        }
+
+        /// <summary>Fractional inset cropped off the picture's left edge (0-0.95). Written per
+        /// row like every placement edit; all four back at zero collapses the crop to null.</summary>
         public double CropLeft
         {
             get => _cropLeft;
@@ -448,6 +516,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (!Set(ref _cropLeft, value) || _syncing)
                     return;
 
+                OnPropertyChanged(nameof(CropTotal));
                 EditRow("sel:cropl", i => SetCrop(i, c => c.Left = value));
             }
         }
@@ -461,6 +530,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (!Set(ref _cropTop, value) || _syncing)
                     return;
 
+                OnPropertyChanged(nameof(CropTotal));
                 EditRow("sel:cropt", i => SetCrop(i, c => c.Top = value));
             }
         }
@@ -474,6 +544,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (!Set(ref _cropRight, value) || _syncing)
                     return;
 
+                OnPropertyChanged(nameof(CropTotal));
                 EditRow("sel:cropr", i => SetCrop(i, c => c.Right = value));
             }
         }
@@ -487,8 +558,283 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (!Set(ref _cropBottom, value) || _syncing)
                     return;
 
+                OnPropertyChanged(nameof(CropTotal));
                 EditRow("sel:cropb", i => SetCrop(i, c => c.Bottom = value));
             }
+        }
+
+        /// <summary>Sum of the four crop insets: 0 means "no crop", anything else lights the crop
+        /// row's reset dot. Writing 0 removes the crop entirely (the dot's reset click).</summary>
+        public double CropTotal
+        {
+            get => _cropLeft + _cropTop + _cropRight + _cropBottom;
+            set
+            {
+                if (_syncing || value != 0 || CropTotal == 0)
+                    return;
+
+                EditRow("sel:cropclear", i => TransformOf(i).Crop = null, origin: null);
+            }
+        }
+
+        /// <summary>True while the preview's gizmo is in crop mode (dragging the item's edges
+        /// adjusts the crop instead of the size). Pure UI state — nothing in the project changes
+        /// until a handle is dragged — cleared whenever the selection changes.</summary>
+        public bool CropModeActive
+        {
+            get => _cropModeActive;
+            set => Set(ref _cropModeActive, value);
+        }
+
+        /// <summary>Tile setter body: mask-tile semantics (only a true write applies).</summary>
+        private void SetAspectTile(AspectTile tile, bool selected)
+        {
+            if (!selected)
+            {
+                // a radio group deselecting the loser; the winner's own set does the work
+                if (_aspectTile == tile && !_syncing)
+                    OnPropertyChanged(TileProperty(tile));
+                return;
+            }
+
+            if (_aspectTile == tile)
+                return;
+
+            SetAspectFlags(tile);
+
+            if (!_syncing)
+                ApplyAspect();
+        }
+
+        /// <summary>Moves the selection to <paramref name="tile"/>, raising change notifications
+        /// for every tile property that flipped plus the dependents.</summary>
+        private void SetAspectFlags(AspectTile tile)
+        {
+            var previous = _aspectTile;
+            _aspectTile = tile;
+
+            foreach (var name in new[] { previous, tile }.Distinct().Select(TileProperty))
+            {
+                if (name != null)
+                    OnPropertyChanged(name);
+            }
+
+            OnPropertyChanged(nameof(ShowCustomAspect));
+            OnPropertyChanged(nameof(AspectSelected));
+        }
+
+        private static string TileProperty(AspectTile tile) => tile switch
+        {
+            AspectTile.Original => nameof(AspectOriginal),
+            AspectTile.R169 => nameof(Aspect169),
+            AspectTile.R11 => nameof(Aspect11),
+            AspectTile.R45 => nameof(Aspect45),
+            AspectTile.R32 => nameof(Aspect32),
+            AspectTile.R43 => nameof(Aspect43),
+            AspectTile.Custom => nameof(AspectCustom),
+            AspectTile.Unlocked => nameof(AspectUnlocked),
+            _ => null,
+        };
+
+        /// <summary>The ratio (width/height) the current tile stands for, or null for the two
+        /// ratio-free tiles (Original and Unlocked).</summary>
+        private double? SelectedAspectRatio()
+        {
+            if (_aspectTile == AspectTile.Custom)
+                return _customAspectH > 0 ? _customAspectW / _customAspectH : null;
+
+            foreach (var (tile, ratio) in AspectPresets)
+            {
+                if (tile == _aspectTile)
+                    return ratio;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Writes the selected tile + fit mode into the model. Fill computes a centred crop that
+        /// brings the picture to the target ratio (and drops any stretch); Stretch clears the crop
+        /// and sets an explicit height instead; no tile clears both — back to the native picture.
+        /// Everything an aspect choice writes lives on the transform, so it fans out over the
+        /// linked row like every other placement edit.
+        /// </summary>
+        private void ApplyAspect()
+        {
+            // Unlocked: give the item an explicit height seeded from what it is drawn at right
+            // now, so the picture does not move — the point is the free edge handles, not a jump.
+            // The crop is left alone; free sizing and cropping are orthogonal.
+            if (_aspectTile == AspectTile.Unlocked)
+            {
+                // per item, not per row: linked segments share the transform's numbers but each
+                // resolves its own content aspect.
+                EditRow("sel:aspect", i => TransformOf(i).ScaleY = CurrentHeightFraction(i), origin: null);
+                return;
+            }
+
+            var ratio = SelectedAspectRatio();
+            if (ratio is not > 0)
+            {
+                EditRow("sel:aspect", i =>
+                {
+                    var t = TransformOf(i);
+                    t.Crop = null;
+                    t.ScaleY = null;
+                }, origin: null);
+                return;
+            }
+
+            if (_aspectStretch)
+            {
+                var output = _session?.Project?.Output;
+                double canvasW = output?.WidthPx ?? 0;
+                double canvasH = output?.HeightPx ?? 0;
+                if (!(canvasW > 0) || !(canvasH > 0))
+                    return;
+
+                EditRow("sel:aspect", i =>
+                {
+                    var t = TransformOf(i);
+                    t.Crop = null;
+                    t.ScaleY = Clamp(t.Scale * canvasW / (ratio.Value * canvasH), MinScale, MaxScale);
+                }, origin: null);
+                return;
+            }
+
+            EditRow("sel:aspect", i =>
+            {
+                // per item, not per row: linked segments share the transform's numbers but each
+                // resolves its own source dimensions.
+                var contentAspect = ItemPlacement.UncroppedContentAspect(_session.Project, i);
+                if (contentAspect is not > 0)
+                    return;
+
+                var t = TransformOf(i);
+                t.ScaleY = null;
+
+                var contentRatio = 1 / contentAspect.Value; // width/height
+                if (Math.Abs(contentRatio - ratio.Value) / ratio.Value < AspectMatchTolerance)
+                {
+                    t.Crop = null; // already the target ratio — one representation for "no crop"
+                }
+                else if (contentRatio > ratio.Value)
+                {
+                    // wider than the target: shave the sides
+                    var inset = (1 - ratio.Value / contentRatio) / 2;
+                    t.Crop = new CropRect { Left = inset, Right = inset };
+                }
+                else
+                {
+                    var inset = (1 - contentRatio / ratio.Value) / 2;
+                    t.Crop = new CropRect { Top = inset, Bottom = inset };
+                }
+            }, origin: null);
+        }
+
+        /// <summary>The height an item is drawn at now, as the canvas fraction <c>ScaleY</c> stores
+        /// — so switching to Unlocked is a no-op on the picture. Null when the content's aspect
+        /// cannot be resolved, which leaves the item deriving its height (the composer's default)
+        /// rather than snapping it to a guess.</summary>
+        private double? CurrentHeightFraction(Item item)
+        {
+            var transform = item?.Transform;
+            if (transform == null)
+                return null;
+
+            // text scales off its own natural block, so its two axes already share one unit
+            if (item.Content is TextContent)
+                return transform.Scale;
+
+            var output = _session?.Project?.Output;
+            double canvasW = output?.WidthPx ?? 0;
+            double canvasH = output?.HeightPx ?? 0;
+            if (!(canvasW > 0) || !(canvasH > 0))
+                return null;
+
+            var aspect = ItemPlacement.ContentAspect(_session.Project, item, canvasW, canvasH);
+            if (aspect is not > 0)
+                return null;
+
+            return transform.Scale * canvasW * aspect.Value / canvasH;
+        }
+
+        /// <summary>
+        /// Reads the tile selection back out of the model: an explicit height means Unlocked or a
+        /// Stretch preset (its box ratio decides), a crop means a Fill preset (the cropped
+        /// picture's ratio likewise), nothing means Original. The current tile is <b>sticky</b>
+        /// where ratios are ambiguous: Custom keeps its selection even when its ratio equals a
+        /// preset's, and Unlocked keeps it whatever ratio the free handles landed on — the user's
+        /// choice of tile is state worth honouring, not something to re-guess on every read.
+        /// </summary>
+        private void SyncAspect(Item item)
+        {
+            var tile = AspectTile.Original;
+            var stretch = _aspectStretch;
+
+            var transform = item?.Transform;
+            var output = _session?.Project?.Output;
+            double canvasW = output?.WidthPx ?? 0;
+            double canvasH = output?.HeightPx ?? 0;
+
+            if (transform?.ScaleY is > 0 && transform.Scale > 0 && canvasW > 0 && canvasH > 0)
+            {
+                stretch = true;
+                tile = _aspectTile == AspectTile.Unlocked
+                    ? AspectTile.Unlocked
+                    : MatchAspectTile(transform.Scale * canvasW / (transform.ScaleY.Value * canvasH),
+                        fallback: AspectTile.Unlocked);
+            }
+            else if (transform?.Crop != null &&
+                     ItemPlacement.UncroppedContentAspect(_session?.Project, item) is > 0 and var contentAspect)
+            {
+                stretch = false;
+                var crop = transform.Crop;
+                double w = 1 - crop.Left - crop.Right;
+                double h = 1 - crop.Top - crop.Bottom;
+                if (w > 0 && h > 0)
+                    tile = MatchAspectTile((1 / contentAspect) * w / h, fallback: AspectTile.Original);
+            }
+            else
+            {
+                stretch = false;
+            }
+
+            SetAspectFlags(tile);
+
+            if (_aspectStretch != stretch)
+            {
+                _aspectStretch = stretch;
+                OnPropertyChanged(nameof(AspectFill));
+                OnPropertyChanged(nameof(AspectStretch));
+            }
+        }
+
+        /// <summary>Custom-first when Custom is the current tile (stickiness), then the presets,
+        /// then Custom by value, then the fallback for ratios matching nothing.</summary>
+        private AspectTile MatchAspectTile(double ratio, AspectTile fallback)
+        {
+            if (!(ratio > 0))
+                return fallback;
+
+            if (_aspectTile == AspectTile.Custom && CustomMatches(ratio))
+                return AspectTile.Custom;
+
+            foreach (var (tile, preset) in AspectPresets)
+            {
+                if (Math.Abs(ratio - preset) / preset < AspectMatchTolerance)
+                    return tile;
+            }
+
+            return CustomMatches(ratio) ? AspectTile.Custom : fallback;
+        }
+
+        private bool CustomMatches(double ratio)
+        {
+            if (_customAspectH <= 0)
+                return false;
+
+            var custom = _customAspectW / _customAspectH;
+            return custom > 0 && Math.Abs(ratio - custom) / custom < AspectMatchTolerance;
         }
 
         // -------------------------------------------------------------------------------- text
@@ -525,7 +871,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             get => _fontSize;
             set
             {
-                value = Clamp(value, 1, 2000);
+                value = Clamp(value, MinFontSize, MaxFontSize);
                 if (!Set(ref _fontSize, value) || _syncing)
                     return;
 
@@ -713,7 +1059,12 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         // ---------------------------------------------------------------------- session events
 
-        private void Session_SelectionChanged(object sender, EventArgs e) => Sync();
+        private void Session_SelectionChanged(object sender, EventArgs e)
+        {
+            // crop mode is a conversation about one item; a new selection ends it.
+            CropModeActive = false;
+            Sync();
+        }
 
         private void Session_ProjectChanged(object sender, ProjectChangedEventArgs e)
         {
@@ -745,11 +1096,10 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 Set(ref _hasSelection, item != null, nameof(HasSelection));
                 Set(ref _showTransform, visual, nameof(ShowTransform));
-                Set(ref _showScale, visual, nameof(ShowScale));
+                Set(ref _showScale, visual && !isText, nameof(ShowScale));
                 Set(ref _showMask, isPicture, nameof(ShowMask));
                 Set(ref _showCrop, isPicture, nameof(ShowCrop));
                 Set(ref _showText, isText, nameof(ShowText));
-                OnPropertyChanged(nameof(ScaleLabel));
                 Set(ref _showAudio, isAudio, nameof(ShowAudio));
                 Set(ref _showTransitions, item != null, nameof(ShowTransitions));
                 Set(ref _showTrackHidden, visual, nameof(ShowTrackHidden));
@@ -767,12 +1117,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _positionX, transform.X, nameof(PositionX));
                 Set(ref _positionY, transform.Y, nameof(PositionY));
                 Set(ref _scale, transform.Scale, nameof(Scale));
-                Set(ref _aspectLocked, transform.ScaleY == null, nameof(AspectLocked));
-                // a locked item keeps the last height shown, so ticking the box off again offers
-                // the number the user was working with rather than a fresh reading.
+                Set(ref _hasScaleY, transform.ScaleY != null, nameof(ShowScaleHeight));
                 Set(ref _scaleHeight, transform.ScaleY ?? _scaleHeight, nameof(ScaleHeight));
                 OnPropertyChanged(nameof(ShowScaleHeight));
-                OnPropertyChanged(nameof(ScaleHeightLabel));
+                OnPropertyChanged(nameof(ScaleLabel));
                 Set(ref _rotation, transform.Rotation, nameof(Rotation));
                 Set(ref _opacity, transform.Opacity, nameof(Opacity));
 
@@ -791,6 +1139,13 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _cropTop, crop.Top, nameof(CropTop));
                 Set(ref _cropRight, crop.Right, nameof(CropRight));
                 Set(ref _cropBottom, crop.Bottom, nameof(CropBottom));
+                OnPropertyChanged(nameof(CropTotal));
+
+                SyncAspect(item);
+
+                // crop mode only means anything while a croppable picture is selected
+                if (!isPicture)
+                    CropModeActive = false;
 
                 if (item?.Content is TextContent text)
                 {
@@ -833,7 +1188,16 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The row-wide write (see the class remarks): every linked segment of the
         /// selected item's row in one mutation, or just the item when it is unlinked.</summary>
-        private void EditRow(string coalesceKey, Action<Item> edit)
+        private void EditRow(string coalesceKey, Action<Item> edit) => EditRow(coalesceKey, edit, this);
+
+        /// <summary>
+        /// Same, with an explicit origin. Spinner-backed setters pass <c>this</c> so the echo does
+        /// not fight the control being held; the aspect/crop writes pass null instead — they change
+        /// state whose mirrors (tile selection, crop total, the height row) the setters do not
+        /// maintain by hand, so the inspector wants its own <see cref="Session_ProjectChanged"/>
+        /// re-read, exactly like <see cref="Unlink"/>.
+        /// </summary>
+        private void EditRow(string coalesceKey, Action<Item> edit, object origin)
         {
             var item = SelectedItem;
             if (item == null)
@@ -844,7 +1208,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             // merge two different items' edits into one undo entry.
             var scope = item.LinkGroupId != null ? item.TrackId : item.Id;
             _session.EditItems(ItemRowScope.RowItemIds(_session, item), edit, $"{coalesceKey}:{scope}",
-                structural: false, origin: this);
+                structural: false, origin: origin);
         }
 
         /// <summary>The single-item write: properties of this segment alone. The coalesce key is
