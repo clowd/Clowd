@@ -155,5 +155,25 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal((SourceId, 0), map.PrimaryVideo);
             Assert.Equal(3 * Second, map.DurationTicks);
         }
+
+        [Fact]
+        public void Retimed_item_scales_both_mapping_directions()
+        {
+            // 1s of timeline at 2x covers source [1s, 3s)
+            var project = NewProject();
+            var track = AddTrack(project, TrackKind.Video);
+            var item = AddMedia(project, track, Second, Second, Second);
+            ((MediaContent)item.Content).Speed = 2.0;
+
+            var map = ProjectTimelineMap.Build(project);
+            var stream = map.VideoStreams[(SourceId, 0)];
+
+            // half a second in consumes a full second of source…
+            Assert.Equal(2 * Second, stream.TimelineToSource(Second + Second / 2));
+            // …and the inverse pacing map divides back
+            Assert.Equal(Second + Second / 2, stream.SourceToTimeline(2 * Second));
+            // past the end clamps to the last kept source instant of the SCALED span
+            Assert.Equal(3 * Second - 1, stream.TimelineToSource(10 * Second));
+        }
     }
 }
