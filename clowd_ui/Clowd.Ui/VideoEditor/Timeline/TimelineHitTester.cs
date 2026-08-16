@@ -21,8 +21,6 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>The item's right edge grip: trim the end.</summary>
         ItemEnd,
-
-        Playhead,
     }
 
     /// <summary>A hit. <see cref="ItemId"/> is <see cref="Guid.Empty"/> and <see cref="RowIndex"/>
@@ -46,10 +44,10 @@ namespace Clowd.UI.VideoEditor.Timeline
 
     /// <summary>
     /// Pure hit-testing over the timeline's precomputed item rectangles, in strict priority order:
-    /// <b>playhead &gt; item edge &gt; item body &gt; ruler &gt; empty</b>. The playhead wins
-    /// everywhere because scrubbing must stay reachable no matter what it is parked over; edges beat
-    /// bodies because a trim grip is the smaller target. Free of Avalonia types so the priorities
-    /// are testable.
+    /// <b>item edge &gt; item body &gt; ruler &gt; empty</b>. Edges beat bodies because a trim grip
+    /// is the smaller target. The playhead is <i>not</i> a target: it is moved from the ruler
+    /// (click or drag there), so it can never swallow a press aimed at the clip beneath it. Free of
+    /// Avalonia types so the priorities are testable.
     /// </summary>
     internal static class TimelineHitTester
     {
@@ -67,16 +65,11 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// the drawing area, y from the top of the ruler; the rows start at
         /// <paramref name="rulerHeight"/>).
         /// </summary>
-        /// <param name="playheadX">Current playhead x, or <see cref="Double.NaN"/> when it is not
-        /// drawn — NaN comparisons are false, so it simply never matches.</param>
         /// <param name="rects">Rectangles of the visible items, in draw order. Their
         /// <see cref="TimelineItemRect.Top"/> is in the same space as <paramref name="y"/>.</param>
-        public static TimelineHit HitTest(double x, double y, double playheadX, double rulerHeight,
+        public static TimelineHit HitTest(double x, double y, double rulerHeight,
             IReadOnlyList<TimelineItemRect> rects, double tolerance = HitTolerance)
         {
-            if (Math.Abs(x - playheadX) <= tolerance)
-                return new TimelineHit(TimelineHitKind.Playhead, Guid.Empty, -1);
-
             if (y < rulerHeight)
                 return new TimelineHit(TimelineHitKind.Ruler, Guid.Empty, -1);
 

@@ -729,6 +729,12 @@ namespace Clowd.VideoSDK.Playback
             var map = _map;
             long tl = target.Ticks;
 
+            // the clock lands on the target before any worker is unblocked: the post-seek immediate
+            // present arrives on a decode thread and asks the clock where the playhead is (see
+            // OnImmediatePresented), so a clock still holding the pre-seek position would race it.
+            Volatile.Write(ref _activeOffsetTicks, PrimaryOffsetAt(map, tl));
+            _clock.SetPosition(target);
+
             // the mix worker seeks in timeline time — no source-domain mapping exists for audio.
             if (flushAudio)
                 set?.MixWorker?.PrepareSeek(target);
@@ -758,8 +764,6 @@ namespace Clowd.VideoSDK.Playback
                 _clock.SetAudioSource(set.AudioSink);
             }
 
-            Volatile.Write(ref _activeOffsetTicks, PrimaryOffsetAt(map, tl));
-            _clock.SetPosition(target);
             RaisePositionChanged();
         }
 
@@ -832,11 +836,20 @@ namespace Clowd.VideoSDK.Playback
             // the primary track's immediately-presented post-seek frame defines the position a
             // paused UI shows, mapped into timeline time.
             var set = _pipelines;
-            if (set?.Primary != null && worker == set.Primary.Worker && _state != PlayerState.Playing)
-            {
-                _clock.SetPosition(new TimeSpan(MapVideoPtsToClock(set.Primary.Key, pts.Ticks)));
-                RaisePositionChanged();
-            }
+            if (set?.Primary == null || worker != set.Primary.Worker || _state == PlayerState.Playing)
+                return;
+
+            // …but only where the stream actually covers the playhead. Past its last item (or in a
+            // gap) the worker still presents its last kept frame, and adopting that frame's pts
+            // would drag the position back to the end of the video — a seek to the end of a project
+            // whose text or images outlast the footage would land on the last video frame instead.
+            var map = _map;
+            if (map != null && map.TryGetVideo(set.Primary.Key, out var stream)
+                && stream.OffsetAtTimeline(Position.Ticks) == long.MinValue)
+                return;
+
+            _clock.SetPosition(new TimeSpan(MapVideoPtsToClock(set.Primary.Key, pts.Ticks)));
+            RaisePositionChanged();
         }
 
         private void OnTick(object state)

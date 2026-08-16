@@ -30,42 +30,20 @@ namespace Clowd.VideoSDK.Tests
         };
 
         [Fact]
-        public void Playhead_beats_every_item_and_the_ruler()
+        public void The_playhead_is_not_a_target_wherever_it_is_parked()
         {
-            // playhead parked right on item A's start edge
-            var onEdge = TimelineHitTester.HitTest(100, Row0Y, 102, RulerHeight, Rects());
-            Assert.Equal(TimelineHitKind.Playhead, onEdge.Kind);
-            Assert.Equal(Guid.Empty, onEdge.ItemId);
-
-            // and over an item body
-            Assert.Equal(TimelineHitKind.Playhead,
-                TimelineHitTester.HitTest(200, Row0Y, 200, RulerHeight, Rects()).Kind);
-
-            // and in the ruler strip
-            Assert.Equal(TimelineHitKind.Playhead,
-                TimelineHitTester.HitTest(200, 5, 200, RulerHeight, Rects()).Kind);
-        }
-
-        [Fact]
-        public void Playhead_tolerance_boundary_is_inclusive()
-        {
-            Assert.Equal(TimelineHitKind.Playhead,
-                TimelineHitTester.HitTest(200 + Tol, Row0Y, 200, RulerHeight, Rects()).Kind);
+            // It is moved from the ruler alone, so a press on the rows always means what is drawn
+            // there: parked on item A's start edge it still trims, and over a body it still selects.
+            Assert.Equal(TimelineHitKind.ItemStart,
+                TimelineHitTester.HitTest(100, Row0Y, RulerHeight, Rects()).Kind);
             Assert.Equal(TimelineHitKind.ItemBody,
-                TimelineHitTester.HitTest(200 + Tol + 0.001, Row0Y, 200, RulerHeight, Rects()).Kind);
-        }
-
-        [Fact]
-        public void A_missing_playhead_never_matches()
-        {
-            var hit = TimelineHitTester.HitTest(200, Row0Y, Double.NaN, RulerHeight, Rects());
-            Assert.Equal(TimelineHitKind.ItemBody, hit.Kind);
+                TimelineHitTester.HitTest(200, Row0Y, RulerHeight, Rects()).Kind);
         }
 
         [Fact]
         public void Ruler_wins_above_the_rows()
         {
-            var hit = TimelineHitTester.HitTest(200, 5, Double.NaN, RulerHeight, Rects());
+            var hit = TimelineHitTester.HitTest(200, 5, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.Ruler, hit.Kind);
             Assert.Equal(-1, hit.RowIndex);
         }
@@ -73,12 +51,12 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Item_edges_beat_the_body()
         {
-            var start = TimelineHitTester.HitTest(102, Row0Y, Double.NaN, RulerHeight, Rects());
+            var start = TimelineHitTester.HitTest(102, Row0Y, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.ItemStart, start.Kind);
             Assert.Equal(ItemA, start.ItemId);
             Assert.Equal(0, start.RowIndex);
 
-            var end = TimelineHitTester.HitTest(148, Row0Y, Double.NaN, RulerHeight, Rects());
+            var end = TimelineHitTester.HitTest(148, Row0Y, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.ItemEnd, end.Kind);
             Assert.Equal(ItemA, end.ItemId);
         }
@@ -87,12 +65,12 @@ namespace Clowd.VideoSDK.Tests
         public void Nearest_edge_wins_between_adjacent_items()
         {
             // x=155: 5 px from A's end, 3 px from B's start.
-            var hit = TimelineHitTester.HitTest(155, Row0Y, Double.NaN, RulerHeight, Rects());
+            var hit = TimelineHitTester.HitTest(155, Row0Y, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.ItemStart, hit.Kind);
             Assert.Equal(ItemB, hit.ItemId);
 
             // x=152: 2 px from A's end, 6 px from B's start.
-            var other = TimelineHitTester.HitTest(152, Row0Y, Double.NaN, RulerHeight, Rects());
+            var other = TimelineHitTester.HitTest(152, Row0Y, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.ItemEnd, other.Kind);
             Assert.Equal(ItemA, other.ItemId);
         }
@@ -112,15 +90,15 @@ namespace Clowd.VideoSDK.Tests
                 new TimelineItemRect(b, 0, 150, 150, 20, 56),  // x 150..300
             };
 
-            var left = TimelineHitTester.HitTest(148, Row0Y, Double.NaN, RulerHeight, rects);
+            var left = TimelineHitTester.HitTest(148, Row0Y, RulerHeight, rects);
             Assert.Equal(TimelineHitKind.ItemEnd, left.Kind);
             Assert.Equal(a, left.ItemId);
 
-            var right = TimelineHitTester.HitTest(152, Row0Y, Double.NaN, RulerHeight, rects);
+            var right = TimelineHitTester.HitTest(152, Row0Y, RulerHeight, rects);
             Assert.Equal(TimelineHitKind.ItemStart, right.Kind);
             Assert.Equal(b, right.ItemId);
 
-            var exact = TimelineHitTester.HitTest(150, Row0Y, Double.NaN, RulerHeight, rects);
+            var exact = TimelineHitTester.HitTest(150, Row0Y, RulerHeight, rects);
             Assert.Equal(TimelineHitKind.ItemStart, exact.Kind);
             Assert.Equal(b, exact.ItemId);
         }
@@ -128,7 +106,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Body_hits_report_the_item_and_its_row()
         {
-            var hit = TimelineHitTester.HitTest(250, Row0Y, Double.NaN, RulerHeight, Rects());
+            var hit = TimelineHitTester.HitTest(250, Row0Y, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.ItemBody, hit.Kind);
             Assert.Equal(ItemB, hit.ItemId);
             Assert.Equal(0, hit.RowIndex);
@@ -139,38 +117,38 @@ namespace Clowd.VideoSDK.Tests
         {
             // 10 px wide: pressing on what would be its start edge selects the body instead, so the
             // item stays selectable and movable until the user zooms in.
-            var hit = TimelineHitTester.HitTest(401, Row1Y, Double.NaN, RulerHeight, Rects());
+            var hit = TimelineHitTester.HitTest(401, Row1Y, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.ItemBody, hit.Kind);
             Assert.Equal(Narrow, hit.ItemId);
             Assert.Equal(1, hit.RowIndex);
 
             // and the suppressed edge does not reach outside the item either
             Assert.Equal(TimelineHitKind.Empty,
-                TimelineHitTester.HitTest(397, Row1Y, Double.NaN, RulerHeight, Rects()).Kind);
+                TimelineHitTester.HitTest(397, Row1Y, RulerHeight, Rects()).Kind);
         }
 
         [Fact]
         public void Edges_only_match_inside_their_own_row()
         {
             // item A's start edge x, but on the audio row below it
-            var hit = TimelineHitTester.HitTest(100, Row1Y, Double.NaN, RulerHeight, Rects());
+            var hit = TimelineHitTester.HitTest(100, Row1Y, RulerHeight, Rects());
             Assert.Equal(TimelineHitKind.Empty, hit.Kind);
         }
 
         [Fact]
         public void Empty_space_is_empty()
         {
-            var gap = TimelineHitTester.HitTest(154, Row0Y, Double.NaN, RulerHeight, Rects(), 1);
+            var gap = TimelineHitTester.HitTest(154, Row0Y, RulerHeight, Rects(), 1);
             Assert.Equal(TimelineHitKind.Empty, gap.Kind);
             Assert.Equal(Guid.Empty, gap.ItemId);
             Assert.Equal(-1, gap.RowIndex);
 
             Assert.Equal(TimelineHitKind.Empty,
-                TimelineHitTester.HitTest(900, Row0Y, Double.NaN, RulerHeight, Rects()).Kind);
+                TimelineHitTester.HitTest(900, Row0Y, RulerHeight, Rects()).Kind);
             Assert.Equal(TimelineHitKind.Empty,
-                TimelineHitTester.HitTest(200, 500, Double.NaN, RulerHeight, Rects()).Kind);
+                TimelineHitTester.HitTest(200, 500, RulerHeight, Rects()).Kind);
             Assert.Equal(TimelineHitKind.Empty,
-                TimelineHitTester.HitTest(200, Row0Y, Double.NaN, RulerHeight, null).Kind);
+                TimelineHitTester.HitTest(200, Row0Y, RulerHeight, null).Kind);
         }
 
         [Fact]
@@ -179,9 +157,9 @@ namespace Clowd.VideoSDK.Tests
             // with the grips out of the way, the body span is half-open [X, Right) — the same
             // convention the model uses for an item's timeline span.
             Assert.Equal(TimelineHitKind.ItemBody,
-                TimelineHitTester.HitTest(400, Row1Y, Double.NaN, RulerHeight, Rects(), 0).Kind);
+                TimelineHitTester.HitTest(400, Row1Y, RulerHeight, Rects(), 0).Kind);
             Assert.Equal(TimelineHitKind.Empty,
-                TimelineHitTester.HitTest(410, Row1Y, Double.NaN, RulerHeight, Rects(), 0).Kind);
+                TimelineHitTester.HitTest(410, Row1Y, RulerHeight, Rects(), 0).Kind);
         }
     }
 }
