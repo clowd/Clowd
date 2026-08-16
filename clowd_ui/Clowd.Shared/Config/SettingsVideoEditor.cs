@@ -19,15 +19,6 @@ namespace Clowd.Config
             set => Set(ref _sidebarWidth, value);
         }
 
-        /// <summary>Preview playback volume, 0-1. Not clamped here — the player clamps what it
-        /// applies, and a settings file the user edited by hand should not silently rewrite.</summary>
-        [Browsable(false)]
-        public double Volume
-        {
-            get => _volume;
-            set => Set(ref _volume, value);
-        }
-
         /// <summary>Last window placement as "x,y,width,height" (physical pixels), restored on open
         /// when it still intersects a connected screen — the exact format and semantics of
         /// <see cref="SettingsGeneral.MainWindowBounds"/>. Null until the window has been opened once.</summary>
@@ -48,7 +39,6 @@ namespace Clowd.Config
         }
 
         private double _sidebarWidth = 230;
-        private double _volume = 1.0;
         private string _windowBounds;
         private bool _windowMaximized;
     }

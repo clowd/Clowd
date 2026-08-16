@@ -315,9 +315,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
             else if (e.Kind == ProjectChangeKind.Mapping)
             {
-                // unlink/relink are Mapping and can come from outside the headers (the
-                // inspector's unlink button) — the link toggles re-read without a rebuild.
-                _headers.SyncToggles();
+                // unlink/relink are Mapping and come from the inspector's unlink button — the
+                // headers' link badges re-read without a rebuild.
+                _headers.RefreshLinkBadges();
             }
 
             _surface.InvalidateVisual();

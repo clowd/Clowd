@@ -22,6 +22,99 @@
         <StreamGeometry x:Key="IconFramePrev">M14,2 L14,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
         <!--  split-at-playhead: a vertical cut line between two half-blocks  -->
         <StreamGeometry x:Key="IconSplit">M7,1 L9,1 L9,15 L7,15 Z M1,4 L5,4 L5,12 L1,12 Z M11,4 L15,4 L15,12 L11,12 Z</StreamGeometry>
+
+        <!--  a local instance so the ring geometry resolves from this window's scope: the shared one
+              lives in ToolButton.axaml, which is merged into the app resources at runtime.  -->
+        <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
+
+        <!--  Render is the window's primary action, so it is a labelled accent button rather than
+              another 30x30 icon. It stays a ToolButton to keep the progress ring the code-behind
+              drives (btnRender.Progress / ShowProgress), drawn here in place of the icon.  -->
+        <ControlTheme x:Key="RenderButtonTheme" TargetType="controls:ToolButton">
+            <Setter Property="Width" Value="NaN" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{DynamicResource SemiColorPrimary}"
+                        ClipToBounds="True">
+                        <Panel>
+                            <!--  hover/press read as a white veil over the accent fill, like the
+                                  30x30 ToolButtons, rather than a second accent token  -->
+                            <Rectangle Name="_veil" Fill="#26FFFFFF">
+                                <Rectangle.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                                    </Transitions>
+                                </Rectangle.Transitions>
+                            </Rectangle>
+                            <StackPanel
+                                Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="7">
+                                <Panel Width="16" Height="16">
+                                    <Path
+                                        Name="_icon"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Data="{TemplateBinding IconPath}"
+                                        Fill="{TemplateBinding Foreground}"
+                                        Stretch="Uniform" />
+                                    <!--  same 16x16 absolute-coordinate ring as ToolButton's  -->
+                                    <Grid Name="_progress" IsVisible="False">
+                                        <Ellipse
+                                            Width="14"
+                                            Height="14"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Stroke="#55FFFFFF"
+                                            StrokeThickness="2" />
+                                        <Path
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            Data="{TemplateBinding Progress, Converter={StaticResource progressToArc}}"
+                                            Stretch="None"
+                                            Stroke="{TemplateBinding Foreground}"
+                                            StrokeLineCap="Round"
+                                            StrokeThickness="2" />
+                                    </Grid>
+                                </Panel>
+                                <ContentPresenter
+                                    VerticalAlignment="Center"
+                                    Content="{TemplateBinding Content}"
+                                    FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^ /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:pressed /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:disabled /template/ Border#_bg">
+                <Setter Property="Opacity" Value="0.5" />
+            </Style>
+            <Style Selector="^[ShowProgress=True] /template/ Path#_icon">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+            <Style Selector="^[ShowProgress=True] /template/ Grid#_progress">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+        </ControlTheme>
     </Window.Resources>
 
     <Grid x:Name="rootGrid" Background="#535353">
@@ -57,56 +150,6 @@
                     Foreground="#CCCCCC" />
             </StackPanel>
 
-            <StackPanel>
-                <controls:ToolButton
-                    Padding="6"
-                    Command="{Binding CommandUndo}"
-                    IconPath="{StaticResource IconUndo}"
-                    ToolTip.Tip="Undo (Ctrl+Z)" />
-                <controls:ToolButton
-                    Padding="6"
-                    Command="{Binding CommandRedo}"
-                    IconPath="{StaticResource IconRedo}"
-                    ToolTip.Tip="Redo (Ctrl+Y)" />
-            </StackPanel>
-
-            <StackPanel>
-                <controls:ToolButton
-                    x:Name="btnAddText"
-                    Padding="7"
-                    Command="{Binding CommandAddText}"
-                    IconPath="{StaticResource IconToolText}"
-                    ToolTip.Tip="Add text at the playhead" />
-                <controls:ToolButton
-                    x:Name="btnAddImage"
-                    Padding="6"
-                    Command="{Binding CommandAddImage}"
-                    IconPath="{StaticResource IconPhoto}"
-                    ToolTip.Tip="Add an image at the playhead" />
-                <controls:ToolButton
-                    x:Name="btnImportMedia"
-                    Padding="6"
-                    Command="{Binding CommandImportMedia}"
-                    IconPath="{StaticResource IconVideo}"
-                    ToolTip.Tip="Import video or audio at the playhead" />
-            </StackPanel>
-
-            <controls:ToolButton
-                x:Name="btnRender"
-                Padding="6"
-                controls:DockAndWrapPanel.DockToEnd="True"
-                Command="{Binding CommandRender}"
-                IconPath="{StaticResource IconVideoMP4}"
-                ToolTip.Tip="Render edited video" />
-
-            <Rectangle
-                Width="1"
-                Height="20"
-                Margin="6,0"
-                VerticalAlignment="Center"
-                controls:DockAndWrapPanel.DockToEnd="True"
-                Fill="#666666" />
-
             <controls:ToolButton
                 x:Name="btnInspector"
                 Padding="6"
@@ -123,6 +166,16 @@
                 IconPath="{StaticResource IconPinned}"
                 IsChecked="{Binding Topmost, Mode=TwoWay}"
                 ToolTip.Tip="Always on top" />
+
+            <controls:ToolButton
+                x:Name="btnRender"
+                Margin="6,0,0,0"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{Binding CommandRender}"
+                Content="Render"
+                IconPath="{StaticResource IconExport}"
+                Theme="{StaticResource RenderButtonTheme}"
+                ToolTip.Tip="Render edited video" />
 
         </controls:DockAndWrapPanel>
 
@@ -143,9 +196,10 @@
                 </Style>
             </Grid.Styles>
 
-            <!--  Column 2 is the resizable property sidebar (reached in code as SidebarColumn); its
+            <!--  Column 3 is the resizable property sidebar (reached in code as SidebarColumn); its
                   pixel Width/MinWidth are driven by ApplySidebarVisible, MaxWidth bounds the drag.  -->
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition
@@ -154,8 +208,62 @@
                     MaxWidth="600" />
             </Grid.ColumnDefinitions>
 
-            <Border
+            <Rectangle
                 Grid.Column="0"
+                Height="1"
+                Margin="4,0,4,0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Fill="#666666" />
+
+            <!--  the same left tool strip as the image editor: ItemWidth is required for DockToEnd
+                  to work in a vertical panel (see DockAndWrapPanel.canDock), and ToolButton is a
+                  fixed 30x30.  -->
+            <controls:DockAndWrapPanel
+                x:Name="ToolBar"
+                Grid.Column="0"
+                Margin="0,4,0,0"
+                ItemWidth="30"
+                Orientation="Vertical"
+                UseLayoutRounding="True">
+
+                <controls:ToolButton
+                    x:Name="btnImportMedia"
+                    Padding="6"
+                    Command="{Binding CommandImportMedia}"
+                    IconPath="{StaticResource IconVideo}"
+                    ToolTip.Tip="Import video or audio at the playhead" />
+
+                <controls:ToolButton
+                    x:Name="btnAddImage"
+                    Padding="6"
+                    Command="{Binding CommandAddImage}"
+                    IconPath="{StaticResource IconPhoto}"
+                    ToolTip.Tip="Add an image at the playhead" />
+
+                <controls:ToolButton
+                    x:Name="btnAddText"
+                    Padding="7"
+                    Command="{Binding CommandAddText}"
+                    IconPath="{StaticResource IconToolText}"
+                    ToolTip.Tip="Add text at the playhead" />
+
+                <controls:ToolButton
+                    Padding="6"
+                    Command="{Binding CommandUndo}"
+                    IconPath="{StaticResource IconUndo}"
+                    ToolTip.Tip="Undo (Ctrl+Z)" />
+
+                <controls:ToolButton
+                    Padding="6"
+                    Command="{Binding CommandRedo}"
+                    IconPath="{StaticResource IconRedo}"
+                    ToolTip.Tip="Redo (Ctrl+Y)" />
+
+            </controls:DockAndWrapPanel>
+
+            <Border
+                Grid.Column="1"
                 Background="#1e1e1e"
                 ClipToBounds="True">
                 <Panel>
@@ -179,7 +287,7 @@
 
             <GridSplitter
                 x:Name="sidebarSplitter"
-                Grid.Column="1"
+                Grid.Column="2"
                 Width="8"
                 Margin="-3,0"
                 ZIndex="1"
@@ -202,7 +310,7 @@
 
             <Border
                 x:Name="sidebarBorder"
-                Grid.Column="2"
+                Grid.Column="3"
                 Background="#454545"
                 IsVisible="False">
                 <Grid>
@@ -293,13 +401,14 @@
                     DockPanel.Dock="Right"
                     Orientation="Horizontal"
                     Spacing="4">
-                    <Path
+                    <!--  filled in code-behind with a GlyphIcon: the speaker glyph is wider than
+                          it is tall, and a Path with Stretch="Uniform" pins the ink to the top of
+                          its box, leaving the icon riding above the slider  -->
+                    <Panel
+                        x:Name="volumeIconHost"
                         Width="16"
                         Height="16"
-                        VerticalAlignment="Center"
-                        Data="{StaticResource IconSpeakerEnabled}"
-                        Fill="#CCCCCC"
-                        Stretch="Uniform" />
+                        VerticalAlignment="Center" />
                     <Slider
                         x:Name="volumeSlider"
                         Width="100"
