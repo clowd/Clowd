@@ -25,8 +25,8 @@ namespace Clowd.UI.VideoEditor.Timeline
     internal sealed class TimelineSurface : Control
     {
         private const double ItemPadY = 2;          // vertical inset of item bodies within their row
-        private const double ItemCornerRadius = 3;
-        private const double TrimGripWidth = 3;
+        private const double ItemCornerRadius = 6;
+        private const double TrimHandleWidth = 9;   // full-height slab at each edge, drawn inside the body's rounded clip
         private const double GlyphSize = 12;
         private const double OffscreenSlackPx = 50; // keep rects for items just off screen so a scrolled-out edge still hit-tests honestly
 
@@ -828,13 +828,35 @@ namespace Clowd.UI.VideoEditor.Timeline
                 context.DrawRectangle(null, palette.SelectionPen, body.Deflate(0.75), ItemCornerRadius, ItemCornerRadius);
 
             if ((selected || hovered) && body.Width >= TimelineHitTester.MinEdgeGrabWidth)
+                RenderTrimHandles(context, palette, body, selected);
+        }
+
+        /// <summary>
+        /// The two edge handles: a full-height slab at each end of the body with a pair of grip
+        /// lines in it, drawn inside the body's rounded clip so the outer corners follow the item's
+        /// radius while the inner side stays square. Selected wins over hover, so an item that is
+        /// both keeps the accent handles the selection border implies.
+        /// </summary>
+        private static void RenderTrimHandles(DrawingContext context, TimelinePalette palette, Rect body,
+            bool selected)
+        {
+            var fill = selected ? palette.TrimHandleActiveFill : palette.TrimHandleHoverFill;
+            var line = selected ? palette.TrimHandleActiveLine : palette.TrimHandleHoverLine;
+
+            var lineHeight = Math.Max(4, Math.Round(body.Height * 0.4));
+            var lineY = Math.Round(body.Y + (body.Height - lineHeight) / 2);
+
+            using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
             {
-                var gripHeight = body.Height * 0.5;
-                var gy = body.Y + (body.Height - gripHeight) / 2;
-                context.DrawRectangle(palette.TrimGripBrush, null,
-                    new Rect(body.X + 1.5, gy, TrimGripWidth, gripHeight), 1, 1);
-                context.DrawRectangle(palette.TrimGripBrush, null,
-                    new Rect(body.Right - TrimGripWidth - 1.5, gy, TrimGripWidth, gripHeight), 1, 1);
+                foreach (var handleX in new[] { body.X, body.Right - TrimHandleWidth })
+                {
+                    context.FillRectangle(fill, new Rect(handleX, body.Y, TrimHandleWidth, body.Height));
+
+                    // 9px handle, split 3 / 1 / 1 / 1 / 3: two 1px lines with a 1px gap, centred.
+                    var x0 = Math.Round(handleX);
+                    context.FillRectangle(line, new Rect(x0 + 3, lineY, 1, lineHeight));
+                    context.FillRectangle(line, new Rect(x0 + 5, lineY, 1, lineHeight));
+                }
             }
         }
 
