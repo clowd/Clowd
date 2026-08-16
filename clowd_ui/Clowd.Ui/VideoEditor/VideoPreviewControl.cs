@@ -444,10 +444,12 @@ namespace Clowd.UI.VideoEditor
             Gizmo.SetTarget(item.Id, placed);
 
             // inflated by the gizmo's handle pad: a control only receives presses inside its own
-            // bounds, and the corner handles straddle the item's corners (the gizmo deflates this
-            // again for everything it draws and hit-tests).
-            return new Rect(videoRect.X + placed.X, videoRect.Y + placed.Y, placed.W, placed.H)
+            // bounds, and the corner handles straddle the item's corners — plus extra room on the
+            // right for the floating rotate handle (the gizmo deflates all of this again for
+            // everything it draws and hit-tests).
+            var inflated = new Rect(videoRect.X + placed.X, videoRect.Y + placed.Y, placed.W, placed.H)
                 .Inflate(TransformGizmoControl.HandlePad);
+            return inflated.WithWidth(inflated.Width + TransformGizmoControl.RotatePad);
         }
     }
 }

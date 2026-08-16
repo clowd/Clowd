@@ -3,7 +3,7 @@ using Avalonia.Input;
 
 namespace Clowd.Drawing;
 
-internal partial class CursorResources {
+public partial class CursorResources {
     public static Cursor Default => GetCursor("Default.cur");
     public static Cursor Rect => GetCursor("Rect.cur");
     public static Cursor Ellipse => GetCursor("Ellipse.cur");
