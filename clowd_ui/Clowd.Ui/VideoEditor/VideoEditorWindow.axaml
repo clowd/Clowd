@@ -470,7 +470,7 @@
                         x:Name="btnPlayPause"
                         Width="30"
                         Height="30"
-                        Padding="7"
+                        Padding="6"
                         Command="{Binding CommandPlayPause}"
                         IconPath="{StaticResource IconPlay}"
                         ToolTip.Tip="Play (Space)" />
@@ -517,14 +517,15 @@
                     DockPanel.Dock="Right"
                     Orientation="Horizontal"
                     Spacing="4">
-                    <!--  filled in code-behind with a GlyphIcon: the speaker glyph is wider than
-                          it is tall, and a Path with Stretch="Uniform" pins the ink to the top of
-                          its box, leaving the icon riding above the slider  -->
-                    <Panel
-                        x:Name="volumeIconHost"
-                        Width="16"
-                        Height="16"
-                        VerticalAlignment="Center" />
+                    <!--  icon + tooltip swap in code-behind with the mute state  -->
+                    <controls:ToolButton
+                        x:Name="btnMute"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconSpeakerEnabled}"
+                        ToolTip.Tip="Mute" />
                     <Slider
                         x:Name="volumeSlider"
                         Width="100"
@@ -546,7 +547,6 @@
             BorderThickness="0,1,0,0">
             <tl:TimelineControl
                 x:Name="timeline"
-                MinHeight="190"
                 MaxHeight="320"
                 Margin="0,2,0,0" />
         </Border>

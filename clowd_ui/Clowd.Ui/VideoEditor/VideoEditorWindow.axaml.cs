@@ -105,6 +105,10 @@ namespace Clowd.UI.VideoEditor
         private readonly List<MenuItem> _speedItems = new List<MenuItem>();
         private double _playbackRate = 1.0; // survives player rebuilds (see OpenPlayerAsync)
 
+        // the slider level the mute button will restore. 0 means "nothing to restore" (the user
+        // reached zero by dragging, not the button) — unmute opens fully.
+        private double _volumeBeforeMute;
+
         // the top bar's resolution picker: rebuilt from the project on every change (the native
         // entry follows the media, and a Custom… size has to join the list), so the flag keeps that
         // refresh from reading back as a user pick.
@@ -216,8 +220,7 @@ namespace Clowd.UI.VideoEditor
             timeline.Scrubbed += Timeline_Scrubbed;
             timeline.ScrubCompleted += Timeline_ScrubCompleted;
 
-            volumeIconHost.Children.Add(TimelineIcons.NewIcon("IconSpeakerEnabled", 16,
-                new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC))));
+            btnMute.Click += (_, _) => ToggleMute();
 
             // preview volume is per-session and always opens wide open, like a video player's:
             // it attenuates our own samples only (see NAudioSink.Volume), so there is nothing
@@ -225,9 +228,20 @@ namespace Clowd.UI.VideoEditor
             volumeSlider.Value = 1.0;
             volumeSlider.PropertyChanged += (_, e) =>
             {
-                if (e.Property == RangeBase.ValueProperty && _player != null)
+                if (e.Property != RangeBase.ValueProperty)
+                    return;
+
+                if (_player != null)
                     _player.Volume = volumeSlider.Value;
+
+                // any audible volume ends the muted state, however it was reached — a later
+                // mute stores THIS value, not one from before.
+                if (volumeSlider.Value > 0)
+                    _volumeBeforeMute = 0;
+
+                UpdateMuteIcon();
             };
+            UpdateMuteIcon();
 
             BuildSpeedMenu();
 
@@ -1371,6 +1385,32 @@ namespace Clowd.UI.VideoEditor
         {
             txtPosition.Text = FormatTime(position) + " / " + FormatTime(Duration);
             preview.PositionTicks = position.Ticks;
+        }
+
+        /// <summary>The transport's mute toggle. Muting remembers the slider so unmuting comes
+        /// back at the same level; a slider dragged to zero by hand has no remembered level
+        /// (<see cref="_volumeBeforeMute"/> stays 0), so unmuting opens it fully.</summary>
+        private void ToggleMute()
+        {
+            if (volumeSlider.Value > 0)
+            {
+                var restore = volumeSlider.Value;
+                volumeSlider.Value = 0;
+                // after the slider write: the value handler treats any audible volume as
+                // "not muted" and clears the stored level.
+                _volumeBeforeMute = restore;
+            }
+            else
+            {
+                volumeSlider.Value = _volumeBeforeMute > 0 ? _volumeBeforeMute : 1.0;
+            }
+        }
+
+        private void UpdateMuteIcon()
+        {
+            var muted = volumeSlider.Value <= 0;
+            btnMute.IconPath = TimelineIcons.Find(muted ? "IconSpeakerDisabled" : "IconSpeakerEnabled");
+            ToolTip.SetTip(btnMute, muted ? "Unmute" : "Mute");
         }
 
         /// <summary>Fills the speed button's drop-down once; the entries are radio items so the
