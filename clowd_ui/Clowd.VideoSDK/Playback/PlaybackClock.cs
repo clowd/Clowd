@@ -49,6 +49,7 @@ namespace Clowd.VideoSDK.Playback
         private TimeSpan _audioAnchor;
         private TimeSpan _audioAnchorElapsed;
         private bool _hasAudioAnchor;
+        private bool _audioAdvancing;
 
         public PlaybackClock(IMonotonicTime time = null)
         {
@@ -127,6 +128,14 @@ namespace Clowd.VideoSDK.Playback
         /// the presenter drops the ones that land more than a frame late. Anchoring on each new
         /// audio value and interpolating from it keeps the clock smooth without letting it drift —
         /// every update re-anchors, so the error can never exceed one renderer callback.
+        ///
+        /// Interpolation only runs once the renderer has been SEEN advancing since the last
+        /// anchor reset. A sink freshly primed after a seek's flush reports its base pts (the
+        /// device-latency clamp) long before anything is audible; extrapolating from that pin
+        /// plays up to <see cref="MaxAudioInterpolation"/> of invented time and then snaps back
+        /// to ~the base when real timing lands — a seek while playing started twice. Holding at
+        /// the reported position until it moves costs at most one device callback (~10ms) in
+        /// steady state and turns the false start into a short hold on the seek target.
         /// </summary>
         private TimeSpan InterpolatedAudioLocked()
         {
@@ -135,11 +144,15 @@ namespace Clowd.VideoSDK.Playback
 
             if (!_hasAudioAnchor || played != _audioAnchor)
             {
+                _audioAdvancing = _hasAudioAnchor && played > _audioAnchor;
                 _audioAnchor = played;
                 _audioAnchorElapsed = elapsed;
                 _hasAudioAnchor = true;
                 return played;
             }
+
+            if (!_audioAdvancing)
+                return played;
 
             var lead = elapsed - _audioAnchorElapsed;
             if (lead > MaxAudioInterpolation)
@@ -154,6 +167,7 @@ namespace Clowd.VideoSDK.Playback
         private void ResetAudioAnchorLocked()
         {
             _hasAudioAnchor = false;
+            _audioAdvancing = false;
         }
 
         public void Start()

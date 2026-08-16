@@ -32,6 +32,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private readonly TimelineViewport _viewport;
         private long _positionTicks;
         private bool _scrubbing;
+        private long _lastScrubTicks;
         private long? _hoverTicks;
 
         public event EventHandler ScrubStarted;
@@ -87,7 +88,8 @@ namespace Clowd.UI.VideoEditor.Timeline
             SetHoverX(Double.NaN); // the real playhead is about to be where the ghost was
             e.Pointer.Capture(this);
             ScrubStarted?.Invoke(this, EventArgs.Empty);
-            Scrubbed?.Invoke(this, _viewport.XToTicksClamped(e.GetPosition(this).X));
+            _lastScrubTicks = _viewport.XToTicksClamped(e.GetPosition(this).X);
+            Scrubbed?.Invoke(this, _lastScrubTicks);
         }
 
         protected override void OnPointerMoved(PointerEventArgs e)
@@ -97,7 +99,15 @@ namespace Clowd.UI.VideoEditor.Timeline
             var x = e.GetPosition(this).X;
             if (_scrubbing && Equals(e.Pointer.Captured, this))
             {
-                Scrubbed?.Invoke(this, _viewport.XToTicksClamped(x));
+                // dedupe: high-polling-rate mice report sub-pixel jitter while "held still", and
+                // every scrub event costs a full pipeline flush + container seek downstream.
+                var ticks = _viewport.XToTicksClamped(x);
+                if (ticks != _lastScrubTicks)
+                {
+                    _lastScrubTicks = ticks;
+                    Scrubbed?.Invoke(this, ticks);
+                }
+
                 return;
             }
 
