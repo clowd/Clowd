@@ -564,6 +564,62 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0.025, center, 6); // half of the clamped 40px width, off the anchor
         }
 
+        // ---------------------------------------------------------------------------- rotation
+
+        /// <summary>Clockwise rotation, matching the composer's <c>RotateDegrees</c> sense (+90°
+        /// sends the point right of the centre to below it), and unrotating by the negated angle
+        /// round-trips.</summary>
+        [Fact]
+        public void RotateAbout_matches_the_composer_and_round_trips()
+        {
+            var (x, y) = GizmoMath.RotateAbout(110, 50, 100, 50, 90);
+            Assert.Equal(100, x, 6);
+            Assert.Equal(60, y, 6);
+
+            var (bx, by) = GizmoMath.RotateAbout(x, y, 100, 50, -90);
+            Assert.Equal(110, bx, 6);
+            Assert.Equal(50, by, 6);
+        }
+
+        /// <summary>The click hit-test unrotates the point about the item centre, so a rotated item
+        /// owns the pixels it actually covers — not its unrotated rect. A 90°-rotated wide overlay
+        /// covers points above/below its centre that the unrotated rect misses, and no longer
+        /// covers the left/right ends of that rect.</summary>
+        [Fact]
+        public void Hit_test_follows_a_rotated_item()
+        {
+            var project = MediaProject(1920, 1080, out var item);
+            // 400x225 centred on an 800x450 canvas: unrotated rect (200,112.5)-(600,337.5)
+            item.Transform = new ModelTransform { Scale = 0.5, Rotation = 90 };
+
+            // rotated 90° the item is 225 wide and 400 tall about (400,225): x 287.5..512.5, y 25..425
+            Assert.NotNull(ItemPlacement.HitTest(project, 0, 400, 50, 800, 450));   // above the AABB's top
+            Assert.Null(ItemPlacement.HitTest(project, 0, 210, 225, 800, 450));     // inside the unrotated rect, but empty now
+        }
+
+        /// <summary>The centre a rotated resize writes puts the anchor's drawn position exactly
+        /// back where it was: composing the result and rotating the anchored corner about the new
+        /// centre lands on the original visual anchor.</summary>
+        [Fact]
+        public void AnchoredCenter_pins_the_drawn_anchor_of_a_rotated_resize()
+        {
+            const double rotation = 30;
+            // item: 400x200 centred at (400,225) on an 800x450 canvas at origin (0,0).
+            // anchor = unrotated top-left corner (200,125); its drawn position:
+            var (avx, avy) = GizmoMath.RotateAbout(200, 125, 400, 225, rotation);
+
+            // user drags the bottom-right corner out to a 600x300 size (still anchored top-left)
+            const double w = 600, h = 300;
+            var (x, y) = GizmoMath.AnchoredCenter(avx, avy, -w / 2, -h / 2, rotation,
+                0, 0, 800, 450);
+
+            // rebuild the drawn anchor from the result: centre + rotated centre-to-anchor vector
+            double cx = x * 800, cy = y * 450;
+            var (rx, ry) = GizmoMath.RotateAbout(cx - w / 2, cy - h / 2, cx, cy, rotation);
+            Assert.Equal(avx, rx, 6);
+            Assert.Equal(avy, ry, 6);
+        }
+
         // ------------------------------------------------------------------------------- helpers
 
         private static Project NewProject() => new Project
