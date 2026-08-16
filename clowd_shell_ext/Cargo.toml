@@ -1,8 +1,6 @@
 [package]
 name = "clowd_shell_ext"
-# The installed DLL is named ClowdShellExt_<this version>.dll, so bump this whenever the
-# extension's behavior changes: a new version lands under a fresh filename, which is what
-# keeps Explorer's lock on the old copy from ever blocking an update.
+# The installed DLL is named ClowdShellExt_<this version>.dll, so bump this on any behavior change - a fresh filename is what keeps Explorer's lock on the old copy from blocking an update.
 version = "1.0.0"
 authors.workspace = true
 repository.workspace = true
@@ -13,8 +11,7 @@ rust-version.workspace = true
 [lib]
 crate-type = ["cdylib"]
 
-# The implementation is entirely #[cfg(windows)]; on other targets the crate
-# builds as an empty library so workspace-wide builds (macOS CI) stay green.
+# Entirely #[cfg(windows)]; elsewhere the crate builds as an empty library so workspace-wide builds stay green.
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "Win32_Foundation",

@@ -1,27 +1,9 @@
 name: Release
 
-# Packages and publishes a completed CI run to GitHub Releases via Velopack.
-#
-# Manually dispatched with the run id of a CI run (the "package" jobs upload one
-# artifact per rid plus a version.txt artifact computed by nbgv at build time —
-# the version published here is always the version of that original build).
-#
-# Runs as a matrix over the four rids; Velopack supports multiple jobs uploading
-# to the same GitHub release (--merge). Each rid maps to a Velopack channel
-# (win-x64, osx-arm64, ...). The app (UpdateService) always follows the newest
-# release on its channel; users who opt in to experimental builds also see
-# releases still flagged pre-release.
-#
-# A pre-release differs from a stable release ONLY by the pre-release flag on
-# the GitHub release itself — same channel, same tag, same version. That means a
-# pre-release is promoted to stable simply by unticking the flag on github.com,
-# with no re-publish needed.
-#
-# The draft release is created up-front by a single job rather than by whichever
-# vpk job gets there first: concurrent jobs would each fail to see the others'
-# in-flight release and create duplicates. The matrix jobs then only ever merge
-# into that existing draft (--publish false), and a final job flips the draft to
-# published once every rid has succeeded.
+# Publishes a completed CI run to GitHub Releases via Velopack, one job per rid, each
+# rid mapping to a Velopack channel that UpdateService follows.
+# A pre-release differs from a stable release only by the flag on the GitHub release, so
+# unticking it on github.com promotes the release with no re-publish.
 
 on:
   workflow_dispatch:
@@ -38,12 +20,11 @@ on:
 permissions:
   contents: write
   actions: read
-  # OIDC token for azure/login (Azure Trusted Signing on the Windows rids)
+  # OIDC token for azure/login.
   id-token: write
 
 jobs:
-  # creates the draft release the matrix jobs upload into, so that no two vpk
-  # jobs try to create it at once.
+  # Creates the draft up-front so that concurrent vpk jobs cannot each miss the others' in-flight release and create duplicates.
   draft:
     name: create draft
     runs-on: ubuntu-latest
@@ -62,9 +43,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-          # a leftover draft is from a failed run, so start clean - vpk refuses to
-          # merge into a release that already has an index for its channel. gh
-          # resolves drafts by their pending tag name, so no tag exists to clean up.
+          # A leftover draft is from a failed run, and vpk refuses to merge into a release that already has an index for its channel.
           if IS_DRAFT=$(gh release view "$TAG" --repo ${{ github.repository }} --json isDraft -q .isDraft 2>/dev/null); then
             if [ "$IS_DRAFT" != "true" ]; then
               echo "::error::Release $TAG is already published, refusing to overwrite it."
@@ -80,8 +59,7 @@ jobs:
             --draft --title "$TAG" --notes "" $PRE
           echo "Created draft release $TAG"
 
-      # give the release a chance to become visible to the api the vpk jobs use
-      # to look it up, otherwise they may not find it and create a duplicate.
+      # Give the release time to become visible to the API the vpk jobs look it up with.
       - name: Wait for release to settle
         run: sleep 30
 
@@ -107,7 +85,7 @@ jobs:
       VERSION: ${{ needs.draft.outputs.version }}
       TAG: ${{ needs.draft.outputs.tag }}
     steps:
-      # only needed for the packaging icon
+      # Only needed for the packaging icon.
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -126,7 +104,7 @@ jobs:
           echo "CHANNEL=$CHANNEL" >> "$GITHUB_ENV"
 
           if [ "${{ runner.os }}" = "macOS" ]; then
-            # the macOS artifact is a zip (preserves unix file modes)
+            # The macOS artifact is a zip, which preserves unix file modes.
             gh run download ${{ inputs.run_id }} --repo ${{ github.repository }} -n clowd-${{ matrix.rid }} -D package
             unzip -q "package/clowd-${{ matrix.rid }}.zip" -d publish
           else
@@ -135,11 +113,7 @@ jobs:
           echo "Publishing version $VERSION to channel $CHANNEL"
         shell: bash
 
-      # fetch the previous release for this channel so vpk can build delta packages;
-      # always --pre false so deltas are built against the newest *stable* release —
-      # the base most installs are actually on. Pre-release opt-ins may fall back to
-      # a full download; stable users always get the delta path. Fails harmlessly on
-      # the very first release of a channel.
+      # Deltas are always built against the newest stable release, the base most installs are actually on; fails harmlessly on a channel's first release.
       - name: Download previous release (deltas)
         run: >
           vpk download github --repoUrl "$REPO_URL" --token "$GH_TOKEN"
@@ -147,9 +121,7 @@ jobs:
           || echo "No previous release found for channel $CHANNEL (first release?)"
         shell: bash
 
-      # vpk authenticates to Trusted Signing via DefaultAzureCredential, which picks
-      # up the CLI session azure/login establishes. The metadata file only names the
-      # signing endpoint/account/profile — nothing sensitive.
+      # vpk authenticates via DefaultAzureCredential, which picks up the CLI session this establishes.
       - name: Azure login (Trusted Signing)
         if: runner.os == 'Windows'
         uses: azure/login@v3
@@ -158,16 +130,11 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # vpk Trusted-Signs the loose exes/dlls during pack, but the sparse msix
-      # must be signed as a package beforehand — vpk just bundles it as-is. Reuse
-      # vpk's vendored signtool + Azure dlib so the msix carries the same
-      # certificate as the binaries. pwsh rather than bash: git-bash mangles
-      # signtool's /flag arguments into paths.
+      # vpk bundles the msix as-is, so it must be signed as a package beforehand; pwsh rather than bash because git-bash mangles signtool's /flag arguments into paths.
       - name: Sign shell extension MSIX (Windows)
         if: runner.os == 'Windows'
         run: |
-          # a restored build cache from before the shell extension existed has no msix;
-          # there is simply nothing to sign in that case, and the pack below still works.
+          # A build from before the shell extension existed has no msix, and the pack below still works without one.
           if (-not (Test-Path publish/ClowdShellExt.msix)) {
             Write-Warning "publish/ClowdShellExt.msix not found - skipping shell extension signing."
             exit 0
@@ -191,10 +158,7 @@ jobs:
           --azureTrustedSignFile .github/azure-trusted-sign.json
         shell: bash
 
-      # velopack signs + notarizes the .app and .pkg during pack (codesign/notarytool)
-      # using a throwaway keychain built from repo secrets. The p12 certificates were
-      # exported without a password, hence the empty -P. Identity names are discovered
-      # from the imported certs (team-id suffix stripped, as vpk requires).
+      # A throwaway keychain for vpk to codesign/notarize with; the p12 certificates were exported without a password, hence the empty -P.
       - name: Install Apple certificates and notary profile
         if: runner.os == 'macOS'
         env:
@@ -223,7 +187,7 @@ jobs:
           xcrun notarytool store-credentials --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM" \
             --password "$APPLE_PASSWORD" --keychain "$KEYCHAIN_PATH" velopack-profile
 
-          # discover the exact identity names; vpk wants them without the "(TEAMID)" suffix
+          # vpk wants the identity names without the "(TEAMID)" suffix.
           APP_IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1 | sed 's/ ([A-Z0-9]*)$//')
           INSTALL_IDENTITY=$(security find-identity -v "$KEYCHAIN_PATH" | sed -n 's/.*"\(Developer ID Installer: [^"]*\)".*/\1/p' | head -1 | sed 's/ ([A-Z0-9]*)$//')
           if [ -z "$APP_IDENTITY" ] || [ -z "$INSTALL_IDENTITY" ]; then
@@ -238,9 +202,7 @@ jobs:
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
         shell: bash
 
-      # The custom Info.plist replicates vpk's generated one plus the mic/system-audio
-      # usage-description keys (TCC kills the app on mic/tap access without them).
-      # SHORT_VERSION mirrors vpk's CFBundleShortVersionString (4-part, prerelease stripped).
+      # Replicates vpk's generated plist plus the mic/system-audio usage descriptions, without which TCC kills the app on mic or tap access.
       - name: Generate Info.plist (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -262,8 +224,7 @@ jobs:
           --notaryProfile velopack-profile --keychain "$KEYCHAIN_PATH"
         shell: bash
 
-      # merges into the draft created above (matched by tag) and leaves it a draft;
-      # the publish job below flips it once every rid has uploaded.
+      # Merges into the draft created above and leaves it a draft for the publish job to flip.
       - name: Upload to GitHub Releases
         run: >
           vpk upload github --repoUrl "$REPO_URL" --token "$GH_TOKEN"

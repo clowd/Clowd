@@ -3,16 +3,11 @@ name = "clowd_scroll_driver"
 version = "1.0.0"
 edition = "2021"
 
-# The second half of a scrolling capture: the overlay (clowd_capture_wgpu)
-# picks the region and the scroll point, this binary does the scrolling,
-# photographing and stitching. Kept out of the capturer because the two
-# have nothing in common at runtime — the driver needs no window, no event
-# loop and no GPU, and starting any of that would put pixels on screen in
-# front of the very content it is about to photograph.
+# The second half of a scrolling capture: the overlay picks the region and scroll point,
+# this binary scrolls, photographs and stitches. Kept out of the capturer because starting a
+# window or GPU here would put pixels in front of the very content it is about to photograph.
 
-# image (PNG encoding), euclid (the geometry types) and sentry (the init
-# guard's type) all reach this crate through clowd_rust_core; it names none of
-# them directly, so they are not declared here.
+# image, euclid and sentry all reach this crate through clowd_rust_core and are not named directly.
 [dependencies]
 clowd_rust_core.workspace = true
 anyhow.workspace = true
@@ -24,30 +19,21 @@ serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
-    # SendInput / GetAsyncKeyState for the wheel injection and the Esc poll
-    # (input/win.rs).
+    # SendInput / GetAsyncKeyState for the wheel injection and the Esc poll (input/win.rs).
     "Win32_UI_Input_KeyboardAndMouse",
     # Window resolution, cursor parking, WM_MOUSEWHEEL (input/win.rs).
     "Win32_UI_WindowsAndMessaging",
     # The per-monitor-DPI-awareness assertion (input/win.rs::preflight).
     "Win32_UI_HiDpi",
-    # BitBlt of the capture region (frame/win.rs) and ScreenToClient
-    # (input/win.rs).
+    # BitBlt of the capture region (frame/win.rs) and ScreenToClient (input/win.rs).
     "Win32_Graphics_Gdi",
 ] }
 
-# The macOS half of the same two modules. core-graphics carries all of it
-# except activation: the window list (input/mac.rs), the synthetic scroll
-# events, the cursor warp and CGWindowListCreateImage (frame/mac.rs).
-# core-foundation is how the window-list dictionaries are read, and
-# objc2-app-kit provides the one AppKit call there is — NSRunningApplication,
-# which is what brings the target's app to the front.
-#
-# Both crates' feature flags here are OS-version gates on bindings the driver
-# cannot do without, all long past our minimum: "highsierra" is
-# CGEventCreateScrollWheelEvent2 (the wheel), "elcapitan" is CGEventPostToPid
-# (the second rung), and objc2-app-kit's "libc" is what exposes
-# NSRunningApplication's by-pid lookup.
+# The macOS half of the same two modules: core-graphics carries the window list, scroll
+# events, cursor warp and CGWindowListCreateImage, core-foundation reads the window-list
+# dictionaries, and objc2-app-kit provides NSRunningApplication for activation.
+# The feature flags are OS-version gates on bindings the driver cannot do without, all long
+# past our minimum.
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = { workspace = true, features = ["highsierra", "elcapitan"] }
 core-foundation.workspace = true
