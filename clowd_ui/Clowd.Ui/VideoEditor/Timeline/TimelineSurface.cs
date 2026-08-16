@@ -792,8 +792,13 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private void DrawFullHeightLine(DrawingContext context, IPen pen, double x)
         {
-            if (x >= -1 && x <= Bounds.Width + 1)
-                context.DrawLine(pen, new Point(x, 0), new Point(x, Bounds.Height));
+            if (x < -1 || x > Bounds.Width + 1)
+                return;
+
+            // snapped to whole device pixels: a hairline drawn at a fractional x is split across two
+            // columns and washes out (see TimelineViewMath.SnapToPixel).
+            x = TimelineViewMath.SnapToPixel(x, TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0, pen.Thickness);
+            context.DrawLine(pen, new Point(x, 0), new Point(x, Bounds.Height));
         }
 
         private void RenderItem(DrawingContext context, TimelinePalette palette, Project project,
