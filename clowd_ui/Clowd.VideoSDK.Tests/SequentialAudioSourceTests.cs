@@ -209,16 +209,34 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Regressing_request_throws_and_unknown_source_throws()
+        public void Regressing_request_repositions_and_unknown_source_throws()
         {
             RequireFFmpeg();
-            var project = ProjectFor(EncodeSineFixture(), out var sourceId);
-            using var source = new SequentialAudioSource(project);
+            string path = EncodeSineFixture();
 
+            // reference: the same window reached by decoding forward to it from the start
+            var reference = ProjectFor(path, out var refId);
+            using var forward = new SequentialAudioSource(reference);
+            var expected = new float[1000 * 2];
+            Assert.True(forward.ReadSamples(refId, 1, 5000, expected, 1000, out _));
+            Assert.Equal(0, forward.RepositionCount);
+
+            var project = ProjectFor(path, out var sourceId);
+            using var source = new SequentialAudioSource(project);
             var dst = new float[1000 * 2];
-            Assert.True(source.ReadSamples(sourceId, 1, 5000, dst, 1000, out _));
-            Assert.Throws<InvalidOperationException>(
-                () => source.ReadSamples(sourceId, 1, 5500, dst, 1000, out _));
+            Assert.True(source.ReadSamples(sourceId, 1, 20000, dst, 1000, out _)); // read ahead ...
+            Assert.True(source.ReadSamples(sourceId, 1, 5000, dst, 1000, out int read)); // ... then back
+            Assert.Equal(1000, read);
+            Assert.Equal(1, source.RepositionCount);
+
+            // aac frames decoded after a mid-stream seek carry decoder state the container cannot
+            // reproduce, worth ~1e-5; a one-sample misplacement would move this 440 Hz fixture by
+            // ~1.4e-2, two orders of magnitude more than the tolerance.
+            for (int i = 0; i < expected.Length; i++)
+            {
+                if (Math.Abs(expected[i] - dst[i]) > 1e-3f)
+                    Assert.Fail($"sample {i / 2} ch{i % 2}: expected {expected[i]}, got {dst[i]} — the reposition is off by at least a sample");
+            }
 
             Assert.Throws<ArgumentException>(
                 () => source.ReadSamples(Guid.NewGuid(), 1, 0, dst, 1000, out _));
