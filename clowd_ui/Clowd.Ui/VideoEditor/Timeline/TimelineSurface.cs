@@ -51,6 +51,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private ITimelinePreviewProvider _previewProvider = NullTimelinePreviewProvider.Instance;
         private IReadOnlyList<TimelineRow> _rows = Array.Empty<TimelineRow>();
         private long _positionTicks;
+        private long? _hoverTicks;
 
         private DragMode _dragMode;
         private EditGesture _gesture;
@@ -145,6 +146,21 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
         }
 
+        /// <summary>Where the ruler's hover ghost is, or null when the pointer is not over the
+        /// ruler; the parent pushes it so the ghost's line runs down through the rows.</summary>
+        public long? HoverTicks
+        {
+            get => _hoverTicks;
+            set
+            {
+                if (_hoverTicks == value)
+                    return;
+
+                _hoverTicks = value;
+                InvalidateVisual();
+            }
+        }
+
         /// <summary>Rebuilds the row layout from the live project — the parent calls this on
         /// Structural changes (and session swaps). Also prunes caches keyed by item ids that no
         /// longer exist.</summary>
@@ -222,9 +238,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             {
                 case TimelineHitKind.Empty:
                 case TimelineHitKind.Ruler: // unreachable (the ruler is a sibling), kept for the shared hit enum
-                case TimelineHitKind.Playhead:
-                    if (hit.Kind == TimelineHitKind.Empty)
-                        _session.ClearSelection();
+                    _session.ClearSelection();
 
                     _dragMode = DragMode.Scrub;
                     _dragPointer = e.Pointer;
@@ -547,10 +561,6 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             switch (hit.Kind)
             {
-                case TimelineHitKind.Playhead:
-                    Cursor = _cursorResize ??= new Cursor(StandardCursorType.SizeWestEast);
-                    break;
-
                 case TimelineHitKind.ItemStart:
                 case TimelineHitKind.ItemEnd:
                 {
@@ -677,14 +687,8 @@ namespace Clowd.UI.VideoEditor.Timeline
             return menuItem;
         }
 
-        private TimelineHit HitTestAt(Point pos)
-        {
-            var duration = _viewport.DurationTicks;
-            var playheadX = duration > 0
-                ? _viewport.TickToX(Math.Clamp(_positionTicks, 0, duration))
-                : Double.NaN; // NaN never matches — the old control's idiom for "not drawn"
-            return TimelineHitTester.HitTest(pos.X, pos.Y, playheadX, 0, ComputeItemRects());
-        }
+        private TimelineHit HitTestAt(Point pos) =>
+            TimelineHitTester.HitTest(pos.X, pos.Y, 0, ComputeItemRects());
 
         private List<TimelineItemRect> ComputeItemRects()
         {
@@ -772,14 +776,24 @@ namespace Clowd.UI.VideoEditor.Timeline
                 context.DrawLine(palette.SnapGuidePen, new Point(gx, 0), new Point(gx, Bounds.Height));
             }
 
-            // playhead line — the ruler above owns the triangle.
+            // playhead line — the ruler above owns the head block. The ruler's hover ghost drops
+            // through the rows the same way, so the frame a click would land on is readable against
+            // the clips and not just against the ruler.
             var duration = _viewport.DurationTicks;
             if (duration > 0)
             {
-                var px = _viewport.TickToX(Math.Clamp(_positionTicks, 0, duration));
-                if (px >= -1 && px <= Bounds.Width + 1)
-                    context.DrawLine(palette.PlayheadPen, new Point(px, 0), new Point(px, Bounds.Height));
+                if (_hoverTicks is long hover)
+                    DrawFullHeightLine(context, palette.HoverPlayheadPen, _viewport.TickToX(hover));
+
+                DrawFullHeightLine(context, palette.PlayheadPen,
+                    _viewport.TickToX(Math.Clamp(_positionTicks, 0, duration)));
             }
+        }
+
+        private void DrawFullHeightLine(DrawingContext context, IPen pen, double x)
+        {
+            if (x >= -1 && x <= Bounds.Width + 1)
+                context.DrawLine(pen, new Point(x, 0), new Point(x, Bounds.Height));
         }
 
         private void RenderItem(DrawingContext context, TimelinePalette palette, Project project,

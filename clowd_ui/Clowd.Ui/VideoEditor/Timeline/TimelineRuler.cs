@@ -8,20 +8,31 @@ using Avalonia.Media;
 namespace Clowd.UI.VideoEditor.Timeline
 {
     /// <summary>
-    /// The pinned time strip above the rows: major/minor ticks and labels picked by
-    /// <see cref="TimelineViewMath.PickTickStepTicks"/> for the current zoom, plus the playhead's
-    /// grab triangle (the surface draws the playhead <i>line</i>; the triangle lives here, exactly
-    /// as the single-track control drew it). Pressing anywhere scrubs, with the same
-    /// pointer-capture idiom as the surface and the same scrub events, which the parent
+    /// The pinned time strip above the rows, and the one place the playhead is moved by hand:
+    /// notches along the top, labels along the bottom, the playhead's head (a rectangle over the
+    /// top half, with the surface's line dropping out of it) and — while the pointer is over the
+    /// strip — a blue ghost of that head showing where a click would land it. Pressing scrubs, with
+    /// the same pointer-capture idiom as the surface and the same scrub events, which the parent
     /// <see cref="TimelineControl"/> folds into its <c>Position</c> property.
     /// </summary>
     internal sealed class TimelineRuler : Control
     {
-        public const double RulerHeight = 24;
+        public const double RulerHeight = 30;
+
+        /// <summary>The playhead head: a rectangle over the top half of the strip, covering the
+        /// notches (never the labels, which sit below it).</summary>
+        public const double HeadWidth = 10;
+
+        public const double HeadHeight = 15;
+
+        /// <summary>Rounding on the head's bottom corners only — the top two stay square against
+        /// the top of the strip.</summary>
+        private const double HeadCornerRadius = 4;
 
         private readonly TimelineViewport _viewport;
         private long _positionTicks;
         private bool _scrubbing;
+        private long? _hoverTicks;
 
         public event EventHandler ScrubStarted;
 
@@ -29,12 +40,21 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public event EventHandler<long> ScrubCompleted;
 
+        /// <summary>The tick the ghost playhead is sitting on, or null when the pointer left the
+        /// strip (or a scrub took over). The parent forwards it to the surface, which runs the
+        /// ghost's line on down through the rows.</summary>
+        public event EventHandler<long?> HoverTicksChanged;
+
         public TimelineRuler(TimelineViewport viewport)
         {
             _viewport = viewport;
             _viewport.Changed += (_, _) => InvalidateVisual();
             ActualThemeVariantChanged += (_, _) => InvalidateVisual();
             ClipToBounds = true;
+            // no pointer over the strip: the ghost playhead IS the cursor here — it says where the
+            // click will land more precisely than an arrow tip ever could, and two markers under
+            // the hand at once only fight each other.
+            Cursor = new Cursor(StandardCursorType.None);
         }
 
         /// <summary>Playhead position in timeline ticks; the parent control pushes it on every
@@ -64,6 +84,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 return;
 
             _scrubbing = true;
+            SetHoverX(Double.NaN); // the real playhead is about to be where the ghost was
             e.Pointer.Capture(this);
             ScrubStarted?.Invoke(this, EventArgs.Empty);
             Scrubbed?.Invoke(this, _viewport.XToTicksClamped(e.GetPosition(this).X));
@@ -73,8 +94,14 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             base.OnPointerMoved(e);
 
+            var x = e.GetPosition(this).X;
             if (_scrubbing && Equals(e.Pointer.Captured, this))
-                Scrubbed?.Invoke(this, _viewport.XToTicksClamped(e.GetPosition(this).X));
+            {
+                Scrubbed?.Invoke(this, _viewport.XToTicksClamped(x));
+                return;
+            }
+
+            SetHoverX(x);
         }
 
         protected override void OnPointerReleased(PointerReleasedEventArgs e)
@@ -90,6 +117,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             ScrubCompleted?.Invoke(this, ticks);
         }
 
+        protected override void OnPointerExited(PointerEventArgs e)
+        {
+            base.OnPointerExited(e);
+            SetHoverX(Double.NaN);
+        }
+
         protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
         {
             base.OnPointerCaptureLost(e);
@@ -99,6 +132,23 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             _scrubbing = false;
             ScrubCompleted?.Invoke(this, Math.Clamp(_positionTicks, 0, Math.Max(0, _viewport.DurationTicks)));
+        }
+
+        /// <summary>Records the hovered instant as the <i>tick</i> a click would produce, not the
+        /// raw x: that is what the ghost has to show, and it is also what the surface needs to draw
+        /// the same line under its own (identical) viewport mapping.</summary>
+        private void SetHoverX(double x)
+        {
+            long? ticks = Double.IsNaN(x) || _viewport.DurationTicks <= 0
+                ? null
+                : _viewport.XToTicksClamped(x);
+
+            if (_hoverTicks == ticks)
+                return;
+
+            _hoverTicks = ticks;
+            HoverTicksChanged?.Invoke(this, ticks);
+            InvalidateVisual();
         }
 
         // --------------------------------------------------------------------------- rendering
@@ -131,41 +181,44 @@ namespace Clowd.UI.VideoEditor.Timeline
                 {
                     var x = _viewport.TickToX(t);
                     var isMajor = t % step == 0;
-                    var tickHeight = isMajor ? 6.0 : 3.0;
-                    context.DrawLine(isMajor ? palette.TickPen : palette.MinorTickPen,
-                        new Point(x, RulerHeight - tickHeight), new Point(x, RulerHeight));
+                    // notches hang from the top edge; the labels sit on the bottom, under the
+                    // band the playhead head occupies.
+                    var tickHeight = isMajor ? 11.0 : 6.0;
+                    context.DrawLine(isMajor ? palette.RulerTickPen : palette.RulerMinorTickPen,
+                        new Point(x, 0), new Point(x, tickHeight));
 
                     if (!isMajor)
                         continue;
 
                     var text = new FormattedText(TimelineViewMath.FormatTick(t, step),
-                        CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 10, palette.LabelBrush);
+                        CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 12,
+                        palette.RulerLabelBrush);
                     // centered on the tick; edge labels scroll off naturally (clamping them like
                     // the fixed-width ruler did would make them slide against the ticks here).
-                    context.DrawText(text, new Point(x - text.Width / 2, RulerHeight - tickHeight - text.Height - 1));
+                    context.DrawText(text, new Point(x - text.Width / 2, RulerHeight - text.Height - 2));
                 }
             }
 
-            RenderPlayheadTriangle(context, palette, duration);
+            // the ghost first, so the playhead stays legible when the two overlap
+            if (_hoverTicks is long hover && !_scrubbing)
+                RenderHead(context, _viewport.TickToX(hover), palette.HoverPlayheadBrush, palette.HoverPlayheadPen);
+
+            var px = _viewport.TickToX(Math.Clamp(_positionTicks, 0, duration));
+            RenderHead(context, px, palette.PlayheadPen.Brush, palette.PlayheadPen);
         }
 
-        private void RenderPlayheadTriangle(DrawingContext context, TimelinePalette palette, long duration)
+        /// <summary>The playhead marker: a <see cref="HeadWidth"/> x <see cref="HeadHeight"/> block
+        /// in the top half of the strip with a line dropping from it to the rows below (the surface
+        /// carries that line on down).</summary>
+        private void RenderHead(DrawingContext context, double x, IBrush fill, IPen linePen)
         {
-            var x = _viewport.TickToX(Math.Clamp(_positionTicks, 0, duration));
-            if (x < -6 || x > Bounds.Width + 6)
+            if (x < -HeadWidth || x > Bounds.Width + HeadWidth)
                 return;
 
-            const double half = 5;
-            var geo = new StreamGeometry();
-            using (var gc = geo.Open())
-            {
-                gc.BeginFigure(new Point(x - half, RulerHeight - 9), true);
-                gc.LineTo(new Point(x + half, RulerHeight - 9));
-                gc.LineTo(new Point(x, RulerHeight - 1));
-                gc.EndFigure(true);
-            }
-
-            context.DrawGeometry(palette.PlayheadPen.Brush, palette.PlayheadOutlinePen, geo);
+            var head = new Rect(x - HeadWidth / 2, 0, HeadWidth, HeadHeight);
+            context.DrawRectangle(fill, null,
+                new RoundedRect(head, 0, 0, HeadCornerRadius, HeadCornerRadius));
+            context.DrawLine(linePen, new Point(x, HeadHeight), new Point(x, RulerHeight));
         }
     }
 }

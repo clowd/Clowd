@@ -8,6 +8,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Clowd.UI.Controls;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
@@ -22,9 +23,9 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// <b>virtual</b> horizontal axis (a <see cref="TimelineViewport"/> — there is no
     /// million-pixel control).
     ///
-    /// Wheel gestures are tunnel-handled here so the inner ScrollViewer never sees the modified
-    /// ones: Ctrl+wheel = anchored zoom, Shift+wheel = horizontal scroll, plain wheel = the
-    /// ScrollViewer's vertical scroll. Everything the timeline edits goes through
+    /// Wheel gestures are tunnel-handled here so the inner ScrollViewer only sees the ones meant
+    /// for it: plain (and Ctrl) wheel = anchored zoom around the pointer, Shift+wheel = horizontal
+    /// scroll, Alt+wheel = the ScrollViewer's vertical scroll. Everything the timeline edits goes through
     /// <see cref="Session"/>; the control re-reads <c>Session.Project</c> on every
     /// <c>ProjectChanged</c> and rebuilds rows/headers only on Structural changes.
     /// </summary>
@@ -46,7 +47,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         private readonly TrackHeaderPanel _headers;
         private readonly ScrollBar _hscroll;
         private readonly Border _corner;
+        private readonly ToolButton _split;
         private readonly ToolButton _zoomToFit;
+        private readonly ToolButton _resetZoom;
         private readonly Border _spacer;
         private readonly Border _scrollHost;
 
@@ -54,7 +57,6 @@ namespace Clowd.UI.VideoEditor.Timeline
         private ITimelinePreviewProvider _previewProvider = NullTimelinePreviewProvider.Instance;
         private bool _scrubbing;
         private bool _syncingScrollBar;
-        private bool _pendingZoomToFit;
 
         /// <summary>Raised when the user starts a scrub drag (playhead, ruler or empty row). The
         /// window pauses playback for the duration of the drag.</summary>
@@ -77,21 +79,30 @@ namespace Clowd.UI.VideoEditor.Timeline
             _headers = new TrackHeaderPanel();
 
             // the corner cell sits over the header column, level with the ruler — the one piece of
-            // timeline chrome with room for a button, and zoom-to-fit is the gesture users reach
-            // for after a Ctrl+wheel has taken them somewhere they cannot find their way back from.
-            _zoomToFit = new ToolButton
+            // timeline chrome with room for buttons, and these three are the ones that belong to
+            // the timeline rather than to playback: split at the playhead, and the two escapes from
+            // a wheel-zoom that has taken the view somewhere the user cannot find their way back
+            // from (fit everything / back to the default scale).
+            _split = NewCornerButton(TimelineIcons.SplitGeometry,
+                "Split every track at playhead (Ctrl+K) — right-click a clip to split just that one",
+                () => SplitAtPlayhead());
+            _zoomToFit = NewCornerButton(TimelineIcons.ZoomToFitGeometry,
+                "Fit the whole project in view", ZoomToFit);
+            _resetZoom = NewCornerButton(TimelineIcons.ResetZoomGeometry,
+                "Reset to the default zoom", ResetZoom);
+
+            var cornerButtons = new StackPanel
             {
-                Width = 20,
-                Height = 20,
-                Padding = new Thickness(3),
+                Orientation = Orientation.Horizontal,
+                Spacing = 2,
                 Margin = new Thickness(0, 0, 4, 0),
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
-                IconPath = TimelineIcons.ZoomToFitGeometry,
             };
-            ToolTip.SetTip(_zoomToFit, "Fit the whole project in view");
-            _zoomToFit.Click += (_, _) => ZoomToFit();
-            _corner = new Border { Child = _zoomToFit };
+            cornerButtons.Children.Add(_split);
+            cornerButtons.Children.Add(_zoomToFit);
+            cornerButtons.Children.Add(_resetZoom);
+            _corner = new Border { Child = cornerButtons };
 
             _spacer = new Border();
             _hscroll = new ScrollBar
@@ -151,6 +162,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             _viewport.Changed += Viewport_Changed;
             _hscroll.Scroll += HorizontalScrollBar_Scroll;
 
+            _ruler.HoverTicksChanged += (_, ticks) => _surface.HoverTicks = ticks;
             _ruler.ScrubStarted += Child_ScrubStarted;
             _ruler.Scrubbed += Child_Scrubbed;
             _ruler.ScrubCompleted += Child_ScrubCompleted;
@@ -170,6 +182,21 @@ namespace Clowd.UI.VideoEditor.Timeline
             };
 
             RefreshChrome();
+        }
+
+        private static ToolButton NewCornerButton(Geometry icon, string tip, Action click)
+        {
+            var button = new ToolButton
+            {
+                Width = 20,
+                Height = 20,
+                Padding = new Thickness(3),
+                VerticalAlignment = VerticalAlignment.Center,
+                IconPath = icon,
+            };
+            ToolTip.SetTip(button, tip);
+            button.Click += (_, _) => click();
+            return button;
         }
 
         // ---------------------------------------------------------------------------- public API
@@ -203,12 +230,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _headers.SetSession(value);
                 _viewport.SetDuration(value?.DurationTicks ?? 0);
 
-                // fit the whole project on open; deferred until the first layout pass when the
-                // viewport width is still unknown.
-                if (_viewport.ViewportWidth > 0)
-                    _viewport.ZoomToFit();
-                else
-                    _pendingZoomToFit = true;
+                // a new project opens at the default scale, not fitted: one second is always the
+                // same width, whatever the length of the recording or the size of the window.
+                _viewport.ResetZoom();
             }
         }
 
@@ -286,6 +310,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Zooms out until the whole project fits and returns to the origin.</summary>
         public void ZoomToFit() => _viewport.ZoomToFit();
 
+        /// <summary>Back to the zoom the editor opens at (see
+        /// <see cref="TimelineViewMath.DefaultTicksPerPixel"/>), keeping the left edge.</summary>
+        public void ResetZoom() => _viewport.ResetZoom();
+
         /// <summary>Scrolls the minimum amount that brings a span into view — where the toolbar's
         /// add/import just put an item, which the user has to be able to see to believe. The end is
         /// asked for first so the start wins when the span is wider than the viewport.</summary>
@@ -353,12 +381,6 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private void Viewport_Changed(object sender, EventArgs e)
         {
-            if (_pendingZoomToFit && _viewport.ViewportWidth > 0)
-            {
-                _pendingZoomToFit = false; // cleared before the re-entrant Changed this raises
-                _viewport.ZoomToFit();
-            }
-
             SyncScrollBar();
             _previewProvider.SetViewport(_viewport.ScrollTicks, _viewport.ScrollEndTicks);
         }
@@ -397,22 +419,29 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (delta == 0)
                 return;
 
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                // anchored zoom around the pointer — the anchor x is measured in the surface's
-                // space so ruler and rows zoom identically; a wheel over the header column or the
-                // vertical scroll bar lands outside [0, width] and the viewport clamps it to the
-                // nearest surface edge (zooming around an off-screen tick would pan, not zoom).
-                _viewport.SetZoomAnchored(_viewport.TicksPerPixel * Math.Pow(ZoomStepPerNotch, -delta),
-                    e.GetPosition(_surface).X);
-                e.Handled = true;
-            }
-            else if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
             {
                 _viewport.ScrollByPixels(-delta * WheelScrollPxPerNotch);
                 e.Handled = true;
             }
-            // plain wheel bubbles on to the vertical ScrollViewer
+            else if (e.KeyModifiers.HasFlag(KeyModifiers.Alt))
+            {
+                // the rows' vertical scroll, which the plain wheel used to carry — it is also
+                // still on the ScrollViewer's own scroll bar.
+                return;
+            }
+            else
+            {
+                // Plain wheel (and Ctrl+wheel, the habit) is an anchored zoom around the pointer:
+                // over a timeline that is what a wheel means, and the rows are rarely tall enough
+                // to scroll. The anchor x is measured in the surface's space so ruler and rows zoom
+                // identically; a wheel over the header column or the vertical scroll bar lands
+                // outside [0, width] and the viewport clamps it to the nearest surface edge
+                // (zooming around an off-screen tick would pan, not zoom).
+                _viewport.SetZoomAnchored(_viewport.TicksPerPixel * Math.Pow(ZoomStepPerNotch, -delta),
+                    e.GetPosition(_surface).X);
+                e.Handled = true;
+            }
         }
 
         // ------------------------------------------------------------------------------- chrome
@@ -436,7 +465,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             var palette = TimelinePalette.ForVariant(ActualThemeVariant);
             _corner.Background = palette.RulerBackground;
+            _split.Foreground = palette.LabelBrush;
             _zoomToFit.Foreground = palette.LabelBrush;
+            _resetZoom.Foreground = palette.LabelBrush;
             _spacer.Background = palette.RulerBackground;
             _scrollHost.Background = palette.SurfaceBackground;
         }

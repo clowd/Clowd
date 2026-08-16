@@ -274,6 +274,18 @@ namespace Clowd.UI.VideoEditor.Timeline
             "M2,5 L4,5 L4,19 L2,19 Z M20,5 L22,5 L22,19 L20,19 Z M11,7 L11,17 L5.5,12 Z " +
             "M13,7 L13,17 L18.5,12 Z");
 
+        /// <summary>"Back to the default zoom": an evenly notched ruler (24x24 box), deliberately
+        /// unlike the fit glyph's arrows — one is "show everything", the other "one second is this
+        /// wide again".</summary>
+        public static readonly Geometry ResetZoomGeometry = StreamGeometry.Parse(
+            "M2,16 L22,16 L22,18 L2,18 Z M6,8 L8,8 L8,16 L6,16 Z M11,5 L13,5 L13,16 L11,16 Z " +
+            "M16,8 L18,8 L18,16 L16,16 Z");
+
+        /// <summary>"Split every track at the playhead": a cut line between two half-blocks (16x16
+        /// box) — the same glyph the window toolbar carried before the button moved here.</summary>
+        public static readonly Geometry SplitGeometry = StreamGeometry.Parse(
+            "M7,1 L9,1 L9,15 L7,15 Z M1,4 L5,4 L5,12 L1,12 Z M11,4 L15,4 L15,12 L11,12 Z");
+
         /// <summary>A simple chain-link glyph (24x24 box); VectorIcons has no link icon.</summary>
         public static readonly Geometry LinkGeometry = StreamGeometry.Parse(
             "M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29," +

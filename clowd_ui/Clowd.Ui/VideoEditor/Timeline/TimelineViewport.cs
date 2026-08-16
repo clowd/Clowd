@@ -52,8 +52,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>The snap/grab tolerance at the current zoom, in ticks.</summary>
         public long ToleranceTicks => TimelineViewMath.ToleranceTicks(_ticksPerPixel);
 
-        /// <summary>Reports the drawing width. Re-clamps zoom and scroll: a narrower viewport can
-        /// leave the current zoom below the fit-all limit.</summary>
+        /// <summary>Reports the drawing width. Re-clamps zoom and scroll: a wider viewport lowers
+        /// the zoom-out limit (the whole project now fits at a finer scale) and can leave the
+        /// current offset past the end.</summary>
         public void SetViewportWidth(double width)
         {
             if (!(width >= 0))
@@ -113,6 +114,24 @@ namespace Clowd.UI.VideoEditor.Timeline
             RaiseChanged();
         }
 
+        /// <summary>Returns to <see cref="TimelineViewMath.DefaultTicksPerPixel"/> (the zoom the
+        /// editor opens at) around <paramref name="anchorX"/>, so whatever the user was looking at
+        /// stays under that x rather than the view jumping back to the origin. Pass 0 — or nothing —
+        /// to keep the left edge.</summary>
+        public void ResetZoom(double anchorX = 0)
+        {
+            var zoom = TimelineViewMath.ClampZoom(TimelineViewMath.DefaultTicksPerPixel,
+                _durationTicks, _viewportWidth);
+            if (zoom == _ticksPerPixel)
+                return;
+
+            anchorX = Math.Clamp(anchorX, 0, Math.Max(0, _viewportWidth));
+            var scroll = TimelineViewMath.ScrollForAnchoredZoom(_scrollTicks, _ticksPerPixel, zoom, anchorX);
+            _ticksPerPixel = zoom;
+            _scrollTicks = TimelineViewMath.ClampScroll(scroll, zoom, _durationTicks, _viewportWidth);
+            RaiseChanged();
+        }
+
         /// <summary>Scrolls by a tick delta (Shift+wheel, scroll bar).</summary>
         public void ScrollBy(long deltaTicks) => ScrollToTicks(_scrollTicks + deltaTicks);
 
@@ -156,6 +175,10 @@ namespace Clowd.UI.VideoEditor.Timeline
                 ScrollToTicks(ticks - span + margin);
         }
 
+        // A width or duration change re-clamps both: a wider viewport (or a shorter project) fits
+        // the whole timeline at a finer scale, and the zoom-out limit IS that fit — a view zoomed
+        // out past it would leave dead space after the end of the project. A zoom tighter than fit
+        // is untouched, so an ordinary resize only changes how much is on screen.
         private void Reclamp()
         {
             var zoom = TimelineViewMath.ClampZoom(_ticksPerPixel, _durationTicks, _viewportWidth);

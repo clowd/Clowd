@@ -67,10 +67,17 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         // ---------------------------------------------------------------------------------- ruler
 
-        public Pen TickPen { get; private init; }
+        /// <summary>The ruler's notches and timestamps. Stronger than <see cref="LabelBrush"/> on
+        /// purpose: the time strip is the timeline's scale, read at a glance while dragging
+        /// something else, so it carries full-weight text colour rather than the muted chrome the
+        /// track headers use.</summary>
+        public Pen RulerTickPen { get; private init; }
 
-        public Pen MinorTickPen { get; private init; }
+        public Pen RulerMinorTickPen { get; private init; }
 
+        public IBrush RulerLabelBrush { get; private init; }
+
+        /// <summary>Muted chrome text: the track headers' names and the corner buttons.</summary>
         public IBrush LabelBrush { get; private init; }
 
         /// <summary>The track headers' drag grip. Deliberately stronger than
@@ -165,6 +172,12 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public Pen PlayheadOutlinePen { get; private init; }
 
+        /// <summary>The ghost playhead the ruler draws under the pointer — where a click would put
+        /// the real one. Blue, so it never reads as the (red) playhead itself.</summary>
+        public IBrush HoverPlayheadBrush { get; private init; }
+
+        public Pen HoverPlayheadPen { get; private init; }
+
         // ------------------------------------------------------------------------------- building
 
         private static TimelinePalette Build(ThemeVariant variant)
@@ -174,6 +187,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             var fill0 = GetThemeColor(variant, "SemiColorFill0", dark ? Color.FromRgb(38, 38, 41) : Color.FromRgb(240, 241, 243));
             var fill1 = GetThemeColor(variant, "SemiColorFill1", dark ? Color.FromRgb(45, 45, 48) : Color.FromRgb(222, 224, 227));
+            var text1 = GetThemeColor(variant, "SemiColorText1", dark ? Color.FromRgb(228, 228, 230) : Color.FromRgb(40, 42, 46));
             var text2 = GetThemeColor(variant, "SemiColorText2", dark ? Color.FromRgb(200, 200, 200) : Color.FromRgb(70, 72, 76));
             var text3 = GetThemeColor(variant, "SemiColorText3", dark ? Color.FromRgb(140, 140, 140) : Color.FromRgb(130, 133, 138));
             var border = GetThemeColor(variant, "SemiColorBorder", dark ? Color.FromRgb(60, 60, 64) : Color.FromRgb(200, 202, 206));
@@ -186,6 +200,10 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             var playheadColor = dark ? Color.FromRgb(240, 82, 82) : Color.FromRgb(212, 48, 48);
 
+            // fixed blue rather than the accent: the ghost has to stay distinct from the playhead
+            // AND from the selection/snap chrome, whatever accent the theme carries.
+            var hoverPlayheadColor = dark ? Color.FromRgb(88, 158, 255) : Color.FromRgb(32, 108, 220);
+
             return new TimelinePalette
             {
                 SurfaceBackground = new SolidColorBrush(dark ? Color.FromRgb(30, 30, 32) : Color.FromRgb(232, 233, 236)),
@@ -194,8 +212,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 RowSeparatorPen = new Pen(new SolidColorBrush(border, 0.7), 1),
                 RulerBackground = new SolidColorBrush(fill0),
 
-                TickPen = new Pen(new SolidColorBrush(text2, 0.6), 1),
-                MinorTickPen = new Pen(new SolidColorBrush(text3, 0.45), 1),
+                RulerTickPen = new Pen(new SolidColorBrush(text1), 1.5),
+                RulerMinorTickPen = new Pen(new SolidColorBrush(text2, 0.75), 1),
+                RulerLabelBrush = new SolidColorBrush(text1),
                 LabelBrush = new SolidColorBrush(text3),
                 GripBrush = new SolidColorBrush(dark ? Color.FromRgb(215, 215, 218) : Color.FromRgb(70, 72, 78)),
                 GripHoverBrush = new SolidColorBrush(dark ? Colors.White : Color.FromRgb(20, 22, 26)),
@@ -226,6 +245,8 @@ namespace Clowd.UI.VideoEditor.Timeline
 
                 PlayheadPen = new Pen(new SolidColorBrush(playheadColor), 1.5),
                 PlayheadOutlinePen = new Pen(new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.6), 1),
+                HoverPlayheadBrush = new SolidColorBrush(hoverPlayheadColor),
+                HoverPlayheadPen = new Pen(new SolidColorBrush(hoverPlayheadColor), 1.5),
             };
         }
 

@@ -103,6 +103,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void ClampZoom_ceiling_fits_the_whole_duration_in_the_viewport()
         {
+            // zooming out past this would leave dead space after the end of the project.
             const long duration = 60 * OneSecond;
             var fit = TimelineViewMath.ClampZoom(Double.MaxValue, duration, 800);
 
@@ -112,26 +113,39 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void ClampZoom_without_a_duration_or_width_falls_back_to_the_default()
+        public void ClampZoom_nonpositive_resolves_to_the_default_zoom()
         {
-            Assert.Equal(TimelineViewMath.DefaultTicksPerPixel, TimelineViewMath.ClampZoom(Double.MaxValue, 0, 800));
-            Assert.Equal(TimelineViewMath.DefaultTicksPerPixel, TimelineViewMath.ClampZoom(Double.MaxValue, TenMinutes, 0));
+            const long duration = 60 * TimeSpan.TicksPerMinute; // far too long to fit at the default
+            Assert.Equal(TimelineViewMath.DefaultTicksPerPixel, TimelineViewMath.ClampZoom(0, duration, 800));
+            Assert.Equal(TimelineViewMath.DefaultTicksPerPixel, TimelineViewMath.ClampZoom(-1, duration, 800));
+            Assert.Equal(TimelineViewMath.DefaultTicksPerPixel, TimelineViewMath.ClampZoom(Double.NaN, duration, 800));
         }
 
         [Fact]
-        public void ClampZoom_nonpositive_resolves_to_the_fit_zoom()
+        public void The_default_zoom_is_fifty_pixels_per_second_and_still_yields_to_fit()
         {
+            Assert.Equal(50, TimeSpan.TicksPerSecond / TimelineViewMath.DefaultTicksPerPixel, 6);
+
+            // a two-second project across 800 px: the default scale would show it in 100 px and
+            // trail 700 px of nothing, so fit wins.
+            const long duration = 2 * OneSecond;
+            Assert.Equal(duration / 800.0,
+                TimelineViewMath.ClampZoom(TimelineViewMath.DefaultTicksPerPixel, duration, 800), 6);
+        }
+
+        [Fact]
+        public void FitTicksPerPixel_stays_inside_the_zoom_range()
+        {
+            // no duration or no width yet: the absolute backstop, not a fit nobody can compute
+            Assert.Equal(TimelineViewMath.MaxTicksPerPixel, TimelineViewMath.FitTicksPerPixel(0, 800));
+            Assert.Equal(TimelineViewMath.MaxTicksPerPixel, TimelineViewMath.FitTicksPerPixel(TenMinutes, 0));
+
             const long duration = 60 * OneSecond;
-            Assert.Equal(duration / 800.0, TimelineViewMath.ClampZoom(0, duration, 800), 6);
-            Assert.Equal(duration / 800.0, TimelineViewMath.ClampZoom(-1, duration, 800), 6);
-        }
+            Assert.Equal(duration / 800.0, TimelineViewMath.FitTicksPerPixel(duration, 800), 6);
 
-        [Fact]
-        public void ClampZoom_never_lets_the_fit_zoom_drop_below_the_floor()
-        {
-            // a 1 ms project across 800 px would "fit" at 12.5 ticks/px — far past the zoom floor.
+            // a 1 ms project across 800 px would "fit" at 12.5 ticks/px — past the zoom floor.
             Assert.Equal(TimelineViewMath.MinTicksPerPixel,
-                TimelineViewMath.ClampZoom(TimelineViewMath.MinTicksPerPixel, TimeSpan.TicksPerMillisecond, 800));
+                TimelineViewMath.FitTicksPerPixel(TimeSpan.TicksPerMillisecond, 800));
         }
 
         // ---------------------------------------------------------------------- scroll clamping
@@ -353,6 +367,65 @@ namespace Clowd.VideoSDK.Tests
 
             viewport.SetZoomAnchored(1, 0);
             Assert.Equal(TimelineViewMath.MinTicksPerPixel, viewport.TicksPerPixel);
+        }
+
+        [Fact]
+        public void Viewport_resizing_keeps_a_zoom_that_still_fits()
+        {
+            // a resize is not a rescale: while the view is tighter than fit, one second stays the
+            // same number of pixels wide and only the visible span changes.
+            var viewport = MakeViewport();
+            viewport.SetZoomAnchored(100_000, 0); // 10 ms/px, far tighter than fit
+            var zoom = viewport.TicksPerPixel;
+
+            viewport.SetViewportWidth(2400);
+            Assert.Equal(zoom, viewport.TicksPerPixel);
+            Assert.Equal(2400 * zoom, viewport.VisibleTicks, 0);
+
+            viewport.SetViewportWidth(300);
+            Assert.Equal(zoom, viewport.TicksPerPixel);
+        }
+
+        [Fact]
+        public void Viewport_widening_pulls_a_fitted_zoom_in_so_the_project_still_fills_it()
+        {
+            // zoomed all the way out, the project exactly fills the viewport. Widening the window
+            // must not leave dead space after the end of it, so the zoom follows the new fit.
+            var viewport = MakeViewport();
+            viewport.SetZoomAnchored(Double.MaxValue, 0);
+            Assert.Equal(1000, viewport.TickToX(TenMinutes), 6);
+
+            viewport.SetViewportWidth(2000);
+
+            Assert.Equal(TenMinutes / 2000.0, viewport.TicksPerPixel, 6);
+            Assert.Equal(2000, viewport.TickToX(TenMinutes), 6);
+        }
+
+        [Fact]
+        public void Viewport_reset_zoom_returns_to_the_default_scale()
+        {
+            var viewport = MakeViewport();
+            viewport.SetZoomAnchored(TimelineViewMath.MinTicksPerPixel, 0);
+            viewport.ScrollToTicks(TimeSpan.TicksPerMinute);
+
+            viewport.ResetZoom();
+
+            Assert.Equal(TimelineViewMath.DefaultTicksPerPixel, viewport.TicksPerPixel);
+        }
+
+        [Fact]
+        public void Viewport_reset_zoom_keeps_the_anchor_tick_under_the_pointer()
+        {
+            var viewport = MakeViewport();
+            viewport.SetZoomAnchored(TimelineViewMath.MinTicksPerPixel, 0);
+            viewport.ScrollToTicks(TimeSpan.TicksPerMinute);
+
+            const double anchorX = 400;
+            var anchorTicks = viewport.XToTicks(anchorX);
+
+            viewport.ResetZoom(anchorX);
+
+            Assert.Equal(anchorX, viewport.TickToX(anchorTicks), 3);
         }
 
         [Fact]
