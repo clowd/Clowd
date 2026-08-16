@@ -261,6 +261,23 @@ namespace Clowd.UI
                 SelectTab(selectedTab.Value);
         }
 
+        /// <summary>Opens the window on the Recent tab and walks the user to
+        /// <paramref name="session"/>'s row — selected, scrolled into view and pulsed. Used by
+        /// actions that create a Recents entry from elsewhere (the video editor's Render button),
+        /// where the entry is the only visible sign anything happened.</summary>
+        public void OpenRecents(SessionInfo session)
+        {
+            // selecting the tab creates the page synchronously (OnNavSelectionChanged), so the
+            // cache lookup below finds it even on the first open.
+            Open(SettingsPageTab.RecentSessions);
+
+            if (_pages.TryGetValue(SettingsPageTab.RecentSessions, out var page)
+                && page is RecentSessionsPage recents)
+            {
+                recents.FocusSession(session);
+            }
+        }
+
         private void SelectTab(SettingsPageTab tab)
         {
             var tag = tab.ToString();
