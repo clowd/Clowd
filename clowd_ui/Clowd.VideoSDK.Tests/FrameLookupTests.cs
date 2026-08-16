@@ -24,6 +24,14 @@ namespace Clowd.VideoSDK.Tests
                 Cursor = new SequentialFrameCursor<string>(Pull, f => Discarded.Add(f));
             }
 
+            /// <summary>Queues another run of the stream, labelled with <paramref name="prefix"/> —
+            /// what the puller yields after its owner repositioned it.</summary>
+            public void Refill(string prefix, params long[] ptsList)
+            {
+                for (int i = 0; i < ptsList.Length; i++)
+                    _frames.Enqueue((ptsList[i], prefix + i));
+            }
+
             private bool Pull(out long pts, out string frame)
             {
                 if (_frames.Count == 0)
@@ -150,6 +158,33 @@ namespace Clowd.VideoSDK.Tests
             // equal (non-decreasing) is fine
             Assert.True(s.Cursor.TryAdvance(10, out long pts, out _));
             Assert.Equal(10, pts);
+        }
+
+        [Fact]
+        public void Rewind_restarts_the_stream_and_drops_held_frames()
+        {
+            var s = new Script(0, 10, 20, 30);
+
+            Assert.True(s.Cursor.TryAdvance(20, out long pts, out string frame));
+            Assert.Equal(20, pts);
+            Assert.Equal("f2", frame);
+
+            // the owner seeked the puller back: it yields the stream again from the start
+            s.Refill("r", 0, 10, 20, 30);
+            s.Cursor.Rewind();
+
+            Assert.Contains("f3", s.Discarded); // the held next frame is not leaked
+
+            Assert.True(s.Cursor.TryAdvance(5, out pts, out frame));
+            Assert.Equal(0, pts); // a time already passed is servable again
+            Assert.Equal("r0", frame);
+
+            Assert.True(s.Cursor.TryAdvance(10, out pts, out frame));
+            Assert.Equal(10, pts);
+            Assert.Equal("r1", frame);
+
+            // and the guard is armed again from the rewound position
+            Assert.Throws<InvalidOperationException>(() => s.Cursor.TryAdvance(9, out _, out _));
         }
 
         [Fact]

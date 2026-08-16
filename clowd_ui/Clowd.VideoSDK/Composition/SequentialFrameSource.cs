@@ -5,12 +5,21 @@ using Clowd.VideoSDK.Model;
 namespace Clowd.VideoSDK.Composition
 {
     /// <summary>
-    /// The render path's <see cref="IFrameSource"/>: monotonic, no seeking. Each requested
-    /// (sourceId, streamIndex) lazily opens its own <see cref="SyncStreamDecoder"/> and a
+    /// The render path's <see cref="IFrameSource"/>: forward decode, no playback machinery. Each
+    /// requested (sourceId, streamIndex) lazily opens its own <see cref="SyncStreamDecoder"/> and a
     /// <see cref="SequentialFrameCursor{T}"/> holding current + next; requests decode forward
     /// while <c>next.pts &lt;= t</c>, so lookups follow the latest-PTS-at-or-before-t contract
-    /// (see <see cref="IFrameSource"/>) for CFR and VFR alike. Requested times must be
-    /// non-decreasing per stream — a regression throws.
+    /// (see <see cref="IFrameSource"/>) for CFR and VFR alike.
+    ///
+    /// <para>
+    /// Requests per stream are expected to run forward — that is what a timeline whose items read
+    /// their source in order produces, and it decodes each stream exactly once. A request that goes
+    /// backwards is legal but costly: the timeline reads that stream out of source order (a clip
+    /// moved behind an earlier one, split halves swapped, the same span used twice), so the decoder
+    /// container-seeks to the keyframe at or before the wanted time and the cursor restarts there
+    /// (<see cref="RepositionCount"/> counts these). Frames still come out identical to a forward
+    /// decode; only the decode work is repeated.
+    /// </para>
     ///
     /// Frames decode to pooled CPU BGRA buffers; when the covering frame changes it is uploaded
     /// through the <see cref="FrameTextureCache"/> (which recycles the buffer and evicts the
@@ -28,6 +37,7 @@ namespace Clowd.VideoSDK.Composition
         private readonly bool _ownsPool;
         private readonly Dictionary<(Guid SourceId, int StreamIndex), StreamState> _streams
             = new Dictionary<(Guid, int), StreamState>();
+        private int _repositions;
         private bool _disposed;
 
         private sealed class DecodedFrame
@@ -42,6 +52,7 @@ namespace Clowd.VideoSDK.Composition
         {
             public SyncStreamDecoder Decoder;
             public SequentialFrameCursor<DecodedFrame> Cursor;
+            public long LastRequestTicks = long.MinValue;
 
             public void Dispose()
             {
@@ -63,6 +74,10 @@ namespace Clowd.VideoSDK.Composition
             _pool = pool ?? new FrameBufferPool();
         }
 
+        /// <summary>Container seeks performed so far because a stream was read out of source order
+        /// (test/diagnostic; a project whose items run forward never repositions).</summary>
+        internal int RepositionCount => _repositions;
+
         public bool TryGetFrame(Guid sourceId, int streamIndex, long sourceTimeTicks, out FrameRef frame)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -77,6 +92,17 @@ namespace Clowd.VideoSDK.Composition
 
             if (state.Cursor == null)
                 return false; // stream previously failed to open — stays dark
+
+            if (sourceTimeTicks < state.LastRequestTicks)
+            {
+                // the timeline reads this stream out of source order: replay it from the keyframe
+                // at or before the wanted time rather than failing the render.
+                state.Decoder.Seek(sourceTimeTicks);
+                state.Cursor.Rewind();
+                _repositions++;
+            }
+
+            state.LastRequestTicks = sourceTimeTicks;
 
             if (!state.Cursor.TryAdvance(sourceTimeTicks, out long ptsTicks, out var decoded))
                 return false; // no decodable frames in the stream

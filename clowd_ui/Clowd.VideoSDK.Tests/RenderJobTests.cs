@@ -134,6 +134,57 @@ namespace Clowd.VideoSDK.Tests
             return path;
         }
 
+        /// <summary>Encodes one second of solid colour per entry (BGRA, e.g. 0xFFFF0000 = blue),
+        /// so a decoded frame identifies the source second it came from.</summary>
+        private string EncodeColorFixture(params uint[] secondsBgra)
+        {
+            string path = TempMp4();
+            using var writer = new Mp4Writer(path, new Mp4WriterOptions
+            {
+                Width = W,
+                Height = H,
+                FpsNum = Fps,
+                FpsDen = 1,
+            });
+
+            var pixels = new uint[W * H];
+            var pin = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+            try
+            {
+                for (int s = 0; s < secondsBgra.Length; s++)
+                {
+                    Array.Fill(pixels, secondsBgra[s]);
+                    for (int n = 0; n < Fps; n++)
+                        writer.SubmitVideoFrame(pin.AddrOfPinnedObject(), W * 4, W, H, s * Fps + n);
+                }
+            }
+            finally
+            {
+                pin.Free();
+            }
+
+            writer.Finish();
+            return path;
+        }
+
+        private static void AddMedia(Project project, Track track, Guid sourceId, int streamIndex,
+            long startTicks, long durationTicks, long sourceInTicks)
+        {
+            project.Items.Add(new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = track.Id,
+                TimelineStartTicks = startTicks,
+                DurationTicks = durationTicks,
+                Content = new MediaContent
+                {
+                    SourceId = sourceId,
+                    StreamIndex = streamIndex,
+                    SourceInTicks = sourceInTicks,
+                },
+            });
+        }
+
         private static unsafe (AVPixelFormat PixelFormat, int AudioStreams, int AudioSampleRate) ProbeRaw(string path)
         {
             AVFormatContext* fmt = null;
@@ -260,6 +311,71 @@ namespace Clowd.VideoSDK.Tests
             Assert.True(red[2] > 200 && red[0] < 60, $"expected red, got B={red[0]} G={red[1]} R={red[2]}");
             var blue = CentrePixelOfFrame(path, 45);
             Assert.True(blue[0] > 200 && blue[2] < 60, $"expected blue, got B={blue[0]} G={blue[1]} R={blue[2]}");
+        }
+
+        [Fact]
+        public void Renders_clips_that_read_one_stream_out_of_source_order()
+        {
+            RequireFFmpeg();
+
+            // source seconds: 0 = red, 1 = green, 2 = blue
+            string fixturePath = EncodeColorFixture(0xFFFF0000, 0xFF00FF00, 0xFF0000FF);
+
+            var project = NewProject();
+            var sourceId = Guid.NewGuid();
+            project.Sources.Add(new Source
+            {
+                Id = sourceId,
+                Path = fixturePath,
+                Streams = { new SourceStream { Index = 0, Kind = StreamKind.Video, Width = W, Height = H, AvgFrameRateNum = Fps, AvgFrameRateDen = 1 } },
+            });
+
+            // the timeline plays the last source second first — what a clip dragged behind an
+            // earlier one (or swapped split halves) produces.
+            var track = AddTrack(project, TrackKind.Video);
+            AddMedia(project, track, sourceId, 0, 0, Second, 2 * Second);
+            AddMedia(project, track, sourceId, 0, Second, Second, 0);
+
+            string path = TempMp4();
+            var result = RenderJob.Run(project, path, new RenderJobOptions { PreferGpu = false });
+
+            Assert.Equal(RenderOutcome.Completed, result.Outcome);
+            Assert.Equal(2L * Fps, result.VideoFrames);
+
+            var first = CentrePixelOfFrame(path, 15);  // 0.5s — source second 2
+            Assert.True(first[0] > 200 && first[2] < 60,
+                $"expected blue, got B={first[0]} G={first[1]} R={first[2]}");
+            var second = CentrePixelOfFrame(path, 45); // 1.5s — source second 0, read after it
+            Assert.True(second[2] > 200 && second[0] < 60,
+                $"expected red, got B={second[0]} G={second[1]} R={second[2]}");
+        }
+
+        [Fact]
+        public void Frame_source_repositions_only_when_a_stream_is_read_backwards()
+        {
+            RequireFFmpeg();
+
+            string fixturePath = EncodeColorFixture(0xFFFF0000, 0xFF00FF00, 0xFF0000FF);
+            var project = NewProject();
+            var sourceId = Guid.NewGuid();
+            project.Sources.Add(new Source
+            {
+                Id = sourceId,
+                Path = fixturePath,
+                Streams = { new SourceStream { Index = 0, Kind = StreamKind.Video, Width = W, Height = H, AvgFrameRateNum = Fps, AvgFrameRateDen = 1 } },
+            });
+
+            using var factory = new CpuSurfaceFactory();
+            using var cache = new FrameTextureCache(factory);
+            using var source = new SequentialFrameSource(project, cache);
+
+            for (int n = 0; n < 3 * Fps; n++)
+                Assert.True(source.TryGetFrame(sourceId, 0, TimeBase.FrameIndexToTicks(n, Fps, 1), out _));
+            Assert.Equal(0, source.RepositionCount); // forward playback decodes the file once
+
+            Assert.True(source.TryGetFrame(sourceId, 0, 0, out var rewound));
+            Assert.Equal(1, source.RepositionCount);
+            Assert.Equal(0, rewound.PtsTicks); // back at the first frame, not held at the end
         }
 
         [Fact]

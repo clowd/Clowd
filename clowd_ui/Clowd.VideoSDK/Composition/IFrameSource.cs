@@ -38,7 +38,8 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>
         /// Gets the frame covering <paramref name="sourceTimeTicks"/> (normalized source time,
         /// 100ns ticks) for the given stream. Returns false when the stream has no decodable
-        /// frames. Sequential (render) implementations require non-decreasing times per stream.
+        /// frames. Decoding (render) implementations are built for non-decreasing times per stream
+        /// and pay a container seek for a request that goes backwards.
         /// </summary>
         bool TryGetFrame(Guid sourceId, int streamIndex, long sourceTimeTicks, out FrameRef frame);
     }

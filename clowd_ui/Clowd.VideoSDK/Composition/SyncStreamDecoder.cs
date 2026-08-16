@@ -6,11 +6,13 @@ using FFmpeg.AutoGen.Abstractions;
 namespace Clowd.VideoSDK.Composition
 {
     /// <summary>
-    /// Synchronous forward-only decode of one video stream for the render path: no threads, no
-    /// queues, no seeking — <see cref="DecodeNext"/> blocks until the next frame is decoded and
-    /// sws_scaled to BGRA in a pooled CPU buffer. Software decode only (the render loop is
-    /// throughput-bound on encode, and hardware decode contexts are not worth their failure
-    /// modes in a batch pipeline).
+    /// Synchronous decode of one video stream for the render path: no threads, no queues —
+    /// <see cref="DecodeNext"/> blocks until the next frame is decoded and sws_scaled to BGRA in a
+    /// pooled CPU buffer. Software decode only (the render loop is throughput-bound on encode, and
+    /// hardware decode contexts are not worth their failure modes in a batch pipeline). Decode is
+    /// forward-only apart from <see cref="Seek"/>, which the consuming
+    /// <see cref="SequentialFrameSource"/> uses to replay a stream a project reads out of source
+    /// order.
     ///
     /// Timestamp handling mirrors <c>VideoDecodeWorker.PtsToTicks</c>: <c>best_effort_timestamp</c>
     /// rescaled with integer math (<see cref="TimeBase"/>), <c>AV_NOPTS_VALUE</c> falling back to
@@ -156,6 +158,43 @@ namespace Clowd.VideoSDK.Composition
 
                 FeedPacket();
             }
+        }
+
+        /// <summary>
+        /// Repositions the container to the keyframe at or before <paramref name="targetTicks"/>
+        /// (normalized stream time — the same domain <see cref="DecodeNext"/> reports) and resets
+        /// decode state, so the next <see cref="DecodeNext"/> resumes there. Video packets are only
+        /// decodable from a keyframe, so the caller reaches the wanted frame by decoding forward
+        /// from here (which is exactly what <see cref="SequentialFrameCursor{T}"/> does after a
+        /// <c>Rewind</c>) — the frames in between are real decode references and their pictures are
+        /// identical to what a forward decode produced.
+        ///
+        /// <para>
+        /// Mirrors <c>SyncAudioStreamDecoder.Seek</c>, including the no-time-base fallback through
+        /// the container's <c>AV_TIME_BASE</c> domain.
+        /// </para>
+        /// </summary>
+        public void Seek(long targetTicks)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
+            bool tbValid = _timeBase.num > 0 && _timeBase.den > 0;
+            long target = Math.Max(0, targetTicks);
+            long ts = tbValid
+                ? TimeBase.TicksToStreamTime(target + _startTimeTicks, _timeBase.num, _timeBase.den)
+                : TimeBase.Rescale(target, 1, TimeBase.TicksPerSecond, 1, ffmpeg.AV_TIME_BASE);
+
+            int seekStream = tbValid ? _streamIndex : -1;
+            int err = ffmpeg.av_seek_frame(_fmt, seekStream, ts, ffmpeg.AVSEEK_FLAG_BACKWARD);
+            if (err < 0)
+                ffmpeg.av_seek_frame(_fmt, seekStream, ts, 0); // some containers reject BACKWARD near 0/EOF
+
+            ffmpeg.avcodec_flush_buffers(_ctx);
+            ffmpeg.av_packet_unref(_pkt);
+            ffmpeg.av_frame_unref(_frame);
+
+            _lastPtsTicks = long.MinValue;
+            _draining = false;
         }
 
         /// <summary>Reads packets until one of this stream is fed to the decoder (or EOF starts
