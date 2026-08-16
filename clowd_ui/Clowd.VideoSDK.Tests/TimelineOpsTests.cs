@@ -204,6 +204,57 @@ namespace Clowd.VideoSDK.Tests
             Assert.All(new[] { screen, webcam }, i => Assert.Equal(Ms(10_000), i.DurationTicks));
         }
 
+        [Fact]
+        public void TrimEnd_extension_is_clamped_by_the_source_duration()
+        {
+            var project = RecordingProject(out var screen, out _, out _);
+            // 60s stream, 2s in-point, 10s shown: 48s of unused tail is all there is to unroll.
+            var applied = TimelineOps.TrimEnd(project, screen.Id, Ms(100_000));
+
+            Assert.Equal(Ms(48_000), applied);
+            Assert.Equal(Ms(58_000), screen.DurationTicks);
+            Assert.Equal(Ms(2_000), SourceIn(screen));
+        }
+
+        [Fact]
+        public void TrimEnd_past_source_end_only_shrinks_never_grows()
+        {
+            var project = RecordingProject(out var screen, out _, out _);
+            // an older project (saved before the clamp) may already hang past the source end.
+            screen.DurationTicks = Ms(70_000);
+
+            Assert.Equal(0, TimelineOps.TrimEnd(project, screen.Id, Ms(1_000)));
+            Assert.Equal(Ms(70_000), screen.DurationTicks);
+
+            Assert.Equal(-Ms(5_000), TimelineOps.TrimEnd(project, screen.Id, -Ms(5_000)));
+            Assert.Equal(Ms(65_000), screen.DurationTicks);
+        }
+
+        [Fact]
+        public void TrimEnd_extension_is_unbounded_when_the_stream_duration_is_unknown()
+        {
+            var project = RecordingProject(out var screen, out _, out _);
+            project.Sources[0].Streams[0].DurationTicks = 0;
+
+            var applied = TimelineOps.TrimEnd(project, screen.Id, Ms(100_000));
+
+            Assert.Equal(Ms(100_000), applied);
+            Assert.Equal(Ms(110_000), screen.DurationTicks);
+        }
+
+        [Fact]
+        public void TrimEnd_extension_is_unbounded_for_non_media_content()
+        {
+            var project = RecordingProject(out var screen, out _, out _);
+            screen.Content = new TextContent { Text = "title" };
+            screen.LinkGroupId = null;
+
+            var applied = TimelineOps.TrimEnd(project, screen.Id, Ms(100_000));
+
+            Assert.Equal(Ms(100_000), applied);
+            Assert.Equal(Ms(110_000), screen.DurationTicks);
+        }
+
         // ---- split ----
 
         [Fact]
