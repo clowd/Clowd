@@ -160,17 +160,19 @@
         <Style Selector="StackPanel.section">
             <Setter Property="Spacing" Value="6" />
         </Style>
-        <Style Selector="ComboBox">
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="MinWidth" Value="100" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <!--  the editor's own dropdown (the top bar's picker) rather than the Semi ComboBox, so
+              every closed control in the panel wears the same chrome as the spinners  -->
+        <Style Selector="controls|DropDownButton">
+            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="6,0,0,0" />
         </Style>
         <!--  wider than the 70px the shared spinner theme picks: this panel puts a spinner on
               nearly every row, and 70px truncates the longer values (e.g. "-360 °"). Right-aligned
               inside the row's fill column so it lines up with the text boxes below it; the theme's
               4px left margin would otherwise push it off that edge.  -->
         <Style Selector="controls|SpinnerTextBox">
-            <Setter Property="Width" Value="100" />
+            <Setter Property="MinWidth" Value="120" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="Margin" Value="6,0,0,0" />
         </Style>
@@ -559,8 +561,11 @@
                             HorizontalAlignment="Right"
                             Orientation="Horizontal"
                             Spacing="4">
+                            <!--  MinWidth 0: the panel's 120px minimum is for lone editors — two
+                                  spinners sharing one row at 120 each would overflow the sidebar  -->
                             <controls:SpinnerTextBox
                                 Width="56"
+                                MinWidth="0"
                                 Margin="0"
                                 Max="1000"
                                 Min="0.1"
@@ -569,6 +574,7 @@
                             <TextBlock VerticalAlignment="Center" Foreground="#CCCCCC" Text=":" />
                             <controls:SpinnerTextBox
                                 Width="56"
+                                MinWidth="0"
                                 Margin="0"
                                 Max="1000"
                                 Min="0.1"
@@ -800,7 +806,7 @@
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Align" />
-                        <ComboBox x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
+                        <controls:DropDownButton x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
@@ -841,7 +847,7 @@
                             <controls:ResetDefaultButton x:Name="dotEntryKind" CurrentValue="{Binding EntryKind, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Entry" />
-                        <ComboBox x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
+                        <controls:DropDownButton x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
@@ -863,7 +869,7 @@
                             <controls:ResetDefaultButton x:Name="dotEntryEasing" CurrentValue="{Binding EntryEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <ComboBox x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
+                        <controls:DropDownButton x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" Margin="0,6,0,0">
@@ -871,7 +877,7 @@
                             <controls:ResetDefaultButton x:Name="dotExitKind" CurrentValue="{Binding ExitKind, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Exit" />
-                        <ComboBox x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
+                        <controls:DropDownButton x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
@@ -893,7 +899,7 @@
                             <controls:ResetDefaultButton x:Name="dotExitEasing" CurrentValue="{Binding ExitEasing, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
-                        <ComboBox x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                        <controls:DropDownButton x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 

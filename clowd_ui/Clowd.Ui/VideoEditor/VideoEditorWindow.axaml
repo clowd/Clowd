@@ -289,8 +289,8 @@
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition
-                    Width="230"
-                    MinWidth="140"
+                    Width="250"
+                    MinWidth="250"
                     MaxWidth="600" />
             </Grid.ColumnDefinitions>
 
@@ -540,6 +540,15 @@
                         VerticalAlignment="Center"
                         Maximum="1"
                         Minimum="0" />
+                    <!--  icon + tooltip swap in code-behind with the timeline's shown state  -->
+                    <controls:ToolButton
+                        x:Name="btnTimelineCollapse"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconChevronDown}"
+                        ToolTip.Tip="Hide the timeline" />
                 </StackPanel>
 
                 <Panel />
@@ -547,8 +556,11 @@
         </Border>
 
         <!--  timeline: sized to its rows (ruler + one row per track + scrollbar), capped so a
-              project with many rows scrolls vertically instead of eating the preview  -->
+              project with many rows scrolls vertically instead of eating the preview. The
+              transport bar's collapse button hides this whole border (the preview takes the
+              space).  -->
         <Border
+            x:Name="timelineBorder"
             Grid.Row="3"
             Background="#3a3a3a"
             BorderBrush="#666666"
