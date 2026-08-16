@@ -1,18 +1,8 @@
 name: CI
 
-# Test + package on every commit. clowd_server has its own workflow
-# (deploy-server.yml) and is excluded from the cargo workspace.
-#
-# Packages (4): win-x64, win-arm64, osx-x64, osx-arm64. Each contains the
-# published Clowd.Ui app with the Rust capture binaries alongside it (the
-# overlay, the OCR recognizer it spawns, and the scrolling-capture driver) and
-# the
-# obs-express recording distribution in an obs-express/ subdirectory — the
-# layout expected by ScreenCaptureService/ObsBinaryLocator. obs-express is
-# pulled from the latest clowd/obs-express-rs GitHub release (public repo,
-# so the default workflow token suffices). Windows packages additionally carry
-# the shell-extension dll (clowd_shell_ext) and its sparse MSIX
-# (ClowdShellExt.msix) for the Win11 modern context menu.
+# Test + package on every commit; clowd_server has its own workflow (deploy-server.yml).
+# Each package is the published Clowd.Ui app with the Rust binaries beside it and
+# obs-express in a subdirectory, the layout ScreenCaptureService/ObsBinaryLocator expects.
 
 on:
   push:
@@ -38,7 +28,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # nbgv (Nerdbank.GitVersioning) needs full history to compute the version height
+          # nbgv needs full history to compute the version height.
           fetch-depth: 0
 
       - name: Install Rust toolchain
@@ -49,10 +39,7 @@ jobs:
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
 
-      # SDK 10 is required twice over: the projects target net10.0 (current LTS),
-      # and Avalonia 12's XAML source generators are built against Roslyn 4.14,
-      # which older SDKs skip (CS9057) — the generated x:Name fields then go
-      # missing and Clowd.Ui fails to compile.
+      # SDK 10 is required: Avalonia 12's XAML generators target Roslyn 4.14, and older SDKs skip them as CS9057 so the x:Name fields go missing.
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v6
         with:
@@ -71,8 +58,7 @@ jobs:
           cargo test -p clowd_ocr
         shell: bash
 
-      # the shell extension is a Windows COM dll (empty crate elsewhere), so its
-      # lint/test gate only means anything on the Windows leg.
+      # The shell extension is a Windows COM dll and an empty crate elsewhere.
       - name: "Rust gate: shell extension (Windows)"
         if: runner.os == 'Windows'
         run: |
@@ -86,9 +72,7 @@ jobs:
           dotnet test clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj -c Release --nologo
         shell: bash
 
-  # Computes the nbgv version once and publishes it as an artifact. The release
-  # workflow (release.yml) downloads version.txt from a completed run and trusts
-  # it as the version of the packages built by that run.
+  # release.yml downloads this from a completed run and trusts it as that run's version.
   version:
     runs-on: ubuntu-latest
     steps:
@@ -100,9 +84,7 @@ jobs:
       - name: Compute nbgv version
         run: |
           dotnet tool update -g nbgv
-          # capture first, write after: nbgv treats a version.txt in the repo root as a
-          # (legacy) version file, so tee-ing into it while nbgv runs makes it read an
-          # empty version file and crash.
+          # Capture first, write after: nbgv reads a repo-root version.txt as a legacy version file and crashes on the empty one tee would leave.
           VERSION="$(nbgv get-version -v SimpleVersion)"
           echo "$VERSION" | tee version.txt
 
@@ -142,13 +124,7 @@ jobs:
             obs-asset: obs-express-macos-arm64.zip
             exe: ""
     runs-on: ${{ matrix.os }}
-    # lifted to the job so the debug-file upload step can test for the token in an `if:`
-    # — the secrets context is not available there, but env is.
-    #
-    # No SENTRY_ORG: an organization auth token (sntrys_…) carries the org slug in its
-    # payload and sentry-cli always prefers that over the environment. Setting the var
-    # here would only produce a "using org X rather than Y" warning on every run. A
-    # personal token would need it — org tokens are what Sentry recommends for CI.
+    # Lifted to the job so the Sentry step can test the token in an `if:`, where secrets are unavailable but env is; no SENTRY_ORG because an org token carries the slug itself.
     env:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
@@ -156,7 +132,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          # nbgv (Nerdbank.GitVersioning) needs full history to compute the version height
+          # nbgv needs full history to compute the version height.
           fetch-depth: 0
 
       - name: Install Rust toolchain
@@ -164,75 +140,50 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      # rust-cache already hashes Cargo.toml, but .cargo/config.toml is named explicitly so a rustflags-only edit cannot restore a cache built with the previous flags.
       - name: Cache cargo build
         uses: Swatinem/rust-cache@v2
         with:
-          key: ${{ matrix.rid }}
+          key: ${{ matrix.rid }}-${{ hashFiles('Cargo.toml', '.cargo/config.toml') }}
 
-      # SDK 10 is required twice over: the projects target net10.0 (current LTS),
-      # and Avalonia 12's XAML source generators are built against Roslyn 4.14,
-      # which older SDKs skip (CS9057) — the generated x:Name fields then go
-      # missing and Clowd.Ui fails to compile.
+      # SDK 10 is required: Avalonia 12's XAML generators target Roslyn 4.14, and older SDKs skip them as CS9057 so the x:Name fields go missing.
       - name: Install .NET SDK
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
-      # No PublishSingleFile: Velopack (vpk pack in release.yml) requires a normal
-      # multi-file publish directory. Version stamping comes from nbgv automatically.
+      # No PublishSingleFile: vpk pack (release.yml) requires a normal multi-file publish directory.
       - name: Publish Clowd.Ui
         run: >
           dotnet publish clowd_ui/Clowd.Ui/Clowd.Ui.csproj
           -c Release -r ${{ matrix.rid }} --self-contained true
           -o publish
 
-      # dotnet publish above gets its version from nbgv automatically; the Rust build has
-      # no such hook, so resolve the same version here and stamp it into the Sentry release
-      # name (clowd_rust_core/src/telemetry.rs). Every process then reports against one release.
+      # The Rust build has no nbgv hook, so stamp the same version into its Sentry release name (clowd_rust_core/src/telemetry.rs).
       - name: Resolve version for capture binary
         shell: bash
         run: |
           dotnet tool update -g nbgv
           echo "CLOWD_VERSION=$(nbgv get-version -v SimpleVersion)" >> "$GITHUB_ENV"
 
-      - name: Build capture binary
-        run: cargo build --release -p clowd_capture_wgpu --target ${{ matrix.target }}
+      # One invocation rather than one per crate, so codegen and the LTO links overlap instead of leaving the runner idle.
+      - name: Build rust binaries
+        shell: bash
+        run: |
+          PKGS="-p clowd_capture_wgpu -p clowd_ocr -p clowd_scroll_driver"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            PKGS="$PKGS -p clowd_shell_ext"
+          fi
+          cargo build --release --target ${{ matrix.target }} $PKGS
 
-      # The OCR recognizer, spawned per request by the overlay (which looks for
-      # it beside itself). Unlike the scrolling-capture driver this ships on
-      # every platform — the overlay's OCR button is not compiled out anywhere.
-      - name: Build OCR recognizer
-        run: cargo build --release -p clowd_ocr --target ${{ matrix.target }}
-
-      # The scrolling-capture driver, spawned by Clowd.Ui once the user has
-      # picked the region and the scroll point. Ships on every platform: it has
-      # a Win32 and a Core Graphics backend, and the overlay's SCROLL button is
-      # compiled out nowhere.
-      - name: Build scrolling capture driver
-        run: cargo build --release -p clowd_scroll_driver --target ${{ matrix.target }}
-
-      - name: Build shell extension (Windows)
-        if: runner.os == 'Windows'
-        run: cargo build --release -p clowd_shell_ext --target ${{ matrix.target }}
-
-      # Sentry symbolicates the capturer's stack traces server-side from these. Without
-      # them an LTO'd release build reports mangled frames with no file or line, which is
-      # most of the value of reporting the panic at all. Matched by debug ID, so there is
-      # no release to associate and the upload can happen any time before the crash.
-      #
-      # Skipped when the token is absent (forks, and any run before the secret is set)
-      # rather than failing the build. The debug files are never packaged — the copy step
-      # below takes the executable only.
+      # Without these an LTO'd release build reports mangled frames with no file or line; skipped rather than failed when the token is absent (forks).
       - name: Upload capture debug files to Sentry
         if: env.SENTRY_AUTH_TOKEN != ''
         shell: bash
         run: |
           npm install -g @sentry/cli
           OUT="target/${{ matrix.target }}/release"
-          # name the artefacts rather than handing sentry-cli the directory, which would
-          # recurse through deps/ and build/ and upload every dependency's intermediates.
-          # The executable goes up alongside the debug file for its symbol table — frames
-          # that never made it into DWARF resolve from there.
+          # Name the artefacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
           if [ "${{ runner.os }}" = "Windows" ]; then
             DIF="$OUT/clowd_capture_wgpu.pdb"
             OCR_DIF="$OUT/clowd_ocr.pdb"
@@ -242,36 +193,28 @@ jobs:
             OCR_DIF="$OUT/clowd_ocr.dSYM"
             SCROLL_DIF="$OUT/clowd_scroll_driver.dSYM"
           fi
+          # The executable goes up alongside the debug file for its symbol table.
           sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
-          # the recognizer and the scrolling capture driver report into the same
-          # project under their own `app` tags, and both ship on every platform
           sentry-cli debug-files upload "$OCR_DIF" "$OUT/clowd_ocr${{ matrix.exe }}"
           sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/clowd_scroll_driver${{ matrix.exe }}"
-          # the shell extension dll (Windows-only) gets the same treatment
           if [ "${{ runner.os }}" = "Windows" ]; then
             sentry-cli debug-files upload "$OUT/clowd_shell_ext.pdb" "$OUT/clowd_shell_ext.dll"
           fi
 
+      # All three sit beside the overlay, which resolves them as siblings of its own executable.
       - name: Copy capture binary into package
         run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
         shell: bash
 
-      # Beside the overlay, which resolves it as a sibling of its own
-      # executable (clowd_capture/src/ocr/client.rs).
       - name: Copy OCR recognizer into package
         run: cp "target/${{ matrix.target }}/release/clowd_ocr${{ matrix.exe }}" publish/
         shell: bash
 
-      # Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver
-      # looks for it.
       - name: Copy scrolling capture driver into package
         run: cp "target/${{ matrix.target }}/release/clowd_scroll_driver${{ matrix.exe }}" publish/
         shell: bash
 
-      # The dll ships under a name carrying the crate's own version (independent of the app
-      # version): SparsePackageManager copies it to the install root under that same name, so
-      # an unchanged extension needs no copy at all across app updates, and a changed one
-      # arrives under a fresh filename that a lock on the old copy can never block.
+      # The version in the filename means a changed extension arrives under a fresh name that a lock on the old copy cannot block.
       - name: Copy shell extension into package (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -280,12 +223,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/clowd_shell_ext.dll" "publish/ClowdShellExt_${EXT_VERSION}.dll"
         shell: bash
 
-      # The Win11 modern context menu ships as a sparse package: the msix holds
-      # only the manifest + logos, while the COM dll and exe stay outside it in
-      # the install root (uap10:AllowExternalContent). SparsePackageManager
-      # registers it at install time with Add-AppxPackage -ExternalLocation.
-      # /nv skips payload validation, which would otherwise reject the manifest's
-      # references to that external content. release.yml signs the msix.
+      # Sparse package: the msix holds only the manifest + logos and /nv skips the payload validation that would reject its references to the external dll.
       - name: Build shell extension MSIX (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -317,11 +255,7 @@ jobs:
           unzip -q obs-express.zip -d publish/obs-express
           chmod +x publish/obs-express/obs-express publish/obs-express/obs-ffmpeg-mux 2>/dev/null || true
 
-          # The obs-express zip materializes the framework symlinks as full copies
-          # (Versions/Current, libobs, Headers, Resources duplicate Versions/A),
-          # which codesign rejects as "bundle format is ambiguous". Rebuild the
-          # canonical symlink structure so the .app can be signed + notarized.
-          # (zip -y below preserves symlinks into the artifact.)
+          # The zip materializes the framework symlinks as full copies, which codesign rejects as "bundle format is ambiguous".
           FW=publish/obs-express/Frameworks/libobs.framework
           if [ -d "$FW" ] && [ ! -L "$FW/Versions/Current" ]; then
             rm -rf "$FW/Versions/Current" "$FW/libobs" "$FW/Headers" "$FW/Resources"
@@ -331,8 +265,7 @@ jobs:
             ln -s Versions/Current/Resources "$FW/Resources"
           fi
 
-      # upload-artifact does not preserve unix file modes, so on macOS wrap
-      # the package in a zip (which does) before uploading.
+      # upload-artifact does not preserve unix file modes, but a zip does.
       - name: Zip package (macOS)
         if: runner.os == 'macOS'
         run: cd publish && zip -qry "../clowd-${{ matrix.rid }}.zip" .

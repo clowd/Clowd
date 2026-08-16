@@ -3,41 +3,24 @@ name = "clowd_ocr"
 version = "1.0.0"
 edition = "2021"
 
-# On-device text recognition, as its own process. The overlay
-# (clowd_capture_wgpu) extracts the selected pixels and spawns this binary per
-# OCR request; it recognizes and writes the result where it was told to.
-#
-# Split out of the capturer because the engine underneath is a static C++
-# library (MNN, via ocr-rs). A Rust panic in it unwinds harmlessly, but an
-# abort, a segfault or a failed allocation on a degenerate selection kills the
-# process it runs in — and in-process that was the overlay, mid-capture, with
-# the user's selection already framed. Here the same failure is an exit code.
-#
-# Two secondary wins, both real: the ~18 MB of embedded models and the static
-# MNN left the capturer (39.4 MB -> ~21 MB, and the capturer is respawned on
-# display-change and GPU-loss, so its size is startup latency), and cancelling
-# a recognition is now killing a process rather than polling a flag between
-# inference batches.
-#
-# It needs no window, no event loop, no GPU and — because it is handed pixels
-# rather than taking them — no screen-recording permission on macOS.
+# On-device text recognition as its own process: the overlay extracts the selected pixels
+# and spawns this binary per request. Split out because an abort or segfault in the static
+# C++ MNN underneath would otherwise kill the overlay mid-capture; here it is an exit code.
+# It also keeps ~18 MB of models out of the capturer (whose size is startup latency, as it
+# is respawned on display-change and GPU-loss) and makes cancellation a process kill.
 
 [dependencies]
 clowd_rust_core.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
-# png/jpeg are for the env-gated diagnostic tests in paddle.rs, which open a
-# real screenshot from disk; recognition itself is handed raw BGRA.
+# png/jpeg are only for the env-gated diagnostic tests in paddle.rs; recognition is handed raw BGRA.
 image = { workspace = true, features = ["png", "jpeg"] }
 log.workspace = true
 serde_json.workspace = true
 simplelog.workspace = true
 
-# PaddleOCR (PP-OCRv6 small) via the MNN runtime — see src/paddle.rs. Links a
-# static MNN from a prebuilt GitHub release archive (windows-x86_64 msvc and
-# macos-universal are both covered; the build script needs curl + PowerShell's
-# Expand-Archive or unzip, and bindgen needs libclang). Model weights are
-# embedded from assets/ocr/ via include_bytes!. The Windows prebuilt is /MT,
-# which is why .cargo/config.toml builds the Windows targets with crt-static:
-# matching it keeps one CRT — one heap — across the Rust/C++ boundary.
+# PaddleOCR (PP-OCRv6 small) on a static MNN pulled from a prebuilt release archive — see
+# src/paddle.rs; the build needs curl, unzip or Expand-Archive, and libclang for bindgen.
+# That prebuilt is /MT, which is why .cargo/config.toml sets crt-static on Windows: matching
+# it keeps one CRT, and so one heap, across the Rust/C++ boundary.
 ocr-rs = "2.4"
