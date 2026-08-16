@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
@@ -919,17 +920,33 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (thumbs.Count == 0)
                 return; // missing thumbnails leave the body fill visible
 
+            // The provider's grid never gets finer than its base interval, so a deep zoom makes
+            // each slot far wider than a frame — one thumb smeared across it. Halving keeps the
+            // draw grid a power-of-two subdivision anchored at source 0 (tile edges stay put
+            // across zoom levels); the tiles repeat the nearest cached thumb at roughly its
+            // natural aspect instead, purely a render decision — nothing new is decoded.
+            var drawInterval = interval;
+            while (slotWidth > naturalSlotPx * 1.5 && drawInterval > 1)
+            {
+                drawInterval /= 2;
+                slotWidth /= 2;
+            }
+
+            // the default bitmap filtering is plain bilinear, which shimmers on the downscales and
+            // smears on the stretches a slot inevitably applies; cubic/mipmapped sampling costs
+            // nothing measurable at filmstrip sizes.
+            using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = BitmapInterpolationMode.HighQuality }))
             using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
             {
                 // slots sit on the interval grid anchored at source time 0 — the same anchoring
                 // the provider quantizes to, so a zoom change reuses decoded thumbnails.
                 var visStartX = Math.Max(body.X, 0);
                 var visEndX = Math.Min(body.Right, Bounds.Width);
-                var firstSlot = Math.Max(0, (media.SourceInTicks + (long)((visStartX - body.X) * tpp)) / interval);
+                var firstSlot = Math.Max(0, (media.SourceInTicks + (long)((visStartX - body.X) * tpp)) / drawInterval);
 
                 for (var n = firstSlot; ; n++)
                 {
-                    var slotSource = n * interval;
+                    var slotSource = n * drawInterval;
                     var x = body.X + (slotSource - media.SourceInTicks) / tpp;
                     if (x >= visEndX)
                         break;
