@@ -1136,7 +1136,14 @@ namespace Clowd.UI.VideoEditor
             // on screen (and later edits cannot race the render job file).
             var created = await VideoRenderManager.StartRenderAsync(_session, _editor.SnapshotForPlayer());
             if (created != null)
+            {
                 TrackRenderSession(created);
+
+                // the render lives as a Recents row (progress, cancel, and later the file) — take
+                // the user to it, whether it was just created or is the one already in flight.
+                if (PageManager.Current.GetSettingsPage() is MainWindow main)
+                    main.OpenRecents(created);
+            }
         }
 
         /// <summary>Points btnRender's ring at <paramref name="renderSession"/>'s ActiveRender and
