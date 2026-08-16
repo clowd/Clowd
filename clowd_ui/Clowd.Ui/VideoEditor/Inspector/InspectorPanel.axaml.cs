@@ -37,6 +37,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             comboExitKind.ItemsSource = Enum.GetValues<TransitionKind>();
             comboEntryEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             comboExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
+            ddSpeed.ItemsSource = SelectedItemViewModel.SpeedOptions;
 
             // enum reset-dot defaults live here, not in XAML: an attribute would be the string
             // "None", which neither equality nor the reset write-back can hand to an enum binding

@@ -54,7 +54,7 @@ namespace Clowd.UI.VideoEditor
     {
         public const string ArgName = "--video-edit";
 
-        private const double SidebarMinWidth = 140;
+        private const double SidebarMinWidth = 250;
         private const double SidebarMaxWidth = 600;
 
         /// <summary>How long a text card or image lands on the timeline — long enough to see and
@@ -236,6 +236,7 @@ namespace Clowd.UI.VideoEditor
             };
 
             btnMute.Click += (_, _) => ToggleMute();
+            btnTimelineCollapse.Click += (_, _) => ToggleTimelineVisible();
 
             // preview volume is per-session and always opens wide open, like a video player's:
             // it attenuates our own samples only (see NAudioSink.Volume), so there is nothing
@@ -1066,7 +1067,7 @@ namespace Clowd.UI.VideoEditor
             {
                 SidebarColumn.MinWidth = SidebarMinWidth;
                 SidebarColumn.Width = new GridLength(
-                    Math.Clamp(Settings?.SidebarWidth ?? 230, SidebarMinWidth, SidebarMaxWidth), GridUnitType.Pixel);
+                    Math.Clamp(Settings?.SidebarWidth ?? 250, SidebarMinWidth, SidebarMaxWidth), GridUnitType.Pixel);
             }
             else
             {
@@ -1460,6 +1461,17 @@ namespace Clowd.UI.VideoEditor
             var muted = volumeSlider.Value <= 0;
             btnMute.IconPath = TimelineIcons.Find(muted ? "IconSpeakerDisabled" : "IconSpeakerEnabled");
             ToolTip.SetTip(btnMute, muted ? "Unmute" : "Mute");
+        }
+
+        /// <summary>The transport's timeline collapse toggle: hides the whole timeline strip so
+        /// the preview takes its space (the chevron flips to point the way back). Per-window and
+        /// transient, like the sidebar.</summary>
+        private void ToggleTimelineVisible()
+        {
+            var show = !timelineBorder.IsVisible;
+            timelineBorder.IsVisible = show;
+            btnTimelineCollapse.IconPath = TimelineIcons.Find(show ? "IconChevronDown" : "IconChevronUp");
+            ToolTip.SetTip(btnTimelineCollapse, show ? "Hide the timeline" : "Show the timeline");
         }
 
         /// <summary>Fills the speed button's drop-down once; the entries are radio items so the
