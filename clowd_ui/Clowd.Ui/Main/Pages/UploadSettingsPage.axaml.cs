@@ -1,27 +1,204 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Notifications;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
+// Avalonia 12 moved TryGetTextAsync and friends off IClipboard into extension methods here.
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Clowd.Config;
 using Clowd.UI.Config;
+using Clowd.UI.Dialogs;
 using Clowd.UI.Helpers;
 using Ursa.Controls;
 
+// Ursa ships a Toast of its own; this page means the app's toast helper.
+using Toast = Clowd.UI.Helpers.Toast;
+
 namespace Clowd.UI.Pages
 {
-    public partial class UploadSettingsPage : UserControl
+    public partial class UploadSettingsPage : UserControl, IPageHeaderContent
     {
+        // the import/export strip shown beside the page title. The page owns the control but does
+        // not host it — the window's header does (see IPageHeaderContent).
+        private readonly Control _transferBar;
+
         public UploadSettingsPage()
         {
             InitializeComponent();
             DataContext = SettingsRoot.Current.Uploads;
+            _transferBar = BuildTransferBar();
+        }
+
+        public Control HeaderContent => _transferBar;
+
+        private Control BuildTransferBar()
+        {
+            var import = new Button { Content = "Import" };
+            ToolTip.SetTip(import, "Read provider settings from a Clowd settings string on the clipboard");
+            import.Click += ImportClicked;
+
+            var export = new Button { Content = "Export" };
+            ToolTip.SetTip(export, "Copy provider settings to the clipboard as a Clowd settings string");
+            export.Click += ExportClicked;
+
+            return new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Center,
+                Spacing = 8,
+                Children = { import, export },
+            };
+        }
+
+        private async void ExportClicked(object sender, RoutedEventArgs e)
+        {
+            var window = TopLevel.GetTopLevel(this) as Window;
+            var uploads = SettingsRoot.Current.Uploads;
+
+            var items = uploads.Providers
+                .Select(p => new ProviderMultiSelectDialog.Item
+                {
+                    Key = p.Provider.GetType().Name,
+                    Name = p.Provider.Name,
+                    Description = p.Provider.Description,
+                    Icon = () => p.Provider.Icon,
+                    // an enabled provider is the one the user has actually configured, so it is
+                    // the one they most likely want to carry to another machine
+                    IsCheckedByDefault = p.IsEnabled,
+                })
+                .ToArray();
+
+            if (items.Length == 0)
+            {
+                Toast.Show(window, "There are no upload providers to export.", NotificationType.Warning);
+                return;
+            }
+
+            var chosen = await ProviderMultiSelectDialog.ShowAsync(
+                window,
+                "Export upload providers",
+                "Choose which providers to copy to the clipboard. The copied text is scrambled so it "
+                + "means nothing to anyone who stumbles across it, but it is not encrypted with a "
+                + "password — it still carries your credentials, so only pass it to people you trust.",
+                "Copy",
+                items);
+
+            if (chosen == null || chosen.Length == 0)
+                return;
+
+            string text;
+            try
+            {
+                var version = typeof(UploadSettingsPage).Assembly.GetName().Version?.ToString();
+                var payload = uploads.ExportProviders(chosen, version, DateTimeOffset.UtcNow);
+                text = UploadSettingsTransfer.Encode(payload);
+            }
+            catch (Exception ex)
+            {
+                SentryConfig.CaptureHandled(ex, "upload.settings-export");
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, ex.Message, "Export failed");
+                return;
+            }
+
+            var clipboard = window?.Clipboard ?? Toast.GetPrimaryClipboard();
+            if (clipboard == null)
+            {
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "The clipboard is not available.", "Export failed");
+                return;
+            }
+
+            await ClipboardImpl.SetClipboardText(clipboard, text);
+            Toast.Show(window, chosen.Length == 1
+                ? "Copied 1 provider to the clipboard."
+                : $"Copied {chosen.Length} providers to the clipboard.");
+        }
+
+        private async void ImportClicked(object sender, RoutedEventArgs e)
+        {
+            var window = TopLevel.GetTopLevel(this) as Window;
+            var uploads = SettingsRoot.Current.Uploads;
+
+            var clipboard = window?.Clipboard ?? Toast.GetPrimaryClipboard();
+            string text = null;
+            if (clipboard != null)
+            {
+                try
+                {
+                    text = await clipboard.TryGetTextAsync();
+                }
+                catch
+                {
+                    // a clipboard held open by another app reads as "nothing of ours" here
+                }
+            }
+
+            if (!UploadSettingsTransfer.TryDecode(text, out var payload) || payload.Providers.Count == 0)
+            {
+                Toast.Show(window, "No provider settings found in the clipboard.", NotificationType.Warning);
+                return;
+            }
+
+            var items = payload.Providers
+                .Select(kvp =>
+                {
+                    var info = uploads.GetProviderByTypeName(kvp.Key);
+                    Func<System.IO.Stream> icon = info == null ? null : () => info.Provider.Icon;
+                    return new ProviderMultiSelectDialog.Item
+                    {
+                        Key = kvp.Key,
+                        Name = info?.Provider.Name ?? kvp.Value.Name ?? kvp.Key,
+                        Description = info != null
+                            ? info.Provider.Description
+                            : "Not supported by this version of Clowd.",
+                        Icon = icon,
+                        IsAvailable = info != null,
+                        IsCheckedByDefault = true,
+                    };
+                })
+                .OrderByDescending(i => i.IsAvailable)
+                .ThenBy(i => i.Name, StringComparer.Ordinal)
+                .ToArray();
+
+            if (items.All(i => !i.IsAvailable))
+            {
+                Toast.Show(
+                    window,
+                    "The clipboard holds Clowd provider settings, but none of those providers exist in this version.",
+                    NotificationType.Warning);
+                return;
+            }
+
+            var chosen = await ProviderMultiSelectDialog.ShowAsync(
+                window,
+                "Import upload providers",
+                "Choose which providers to import. Each one you tick has all of its settings "
+                + "replaced by what is in the clipboard — including whether it is enabled and which "
+                + "uploads it is the default for.",
+                "Import",
+                items);
+
+            if (chosen == null || chosen.Length == 0)
+                return;
+
+            var imported = 0;
+            foreach (var key in chosen)
+            {
+                if (payload.Providers.TryGetValue(key, out var entry) && uploads.ImportProvider(key, entry))
+                    imported++;
+            }
+
+            Toast.Show(window, imported == 1
+                ? "Imported 1 provider."
+                : $"Imported {imported} providers.");
         }
 
         private void DefaultChipClicked(object sender, RoutedEventArgs e)
