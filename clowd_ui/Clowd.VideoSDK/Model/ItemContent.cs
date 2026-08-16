@@ -32,14 +32,22 @@ public sealed class MediaContent : ItemContent
     public int StreamIndex { get; set; }
 
     /// <summary>Where in the source this item starts, in 100ns ticks. Trimming the start of the
-    /// item moves this by the same amount.</summary>
+    /// item moves this by the same amount (scaled by <see cref="Speed"/>).</summary>
     public long SourceInTicks { get; set; }
+
+    /// <summary>Playback speed: how many source seconds one timeline second consumes (2 = twice
+    /// as fast). With speed, timeline time <c>t</c> maps to source time
+    /// <c>SourceInTicks + (t - item.TimelineStartTicks) * Speed</c>. Audio pitch rides with the
+    /// speed (linear resample, no time stretching). 1 = realtime; only desynced (unlinked) items
+    /// carry a non-unity speed — linked rows must keep the recording's own clock.</summary>
+    public double Speed { get; set; } = 1.0;
 
     public override ItemContent Clone() => new MediaContent
     {
         SourceId = SourceId,
         StreamIndex = StreamIndex,
         SourceInTicks = SourceInTicks,
+        Speed = Speed,
     };
 }
 

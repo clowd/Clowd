@@ -99,7 +99,11 @@ namespace Clowd.VideoSDK.Composition
                 {
                     if (frames == null)
                         return;
-                    long sourceTicks = media.SourceInTicks + (timeTicks - item.TimelineStartTicks);
+                    // elapsed timeline time consumes source time at the item's playback speed
+                    long elapsed = timeTicks - item.TimelineStartTicks;
+                    double speed = TimelineOps.SpeedOf(media);
+                    long sourceTicks = media.SourceInTicks +
+                        (speed == 1.0 ? elapsed : (long)Math.Round(elapsed * speed));
                     if (!frames.TryGetFrame(media.SourceId, media.StreamIndex, sourceTicks, out var frame)
                         || frame.Image == null)
                         return;

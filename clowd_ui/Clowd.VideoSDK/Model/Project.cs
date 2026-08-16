@@ -169,6 +169,8 @@ public sealed class Project
                         errors.Add($"Item {item.Id} references stream {media.StreamIndex} which source {media.SourceId} does not have.");
                     if (media.SourceInTicks < 0)
                         errors.Add($"Item {item.Id} has a negative source in-point ({media.SourceInTicks} ticks).");
+                    if (!(media.Speed > 0) || Double.IsInfinity(media.Speed))
+                        errors.Add($"Item {item.Id} has a non-positive playback speed ({media.Speed}).");
                     break;
 
                 default:

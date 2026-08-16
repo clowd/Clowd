@@ -906,10 +906,15 @@ namespace Clowd.UI.VideoEditor.Timeline
                 ? (double)stream.Width / stream.Height
                 : 16.0 / 9;
 
-            var tpp = _viewport.TicksPerPixel;
+            // a re-timed item (speed ≠ 1) covers DurationTicks * speed of SOURCE, and one screen
+            // pixel spans tpp * speed source ticks — all the strip math below runs in source time,
+            // so it uses the scaled tick-per-pixel throughout.
+            var speed = TimelineOps.SpeedOf(media);
+            var tpp = _viewport.TicksPerPixel * speed;
+            var sourceSpan = speed == 1.0 ? item.DurationTicks : (long)Math.Round(item.DurationTicks * speed);
             var naturalSlotPx = Math.Max(8, body.Height * aspect);
             var strip = _previewProvider.GetThumbnails(new ThumbnailRequest(media.SourceId, media.StreamIndex,
-                media.SourceInTicks, item.DurationTicks, (long)(naturalSlotPx * tpp), (int)Math.Round(body.Height)));
+                media.SourceInTicks, sourceSpan, (long)(naturalSlotPx * tpp), (int)Math.Round(body.Height)));
 
             var interval = Math.Max(1, strip.IntervalTicks);
             var slotWidth = interval / tpp;
@@ -1011,8 +1016,13 @@ namespace Clowd.UI.VideoEditor.Timeline
                 !cache.Matches(tpp, media.SourceInTicks, item.DurationTicks, bucketCount) ||
                 !cache.Complete)
             {
+                // the peaks are read in SOURCE time: a re-timed item's timeline bucket covers
+                // perBucket * speed of source, so bucket i lines up under the same x either way.
+                var speed = TimelineOps.SpeedOf(media);
+                var srcDuration = speed == 1.0 ? item.DurationTicks : (long)Math.Round(item.DurationTicks * speed);
+                var srcPerBucket = speed == 1.0 ? perBucket : Math.Max(1L, (long)Math.Round(perBucket * speed));
                 var peaks = _previewProvider.GetAudioPeaks(new AudioPeaksRequest(media.SourceId,
-                    media.StreamIndex, media.SourceInTicks, item.DurationTicks, perBucket));
+                    media.StreamIndex, media.SourceInTicks, srcDuration, srcPerBucket));
                 cache = WaveformCache.Build(peaks, tpp, media.SourceInTicks, item.DurationTicks,
                     bucketCount, perBucket, body.Height);
                 _waveforms[item.Id] = cache;

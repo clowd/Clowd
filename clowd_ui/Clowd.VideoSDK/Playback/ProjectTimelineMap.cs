@@ -26,23 +26,37 @@ namespace Clowd.VideoSDK.Playback
     /// </summary>
     internal sealed class ProjectTimelineMap
     {
-        /// <summary>One item's span: timeline [TlStart, TlEnd) filled from source [SrcIn, SrcEnd).</summary>
+        /// <summary>One item's span: timeline [TlStart, TlEnd) filled from source [SrcIn, SrcEnd),
+        /// consumed at <see cref="Speed"/> source ticks per timeline tick (1 = realtime).</summary>
         internal readonly struct Segment
         {
-            public Segment(long tlStart, long tlEnd, long srcIn)
+            public Segment(long tlStart, long tlEnd, long srcIn, double speed = 1.0)
             {
                 TlStart = tlStart;
                 TlEnd = tlEnd;
                 SrcIn = srcIn;
+                Speed = speed > 0 ? speed : 1.0;
             }
 
             public long TlStart { get; }
             public long TlEnd { get; }
             public long SrcIn { get; }
+            public double Speed { get; }
 
-            public long SrcEnd => SrcIn + (TlEnd - TlStart);
-            /// <summary>Source minus timeline: constant within the segment.</summary>
+            public long SrcEnd => SrcIn + ToSource(TlEnd - TlStart);
+
+            /// <summary>Source minus timeline at the segment's start. No longer the per-instant
+            /// offset once <see cref="Speed"/> ≠ 1 — it serves as the segment's identity for seam
+            /// detection (the player only ever compares it across instants), never arithmetic.</summary>
             public long Offset => SrcIn - TlStart;
+
+            /// <summary>A timeline span inside this segment, rendered into source ticks.</summary>
+            public long ToSource(long timelineTicks) =>
+                Speed == 1.0 ? timelineTicks : (long)Math.Round(timelineTicks * Speed);
+
+            /// <summary>A source span inside this segment, rendered into timeline ticks.</summary>
+            public long ToTimeline(long sourceTicks) =>
+                Speed == 1.0 ? sourceTicks : (long)Math.Round(sourceTicks / Speed);
         }
 
         /// <summary>The mapping for one (sourceId, streamIndex).</summary>
@@ -77,7 +91,7 @@ namespace Clowd.VideoSDK.Playback
                     if (tlTicks < seg.TlStart)
                         return seg.SrcIn; // before this segment (leading edge or a gap)
                     if (tlTicks < seg.TlEnd)
-                        return seg.SrcIn + (tlTicks - seg.TlStart);
+                        return seg.SrcIn + seg.ToSource(tlTicks - seg.TlStart);
                 }
 
                 // Past the last segment: clamp to the last KEPT source instant, not to SrcEnd.
@@ -99,7 +113,7 @@ namespace Clowd.VideoSDK.Playback
                 foreach (var seg in _segments)
                 {
                     if (srcTicks >= seg.SrcIn && srcTicks < seg.SrcEnd)
-                        return seg.TlStart + (srcTicks - seg.SrcIn);
+                        return seg.TlStart + seg.ToTimeline(srcTicks - seg.SrcIn);
                     if (seg.SrcEnd <= srcTicks && seg.SrcEnd > bestSrcEnd)
                     {
                         bestSrcEnd = seg.SrcEnd;
@@ -206,7 +220,7 @@ namespace Clowd.VideoSDK.Playback
                     var media = (MediaContent)item.Content;
                     var key = (media.SourceId, media.StreamIndex);
                     var segment = new Segment(item.TimelineStartTicks, item.TimelineEndTicks,
-                        media.SourceInTicks);
+                        media.SourceInTicks, TimelineOps.SpeedOf(media));
 
                     if (!videoSegments.TryGetValue(key, out var list))
                         videoSegments[key] = list = new List<Segment>();
