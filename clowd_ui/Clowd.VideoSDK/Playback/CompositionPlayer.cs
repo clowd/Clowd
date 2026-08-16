@@ -912,10 +912,13 @@ namespace Clowd.VideoSDK.Playback
                     }
                 }
 
-                // end of timeline (trailing trim never reaches file EOF), or end of all media.
+                // The timeline length is what ends playback: media running out says nothing about
+                // the timeline, because text/image items (which have no media pipeline at all) can
+                // outlast the last video frame and must keep playing to the project's end. Running
+                // out of media is only a fallback for a timeline of unknown length.
                 long dur = map?.DurationTicks ?? 0;
                 bool ended = dur > 0 && tl >= dur;
-                if (!ended && set != null && set.Files.Length > 0)
+                if (dur <= 0 && set != null && set.Files.Length > 0)
                 {
                     bool eof = true;
                     foreach (var file in set.Files)
