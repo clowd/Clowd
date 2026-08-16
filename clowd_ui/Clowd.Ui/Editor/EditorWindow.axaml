@@ -349,14 +349,16 @@
 
                 <!--  The vector/raster tool buttons are generated in code-behind (RebuildToolStrip)
                       and inserted at the front of this panel; the fixed Undo/Redo/customize
-                      buttons below always sit at the end of the strip.  -->
+                      buttons below dock to the bottom of the strip.  -->
 
                 <controls:ToolButton
+                    controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding ElementName=drawingCanvas, Path=CommandUndo, Mode=OneWay}"
                     IconPath="{StaticResource IconUndo}"
                     ToolTip.Tip="Undo (Ctrl+Z)" />
 
                 <controls:ToolButton
+                    controls:DockAndWrapPanel.DockToEnd="True"
                     Command="{Binding ElementName=drawingCanvas, Path=CommandRedo, Mode=OneWay}"
                     IconPath="{StaticResource IconRedo}"
                     ToolTip.Tip="Redo (Ctrl+Y)" />
