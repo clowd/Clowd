@@ -72,14 +72,17 @@ public static class TimelineOps
     {
         var item = Require(project, itemId);
         var media = item.Content as MediaContent;
+        var speed = SpeedOf(media);
 
         var maxShrink = item.DurationTicks - MinSegmentTicks;
         if (deltaTicks > maxShrink)
             deltaTicks = Math.Max(0, maxShrink);
 
+        // a timeline tick consumes `speed` source ticks, so the room before the source's start
+        // is SourceInTicks / speed timeline ticks (floored — never let rounding rewind past 0).
         var maxExtend = media == null
             ? item.TimelineStartTicks
-            : Math.Min(item.TimelineStartTicks, media.SourceInTicks);
+            : Math.Min(item.TimelineStartTicks, (long)Math.Floor(media.SourceInTicks / speed));
         if (deltaTicks < -maxExtend)
             deltaTicks = -maxExtend;
 
@@ -89,7 +92,7 @@ public static class TimelineOps
         item.TimelineStartTicks += deltaTicks;
         item.DurationTicks -= deltaTicks;
         if (media != null)
-            media.SourceInTicks += deltaTicks;
+            media.SourceInTicks = Math.Max(0, media.SourceInTicks + ToSourceTicks(deltaTicks, speed));
 
         return deltaTicks;
     }
@@ -117,7 +120,10 @@ public static class TimelineOps
             var streamDuration = StreamDurationOf(project, media);
             if (streamDuration > 0)
             {
-                var maxExtend = Math.Max(0, streamDuration - media.SourceInTicks - item.DurationTicks);
+                // remaining source, expressed in timeline ticks at the item's speed
+                var speed = SpeedOf(media);
+                var remainingTimeline = (long)Math.Floor((streamDuration - media.SourceInTicks) / speed);
+                var maxExtend = Math.Max(0, remainingTimeline - item.DurationTicks);
                 if (deltaTicks > maxExtend)
                     deltaTicks = maxExtend;
             }
@@ -210,7 +216,7 @@ public static class TimelineOps
 
             var content = m.Content?.Clone();
             if (content is MediaContent media)
-                media.SourceInTicks += leftLength;
+                media.SourceInTicks += ToSourceTicks(leftLength, SpeedOf(media));
 
             var right = new Item
             {
@@ -343,10 +349,57 @@ public static class TimelineOps
         a.TimelineStartTicks < b.TimelineEndTicks && b.TimelineStartTicks < a.TimelineEndTicks;
 
     /// <summary>Whether two items map source time to timeline time identically. Only media carries
-    /// such a mapping — text, images and solids have nothing to disagree about.</summary>
+    /// such a mapping — text, images and solids have nothing to disagree about. A re-timed item
+    /// (speed ≠ 1) never re-links: its clock has left the recording's for good.</summary>
     private static bool Aligned(Item a, Item b) =>
         a.Content is not MediaContent ma || b.Content is not MediaContent mb ||
-        a.TimelineStartTicks - ma.SourceInTicks == b.TimelineStartTicks - mb.SourceInTicks;
+        (SpeedOf(ma) == 1.0 && SpeedOf(mb) == 1.0 &&
+         a.TimelineStartTicks - ma.SourceInTicks == b.TimelineStartTicks - mb.SourceInTicks);
+
+    /// <summary>
+    /// Sets a media item's <see cref="MediaContent.Speed"/>, re-timing the clip in place: the item
+    /// keeps showing the same stretch of source, so its timeline duration scales by
+    /// <c>oldSpeed / newSpeed</c>, anchored at its start. The new duration is clamped to at least
+    /// <see cref="MinSegmentTicks"/> and to the gap before the next item on the track (slowing a
+    /// clip down must not run it into its neighbour — the content is end-trimmed instead). Single
+    /// item, media only; returns the speed actually stored (unchanged for non-media).
+    /// </summary>
+    public static double SetSpeed(Project project, Guid itemId, double speed)
+    {
+        var item = Require(project, itemId);
+        if (item.Content is not MediaContent media)
+            return 1.0;
+
+        speed = Math.Clamp(speed, 0.01, 100);
+        var oldSpeed = SpeedOf(media);
+        if (speed == oldSpeed)
+            return speed;
+
+        var sourceSpan = ToSourceTicks(item.DurationTicks, oldSpeed);
+        var newDuration = (long)Math.Round(sourceSpan / speed);
+
+        var limit = long.MaxValue;
+        foreach (var other in project.Items)
+        {
+            if (other.Id != item.Id && other.TrackId == item.TrackId &&
+                other.TimelineStartTicks > item.TimelineStartTicks)
+                limit = Math.Min(limit, other.TimelineStartTicks - item.TimelineStartTicks);
+        }
+
+        media.Speed = speed;
+        item.DurationTicks = Math.Clamp(newDuration, MinSegmentTicks, Math.Max(MinSegmentTicks, limit));
+        return speed;
+    }
+
+    /// <summary>The item's playback speed with the model's "unset means realtime" collapsed:
+    /// always a positive factor, 1.0 for null media.</summary>
+    public static double SpeedOf(MediaContent media) =>
+        media != null && media.Speed > 0 ? media.Speed : 1.0;
+
+    /// <summary>A timeline span rendered into source ticks at <paramref name="speed"/> — exact
+    /// for realtime so speed-1 projects keep their integer-perfect maths.</summary>
+    private static long ToSourceTicks(long timelineTicks, double speed) =>
+        speed == 1.0 ? timelineTicks : (long)Math.Round(timelineTicks * speed);
 
     private static bool Covers(Item item, long timelineTicks) =>
         timelineTicks >= item.TimelineStartTicks && timelineTicks < item.TimelineEndTicks;

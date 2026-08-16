@@ -275,6 +275,15 @@
                     </StackPanel>
                 </DockPanel>
 
+                <!--  playback speed: media rows only, and only once desynced — a linked segment
+                      keeps the recording's clock (see SelectedItemViewModel.ShowSpeed). Sits
+                      under the title because it re-times the whole clip, not one property.  -->
+                <DockPanel Classes="row" IsVisible="{Binding ShowSpeed}">
+                    <Panel Classes="dot" DockPanel.Dock="Left" />
+                    <TextBlock Classes="label" Text="Speed" />
+                    <controls:DropDownButton x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
+                </DockPanel>
+
                 <!--  synced-object banner: shown only while the row still moves with its recording.
                       An unsynced row shows nothing at all — "not linked" is the unremarkable state.  -->
                 <Border
