@@ -7,16 +7,11 @@ license.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
-# What the Rust binaries genuinely share: the coordinate space they all speak,
-# the `session.json` contract they all write, the exit codes the shell reads
-# from them, and the crash-reporting setup that puts them in one Sentry
-# project under one release. Nothing that belongs to a single binary lives
-# here — no overlay state, no scrolling logic.
-#
-# `app.manifest` sits here too. It is not Rust, but it is shared in exactly
-# the same sense: it is what makes a process per-monitor DPI aware, and a copy
-# that drifted would silently make one binary photograph the wrong pixels.
-# Each binary's own build.rs embeds it (see clowd_capture/build.rs).
+# Only what the Rust binaries genuinely share: the coordinate space, the session.json
+# contract, the exit codes the shell reads, and the Sentry setup that puts them all in one
+# project under one release.
+# app.manifest sits here for the same reason — it is what makes a process per-monitor DPI
+# aware, and a drifted copy would silently make one binary photograph the wrong pixels.
 
 [dependencies]
 anyhow.workspace = true
