@@ -82,6 +82,39 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Rate_scales_wall_time_and_rebases_when_it_changes()
+        {
+            var time = new FakeTime();
+            var clock = new PlaybackClock(time) { Rate = 2.0 };
+
+            clock.Start();
+            time.Advance(1);
+            Assert.Equal(TimeSpan.FromSeconds(2), clock.Position);
+
+            // the change must not move the playhead — only what happens after it.
+            clock.Rate = 0.5;
+            Assert.Equal(TimeSpan.FromSeconds(2), clock.Position);
+            time.Advance(2);
+            Assert.Equal(TimeSpan.FromSeconds(3), clock.Position);
+        }
+
+        [Fact]
+        public void Rate_scales_the_audio_interpolation_lead()
+        {
+            // the audio master reports media time already (the sink applies the speed to its own
+            // mapping); only the wall time carried between its updates needs scaling.
+            var time = new FakeTime();
+            var audio = new FakeAudio { HasTiming = true, PlayedTime = TimeSpan.FromSeconds(1) };
+            var clock = new PlaybackClock(time) { Rate = 2.0 };
+            clock.SetAudioSource(audio);
+            clock.Start();
+
+            Assert.Equal(TimeSpan.FromSeconds(1), clock.Position);
+            time.Advance(0.005);
+            Assert.Equal(TimeSpan.FromSeconds(1.01), clock.Position);
+        }
+
+        [Fact]
         public void Audio_master_wins_when_it_has_timing()
         {
             var time = new FakeTime();

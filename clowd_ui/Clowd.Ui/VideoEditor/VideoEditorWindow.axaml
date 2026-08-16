@@ -27,6 +27,60 @@
               lives in ToolButton.axaml, which is merged into the app resources at runtime.  -->
         <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
 
+        <!--  The playback-speed picker: a ToolButton is icon-only, and this one has to show which
+              speed is active, so it is a labelled button wearing the same transparent fill and
+              white hover veil as the transport buttons beside it.  -->
+        <ControlTheme x:Key="SpeedButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="54" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Rectangle Name="_bg" Fill="{TemplateBinding Background}" />
+                        <StackPanel
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="5">
+                            <ContentPresenter VerticalAlignment="Center" Content="{TemplateBinding Content}" />
+                            <Path
+                                Width="8"
+                                Height="5"
+                                VerticalAlignment="Center"
+                                Data="M0,0 L8,0 L4,5 Z"
+                                Fill="{TemplateBinding Foreground}"
+                                Stretch="None" />
+                        </StackPanel>
+                        <Rectangle Name="_hover" Fill="#33FFFFFF">
+                            <Rectangle.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                                </Transitions>
+                            </Rectangle.Transitions>
+                        </Rectangle>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^ /template/ Rectangle#_hover">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Rectangle#_hover">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:pressed /template/ Rectangle#_hover">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.5" />
+            </Style>
+        </ControlTheme>
+
         <!--  Render is the window's primary action, so it is a labelled accent button rather than
               another 30x30 icon. It stays a ToolButton to keep the progress ring the code-behind
               drives (btnRender.Progress / ShowProgress), drawn here in place of the icon.  -->
@@ -379,12 +433,22 @@
                         IconPath="{StaticResource IconFrameNext}"
                         ToolTip.Tip="Next frame (Right)" />
 
+                    <!--  the extra top margin is an optical centering nudge: digits have no
+                          descenders, so centering the font's full line box (ascent + a descent
+                          nothing here uses) leaves the readout visibly riding high next to the
+                          30x30 buttons.  -->
                     <TextBlock
                         x:Name="txtPosition"
-                        Margin="10,0"
+                        Margin="10,2,6,0"
                         VerticalAlignment="Center"
                         FontFamily="Consolas,Cascadia Mono,monospace"
                         Text="00:00.0 / 00:00.0" />
+
+                    <Button
+                        x:Name="btnSpeed"
+                        Content="1x"
+                        Theme="{StaticResource SpeedButtonTheme}"
+                        ToolTip.Tip="Playback speed" />
 
                     <controls:ToolButton
                         x:Name="btnSplit"

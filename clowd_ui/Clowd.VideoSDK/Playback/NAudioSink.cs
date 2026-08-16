@@ -18,10 +18,14 @@ namespace Clowd.VideoSDK.Playback
         private readonly int _sampleRate;
         private readonly int _channels;
         private readonly IAudioOutput _out;
-        private long _consumedFrames;              // media frames delivered to the device
+        private long _consumedFrames;              // device frames delivered to the device
         private long _basePtsTicks = long.MinValue; // long.MinValue = no timing yet
         private long _underrunSamples;
         private float _volume = 1.0f;
+        // playback speed of the samples in the ring: the producer resamples so one device frame
+        // carries this much media time (see AudioMixWorker). Only ever changed together with a
+        // timing reset, so base pts and consumed frames always describe one mapping.
+        private double _speed = 1.0;
         private bool _disposed;
 
         /// <param name="output">Audio backend; null picks the platform default. Injected by tests
@@ -48,9 +52,10 @@ namespace Clowd.VideoSDK.Playback
                 if (baseTicks == long.MinValue)
                     return TimeSpan.Zero;
                 long frames = Interlocked.Read(ref _consumedFrames);
+                double speed = Volatile.Read(ref _speed);
                 long ticks = baseTicks
-                             + (long)(frames * (double)TimeSpan.TicksPerSecond / _sampleRate)
-                             - LatencyMs * TimeSpan.TicksPerMillisecond;
+                             + (long)(frames * speed * TimeSpan.TicksPerSecond / _sampleRate)
+                             - (long)(LatencyMs * TimeSpan.TicksPerMillisecond * speed);
                 if (ticks < baseTicks)
                     ticks = baseTicks;
                 return new TimeSpan(ticks);
@@ -85,8 +90,14 @@ namespace Clowd.VideoSDK.Playback
 
         /// <summary>Called by the audio decode thread after a flush: timing restarts from the
         /// first sample written after the seek.</summary>
-        public void ResetTiming()
+        public void ResetTiming() => ResetTiming(Volatile.Read(ref _speed));
+
+        /// <summary>The flush form the producer uses when it also changes playback speed: the new
+        /// media-time-per-device-frame mapping takes effect with the first sample of the flushed
+        /// stream, so <see cref="PlayedTime"/> never mixes two mappings.</summary>
+        public void ResetTiming(double speed)
         {
+            Volatile.Write(ref _speed, speed);
             Interlocked.Exchange(ref _basePtsTicks, long.MinValue);
             Interlocked.Exchange(ref _consumedFrames, 0);
         }
