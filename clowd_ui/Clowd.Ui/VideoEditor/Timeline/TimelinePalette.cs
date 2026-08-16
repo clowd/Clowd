@@ -121,8 +121,21 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Accent the selection (and the header's active row) is drawn in.</summary>
         public Color SelectionAccent { get; private init; }
 
-        /// <summary>Trim grips at the edges of the selected item.</summary>
-        public IBrush TrimGripBrush { get; private init; }
+        /// <summary>Body of a trim handle on a merely hovered item — a translucent white slab, so
+        /// the item's own fill still reads through and the handle does not claim the item is
+        /// selected.</summary>
+        public IBrush TrimHandleHoverFill { get; private init; }
+
+        /// <summary>The two grip lines inside a hovered handle. Dark, because the hover slab is
+        /// light whatever the theme.</summary>
+        public IBrush TrimHandleHoverLine { get; private init; }
+
+        /// <summary>Body of a trim handle on the selected item — the selection accent, so the
+        /// handles read as part of the selection border rather than as separate chrome.</summary>
+        public IBrush TrimHandleActiveFill { get; private init; }
+
+        /// <summary>The two grip lines inside a selected handle, over the accent slab.</summary>
+        public IBrush TrimHandleActiveLine { get; private init; }
 
         /// <summary>Hover highlight laid over an item body.</summary>
         public IBrush HoverOverlay { get; private init; }
@@ -198,7 +211,10 @@ namespace Clowd.UI.VideoEditor.Timeline
 
                 SelectionAccent = accent,
                 SelectionPen = new Pen(new SolidColorBrush(accent), 2),
-                TrimGripBrush = new SolidColorBrush(dark ? Color.FromRgb(240, 240, 240) : Colors.White, 0.9),
+                TrimHandleHoverFill = new SolidColorBrush(Colors.White, 0.65),
+                TrimHandleHoverLine = new SolidColorBrush(Color.FromRgb(20, 22, 26), 0.85),
+                TrimHandleActiveFill = new SolidColorBrush(accent),
+                TrimHandleActiveLine = new SolidColorBrush(Colors.White, 0.95),
                 HoverOverlay = new SolidColorBrush(dark ? Colors.White : Colors.Black, 0.08),
                 DimFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.5),
                 HatchPen = new Pen(new SolidColorBrush(dark ? Colors.White : Colors.Black, 0.18), 1),
