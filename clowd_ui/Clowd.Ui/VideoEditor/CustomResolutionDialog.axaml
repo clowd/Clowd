@@ -1,0 +1,74 @@
+<Window
+    x:Class="Clowd.UI.VideoEditor.CustomResolutionDialog"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    Title="Custom resolution"
+    Width="360"
+    Background="{DynamicResource ApplicationBackgroundBrush}"
+    CanResize="False"
+    ShowInTaskbar="False"
+    SizeToContent="Height"
+    WindowStartupLocation="CenterOwner">
+
+    <DockPanel LastChildFill="True">
+
+        <!--  button strip  -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource SemiColorFill0}">
+            <DockPanel Margin="16,10" LastChildFill="False">
+                <StackPanel
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button
+                        x:Name="OkButton"
+                        MinWidth="80"
+                        HorizontalContentAlignment="Center"
+                        Classes="Primary"
+                        Content="Set"
+                        IsDefault="True"
+                        Theme="{StaticResource SolidButton}" />
+                    <Button
+                        x:Name="CancelButton"
+                        MinWidth="80"
+                        HorizontalContentAlignment="Center"
+                        Content="Cancel"
+                        IsCancel="True" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <StackPanel Margin="16,18,16,16" Spacing="12">
+            <TextBlock
+                FontSize="13"
+                Text="The output canvas the edit is composed into. Sizes are rounded down to an even number of pixels, which is what the encoder accepts."
+                TextWrapping="Wrap" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock
+                    Width="46"
+                    VerticalAlignment="Center"
+                    Text="Width:" />
+                <controls:SpinnerTextBox
+                    x:Name="WidthBox"
+                    Width="90"
+                    SnapToWholeNumber="True"
+                    SpinAmount="2"
+                    Suffix="px" />
+                <TextBlock
+                    Margin="8,0,0,0"
+                    Width="46"
+                    VerticalAlignment="Center"
+                    Text="Height:" />
+                <controls:SpinnerTextBox
+                    x:Name="HeightBox"
+                    Width="90"
+                    SnapToWholeNumber="True"
+                    SpinAmount="2"
+                    Suffix="px" />
+            </StackPanel>
+        </StackPanel>
+
+    </DockPanel>
+
+</Window>

@@ -29,6 +29,7 @@ namespace Clowd.UI.Controls
             Add(app, "CaptureToolButton");
             Add(app, "SpinnerTextBox");
             Add(app, "DropDownButton");
+            Add(app, "CaptionedCheckBox");
         }
 
         private static void Add(Application app, string name)

@@ -163,27 +163,12 @@
                         <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
                     </Border>
                 </Border>
-                <StackPanel
-                    Height="20"
+                <controls:CaptionedCheckBox
+                    x:Name="chkColorAuto"
                     Margin="4,0,0,0"
-                    VerticalAlignment="Center"
-                    IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoColor}"
-                    Orientation="Vertical">
-                    <Viewbox Width="10" Height="10">
-                        <CheckBox
-                            x:Name="chkColorAuto"
-                            Margin="0"
-                            Padding="0"
-                            HorizontalAlignment="Center"
-                            MinWidth="0"
-                            MinHeight="0"
-                            IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectColorAuto, Mode=TwoWay}" />
-                    </Viewbox>
-                    <TextBlock
-                        HorizontalAlignment="Center"
-                        FontSize="8"
-                        Text="Auto" />
-                </StackPanel>
+                    Caption="Auto"
+                    IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectColorAuto, Mode=TwoWay}"
+                    IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=AutoColor}" />
             </StackPanel>
 
             <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Font}">
