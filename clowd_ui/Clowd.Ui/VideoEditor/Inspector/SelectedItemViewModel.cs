@@ -653,81 +653,40 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>
-        /// Writes the selected tile + fit mode into the model. Fill computes a centred crop that
-        /// brings the picture to the target ratio (and drops any stretch); Stretch clears the crop
-        /// and sets an explicit height instead; no tile clears both — back to the native picture.
-        /// Everything an aspect choice writes lives on the transform, so it fans out over the
-        /// linked row like every other placement edit.
+        /// Writes the selected tile + fit mode into the model — always onto
+        /// <see cref="Transform.Aspect"/>/<see cref="Transform.AspectStretch"/>, never the crop:
+        /// the composer resolves the ratio itself (see <c>AspectMath</c>), and the crop fields stay
+        /// whatever the user cut, applied after the ratio. Unlocked instead trades the ratio for an
+        /// explicit height; Original clears everything ratio-shaped and nothing else.
         /// </summary>
         private void ApplyAspect()
         {
-            // Unlocked: give the item an explicit height seeded from what it is drawn at right
-            // now, so the picture does not move — the point is the free edge handles, not a jump.
-            // The crop is left alone; free sizing and cropping are orthogonal.
             if (_aspectTile == AspectTile.Unlocked)
             {
-                // per item, not per row: linked segments share the transform's numbers but each
+                // an explicit height seeded from what the item is drawn at right now, so the
+                // picture does not move — the point is the free edge handles, not a jump. Read
+                // BEFORE the aspect is cleared: the seed is the drawn (aspect-shaped) height.
+                // Per item, not per row: linked segments share the transform's numbers but each
                 // resolves its own content aspect.
-                EditRow("sel:aspect", i => TransformOf(i).ScaleY = CurrentHeightFraction(i), origin: null);
+                EditRow("sel:aspect", i =>
+                {
+                    var height = CurrentHeightFraction(i);
+                    var t = TransformOf(i);
+                    t.ScaleY = height;
+                    t.Aspect = null;
+                    t.AspectStretch = false;
+                }, origin: null);
                 return;
             }
 
             var ratio = SelectedAspectRatio();
-            if (ratio is not > 0)
-            {
-                EditRow("sel:aspect", i =>
-                {
-                    var t = TransformOf(i);
-                    t.Crop = null;
-                    t.ScaleY = null;
-                }, origin: null);
-                return;
-            }
-
-            if (_aspectStretch)
-            {
-                var output = _session?.Project?.Output;
-                double canvasW = output?.WidthPx ?? 0;
-                double canvasH = output?.HeightPx ?? 0;
-                if (!(canvasW > 0) || !(canvasH > 0))
-                    return;
-
-                EditRow("sel:aspect", i =>
-                {
-                    var t = TransformOf(i);
-                    t.Crop = null;
-                    t.ScaleY = Clamp(t.Scale * canvasW / (ratio.Value * canvasH), MinScale, MaxScale);
-                }, origin: null);
-                return;
-            }
-
+            var stretch = _aspectStretch;
             EditRow("sel:aspect", i =>
             {
-                // per item, not per row: linked segments share the transform's numbers but each
-                // resolves its own source dimensions.
-                var contentAspect = ItemPlacement.UncroppedContentAspect(_session.Project, i);
-                if (contentAspect is not > 0)
-                    return;
-
                 var t = TransformOf(i);
                 t.ScaleY = null;
-
-                var contentRatio = 1 / contentAspect.Value; // width/height
-                if (Math.Abs(contentRatio - ratio.Value) / ratio.Value < AspectMatchTolerance)
-                {
-                    t.Crop = null; // already the target ratio — one representation for "no crop"
-                }
-                else if (contentRatio > ratio.Value)
-                {
-                    // wider than the target: shave the sides
-                    var inset = (1 - ratio.Value / contentRatio) / 2;
-                    t.Crop = new CropRect { Left = inset, Right = inset };
-                }
-                else
-                {
-                    var inset = (1 - contentRatio / ratio.Value) / 2;
-                    t.Crop = new CropRect { Top = inset, Bottom = inset };
-                }
+                t.Aspect = ratio is > 0 ? ratio : null;
+                t.AspectStretch = ratio is > 0 && stretch;
             }, origin: null);
         }
 
@@ -759,12 +718,11 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>
-        /// Reads the tile selection back out of the model: an explicit height means Unlocked or a
-        /// Stretch preset (its box ratio decides), a crop means a Fill preset (the cropped
-        /// picture's ratio likewise), nothing means Original. The current tile is <b>sticky</b>
-        /// where ratios are ambiguous: Custom keeps its selection even when its ratio equals a
-        /// preset's, and Unlocked keeps it whatever ratio the free handles landed on — the user's
-        /// choice of tile is state worth honouring, not something to re-guess on every read.
+        /// Reads the tile selection straight out of the model: an explicit height is Unlocked
+        /// (free sizing, whatever ratio it happens to be at), a stored <see cref="Transform.Aspect"/>
+        /// selects its preset — or Custom, which is <b>sticky</b> when its ratio equals a preset's
+        /// (the user's tile choice is honoured, not re-guessed) — and nothing means Original.
+        /// A hand-made crop never lights a tile: the crop is the user's, applied after the ratio.
         /// </summary>
         private void SyncAspect(Item item)
         {
@@ -772,27 +730,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             var stretch = _aspectStretch;
 
             var transform = item?.Transform;
-            var output = _session?.Project?.Output;
-            double canvasW = output?.WidthPx ?? 0;
-            double canvasH = output?.HeightPx ?? 0;
-
-            if (transform?.ScaleY is > 0 && transform.Scale > 0 && canvasW > 0 && canvasH > 0)
+            if (transform?.ScaleY != null)
             {
-                stretch = true;
-                tile = _aspectTile == AspectTile.Unlocked
-                    ? AspectTile.Unlocked
-                    : MatchAspectTile(transform.Scale * canvasW / (transform.ScaleY.Value * canvasH),
-                        fallback: AspectTile.Unlocked);
+                tile = AspectTile.Unlocked;
             }
-            else if (transform?.Crop != null &&
-                     ItemPlacement.UncroppedContentAspect(_session?.Project, item) is > 0 and var contentAspect)
+            else if (transform?.Aspect is > 0 and var ratio)
             {
-                stretch = false;
-                var crop = transform.Crop;
-                double w = 1 - crop.Left - crop.Right;
-                double h = 1 - crop.Top - crop.Bottom;
-                if (w > 0 && h > 0)
-                    tile = MatchAspectTile((1 / contentAspect) * w / h, fallback: AspectTile.Original);
+                stretch = transform.AspectStretch;
+                tile = MatchAspectTile(ratio, fallback: AspectTile.Custom);
+
+                // a stored ratio the Custom spinners do not currently show (a reloaded project,
+                // say): make the Custom row tell the truth about what is applied
+                if (tile == AspectTile.Custom && !CustomMatches(ratio))
+                {
+                    Set(ref _customAspectW, Math.Round(ratio, 2), nameof(CustomAspectW));
+                    Set(ref _customAspectH, 1, nameof(CustomAspectH));
+                }
             }
             else
             {

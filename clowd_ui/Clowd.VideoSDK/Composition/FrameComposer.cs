@@ -135,30 +135,23 @@ namespace Clowd.VideoSDK.Composition
             if (imgW <= 0 || imgH <= 0)
                 return;
 
-            // Crop insets are fractions of the source picture, applied before Scale.
-            double cl = 0, ct = 0, cr = 0, cb = 0;
-            if (transform.Crop is { } crop)
-            {
-                cl = Clamp01(crop.Left);
-                ct = Clamp01(crop.Top);
-                cr = Clamp01(crop.Right);
-                cb = Clamp01(crop.Bottom);
-                if (cl + cr >= 1 || ct + cb >= 1)
-                    return; // cropped to nothing
-            }
+            // The displayed source region: the aspect ratio's own crop (fill) combined with the
+            // user's crop on top of it — one resolver shared with the editor's placement math.
+            var (cl, ct, cr, cb) = AspectMath.SourceInsets(transform, imgW, imgH);
+            if (cl + cr >= 1 || ct + cb >= 1)
+                return; // cropped to nothing
 
             var src = new SKRect(
                 (float)(cl * imgW), (float)(ct * imgH),
                 (float)((1 - cr) * imgW), (float)((1 - cb) * imgH));
 
-            // Scale = width fraction of the canvas; height follows the (cropped) content aspect,
-            // unless the user unlocked the aspect ratio and gave the height its own fraction.
-            double croppedW = imgW * (1 - cl - cr);
-            double croppedH = imgH * (1 - ct - cb);
+            // Scale = width fraction of the canvas; height follows the displayed aspect (the
+            // region's own ratio, or the stretch target), unless an explicit height overrides it.
             double destW = transform.Scale * canvasWidth;
             double destH = transform.ScaleY is { } scaleY
                 ? scaleY * canvasHeight
-                : destW * croppedH / croppedW;
+                : destW * (AspectMath.DisplayAspect(transform, imgW, imgH)
+                           ?? (imgH * (1 - ct - cb)) / (imgW * (1 - cl - cr)));
 
             var rect = PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
             if (rect.Width <= 0 || rect.Height <= 0)
