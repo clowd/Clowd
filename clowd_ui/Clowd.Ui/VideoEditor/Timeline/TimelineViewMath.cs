@@ -29,8 +29,14 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// frame of 60 fps material is already ~166 px wide here.</summary>
         public const double MinTicksPerPixel = TimeSpan.TicksPerMillisecond / 10.0;
 
-        /// <summary>Zoom used when the timeline has no duration to fit yet: 1 second per 100 px.</summary>
-        public const double DefaultTicksPerPixel = TimeSpan.TicksPerSecond / 100.0;
+        /// <summary>Absolute zoom-out backstop, used only while the duration or the viewport width
+        /// is still unknown — once both are known the ceiling is the fit zoom (see
+        /// <see cref="ClampZoom"/>), which is always tighter for a real project.</summary>
+        public const double MaxTicksPerPixel = TimeSpan.TicksPerSecond * 60.0;
+
+        /// <summary>The zoom the editor opens at, and the one the reset-zoom button returns to:
+        /// one second per 50 px.</summary>
+        public const double DefaultTicksPerPixel = TimeSpan.TicksPerSecond / 50.0;
 
         /// <summary>How far past the end of the timeline the view may scroll, so the last item's
         /// end edge is grabbable instead of being pinned against the right border.</summary>
@@ -101,25 +107,30 @@ namespace Clowd.UI.VideoEditor.Timeline
             return (long)Math.Round(anchorTicks - anchorX * newTicksPerPixel);
         }
 
-        /// <summary>The zoom at which the whole timeline exactly fills the viewport — the
-        /// zoomed-out limit. Falls back to <see cref="DefaultTicksPerPixel"/> while the duration or
-        /// the viewport width is still unknown.</summary>
+        /// <summary>The zoom at which the whole timeline exactly fills the viewport — what the
+        /// zoom-to-fit button asks for, and the zoom-out limit. Falls back to
+        /// <see cref="MaxTicksPerPixel"/> while the duration or the viewport width is still
+        /// unknown.</summary>
         public static double FitTicksPerPixel(long durationTicks, double viewportWidth)
         {
             if (durationTicks <= 0 || !(viewportWidth > 0))
-                return DefaultTicksPerPixel;
+                return MaxTicksPerPixel;
 
-            return Math.Max(MinTicksPerPixel, durationTicks / viewportWidth);
+            return Math.Clamp(durationTicks / viewportWidth, MinTicksPerPixel, MaxTicksPerPixel);
         }
 
-        /// <summary>Clamps a zoom to <c>[<see cref="MinTicksPerPixel"/>, fit-whole-duration]</c>:
-        /// the user can never zoom out past the whole project, nor in past 0.1 ms/px. A
-        /// non-positive (or NaN) input resolves to the fit zoom.</summary>
+        /// <summary>
+        /// Clamps a zoom to <c>[<see cref="MinTicksPerPixel"/>, fit-whole-duration]</c>: the user
+        /// can never zoom out far enough to leave dead space past the end of the project, nor in
+        /// past 0.1 ms/px. A non-positive (or NaN) input resolves to
+        /// <see cref="DefaultTicksPerPixel"/>, itself capped at the fit zoom — a project shorter
+        /// than one screenful at the default scale opens fitted rather than trailing empty space.
+        /// </summary>
         public static double ClampZoom(double ticksPerPixel, long durationTicks, double viewportWidth)
         {
             var fit = FitTicksPerPixel(durationTicks, viewportWidth);
             if (!(ticksPerPixel > 0))
-                return fit;
+                ticksPerPixel = DefaultTicksPerPixel;
 
             return Math.Clamp(ticksPerPixel, MinTicksPerPixel, Math.Max(MinTicksPerPixel, fit));
         }
