@@ -401,7 +401,6 @@ namespace Clowd.UI.VideoEditor
                 CommandRedo.RaiseCanExecuteChanged();
             };
             _editor.SelectionChanged += Editor_SelectionChanged;
-            _editor.ValidationFailed += Editor_ValidationFailed;
             CommandUndo.RaiseCanExecuteChanged();
             CommandRedo.RaiseCanExecuteChanged();
 
@@ -597,15 +596,6 @@ namespace Clowd.UI.VideoEditor
         {
             _emptyEditShown = true;
             ShowStatus(EmptyEditMessage);
-        }
-
-        /// <summary>A mutation validation rolled back leaves the model exactly as it was — which,
-        /// with no notice, is indistinguishable from a dead key (a Delete whose ripple would land
-        /// items on top of each other does nothing at all). Say what was refused.</summary>
-        private void Editor_ValidationFailed(object sender, ValidationFailureEventArgs e)
-        {
-            if (!_closing)
-                Toast.Show(this, $"Couldn't {e.Operation.ToLowerInvariant()} here — it would leave items overlapping, so nothing was changed.");
         }
 
         private void Player_PositionChanged(object sender, EventArgs e)
