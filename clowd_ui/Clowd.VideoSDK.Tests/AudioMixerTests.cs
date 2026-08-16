@@ -332,5 +332,74 @@ namespace Clowd.VideoSDK.Tests
             var mixer = new AudioMixer(project, new FakeAudioSource());
             Assert.Throws<ArgumentOutOfRangeException>(() => mixer.MixChunk(0, 100, new float[10]));
         }
+
+        // ------------------------------------------------------------------- playback speed
+
+        /// <summary>Encodes its own position into each sample (scaled so the mixer's [-1,1]
+        /// clamp never bites) — output values reveal exactly which source frame was read.</summary>
+        private sealed class PositionalSource : IAudioSource
+        {
+            public const float Scale = 1e-6f;
+
+            public readonly List<(long Pos, int Frames)> Requests = new List<(long, int)>();
+
+            public bool ReadSamples(Guid sourceId, int streamIndex, long sourcePosFrames,
+                float[] dst, int frames, out int framesRead)
+            {
+                Requests.Add((sourcePosFrames, frames));
+                for (int f = 0; f < frames; f++)
+                {
+                    float v = (sourcePosFrames + f) * Scale;
+                    dst[f * 2] = v;
+                    dst[f * 2 + 1] = v;
+                }
+                framesRead = frames;
+                return true;
+            }
+        }
+
+        [Fact]
+        public void Speed_maps_output_frames_to_scaled_source_positions()
+        {
+            var project = NewProject();
+            var item = AddAudioItem(project, Guid.NewGuid(), 0, Second / 4);
+            ((MediaContent)item.Content).Speed = 2.0;
+
+            var source = new PositionalSource();
+            var mixer = new AudioMixer(project, source);
+
+            var dst = Mix(mixer, 0, 1000);
+            for (int s = 0; s < 1000; s += 97)
+                Assert.Equal(2.0 * s * PositionalSource.Scale, dst[s * 2], 1e-9);
+
+            // the next chunk continues the 2x mapping without re-reading anything
+            dst = Mix(mixer, 1000, 1000);
+            for (int s = 0; s < 1000; s += 97)
+                Assert.Equal(2.0 * (1000 + s) * PositionalSource.Scale, dst[s * 2], 1e-9);
+
+            // the forward-only contract holds: requests never rewind or overlap
+            long nextPos = 0;
+            foreach (var (pos, frames) in source.Requests)
+            {
+                Assert.True(pos >= nextPos, $"request at {pos} rewound before {nextPos}");
+                nextPos = pos + frames;
+            }
+        }
+
+        [Fact]
+        public void Speed_interpolates_between_source_frames()
+        {
+            var project = NewProject();
+            var item = AddAudioItem(project, Guid.NewGuid(), 0, Second);
+            ((MediaContent)item.Content).Speed = 0.5;
+
+            var mixer = new AudioMixer(project, new PositionalSource());
+
+            // half speed: output frame s sits at source position s/2 — odd frames land exactly
+            // between two source frames and read their midpoint.
+            var dst = Mix(mixer, 0, 100);
+            for (int s = 0; s < 100; s++)
+                Assert.Equal(0.5 * s * PositionalSource.Scale, dst[s * 2], 1e-9);
+        }
     }
 }

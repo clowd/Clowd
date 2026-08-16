@@ -876,5 +876,49 @@ namespace Clowd.VideoSDK.Tests
             session.EditItem(screen.Id, i => i.Transform.X = 0.7, origin: null);
             Assert.False(vm.HasSelection);
         }
+
+        // ---------------------------------------------------------------------- playback speed
+
+        [Fact]
+        public void Speed_ShownOnlyForDesyncedMedia()
+        {
+            var (session, vm) = NewInspector(out var screen, out _, out _, out var audio, out var text);
+
+            // linked media: the row still moves with its recording, so no speed control
+            session.Select(screen.Id);
+            Assert.False(vm.ShowSpeed);
+
+            // a text card has no source clock at all
+            session.Select(text.Id);
+            Assert.False(vm.ShowSpeed);
+
+            // desyncing the audio row exposes it (audio and video alike)
+            session.UnlinkTrack(session.Project.Items.First(i => i.Id == audio.Id).TrackId, null);
+            session.Select(audio.Id);
+            Assert.True(vm.ShowSpeed);
+            Assert.Equal(1.0, vm.SpeedChoice.Value);
+        }
+
+        [Fact]
+        public void Speed_WritesThroughTheSessionAndRetimes()
+        {
+            var (session, vm) = NewInspector(out var screen, out _, out _, out _, out _);
+            session.UnlinkTrack(screen.TrackId, null);
+            session.Select(screen.Id);
+
+            var twoX = SelectedItemViewModel.SpeedOptions.First(o => o.Value == 2.0);
+            vm.SpeedChoice = twoX;
+
+            var live = Live(session, screen.Id);
+            Assert.Equal(2.0, ((MediaContent)live.Content).Speed);
+            Assert.Equal(Ms(5_000), live.DurationTicks); // 10s of source at 2x
+            Assert.Equal(2.0, vm.SpeedChoice.Value);
+
+            // undo restores both the speed and the clip's timeline length, and the view model
+            // re-reads it (origin null on the write)
+            session.Undo();
+            Assert.Equal(1.0, vm.SpeedChoice.Value);
+            Assert.Equal(Ms(10_000), Live(session, screen.Id).DurationTicks);
+        }
     }
 }
