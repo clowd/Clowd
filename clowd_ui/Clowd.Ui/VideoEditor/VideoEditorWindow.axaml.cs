@@ -120,6 +120,8 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandPlayPause { get; }
         public RelayCommand CommandStepBack { get; }
         public RelayCommand CommandStepForward { get; }
+        public RelayCommand CommandJumpStart { get; }
+        public RelayCommand CommandJumpEnd { get; }
         public RelayCommand CommandSplit { get; }
         public RelayCommand CommandUndo { get; }
         public RelayCommand CommandRedo { get; }
@@ -152,6 +154,8 @@ namespace Clowd.UI.VideoEditor
             CommandPlayPause = new RelayCommand { Executed = _ => TogglePlayPause(), Text = "Play/Pause" };
             CommandStepBack = new RelayCommand { Executed = _ => StepFrame(-1), Text = "Previous frame" };
             CommandStepForward = new RelayCommand { Executed = _ => StepFrame(1), Text = "Next frame" };
+            CommandJumpStart = new RelayCommand { Executed = _ => JumpToStart(), Text = "Jump to start" };
+            CommandJumpEnd = new RelayCommand { Executed = _ => JumpToEnd(), Text = "Jump to end" };
             CommandSplit = new RelayCommand { Executed = _ => SplitAtPlayhead(), Text = "_Split Every Track at Playhead", Gesture = new SimpleKeyGesture(Key.K, KeyModifiers.Control) };
             CommandUndo = new RelayCommand
             {
@@ -693,6 +697,14 @@ namespace Clowd.UI.VideoEditor
             _ = _player.StepFrameAsync(direction);
         }
 
+        /// <summary>Playhead to the first frame. Playback is left running — the same as the Home
+        /// key, which these buttons mirror.</summary>
+        private void JumpToStart() => SeekTo(0);
+
+        /// <summary>Playhead to the end of the timeline (the whole project's, so text or images
+        /// running past the last video frame are included).</summary>
+        private void JumpToEnd() => SeekTo(_editor?.DurationTicks ?? 0);
+
         private void SeekTo(long ticks)
         {
             if (!PlayerReady)
@@ -921,11 +933,11 @@ namespace Clowd.UI.VideoEditor
                         e.Handled = true;
                     return;
                 case Key.Home:
-                    SeekTo(0);
+                    JumpToStart();
                     e.Handled = true;
                     return;
                 case Key.End:
-                    SeekTo(_editor?.DurationTicks ?? 0);
+                    JumpToEnd();
                     e.Handled = true;
                     return;
             }
