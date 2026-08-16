@@ -97,10 +97,12 @@ public static class TimelineOps
     /// <summary>
     /// Moves the out-point of a <b>single</b> item, link group or not: positive
     /// <paramref name="deltaTicks"/> lengthens it, negative shortens it, clamped so it keeps at
-    /// least <see cref="MinSegmentTicks"/>. Extension past the end of a media source is allowed —
-    /// the compositor holds the last frame, matching VFR gap behaviour. The item's start and
-    /// in-point are untouched, so the source↔timeline mapping of every instant it still covers is
-    /// unchanged and linked rows stay in sync. Returns the delta actually applied.
+    /// least <see cref="MinSegmentTicks"/> and — for media whose stream duration is known — never
+    /// extends past the end of its source (there is no material there: video would freeze on the
+    /// last frame and audio would mix to silence). An item already hanging past the source end
+    /// (older project, or a stale probe) may still shrink, it just cannot grow. The item's start
+    /// and in-point are untouched, so the source↔timeline mapping of every instant it still
+    /// covers is unchanged and linked rows stay in sync. Returns the delta actually applied.
     /// </summary>
     public static long TrimEnd(Project project, Guid itemId, long deltaTicks)
     {
@@ -110,11 +112,40 @@ public static class TimelineOps
         if (deltaTicks < -maxShrink)
             deltaTicks = Math.Min(0, -maxShrink);
 
+        if (item.Content is MediaContent media)
+        {
+            var streamDuration = StreamDurationOf(project, media);
+            if (streamDuration > 0)
+            {
+                var maxExtend = Math.Max(0, streamDuration - media.SourceInTicks - item.DurationTicks);
+                if (deltaTicks > maxExtend)
+                    deltaTicks = maxExtend;
+            }
+        }
+
         if (deltaTicks == 0)
             return 0;
 
         item.DurationTicks += deltaTicks;
         return deltaTicks;
+    }
+
+    /// <summary>The probed duration of the stream an item plays, or 0 when the source/stream is
+    /// missing or the probe recorded no duration — in which case trims are not source-bounded.</summary>
+    private static long StreamDurationOf(Project project, MediaContent media)
+    {
+        foreach (var source in project.Sources ?? Enumerable.Empty<Source>())
+        {
+            if (source.Id != media.SourceId)
+                continue;
+            foreach (var stream in source.Streams ?? Enumerable.Empty<SourceStream>())
+            {
+                if (stream.Index == media.StreamIndex)
+                    return stream.DurationTicks;
+            }
+        }
+
+        return 0;
     }
 
     /// <summary>
