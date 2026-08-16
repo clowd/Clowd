@@ -18,10 +18,14 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// <summary>
     /// The native column to the left of the drawing surface: one header per row (heights from
     /// <see cref="TimelineRowLayout"/>, so the two columns stay pixel-aligned) with the drag grip,
-    /// the track's kind icon and name, the enable toggle (eye → <c>Track.Hidden</c> for picture
-    /// rows, speaker → <c>Track.Muted</c> for audio rows; checked = enabled) and the sync toggle
-    /// (checked = the row's items are link-grouped). Rebuilt wholesale on Structural project
-    /// changes — under ten rows, so there is nothing to diff.
+    /// the track's kind icon and name, the enable button (eye → <c>Track.Hidden</c> for picture
+    /// rows, speaker → <c>Track.Muted</c> for audio rows) and, on rows whose items are
+    /// link-grouped, a static chain badge. Rebuilt wholesale on Structural project changes — under
+    /// ten rows, so there is nothing to diff.
+    ///
+    /// <para>The badge is a label, not a button: unlinking is a rare, consequential edit, so it
+    /// lives in the inspector ("Unlink from recording") where it can carry an explanation, rather
+    /// than being one stray click away in every row.</para>
     ///
     /// <para>The rows live in a <see cref="StackPanel"/> inside this panel rather than being its own
     /// children, so the drop indicator of a reorder drag can be a sibling laid <i>over</i> them —
@@ -29,8 +33,8 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// </summary>
     internal sealed class TrackHeaderPanel : Panel, IRowReorderDragHost
     {
-        private const string SyncedTip = "Synced — moves with the other recording tracks";
-        private const string RelinkTip = "Re-sync with the other recording tracks";
+        private const string SyncedTip =
+            "Synced — moves and splits with the other recording tracks. Unsync from the properties panel.";
 
         /// <summary>Breathing room either side of the grip: it is the first thing in the row, so
         /// without it the dots crowd both the panel edge and the kind icon.</summary>
@@ -51,13 +55,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         };
 
         private EditorSession _session;
-        private bool _syncing; // our own state write is raising IsCheckedChanged
 
-        /// <summary>The link toggle of every built row, so <see cref="SyncToggles"/> can re-read
-        /// link state after a Mapping change made somewhere other than this panel (the inspector's
-        /// "Unlink from recording" button writes the same state these buttons show).</summary>
-        private readonly List<(Guid TrackId, ToolButton Button)> _linkButtons =
-            new List<(Guid, ToolButton)>();
+        /// <summary>The link badge of every built row, so <see cref="RefreshLinkBadges"/> can
+        /// re-read link state after a Mapping change (unlink/relink raise no rebuild, and come from
+        /// the inspector rather than from this panel).</summary>
+        private readonly List<(Guid TrackId, Control Badge)> _linkBadges =
+            new List<(Guid, Control)>();
 
         /// <summary>The laid-out rows of the current build, and their visuals, in display order —
         /// index i of both is row i. The reorder drag works in this space (top to bottom, which for
@@ -90,7 +93,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             _stack.Children.Clear();
             _rowBorders.Clear();
-            _linkButtons.Clear();
+            _linkBadges.Clear();
             _rows = Array.Empty<TimelineRow>();
 
             var palette = TimelinePalette.ForVariant(ActualThemeVariant);
@@ -117,41 +120,23 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>Re-reads every row's link state from the live project — the parent calls this
-        /// on Mapping changes, because unlink/relink are Mapping (no rebuild follows) and can be
-        /// issued from outside this panel (the inspector's unlink button). Only a toggle whose
-        /// state actually differs is written, so a Mapping change elsewhere cannot clobber the
-        /// "no longer aligned" tooltip a refused <c>TryRelinkTrack</c> left behind.</summary>
-        public void SyncToggles()
+        /// on Mapping changes, because unlink/relink are Mapping (no rebuild follows) and are
+        /// issued from the inspector, not from here.</summary>
+        public void RefreshLinkBadges()
         {
             var project = _session?.Project;
             if (project == null)
                 return;
 
-            foreach (var (trackId, button) in _linkButtons)
-            {
-                var linked = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null);
-                if (linked == (button.IsChecked == true))
-                    continue;
-
-                _syncing = true;
-                try
-                {
-                    button.IsChecked = linked;
-                }
-                finally
-                {
-                    _syncing = false;
-                }
-
-                ToolTip.SetTip(button, linked ? SyncedTip : RelinkTip);
-            }
+            foreach (var (trackId, badge) in _linkBadges)
+                badge.IsVisible = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null);
         }
 
         private Border BuildRow(TimelinePalette palette, Project project, Track track, TimelineRow row, int rowIndex)
         {
             var trackId = track.Id;
             var isAudio = row.Kind == TimelineRowKind.Audio;
-            var buttonSize = Math.Min(22, row.Height - 4);
+            var buttonSize = Math.Min(20, row.Height - 4);
 
             var dock = new DockPanel { LastChildFill = true };
 
@@ -166,95 +151,52 @@ namespace Clowd.UI.VideoEditor.Timeline
             DockPanel.SetDock(grip, Dock.Left);
             dock.Children.Add(grip);
 
-            // ------- enable toggle (eye / speaker), rightmost. SetTrackHidden/Muted raise a
-            // Structural change, which rebuilds this whole panel — the fresh button shows the
-            // fresh state, so nothing here updates its own icon.
+            // ------- enable button (eye / speaker), rightmost — the layers panel's row button, so
+            // the two panels' rows read the same. SetTrackHidden/Muted raise a Structural change,
+            // which rebuilds this whole panel: the fresh button carries the fresh glyph, so nothing
+            // here updates its own icon, and the state is the glyph rather than a checked fill.
             var enabled = isAudio ? !track.Muted : !track.Hidden;
-            var enable = new ToolButton
-            {
-                CanToggle = true,
-                Width = buttonSize,
-                Height = buttonSize,
-                Padding = new Thickness(4),
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = palette.LabelBrush,
-                IsChecked = enabled,
-                IconPath = TimelineIcons.Find(isAudio
+            var enable = RowIconButton.Build(
+                TimelineIcons.Find(isAudio
                     ? (enabled ? "IconSpeakerEnabled" : "IconSpeakerDisabled")
                     : (enabled ? "IconEye" : "IconEyeOff")),
-            };
-            ToolTip.SetTip(enable, isAudio ? "Include this audio in the mix" : "Show this track in the picture");
-            enable.IsCheckedChanged += (_, _) =>
+                Brushes.White,
+                isAudio
+                    ? (enabled ? "Mute this row" : "Include this audio in the mix")
+                    : (enabled ? "Hide this row" : "Show this track in the picture"),
+                buttonSize,
+                // white when on, faded back when off: at the label's weight the "on" state read as
+                // dirt rather than as a lit control.
+                enabled ? 1.0 : 0.4);
+            enable.Click += (_, _) =>
             {
-                if (_syncing || _session == null)
+                if (_session == null)
                     return;
 
-                var on = enable.IsChecked == true;
                 if (isAudio)
-                    _session.SetTrackMuted(trackId, !on, this);
+                    _session.SetTrackMuted(trackId, enabled, this);
                 else
-                    _session.SetTrackHidden(trackId, !on, this);
+                    _session.SetTrackHidden(trackId, enabled, this);
             };
             DockPanel.SetDock(enable, Dock.Right);
             dock.Children.Add(enable);
 
-            // ------- sync toggle, shown when the row is (or could plausibly become) linked.
-            // Unlink/relink are Mapping changes — no rebuild follows — so this button maintains
-            // its own state (including staying unchecked when TryRelinkTrack refuses), and
-            // SyncToggles re-reads it when a Mapping change comes from outside this panel.
-            var rowHasItems = project.Items.Any(i => i.TrackId == trackId);
-            var linked = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null);
-            var relinkable = rowHasItems && project.Items.Any(i => i.TrackId != trackId && i.LinkGroupId != null);
-            if (linked || relinkable)
+            // ------- link badge: a label saying the row's items move with the recording, not a
+            // control. Built on every row and collapsed when unlinked, so RefreshLinkBadges can
+            // flip it either way without a rebuild (unlink/relink are Mapping changes).
+            var badge = new Border
             {
-                var link = new ToolButton
-                {
-                    CanToggle = true,
-                    Width = buttonSize,
-                    Height = buttonSize,
-                    Padding = new Thickness(4),
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = palette.LabelBrush,
-                    IsChecked = linked,
-                    IconPath = TimelineIcons.LinkGeometry,
-                };
-                ToolTip.SetTip(link, linked ? SyncedTip : RelinkTip);
-                link.IsCheckedChanged += (_, _) =>
-                {
-                    if (_syncing || _session == null)
-                        return;
-
-                    if (link.IsChecked == true)
-                    {
-                        if (_session.TryRelinkTrack(trackId, this))
-                        {
-                            ToolTip.SetTip(link, SyncedTip);
-                        }
-                        else
-                        {
-                            _syncing = true;
-                            try
-                            {
-                                link.IsChecked = false;
-                            }
-                            finally
-                            {
-                                _syncing = false;
-                            }
-
-                            ToolTip.SetTip(link, "Items no longer aligned — undo to re-sync");
-                        }
-                    }
-                    else
-                    {
-                        _session.UnlinkTrack(trackId, this);
-                        ToolTip.SetTip(link, RelinkTip);
-                    }
-                };
-                DockPanel.SetDock(link, Dock.Right);
-                dock.Children.Add(link);
-                _linkButtons.Add((trackId, link));
-            }
+                Width = buttonSize,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsVisible = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null),
+                Child = TimelineIcons.NewIcon(TimelineIcons.LinkGeometry, buttonSize * 0.6, palette.LabelBrush),
+                Opacity = 0.7,
+                Background = Brushes.Transparent, // a null background is not hit-testable — no tooltip
+            };
+            ToolTip.SetTip(badge, SyncedTip);
+            DockPanel.SetDock(badge, Dock.Right);
+            dock.Children.Add(badge);
+            _linkBadges.Add((trackId, badge));
 
             // ------- kind icon + name
             var icon = TimelineIcons.NewIcon(KindIconKey(row.Kind), 13, palette.LabelBrush);
@@ -343,7 +285,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <c>Stretch.Uniform</c> would hang wide glyphs (IconVideo's 26 x 14 camera) above the
         /// row's text.</summary>
         public static Control NewIcon(string key, double box, IBrush brush) =>
-            new GlyphIcon(Find(key), brush) { Width = box, Height = box };
+            NewIcon(Find(key), box, brush);
+
+        /// <summary>The same for a geometry this class carries itself (the chain link), which has
+        /// no resource key to look up.</summary>
+        public static Control NewIcon(Geometry geometry, double box, IBrush brush) =>
+            new GlyphIcon(geometry, brush) { Width = box, Height = box };
 
         /// <summary>The named StreamGeometry from the application resources, or null (a Path with
         /// null Data simply draws nothing — the headers stay usable even if an icon goes missing).</summary>

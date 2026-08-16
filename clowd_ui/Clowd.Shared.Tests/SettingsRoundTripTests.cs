@@ -292,7 +292,6 @@ namespace Clowd.Shared.Tests
             var loaded = SettingsService.Load(_path);
 
             Assert.Equal(230d, loaded.VideoEditor.SidebarWidth);
-            Assert.Equal(1.0d, loaded.VideoEditor.Volume);
             Assert.Null(loaded.VideoEditor.WindowBounds);
             Assert.False(loaded.VideoEditor.WindowMaximized);
         }
@@ -301,8 +300,7 @@ namespace Clowd.Shared.Tests
         public void VideoEditorViewState_RoundTrips()
         {
             var original = new SettingsRoot();
-            original.VideoEditor.SidebarWidth = 315;
-            original.VideoEditor.Volume = 0.35; // invariant double
+            original.VideoEditor.SidebarWidth = 315; // invariant double
             original.VideoEditor.WindowBounds = "10,20,1280,720";
             original.VideoEditor.WindowMaximized = true;
 
@@ -310,7 +308,6 @@ namespace Clowd.Shared.Tests
             var loaded = SettingsService.Load(_path);
 
             Assert.Equal(315d, loaded.VideoEditor.SidebarWidth);
-            Assert.Equal(0.35d, loaded.VideoEditor.Volume);
             Assert.Equal("10,20,1280,720", loaded.VideoEditor.WindowBounds);
             Assert.True(loaded.VideoEditor.WindowMaximized);
         }
