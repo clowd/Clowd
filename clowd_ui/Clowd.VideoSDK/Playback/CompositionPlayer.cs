@@ -80,6 +80,12 @@ namespace Clowd.VideoSDK.Playback
         /// <summary>Source-timeline offset of the primary-stream segment the pipelines were last
         /// synced to; a differing offset at the playing position means a cut seam was crossed.</summary>
         private long _activeOffsetTicks = long.MinValue;
+        /// <summary>Whether the most recent seek was <see cref="SeekMode.Fast"/> (scrubbing).
+        /// Its immediately-presented frame is a keyframe that can sit far before the requested
+        /// target, and the preview composes at the clock's instant — adopting that pts would
+        /// bounce the composed picture between the scrub target and the keyframe on every scrub
+        /// tick, so a Fast immediate leaves the clock on the target it was given.</summary>
+        private volatile bool _lastSeekWasFast;
         private int _decoderOpens;
         private bool _disposed;
         private Task _openTask;
@@ -743,6 +749,7 @@ namespace Clowd.VideoSDK.Playback
             // the clock lands on the target before any worker is unblocked: the post-seek immediate
             // present arrives on a decode thread and asks the clock where the playhead is (see
             // OnImmediatePresented), so a clock still holding the pre-seek position would race it.
+            _lastSeekWasFast = mode == SeekMode.Fast;
             Volatile.Write(ref _activeOffsetTicks, PrimaryOffsetAt(map, tl));
             _clock.SetPosition(target);
 
@@ -849,6 +856,18 @@ namespace Clowd.VideoSDK.Playback
             var set = _pipelines;
             if (set?.Primary == null || worker != set.Primary.Worker || _state == PlayerState.Playing)
                 return;
+
+            // a Fast (scrub) seek keeps the clock on its target — see _lastSeekWasFast — and a
+            // queued newer seek makes this frame stale: its pts describes a target the clock has
+            // already left (or is about to leave), and adopting it would drag the composed
+            // instant backwards mid-scrub.
+            if (_lastSeekWasFast)
+                return;
+            lock (_seekSync)
+            {
+                if (_hasPendingSeek)
+                    return;
+            }
 
             // …but only where the stream actually covers the playhead. Past its last item (or in a
             // gap) the worker still presents its last kept frame, and adopting that frame's pts
