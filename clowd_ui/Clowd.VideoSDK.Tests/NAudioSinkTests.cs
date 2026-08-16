@@ -87,6 +87,23 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0.0, sink.Volume);
         }
 
+        /// <summary>At a non-realtime speed the producer resamples, so one device frame carries
+        /// more (or less) media time — including the device latency the played-time backs off by.
+        /// </summary>
+        [Fact]
+        public void Speed_scales_the_media_time_a_device_frame_carries()
+        {
+            using var sink = Create(out var output, out var ring);
+            sink.ResetTiming(2.0);
+            sink.TrySetBasePts(TimeSpan.Zero);
+
+            var block = new float[SampleRate * Channels / 2]; // half a second of device frames
+            Pull(output, ring, block, 1.0, sink);
+
+            // 0.5s of device time = 1s of timeline, less the 100ms device latency at 2x.
+            Assert.InRange(sink.PlayedTime, TimeSpan.FromSeconds(0.799), TimeSpan.FromSeconds(0.801));
+        }
+
         /// <summary>Muting must not stop media time: the frames still went to the device, they were
         /// simply quiet, so the audio master clock advances exactly as at full volume.</summary>
         [Fact]

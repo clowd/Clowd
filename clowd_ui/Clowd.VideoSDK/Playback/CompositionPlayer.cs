@@ -63,6 +63,7 @@ namespace Clowd.VideoSDK.Playback
 
         private volatile PlayerState _state = PlayerState.Idle;
         private double _volume = 1.0;
+        private double _playbackRate = 1.0;
         private bool _audioDetached;
         private int _skipSeekBusy;
         /// <summary>Source-timeline offset of the primary-stream segment the pipelines were last
@@ -191,6 +192,46 @@ namespace Clowd.VideoSDK.Playback
             }
         }
 
+        /// <summary>Bounds on <see cref="PlaybackRate"/>: fast enough to skim, slow enough to
+        /// study a frame sequence, and short of the extremes where the decoders can no longer
+        /// feed the clock at all.</summary>
+        public const double MinPlaybackRate = 0.1;
+        public const double MaxPlaybackRate = 8.0;
+
+        /// <summary>
+        /// Playback speed, 1 = realtime. Video paces against the (now rate-scaled) clock and
+        /// drops frames it can no longer present in time; audio is linearly resampled by the mix
+        /// worker, so it keeps playing with its pitch shifted — no time stretching. Changing the
+        /// rate re-bases the audio mapping through a seek at the current position, so it costs
+        /// the same hiccup as a seek; the position itself never jumps.
+        /// </summary>
+        public double PlaybackRate
+        {
+            get => _playbackRate;
+            set
+            {
+                double rate = Math.Clamp(value, MinPlaybackRate, MaxPlaybackRate);
+                if (rate == _playbackRate)
+                    return;
+
+                _playbackRate = rate;
+                var clock = _clock;
+                if (clock == null)
+                    return; // not open yet — OpenCore applies it to the clock it builds
+
+                clock.Rate = rate; // rebases: the position is continuous across the change
+                var mix = _pipelines?.MixWorker;
+                if (mix == null)
+                    return;
+
+                // the mix worker adopts the speed at its next chunk and flushes itself; the seek
+                // lands video on the same instant so the two agree from the first sample on.
+                mix.SetSpeed(rate);
+                if (_state is PlayerState.Paused or PlayerState.Playing or PlayerState.Ended)
+                    _ = SeekAsync(Position, SeekMode.Exact);
+            }
+        }
+
         // --------------------------------------------------------------------------------- open
 
         /// <summary>Opens the project's media and presents the first frame (paused). One project
@@ -228,7 +269,7 @@ namespace Clowd.VideoSDK.Playback
         private void OpenCore(Project project, VideoOpenOptions options)
         {
             _options = options;
-            _clock = new PlaybackClock();
+            _clock = new PlaybackClock { Rate = _playbackRate };
 
             var map = ProjectTimelineMap.Build(project);
             _project = project;
@@ -357,6 +398,8 @@ namespace Clowd.VideoSDK.Playback
                     set.AudioSink = new NAudioSink(mixRate, 2, set.AudioRing, _options.CreateAudioOutput?.Invoke());
                     set.AudioSink.Volume = _volume;
                     set.MixWorker = new AudioMixWorker(project, set.AudioRing, set.AudioSink, mixRate);
+                    if (_playbackRate != 1.0)
+                        set.MixWorker.SetSpeed(_playbackRate); // a rebuild keeps the chosen speed
                     Interlocked.Increment(ref _decoderOpens); // the audio pipeline, as one
                     _clock.SetAudioSource(set.AudioSink);
                 }

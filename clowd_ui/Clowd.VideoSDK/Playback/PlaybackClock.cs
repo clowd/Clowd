@@ -42,6 +42,7 @@ namespace Clowd.VideoSDK.Playback
         private IAudioClockSource _audio;
         private TimeSpan _basePosition;
         private TimeSpan _baseElapsed;
+        private double _rate = 1.0;
         private bool _running;
 
         // audio-master interpolation: the last position the renderer reported, and when we saw it.
@@ -73,6 +74,31 @@ namespace Clowd.VideoSDK.Playback
             get { lock (_sync) return _running; }
         }
 
+        /// <summary>
+        /// Playback speed: how much media time one second of wall time is worth (1 = realtime).
+        /// Only the stopwatch fallback scales here — an attached audio master already reports
+        /// media time (the sink applies the same speed to its own played-time mapping), so it
+        /// needs no scaling beyond the interpolation lead between renderer updates. Changing the
+        /// rate rebases, so the position never jumps.
+        /// </summary>
+        public double Rate
+        {
+            get { lock (_sync) return _rate; }
+            set
+            {
+                ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(value, 0.0);
+                lock (_sync)
+                {
+                    if (_rate == value)
+                        return;
+                    _basePosition = PositionLocked();
+                    _baseElapsed = _time.Elapsed;
+                    _rate = value;
+                    ResetAudioAnchorLocked();
+                }
+            }
+        }
+
         public TimeSpan Position
         {
             get { lock (_sync) return PositionLocked(); }
@@ -87,8 +113,12 @@ namespace Clowd.VideoSDK.Playback
                 return InterpolatedAudioLocked();
             if (!_running)
                 return _basePosition;
-            return _basePosition + (_time.Elapsed - _baseElapsed);
+            return _basePosition + ScaleLocked(_time.Elapsed - _baseElapsed);
         }
+
+        /// <summary>Wall time to media time at the current rate.</summary>
+        private TimeSpan ScaleLocked(TimeSpan wall)
+            => _rate == 1.0 ? wall : new TimeSpan((long)(wall.Ticks * _rate));
 
         /// <summary>
         /// The audio position, carried forward by wall time between renderer updates. WASAPI only
@@ -114,7 +144,9 @@ namespace Clowd.VideoSDK.Playback
             var lead = elapsed - _audioAnchorElapsed;
             if (lead > MaxAudioInterpolation)
                 lead = MaxAudioInterpolation;
-            return _audioAnchor + lead;
+            // the cap is wall time (how long the renderer may stall); the lead itself is media
+            // time, so it carries the rate — at 2x, 5ms of wall time is 10ms of timeline.
+            return _audioAnchor + ScaleLocked(lead);
         }
 
         /// <summary>Drops the interpolation anchor so the next read re-syncs to the renderer
