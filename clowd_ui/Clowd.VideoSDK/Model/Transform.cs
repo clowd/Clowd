@@ -47,8 +47,21 @@ public sealed class Transform
     /// <summary>0 = transparent, 1 = opaque. Multiplies with transition opacity.</summary>
     public double Opacity { get; set; } = 1.0;
 
-    /// <summary>Region of the source picture to show, or null for the whole frame. Applied
-    /// before <see cref="Scale"/>.</summary>
+    /// <summary>
+    /// Target aspect ratio (width/height), or null — the default — for the content's own. Applied
+    /// AFTER <see cref="Crop"/>: <see cref="AspectStretch"/> false trims the cropped picture
+    /// symmetrically to this ratio, true distorts it into the ratio — either way the drawn box
+    /// always honours the ratio, and cropping only changes what is shown inside it. The crop
+    /// stores only what the user cut, never what the ratio implied.
+    /// </summary>
+    public double? Aspect { get; set; }
+
+    /// <summary>How <see cref="Aspect"/> is reached: false (the default) crops the excess away
+    /// ("fill"), true stretches the picture to fit. Meaningless while Aspect is null.</summary>
+    public bool AspectStretch { get; set; }
+
+    /// <summary>Region of the source picture to show, or null for the whole frame. Applied first
+    /// — before <see cref="Aspect"/> and <see cref="Scale"/>.</summary>
     public CropRect Crop { get; set; }
 
     /// <summary>Shape the item is clipped to, or null for the plain rectangle.</summary>
@@ -62,6 +75,8 @@ public sealed class Transform
         ScaleY = ScaleY,
         Rotation = Rotation,
         Opacity = Opacity,
+        Aspect = Aspect,
+        AspectStretch = AspectStretch,
         Crop = Crop?.Clone(),
         Mask = Mask?.Clone(),
     };

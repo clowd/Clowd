@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Clowd.UI.VideoEditor.Inspector;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Xunit;
@@ -327,11 +328,11 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(Live(session, screen.Id).Transform.ScaleY);
         }
 
-        /// <summary>Fill crops the source to the target ratio, centred, on every linked segment.
-        /// The 640x480 camera is 4:3; bringing it to 16:9 shaves (1 - (4/3)/(16/9))/2 = 12.5% off
-        /// the top and bottom.</summary>
+        /// <summary>An aspect tile writes the ratio itself (<see cref="Transform.Aspect"/>) over
+        /// every linked segment — the crop fields stay untouched, because the crop belongs to the
+        /// user and is applied after the ratio (see AspectMath).</summary>
         [Fact]
-        public void AspectFill_WritesACenteredCropOverTheWholeRow()
+        public void AspectFill_StoresTheRatioAndNeverTouchesTheCrop()
         {
             var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
             session.Select(webcamA.Id);
@@ -340,71 +341,110 @@ namespace Clowd.VideoSDK.Tests
 
             foreach (var id in new[] { webcamA.Id, webcamB.Id })
             {
-                var crop = Live(session, id).Transform.Crop;
-                Assert.Equal(0.125, crop.Top, 9);
-                Assert.Equal(0.125, crop.Bottom, 9);
-                Assert.Equal(0, crop.Left);
-                Assert.Equal(0, crop.Right);
-                Assert.Null(Live(session, id).Transform.ScaleY);
+                var transform = Live(session, id).Transform;
+                Assert.Equal(16 / 9.0, transform.Aspect.Value, 9);
+                Assert.False(transform.AspectStretch);
+                Assert.Null(transform.Crop);
+                Assert.Null(transform.ScaleY);
             }
 
             Assert.True(vm.Aspect169);
             Assert.False(vm.AspectOriginal);
+            Assert.Equal(0, vm.CropTotal); // the crop rows still read 0% — nothing was "edited"
 
-            // and the tile survives a re-read from the model: selecting away and back re-derives
-            // "16:9 fill" from the crop itself.
+            // and the tile survives a re-read: the model stores the ratio exactly.
             session.ClearSelection();
             session.Select(webcamA.Id);
             Assert.True(vm.Aspect169);
             Assert.True(vm.AspectFill);
         }
 
-        /// <summary>Stretch writes an explicit height instead of a crop: the box gets the target
-        /// ratio, the pixels distort. 0.25 wide on a 1920x1080 canvas at 16:9 is 480x270px —
-        /// ScaleY 0.25.</summary>
+        /// <summary>The user's whole point: a ratio AND a crop compose, crop first. 1:1 on the
+        /// 4:3 camera plus 20% off the right — the crop rows show exactly the 20%, the ratio tile
+        /// stays lit, and the drawn box is STILL a square: the ratio is taken from what survived
+        /// the crop, so cropping changes the picture inside the box, never the box's shape.</summary>
         [Fact]
-        public void AspectStretch_WritesAnExplicitHeightAndNoCrop()
+        public void CropAppliesBeforeTheAspectRatio_AndTheBoxKeepsTheRatio()
+        {
+            var (session, vm) = NewInspector(out _, out var webcamA, out _, out _, out _);
+            session.Select(webcamA.Id);
+
+            vm.Aspect11 = true;
+            vm.CropRight = 0.2;
+
+            var transform = Live(session, webcamA.Id).Transform;
+            Assert.Equal(1.0, transform.Aspect.Value, 9);
+            Assert.Equal(0.2, transform.Crop.Right);
+            Assert.Equal(0, transform.Crop.Left);
+            Assert.True(vm.Aspect11);
+            Assert.Equal(0.2, vm.CropRight);
+
+            // the shared resolver: the 20% crop leaves 512x480 (ratio 16:15); the 1:1 fill then
+            // trims (1 - 15/16)/2 of that region off each side — 0.025 of the raw source width.
+            var (l, t, r, b) = AspectMath.SourceInsets(transform, 640, 480);
+            Assert.Equal(0.025, l, 9);
+            Assert.Equal(0.225, r, 9);
+            Assert.Equal(0, t, 9);
+            Assert.Equal(0, b, 9);
+
+            // surviving region: 640 * (1 - 0.025 - 0.225) = 480 wide, 480 tall — the square holds
+            Assert.Equal(1.0, AspectMath.DisplayAspect(transform, 640, 480).Value, 9);
+        }
+
+        /// <summary>Stretch stores the same ratio with the stretch flag — no crop, no explicit
+        /// height; the composer distorts the picture into the ratio itself.</summary>
+        [Fact]
+        public void AspectStretch_StoresTheFlagAndNoHeight()
         {
             var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
             session.Select(webcamA.Id);
             vm.Scale = 0.25;
 
             vm.AspectStretch = true; // no tile yet — mode alone writes nothing
-            Assert.Null(Live(session, webcamA.Id).Transform.ScaleY);
+            Assert.Null(Live(session, webcamA.Id).Transform.Aspect);
 
             vm.Aspect169 = true;
 
             foreach (var id in new[] { webcamA.Id, webcamB.Id })
             {
-                Assert.Equal(0.25, Live(session, id).Transform.ScaleY.Value, 9);
-                Assert.Null(Live(session, id).Transform.Crop);
+                var transform = Live(session, id).Transform;
+                Assert.Equal(16 / 9.0, transform.Aspect.Value, 9);
+                Assert.True(transform.AspectStretch);
+                Assert.Null(transform.Crop);
+                Assert.Null(transform.ScaleY);
+
+                // the drawn box: stretch forces the target ratio (h/w = 9/16)
+                Assert.Equal(9 / 16.0, AspectMath.DisplayAspect(transform, 640, 480).Value, 9);
             }
 
-            Assert.True(vm.ShowScaleHeight);
-            Assert.Equal("Width", vm.ScaleLabel);
+            // no explicit height, so no Height row — the ratio lives in the aspect, not in ScaleY
+            Assert.False(vm.ShowScaleHeight);
 
-            // re-derived from the model on a fresh read, exactly like the fill case
             session.ClearSelection();
             session.Select(webcamA.Id);
             Assert.True(vm.Aspect169);
             Assert.True(vm.AspectStretch);
         }
 
-        /// <summary>Selecting Original IS the reset: everything the previous tile wrote leaves the
-        /// model and the picture is back on its native ratio.</summary>
+        /// <summary>Selecting Original resets the ratio — and ONLY the ratio: a crop the user cut
+        /// is theirs and survives.</summary>
         [Fact]
-        public void SelectingOriginal_ClearsTheCropAndTheStretch()
+        public void SelectingOriginal_ClearsTheRatioButKeepsTheUsersCrop()
         {
             var (session, vm) = NewInspector(out _, out var webcamA, out _, out _, out _);
             session.Select(webcamA.Id);
             vm.Aspect169 = true;
+            vm.CropRight = 0.2;
 
             vm.AspectOriginal = true;
 
-            Assert.Null(Live(session, webcamA.Id).Transform.Crop);
-            Assert.Null(Live(session, webcamA.Id).Transform.ScaleY);
+            var transform = Live(session, webcamA.Id).Transform;
+            Assert.Null(transform.Aspect);
+            Assert.Null(transform.ScaleY);
+            Assert.Equal(0.2, transform.Crop.Right);
             Assert.True(vm.AspectOriginal);
             Assert.False(vm.AspectSelected);
+            Assert.Equal(0.2, vm.CropRight);
         }
 
         /// <summary>A hand-made crop that matches no preset lights no ratio tile — the grid falls
