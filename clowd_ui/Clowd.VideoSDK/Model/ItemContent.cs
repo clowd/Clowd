@@ -152,7 +152,7 @@ public sealed class CursorContent : ItemContent
     /// sprites the recorder rasterized into the capture file (the real cursor, custom app cursors
     /// included); every other style draws a themed vector glyph at the captured position. An
     /// unrecognized value renders as the theme's arrow.</summary>
-    public static readonly IReadOnlyList<string> Styles = new[] { "none", "native", "vision", "point", "bibata", "breezex", "macos", "fuchsia" };
+    public static readonly IReadOnlyList<string> Styles = new[] { "none", "native", "vision", "point", "bibata", "breezex", "macos", "fuchsia", "neon" };
 
     /// <summary>The click animation names the editor offers, in menu order. <c>ripple</c>/<c>pulse</c>
     /// fire one burst per release; <c>ring</c> is a circle outline pinned to the pointer that closes
