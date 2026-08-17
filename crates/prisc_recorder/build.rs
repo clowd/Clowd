@@ -20,6 +20,11 @@ fn build_macos() {
     println!("cargo:rustc-link-lib=framework=CoreGraphics");
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
     println!("cargo:rustc-link-lib=framework=ColorSync");
+    // Cursor-shape classification matches the live cursor against the stock
+    // NSCursor set (platform/macos.rs::cursor_shape), which needs AppKit and
+    // the Objective-C runtime.
+    println!("cargo:rustc-link-lib=framework=AppKit");
+    println!("cargo:rustc-link-lib=objc");
 
     let build_dir = env::var("DEP_OBS_OBS_BUILD_DIR").expect("DEP_OBS_OBS_BUILD_DIR not set");
     let config = env::var("DEP_OBS_OBS_BUILD_CONFIG").expect("DEP_OBS_OBS_BUILD_CONFIG not set");

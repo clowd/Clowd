@@ -389,6 +389,12 @@ impl InputCapture {
         monitors: &[MonitorInfo],
         output: *mut obs_sys::obs_output_t,
     ) -> Result<InputCapture, String> {
+        // Prime the cursor classifier from the calling (main) thread. The first
+        // sample is the expensive one — on macOS it bootstraps AppKit and hashes
+        // the stock cursor set (~30 ms) — and the tick callback would otherwise
+        // pay it on the graphics thread during the first rendered frame.
+        let _ = platform::get_cursor_state();
+
         let file = std::fs::File::create(path)
             .map_err(|e| format!("failed to create '{}': {e}", path.display()))?;
 

@@ -1,6 +1,6 @@
-//! macOS platform implementation (DESIGN §2.2). Compile-guarded and untested
-//! on this machine; ports the pre-refactor CoreGraphics logic behind the new
-//! platform signatures. Monitor bounds are CG points (§1.1 capture space).
+//! macOS platform implementation (DESIGN §2.2). Ports the pre-refactor
+//! CoreGraphics logic behind the new platform signatures. Monitor bounds are
+//! CG points (§1.1 capture space).
 
 use std::env;
 use std::ffi::CStr;
@@ -212,16 +212,8 @@ pub fn get_mouse_info() -> MouseInfo {
 }
 
 /// Position from the same CGEvent snapshot as `get_mouse_info`, plus the
-/// visible/hidden distinction.
-///
-/// Shape classification is not implemented: every visible sample reports
-/// `arrow` (the editor's universal fallback kind). Unlike Windows, where
-/// `GetCursorInfo` hands back a comparable `HCURSOR`, macOS exposes no public,
-/// cheap way to identify the active cursor — `NSCursor.currentSystemCursor`
-/// means linking AppKit and hashing a fresh TIFF per sample, far too expensive
-/// for a per-frame call on the graphics thread. `Hidden` is still worth
-/// reporting on its own: it stops the editor compositing an arrow over content
-/// where macOS was drawing nothing.
+/// classified cursor shape (see [`cursor_shape`] for how that is identified
+/// and why it is cheap enough to do here, on the graphics thread).
 pub fn get_cursor_state() -> CursorState {
     let event = unsafe { CGEventCreate(std::ptr::null()) };
     let (x, y) = if event.is_null() {
@@ -231,8 +223,11 @@ pub fn get_cursor_state() -> CursorState {
         unsafe { CFRelease(event) };
         (p.x, p.y)
     };
+    // Checked before classifying: a hidden cursor still has a shape, and
+    // reporting it would make the editor composite a pointer over content
+    // where macOS was drawing nothing.
     let kind = if unsafe { CGCursorIsVisible() } {
-        CursorKind::Arrow
+        cursor_shape::current()
     } else {
         CursorKind::Hidden
     };
@@ -243,6 +238,229 @@ pub fn get_cursor_state() -> CursorState {
         x: x.round() as i32,
         y: y.round() as i32,
         kind,
+    }
+}
+
+/// Identifies the active system cursor by matching its image against the stock
+/// `NSCursor` set.
+///
+/// Windows gets a comparable `HCURSOR` straight from `GetCursorInfo`; macOS has
+/// no such handle, so the only reliable identity is the cursor's own bitmap.
+/// Hashing it costs ~470 µs — far too much to repeat every rendered frame — so
+/// the work is gated on `CGSCurrentCursorSeed`, a change counter that costs
+/// ~2 ns to read. Steady state is therefore a couple of nanoseconds per frame,
+/// and the full classify runs only on the frames where the cursor actually
+/// changed. That is why this needs no sampling thread of its own.
+///
+/// The seed is private CoreGraphics SPI, so it is resolved with `dlsym` and
+/// absence is not fatal: without it the classify is time-gated to
+/// [`RESAMPLE_INTERVAL`] instead, trading exactness for the same bounded cost.
+///
+/// Measured on macOS 15.7 (arm64): off-main-thread calls are fine, which
+/// matters because this runs on the OBS graphics thread.
+mod cursor_shape {
+    use std::ffi::{c_char, c_void, CString};
+    use std::sync::{Mutex, OnceLock};
+    use std::time::{Duration, Instant};
+
+    use super::CursorKind;
+
+    /// How stale a sample may get when the seed is unavailable. At 60 fps this
+    /// caps the cost of the fallback path at roughly 0.5% of one core.
+    const RESAMPLE_INTERVAL: Duration = Duration::from_millis(100);
+
+    const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
+    /// `NSApplicationActivationPolicyProhibited` — no Dock icon, no menu bar.
+    const ACTIVATION_POLICY_PROHIBITED: isize = 2;
+
+    // Linked by build.rs (AppKit + libobjc), like the CoreGraphics symbols above.
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> *mut c_void;
+        fn sel_registerName(name: *const c_char) -> *mut c_void;
+        fn objc_msgSend();
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
+    }
+
+    type Msg0Ptr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
+    type Msg0Len = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
+    type Msg1Isize = unsafe extern "C" fn(*mut c_void, *mut c_void, isize) -> bool;
+
+    unsafe fn class(name: &str) -> *mut c_void {
+        let n = CString::new(name).unwrap();
+        objc_getClass(n.as_ptr())
+    }
+
+    unsafe fn selector(name: &str) -> *mut c_void {
+        let n = CString::new(name).unwrap();
+        sel_registerName(n.as_ptr())
+    }
+
+    /// `[obj sel]` returning an object pointer.
+    unsafe fn msg(obj: *mut c_void, sel: &str) -> *mut c_void {
+        if obj.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: Msg0Ptr = std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector(sel))
+    }
+
+    /// `[obj sel]` returning an NSUInteger.
+    unsafe fn msg_len(obj: *mut c_void, sel: &str) -> usize {
+        if obj.is_null() {
+            return 0;
+        }
+        let f: Msg0Len = std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector(sel))
+    }
+
+    /// AppKit needs an `NSApplication` to exist before `+[NSCursor
+    /// arrowCursor]` and `IBeamCursor` will resolve — they return nil in a bare
+    /// CLI process, while the other stock cursors work either way. Those two
+    /// are the most common cursors on screen, so the bootstrap is not optional.
+    ///
+    /// Done lazily, so a run without `--input-capture` never creates it, and
+    /// pinned to the prohibited activation policy so the recorder cannot
+    /// acquire a Dock icon or menu bar by side effect.
+    fn ensure_appkit() {
+        static INIT: OnceLock<()> = OnceLock::new();
+        INIT.get_or_init(|| unsafe {
+            let app = msg(class("NSApplication"), "sharedApplication");
+            if !app.is_null() {
+                let f: Msg1Isize = std::mem::transmute(objc_msgSend as *const ());
+                f(
+                    app,
+                    selector("setActivationPolicy:"),
+                    ACTIVATION_POLICY_PROHIBITED,
+                );
+            }
+        });
+    }
+
+    /// FNV-1a over an `NSCursor`'s image bytes. `None` when the cursor, its
+    /// image, or the encode is unavailable.
+    unsafe fn hash_cursor(cursor: *mut c_void) -> Option<u64> {
+        let data = msg(msg(cursor, "image"), "TIFFRepresentation");
+        let bytes = msg(data, "bytes") as *const u8;
+        let len = msg_len(data, "length");
+        if bytes.is_null() || len == 0 {
+            return None;
+        }
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for i in 0..len {
+            h ^= *bytes.add(i) as u64;
+            h = h.wrapping_mul(0x1000_0000_01b3);
+        }
+        Some(h)
+    }
+
+    /// Stock `NSCursor` class selectors paired with the wire kind they mean.
+    ///
+    /// Only unambiguous mappings are listed. macOS has no stock cursor for
+    /// `Wait`/`AppStarting` (the beachball is not an `NSCursor`), `Help`,
+    /// `Pen`, `Person` or `UpArrow`, and exposes the diagonal resize cursors
+    /// only as private SPI, so `SizeNwse`/`SizeNesw` are unreachable too —
+    /// anything unmatched falls through to `Custom`, which is exactly what
+    /// those cases are from the wire contract's point of view.
+    const STOCK: [(&str, CursorKind); 14] = [
+        ("arrowCursor", CursorKind::Arrow),
+        ("IBeamCursor", CursorKind::IBeam),
+        ("IBeamCursorForVerticalLayout", CursorKind::IBeam),
+        ("crosshairCursor", CursorKind::Cross),
+        ("pointingHandCursor", CursorKind::Hand),
+        ("operationNotAllowedCursor", CursorKind::No),
+        ("resizeLeftRightCursor", CursorKind::SizeWe),
+        ("resizeUpDownCursor", CursorKind::SizeNs),
+        ("resizeLeftCursor", CursorKind::SizeWe),
+        ("resizeRightCursor", CursorKind::SizeWe),
+        ("resizeUpCursor", CursorKind::SizeNs),
+        ("resizeDownCursor", CursorKind::SizeNs),
+        // The pan cursors are the closest thing macOS has to SizeAll.
+        ("openHandCursor", CursorKind::SizeAll),
+        ("closedHandCursor", CursorKind::SizeAll),
+    ];
+
+    /// Hashes of the stock cursors, built once (~7 ms) on first classify.
+    fn stock_table() -> &'static Vec<(u64, CursorKind)> {
+        static TABLE: OnceLock<Vec<(u64, CursorKind)>> = OnceLock::new();
+        TABLE.get_or_init(|| {
+            ensure_appkit();
+            let mut out = Vec::with_capacity(STOCK.len());
+            for (sel, kind) in STOCK {
+                let cursor = unsafe { msg(class("NSCursor"), sel) };
+                if let Some(h) = unsafe { hash_cursor(cursor) } {
+                    // First mapping wins, so the aliases above cannot displace
+                    // the canonical kind for a shared image.
+                    if !out.iter().any(|(hh, _)| *hh == h) {
+                        out.push((h, kind));
+                    }
+                }
+            }
+            out
+        })
+    }
+
+    /// The private change counter, or `None` if this macOS build lacks it.
+    fn seed() -> Option<i32> {
+        static SEED_FN: OnceLock<Option<unsafe extern "C" fn() -> i32>> = OnceLock::new();
+        let f = *SEED_FN.get_or_init(|| unsafe {
+            let name = CString::new("CGSCurrentCursorSeed").unwrap();
+            let p = dlsym(RTLD_DEFAULT, name.as_ptr());
+            if p.is_null() {
+                None
+            } else {
+                Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn() -> i32>(p))
+            }
+        });
+        f.map(|f| unsafe { f() })
+    }
+
+    fn classify() -> CursorKind {
+        ensure_appkit();
+        let table = stock_table();
+        let current = unsafe { msg(class("NSCursor"), "currentSystemCursor") };
+        match unsafe { hash_cursor(current) } {
+            Some(h) => table
+                .iter()
+                .find(|(hh, _)| *hh == h)
+                .map(|(_, k)| *k)
+                .unwrap_or(CursorKind::Custom),
+            // No readable image: report the fallback kind rather than invent a
+            // shape. `currentSystemCursor` is deprecated as of macOS 15, so
+            // this is the path a future removal would take.
+            None => CursorKind::Arrow,
+        }
+    }
+
+    struct Cache {
+        seed: Option<i32>,
+        sampled_at: Instant,
+        kind: CursorKind,
+    }
+
+    static CACHE: Mutex<Option<Cache>> = Mutex::new(None);
+
+    /// The current cursor kind, classified at most once per actual change.
+    pub fn current() -> CursorKind {
+        let now_seed = seed();
+        // Poisoning cannot corrupt this: the cache is pure memoisation, so the
+        // worst a panicking holder leaves behind is a stale kind.
+        let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(c) = cache.as_ref() {
+            let fresh = match (now_seed, c.seed) {
+                (Some(now), Some(then)) => now == then,
+                _ => c.sampled_at.elapsed() < RESAMPLE_INTERVAL,
+            };
+            if fresh {
+                return c.kind;
+            }
+        }
+        let kind = classify();
+        *cache = Some(Cache {
+            seed: now_seed,
+            sampled_at: Instant::now(),
+            kind,
+        });
+        kind
     }
 }
 
