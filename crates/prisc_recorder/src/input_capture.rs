@@ -61,7 +61,8 @@ struct HeaderLine {
     #[serde(rename = "type")]
     ty: &'static str,
     version: u32,
-    /// Recording region `[x,y,w,h]`, physical px, virtual-desktop coords.
+    /// Recording region `[x,y,w,h]` in canvas pixels — `w`/`h` are the encoded
+    /// video's exact dimensions (see [`to_canvas`]).
     region: (i32, i32, u32, u32),
     fps_num: u32,
     fps_den: u32,
@@ -71,12 +72,14 @@ struct HeaderLine {
 
 #[derive(Serialize, Clone)]
 struct MonitorEntry {
+    /// Bounds in canvas pixels, the same space as `region` and the frame rows.
     x: i32,
     y: i32,
     w: u32,
     h: u32,
     /// DPI zoom (Windows: dpi/96; macOS: Retina backing scale) — the editor's
-    /// base factor for themed cursor sizing.
+    /// base factor for themed cursor sizing. Deliberately *not* a coordinate:
+    /// it stays a density factor while `x/y/w/h` above are canvas pixels.
     scale: f64,
 }
 
@@ -85,6 +88,7 @@ struct FrameRow {
     #[serde(rename = "type")]
     ty: &'static str,
     t: f64,
+    /// Cursor hotspot in canvas pixels (see [`to_canvas`]).
     x: i32,
     y: i32,
     b: u32,
@@ -111,7 +115,21 @@ struct EventRow {
     y: Option<i32>,
 }
 
-fn event_row(t: f64, kind: RawEventKind) -> EventRow {
+/// Converts a capture-space coordinate to canvas pixels — the space the encoded
+/// video, and therefore the editor, works in.
+///
+/// Windows capture coordinates are already physical pixels and `canvas_scale`
+/// is 1.0, so this is a no-op there. macOS reports CG points while the canvas is
+/// `region * backing scale` (`region::plan_region`), so without this the editor
+/// maps a point offset onto a pixel grid and draws every overlay at
+/// `1 / backing` of its correct distance from the region's top-left — half way
+/// in, on a Retina display. `tracker.rs` already applies the same factor for the
+/// click highlight; this is the sidecar catching up.
+pub fn to_canvas(v: i32, canvas_scale: f64) -> i32 {
+    (v as f64 * canvas_scale).round() as i32
+}
+
+fn event_row(t: f64, kind: RawEventKind, canvas_scale: f64) -> EventRow {
     let mut row = EventRow {
         ty: "event",
         t,
@@ -135,14 +153,14 @@ fn event_row(t: f64, kind: RawEventKind) -> EventRow {
         RawEventKind::MouseDown { btn, x, y } => {
             row.kind = "md";
             row.btn = Some(btn);
-            row.x = Some(x);
-            row.y = Some(y);
+            row.x = Some(to_canvas(x, canvas_scale));
+            row.y = Some(to_canvas(y, canvas_scale));
         }
         RawEventKind::MouseUp { btn, x, y } => {
             row.kind = "mu";
             row.btn = Some(btn);
-            row.x = Some(x);
-            row.y = Some(y);
+            row.x = Some(to_canvas(x, canvas_scale));
+            row.y = Some(to_canvas(y, canvas_scale));
         }
     }
     row
@@ -208,6 +226,7 @@ fn writer_loop(
     armed: std::sync::Arc<AtomicBool>,
     t0_ns: std::sync::Arc<AtomicU64>,
     output_addr: usize,
+    canvas_scale: f64,
 ) {
     let output = output_addr as *mut obs_sys::obs_output_t;
     let mut w = BufWriter::new(file);
@@ -220,10 +239,10 @@ fn writer_loop(
             Ok(m) => m,
             Err(_) => break,
         };
-        handle_msg(&mut w, msg, &armed, &t0_ns, output);
+        handle_msg(&mut w, msg, &armed, &t0_ns, output, canvas_scale);
         loop {
             match rx.try_recv() {
-                Ok(m) => handle_msg(&mut w, m, &armed, &t0_ns, output),
+                Ok(m) => handle_msg(&mut w, m, &armed, &t0_ns, output, canvas_scale),
                 Err(mpsc::TryRecvError::Empty) => {
                     let _ = w.flush();
                     break;
@@ -246,6 +265,7 @@ fn handle_msg(
     armed: &AtomicBool,
     t0_ns: &AtomicU64,
     output: *mut obs_sys::obs_output_t,
+    canvas_scale: f64,
 ) {
     let mut write_line = |line: &str| {
         if let Err(e) = writeln!(w, "{line}") {
@@ -273,7 +293,7 @@ fn handle_msg(
             }
             let offset = unsafe { pause_offset_ns(output) };
             if let Some(t) = map_t(ev.t_ns, t0_ns.load(Ordering::Acquire), offset) {
-                if let Ok(line) = serde_json::to_string(&event_row(t, ev.kind)) {
+                if let Ok(line) = serde_json::to_string(&event_row(t, ev.kind, canvas_scale)) {
                     write_line(&line);
                 }
             }
@@ -304,6 +324,10 @@ struct TickState {
     t0_ns: std::sync::Arc<AtomicU64>,
     /// `*mut obs_output_t` as usize (pause state/offset reads).
     output: usize,
+    /// Capture-space units per canvas pixel, applied to the row coordinates
+    /// (see [`to_canvas`]). The observer below still gets the *unscaled*
+    /// sample: the cursor track positions its item in capture space.
+    canvas_scale: f64,
     tx: mpsc::Sender<WriterMsg>,
     /// The hooks live exactly as long as the tick callback that samples them.
     hook: InputHook,
@@ -352,8 +376,8 @@ unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
     let _ = state.tx.send(WriterMsg::Frame(FrameRow {
         ty: "frame",
         t,
-        x: cursor.x,
-        y: cursor.y,
+        x: to_canvas(cursor.x, state.canvas_scale),
+        y: to_canvas(cursor.y, state.canvas_scale),
         b: buttons,
         k: keys,
         c: cursor.kind.as_str(),
@@ -373,7 +397,15 @@ pub struct InputCapture {
     path: PathBuf,
     /// Header data captured at construction; the fps joins at
     /// `on_output_started` (a pre-start `configure` may still change it).
-    region: Rect,
+    /// The region's origin in canvas pixels — every row coordinate is measured
+    /// from here. Stored as a bare origin rather than a `Rect` so there is no
+    /// half-converted rectangle lying around: the extent comes from `canvas`.
+    region_origin: (i32, i32),
+    /// The encoded video's exact dimensions, reported as the header region's
+    /// `w`/`h`. Taken from the region plan rather than recomputed: the planner
+    /// rounds the canvas down to an even size, so multiplying here could differ
+    /// by a pixel and desync the editor's source rect.
+    canvas: (u32, u32),
     monitors: Vec<MonitorEntry>,
     /// Boxed so the address handed to libobs stays valid when `self` moves.
     state: Box<TickState>,
@@ -387,6 +419,8 @@ impl InputCapture {
         path: &Path,
         region: Rect,
         monitors: &[MonitorInfo],
+        canvas_scale: f64,
+        canvas: (u32, u32),
         output: *mut obs_sys::obs_output_t,
     ) -> Result<InputCapture, String> {
         // Prime the cursor classifier from the calling (main) thread. The first
@@ -407,7 +441,9 @@ impl InputCapture {
         let output_addr = output as usize;
         std::thread::Builder::new()
             .name("input-capture-writer".to_string())
-            .spawn(move || writer_loop(file, rx, writer_armed, writer_t0, output_addr))
+            .spawn(move || {
+                writer_loop(file, rx, writer_armed, writer_t0, output_addr, canvas_scale)
+            })
             .map_err(|e| format!("failed to spawn the input-capture writer: {e}"))?;
 
         // The hook thread forwards edges into the writer channel; timestamp
@@ -418,13 +454,14 @@ impl InputCapture {
         }))
         .map_err(|e| format!("failed to install the input hooks: {e}"))?;
 
+        // Bounds into canvas pixels; `scale` stays a density factor.
         let monitors = monitors
             .iter()
             .map(|m| MonitorEntry {
-                x: m.x,
-                y: m.y,
-                w: m.width,
-                h: m.height,
+                x: to_canvas(m.x, canvas_scale),
+                y: to_canvas(m.y, canvas_scale),
+                w: (m.width as f64 * canvas_scale).round() as u32,
+                h: (m.height as f64 * canvas_scale).round() as u32,
                 scale: platform::monitor_display_scale(m),
             })
             .collect();
@@ -433,6 +470,7 @@ impl InputCapture {
             armed,
             t0_ns,
             output: output_addr,
+            canvas_scale,
             tx: tx.clone(),
             hook,
             observer: Mutex::new(None),
@@ -443,7 +481,11 @@ impl InputCapture {
         Ok(InputCapture {
             tx,
             path: path.to_path_buf(),
-            region,
+            region_origin: (
+                to_canvas(region.x, canvas_scale),
+                to_canvas(region.y, canvas_scale),
+            ),
+            canvas,
             monitors,
             state,
         })
@@ -470,7 +512,12 @@ impl InputCapture {
         let _ = self.tx.send(WriterMsg::Header(HeaderLine {
             ty: "header",
             version: 1,
-            region: (self.region.x, self.region.y, self.region.w, self.region.h),
+            region: (
+                self.region_origin.0,
+                self.region_origin.1,
+                self.canvas.0,
+                self.canvas.1,
+            ),
             fps_num,
             fps_den: 1,
             platform: platform::PLATFORM_NAME,
@@ -621,6 +668,76 @@ mod tests {
     }
 
     #[test]
+    fn to_canvas_is_identity_at_unit_scale() {
+        // Windows always lands here: capture coords are already physical px.
+        for v in [-1920, -1, 0, 1, 1080, 3840] {
+            assert_eq!(to_canvas(v, 1.0), v);
+        }
+    }
+
+    #[test]
+    fn to_canvas_scales_points_to_retina_pixels() {
+        // macOS: CG points -> canvas px on a 2x display.
+        assert_eq!(to_canvas(0, 2.0), 0);
+        assert_eq!(to_canvas(100, 2.0), 200);
+        // Displays left of / above the primary have negative origins; the
+        // conversion must stay symmetric or the region offset skews.
+        assert_eq!(to_canvas(-100, 2.0), -200);
+        assert_eq!(to_canvas(-1, 2.0), -2);
+    }
+
+    #[test]
+    fn to_canvas_rounds_half_away_from_zero() {
+        // Fractional backing scales exist (1.5x "More Space" modes).
+        assert_eq!(to_canvas(3, 1.5), 5); // 4.5
+        assert_eq!(to_canvas(-3, 1.5), -5);
+        assert_eq!(to_canvas(1, 1.5), 2); // 1.5
+    }
+
+    /// The bug this conversion exists for: a cursor at the region's
+    /// bottom-right must land at the bottom-right of the encoded frame. Before
+    /// the fix the editor received point offsets and mapped them onto a pixel
+    /// grid, drawing every overlay half way in on a Retina display.
+    #[test]
+    fn region_relative_offsets_span_the_full_canvas() {
+        // 800x600 points of region on a 2x display -> a 1600x1200 canvas.
+        let (region_x, region_y) = (100, 50);
+        let (cursor_x, cursor_y) = (900, 650); // the region's far corner
+        let scale = 2.0;
+
+        let offset_x = to_canvas(cursor_x, scale) - to_canvas(region_x, scale);
+        let offset_y = to_canvas(cursor_y, scale) - to_canvas(region_y, scale);
+        assert_eq!((offset_x, offset_y), (1600, 1200));
+
+        // Unscaled, the same corner would have reported the canvas midpoint.
+        assert_eq!((cursor_x - region_x, cursor_y - region_y), (800, 600));
+    }
+
+    #[test]
+    fn mouse_event_coordinates_are_converted() {
+        let md = event_row(
+            1.0,
+            RawEventKind::MouseDown {
+                btn: BTN_LEFT,
+                x: 100,
+                y: 200,
+            },
+            2.0,
+        );
+        assert_eq!(
+            serde_json::to_string(&md).unwrap(),
+            r#"{"type":"event","t":1.0,"kind":"md","btn":1,"x":200,"y":400}"#
+        );
+
+        // Key rows carry no coordinates, so the scale must not perturb them.
+        let kd = event_row(1.0, RawEventKind::KeyDown { vk: 17, ch: None }, 2.0);
+        assert_eq!(
+            serde_json::to_string(&kd).unwrap(),
+            r#"{"type":"event","t":1.0,"kind":"kd","vk":17}"#
+        );
+    }
+
+    #[test]
     fn event_rows_match_the_contract() {
         let kd = event_row(
             1234.111,
@@ -628,6 +745,7 @@ mod tests {
                 vk: 75,
                 ch: Some('k'),
             },
+            1.0,
         );
         assert_eq!(
             serde_json::to_string(&kd).unwrap(),
@@ -635,13 +753,13 @@ mod tests {
         );
 
         // No translated char -> `ch` omitted, not null.
-        let kd_none = event_row(1.0, RawEventKind::KeyDown { vk: 17, ch: None });
+        let kd_none = event_row(1.0, RawEventKind::KeyDown { vk: 17, ch: None }, 1.0);
         assert_eq!(
             serde_json::to_string(&kd_none).unwrap(),
             r#"{"type":"event","t":1.0,"kind":"kd","vk":17}"#
         );
 
-        let ku = event_row(1234.222, RawEventKind::KeyUp { vk: 75 });
+        let ku = event_row(1234.222, RawEventKind::KeyUp { vk: 75 }, 1.0);
         assert_eq!(
             serde_json::to_string(&ku).unwrap(),
             r#"{"type":"event","t":1234.222,"kind":"ku","vk":75}"#
@@ -654,6 +772,7 @@ mod tests {
                 x: 100,
                 y: 200,
             },
+            1.0,
         );
         assert_eq!(
             serde_json::to_string(&md).unwrap(),
@@ -667,6 +786,7 @@ mod tests {
                 x: -10,
                 y: 0,
             },
+            1.0,
         );
         assert_eq!(
             serde_json::to_string(&mu).unwrap(),

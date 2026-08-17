@@ -593,7 +593,14 @@ impl Recorder {
         // interaction (tick callbacks survive a video reset).
         let input_capture = match cli.input_capture {
             Some(ref path) => {
-                match InputCapture::new(path, capture_region, &monitors, output.as_ptr()) {
+                match InputCapture::new(
+                    path,
+                    capture_region,
+                    &monitors,
+                    plan.canvas_scale,
+                    plan.canvas,
+                    output.as_ptr(),
+                ) {
                     Ok(ic) => Some(ic),
                     Err(e) => fail(format_args!("Failed to start input capture: {e}")),
                 }
