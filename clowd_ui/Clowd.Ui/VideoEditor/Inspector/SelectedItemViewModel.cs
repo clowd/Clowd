@@ -141,6 +141,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             ["breezex"] = "BreezeX",
             ["macos"] = "macOS",
             ["fuchsia"] = "Fuchsia",
+            ["neon"] = "Neon",
         };
 
         private static readonly Dictionary<string, string> ClickAnimationLabels = new Dictionary<string, string>
@@ -190,6 +191,38 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         public static readonly NamedOption DefaultClickAnimationOption =
             FindOption(ClickAnimationOptions, "none");
+
+        /// <summary>A keystroke-filter picker entry: the model's enum beside the label the menu
+        /// shows — the same singleton discipline as <see cref="SpeedOption"/>, so reference
+        /// equality selects the row.</summary>
+        public sealed class KeystrokeFilterOption
+        {
+            public KeystrokeFilterOption(KeystrokeFilter value, string label)
+            {
+                Value = value;
+                Label = label;
+            }
+
+            public KeystrokeFilter Value { get; }
+
+            public string Label { get; }
+
+            public override string ToString() => Label;
+        }
+
+        /// <summary>The keystroke overlay's filter menu, in menu order — everything, only the
+        /// keys that draw as keycaps, or only shortcut chords.</summary>
+        public static readonly IReadOnlyList<KeystrokeFilterOption> KeystrokeFilterOptions = new[]
+        {
+            new KeystrokeFilterOption(KeystrokeFilter.None, "None"),
+            new KeystrokeFilterOption(KeystrokeFilter.Special, "Special keys"),
+            new KeystrokeFilterOption(KeystrokeFilter.Shortcuts, "Shortcuts"),
+        };
+
+        /// <summary>What a new keystroke overlay shows (<see cref="KeyboardContent.Filter"/>'s own
+        /// default), and what the filter row's reset dot writes back.</summary>
+        public static readonly KeystrokeFilterOption DefaultKeystrokeFilterOption =
+            KeystrokeFilterOptions[0];
 
         /// <summary>The one style that draws the recorded cursor sprites instead of a themed glyph —
         /// the glyph-only rows (colourways, SURROUND) mean nothing while it is picked, so they leave
@@ -439,6 +472,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _keyboardFontSize = DefaultKeyboardFontSize;
         private double _keyboardLingerMs = DefaultKeyboardLingerMs;
         private double _keyboardPauseBreakMs = DefaultKeyboardPauseBreakMs;
+        private KeystrokeFilter _keyboardFilter = KeystrokeFilter.None;
         private string _keyboardTextColorHex = DefaultKeyboardTextColorHex;
         private string _keyboardBackColorHex = DefaultKeyboardBackColorHex;
 
@@ -1750,6 +1784,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        /// <summary>Which keystrokes the overlay shows, as one of
+        /// <see cref="KeystrokeFilterOptions"/>.</summary>
+        public KeystrokeFilterOption KeyboardFilter
+        {
+            get => KeystrokeFilterOptions.First(o => o.Value == _keyboardFilter);
+            set
+            {
+                if (value == null || _syncing || value.Value == _keyboardFilter)
+                    return;
+
+                _keyboardFilter = value.Value;
+                OnPropertyChanged(nameof(KeyboardFilter));
+                EditKeyboard("sel:keyfilter", k => k.Filter = value.Value);
+            }
+        }
+
         // ---------------------------------------------------------------------------- surround
 
         /// <summary>
@@ -2120,6 +2170,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _keyboardFontSize, keyboard.FontSize, nameof(KeyboardFontSize));
                     Set(ref _keyboardLingerMs, keyboard.LingerMs, nameof(KeyboardLingerMs));
                     Set(ref _keyboardPauseBreakMs, keyboard.PauseBreakMs, nameof(KeyboardPauseBreakMs));
+                    Set(ref _keyboardFilter, keyboard.Filter, nameof(KeyboardFilter));
                     Set(ref _keyboardTextColorHex, HexOfArgb(keyboard.TextColor), nameof(KeyboardTextColorHex));
                     Set(ref _keyboardBackColorHex, HexOfArgb(keyboard.BackgroundColor), nameof(KeyboardBackColorHex));
                 }

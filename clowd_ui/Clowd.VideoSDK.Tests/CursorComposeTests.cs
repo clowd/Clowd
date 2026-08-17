@@ -443,7 +443,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Default_overlay_is_suppressed_while_a_cursor_item_is_active()
+        public void Default_overlay_is_suppressed_while_a_cursor_item_exists()
         {
             var p = NewProject();
             string capture = WriteCapture(Header,
@@ -465,9 +465,14 @@ namespace Clowd.VideoSDK.Tests
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
             AssertColor(Px(Render(p, 5 * Sec, frames), 34, 34), 255, 0, 0);
 
-            // an inactive cursor item (span elsewhere) suppresses nothing
+            // a cursor item whose span is elsewhere still suppresses: a gap trimmed into the
+            // cursor track means "no cursor here", not "back to the default"
             cursorItem.TimelineStartTicks = 8 * Sec;
             cursorItem.DurationTicks = 1 * Sec;
+            AssertColor(Px(Render(p, 5 * Sec, frames), 34, 34), 255, 0, 0);
+
+            // only deleting the track's last cursor item hands the cursor back to the default
+            p.Items.Remove(cursorItem);
             AssertColor(Px(Render(p, 5 * Sec, frames), 34, 34), 0, 0, 255);
         }
 

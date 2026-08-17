@@ -1373,6 +1373,18 @@
                         <Rectangle Classes="sectionRule" />
                     </DockPanel>
 
+                    <!--  which keystrokes show at all: everything, only the keys that draw as
+                          keycaps (Esc, F5, shortcuts…), or only shortcut chords. The dot's default
+                          is the None option object, assigned in code-behind for the same reason
+                          ddSpeedTarget's is.  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotKeyFilter" CurrentValue="{Binding KeyboardFilter, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Filter" />
+                        <controls:DropDownButton x:Name="ddKeyFilter" SelectedItem="{Binding KeyboardFilter, Mode=TwoWay}" />
+                    </DockPanel>
+
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFontSize, Mode=TwoWay}" DefaultValue="40" />
