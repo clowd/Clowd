@@ -1558,7 +1558,7 @@ namespace Clowd.UI.VideoEditor
             }
 
             btnSpeed.Flyout = flyout;
-            btnSpeed.Content = FormatRate(_playbackRate);
+            UpdateSpeedButton();
         }
 
         /// <summary>Applies a speed to the live player and to the picker. Kept on the window (not
@@ -1566,12 +1566,22 @@ namespace Clowd.UI.VideoEditor
         private void SetPlaybackRate(double rate)
         {
             _playbackRate = rate;
-            btnSpeed.Content = FormatRate(rate);
+            UpdateSpeedButton();
             foreach (var item in _speedItems)
                 item.IsChecked = (double)item.Tag == rate;
 
             if (_player != null)
                 _player.PlaybackRate = rate;
+        }
+
+        /// <summary>A non-1x speed silently distorts every duration the user sees, so the button
+        /// flags itself bold and orange (the timeline's link-badge color) until it's back to 1x.</summary>
+        private void UpdateSpeedButton()
+        {
+            var normal = _playbackRate == 1.0;
+            btnSpeed.Content = FormatRate(_playbackRate);
+            btnSpeed.FontWeight = normal ? FontWeight.Normal : FontWeight.Bold;
+            btnSpeed.Foreground = normal ? Brushes.White : new SolidColorBrush(Color.FromRgb(255, 159, 67));
         }
 
         private static string FormatRate(double rate)
