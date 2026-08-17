@@ -182,7 +182,7 @@ namespace Clowd.UI.Services
                     : Path.Combine(sessionDir, VideoEditPersistence.FileName);
 
                 project = VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe,
-                    AudioTrackLabels.From(source.AudioTracks));
+                    AudioTrackLabels.From(source.AudioTracks), RecordingTrackHints.From(source));
             }
             catch (Exception ex)
             {

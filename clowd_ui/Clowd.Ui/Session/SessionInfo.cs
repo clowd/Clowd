@@ -200,6 +200,34 @@ namespace Clowd
         [JsonIgnore]
         public bool HasWebcamTrack => WebcamTrack != null && WebcamTrack.Width > 0 && WebcamTrack.Height > 0;
 
+        // set on recordings that carry the 512x512 cursor-box track an input-capture recording is
+        // given; null on everything else. Written once when the session is created, like
+        // WebcamTrack, and read for the same reasons: to open the editor on a recording whose
+        // cursor is composited nowhere until it draws it, without probing the file.
+        public SessionVideoTrack CursorTrack
+        {
+            get => Get<SessionVideoTrack>();
+            set
+            {
+                if (Set(value))
+                    OnPropertyChanged(nameof(HasCursorTrack));
+            }
+        }
+
+        [JsonIgnore]
+        public bool HasCursorTrack => CursorTrack != null && CursorTrack.Width > 0 && CursorTrack.Height > 0;
+
+        // full path to the input-capture jsonl the recorder wrote beside this session's files —
+        // cursor positions, clicks and keystrokes, which the editor's cursor/keyboard overlays
+        // read. It stays in the session directory for the life of the session (like
+        // videoedit.json); null on recordings made without input capture, and the editor degrades
+        // to no-data when the file has since gone missing.
+        public string InputCapturePath
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+
         // the recording's audio tracks as the recorder described them, written once when the session
         // is created (like WebcamTrack). Null on anything it did not report; the video editor still
         // builds a row per audio stream it probes, and uses these only to name them.

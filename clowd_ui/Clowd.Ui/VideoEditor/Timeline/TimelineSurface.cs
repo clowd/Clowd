@@ -283,9 +283,12 @@ namespace Clowd.UI.VideoEditor.Timeline
                     // locked row's) body gets selection only — the missing drag affordance IS the
                     // sync cue, together with the header's link toggle. An import's group is just
                     // "streams of one file": dragging any member moves the whole group
-                    // (TimelineOps.Move is group-scoped), which cannot desync anything.
+                    // (TimelineOps.Move is group-scoped), which cannot desync anything. Cursor and
+                    // keyboard items are hard-synced to the recording whatever their group looks
+                    // like, so they are named here rather than left to the group test.
                     var track = FindTrack(item.TrackId);
-                    if (_session.IsRippleGroup(item.Id) || track is not { Locked: false })
+                    if (_session.IsRippleGroup(item.Id) || IsInputOverlayRow(item.TrackId) ||
+                        track is not { Locked: false })
                         return;
 
                     BeginDrag(DragMode.MoveItem, e, item.Id,
@@ -627,7 +630,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                     var item = FindItem(hit.ItemId);
                     var track = item == null ? null : FindTrack(item.TrackId);
                     var movable = item != null && track is { Locked: false } &&
-                                  _session?.IsRippleGroup(item.Id) != true;
+                                  _session?.IsRippleGroup(item.Id) != true &&
+                                  !IsInputOverlayRow(item.TrackId);
                     // Arrow (not the grab hand) on a recording-synced or locked body: no move
                     // affordance IS the cue. Import groups move as one, so their bodies keep it.
                     // Grab (not the pointing Hand — that one belongs to the edge-jump chevrons)
@@ -725,8 +729,11 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             // unlinking is a row-level action (it is the header's link toggle), offered here
             // because that toggle is easy to miss and this is where the sync is felt: a synced
-            // item has no move affordance.
-            if (_session.Project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null))
+            // item has no move affordance. Never offered on a cursor/keyboard row: those read the
+            // recording's input capture at the recording's own times, so their sync is not a
+            // toggle and the session refuses to take it off (EditorSession.UnlinkTrack).
+            if (!IsInputOverlayRow(trackId) &&
+                _session.Project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null))
             {
                 menu.Items.Add(new Separator());
                 menu.Items.Add(NewMenuItem("Unlink Row", true, () => _session.UnlinkTrack(trackId, this)));
@@ -768,6 +775,20 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
 
             return rects;
+        }
+
+        /// <summary>Whether the row is one of the recording's input-capture overlays — read off
+        /// the laid-out rows (the layout already classified them by content), which is the same
+        /// answer the header panel and the session's refusals give.</summary>
+        private bool IsInputOverlayRow(Guid trackId)
+        {
+            foreach (var row in _rows)
+            {
+                if (row.TrackId == trackId)
+                    return TimelineRowLayout.IsInputOverlay(row.Kind);
+            }
+
+            return false;
         }
 
         private Item FindItem(Guid id) => _session?.Project.Items.FirstOrDefault(i => i.Id == id);
@@ -896,6 +917,15 @@ namespace Clowd.UI.VideoEditor.Timeline
                 case ZoomContent zoom:
                     RenderGlyphLabel(context, palette, body, TimelineIcons.MagnifierGeometry,
                         Math.Round(zoom.Zoom * 100).ToString("0", CultureInfo.InvariantCulture) + "%");
+                    break;
+                // the input overlays name themselves and nothing else: their content is the
+                // recording's captured input, which has no one number to put on the card (the
+                // style and the timings live in the properties panel).
+                case CursorContent:
+                    RenderGlyphLabel(context, palette, body, TimelineIcons.CursorArrowGeometry, "Cursor");
+                    break;
+                case KeyboardContent:
+                    RenderGlyphLabel(context, palette, body, TimelineIcons.KeyboardGeometry, "Keys");
                     break;
             }
 

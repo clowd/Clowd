@@ -109,6 +109,89 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly SpeedOption DefaultSpeedTargetOption =
             SpeedTargetOptions.First(o => o.Value == 2.0);
 
+        /// <summary>A string-valued picker entry: the model's wire value beside the label the menu
+        /// shows. The same shape — and the same singleton discipline — as <see cref="SpeedOption"/>:
+        /// the lists below are the only instances, so reference equality selects the row.</summary>
+        public sealed class NamedOption
+        {
+            public NamedOption(string value, string label)
+            {
+                Value = value;
+                Label = label;
+            }
+
+            public string Value { get; }
+
+            public string Label { get; }
+
+            public override string ToString() => Label;
+        }
+
+        /// <summary>Display names for the cursor styles the model offers. Built off
+        /// <see cref="CursorContent.Styles"/> so the menu's order and membership are the model's;
+        /// a style with no entry here shows its wire name rather than disappearing.</summary>
+        private static readonly Dictionary<string, string> CursorStyleLabels = new Dictionary<string, string>
+        {
+            ["native"] = "Native",
+            ["ios-glyph"] = "iOS Glyph",
+            ["material"] = "Material",
+            ["fluent"] = "Fluent",
+            ["plumpy"] = "Plumpy",
+            ["softteal"] = "Softteal",
+            ["papercut"] = "Papercut",
+            ["doodle"] = "Doodle",
+        };
+
+        private static readonly Dictionary<string, string> ClickAnimationLabels = new Dictionary<string, string>
+        {
+            ["none"] = "None",
+            ["ripple"] = "Ripple",
+            ["pulse"] = "Pulse",
+        };
+
+        public static readonly IReadOnlyList<NamedOption> CursorStyleOptions =
+            BuildOptions(CursorContent.Styles, CursorStyleLabels);
+
+        /// <summary>What a new cursor item is created at (<see cref="CursorContent.Style"/>'s own
+        /// default), and what the style row's reset dot writes back.</summary>
+        public static readonly NamedOption DefaultCursorStyleOption =
+            FindOption(CursorStyleOptions, "ios-glyph");
+
+        public static readonly IReadOnlyList<NamedOption> ClickAnimationOptions =
+            BuildOptions(CursorContent.ClickAnimations, ClickAnimationLabels);
+
+        public static readonly NamedOption DefaultClickAnimationOption =
+            FindOption(ClickAnimationOptions, "none");
+
+        /// <summary>The one style that draws the recorded 512px box instead of a themed glyph —
+        /// the size and drop-shadow rows mean nothing while it is picked.</summary>
+        public const string NativeCursorStyle = "native";
+
+        /// <summary>The glyph-size range the spinner offers. Narrower than the model's own
+        /// validated 0.25–4: those are the bounds a project may hold, these are the ones worth
+        /// dialling.</summary>
+        public const double MinCursorSize = 0.5;
+
+        public const double MaxCursorSize = 3.0;
+
+        public const double DefaultCursorSize = 1.0;
+
+        /// <summary>The keystroke overlay's own ranges — <see cref="KeyboardContent"/>'s validated
+        /// bounds, repeated so the spinners cannot offer a number the project would refuse.</summary>
+        public const double MinKeyboardFontSize = 8;
+
+        public const double MaxKeyboardFontSize = 200;
+
+        public const double DefaultKeyboardFontSize = 28;
+
+        public const double MaxKeyboardMs = 10_000;
+
+        public const double DefaultKeyboardLingerMs = 300;
+
+        public const double DefaultKeyboardFadeMs = 250;
+
+        public const double DefaultKeyboardPauseBreakMs = 1000;
+
         public const double MinScale = 0.01;
         public const double MaxScale = 4.0;
         public const double MaxVolume = 2.0;
@@ -181,6 +264,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private bool _hasSelection;
         private bool _showTransform;
         private bool _showScale;
+        private bool _showRotation;
         private bool _showMask;
         private bool _showCrop;
         private bool _showText;
@@ -241,11 +325,23 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private bool _showSpeedEffect;
         private bool _showZoomEffect;
+        private bool _showCursorTrack;
+        private bool _showKeyboardTrack;
         private bool _showRamp;
         private double _speedFactor = 2.0;
         private double _zoomFactor = DefaultZoom;
         private double _zoomFocusX = 0.5;
         private double _zoomFocusY = 0.5;
+
+        private string _cursorStyle = "ios-glyph";
+        private double _cursorSize = DefaultCursorSize;
+        private bool _cursorDropShadow;
+        private string _cursorClickAnimation = "none";
+
+        private double _keyboardFontSize = DefaultKeyboardFontSize;
+        private double _keyboardLingerMs = DefaultKeyboardLingerMs;
+        private double _keyboardFadeMs = DefaultKeyboardFadeMs;
+        private double _keyboardPauseBreakMs = DefaultKeyboardPauseBreakMs;
 
         private bool _rampEntryEnabled;
         private double _rampEntryMs = DefaultTransitionMs;
@@ -309,6 +405,12 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// shows) a second size number.</summary>
         public bool ShowScale => _showScale;
 
+        /// <summary>The Rotation row. Off for the keystroke overlay: the composer draws its
+        /// pill block upright whatever <c>Transform.Rotation</c> says (the gizmo withholds its
+        /// rotate handle for the same reason), so a spinner here would write a number nothing
+        /// reads — and knock the gizmo's chrome out of line with the drawn block.</summary>
+        public bool ShowRotation => _showRotation;
+
         /// <summary>The PLACEMENT scale row's label: "Size" while the height follows the content,
         /// "Width" once a stretch has given the item a height of its own (which adds the Height
         /// row below).</summary>
@@ -343,6 +445,12 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The zoom effect item's magnification + focal point section.</summary>
         public bool ShowZoomEffect => _showZoomEffect;
+
+        /// <summary>The cursor overlay's style/size/click section.</summary>
+        public bool ShowCursorTrack => _showCursorTrack;
+
+        /// <summary>The keystroke overlay's type/timing section.</summary>
+        public bool ShowKeyboardTrack => _showKeyboardTrack;
 
         public bool ShowTrackHidden => _showTrackHidden;
 
@@ -1231,6 +1339,131 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        // ---------------------------------------------------------------------- input overlays
+
+        /// <summary>
+        /// The cursor overlay's style, as one of <see cref="CursorStyleOptions"/>. Every property
+        /// of these two sections writes the whole row (<see cref="EditCursor"/> /
+        /// <see cref="EditKeyboard"/> fan out like <see cref="EditRow"/>): the segments of an
+        /// overlay row are the split pieces of one continuous overlay, so a style the user picked
+        /// on one piece belongs to all of them — an unlinked row is a row of one either way.
+        /// </summary>
+        public NamedOption CursorStyle
+        {
+            get => FindOption(CursorStyleOptions, _cursorStyle);
+            set
+            {
+                if (value == null || _syncing || value.Value == _cursorStyle)
+                    return;
+
+                _cursorStyle = value.Value;
+                OnPropertyChanged(nameof(CursorStyle));
+                OnPropertyChanged(nameof(CursorGlyphEnabled));
+                EditCursor("sel:cursorstyle", c => c.Style = value.Value);
+            }
+        }
+
+        /// <summary>Whether the glyph rows (size, drop shadow) mean anything: the
+        /// <c>native</c> style draws the recorded box, which carries its own size and shadow.</summary>
+        public bool CursorGlyphEnabled => _cursorStyle != NativeCursorStyle;
+
+        /// <summary>Glyph size multiplier over the style's base size.</summary>
+        public double CursorSize
+        {
+            get => _cursorSize;
+            set
+            {
+                value = Clamp(value, MinCursorSize, MaxCursorSize);
+                if (!Set(ref _cursorSize, value) || _syncing)
+                    return;
+
+                EditCursor("sel:cursorsize", c => c.Size = value);
+            }
+        }
+
+        public bool CursorDropShadow
+        {
+            get => _cursorDropShadow;
+            set
+            {
+                if (!Set(ref _cursorDropShadow, value) || _syncing)
+                    return;
+
+                EditCursor("sel:cursorshadow", c => c.DropShadow = value);
+            }
+        }
+
+        /// <summary>What a mouse click draws, as one of <see cref="ClickAnimationOptions"/>.</summary>
+        public NamedOption CursorClickAnimation
+        {
+            get => FindOption(ClickAnimationOptions, _cursorClickAnimation);
+            set
+            {
+                if (value == null || _syncing || value.Value == _cursorClickAnimation)
+                    return;
+
+                _cursorClickAnimation = value.Value;
+                OnPropertyChanged(nameof(CursorClickAnimation));
+                EditCursor("sel:cursorclick", c => c.ClickAnimation = value.Value);
+            }
+        }
+
+        /// <summary>Keystroke text size, in output-canvas pixels (the preview scales it like a
+        /// text card's).</summary>
+        public double KeyboardFontSize
+        {
+            get => _keyboardFontSize;
+            set
+            {
+                value = Clamp(value, MinKeyboardFontSize, MaxKeyboardFontSize);
+                if (!Set(ref _keyboardFontSize, value) || _syncing)
+                    return;
+
+                EditKeyboard("sel:keyfont", k => k.FontSize = value);
+            }
+        }
+
+        /// <summary>How long a finished run stays fully visible before it starts fading.</summary>
+        public double KeyboardLingerMs
+        {
+            get => _keyboardLingerMs;
+            set
+            {
+                value = Clamp(value, 0, MaxKeyboardMs);
+                if (!Set(ref _keyboardLingerMs, value) || _syncing)
+                    return;
+
+                EditKeyboard("sel:keylinger", k => k.LingerMs = MsToInt(value));
+            }
+        }
+
+        public double KeyboardFadeMs
+        {
+            get => _keyboardFadeMs;
+            set
+            {
+                value = Clamp(value, 0, MaxKeyboardMs);
+                if (!Set(ref _keyboardFadeMs, value) || _syncing)
+                    return;
+
+                EditKeyboard("sel:keyfade", k => k.FadeMs = MsToInt(value));
+            }
+        }
+
+        /// <summary>The typing gap that ends a run and starts the next row.</summary>
+        public double KeyboardPauseBreakMs
+        {
+            get => _keyboardPauseBreakMs;
+            set
+            {
+                value = Clamp(value, 0, MaxKeyboardMs);
+                if (!Set(ref _keyboardPauseBreakMs, value) || _syncing)
+                    return;
+
+                EditKeyboard("sel:keypause", k => k.PauseBreakMs = MsToInt(value));
+            }
+        }
+
         // ------------------------------------------------------------------------------- ramps
 
         /// <summary>Whether the item ramps in at all — the section's switch, and the only thing
@@ -1358,12 +1591,23 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // half of the panel is off and only the effect's own section is left.
                 var isEffect = item?.Content is SpeedContent or ZoomContent;
                 var isText = item?.Content is TextContent;
-                var visual = item != null && !isAudio && !isEffect;
+                // the cursor overlay is placed by the capture data, not by the item: its position,
+                // size, aspect, crop and mask all come from the screen row it is synced to, so its
+                // visual half is off for the same reason an effect's is. The keystroke overlay is
+                // the other way round — Transform IS where the block sits and how wide it wraps —
+                // so it keeps placement, and only the picture-shaped rows (aspect/crop/shape,
+                // which key off isPicture below) stay away from it.
+                var isCursor = item?.Content is CursorContent;
+                var visual = item != null && !isAudio && !isEffect && !isCursor;
                 var isPicture = visual && item.Content is MediaContent or ImageContent;
 
                 Set(ref _hasSelection, item != null, nameof(HasSelection));
                 Set(ref _showTransform, visual, nameof(ShowTransform));
                 Set(ref _showScale, visual && !isText, nameof(ShowScale));
+                // the keystroke overlay keeps placement but not rotation: the composer draws the
+                // block upright whatever Transform.Rotation says (see DrawKeyboard).
+                Set(ref _showRotation, visual && item.Content is not KeyboardContent,
+                    nameof(ShowRotation));
                 Set(ref _showMask, isPicture, nameof(ShowMask));
                 Set(ref _showCrop, isPicture, nameof(ShowCrop));
                 Set(ref _showText, isText, nameof(ShowText));
@@ -1372,6 +1616,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _showRamp, item != null && (isAudio || isEffect), nameof(ShowRamp));
                 Set(ref _showSpeedEffect, item?.Content is SpeedContent, nameof(ShowSpeedEffect));
                 Set(ref _showZoomEffect, item?.Content is ZoomContent, nameof(ShowZoomEffect));
+                Set(ref _showCursorTrack, isCursor, nameof(ShowCursorTrack));
+                Set(ref _showKeyboardTrack, item?.Content is KeyboardContent, nameof(ShowKeyboardTrack));
                 // the eye stays: hiding an effect row is how the effect is turned off
                 Set(ref _showTrackHidden, item != null && !isAudio, nameof(ShowTrackHidden));
                 Set(ref _showTrackMuted, isAudio, nameof(ShowTrackMuted));
@@ -1396,6 +1642,24 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _zoomFactor, zoom.Zoom, nameof(ZoomFactor));
                     Set(ref _zoomFocusX, zoom.FocusX, nameof(ZoomFocusX));
                     Set(ref _zoomFocusY, zoom.FocusY, nameof(ZoomFocusY));
+                }
+
+                if (item?.Content is CursorContent cursor)
+                {
+                    Set(ref _cursorStyle, cursor.Style ?? DefaultCursorStyleOption.Value, nameof(CursorStyle));
+                    Set(ref _cursorSize, cursor.Size, nameof(CursorSize));
+                    Set(ref _cursorDropShadow, cursor.DropShadow, nameof(CursorDropShadow));
+                    Set(ref _cursorClickAnimation, cursor.ClickAnimation ?? DefaultClickAnimationOption.Value,
+                        nameof(CursorClickAnimation));
+                    OnPropertyChanged(nameof(CursorGlyphEnabled));
+                }
+
+                if (item?.Content is KeyboardContent keyboard)
+                {
+                    Set(ref _keyboardFontSize, keyboard.FontSize, nameof(KeyboardFontSize));
+                    Set(ref _keyboardLingerMs, keyboard.LingerMs, nameof(KeyboardLingerMs));
+                    Set(ref _keyboardFadeMs, keyboard.FadeMs, nameof(KeyboardFadeMs));
+                    Set(ref _keyboardPauseBreakMs, keyboard.PauseBreakMs, nameof(KeyboardPauseBreakMs));
                 }
 
                 var transform = item?.Transform ?? new Transform();
@@ -1560,6 +1824,36 @@ namespace Clowd.UI.VideoEditor.Inspector
             }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
         }
 
+        /// <summary>The cursor-overlay write: content-guarded on both sides like
+        /// <see cref="EditZoom"/> (the section's bindings stay live while it is hidden), and
+        /// row-wide like <see cref="EditRow"/> — the split segments of an overlay row are one
+        /// overlay, so they must not end up with different styles.</summary>
+        private void EditCursor(string coalesceKey, Action<CursorContent> edit)
+        {
+            EditOverlayRow<CursorContent>(coalesceKey, edit);
+        }
+
+        /// <summary>The keystroke-overlay write; see <see cref="EditCursor"/>.</summary>
+        private void EditKeyboard(string coalesceKey, Action<KeyboardContent> edit)
+        {
+            EditOverlayRow<KeyboardContent>(coalesceKey, edit);
+        }
+
+        private void EditOverlayRow<TContent>(string coalesceKey, Action<TContent> edit)
+            where TContent : ItemContent
+        {
+            var item = SelectedItem;
+            if (item?.Content is not TContent)
+                return;
+
+            var scope = item.LinkGroupId != null ? item.TrackId : item.Id;
+            _session.EditItems(ItemRowScope.RowItemIds(_session, item), i =>
+            {
+                if (i.Content is TContent content)
+                    edit(content);
+            }, $"{coalesceKey}:{scope}", structural: false, origin: this);
+        }
+
         private void SetMaskFlags(bool square, bool circle, bool rounded, bool squircle)
         {
             Set(ref _maskSquare, square, nameof(MaskSquare));
@@ -1695,6 +1989,34 @@ namespace Clowd.UI.VideoEditor.Inspector
         private static long MsToTicks(double ms) =>
             (long)Math.Round(Math.Max(0, ms) * TimeSpan.TicksPerMillisecond);
 
+        /// <summary>The overlay timings are whole milliseconds in the model; a spinner's text box
+        /// hands over whatever parsed.</summary>
+        private static int MsToInt(double ms) => (int)Math.Round(Math.Max(0, ms));
+
+        /// <summary>Wraps the model's own value list in labelled singletons, in the model's order —
+        /// see <see cref="NamedOption"/>.</summary>
+        private static IReadOnlyList<NamedOption> BuildOptions(
+            IReadOnlyList<string> values, IReadOnlyDictionary<string, string> labels)
+        {
+            var options = new List<NamedOption>(values.Count);
+            foreach (var value in values)
+                options.Add(new NamedOption(value, labels.TryGetValue(value, out var label) ? label : value));
+            return options;
+        }
+
+        /// <summary>The singleton for a wire value — the first entry when the model holds something
+        /// the menu does not offer, which is how the composer treats it too (an unknown style falls
+        /// back to the theme's arrow rather than drawing nothing).</summary>
+        private static NamedOption FindOption(IReadOnlyList<NamedOption> options, string value)
+        {
+            foreach (var option in options)
+            {
+                if (option.Value == value)
+                    return option;
+            }
+            return options.Count > 0 ? options[0] : null;
+        }
+
         private static string DescribeContent(Item item, bool onAudioTrack) => item?.Content switch
         {
             null => "",
@@ -1704,6 +2026,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             SolidContent => "Color",
             SpeedContent => "Speed",
             ZoomContent => "Zoom",
+            CursorContent => "Cursor",
+            KeyboardContent => "Keys",
             _ => "Item",
         };
 

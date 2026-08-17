@@ -33,8 +33,13 @@ namespace Clowd.UI
     /// <c>stopped_recording</c> as an optional <c>tracks</c> object. The video editor needs it to
     /// place the webcam overlay (which stream, and what aspect ratio) and to label the audio rows.
     /// Null on a recorder too old to send it; <see cref="Webcam"/> is null whenever no camera was
-    /// captured, and <see cref="Audio"/> is empty when the report named no audio tracks.</summary>
-    public sealed record ObsTracks(ObsTrackInfo Screen, ObsTrackInfo Webcam, IReadOnlyList<ObsAudioTrackInfo> Audio);
+    /// captured, and <see cref="Audio"/> is empty when the report named no audio tracks.
+    /// <see cref="Cursor"/> is the 512x512 cursor-box track an input-capture recording carries
+    /// (null without one), and <see cref="InputCapturePath"/> is the recorder's echo of the jsonl
+    /// path it wrote — a top-level field beside <c>tracks</c> on the wire, kept here because the
+    /// two describe the same recording and are read together. Both null on older recorders.</summary>
+    public sealed record ObsTracks(ObsTrackInfo Screen, ObsTrackInfo Webcam, IReadOnlyList<ObsAudioTrackInfo> Audio,
+        ObsTrackInfo Cursor = null, string InputCapturePath = null);
 
 /// <summary>The recorder's answer to a <c>configure</c> command (DESIGN §1.3): either
 /// <c>configure_applied</c>, whose <see cref="IgnoredKeys"/> names the settings the recorder
@@ -567,13 +572,16 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         /// <code>
         /// {"screen": {"index":0,"width":W,"height":H},
         ///  "webcam": {"index":1,"width":W,"height":H},          // absent, not null, without one
+        ///  "cursor": {"index":2,"width":512,"height":512},      // input-capture recordings only
         ///  "audio":  [{"index":0,"kind":"speaker","device":"default","name":"Speaker 1"}, …]}
         /// </code>
         ///
         /// Every part of it is optional as far as this reader is concerned: an older recorder sends
         /// no <c>audio</c> array at all (single mixed track, nothing to say about it), and the
         /// editor's rows come from probing the file either way — the report only decorates them.
-        /// So anything unparseable is dropped, never thrown on.
+        /// So anything unparseable is dropped, never thrown on. The message may also carry a
+        /// top-level <c>"input_capture":"path"</c> beside <c>tracks</c> — the jsonl sidecar the
+        /// recorder wrote — read into the same record for the same reason.
         /// </summary>
         internal static ObsTracks ParseTracks(JsonElement root, ObsTracks previous)
         {
@@ -584,7 +592,14 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             if (screen == null)
                 return previous; // a tracks object without a screen track is not one we can use
 
-            return new ObsTracks(screen, ReadTrack(tracksEl, "webcam"), ReadAudioTracks(tracksEl));
+            var inputCapture = root.TryGetProperty("input_capture", out var pathEl)
+                               && pathEl.ValueKind == JsonValueKind.String
+                               && !String.IsNullOrEmpty(pathEl.GetString())
+                ? pathEl.GetString()
+                : null;
+
+            return new ObsTracks(screen, ReadTrack(tracksEl, "webcam"), ReadAudioTracks(tracksEl),
+                ReadTrack(tracksEl, "cursor"), inputCapture);
         }
 
         /// <summary>The <c>audio</c> array of a tracks report, in the order it was written. An entry

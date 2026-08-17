@@ -445,7 +445,10 @@
                             Value="{Binding ScaleHeight, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <DockPanel Classes="row">
+                    <!--  hidden for the keystroke overlay: the composer draws its block upright
+                          whatever Transform.Rotation says, so the spinner would write a number
+                          nothing reads.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowRotation}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding Rotation, Mode=TwoWay}" DefaultValue="0" />
                         </Panel>
@@ -957,6 +960,123 @@
                             SpinAmount="0.01"
                             Suffix="%"
                             Value="{Binding ZoomFocusY, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  cursor overlay: where it is drawn is the recording's business (the capture
+                      file places it), so the whole section is about what it looks like. The size
+                      and shadow rows are disabled under the native style, which draws the
+                      recorded cursor box and carries both of its own.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowCursorTrack}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="CURSOR" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <!--  the dot's default is the style option object, assigned in code-behind
+                              for the same reason ddSpeed's is  -->
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotCursorStyle" CurrentValue="{Binding CursorStyle, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Style" />
+                        <controls:DropDownButton x:Name="ddCursorStyle" SelectedItem="{Binding CursorStyle, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsEnabled="{Binding CursorGlyphEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Size" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="3"
+                            Min="0.5"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsEnabled="{Binding CursorGlyphEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotCursorDropShadow" CurrentValue="{Binding CursorDropShadow, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Shadow" />
+                        <CheckBox IsChecked="{Binding CursorDropShadow, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotCursorClick" CurrentValue="{Binding CursorClickAnimation, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Clicks" />
+                        <controls:DropDownButton x:Name="ddCursorClick" SelectedItem="{Binding CursorClickAnimation, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  keystroke overlay: how big the keys read, and the three times that decide how
+                      long a run stays and when the next one starts. Where the block sits and how
+                      wide it wraps are the placement section's business, above.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowKeyboardTrack}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="KEYSTROKES" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFontSize, Mode=TwoWay}" DefaultValue="28" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Size" />
+                        <controls:SpinnerTextBox
+                            Max="200"
+                            Min="8"
+                            SnapToWholeNumber="True"
+                            SpinAmount="2"
+                            Suffix="px"
+                            Value="{Binding KeyboardFontSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardLingerMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Linger" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding KeyboardLingerMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFadeMs, Mode=TwoWay}" DefaultValue="250" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Fade" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding KeyboardFadeMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" DefaultValue="1000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="New row" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 

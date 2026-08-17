@@ -102,6 +102,68 @@ namespace Clowd.VideoSDK.Tests
             Assert.False(ObsArguments.UsesWebcam(null));
         }
 
+        /// <summary>Input capture rides with multi-track: every composed recording gets the jsonl
+        /// (and the 512x512 cursor box track), written into the session directory beside the mp4.
+        /// A single-track recording has no editor to read it, so it is not asked for.</summary>
+        [Fact]
+        public void Multi_track_recordings_also_capture_input()
+        {
+            var args = Build(Settings());
+            var i = Array.IndexOf(args, "--input-capture");
+
+            Assert.True(i >= 0);
+            Assert.Equal(@"C:\out\input-capture.jsonl", args[i + 1]);
+
+            Assert.DoesNotContain("--input-capture", Build(Settings(composition: false)));
+        }
+
+        // ------------------------------------------------------------------ settings file
+
+        private static JsonDocument WriteSettings(SettingsRecording settings)
+        {
+            var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "clowd-obs-settings-" + Guid.NewGuid().ToString("N") + ".json");
+            try
+            {
+                ObsArguments.WriteSettingsFile(path, settings);
+                return JsonDocument.Parse(System.IO.File.ReadAllText(path));
+            }
+            finally
+            {
+                System.IO.File.Delete(path);
+            }
+        }
+
+        /// <summary>With input capture active the editor owns the cursor (its own 512 track) and
+        /// the click highlight (the jsonl) — baking either into the screen frames would double
+        /// them up in the composed output, so the settings file forces both off whatever the user's
+        /// settings say.</summary>
+        [Fact]
+        public void Input_capture_hands_cursor_and_tracker_to_the_editor()
+        {
+            var settings = Settings();
+            settings.ShowMouseCursor = true;
+            settings.HighlightClicks = true;
+
+            using var file = WriteSettings(settings);
+            Assert.False(file.RootElement.GetProperty("cursor").GetBoolean());
+            Assert.False(file.RootElement.GetProperty("tracker").GetBoolean());
+        }
+
+        /// <summary>…and a single-track recording keeps the legacy behavior: the flattened file is
+        /// all the user ever gets, so their cursor/highlight settings apply directly.</summary>
+        [Fact]
+        public void Single_track_recordings_keep_the_cursor_settings()
+        {
+            var settings = Settings(composition: false);
+            settings.ShowMouseCursor = true;
+            settings.HighlightClicks = true;
+
+            using var file = WriteSettings(settings);
+            Assert.True(file.RootElement.GetProperty("cursor").GetBoolean());
+            Assert.True(file.RootElement.GetProperty("tracker").GetBoolean());
+        }
+
         // ------------------------------------------------------------------ tracks report
 
         private static ObsTracks Parse(string json, ObsTracks previous = null)
@@ -172,6 +234,37 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(new[] { new ObsAudioTrackInfo(1, null), new ObsAudioTrackInfo(2, null),
                                  new ObsAudioTrackInfo(3, "microphone") },
                 tracks.Audio);
+        }
+
+        /// <summary>An input-capture recording's report also names the cursor box track (inside
+        /// <c>tracks</c>) and echoes the jsonl path back (top level, beside it).</summary>
+        [Fact]
+        public void An_input_capture_report_carries_the_cursor_track_and_jsonl_path()
+        {
+            var tracks = Parse("""
+                {"type":"started_recording","input_capture":"C:\\s\\input-capture.jsonl","tracks":{
+                  "screen":{"index":0,"width":1920,"height":1080},
+                  "webcam":{"index":1,"width":1280,"height":720},
+                  "cursor":{"index":2,"width":512,"height":512}}}
+                """);
+
+            Assert.Equal(new ObsTrackInfo(2, 512, 512), tracks.Cursor);
+            Assert.Equal(@"C:\s\input-capture.jsonl", tracks.InputCapturePath);
+        }
+
+        /// <summary>Both fields are optional and forward-tolerant: a recorder that predates them
+        /// (or a malformed value) reads as "no cursor, no jsonl", never as a failure.</summary>
+        [Fact]
+        public void A_report_without_input_capture_reads_as_none()
+        {
+            var tracks = Parse("""{"tracks":{"screen":{"index":0,"width":800,"height":600}}}""");
+            Assert.Null(tracks.Cursor);
+            Assert.Null(tracks.InputCapturePath);
+
+            Assert.Null(Parse("""{"input_capture":42,"tracks":{"screen":{"index":0}}}""").InputCapturePath);
+            Assert.Null(Parse("""{"input_capture":"","tracks":{"screen":{"index":0}}}""").InputCapturePath);
+            Assert.Null(Parse("""{"tracks":{"screen":{"index":0},"cursor":null}}""").Cursor);
+            Assert.Null(Parse("""{"tracks":{"screen":{"index":0},"cursor":7}}""").Cursor);
         }
 
         /// <summary>stopped_recording is the second report; a message carrying none must not clear

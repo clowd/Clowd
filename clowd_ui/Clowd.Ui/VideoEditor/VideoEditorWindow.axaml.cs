@@ -138,6 +138,8 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandAddImage { get; }
         public RelayCommand CommandAddZoomEffect { get; }
         public RelayCommand CommandAddSpeedEffect { get; }
+        public RelayCommand CommandAddCursorTrack { get; }
+        public RelayCommand CommandAddKeyboardTrack { get; }
         public RelayCommand CommandImportMedia { get; }
         public RelayCommand CommandImportAudio { get; }
         public RelayCommand CommandRender { get; }
@@ -191,6 +193,18 @@ namespace Clowd.UI.VideoEditor
                 Executed = _ => AddSpeedEffect(),
                 CanExecute = _ => _editor is { HasSpeedTrack: false },
                 Text = "Add _Speed",
+            };
+            CommandAddCursorTrack = new RelayCommand
+            {
+                Executed = _ => AddCursorTrack(),
+                CanExecute = _ => _editor is { HasInputCapture: true, HasCursorTrack: false },
+                Text = "Add _Cursor Track",
+            };
+            CommandAddKeyboardTrack = new RelayCommand
+            {
+                Executed = _ => AddKeyboardTrack(),
+                CanExecute = _ => _editor is { HasInputCapture: true, HasKeyboardTrack: false },
+                Text = "Add _Keyboard Track",
             };
             CommandImportMedia = new RelayCommand
             {
@@ -461,9 +475,10 @@ namespace Clowd.UI.VideoEditor
             try
             {
                 // the session's recorder report names the audio rows a fresh edit creates ("Microphone"
-                // rather than "Audio 2"); the probe still decides which rows there are.
+                // rather than "Audio 2") and classifies the video streams (which is the webcam, which
+                // the cursor box); the probe still decides which rows there are.
                 project = VideoEditPersistence.LoadOrCreate(_editDocPath, _videoPath, probe,
-                    AudioTrackLabels.From(_session?.AudioTracks));
+                    AudioTrackLabels.From(_session?.AudioTracks), RecordingTrackHints.From(_session));
             }
             catch (Exception ex)
             {
@@ -489,11 +504,13 @@ namespace Clowd.UI.VideoEditor
                 CommandUndo.RaiseCanExecuteChanged();
                 CommandRedo.RaiseCanExecuteChanged();
                 RefreshAddSpeedButton();
+                RefreshInputOverlayButtons();
             };
             _editor.SelectionChanged += Editor_SelectionChanged;
             CommandUndo.RaiseCanExecuteChanged();
             CommandRedo.RaiseCanExecuteChanged();
             RefreshAddSpeedButton();
+            RefreshInputOverlayButtons();
 
             Inspector.Session = _editor;
             timeline.Session = _editor;
@@ -615,6 +632,7 @@ namespace Clowd.UI.VideoEditor
             RefreshResolutionPicker();
             RefreshFrameRatePicker();
             RefreshAddSpeedButton();
+            RefreshInputOverlayButtons();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -934,6 +952,53 @@ namespace Clowd.UI.VideoEditor
             ToolTip.SetTip(btnAddSpeed, _editor is { HasSpeedTrack: true }
                 ? "A Speed row already exists — split or modify the existing Speed row instead."
                 : "Add speed change");
+        }
+
+        /// <summary>Adds the cursor overlay row — one per project, mirroring the recording's screen
+        /// segments. The session refuses (null) when the recording carries no input-capture data or
+        /// the row already exists, which is also what the button's CanExecute reads.</summary>
+        private void AddCursorTrack()
+        {
+            if (!CanAddToProject)
+                return;
+
+            var item = _editor.AddCursorTrack();
+            if (item != null)
+                RevealNewItem(item);
+        }
+
+        /// <summary>The keystroke overlay's counterpart of <see cref="AddCursorTrack"/>.</summary>
+        private void AddKeyboardTrack()
+        {
+            if (!CanAddToProject)
+                return;
+
+            var item = _editor.AddKeyboardTrack();
+            if (item != null)
+                RevealNewItem(item);
+        }
+
+        /// <summary>The two input-overlay buttons on the same terms as
+        /// <see cref="RefreshAddSpeedButton"/>: single-use per project, and only offered at all for
+        /// a recording that captured input — so the tooltip says which of the two reasons the
+        /// button is disabled for. Called from the same project/history change sites (an undo can
+        /// create or remove either row).</summary>
+        private void RefreshInputOverlayButtons()
+        {
+            CommandAddCursorTrack.RaiseCanExecuteChanged();
+            CommandAddKeyboardTrack.RaiseCanExecuteChanged();
+
+            var hasCapture = _editor is { HasInputCapture: true };
+            ToolTip.SetTip(btnAddCursor, !hasCapture
+                ? "This recording has no input capture data — the cursor overlay needs it."
+                : _editor is { HasCursorTrack: true }
+                    ? "A Cursor row already exists — modify the existing Cursor row instead."
+                    : "Add Cursor Track");
+            ToolTip.SetTip(btnAddKeyboard, !hasCapture
+                ? "This recording has no input capture data — the keystroke overlay needs it."
+                : _editor is { HasKeyboardTrack: true }
+                    ? "A Keys row already exists — modify the existing Keys row instead."
+                    : "Add Keyboard Track");
         }
 
         /// <summary>Imports an external file as an overlay: probed off the UI thread (the same

@@ -77,6 +77,11 @@ namespace Clowd.UI
         /// <summary>Name of the settings file inside the session directory.</summary>
         public const string SettingsFileName = "obs-settings.json";
 
+        /// <summary>Name of the input-capture JSONL sidecar inside the session directory. It stays
+        /// there for the life of the session (like videoedit.json) — the editor reads it in place,
+        /// and a missing file just means no cursor/keyboard data.</summary>
+        public const string InputCaptureFileName = "input-capture.jsonl";
+
         /// <summary>The color the click tracker is drawn in; obs-express's own default. Not
         /// surfaced as a Clowd setting, but the file must carry every field.</summary>
         private const string TrackerColor = "255,0,0";
@@ -86,6 +91,12 @@ namespace Clowd.UI
         /// configured device (speakers first). Without it the single-track ffmpeg muxer writes one
         /// video track and mixes every audio device into one.</summary>
         private const string MultiTrackArg = "--multi-track";
+
+        /// <summary>Recorder flag naming the JSONL file it should write cursor/keyboard input data
+        /// into. Given together with <see cref="MultiTrackArg"/>, it also earns the mp4 a 512x512
+        /// cursor-box video track; without it the file alone would still be written, but Clowd only
+        /// asks for input capture on recordings the editor can open.</summary>
+        private const string InputCaptureArg = "--input-capture";
 
         /// <summary>libobs carries at most six audio tracks (its mixer/encoder limit), and the
         /// recorder refuses to start when <see cref="MultiTrackArg"/> is given with more devices
@@ -109,10 +120,24 @@ namespace Clowd.UI
             // recorder only accepts it on the command line. A change to it therefore costs a respawn
             // (see VideoCapturePage), unlike every tunable in WriteSettingsFile.
             if (UsesMultiTrack(settings))
+            {
                 args.Add(MultiTrackArg);
+
+                // input capture rides with multi-track: the jsonl (and the 512x512 cursor box
+                // track the recorder adds alongside it) only mean anything to the editor, which a
+                // single-track recording never reaches. Session-fixed like --output, so it is a
+                // CLI argument rather than a settings-file key.
+                args.Add(InputCaptureArg);
+                args.Add(GetInputCapturePath(Path.GetDirectoryName(outputMp4)));
+            }
 
             return args;
         }
+
+        /// <summary>Where the input-capture sidecar of a session lives — the recorder is told this
+        /// exact path, and the editor's fallback (a recorder too old to echo it back) looks here.</summary>
+        public static string GetInputCapturePath(string sessionDir)
+            => Path.Combine(sessionDir ?? "", InputCaptureFileName);
 
         /// <summary>
         /// Whether this recording is written as one track per stream — which is exactly what
@@ -158,6 +183,13 @@ namespace Clowd.UI
         /// </summary>
         public static void WriteSettingsFile(string path, SettingsRecording settings)
         {
+            // input capture (which rides with multi-track, see Build) hands both cursor and click
+            // highlighting to the editor: the cursor is recorded as its own 512x512 track and the
+            // clicks live in the jsonl, so baking either into the screen frames would double them
+            // up in the composed output. Single-track recordings keep the legacy behavior — the
+            // flattened file is all the user ever gets, so the settings apply directly.
+            var inputCapture = UsesMultiTrack(settings);
+
             var model = new ObsSettingsJson
             {
                 Fps = settings.Fps,
@@ -167,8 +199,8 @@ namespace Clowd.UI
                 MaxHeight = settings.MaxResolutionHeight,
                 HwAccel = settings.HardwareAccelerated,
                 LowCpu = false,
-                Cursor = settings.ShowMouseCursor,
-                Tracker = settings.HighlightClicks,
+                Cursor = !inputCapture && settings.ShowMouseCursor,
+                Tracker = !inputCapture && settings.HighlightClicks,
                 TrackerColor = TrackerColor,
                 // The devices are listed regardless of the CaptureSpeaker/CaptureMicrophone
                 // toggles — those are runtime mutes applied over stdin; omitting the device would
