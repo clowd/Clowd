@@ -290,6 +290,8 @@ mod cursor_shape {
 
     // Linked by build.rs (AppKit + libobjc), like the CoreGraphics symbols above.
     extern "C" {
+        fn objc_autoreleasePoolPush() -> *mut c_void;
+        fn objc_autoreleasePoolPop(pool: *mut c_void);
         fn objc_getClass(name: *const c_char) -> *mut c_void;
         fn sel_registerName(name: *const c_char) -> *mut c_void;
         fn objc_msgSend();
@@ -300,12 +302,29 @@ mod cursor_shape {
     type Msg0Len = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
     type Msg1Isize = unsafe extern "C" fn(*mut c_void, *mut c_void, isize) -> bool;
     type Msg1Ptr = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
+    type Msg1Usize = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
     type Msg2UsizePtr =
         unsafe extern "C" fn(*mut c_void, *mut c_void, usize, *mut c_void) -> *mut c_void;
     /// NSPoint/NSSize are two doubles — returned in registers on both arm64
     /// and x86_64, so plain `objc_msgSend` (not `_stret`) is the right call.
     type Msg0Point = unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGPoint;
     type Msg0Size = unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGSize;
+
+    /// Runs `f` inside an autorelease pool.
+    ///
+    /// Nothing here executes on an AppKit-managed thread — the tick callback is
+    /// libobs's graphics thread — so there is no ambient pool to catch what
+    /// AppKit autoreleases. `TIFFRepresentation` and the PNG encode return
+    /// autoreleased objects holding the cursor bitmap at every representation
+    /// size; without a pool each capture strands them. Measured at ~750 KB per
+    /// cursor change on macOS 15.7, which over a long recording is unbounded
+    /// growth rather than a fixed overhead.
+    fn autoreleased<T>(f: impl FnOnce() -> T) -> T {
+        let pool = unsafe { objc_autoreleasePoolPush() };
+        let out = f();
+        unsafe { objc_autoreleasePoolPop(pool) };
+        out
+    }
 
     unsafe fn class(name: &str) -> *mut c_void {
         let n = CString::new(name).unwrap();
@@ -342,6 +361,15 @@ mod cursor_shape {
         }
         let f: Msg1Ptr = std::mem::transmute(objc_msgSend as *const ());
         f(obj, selector(sel), arg)
+    }
+
+    /// `[obj sel:index]`, returning an object pointer.
+    unsafe fn msg_idx(obj: *mut c_void, sel: &str, index: usize) -> *mut c_void {
+        if obj.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: Msg1Usize = std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector(sel), index)
     }
 
     /// `[obj sel:int arg2:obj]`, returning an object pointer.
@@ -445,6 +473,7 @@ mod cursor_shape {
         static TABLE: OnceLock<Vec<(u64, CursorKind)>> = OnceLock::new();
         TABLE.get_or_init(|| {
             ensure_appkit();
+            autoreleased(|| {
             let mut out = Vec::with_capacity(STOCK.len());
             for (sel, kind) in STOCK {
                 let cursor = unsafe { msg(class("NSCursor"), sel) };
@@ -457,6 +486,7 @@ mod cursor_shape {
                 }
             }
             out
+            })
         })
     }
 
@@ -481,8 +511,8 @@ mod cursor_shape {
     fn classify() -> CursorKind {
         ensure_appkit();
         let table = stock_table();
-        let current = unsafe { msg(class("NSCursor"), "currentSystemCursor") };
-        match unsafe { hash_cursor(current) } {
+        let hash = autoreleased(|| unsafe { hash_cursor(msg(class("NSCursor"), "currentSystemCursor")) });
+        match hash {
             Some(h) => table
                 .iter()
                 .find(|(hh, _)| *hh == h)
@@ -603,11 +633,12 @@ mod cursor_shape {
     /// cursors are plain alpha bitmaps: `mask` is always `None`.
     fn capture_sprite(kind: CursorKind) -> Option<RawSprite> {
         ensure_appkit();
-        unsafe {
+        autoreleased(|| unsafe {
             let cursor = msg(class("NSCursor"), "currentSystemCursor");
             let image = msg(cursor, "image");
-            let tiff = msg(image, "TIFFRepresentation");
-            let rep = msg1(class("NSBitmapImageRep"), "imageRepWithData:", tiff);
+            let size = msg_size(image, "size");
+            let rep = pick_rep(image, size.width * target_backing_scale())?;
+
             let png = msg2(
                 rep,
                 "representationUsingType:properties:",
@@ -625,9 +656,8 @@ mod cursor_shape {
                 return None;
             }
             // hotSpot is in points; the sprite is pixel-sized, so scale by the
-            // image's pixels-per-point ratio (2 on Retina).
+            // chosen representation's pixels-per-point ratio.
             let hot = msg_point(cursor, "hotSpot");
-            let size = msg_size(image, "size");
             let sx = if size.width > 0.0 {
                 w as f64 / size.width
             } else {
@@ -647,7 +677,50 @@ mod cursor_shape {
                 bmp: SpritePixels::Png(std::slice::from_raw_parts(bytes, len).to_vec()),
                 mask: None,
             })
+        })
+    }
+
+    /// The densest backing scale in use, matching `region::plan_region`'s
+    /// `canvas_scale` — the factor the canvas (and therefore the sprite) is
+    /// sized by.
+    fn target_backing_scale() -> f64 {
+        super::enumerate_monitors()
+            .iter()
+            .map(|m| m.scale)
+            .fold(1.0f64, f64::max)
+    }
+
+    /// The `NSImageRep` whose pixel width is closest to `target_px`.
+    ///
+    /// A cursor `NSImage` carries a whole ladder of representations — 17x23,
+    /// 34x46, 85x115 and 170x230 for the stock arrow on macOS 15.7, the upper
+    /// rungs feeding the accessibility pointer-size slider. `TIFFRepresentation`
+    /// serializes all of them and `imageRepWithData:` then returns the *first*,
+    /// which is the largest: a 10x sprite for a cursor the OS draws at 17x23.
+    /// Selecting explicitly is what keeps `RawSprite::w/h` honest about being
+    /// physical pixels.
+    unsafe fn pick_rep(image: *mut c_void, target_px: f64) -> Option<*mut c_void> {
+        let reps = msg(image, "representations");
+        let count = msg_len(reps, "count");
+        if count == 0 {
+            return None;
         }
+        let mut best: Option<(*mut c_void, f64)> = None;
+        for i in 0..count {
+            let rep = msg_idx(reps, "objectAtIndex:", i);
+            if rep.is_null() {
+                continue;
+            }
+            let w = msg_len(rep, "pixelsWide") as f64;
+            if w <= 0.0 {
+                continue;
+            }
+            let delta = (w - target_px).abs();
+            if best.is_none_or(|(_, b)| delta < b) {
+                best = Some((rep, delta));
+            }
+        }
+        best.map(|(rep, _)| rep)
     }
 }
 
