@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Clowd.VideoSDK.Model;
 using SkiaSharp;
 
 namespace Clowd.VideoSDK.Composition
@@ -14,16 +15,11 @@ namespace Clowd.VideoSDK.Composition
     internal static class CursorCompose
     {
         /// <summary>Base size of a themed glyph in source (physical) pixels at monitor scale 1 —
-        /// the nominal size of a Windows cursor at 100% DPI. Multiplied by
-        /// <c>CursorContent.Size</c> and the header's monitor scale.</summary>
-        internal const double BaseCursorPx = 32.0;
-
-        // Click animation constants — the obs tracker's, verbatim (tracker.rs): 400 ms, 85% peak
-        // opacity fading linearly to 0, radius 10 → 40 DIP.
-        internal const double ClickDurationMs = 400.0;
-        internal const double ClickMaxOpacity = 0.85;
-        internal const double ClickRadiusStartDip = 10.0;
-        internal const double ClickRadiusGrowthDip = 30.0;
+        /// the standardised 100% cursor size, deliberately larger than the 32px a Windows cursor
+        /// is authored at (a recorded cursor reads better a touch oversized). Multiplied by
+        /// <c>CursorContent.Size</c> and the header's monitor scale, so 100% lands at 40x40 on a
+        /// screen row shown at its recorded logical size whatever the recording's DPI was.</summary>
+        internal const double BaseCursorPx = 40.0;
 
         /// <summary>The <see cref="CursorAssets"/> kind key for a captured cursor kind, or null
         /// for the kinds without dedicated artwork (they fall back to the style's arrow).</summary>
@@ -203,52 +199,60 @@ namespace Clowd.VideoSDK.Composition
             }
         }
 
-        // ------------------------------------------------------------------------- click anims
+        // --------------------------------------------------------------------- click highlight
 
         /// <summary>
-        /// Draws every in-flight click animation at <paramref name="sourceMs"/>: one animation per
-        /// mouse-down event, started at the event's time and animated in <b>project</b> time (the
-        /// source-time window scales by <paramref name="speed"/> so a sped-up clip does not
-        /// compress the animation). Ripple = expanding fading circle (the tracker's constants);
-        /// pulse = the same fade with the radius shrinking instead. Drawn beneath the glyph —
-        /// callers invoke this first.
+        /// Draws the click highlight at <paramref name="sourceMs"/>: a solid dot pinned to the
+        /// pointer for as long as a button is held (<see cref="InputFrame.Buttons"/> on
+        /// <paramref name="row"/>, so it follows a drag), and one expanding animation per mouse-<b>up</b>
+        /// event — the highlight explodes where the button was released. Both animate in
+        /// <b>project</b> time (the source-time window scales by <paramref name="speed"/> so a
+        /// sped-up clip does not compress the animation). Ripple = expanding fading circle (the
+        /// tracker's constants); pulse = the same fade with the radius shrinking instead. The item's
+        /// own <c>HoldSize</c>, <c>ClickSize</c> and <c>AnimationSpeed</c> scale the held dot, the
+        /// sweep and the clock respectively. Drawn beneath the glyph/box — callers invoke this
+        /// first.
         /// </summary>
         internal static void DrawClickAnimations(SKCanvas target, InputCapture capture,
-            in PictureMapping map, double sourceMs, double speed, string animation,
-            uint colorArgb, double monitorScale, double opacity)
+            in PictureMapping map, in InputFrame row, double sourceMs, double speed,
+            CursorContent cursor, double monitorScale, double opacity)
         {
-            bool pulse;
-            if (string.Equals(animation, "ripple", StringComparison.OrdinalIgnoreCase))
-                pulse = false;
-            else if (string.Equals(animation, "pulse", StringComparison.OrdinalIgnoreCase))
-                pulse = true;
-            else
+            if (cursor == null || !ClickHighlight.TryParse(cursor.ClickAnimation, out bool pulse))
                 return;
 
             if (speed <= 0)
                 speed = 1.0;
-            double windowMs = ClickDurationMs * speed;
+
+            var header = capture.Header;
+            var color = new SKColor(cursor.ClickColor);
+            using var paint = new SKPaint { IsAntialias = true };
+
+            if (row.Buttons != 0)
+            {
+                float heldRadius = (float)(ClickHighlight.HeldRadiusDip(cursor.HoldSize)
+                    * monitorScale * map.ScaleX);
+                double heldAlpha = ClickHighlight.MaxOpacity * (color.Alpha / 255.0) * opacity;
+                paint.Color = color.WithAlpha(FrameComposer.AlphaByte(heldAlpha));
+                target.DrawCircle(map.Map(row.X - header.RegionX, row.Y - header.RegionY),
+                    heldRadius, paint);
+            }
+
+            double windowMs = ClickHighlight.DurationMsAt(cursor.AnimationSpeed) * speed;
             var events = capture.EventsBetween(sourceMs - windowMs, sourceMs + 0.001);
             if (events.Count == 0)
                 return;
 
-            var header = capture.Header;
-            var color = new SKColor(colorArgb);
-            using var paint = new SKPaint { IsAntialias = true };
-
             foreach (var e in events)
             {
-                if (e.Kind != InputEventKind.MouseDown)
+                if (e.Kind != InputEventKind.MouseUp)
                     continue;
                 double progress = (sourceMs - e.TimeMs) / windowMs;
                 if (progress < 0 || progress >= 1)
                     continue;
 
-                double radiusDip = pulse
-                    ? ClickRadiusStartDip + (1 - progress) * ClickRadiusGrowthDip
-                    : ClickRadiusStartDip + progress * ClickRadiusGrowthDip;
-                float radius = (float)(radiusDip * monitorScale * map.ScaleX);
-                double alpha = (1 - progress) * ClickMaxOpacity * (color.Alpha / 255.0) * opacity;
+                float radius = (float)(ClickHighlight.RadiusDip(progress, pulse, cursor.ClickSize)
+                    * monitorScale * map.ScaleX);
+                double alpha = ClickHighlight.Opacity(progress) * (color.Alpha / 255.0) * opacity;
 
                 paint.Color = color.WithAlpha(FrameComposer.AlphaByte(alpha));
                 var pos = map.Map(e.X - header.RegionX, e.Y - header.RegionY);

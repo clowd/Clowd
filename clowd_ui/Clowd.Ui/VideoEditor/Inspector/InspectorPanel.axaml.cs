@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Media;
 using Clowd.Drawing;
@@ -41,11 +42,12 @@ namespace Clowd.UI.VideoEditor.Inspector
             comboRampExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             ddSpeed.ItemsSource = SelectedItemViewModel.SpeedOptions;
             ddSpeedTarget.ItemsSource = SelectedItemViewModel.SpeedTargetOptions;
-            ddCursorStyle.ItemsSource = SelectedItemViewModel.CursorStyleOptions;
-            ddCursorClick.ItemsSource = SelectedItemViewModel.ClickAnimationOptions;
+            listCursorStyle.ItemsSource = SelectedItemViewModel.CursorStyleOptions;
+            listCursorClick.ItemsSource = SelectedItemViewModel.ClickAnimationOptions;
 
             // enum reset-dot defaults live here, not in XAML: an attribute would be the string
-            // "None", which neither equality nor the reset write-back can hand to an enum binding
+            // "None", which neither equality nor the reset write-back can hand to an enum binding.
+            // The entry/exit pair is also selection-dependent (RefreshTransitionDefaults).
             dotEntryKind.DefaultValue = TransitionKind.None;
             dotExitKind.DefaultValue = TransitionKind.None;
             dotEntryEasing.DefaultValue = SelectedItemViewModel.DefaultTransitionEasing;
@@ -56,13 +58,16 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampExitEnabled.DefaultValue = false;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
             dotSpeedTarget.DefaultValue = SelectedItemViewModel.DefaultSpeedTargetOption;
-            dotCursorStyle.DefaultValue = SelectedItemViewModel.DefaultCursorStyleOption;
-            dotCursorClick.DefaultValue = SelectedItemViewModel.DefaultClickAnimationOption;
-            dotCursorDropShadow.DefaultValue = false;
+            dotCursorDropShadow.DefaultValue = true;
 
             btnFont.Click += async (_, _) => await PickFontAsync();
             btnDesync.Click += async (_, _) => await ConfirmDesyncAsync();
-            colorWell.PointerPressed += ColorWell_PointerPressed;
+            colorWell.PointerPressed += (_, e) => OpenColorPicker(e,
+                () => _vm.TextColorHex, hex => _vm.TextColorHex = hex);
+            keyTextColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
+                () => _vm.KeyboardTextColorHex, hex => _vm.KeyboardTextColorHex = hex);
+            keyBackColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
+                () => _vm.KeyboardBackColorHex, hex => _vm.KeyboardBackColorHex = hex);
             miniColor.Cancelled += (_, _) => colorPopup.IsOpen = false;
 
             DataContextChanged += (_, _) => AttachViewModel(DataContext as SelectedItemViewModel);
@@ -99,7 +104,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 _vm.PropertyChanged += ViewModel_PropertyChanged;
 
             RefreshFontButton();
-            RefreshColorWell();
+            RefreshColorWells();
+            RefreshTransitionDefaults();
             RefreshTrackIcons();
         }
 
@@ -111,7 +117,12 @@ namespace Clowd.UI.VideoEditor.Inspector
                     RefreshFontButton();
                     break;
                 case nameof(SelectedItemViewModel.TextColorHex):
-                    RefreshColorWell();
+                case nameof(SelectedItemViewModel.KeyboardTextColorHex):
+                case nameof(SelectedItemViewModel.KeyboardBackColorHex):
+                    RefreshColorWells();
+                    break;
+                case nameof(SelectedItemViewModel.ShowKeyboardTrack):
+                    RefreshTransitionDefaults();
                     break;
                 case nameof(SelectedItemViewModel.TrackHidden):
                 case nameof(SelectedItemViewModel.TrackMuted):
@@ -131,13 +142,31 @@ namespace Clowd.UI.VideoEditor.Inspector
             txtFontName.FontFamily = hasFamily ? FontUtil.CreateSafe(family) : FontFamily.Default;
         }
 
-        private void RefreshColorWell()
+        private void RefreshColorWells()
         {
-            var hex = _vm?.TextColorHex;
-            txtColorHex.Text = String.IsNullOrEmpty(hex) ? "#FFFFFFFF" : hex;
+            RefreshColorWell(txtColorHex, colorSwatch, _vm?.TextColorHex, "#FFFFFFFF");
+            RefreshColorWell(txtKeyTextColorHex, keyTextColorSwatch, _vm?.KeyboardTextColorHex,
+                SelectedItemViewModel.DefaultKeyboardTextColorHex);
+            RefreshColorWell(txtKeyBackColorHex, keyBackColorSwatch, _vm?.KeyboardBackColorHex,
+                SelectedItemViewModel.DefaultKeyboardBackColorHex);
+        }
 
-            if (Color.TryParse(txtColorHex.Text, out var color))
-                colorSwatch.Fill = new SolidColorBrush(color);
+        private static void RefreshColorWell(TextBlock label, Shape swatch, string hex, string fallback)
+        {
+            label.Text = String.IsNullOrEmpty(hex) ? fallback : hex;
+
+            if (Color.TryParse(label.Text, out var color))
+                swatch.Fill = new SolidColorBrush(color);
+        }
+
+        /// <summary>A keystroke overlay's entry/exit animate its rows rather than the block, and
+        /// the row defaults <c>EditorSession.AddKeyboardTrack</c> writes are not the universal
+        /// None/None — so these two dots follow the selection.</summary>
+        private void RefreshTransitionDefaults()
+        {
+            var keys = _vm?.ShowKeyboardTrack == true;
+            dotEntryKind.DefaultValue = keys ? TransitionKind.SlideUp : TransitionKind.None;
+            dotExitKind.DefaultValue = keys ? TransitionKind.Fade : TransitionKind.None;
         }
 
         /// <summary>The hide/mute buttons flip their glyphs with the state (eye/eye-off,
@@ -164,17 +193,17 @@ namespace Clowd.UI.VideoEditor.Inspector
                 vm.FontFamily = dialog.SelectedFont.TextFontFamilyName;
         }
 
-        private void ColorWell_PointerPressed(object sender, PointerPressedEventArgs e)
+        /// <summary>Every colour row opens the one mini picker in place; the row supplies which
+        /// value it reads and writes.</summary>
+        private void OpenColorPicker(PointerPressedEventArgs e, Func<string> read, Action<string> write)
         {
-            var vm = _vm;
-            if (vm == null)
+            if (_vm == null)
                 return;
 
-            if (!Color.TryParse(vm.TextColorHex ?? "", out var current))
+            if (!Color.TryParse(read() ?? "", out var current))
                 current = Colors.White;
 
-            miniColor.Reset(current, c =>
-                vm.TextColorHex = $"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}");
+            miniColor.Reset(current, c => write($"#{c.A:X2}{c.R:X2}{c.G:X2}{c.B:X2}"));
             colorPopup.IsOpen = true;
             e.Handled = true;
         }

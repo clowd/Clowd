@@ -205,9 +205,12 @@ public sealed class Project
                 case CursorContent cursor:
                     if (!sourceById.ContainsKey(cursor.SourceId))
                         errors.Add($"Item {item.Id} references unknown source {cursor.SourceId}.");
-                    // negated comparison so NaN fails the check rather than sailing through.
-                    if (!(cursor.Size >= 0.25 && cursor.Size <= 4))
-                        errors.Add($"Item {item.Id} has a cursor size {cursor.Size} outside 0.25..4.");
+                    // negated comparisons so NaN fails the check rather than sailing through.
+                    if (!(cursor.Size >= 0.25 && cursor.Size <= 5))
+                        errors.Add($"Item {item.Id} has a cursor size {cursor.Size} outside 0.25..5.");
+                    CheckHighlightFactor(errors, item.Id, "hold size", cursor.HoldSize);
+                    CheckHighlightFactor(errors, item.Id, "click size", cursor.ClickSize);
+                    CheckHighlightFactor(errors, item.Id, "animation speed", cursor.AnimationSpeed);
                     break;
 
                 case KeyboardContent keyboard:
@@ -217,8 +220,6 @@ public sealed class Project
                         errors.Add($"Item {item.Id} has a keyboard font size {keyboard.FontSize} outside 8..200.");
                     if (keyboard.LingerMs < 0 || keyboard.LingerMs > 10000)
                         errors.Add($"Item {item.Id} has a keyboard linger {keyboard.LingerMs}ms outside 0..10000.");
-                    if (keyboard.FadeMs < 0 || keyboard.FadeMs > 10000)
-                        errors.Add($"Item {item.Id} has a keyboard fade {keyboard.FadeMs}ms outside 0..10000.");
                     if (keyboard.PauseBreakMs < 0 || keyboard.PauseBreakMs > 10000)
                         errors.Add($"Item {item.Id} has a keyboard pause break {keyboard.PauseBreakMs}ms outside 0..10000.");
                     break;
@@ -299,6 +300,17 @@ public sealed class Project
         }
 
         return errors;
+    }
+
+    /// <summary>One of the cursor highlight's three multipliers, against the single range they
+    /// share. Negated comparison so NaN fails rather than sailing through.</summary>
+    private static void CheckHighlightFactor(List<string> errors, Guid itemId, string name, double value)
+    {
+        if (!(value >= CursorContent.MinHighlightFactor && value <= CursorContent.MaxHighlightFactor))
+        {
+            errors.Add($"Item {itemId} has a cursor highlight {name} {value} outside " +
+                $"{CursorContent.MinHighlightFactor}..{CursorContent.MaxHighlightFactor}.");
+        }
     }
 }
 

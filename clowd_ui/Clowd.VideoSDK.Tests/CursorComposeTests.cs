@@ -74,8 +74,11 @@ namespace Clowd.VideoSDK.Tests
             "{\"type\":\"header\",\"version\":1,\"region\":[0,0,64,64],\"fps_num\":30,\"fps_den\":1," +
             "\"platform\":\"windows\",\"monitors\":[{\"x\":0,\"y\":0,\"w\":64,\"h\":64,\"scale\":1.0}]}";
 
-        private static string Frame(double t, int x, int y, string kind = "arrow") =>
-            $"{{\"type\":\"frame\",\"t\":{t},\"x\":{x},\"y\":{y},\"b\":0,\"c\":\"{kind}\"}}";
+        private static string Frame(double t, int x, int y, string kind = "arrow", int buttons = 0) =>
+            $"{{\"type\":\"frame\",\"t\":{t},\"x\":{x},\"y\":{y},\"b\":{buttons},\"c\":\"{kind}\"}}";
+
+        private static string MouseEvent(string kind, double t, int x, int y) =>
+            $"{{\"type\":\"event\",\"t\":{t},\"kind\":\"{kind}\",\"btn\":1,\"x\":{x},\"y\":{y}}}";
 
         /// <summary>Per-stream still frames: stream 0 = the screen, stream 1 = the cursor box.</summary>
         private sealed class MultiStreamSource : IFrameSource, IDisposable
@@ -511,15 +514,15 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
-        // ---------------------------------------------------------------------- click animation
+        // ----------------------------------------------------------------------- click highlight
 
         [Fact]
-        public void Ripple_draws_a_fading_circle_at_the_click_position()
+        public void Ripple_draws_a_fading_circle_at_the_release_position()
         {
-            // md at t=1000ms, pos (20,20); composed at 1200ms → progress 0.5, radius 25px,
+            // mu at t=1000ms, pos (20,20); composed at 1200ms → progress 0.5, radius 25px,
             // opacity 0.425 red over blue
             string capture = WriteCapture(Header, Frame(0, 32, 32),
-                "{\"type\":\"event\",\"t\":1000,\"kind\":\"md\",\"btn\":1,\"x\":20,\"y\":20}");
+                MouseEvent("mu", 1000, 20, 20));
             var (p, _, cursor) = CursorProject(capture, "ios-glyph");
             ((CursorContent)cursor.Content).ClickAnimation = "ripple";
 
@@ -536,10 +539,185 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Press_alone_draws_no_animation()
+        {
+            // the press only pins the held dot to the pointer (and this capture's frames report no
+            // button held); the animation belongs to the release, which never comes here
+            string capture = WriteCapture(Header, Frame(0, 32, 32),
+                MouseEvent("md", 1000, 20, 20));
+            var (p, _, cursor) = CursorProject(capture, "ios-glyph");
+            ((CursorContent)cursor.Content).ClickAnimation = "ripple";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            var px = Render(p, (long)(1.2 * Sec), frames);
+            AssertColor(Px(px, 30, 20), 255, 0, 0, tolerance: 3);
+            AssertColor(Px(px, 20, 20), 255, 0, 0, tolerance: 3);
+        }
+
+        [Fact]
+        public void Held_button_draws_a_dot_that_follows_the_cursor()
+        {
+            // native with no box stream draws no cursor of its own, so every pixel below is the
+            // highlight's. Buttons are held from 1000ms, and the pointer drags (20,20) → (40,40).
+            string capture = WriteCapture(Header,
+                Frame(0, 20, 20),
+                Frame(1000, 20, 20, buttons: 1),
+                Frame(1200, 40, 40, buttons: 1),
+                MouseEvent("md", 1000, 20, 20));
+            var (p, _, cursor) = CursorProject(capture, "native");
+            var content = (CursorContent)cursor.Content;
+            content.StreamIndex = -1;
+            content.ClickAnimation = "ripple";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+
+            var atPress = Render(p, (long)(1.05 * Sec), frames);
+            Assert.True(Px(atPress, 20, 20).R > 60, "no held dot at the press position");
+            AssertColor(Px(atPress, 40, 40), 255, 0, 0, tolerance: 3);
+
+            // mid-drag the dot has moved with the pointer and left the press position bare —
+            // it is not an animation anchored where the press landed
+            var midDrag = Render(p, (long)(1.25 * Sec), frames);
+            Assert.True(Px(midDrag, 40, 40).R > 60, "the held dot did not follow the cursor");
+            AssertColor(Px(midDrag, 20, 20), 255, 0, 0, tolerance: 3);
+
+            // radius 10 DIP: 12px out is already outside it
+            AssertColor(Px(midDrag, 52, 40), 255, 0, 0, tolerance: 3);
+
+            // …and none of it draws without a highlight to draw
+            content.ClickAnimation = "none";
+            AssertColor(Px(Render(p, (long)(1.25 * Sec), frames), 40, 40), 255, 0, 0, tolerance: 3);
+        }
+
+        [Fact]
+        public void Release_explodes_the_highlight_where_the_button_came_up()
+        {
+            string capture = WriteCapture(Header,
+                Frame(0, 20, 20),
+                Frame(1000, 40, 40, buttons: 1),
+                Frame(1500, 40, 40),
+                MouseEvent("md", 900, 20, 20),
+                MouseEvent("mu", 1400, 40, 40));
+            var (p, _, cursor) = CursorProject(capture, "native");
+            var content = (CursorContent)cursor.Content;
+            content.StreamIndex = -1;
+            content.ClickAnimation = "ripple";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+
+            // 200ms after the release → progress 0.5, radius 25px about (40,40)
+            var px = Render(p, (long)(1.6 * Sec), frames);
+            Assert.True(Px(px, 60, 40).R > 60, "the release did not fire the animation");
+            AssertColor(Px(px, 8, 40), 255, 0, 0, tolerance: 3); // 32px out: past the ripple
+        }
+
+        [Fact]
+        public void Hold_size_scales_the_held_dot_only()
+        {
+            string capture = WriteCapture(Header,
+                Frame(0, 32, 32, buttons: 1),
+                MouseEvent("md", 0, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "native");
+            var content = (CursorContent)cursor.Content;
+            content.StreamIndex = -1;
+            content.ClickAnimation = "ripple";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+
+            // default: radius 10, so 16px out is bare
+            AssertColor(Px(Render(p, 1 * Sec, frames), 48, 32), 255, 0, 0, tolerance: 3);
+
+            // doubled: radius 20 reaches it
+            content.HoldSize = 2.0;
+            Assert.True(Px(Render(p, 1 * Sec, frames), 48, 32).R > 60,
+                "hold size did not widen the held dot");
+
+            // and shrinking it pulls the dot back inside 6px
+            content.HoldSize = 0.5;
+            AssertColor(Px(Render(p, 1 * Sec, frames), 40, 32), 255, 0, 0, tolerance: 3);
+        }
+
+        [Fact]
+        public void Click_size_scales_the_release_animation()
+        {
+            // mu at 1000ms; composed at 1200ms → progress 0.5, radius 25 by default
+            string capture = WriteCapture(Header, Frame(0, 32, 32),
+                MouseEvent("mu", 1000, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "native");
+            var content = (CursorContent)cursor.Content;
+            content.StreamIndex = -1;
+            content.ClickAnimation = "ripple";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            long at = (long)(1.2 * Sec);
+
+            // half size: radius 12.5, so a point 20px out is outside it…
+            content.ClickSize = 0.5;
+            AssertColor(Px(Render(p, at, frames), 52, 32), 255, 0, 0, tolerance: 3);
+
+            // …and at full size it is inside
+            content.ClickSize = 1.0;
+            Assert.True(Px(Render(p, at, frames), 52, 32).R > 60,
+                "click size did not scale the release animation");
+        }
+
+        [Fact]
+        public void Animation_speed_shortens_the_release_animation()
+        {
+            string capture = WriteCapture(Header, Frame(0, 32, 32),
+                MouseEvent("mu", 1000, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "native");
+            var content = (CursorContent)cursor.Content;
+            content.StreamIndex = -1;
+            content.ClickAnimation = "ripple";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            long early = (long)(1.2 * Sec); // 200ms after the release
+            long late = (long)(1.5 * Sec);  // 500ms after it, past the stock 400ms
+
+            // 1x: still running at 200ms, over by 500ms
+            Assert.True(Px(Render(p, early, frames), 32, 32).R > 60, "the animation should still be running");
+            AssertColor(Px(Render(p, late, frames), 32, 32), 255, 0, 0, tolerance: 3);
+
+            // 2x: 200ms long, so it is already over at 200ms
+            content.AnimationSpeed = 2.0;
+            AssertColor(Px(Render(p, early, frames), 32, 32), 255, 0, 0, tolerance: 3);
+
+            // half speed: 800ms long, so it is still going where 1x had finished
+            content.AnimationSpeed = 0.5;
+            Assert.True(Px(Render(p, late, frames), 32, 32).R > 60,
+                "half speed should still be animating after the stock duration");
+        }
+
+        [Fact]
+        public void Highlight_factors_survive_a_hand_edited_project()
+        {
+            // the model rejects these, but a file carrying them must still draw something sane
+            // rather than nothing at all (a zero speed would divide the clock away)
+            string capture = WriteCapture(Header,
+                Frame(0, 32, 32, buttons: 1),
+                Frame(1100, 32, 32),
+                MouseEvent("mu", 1000, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "native");
+            var content = (CursorContent)cursor.Content;
+            content.StreamIndex = -1;
+            content.ClickAnimation = "ripple";
+            content.HoldSize = 0;
+            content.ClickSize = Double.NaN;
+            content.AnimationSpeed = 0;
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            Assert.True(Px(Render(p, (long)(0.5 * Sec), frames), 32, 32).R > 60,
+                "a clamped hold size should still draw the held dot");
+            Assert.True(Px(Render(p, (long)(1.2 * Sec), frames), 32, 32).R > 60,
+                "a clamped speed should still run the animation");
+        }
+
+        [Fact]
         public void Pulse_draws_a_shrinking_dot()
         {
             string capture = WriteCapture(Header, Frame(0, 32, 32),
-                "{\"type\":\"event\",\"t\":1000,\"kind\":\"md\",\"btn\":1,\"x\":20,\"y\":20}");
+                MouseEvent("mu", 1000, 20, 20));
             var (p, _, cursor) = CursorProject(capture, "ios-glyph");
             ((CursorContent)cursor.Content).ClickAnimation = "pulse";
 

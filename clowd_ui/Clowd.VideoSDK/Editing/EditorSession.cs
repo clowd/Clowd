@@ -458,17 +458,150 @@ namespace Clowd.VideoSDK.Editing
             Mutate("Move", ProjectChangeKind.Mapping, null, origin,
                 p => TimelineOps.Move(p, itemId, deltaTicks));
 
-        /// <summary>Wraps <see cref="TimelineOps.TrimStart"/> (single item). Returns the delta
-        /// actually applied.</summary>
+        /// <summary>Wraps <see cref="TimelineOps.TrimStart"/> (single item), with the input-overlay
+        /// clamp on both sides of the hard sync (see <see cref="ClampOverlayTrim"/> and
+        /// <see cref="ClampOverlayItemsToScreen"/>). Returns the delta actually applied.</summary>
         public long TrimItemStart(Guid itemId, long deltaTicks, object origin = null) =>
-            Mutate("Trim", ProjectChangeKind.Mapping, null, origin,
-                p => TimelineOps.TrimStart(p, itemId, deltaTicks));
+            Mutate("Trim", TrimChangeKind(itemId), null, origin, p =>
+            {
+                var applied = TimelineOps.TrimStart(p, itemId,
+                    ClampOverlayTrim(p, itemId, deltaTicks, fromStart: true));
+                ClampOverlayItemsToScreen(p, itemId);
+                return applied;
+            });
 
-        /// <summary>Wraps <see cref="TimelineOps.TrimEnd"/> (single item). Returns the delta
-        /// actually applied.</summary>
+        /// <summary>Wraps <see cref="TimelineOps.TrimEnd"/> (single item), clamped exactly as
+        /// <see cref="TrimItemStart"/>. Returns the delta actually applied.</summary>
         public long TrimItemEnd(Guid itemId, long deltaTicks, object origin = null) =>
-            Mutate("Trim", ProjectChangeKind.Mapping, null, origin,
-                p => TimelineOps.TrimEnd(p, itemId, deltaTicks));
+            Mutate("Trim", TrimChangeKind(itemId), null, origin, p =>
+            {
+                var applied = TimelineOps.TrimEnd(p, itemId,
+                    ClampOverlayTrim(p, itemId, deltaTicks, fromStart: false));
+                ClampOverlayItemsToScreen(p, itemId);
+                return applied;
+            });
+
+        /// <summary>
+        /// The change kind a trim of this item raises: <see cref="ProjectChangeKind.Structural"/>
+        /// when the item's recording carries cursor/keyboard rows, because shrinking the screen
+        /// takes those items along and may strand — and so drop — one of them, emptying a row.
+        /// Deliberately keyed on the group rather than on what the trim turns out to do: the answer
+        /// is needed before the mutation runs, and an extra row rebuild once per trim gesture costs
+        /// nothing (mid-gesture changes raise Preview and escalate the gesture's kind instead).
+        /// </summary>
+        private ProjectChangeKind TrimChangeKind(Guid itemId)
+        {
+            var item = Project.Items.FirstOrDefault(i => i.Id == itemId);
+            if (item?.LinkGroupId is not Guid group || item.Content is not MediaContent)
+                return ProjectChangeKind.Mapping;
+
+            return Project.Items.Any(i => i.LinkGroupId == group
+                                          && i.Content is CursorContent or KeyboardContent)
+                ? ProjectChangeKind.Structural
+                : ProjectChangeKind.Mapping;
+        }
+
+        /// <summary>
+        /// The trim delta an input-overlay item may actually take. Cursor/keyboard items annotate a
+        /// screen segment and are hard-synced to it: they may be trimmed <i>shorter</i> freely (hide
+        /// the cursor for a while) but must never reach past the screen span, where they would have
+        /// nothing to annotate — the cursor draws nothing there and the keyboard falls back to
+        /// item-relative time (see <c>FrameComposer.FindScreenMediaItem</c>). The dragged edge is
+        /// therefore clamped to the span of the screen items sharing the overlay's link group. An
+        /// item already hanging past that span may still shrink, it just cannot grow, exactly as
+        /// <see cref="TimelineOps.TrimEnd"/> treats an item hanging past the end of its source.
+        /// Non-overlay items — and overlays whose screen row is gone — pass through unchanged.
+        /// </summary>
+        private static long ClampOverlayTrim(Project project, Guid itemId, long deltaTicks, bool fromStart)
+        {
+            var item = project.Items.FirstOrDefault(i => i.Id == itemId);
+            if (item == null || OverlayScreenSpan(project, item) is not { } span)
+                return deltaTicks;
+
+            return fromStart
+                ? Math.Max(deltaTicks, Math.Min(0, span.Start - item.TimelineStartTicks))
+                : Math.Min(deltaTicks, Math.Max(0, span.End - item.TimelineEndTicks));
+        }
+
+        /// <summary>
+        /// The other side of the same contract: after a screen item is trimmed, the overlay items of
+        /// its link group are pulled in with it so they never outlive the screen span. Trims are
+        /// single-item by design (the group's rows keep their own in-points), so nothing else fans
+        /// out this way — but an overlay left hanging over material that is gone is exactly the
+        /// state the hard sync exists to prevent. An overlay item the trim leaves entirely outside
+        /// the span is removed: what it annotated no longer plays. No-op for anything but a linked
+        /// media item.
+        /// </summary>
+        private void ClampOverlayItemsToScreen(Project project, Guid trimmedItemId)
+        {
+            var trimmed = project.Items.FirstOrDefault(i => i.Id == trimmedItemId);
+            if (trimmed?.LinkGroupId is not Guid group || trimmed.Content is not MediaContent)
+                return;
+
+            var dropped = false;
+            foreach (var overlay in project.Items.Where(i => i.LinkGroupId == group
+                         && i.Content is CursorContent or KeyboardContent).ToList())
+            {
+                if (OverlayScreenSpan(project, overlay) is not { } span)
+                    continue;
+
+                var start = Math.Max(overlay.TimelineStartTicks, span.Start);
+                var end = Math.Min(overlay.TimelineEndTicks, span.End);
+                if (end <= start)
+                {
+                    project.Items.Remove(overlay);
+                    dropped = true;
+                    continue;
+                }
+
+                overlay.TimelineStartTicks = start;
+                overlay.DurationTicks = end - start;
+            }
+
+            if (dropped)
+                PruneEmptyTracks(project);
+        }
+
+        /// <summary>The span an input-overlay item is allowed to occupy: the union of the video-row
+        /// screen items sharing its link group — the segment it mirrors, which a
+        /// <see cref="TimelineOps.SplitItem"/> on the screen row may have left as two back-to-back
+        /// members. Null for a non-overlay item, and for an overlay whose screen partner is gone
+        /// (nothing to clamp to; the overlay already draws nothing).</summary>
+        private static (long Start, long End)? OverlayScreenSpan(Project project, Item item)
+        {
+            Guid sourceId;
+            if (item.Content is CursorContent cursor)
+                sourceId = cursor.SourceId;
+            else if (item.Content is KeyboardContent keyboard)
+                sourceId = keyboard.SourceId;
+            else
+                return null;
+
+            if (item.LinkGroupId is not Guid group)
+                return null;
+
+            var source = project.Sources.FirstOrDefault(s => s.Id == sourceId);
+            if (source == null)
+                return null;
+
+            long start = long.MaxValue, end = long.MinValue;
+            foreach (var partner in project.Items)
+            {
+                if (partner.LinkGroupId != group || partner.Content is not MediaContent media
+                    || media.SourceId != sourceId
+                    || !Composition.FrameComposer.IsScreenStream(source, media.StreamIndex))
+                    continue;
+
+                var track = project.Tracks.FirstOrDefault(t => t.Id == partner.TrackId);
+                if (track?.Kind != TrackKind.Video)
+                    continue;
+
+                start = Math.Min(start, partner.TimelineStartTicks);
+                end = Math.Max(end, partner.TimelineEndTicks);
+            }
+
+            return end > start ? (start, end) : null;
+        }
 
         /// <summary>Wraps <see cref="TimelineOps.SetSpeed"/> (single media item, re-timed in
         /// place). Returns the speed actually stored.</summary>
@@ -1087,6 +1220,11 @@ namespace Clowd.VideoSDK.Editing
             return committed ? created : null;
         }
 
+        /// <summary>How long a keystroke row takes to arrive or leave, as
+        /// <see cref="AddKeyboardTrack"/> writes it — the same 300ms the inspector's animation
+        /// spinners default to.</summary>
+        private const long KeyboardRowTransitionTicks = 300 * TimeSpan.TicksPerMillisecond;
+
         /// <summary>Whether the project carries a cursor overlay row — by content, like
         /// <see cref="HasSpeedTrack"/>, so the flag flips off the moment the last item goes.</summary>
         public bool HasCursorTrack => FindInputOverlayTrack(Project, cursor: true) != null;
@@ -1197,6 +1335,21 @@ namespace Clowd.VideoSDK.Editing
                     Transform = cursor
                         ? new Transform()
                         : new Transform { X = 0.5, Y = 0.85, Scale = 0.5 },
+                    // on a keyboard row entry/exit animate each keystroke ROW rather than the
+                    // block (see FrameComposer.DrawKeyboard): rows slide up into place as they
+                    // push the older ones along, and fade away once they have been read.
+                    Entry = cursor ? null : new Transition
+                    {
+                        Kind = TransitionKind.SlideUp,
+                        DurationTicks = KeyboardRowTransitionTicks,
+                        Easing = TransitionEasing.CubicInOut,
+                    },
+                    Exit = cursor ? null : new Transition
+                    {
+                        Kind = TransitionKind.Fade,
+                        DurationTicks = KeyboardRowTransitionTicks,
+                        Easing = TransitionEasing.CubicInOut,
+                    },
                     LinkGroupId = segment.LinkGroupId,
                 };
                 project.Items.Add(item);

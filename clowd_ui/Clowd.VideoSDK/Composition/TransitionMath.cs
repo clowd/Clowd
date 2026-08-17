@@ -124,6 +124,54 @@ namespace Clowd.VideoSDK.Composition
             };
         }
 
+        /// <summary>
+        /// The combined effect of an entry/exit pair whose eased shown-fractions the caller has
+        /// already worked out — what the keystroke overlay needs, since its animated units are
+        /// <b>rows</b>, not items: a row has no timeline span to derive progress from, but it
+        /// animates with exactly the same kinds. Slides ramp opacity here as well as offsetting:
+        /// a row that slides out from behind its neighbour at full opacity reads as a glitch,
+        /// where a whole picture sliding off the frame does not.
+        /// </summary>
+        public static ItemEffects EvaluateShown(TransitionKind entryKind, double entryShown,
+            TransitionKind exitKind, double exitShown)
+        {
+            double opacity = 1, dx = 0, dy = 0;
+            bool hasWipe = false;
+            double wipeFrom = 0, wipeTo = 1;
+
+            if (IsAnimated(entryKind) && entryShown < 1)
+            {
+                Apply(entryKind, entryShown, isExit: false, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo);
+                if (IsSlide(entryKind))
+                    opacity *= Math.Clamp(entryShown, 0, 1);
+            }
+
+            if (IsAnimated(exitKind) && exitShown < 1)
+            {
+                Apply(exitKind, exitShown, isExit: true, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo);
+                if (IsSlide(exitKind))
+                    opacity *= Math.Clamp(exitShown, 0, 1);
+            }
+
+            return new ItemEffects
+            {
+                Opacity = opacity,
+                OffsetXFrac = dx,
+                OffsetYFrac = dy,
+                HasWipe = hasWipe,
+                WipeFromFrac = wipeFrom,
+                WipeToFrac = wipeTo,
+            };
+        }
+
+        /// <summary>Kinds that move pixels. Ramp modulates an effect quantity and has no picture
+        /// of its own; None is the absence of one.</summary>
+        public static bool IsAnimated(TransitionKind kind)
+            => kind != TransitionKind.None && kind != TransitionKind.Ramp;
+
+        public static bool IsSlide(TransitionKind kind) => kind is TransitionKind.SlideLeft
+            or TransitionKind.SlideRight or TransitionKind.SlideUp or TransitionKind.SlideDown;
+
         private static bool IsActive(Transition tr)
             => tr != null && tr.Kind != TransitionKind.None && tr.DurationTicks > 0;
 

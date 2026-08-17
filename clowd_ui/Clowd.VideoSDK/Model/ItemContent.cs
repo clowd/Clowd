@@ -166,18 +166,39 @@ public sealed class CursorContent : ItemContent
     /// <summary>One of <see cref="Styles"/>.</summary>
     public string Style { get; set; } = "ios-glyph";
 
-    /// <summary>Glyph size multiplier over the style's base size, validated to 0.25..4.
+    /// <summary>Glyph size multiplier over the style's base size, validated to 0.25..5.
     /// Ignored by the <c>native</c> style (the box stream is captured at recording scale).</summary>
     public double Size { get; set; } = 1.0;
 
-    /// <summary>Drop shadow under the themed glyph. Ignored by the <c>native</c> style.</summary>
-    public bool DropShadow { get; set; }
+    /// <summary>Drop shadow under the themed glyph. Ignored by the <c>native</c> style (the box
+    /// stream already carries the system cursor's own shadow), which is why it can default on.</summary>
+    public bool DropShadow { get; set; } = true;
 
     /// <summary>One of <see cref="ClickAnimations"/>.</summary>
     public string ClickAnimation { get; set; } = "none";
 
     /// <summary>Click animation color, packed ARGB.</summary>
     public uint ClickColor { get; set; } = 0xFFFF0000;
+
+    /// <summary>The range every highlight multiplier below is validated to, and what the editor's
+    /// spinners offer. One range for all three: they are all "a bit more / a bit less of the
+    /// stock behaviour", and a quarter to quadruple is as far as any of them stays useful.</summary>
+    public const double MinHighlightFactor = 0.25;
+
+    public const double MaxHighlightFactor = 4.0;
+
+    /// <summary>Size multiplier on the dot drawn under a held mouse button. Ignored while
+    /// <see cref="ClickAnimation"/> is <c>none</c>, which draws no highlight at all.</summary>
+    public double HoldSize { get; set; } = 1.0;
+
+    /// <summary>Size multiplier on the animation the release fires — the whole sweep scales, so a
+    /// pulse shrinks from further out just as a ripple grows further.</summary>
+    public double ClickSize { get; set; } = 1.0;
+
+    /// <summary>Playback-rate multiplier on that animation: 2 runs it in half the time. Distinct
+    /// from the clip's own speed, which the composer already folds in so a sped-up clip does not
+    /// compress the highlight.</summary>
+    public double AnimationSpeed { get; set; } = 1.0;
 
     public override ItemContent Clone() => new CursorContent
     {
@@ -188,6 +209,9 @@ public sealed class CursorContent : ItemContent
         DropShadow = DropShadow,
         ClickAnimation = ClickAnimation,
         ClickColor = ClickColor,
+        HoldSize = HoldSize,
+        ClickSize = ClickSize,
+        AnimationSpeed = AnimationSpeed,
     };
 }
 
@@ -198,28 +222,46 @@ public sealed class CursorContent : ItemContent
 /// stacking upward from the anchor.</summary>
 public sealed class KeyboardContent : ItemContent
 {
+    /// <summary>The typing pill's default fill: black at 55%. The translucency is <b>in</b> the
+    /// stored alpha, so a user who picks a colour picks its opacity with it.</summary>
+    public const uint DefaultBackgroundColor = 0x8C000000;
+
+    public const uint DefaultTextColor = 0xFFFFFFFF;
+
+    /// <summary>Keystrokes read at a glance or not at all, so the block starts big — the
+    /// compositor falls back to this for a non-positive size too.</summary>
+    public const double DefaultFontSize = 40;
+
     public Guid SourceId { get; set; }
 
     /// <summary>Font size in output-canvas pixels, validated to 8..200.</summary>
-    public double FontSize { get; set; } = 28;
+    public double FontSize { get; set; } = DefaultFontSize;
 
     /// <summary>How long a finished run of keystrokes stays fully visible after its last key,
-    /// in ms, validated to 0..10000.</summary>
-    public int LingerMs { get; set; } = 300;
-
-    /// <summary>Fade-out length after the linger, in ms, validated to 0..10000.</summary>
-    public int FadeMs { get; set; } = 250;
+    /// in ms, validated to 0..10000. What happens either side of it — how a row arrives and how
+    /// it leaves — is the item's own <see cref="Item.Entry"/>/<see cref="Item.Exit"/>, applied
+    /// per row rather than to the block (see <c>FrameComposer.DrawKeyboard</c>).</summary>
+    public int LingerMs { get; set; } = 1000;
 
     /// <summary>Typing gap that ends a run and starts a new row, in ms, validated to
     /// 0..10000.</summary>
     public int PauseBreakMs { get; set; } = 1000;
+
+    /// <summary>Typed text colour, packed ARGB. Styles the plain-typing pill's text only — the
+    /// special keys draw as keycaps with their own fixed livery.</summary>
+    public uint TextColor { get; set; } = DefaultTextColor;
+
+    /// <summary>Typing pill fill, packed ARGB — alpha included (see
+    /// <see cref="DefaultBackgroundColor"/>).</summary>
+    public uint BackgroundColor { get; set; } = DefaultBackgroundColor;
 
     public override ItemContent Clone() => new KeyboardContent
     {
         SourceId = SourceId,
         FontSize = FontSize,
         LingerMs = LingerMs,
-        FadeMs = FadeMs,
         PauseBreakMs = PauseBreakMs,
+        TextColor = TextColor,
+        BackgroundColor = BackgroundColor,
     };
 }

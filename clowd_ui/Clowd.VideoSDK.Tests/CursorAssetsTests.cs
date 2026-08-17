@@ -74,6 +74,9 @@ namespace Clowd.VideoSDK.Tests
                 // the reverse) would silently paint nothing.
                 Assert.Equal(layer.Stroke.Alpha > 0, layer.StrokeWidth > 0);
                 Assert.Equal(layer.Stroke.Alpha > 0 && layer.StrokeWidth > 0, layer.HasStroke);
+                // the non-Skia view of the same two colours (the inspector's style tiles)
+                Assert.Equal((uint)layer.Fill, layer.FillArgb);
+                Assert.Equal((uint)layer.Stroke, layer.StrokeArgb);
             }
         }
 
