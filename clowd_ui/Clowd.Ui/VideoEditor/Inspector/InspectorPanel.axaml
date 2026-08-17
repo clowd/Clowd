@@ -1095,6 +1095,19 @@
                             Value="{Binding CursorSize, Mode=TwoWay}" />
                     </DockPanel>
 
+                    <!--  Windows hides the cursor while typing and flashes it back on every pause;
+                          on (the default, and what a recording without a cursor track always gets)
+                          keeps it hidden until it actually moves or clicks again.  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  bool default is assigned in code-behind for the same reason the
+                                  enum ones are: a XAML DefaultValue is a string  -->
+                            <controls:ResetDefaultButton x:Name="dotCursorDebounce" CurrentValue="{Binding CursorDebounce, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Debounce" />
+                        <CheckBox IsChecked="{Binding CursorDebounce, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
                     <DockPanel Margin="0,8,0,0">
                         <TextBlock Classes="section" Text="CURSOR" />
                         <Rectangle Classes="sectionRule" />

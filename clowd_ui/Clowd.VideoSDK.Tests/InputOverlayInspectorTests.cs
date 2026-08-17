@@ -294,6 +294,25 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void CursorDebounce_DefaultsOnAndWritesTheWholeRow()
+        {
+            var (session, vm) = NewInspector(out _);
+            var cursor = session.AddCursorTrack();
+            session.Select(cursor.Id);
+
+            Assert.True(vm.CursorDebounce);
+            Assert.All(CursorItems(session), c => Assert.True(c.Debounce));
+
+            vm.CursorDebounce = false;
+            Assert.All(CursorItems(session), c => Assert.False(c.Debounce));
+
+            // an external edit (undo, another view) syncs back into the panel
+            session.EditItem(cursor.Id, i => ((CursorContent)i.Content).Debounce = true,
+                "test", structural: false, origin: new object());
+            Assert.True(vm.CursorDebounce);
+        }
+
+        [Fact]
         public void HighlightDials_WriteTheWholeRowAndClampToTheModelsRange()
         {
             var (session, vm) = NewInspector(out _);

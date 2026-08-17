@@ -217,11 +217,13 @@ namespace Clowd.VideoSDK.Tests
             var cursor = new CursorContent
             {
                 SourceId = Guid.NewGuid(), Style = "vision", Variant = "light", Size = 2.0,
-                FillOpacity = 0.6, HoldSize = 1.5, ClickSize = 0.5, AnimationSpeed = 3.0,
+                Debounce = false, FillOpacity = 0.6, HoldSize = 1.5, ClickSize = 0.5,
+                AnimationSpeed = 3.0,
             };
             var cursorCopy = (CursorContent)cursor.Clone();
             cursorCopy.Style = "native";
             cursorCopy.Size = 0.5;
+            cursorCopy.Debounce = true;
             cursorCopy.FillOpacity = 0.1;
             cursorCopy.HoldSize = 4;
             cursorCopy.ClickSize = 4;
@@ -229,6 +231,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("vision", cursor.Style);
             Assert.Equal("light", cursor.Variant);
             Assert.Equal(2.0, cursor.Size);
+            Assert.False(cursor.Debounce);
             Assert.Equal(0.6, cursor.FillOpacity);
             Assert.Equal(1.5, cursor.HoldSize);
             Assert.Equal(0.5, cursor.ClickSize);

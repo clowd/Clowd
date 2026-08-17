@@ -276,8 +276,9 @@ namespace Clowd.VideoSDK.Composition
         /// sampled it, crop/aspect included. Suppressed the moment any
         /// <see cref="CursorContent"/> item for the source is active at <paramref name="timeTicks"/>
         /// (the cursor track owns the cursor then, whatever its style), and skipped for hidden
-        /// cursors, positions outside the capture region and frames carrying no sprite (a v1 file
-        /// or a degraded capture).
+        /// cursors (always debounced — see <see cref="InputCapture.IsInactiveAt"/>), positions
+        /// outside the capture region and frames carrying no sprite (a v1 file or a degraded
+        /// capture).
         /// </summary>
         private static void DrawDefaultCursorOverlay(Project project, MediaContent media,
             long timeTicks, long sourceTicks, SKImage screenImage, Transform transform,
@@ -292,8 +293,14 @@ namespace Clowd.VideoSDK.Composition
                 return;
 
             var capture = InputCapture.Get(source.InputCapturePath);
-            if (capture.FrameAt(sourceTicks / (double)TimeSpan.TicksPerMillisecond) is not { } row
-                || row.Cursor == CursorKind.Hidden
+            int rowIndex = capture.LatestAtOrBefore(sourceTicks / (double)TimeSpan.TicksPerMillisecond);
+            if (rowIndex < 0)
+                return;
+            var row = capture.Frames[rowIndex];
+            // debounced, not the raw Hidden bit: the default overlay has no setting to turn this
+            // off — the typing flicker should never survive without a cursor track to opt out on.
+            if (row.Cursor == CursorKind.Hidden
+                || capture.IsInactiveAt(rowIndex)
                 || !CursorCompose.IsInsideRegion(capture.Header, row.X, row.Y))
                 return;
 
@@ -330,8 +337,9 @@ namespace Clowd.VideoSDK.Composition
         /// pointer shadow is DWM-composited, never part of the cursor shape the recorder
         /// rasterizes (routing the sprite through <see cref="CursorCompose.DrawGlyph"/>'s
         /// decoration layer is the easy follow-up if one is wanted). The click highlight draws
-        /// beneath. A hidden cursor, a position outside the region, or a missing screen item draws
-        /// nothing.
+        /// beneath. A hidden cursor (debounced through the capture's inactivity latch unless the
+        /// item's <c>Debounce</c> is off), a position outside the region, or a missing screen item
+        /// draws nothing.
         /// </summary>
         private static void DrawCursorItem(Project project, Item item, CursorContent cursor,
             long timeTicks, IFrameSource frames, SKCanvas target, double opacity,
@@ -359,8 +367,12 @@ namespace Clowd.VideoSDK.Composition
                     canvasWidth, canvasHeight, out var map))
                 return;
 
-            if (capture.FrameAt(sourceMs) is not { } row
-                || row.Cursor == CursorKind.Hidden
+            int rowIndex = capture.LatestAtOrBefore(sourceMs);
+            if (rowIndex < 0)
+                return;
+            var row = capture.Frames[rowIndex];
+            if (row.Cursor == CursorKind.Hidden
+                || (cursor.Debounce && capture.IsInactiveAt(rowIndex))
                 || !CursorCompose.IsInsideRegion(capture.Header, row.X, row.Y))
                 return;
 
