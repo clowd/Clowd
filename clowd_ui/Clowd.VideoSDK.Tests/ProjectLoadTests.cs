@@ -218,24 +218,29 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>A fresh edit of a two-stream recording opens <i>showing</i> the camera: the user
         /// recorded with one on purpose, and the row's eye toggle is how they turn it off. (v1
         /// defaulted the overlay off — its single-bar UI had no row to show a camera on.) The
-        /// placement it lands with is still the v1 default, pinned through the same pixel-rounded
-        /// rect the v1 render path was handed, so turning it off and on cannot invent a rect.</summary>
+        /// placement it lands with is the fresh-edit seed — bottom-right, a 1:1 squircle with a
+        /// shadow — not the v1 overlay default, which only a migrated file keeps.</summary>
         [Fact]
-        public void A_fresh_create_shows_the_webcam_row_with_its_default_placement()
+        public void A_fresh_create_shows_the_webcam_row_with_its_seeded_placement()
         {
             var actual = VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe());
 
             Assert.False(actual.Tracks.Single(t => t.Name == "Webcam").Hidden);
 
-            var rect = VideoEditPersistence.ComputeWebcamRect(new WebcamOverlay(), 1920, 1080, 640, 480);
-            var expected = RecordingProject.WebcamTransform(rect.X, rect.Y, rect.W, rect.H, 1920, 1080, null);
-
-            var cam = actual.Items.First(i => ((MediaContent)i.Content).StreamIndex == 1).Transform;
-            Assert.Equal(expected.X, cam.X, 9);
-            Assert.Equal(expected.Y, cam.Y, 9);
+            var camItem = actual.Items.First(i => ((MediaContent)i.Content).StreamIndex == 1);
+            var cam = camItem.Transform;
+            Assert.Equal(0.8, cam.X, 9);
+            Assert.Equal(0.8, cam.Y, 9);
             Assert.Equal(0.2, cam.Scale, 9);
-            Assert.Equal(MaskShape.Circle, cam.Mask.Shape);
+            Assert.Equal(1.0, cam.Aspect.Value, 9);
+            Assert.False(cam.AspectStretch);
+            Assert.Equal(MaskShape.Squircle, cam.Mask.Shape);
             Assert.Equal(0.25, cam.Mask.CornerRadius, 9);
+            Assert.Equal(SurroundKind.Shadow, camItem.Surround.Kind);
+
+            // the seed decorates the camera alone — the screen item stays bare.
+            var screen = actual.Items.First(i => ((MediaContent)i.Content).StreamIndex == 0);
+            Assert.Null(screen.Surround);
         }
 
         /// <summary>The other half of the same rule: the fresh-create default must not leak into the

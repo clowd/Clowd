@@ -134,7 +134,8 @@ namespace Clowd.UI.VideoEditor
             ArgumentNullException.ThrowIfNull(probe);
 
             return TryLoadProject(editJsonPath, videoPath, probe, audioTrackNames, hints)
-                   ?? BuildFromDocument(FreshDocument(), videoPath, probe, audioTrackNames, hints);
+                   ?? BuildFromDocument(FreshDocument(), videoPath, probe, audioTrackNames, hints,
+                       freshEdit: true);
         }
 
         /// <summary>
@@ -208,7 +209,8 @@ namespace Clowd.UI.VideoEditor
         /// window that refuses to hand one to the player or the renderer.
         /// </summary>
         private static Project BuildFromDocument(VideoEditDocument document, string videoPath,
-            MediaProbeResult probe, IReadOnlyList<string> audioTrackNames, RecordingTrackHints hints)
+            MediaProbeResult probe, IReadOnlyList<string> audioTrackNames, RecordingTrackHints hints,
+            bool freshEdit = false)
         {
             var videoStreams = probe.VideoStreams ?? Array.Empty<VideoStreamProbe>();
             if (videoStreams.Count == 0)
@@ -254,7 +256,12 @@ namespace Clowd.UI.VideoEditor
                 FpsNum = fpsNum,
                 FpsDen = fpsDen,
                 Segments = segments,
-                WebcamTransform = cam != null ? WebcamTransformOf(document.Webcam, screen, cam) : null,
+                WebcamTransform = cam == null ? null
+                    : freshEdit ? FreshWebcamTransform(document.Webcam)
+                    : WebcamTransformOf(document.Webcam, screen, cam),
+                WebcamSurround = cam != null && freshEdit
+                    ? Surround.Create(SurroundKind.Shadow, cursor: false)
+                    : null,
                 WebcamHidden = !document.Webcam.Enabled,
                 Ids = RecordingIds.New(audioStreams.Count),
             });
@@ -288,6 +295,25 @@ namespace Clowd.UI.VideoEditor
 
             return videoStreams[1];
         }
+
+        /// <summary>
+        /// The placement a <b>fresh</b> edit's webcam starts at: bottom-right at 80%, a 1:1 fill
+        /// crop in a squircle, at the document's default width. Presentation seeding only — the
+        /// model's own defaults (and the inspector's "reset" affordances) are untouched, so the
+        /// user can strip any of it back off. A migrated v1 edit never comes here: its placement
+        /// is what the file says (<see cref="WebcamTransformOf"/>).
+        /// </summary>
+        private static Transform FreshWebcamTransform(WebcamOverlay overlay) => new Transform
+        {
+            X = 0.8,
+            Y = 0.8,
+            Scale = overlay.Width,
+            Aspect = 1.0,
+            AspectStretch = false,
+            // the radius rides along unused by the squircle, so switching to a rounded rect
+            // starts from the overlay's default rather than a square corner.
+            Mask = new Mask { Shape = MaskShape.Squircle, CornerRadius = overlay.CornerRadius },
+        };
 
         /// <summary>The webcam items' placement, taken through the very pixel rect the v1 render
         /// path was handed (<see cref="ComputeWebcamRect"/>) — its rounding and edge clamping are
