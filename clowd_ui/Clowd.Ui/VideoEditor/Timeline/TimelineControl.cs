@@ -203,6 +203,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             // copy of the ripple/group rules. (Its two Split entries do NOT delegate here: they cut
             // the clicked clip alone, where this one cuts every row at once.)
             _surface.DeleteSelection = DeleteSelection;
+            _surface.RippleDeleteSelection = RippleDeleteSelection;
 
             ActualThemeVariantChanged += (_, _) =>
             {
@@ -295,34 +296,51 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>The selected item ids, primary first (delegated to <see cref="Session"/>).</summary>
         public IReadOnlyList<Guid> SelectedItemIds => _session?.SelectedItemIds ?? Array.Empty<Guid>();
 
-        /// <summary>Deletes the primary selected item — ripple for recording segments (the gap
-        /// closes on all tracks), a whole-group lift for an imported file's linked rows, plain
-        /// removal for unlinked items. An import's link group means "streams of one file", not
-        /// "contiguous recording segments", so rippling it would silently shift unrelated material
-        /// (see <see cref="EditorSession.IsRippleGroup"/>). The window forwards the Delete key
-        /// here. Returns false when nothing deletable is selected.</summary>
+        /// <summary>Deletes the primary selected item — just that clip, leaving its span blank.
+        /// The rest of its link group (the recording's other rows, the row's other segments) stays
+        /// exactly where it is: deleting the middle of a split audio row silences that stretch and
+        /// moves nothing. The cross-track cut is <see cref="RippleDeleteSelection"/>, offered from
+        /// the context menu. The window forwards the Delete key here. Returns false when nothing
+        /// deletable is selected.</summary>
         public bool DeleteSelection()
         {
-            // a drag in progress owns the model (a gesture is open): a delete would ride the
-            // gesture as an un-undoable preview and be resurrected by the drag's next move.
-            if (_session == null || _session.IsGestureActive)
-                return false;
-
-            var item = _session.PrimarySelectedItem;
+            var item = DeletableSelection();
             if (item == null)
                 return false;
 
-            var track = _session.Project.Tracks.FirstOrDefault(t => t.Id == item.TrackId);
-            if (track is not { Locked: false })
+            _session.DeleteItem(item.Id, this);
+            return true;
+        }
+
+        /// <summary>Cuts the selected clip's span out of its link group and closes the gap on
+        /// <b>all</b> tracks (<see cref="EditorSession.RippleDeleteItem"/>) — the "remove this
+        /// stretch of the recording" gesture, from the context menu's Ripple Delete. An unlinked
+        /// item is a group of one: it is removed and everything at or after it slides left.
+        /// Returns false when nothing deletable is selected.</summary>
+        public bool RippleDeleteSelection()
+        {
+            var item = DeletableSelection();
+            if (item == null)
                 return false;
 
-            if (item.LinkGroupId == null)
-                _session.DeleteItem(item.Id, this);
-            else if (_session.IsRippleGroup(item.Id))
-                _session.RippleDeleteItem(item.Id, this);
-            else
-                _session.DeleteGroup(item.Id, this);
+            _session.RippleDeleteItem(item.Id, this);
             return true;
+        }
+
+        /// <summary>The primary selected item when a delete may act on it, else null. A drag in
+        /// progress owns the model (a gesture is open): a delete would ride the gesture as an
+        /// un-undoable preview and be resurrected by the drag's next move.</summary>
+        private Item DeletableSelection()
+        {
+            if (_session == null || _session.IsGestureActive)
+                return null;
+
+            var item = _session.PrimarySelectedItem;
+            if (item == null)
+                return null;
+
+            var track = _session.Project.Tracks.FirstOrDefault(t => t.Id == item.TrackId);
+            return track is { Locked: false } ? item : null;
         }
 
         /// <summary>Splits every row that covers the playhead — see

@@ -9,7 +9,9 @@ namespace Clowd.VideoSDK.Model;
 /// live — timeline control, keyboard shortcuts and tests all come through here, so link behaviour
 /// cannot drift between entry points. The operations that change <i>when</i> content plays
 /// (<see cref="Move"/>, <see cref="Split"/>, <see cref="RippleDelete"/>) resolve the target item's
-/// link group first and apply to all members (an unlinked item is a group of one); the operations
+/// link group first and apply to the members concerned — all of them for a move, those covering
+/// the instant for a split, those overlapping the item's span for a delete (an unlinked item is a
+/// group of one); the operations
 /// that change how much of an item is shown (<see cref="TrimStart"/>, <see cref="TrimEnd"/>) or
 /// remove a lone item (<see cref="Delete"/>) are single-item.
 ///
@@ -243,25 +245,93 @@ public static class TimelineOps
     }
 
     /// <summary>
-    /// Removes the item's whole link group and closes the gap: every remaining item that started
-    /// at or after the group did shifts left by the group's span (clamped so nothing shifts to
-    /// before where the group began). This is the multi-track generalization of the v1 "cut":
-    /// items on <b>all</b> tracks shift, so cross-track sync is preserved.
+    /// Cuts the item's <b>own span</b> out of its link group and closes the gap: every group
+    /// member is trimmed/split to remove what it played inside <c>[start, end)</c>, and every
+    /// remaining item that started at or after the cut shifts left by its length (clamped so
+    /// nothing shifts to before where the cut began). This is the multi-track generalization of
+    /// the v1 "cut": items on <b>all</b> tracks shift, so cross-track sync is preserved.
+    ///
+    /// <para>Scoped to the item's span — never "the whole group" — because one group can carry
+    /// several back-to-back segments per row (a recording built from keep-slices, or the two
+    /// halves a <see cref="SplitItem"/> leaves): deleting one clip must not take the rest of the
+    /// recording with it. When every member shares the clip's span (the common one-segment
+    /// column) this removes exactly the group as before.</para>
     /// </summary>
     public static void RippleDelete(Project project, Guid itemId)
     {
-        var members = GetLinkedItems(project, itemId);
+        var target = Require(project, itemId);
+        var start = target.TimelineStartTicks;
+        var end = target.TimelineEndTicks;
 
-        var start = members.Min(m => m.TimelineStartTicks);
-        var span = members.Max(m => m.TimelineEndTicks) - start;
+        CutGroupRange(project, itemId, start, end);
 
-        foreach (var m in members)
-            project.Items.Remove(m);
-
+        var span = end - start;
         foreach (var item in project.Items)
         {
             if (item.TimelineStartTicks >= start)
                 item.TimelineStartTicks = Math.Max(start, item.TimelineStartTicks - span);
+        }
+    }
+
+    /// <summary>The no-ripple counterpart of <see cref="RippleDelete"/>: cuts the item's span out
+    /// of its link group in place, leaving the gap open and everything outside the group
+    /// untouched. The delete for an imported file's linked rows, whose group means "streams of
+    /// one file" — closing the gap under unrelated material is the recording cut's semantics, not
+    /// the overlay's.</summary>
+    public static void DeleteLinked(Project project, Guid itemId)
+    {
+        var target = Require(project, itemId);
+        CutGroupRange(project, itemId, target.TimelineStartTicks, target.TimelineEndTicks);
+    }
+
+    /// <summary>
+    /// Removes what every member of the item's link group plays inside <c>[start, end)</c>: a
+    /// member inside the range is removed, one straddling an edge is trimmed (splitting in two
+    /// when it hangs over both, exactly as <see cref="SplitCore"/> would cut it — in-point
+    /// advanced, entry left / exit right). A remnant shorter than <see cref="MinSegmentTicks"/>
+    /// is culled with the member rather than kept: the group's rows need not agree on their edges
+    /// (a recording's audio ends a hair before its video), and a delete that left a sub-minimum
+    /// sliver behind would strand an item no edit is allowed to produce.
+    /// </summary>
+    private static void CutGroupRange(Project project, Guid itemId, long start, long end)
+    {
+        foreach (var m in GetLinkedItems(project, itemId)
+                     .Where(m => m.TimelineStartTicks < end && m.TimelineEndTicks > start).ToList())
+        {
+            var leftLength = start - m.TimelineStartTicks;
+            var rightLength = m.TimelineEndTicks - end;
+
+            if (rightLength >= MinSegmentTicks)
+            {
+                var content = m.Content?.Clone();
+                if (content is MediaContent media)
+                    media.SourceInTicks += ToSourceTicks(end - m.TimelineStartTicks, SpeedOf(media));
+
+                project.Items.Add(new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = m.TrackId,
+                    TimelineStartTicks = end,
+                    DurationTicks = rightLength,
+                    Content = content,
+                    Transform = m.Transform?.Clone() ?? new Transform(),
+                    Surround = m.Surround?.Clone(),
+                    Entry = null,
+                    Exit = m.Exit,
+                    Volume = m.Volume,
+                    LinkGroupId = m.LinkGroupId,
+                });
+            }
+
+            if (leftLength >= MinSegmentTicks)
+            {
+                m.DurationTicks = leftLength;
+                m.Exit = null;
+            }
+            else
+            {
+                project.Items.Remove(m);
+            }
         }
     }
 
