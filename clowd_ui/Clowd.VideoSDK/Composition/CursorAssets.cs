@@ -162,7 +162,7 @@ namespace Clowd.VideoSDK.Composition
     /// A style that declares no colourway has exactly one, unnamed, and stores a null variant.
     /// </para>
     /// <para>
-    /// Six styles live here, from two families that are built quite differently.
+    /// Seven styles live here, from two families that are built quite differently.
     /// </para>
     /// <para>
     /// <b>The iDarques packs</b> — <c>vision</c> (Vision Cursor, a conventional pointer set on a
@@ -174,15 +174,17 @@ namespace Clowd.VideoSDK.Composition
     /// from.
     /// </para>
     /// <para>
-    /// <b>The ful1e5 packs</b> — <c>bibata</c>, <c>breezex</c>, <c>macos</c> and <c>fuchsia</c> —
-    /// carry no artwork here at all. Their SVG sources ship as embedded resources
+    /// <b>The SVG-sourced packs</b> — <c>bibata</c>, <c>breezex</c>, <c>macos</c>, <c>fuchsia</c>
+    /// and <c>neon</c> — carry no artwork here at all. Their SVG sources ship as embedded resources
     /// under <c>Composition/CursorPacks</c> and <see cref="CursorPackLoader"/> reads them at table
-    /// build, so a pack is re-synced by re-copying files rather than by transcribing anything. Those
-    /// packs author against three placeholder colours and declare the real ones per theme, which is
-    /// what makes a colourway here: see <see cref="CursorPackPalette"/>. <c>bibata</c> is the one
-    /// style whose colourways are not purely a palette — its <c>R</c> and <c>S</c> halves are the
-    /// pack's rounded and sharp edge sets, which is two geometries — and only its left-hand cursors
-    /// are carried, the pack's <c>-Right</c> mirrors being a separate set for a different hand.
+    /// build, so a pack is re-synced by re-copying files rather than by transcribing anything. Each
+    /// colourway is a recolouring of one stored drawing (see <see cref="CursorPackPalette"/>): the
+    /// four ful1e5 packs author against placeholder colours and declare the real ones per theme,
+    /// while <c>neon</c> ships one folder per colour, of which one is stored and the rest are its
+    /// palettes. <c>bibata</c> is the one style whose colourways are not purely a palette — its
+    /// <c>R</c> and <c>S</c> halves are the pack's rounded and sharp edge sets, which is two
+    /// geometries — and only its left-hand cursors are carried, the pack's <c>-Right</c> mirrors
+    /// being a separate set for a different hand.
     /// </para>
     /// <para>
     /// Faithfulness notes for the iDarques packs, all of them forced by what this table can hold
@@ -200,8 +202,9 @@ namespace Clowd.VideoSDK.Composition
     /// generated at table build from the static artwork rather than pasted per frame: Vision's
     /// rotating gradient becomes a paper sector orbiting the busy ring and a pointer whose fill
     /// pulses towards the accent; Point's colour cycle is the source's own — the dot lerping between
-    /// the colourway's base colour and its link blue. (The ful1e5 packs need none of this: they draw
-    /// every frame, and the loader reads them as they are.)</item>
+    /// the colourway's base colour and its link blue. (The SVG-sourced packs need none of this: the
+    /// ful1e5 four draw every frame, and Neon declares its animation in the file, which the loader
+    /// samples — either way the loader hands back a finished loop.)</item>
     /// <item>Both <c>help</c> badges are raster in the source — live text in DIN Round Pro, a pixel
     /// layer — so those two glyphs are traced from the PSDs' own rasterised layers.</item>
     /// <item>Only one of the two diagonal-resize cursors is authored per PSD (Vision's Black source
@@ -213,8 +216,9 @@ namespace Clowd.VideoSDK.Composition
     /// </list>
     /// <para>
     /// Every hotspot is the pack's own: the iDarques ones off their <c>.cur</c> headers scaled to the
-    /// viewBox — which is why Vision points from a tip and Point from its dot — and the ful1e5 ones
-    /// off each pack's <c>configs/x.build.toml</c>, which quotes them against a 256-unit render.
+    /// viewBox — which is why Vision points from a tip and Point from its dot — the ful1e5 ones off
+    /// each pack's <c>configs/x.build.toml</c>, and Neon's, which ships no config, off the point
+    /// each of its drawings is built around. All are quoted against a 256-unit box.
     /// </para>
     /// </remarks>
     public static class CursorAssets
@@ -239,6 +243,8 @@ namespace Clowd.VideoSDK.Composition
         private const string MacOsStyle = "macos";
 
         private const string FuchsiaStyle = "fuchsia";
+
+        private const string NeonStyle = "neon";
 
         // Kind keys: the input-capture wire names, one per drawable CursorKind. `Custom` has none
         // (it falls back to the arrow) and `Hidden` draws nothing.
@@ -272,6 +278,7 @@ namespace Clowd.VideoSDK.Composition
         public static IReadOnlyList<string> Styles { get; } = Array.AsReadOnly(new[]
         {
             VisionStyle, PointStyle, BibataStyle, BreezeXStyle, MacOsStyle, FuchsiaStyle,
+            NeonStyle,
         });
 
         /// <summary>
@@ -330,18 +337,18 @@ namespace Clowd.VideoSDK.Composition
 
         // ------------------------------------------------------------------------ ful1e5 packs
 
-        /// <summary>One colourway of a ful1e5 pack: the picker's two names for it, the artwork
-        /// folder it draws (only <see cref="BibataStyle"/> has more than one), and what its theme
-        /// paints the pack's three placeholder colours.</summary>
+        /// <summary>One colourway of an SVG-sourced pack: the picker's two names for it, the
+        /// artwork folder it draws (only <see cref="BibataStyle"/> has more than one), and the
+        /// recolouring that turns that folder's stored colours into this theme's.</summary>
         private sealed class PackTheme
         {
-            internal PackTheme(string id, string label, string folder, uint body, uint outline,
-                uint accent = 0)
+            internal PackTheme(string id, string label, string folder,
+                params (uint From, uint To)[] palette)
             {
                 Id = id;
                 Label = label;
                 Folder = folder;
-                Palette = new CursorPackPalette(body, outline, accent == 0 ? body : accent);
+                Palette = new CursorPackPalette(palette);
             }
 
             internal string Id { get; }
@@ -359,10 +366,11 @@ namespace Clowd.VideoSDK.Composition
         private sealed class Pack
         {
             internal Pack(string style, float frameMs, (string Kind, float X, float Y)[] hotspots,
-                PackTheme[] themes)
+                PackTheme[] themes, float periodMs = 0)
             {
                 Style = style;
                 FrameMs = frameMs;
+                PeriodMs = periodMs;
                 Themes = themes;
                 Hotspots = new Dictionary<string, SKPoint>(StringComparer.OrdinalIgnoreCase);
                 foreach (var (kind, x, y) in hotspots)
@@ -373,6 +381,10 @@ namespace Clowd.VideoSDK.Composition
 
             internal float FrameMs { get; }
 
+            /// <summary>How long one loop of a pack whose animation has to be sampled runs, in
+            /// milliseconds; zero for a pack that draws its frames and needs no sampling.</summary>
+            internal float PeriodMs { get; }
+
             internal PackTheme[] Themes { get; }
 
             internal Dictionary<string, SKPoint> Hotspots { get; }
@@ -382,9 +394,28 @@ namespace Clowd.VideoSDK.Composition
                 => Hotspots.TryGetValue(kind, out var point) ? point : new SKPoint(128f, 128f);
         }
 
-        // The packs' own colours, off each repository's render.json. A pack whose themes never name
-        // an accent leaves that role at its body colour, which is what the sources do too — the
-        // accent placeholder only ever appears in Bibata's artwork.
+        // A ful1e5 theme names the real colour of each placeholder its pack draws with; these three
+        // spell which placeholder is being named. A pack whose themes never name an accent simply
+        // omits it — the accent placeholder only ever appears in Bibata's artwork.
+        private static (uint, uint) Body(uint colour) => (0x00FF00, colour);
+
+        private static (uint, uint) Outline(uint colour) => (0x0000FF, colour);
+
+        private static (uint, uint) Accent(uint colour) => (0xFF0000, colour);
+
+        // Neon states its colours outright rather than through placeholders, so a theme is keyed on
+        // the stored folder's own four: the neon line, the pale core inside it, and the contrasting
+        // pair the help badge is drawn in.
+        private static (uint, uint) NeonLine(uint colour) => (0x3B6EFF, colour);
+
+        private static (uint, uint) NeonCore(uint colour) => (0xABC1FF, colour);
+
+        private static (uint, uint) NeonBadge(uint colour) => (0x45FF83, colour);
+
+        private static (uint, uint) NeonBadgeCore(uint colour) => (0xAFFFCA, colour);
+
+        // The packs' own colours, off each repository's render.json (and, for Neon, off the eight
+        // folders it ships).
         private static readonly Pack[] Packs =
         {
             // Bibata is the one pack with two geometries: `-r` is its Modern (rounded edge) set and
@@ -396,12 +427,12 @@ namespace Clowd.VideoSDK.Composition
                 (KindHelp, 42f, 86f),
             }, new[]
             {
-                new PackTheme("amber-r", "Amber R", "bibata-r", 0xFFFF8300, 0xFFFFFFFF, 0xFF001524),
-                new PackTheme("amber-s", "Amber S", "bibata-s", 0xFFFF8300, 0xFFFFFFFF, 0xFF001524),
-                new PackTheme("classic-r", "Classic R", "bibata-r", 0xFF000000, 0xFFFFFFFF, 0xFF000000),
-                new PackTheme("classic-s", "Classic S", "bibata-s", 0xFF000000, 0xFFFFFFFF, 0xFF000000),
-                new PackTheme("ice-r", "Ice R", "bibata-r", 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF),
-                new PackTheme("ice-s", "Ice S", "bibata-s", 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF),
+                new PackTheme("amber-r", "Amber R", "bibata-r", Body(0xFF8300), Outline(0xFFFFFF), Accent(0x001524)),
+                new PackTheme("amber-s", "Amber S", "bibata-s", Body(0xFF8300), Outline(0xFFFFFF), Accent(0x001524)),
+                new PackTheme("classic-r", "Classic R", "bibata-r", Body(0x000000), Outline(0xFFFFFF), Accent(0x000000)),
+                new PackTheme("classic-s", "Classic S", "bibata-s", Body(0x000000), Outline(0xFFFFFF), Accent(0x000000)),
+                new PackTheme("ice-r", "Ice R", "bibata-r", Body(0xFFFFFF), Outline(0x000000), Accent(0xFFFFFF)),
+                new PackTheme("ice-s", "Ice S", "bibata-s", Body(0xFFFFFF), Outline(0x000000), Accent(0xFFFFFF)),
             }),
             new Pack(BreezeXStyle, 10f, new (string, float, float)[]
             {
@@ -412,9 +443,9 @@ namespace Clowd.VideoSDK.Composition
                 (KindSizeNs, 126f, 125f),
             }, new[]
             {
-                new PackTheme("dark", "Dark", "breezex", 0xFF4D4D4D, 0xFFFFFFFF),
-                new PackTheme("black", "Black", "breezex", 0xFF000000, 0xFFFFFFFF),
-                new PackTheme("light", "Light", "breezex", 0xFFFFFFFF, 0xFF4D4D4D),
+                new PackTheme("dark", "Dark", "breezex", Body(0x4D4D4D), Outline(0xFFFFFF)),
+                new PackTheme("black", "Black", "breezex", Body(0x000000), Outline(0xFFFFFF)),
+                new PackTheme("light", "Light", "breezex", Body(0xFFFFFF), Outline(0x4D4D4D)),
             }),
             new Pack(MacOsStyle, 20f, new (string, float, float)[]
             {
@@ -424,8 +455,8 @@ namespace Clowd.VideoSDK.Composition
                 (KindSizeAll, 139f, 86f),
             }, new[]
             {
-                new PackTheme("black", "Black", "macos", 0xFF000000, 0xFFFFFFFF),
-                new PackTheme("white", "White", "macos", 0xFFFFFFFF, 0xFF000000),
+                new PackTheme("black", "Black", "macos", Body(0x000000), Outline(0xFFFFFF)),
+                new PackTheme("white", "White", "macos", Body(0xFFFFFF), Outline(0x000000)),
             }),
             new Pack(FuchsiaStyle, 35f, new (string, float, float)[]
             {
@@ -434,11 +465,43 @@ namespace Clowd.VideoSDK.Composition
                 (KindUpArrow, 128f, 18f), (KindPen, 55f, 203f),
             }, new[]
             {
-                new PackTheme("fuchsia", "Fuchsia", "fuchsia", 0xFFE11C79, 0xFFFFFFFF),
-                new PackTheme("pop", "Pop", "fuchsia", 0xFFF8B572, 0xFFFFFFFF),
-                new PackTheme("red", "Red", "fuchsia", 0xFFFF0000, 0xFFFFFFFF),
-                new PackTheme("amber", "Amber", "fuchsia", 0xFFFFA400, 0xFFFFFFFF),
+                new PackTheme("fuchsia", "Fuchsia", "fuchsia", Body(0xE11C79), Outline(0xFFFFFF)),
+                new PackTheme("pop", "Pop", "fuchsia", Body(0xF8B572), Outline(0xFFFFFF)),
+                new PackTheme("red", "Red", "fuchsia", Body(0xFF0000), Outline(0xFFFFFF)),
+                new PackTheme("amber", "Amber", "fuchsia", Body(0xFFA400), Outline(0xFFFFFF)),
             }),
+            // Neon draws every cursor as a stack of strokes of one path — a wide dim glow, a
+            // brighter bloom, a pale core — and animates its two busy cursors in the file, which is
+            // why it declares a loop length: 6.4 s sampled every 100 ms, long enough to hold whole
+            // numbers of both the 1.6 s pulse and (stretched a touch) the 6 s colour cycle.
+            // Its hotspots ship with no config, so they are read off the drawings — the pointer's
+            // tip, the fingertip, the pen's nib, the centre for everything else — and, like every
+            // pack here, quoted against a 256-unit box: Neon draws on 32, so each is the point in
+            // its own units times eight (the arrow's tip at (8.5, 6) is (68, 48) below).
+            new Pack(NeonStyle, 100f, new (string, float, float)[]
+            {
+                (KindArrow, 68f, 48f), (KindHelp, 68f, 48f), (KindAppStarting, 68f, 48f),
+                (KindUpArrow, 128f, 43f), (KindHand, 113.5f, 44.4f), (KindPerson, 89.4f, 32f),
+                (KindPen, 40.2f, 190.2f),
+            }, new[]
+            {
+                new PackTheme("blue", "Blue", "neon", NeonLine(0x3B6EFF), NeonCore(0xABC1FF),
+                    NeonBadge(0x45FF83), NeonBadgeCore(0xAFFFCA)),
+                new PackTheme("cyan", "Cyan", "neon", NeonLine(0x36FFFF), NeonCore(0xA9FFFF),
+                    NeonBadge(0x45FFE0), NeonBadgeCore(0xAFFFF2)),
+                new PackTheme("green", "Green", "neon", NeonLine(0x49FF3B), NeonCore(0xB1FFAB),
+                    NeonBadge(0x4545FF), NeonBadgeCore(0xAFAFFF)),
+                new PackTheme("yellow", "Yellow", "neon", NeonLine(0xFCFF3B), NeonCore(0xFEFFAB),
+                    NeonBadge(0xFF45FF), NeonBadgeCore(0xFFAFFF)),
+                new PackTheme("orange", "Orange", "neon", NeonLine(0xFFA53B), NeonCore(0xFFD8AB),
+                    NeonBadge(0xFF45A2), NeonBadgeCore(0xFFAFD7)),
+                new PackTheme("red", "Red", "neon", NeonLine(0xFF3B3B), NeonCore(0xFFABAB),
+                    NeonBadge(0xFF4545), NeonBadgeCore(0xFFAFAF)),
+                new PackTheme("pink", "Pink", "neon", NeonLine(0xFF3BBC), NeonCore(0xFFABE2),
+                    NeonBadge(0xFFC145), NeonBadgeCore(0xFFE4AF)),
+                new PackTheme("purple", "Purple", "neon", NeonLine(0xAE3BFF), NeonCore(0xDCABFF),
+                    NeonBadge(0xA2FF45), NeonBadgeCore(0xD7FFAF)),
+            }, periodMs: 6400f),
         };
 
         private static readonly Dictionary<string, CursorVariant[]> VariantTable = BuildVariantTable();
@@ -1025,7 +1088,7 @@ namespace Clowd.VideoSDK.Composition
                         var hotspot = pack.HotspotOf(kind);
                         var glyph = kind is KindWait or KindAppStarting
                             ? CursorPackLoader.LoadAnimated(theme.Folder, kind, theme.Palette,
-                                hotspot.X, hotspot.Y, pack.FrameMs)
+                                hotspot.X, hotspot.Y, pack.FrameMs, pack.PeriodMs)
                             : CursorPackLoader.LoadStatic(theme.Folder, kind, theme.Palette,
                                 hotspot.X, hotspot.Y);
                         if (glyph != null)

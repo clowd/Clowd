@@ -43,10 +43,10 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void The_themed_styles_are_the_six_packs_native_excluded()
+        public void The_themed_styles_are_the_seven_packs_native_excluded()
         {
             Assert.Equal(
-                new[] { "vision", "point", "bibata", "breezex", "macos", "fuchsia" },
+                new[] { "vision", "point", "bibata", "breezex", "macos", "fuchsia", "neon" },
                 CursorAssets.Styles);
             Assert.DoesNotContain(CursorAssets.NativeStyle, CursorAssets.Styles);
             Assert.Equal("vision", CursorAssets.DefaultStyle);
@@ -108,16 +108,18 @@ namespace Clowd.VideoSDK.Tests
             Assert.Empty(CursorAssets.Variants(null));
         }
 
-        /// <summary>The ful1e5 packs' colourways, which are their own repositories' theme lists.
+        /// <summary>The SVG-sourced packs' colourways, which are their own sources' theme lists.
         /// Bibata's are the six the editor offers: three palettes on each of the pack's two edge
-        /// sets, left-hand only.</summary>
+        /// sets, left-hand only. Neon's are the eight colour folders it ships.</summary>
         [Theory]
         [InlineData("bibata", "amber-r|amber-s|classic-r|classic-s|ice-r|ice-s",
             "Amber R|Amber S|Classic R|Classic S|Ice R|Ice S")]
         [InlineData("breezex", "dark|black|light", "Dark|Black|Light")]
         [InlineData("macos", "black|white", "Black|White")]
         [InlineData("fuchsia", "fuchsia|pop|red|amber", "Fuchsia|Pop|Red|Amber")]
-        public void A_ful1e5_packs_colourways_are_its_own_themes(string style, string ids, string labels)
+        [InlineData("neon", "blue|cyan|green|yellow|orange|red|pink|purple",
+            "Blue|Cyan|Green|Yellow|Orange|Red|Pink|Purple")]
+        public void A_packs_colourways_are_its_own_themes(string style, string ids, string labels)
         {
             Assert.Equal(ids.Split('|'), CursorAssets.Variants(style).Select(v => v.Id).ToArray());
             Assert.Equal(labels.Split('|'), CursorAssets.Variants(style).Select(v => v.Label).ToArray());
@@ -165,11 +167,11 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>
-        /// The same property for the ful1e5 packs, which reach it a different way: their themes are
-        /// a colour map over one set of SVGs, so two themes of one pack are the same geometry unless
-        /// they name different artwork. Bibata is the one that does — its <c>R</c> and <c>S</c>
-        /// colourways are the pack's rounded and sharp edge sets — so geometry is compared within an
-        /// edge set, and across the two only to prove they really are different drawings.
+        /// The same property for the SVG-sourced packs, which reach it a different way: their themes
+        /// are a colour map over one set of SVGs, so two themes of one pack are the same geometry
+        /// unless they name different artwork. Bibata is the one that does — its <c>R</c> and
+        /// <c>S</c> colourways are the pack's rounded and sharp edge sets — so geometry is compared
+        /// within an edge set, and across the two only to prove they really are different drawings.
         /// </summary>
         [Theory]
         [InlineData("bibata", "amber-r", "classic-r")]
@@ -177,7 +179,8 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("breezex", "dark", "light")]
         [InlineData("macos", "black", "white")]
         [InlineData("fuchsia", "fuchsia", "amber")]
-        public void A_ful1e5_packs_themes_are_one_geometry_recoloured(string style, string a, string b)
+        [InlineData("neon", "blue", "purple")]
+        public void A_packs_themes_are_one_geometry_recoloured(string style, string a, string b)
         {
             foreach (var kind in CursorAssets.Kinds)
             {
@@ -228,7 +231,8 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("breezex", "dark", "light")]
         [InlineData("macos", "black", "white")]
         [InlineData("fuchsia", "fuchsia", "amber")]
-        public void A_ful1e5_packs_themes_actually_recolour_it(string style, string a, string b)
+        [InlineData("neon", "blue", "purple")]
+        public void A_packs_themes_actually_recolour_it(string style, string a, string b)
         {
             var first = CursorAssets.TryGet(style, a, CursorAssets.KindArrow);
             var second = CursorAssets.TryGet(style, b, CursorAssets.KindArrow);
@@ -506,6 +510,42 @@ namespace Clowd.VideoSDK.Tests
                     Assert.True(layer.Fill.Alpha > 0,
                         $"{style}/{variant}/{kind}: invisible frame layer");
                 }
+            }
+        }
+
+        /// <summary>
+        /// Neon's two busy cursors animate in the file, with SMIL, and are sampled into stills at
+        /// table build — the loop has to come out long enough to hold whole cycles of both the
+        /// colour ramp and the scale pulse, and the ramp really has to reach every one of the pack's
+        /// hues rather than sitting on the stored theme's.
+        /// </summary>
+        [Theory]
+        [InlineData("blue")]
+        [InlineData("purple")]
+        public void Neons_busy_cursors_are_sampled_from_their_own_animation(string variant)
+        {
+            foreach (var kind in new[] { CursorAssets.KindWait, CursorAssets.KindAppStarting })
+            {
+                var glyph = CursorAssets.TryGet("neon", variant, kind);
+                Assert.Equal(64, glyph.Frames.Count);
+                Assert.Equal(100f, glyph.FrameDurationMs);
+
+                // the spinner's colour is the pack's own cycle, so it is the same whichever theme
+                // is picked, and it visits far more than one hue
+                var hues = glyph.Frames
+                    .Select(f => f.Paths[f.Paths.Count - 1].FillArgb & 0x00FFFFFF)
+                    .Distinct()
+                    .ToArray();
+                Assert.True(hues.Length > 20, $"neon/{variant}/{kind}: only {hues.Length} hues");
+            }
+
+            // ...and the cycle is genuinely theme-independent: two themes' spinners match frame for
+            // frame, even though everything else about them is recoloured.
+            var blue = CursorAssets.TryGet("neon", "blue", CursorAssets.KindWait);
+            var other = CursorAssets.TryGet("neon", variant, CursorAssets.KindWait);
+            for (int i = 0; i < blue.Frames.Count; i++)
+            {
+                Assert.Equal(blue.Frames[i].Paths[0].FillArgb, other.Frames[i].Paths[0].FillArgb);
             }
         }
 
