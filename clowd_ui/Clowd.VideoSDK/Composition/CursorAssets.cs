@@ -52,6 +52,16 @@ namespace Clowd.VideoSDK.Composition
     /// Immutable and shared process-wide — a caller may cache parsed <c>SKPath</c>s keyed by the
     /// instance, but must not mutate anything reachable from here.
     /// </summary>
+    /// <remarks>
+    /// An <b>animated</b> cursor is a loop of these: the table stores a container glyph whose
+    /// <see cref="Frames"/> are the individual stills, each a plain static glyph. The container
+    /// adopts its first frame's geometry outright, so a consumer that never asks for time (the
+    /// inspector's style tiles, the tests' structural sweeps) sees frame 0 and needs no special
+    /// case; a consumer drawing at a moment in time calls <see cref="FrameAt"/>. Frame selection
+    /// is a pure function of the time it is handed — the caller decides whose clock that is
+    /// (the compositor passes <i>project</i> time, so a spinner turns at one speed through
+    /// speed-warped clips, and preview, scrub and render all agree by construction).
+    /// </remarks>
     public sealed class CursorGlyph
     {
         internal CursorGlyph(float viewBox, float hotspotX, float hotspotY, CursorGlyphPath[] paths)
@@ -59,6 +69,29 @@ namespace Clowd.VideoSDK.Composition
             ViewBox = viewBox;
             Hotspot = new SKPoint(hotspotX, hotspotY);
             Paths = Array.AsReadOnly(paths);
+        }
+
+        /// <summary>An animated cursor: a looping frame list, each frame a static glyph sharing
+        /// the same viewBox and hotspot. The container itself presents frame 0's geometry.</summary>
+        internal CursorGlyph(float frameDurationMs, CursorGlyph[] frames)
+        {
+            if (frames == null || frames.Length == 0)
+                throw new ArgumentException("an animated glyph needs at least one frame", nameof(frames));
+            if (frameDurationMs <= 0)
+                throw new ArgumentOutOfRangeException(nameof(frameDurationMs));
+            foreach (var frame in frames)
+            {
+                if (frame.Frames != null)
+                    throw new ArgumentException("frames cannot themselves be animated", nameof(frames));
+                if (frame.ViewBox != frames[0].ViewBox || frame.Hotspot != frames[0].Hotspot)
+                    throw new ArgumentException("frames must share one viewBox and hotspot", nameof(frames));
+            }
+
+            ViewBox = frames[0].ViewBox;
+            Hotspot = frames[0].Hotspot;
+            Paths = frames[0].Paths;
+            Frames = Array.AsReadOnly(frames);
+            FrameDurationMs = frameDurationMs;
         }
 
         /// <summary>Side of the (always square) source viewBox. Draw scale for a target glyph of
@@ -69,8 +102,30 @@ namespace Clowd.VideoSDK.Composition
         /// units — the pack's own hotspot, off its <c>.cur</c> headers.</summary>
         public SKPoint Hotspot { get; }
 
-        /// <summary>Layers, bottom-first.</summary>
+        /// <summary>Layers, bottom-first. For an animated glyph these are frame 0's layers.</summary>
         public IReadOnlyList<CursorGlyphPath> Paths { get; }
+
+        /// <summary>The animation's stills in loop order, or null for a static glyph.</summary>
+        public IReadOnlyList<CursorGlyph> Frames { get; }
+
+        /// <summary>How long each frame shows, in milliseconds (0 for a static glyph).</summary>
+        public float FrameDurationMs { get; }
+
+        /// <summary>
+        /// The still to draw at <paramref name="timeMs"/>: the glyph itself when static, else
+        /// the covering frame of the loop. Deterministic — the same time always yields the same
+        /// frame, whatever order times are asked in, which is what keeps scrubbing, preview and
+        /// render pixel-identical. Negative times are valid (the loop extends both ways).
+        /// </summary>
+        public CursorGlyph FrameAt(double timeMs)
+        {
+            if (Frames == null)
+                return this;
+            int idx = (int)Math.Floor(timeMs / FrameDurationMs) % Frames.Count;
+            if (idx < 0)
+                idx += Frames.Count;
+            return Frames[idx];
+        }
     }
 
     /// <summary>
@@ -127,8 +182,12 @@ namespace Clowd.VideoSDK.Composition
     /// <item>Photoshop marks a hole with a path operation and leaves the winding alone; the same
     /// hole is spelled here as a reversed contour, which is what the nonzero fill rule wants.</item>
     /// <item>Each pack's <c>wait</c>/<c>appstarting</c> are its two animated cursors, gradient-based
-    /// in the source. Each is flattened to the colour that tells it apart from the plain pointer:
-    /// the gradient's accent stop for Vision, the animation's midpoint for Point.</item>
+    /// in the source. Each is stored as a looping frame list (<see cref="CursorGlyph.Frames"/>),
+    /// generated at table build from the static artwork rather than pasted per frame: Vision's
+    /// rotating gradient becomes a paper sector orbiting the busy ring and a pointer whose fill
+    /// pulses towards the accent; Point's colour cycle is the source's own — the dot lerping
+    /// between the colourway's base colour and its link blue. A complex animation that cannot be
+    /// generated this way can still hand the same constructor hand-authored frames.</item>
     /// <item>Both <c>help</c> badges are raster in the source — live text in DIN Round Pro (Vision),
     /// a pixel layer (Point) — so those two glyphs are traced from the PSDs' own rasterised layers.</item>
     /// <item>Only one of the two diagonal-resize cursors is authored per file (Vision's Black source
@@ -272,6 +331,39 @@ namespace Clowd.VideoSDK.Composition
         private static CursorGlyph G(float viewBox, float hotspotX, float hotspotY, params CursorGlyphPath[] paths)
             => new CursorGlyph(viewBox, hotspotX, hotspotY, paths);
 
+        private static CursorGlyph A(float frameDurationMs, CursorGlyph[] frames)
+            => new CursorGlyph(frameDurationMs, frames);
+
+        /// <summary>An annular sector (a slice of a ring) as SVG path data, generated through
+        /// <c>SKPath</c> so the stored layer is a plain path like every authored one. Angles are
+        /// Skia's: degrees clockwise from 3 o'clock (y grows downward).</summary>
+        private static string RingSector(float centre, float outerRadius, float innerRadius,
+            float startDeg, float sweepDeg)
+        {
+            using var path = new SKPath();
+            var outer = SKRect.Create(centre - outerRadius, centre - outerRadius,
+                outerRadius * 2, outerRadius * 2);
+            var inner = SKRect.Create(centre - innerRadius, centre - innerRadius,
+                innerRadius * 2, innerRadius * 2);
+            path.AddArc(outer, startDeg, sweepDeg);
+            path.ArcTo(inner, startDeg + sweepDeg, -sweepDeg, false);
+            path.Close();
+            return path.ToSvgPathData();
+        }
+
+        /// <summary>Per-channel ARGB interpolation, <paramref name="t"/> ∈ [0, 1].</summary>
+        private static uint Lerp(uint from, uint to, float t)
+        {
+            uint Channel(int shift)
+            {
+                int a = (int)((from >> shift) & 0xFF);
+                int b = (int)((to >> shift) & 0xFF);
+                return (uint)Math.Clamp((int)Math.Round(a + (b - a) * (double)t), 0, 255);
+            }
+
+            return Channel(24) << 24 | Channel(16) << 16 | Channel(8) << 8 | Channel(0);
+        }
+
         // ---------------------------------------------------------------------- vision palette
 
         /// <summary>Vision's two base colours. They trade places between the colourways: the dark
@@ -309,16 +401,20 @@ namespace Clowd.VideoSDK.Composition
 
         private const uint PointDenyEdge = 0xFF720000;
 
-        /// <summary>The busy pointer, whose animation cycles the dot between the colourway's own
-        /// base colour and <see cref="PointLink"/>; a still frame takes the midpoint, which stays
-        /// distinct from the plain pointer in either colourway.</summary>
-        private const uint PointWorkDark = 0xFF3A8ED8;
-
-        private const uint PointWorkLight = 0xFF64B8FF;
-
         /// <summary>Point's 3-unit outside stroke as the centred width that draws the same
         /// picture, on its smaller 64-unit viewBox.</summary>
         private const float PointHalo = 6f;
+
+        // ------------------------------------------------------------------ animation generation
+
+        /// <summary>Frames per animation loop and how long each shows: 18 × 60 ms ≈ one revolution
+        /// (or one colour cycle) every 1.08 s, the cadence a Windows <c>.ani</c> spinner runs at.</summary>
+        private const int SpinFrames = 18;
+
+        private const float SpinFrameMs = 60f;
+
+        /// <summary>Sweep of the orbiting highlight sector, degrees.</summary>
+        private const float SpinSweep = 100f;
 
         // --------------------------------------------------------------------- vision artwork
         // Generated from the pack's PSD vector masks; see the class remarks. Each constant is
@@ -640,10 +736,29 @@ namespace Clowd.VideoSDK.Composition
                     P(VisionLink, ink, paper, Halo));
                 t[Key(VisionStyle, variant, KindUpArrow)] = G(128f, 64f, 8f,
                     P(VisionAlternate, ink, paper, Halo));
-                t[Key(VisionStyle, variant, KindWait)] = G(128f, 64f, 64f,
-                    P(VisionBusy, Spin, Ink, Halo));
-                t[Key(VisionStyle, variant, KindAppStarting)] = G(128f, 8f, 8f,
-                    P(VisionWork, Paper, Spin, Halo));
+                // wait: the source's rotating gradient, faked as a paper sector orbiting the ring.
+                // The ring layer is shared across frames so path caches key it once; the radii are
+                // VisionBusy's own (centre 64, ring 19.938..30.25), so the sector sits flush.
+                var visionRing = P(VisionBusy, Spin, Ink, Halo);
+                var visionWaitFrames = new CursorGlyph[SpinFrames];
+                for (int i = 0; i < SpinFrames; i++)
+                {
+                    visionWaitFrames[i] = G(128f, 64f, 64f, visionRing,
+                        P(RingSector(64f, 30.25f, 19.938f, -90f + i * 360f / SpinFrames, SpinSweep),
+                            Paper, Ink, HaloThin));
+                }
+                t[Key(VisionStyle, variant, KindWait)] = A(SpinFrameMs, visionWaitFrames);
+
+                // appstarting: the pointer cannot rotate, so the source's sweeping gradient becomes
+                // a fill pulsing towards the accent and back. Frame 0 is the old static colour.
+                var visionWorkFrames = new CursorGlyph[SpinFrames];
+                for (int i = 0; i < SpinFrames; i++)
+                {
+                    float mix = 0.5f - 0.5f * MathF.Cos(2f * MathF.PI * i / SpinFrames);
+                    visionWorkFrames[i] = G(128f, 8f, 8f,
+                        P(VisionWork, Lerp(Paper, Spin, mix), Spin, Halo));
+                }
+                t[Key(VisionStyle, variant, KindAppStarting)] = A(SpinFrameMs, visionWorkFrames);
                 t[Key(VisionStyle, variant, KindCross)] = G(128f, 64f, 64f,
                     P(VisionCrossTop, ink, paper, Halo), P(VisionCrossBottom, ink, paper, Halo),
                     P(VisionCrossRight, ink, paper, Halo), P(VisionCrossLeft, ink, paper, Halo));
@@ -670,13 +785,11 @@ namespace Clowd.VideoSDK.Composition
                     P(VisionPointer, ink, paper, Halo), P(VisionHelpBadge, ink, paper, Halo));
             }
 
-            // Point is the same two-colourway arrangement on a 64-unit viewBox: `work` is its one
-            // extra colourway-varying colour (the busy pointer's tint), which is why it rides the
-            // loop rather than naming a constant.
-            foreach (var (variant, ink, paper, work) in new[]
+            // Point is the same two-colourway arrangement on a 64-unit viewBox.
+            foreach (var (variant, ink, paper) in new[]
             {
-                ("dark", PointInk, Paper, PointWorkDark),
-                ("light", Paper, PointInk, PointWorkLight),
+                ("dark", PointInk, Paper),
+                ("light", Paper, PointInk),
             })
             {
                 t[Key(PointStyle, variant, KindArrow)] = G(64f, 32f, 32f,
@@ -687,11 +800,33 @@ namespace Clowd.VideoSDK.Composition
                     P(PointDot, PointLink, paper, PointHalo));
                 t[Key(PointStyle, variant, KindNo)] = G(64f, 32f, 32f,
                     P(PointDot, PointDeny, PointDenyEdge, PointHalo));
-                t[Key(PointStyle, variant, KindAppStarting)] = G(64f, 32f, 32f,
-                    P(PointDot, work, paper, PointHalo));
-                t[Key(PointStyle, variant, KindWait)] = G(64f, 32f, 32f,
-                    P(PointBusyRing, PointLink, paper, PointHalo),
-                    P(PointDot, ink, paper, PointHalo));
+                // appstarting: the source's own animation — the dot cycling between the
+                // colourway's base colour and the link blue. Frame 0 is the cycle's midpoint,
+                // which is (near) the tint the old static table showed.
+                var pointWorkFrames = new CursorGlyph[SpinFrames];
+                for (int i = 0; i < SpinFrames; i++)
+                {
+                    float mix = 0.5f + 0.5f * MathF.Sin(2f * MathF.PI * i / SpinFrames);
+                    pointWorkFrames[i] = G(64f, 32f, 32f,
+                        P(PointDot, Lerp(ink, PointLink, mix), paper, PointHalo));
+                }
+                t[Key(PointStyle, variant, KindAppStarting)] = A(SpinFrameMs, pointWorkFrames);
+
+                // wait: the same orbiting-sector fake as Vision's, on PointBusyRing's radii
+                // (centre 32, ring 11.888..18.02); ring and dot layers shared across frames. The
+                // sector's halo is half width — the ring is barely thicker than a full halo, which
+                // would read as a black crescent rather than an outlined highlight.
+                var pointRing = P(PointBusyRing, PointLink, paper, PointHalo);
+                var pointWaitDot = P(PointDot, ink, paper, PointHalo);
+                var pointWaitFrames = new CursorGlyph[SpinFrames];
+                for (int i = 0; i < SpinFrames; i++)
+                {
+                    pointWaitFrames[i] = G(64f, 32f, 32f, pointRing,
+                        P(RingSector(32f, 18.02f, 11.888f, -90f + i * 360f / SpinFrames, SpinSweep),
+                            paper, ink, PointHalo / 2f),
+                        pointWaitDot);
+                }
+                t[Key(PointStyle, variant, KindWait)] = A(SpinFrameMs, pointWaitFrames);
                 t[Key(PointStyle, variant, KindIBeam)] = G(64f, 32f, 32f,
                     P(PointCrossTop, ink, paper, PointHalo),
                     P(PointCrossBottom, ink, paper, PointHalo));

@@ -323,7 +323,8 @@ namespace Clowd.VideoSDK.Composition
         /// recorded pixel would, crop/aspect/mask included. <c>none</c> draws no cursor at all
         /// (the click highlight, its own setting, still does); <c>native</c> draws the frame's
         /// recorded sprite (<see cref="InputFrame.SpriteId"/>) at its captured pixel size times
-        /// <c>Size</c>; every other style draws a themed glyph sized by
+        /// <c>Size</c>; every other style draws a themed glyph (an animated one — the wait and
+        /// appstarting spinners — showing the frame project time selects) sized by
         /// <c>Size · 40 px · monitor scale</c> in source pixels, then through the same px→canvas
         /// factor as the screen frame. The native style ignores the item's shadow surround: the OS
         /// pointer shadow is DWM-composited, never part of the cursor shape the recorder
@@ -390,7 +391,11 @@ namespace Clowd.VideoSDK.Composition
                 }
                 else
                 {
-                    var glyph = CursorCompose.ResolveGlyph(cursor.Style, cursor.Variant, row.Cursor);
+                    // an animated glyph (wait/appstarting spinners) picks its frame by *project*
+                    // time, the click animations' clock: constant spin through speed-warped clips,
+                    // and scrub/preview/render agree because the frame is a pure function of t.
+                    var glyph = CursorCompose.ResolveGlyph(cursor.Style, cursor.Variant, row.Cursor)
+                        ?.FrameAt(timeTicks / (double)TimeSpan.TicksPerMillisecond);
                     if (glyph != null)
                     {
                         double sizeSourcePx = (cursor.Size > 0 ? cursor.Size : 1.0)
