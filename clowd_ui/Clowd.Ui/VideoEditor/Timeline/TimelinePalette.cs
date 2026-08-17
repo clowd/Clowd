@@ -130,6 +130,19 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Waveform body on an audio item.</summary>
         public IBrush WaveformBrush { get; private init; }
 
+        private IBrush _edgeFadeLeftEven;
+        private IBrush _edgeFadeLeftOdd;
+        private IBrush _edgeFadeRightEven;
+        private IBrush _edgeFadeRightOdd;
+
+        /// <summary>Gradient to the row background laid over an item's end where the viewport cuts
+        /// it off. Per row parity because the row fills alternate — and built from the row colour
+        /// composited over the surface, since the Semi fills are translucent overlays and a
+        /// gradient of the raw overlay would never fully dissolve the item.</summary>
+        public IBrush ItemEdgeFade(bool evenRow, bool leftEdge) => leftEdge
+            ? (evenRow ? _edgeFadeLeftEven : _edgeFadeLeftOdd)
+            : (evenRow ? _edgeFadeRightEven : _edgeFadeRightOdd);
+
         // ------------------------------------------------------------------ selection and state
 
         /// <summary>Border of the selected item.</summary>
@@ -212,13 +225,17 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             var playheadColor = dark ? Color.FromRgb(240, 82, 82) : Color.FromRgb(212, 48, 48);
 
+            var surfaceColor = dark ? Color.FromRgb(30, 30, 32) : Color.FromRgb(232, 233, 236);
+            var rowEven = CompositeOver(fill1, surfaceColor);
+            var rowOdd = CompositeOver(fill0, surfaceColor);
+
             // fixed blue rather than the accent: the ghost has to stay distinct from the playhead
             // AND from the selection/snap chrome, whatever accent the theme carries.
             var hoverPlayheadColor = dark ? Color.FromRgb(88, 158, 255) : Color.FromRgb(32, 108, 220);
 
             return new TimelinePalette
             {
-                SurfaceBackground = new SolidColorBrush(dark ? Color.FromRgb(30, 30, 32) : Color.FromRgb(232, 233, 236)),
+                SurfaceBackground = new SolidColorBrush(surfaceColor),
                 RowBackground = new SolidColorBrush(fill1),
                 RowBackgroundAlt = new SolidColorBrush(fill0),
                 RowSeparatorPen = new Pen(new SolidColorBrush(border, 0.7), 1),
@@ -242,6 +259,10 @@ namespace Clowd.UI.VideoEditor.Timeline
                 ItemLabelBrush = new SolidColorBrush(dark ? Color.FromRgb(240, 240, 240) : Colors.White),
                 FilmstripPlaceholderFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.12),
                 WaveformBrush = new SolidColorBrush(dark ? Color.FromRgb(226, 244, 236) : Color.FromRgb(28, 62, 48), 0.8),
+                _edgeFadeLeftEven = EdgeFadeBrush(rowEven, fromLeft: true),
+                _edgeFadeLeftOdd = EdgeFadeBrush(rowOdd, fromLeft: true),
+                _edgeFadeRightEven = EdgeFadeBrush(rowEven, fromLeft: false),
+                _edgeFadeRightOdd = EdgeFadeBrush(rowOdd, fromLeft: false),
 
                 SelectionAccent = accent,
                 SelectionPen = new Pen(new SolidColorBrush(accent), 2),
@@ -286,6 +307,33 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
 
             return fallback;
+        }
+
+        /// <summary>Alpha-composites a translucent overlay onto an opaque backing colour.</summary>
+        private static Color CompositeOver(Color over, Color under)
+        {
+            var a = over.A / 255.0;
+            return Color.FromRgb(
+                (byte)Math.Round(over.R * a + under.R * (1 - a)),
+                (byte)Math.Round(over.G * a + under.G * (1 - a)),
+                (byte)Math.Round(over.B * a + under.B * (1 - a)));
+        }
+
+        /// <summary>A horizontal gradient from an opaque colour to the same colour fully
+        /// transparent — relative to whatever rect it fills.</summary>
+        private static IBrush EdgeFadeBrush(Color color, bool fromLeft)
+        {
+            var clear = Color.FromArgb(0, color.R, color.G, color.B);
+            return new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+                GradientStops = new GradientStops
+                {
+                    new GradientStop(fromLeft ? color : clear, 0),
+                    new GradientStop(fromLeft ? clear : color, 1),
+                },
+            };
         }
 
         private static Color WithOpacity(Color color, double opacity)

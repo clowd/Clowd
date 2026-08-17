@@ -130,6 +130,18 @@ namespace Clowd.UI.VideoEditor.Timeline
                 Minimum = 0,
             };
 
+            // a touch taller than the theme's ordinary scrollbars: this bar is the timeline's main
+            // navigation strip, not incidental chrome. The thumb grows via a scoped resource
+            // override; the bar itself needs an explicit Height — the theme's thickness resource
+            // sizes the thumb but not the control, so overriding it alone leaves the fatter thumb
+            // clipped by the old container.
+            if (Application.Current!.TryGetResource("ScrollBarThickness", null, out var barSize) &&
+                barSize is double bar)
+                _hscroll.Height = bar + 2;
+            if (Application.Current!.TryGetResource("ScrollBarThumbThickness", null, out var thumbSize) &&
+                thumbSize is double thumb)
+                _hscroll.Resources["ScrollBarThumbThickness"] = thumb + 2;
+
             var scrollContent = new Grid
             {
                 ColumnDefinitions = new ColumnDefinitions($"{HeaderWidth},*"),
