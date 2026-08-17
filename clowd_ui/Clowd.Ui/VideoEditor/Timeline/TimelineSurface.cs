@@ -1273,6 +1273,11 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private void RenderTransitions(DrawingContext context, TimelinePalette palette, Item item, Rect body)
         {
+            // a keystroke overlay spends its Entry/Exit on each key row (see FrameComposer), not
+            // on the item as a whole — a ramp on its card would promise a fade that never happens.
+            if (item.Content is KeyboardContent)
+                return;
+
             if (item.Entry is { Kind: not TransitionKind.None } entry)
                 RenderRamp(context, palette, body, Math.Min(entry.DurationTicks, item.DurationTicks), isEntry: true);
             if (item.Exit is { Kind: not TransitionKind.None } exit)
