@@ -278,6 +278,208 @@ namespace Clowd.VideoSDK.Tests
             Assert.Empty(session.Project.Validate());
         }
 
+        // ---------------------------------------------------------------------------- trim clamp
+
+        /// <summary>The overlay items of the first recording segment ([0, 8s)) and of the second
+        /// ([8s, 20s)), in timeline order.</summary>
+        private static (Item First, Item Second) CursorItems(EditorSession session)
+        {
+            var items = session.Project.Items
+                .Where(i => i.Content is CursorContent).OrderBy(i => i.TimelineStartTicks).ToList();
+            return (items[0], items[1]);
+        }
+
+        private static Item Live(EditorSession session, Item item) =>
+            session.Project.Items.Single(i => i.Id == item.Id);
+
+        [Fact]
+        public void An_overlay_item_never_trims_past_the_end_of_its_screen_segment()
+        {
+            var session = NewSession(out _, out _, out _);
+            session.AddCursorTrack();
+            var (cursor, _) = CursorItems(session);
+
+            // the item already ends exactly at the screen segment's end: there is nowhere to go.
+            Assert.Equal(0, session.TrimItemEnd(cursor.Id, Ms(5_000)));
+            Assert.Equal(Ms(8_000), Live(session, cursor).DurationTicks);
+
+            // shorter is always allowed — hiding the cursor for the tail of the segment.
+            Assert.Equal(-Ms(2_000), session.TrimItemEnd(cursor.Id, -Ms(2_000)));
+            Assert.Equal(Ms(6_000), Live(session, cursor).DurationTicks);
+
+            // and it may grow back, but only as far as the screen segment reaches.
+            Assert.Equal(Ms(2_000), session.TrimItemEnd(cursor.Id, Ms(9_000)));
+            Assert.Equal(0, Live(session, cursor).TimelineStartTicks);
+            Assert.Equal(Ms(8_000), Live(session, cursor).DurationTicks);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void An_overlay_item_never_trims_past_the_start_of_its_screen_segment()
+        {
+            var session = NewSession(out _, out _, out _);
+            session.AddCursorTrack();
+            var (_, cursor) = CursorItems(session); // the [8s, 20s) segment
+
+            Assert.Equal(0, session.TrimItemStart(cursor.Id, -Ms(3_000)));
+            Assert.Equal(Ms(8_000), Live(session, cursor).TimelineStartTicks);
+
+            Assert.Equal(Ms(2_000), session.TrimItemStart(cursor.Id, Ms(2_000)));
+            Assert.Equal(Ms(10_000), Live(session, cursor).TimelineStartTicks);
+            Assert.Equal(Ms(10_000), Live(session, cursor).DurationTicks);
+
+            Assert.Equal(-Ms(2_000), session.TrimItemStart(cursor.Id, -Ms(6_000)));
+            Assert.Equal(Ms(8_000), Live(session, cursor).TimelineStartTicks);
+            Assert.Equal(Ms(12_000), Live(session, cursor).DurationTicks);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void A_keyboard_item_is_clamped_to_the_screen_segment_too()
+        {
+            var session = NewSession(out _, out _, out _);
+            var keys = session.AddKeyboardTrack();
+
+            Assert.Equal(0, session.TrimItemEnd(keys.Id, Ms(4_000)));
+            Assert.Equal(0, session.TrimItemStart(keys.Id, -Ms(4_000)));
+            Assert.Equal(0, Live(session, keys).TimelineStartTicks);
+            Assert.Equal(Ms(8_000), Live(session, keys).DurationTicks);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void Trimming_the_screen_item_shorter_takes_its_overlay_items_along()
+        {
+            var session = NewSession(out var screenTrack, out var webcamTrack, out _);
+            session.AddCursorTrack();
+            var screenItems = session.Project.Items
+                .Where(i => i.TrackId == screenTrack.Id).OrderBy(i => i.TimelineStartTicks).ToList();
+            var (firstCursor, secondCursor) = CursorItems(session);
+
+            Assert.Equal(-Ms(3_000), session.TrimItemEnd(screenItems[0].Id, -Ms(3_000)));
+            Assert.Equal(0, Live(session, firstCursor).TimelineStartTicks);
+            Assert.Equal(Ms(5_000), Live(session, firstCursor).DurationTicks);
+
+            Assert.Equal(Ms(2_000), session.TrimItemStart(screenItems[1].Id, Ms(2_000)));
+            Assert.Equal(Ms(10_000), Live(session, secondCursor).TimelineStartTicks);
+            Assert.Equal(Ms(10_000), Live(session, secondCursor).DurationTicks);
+
+            // only the overlay rows follow: the webcam row is linked too, but a trim has always
+            // been single-item and its spans are untouched.
+            var webcam = session.Project.Items
+                .Where(i => i.TrackId == webcamTrack.Id).OrderBy(i => i.TimelineStartTicks).ToList();
+            Assert.Equal(new[] { 0L, Ms(8_000) }, webcam.Select(i => i.TimelineStartTicks));
+            Assert.Equal(new[] { Ms(8_000), Ms(12_000) }, webcam.Select(i => i.DurationTicks));
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void Trimming_the_screen_item_longer_leaves_the_overlay_where_it_was()
+        {
+            var session = NewSession(out var screenTrack, out _, out _);
+            session.AddCursorTrack();
+            var firstScreen = session.Project.Items
+                .Where(i => i.TrackId == screenTrack.Id).OrderBy(i => i.TimelineStartTicks).First();
+            var (cursor, _) = CursorItems(session);
+
+            session.TrimItemEnd(firstScreen.Id, -Ms(3_000));
+            Assert.Equal(Ms(5_000), Live(session, cursor).DurationTicks);
+
+            // growing the screen back only re-opens room the overlay may be dragged into; the
+            // clamp never lengthens an item by itself.
+            Assert.Equal(Ms(3_000), session.TrimItemEnd(firstScreen.Id, Ms(3_000)));
+            Assert.Equal(Ms(5_000), Live(session, cursor).DurationTicks);
+            Assert.Equal(Ms(3_000), session.TrimItemEnd(cursor.Id, Ms(4_000)));
+            Assert.Equal(Ms(8_000), Live(session, cursor).DurationTicks);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void A_screen_trim_that_strands_an_overlay_piece_drops_it_and_prunes_the_row()
+        {
+            var session = NewSession(out var screenTrack, out _, out _);
+            session.AddCursorTrack();
+            var (firstCursor, secondCursor) = CursorItems(session);
+            var firstScreen = session.Project.Items
+                .Where(i => i.TrackId == screenTrack.Id).OrderBy(i => i.TimelineStartTicks).First();
+
+            // leave one overlay piece, [0, 2s), over a screen segment that still runs to 8s.
+            session.DeleteItem(secondCursor.Id);
+            Assert.True(session.SplitItemAt(firstCursor.Id, Ms(2_000)));
+            var tail = session.Project.Items
+                .Where(i => i.Content is CursorContent).OrderBy(i => i.TimelineStartTicks).Last();
+            session.DeleteItem(tail.Id);
+            Assert.True(session.HasCursorTrack);
+
+            ProjectChangeKind? kind = null;
+            session.ProjectChanged += (_, e) => kind = e.Kind;
+
+            // the screen now starts at 3s: the piece annotates material that no longer plays.
+            Assert.Equal(Ms(3_000), session.TrimItemStart(firstScreen.Id, Ms(3_000)));
+
+            Assert.DoesNotContain(session.Project.Items, i => i.Content is CursorContent);
+            Assert.False(session.HasCursorTrack);
+            Assert.DoesNotContain(session.Project.Tracks, t => t.Name == "Cursor");
+            // the row went with it, so the timeline must rebuild.
+            Assert.Equal(ProjectChangeKind.Structural, kind);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void A_split_screen_segment_bounds_the_overlay_by_both_halves()
+        {
+            var session = NewSession(out var screenTrack, out _, out _);
+            session.AddCursorTrack();
+            var firstScreen = session.Project.Items
+                .Where(i => i.TrackId == screenTrack.Id).OrderBy(i => i.TimelineStartTicks).First();
+            var (cursor, _) = CursorItems(session);
+
+            // a right-click split of the screen row leaves both halves in the recording's group,
+            // so the overlay may still span the cut — but not the segment's outer edge.
+            Assert.True(session.SplitItemAt(firstScreen.Id, Ms(4_000)));
+            Assert.Equal(0, session.TrimItemEnd(cursor.Id, Ms(1_000)));
+            Assert.Equal(-Ms(5_000), session.TrimItemEnd(cursor.Id, -Ms(5_000)));
+            Assert.Equal(Ms(5_000), session.TrimItemEnd(cursor.Id, Ms(9_000)));
+            Assert.Equal(Ms(8_000), Live(session, cursor).DurationTicks);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void Without_a_screen_row_there_is_nothing_to_clamp_to()
+        {
+            var session = NewSession(out var screenTrack, out _, out _);
+            session.AddCursorTrack();
+            var (_, cursor) = CursorItems(session); // the last item on the row: room to grow into
+            session.DeleteTrack(screenTrack.Id);
+
+            Assert.Equal(Ms(3_000), session.TrimItemEnd(cursor.Id, Ms(3_000)));
+            Assert.Equal(Ms(15_000), Live(session, cursor).DurationTicks);
+        }
+
+        [Fact]
+        public void Undo_restores_a_clamped_trim_on_both_sides()
+        {
+            var session = NewSession(out var screenTrack, out _, out _);
+            session.AddCursorTrack();
+            var (cursor, _) = CursorItems(session);
+            var firstScreen = session.Project.Items
+                .Where(i => i.TrackId == screenTrack.Id).OrderBy(i => i.TimelineStartTicks).First();
+            var before = session.Project.ToJson();
+
+            session.TrimItemEnd(cursor.Id, -Ms(2_000));
+            var afterOverlayTrim = session.Project.ToJson();
+            session.TrimItemEnd(firstScreen.Id, -Ms(4_000));
+            Assert.Equal(Ms(4_000), Live(session, cursor).DurationTicks); // rippled with the screen
+
+            session.Undo();
+            Assert.Equal(afterOverlayTrim, session.Project.ToJson());
+            Assert.Equal(Ms(6_000), Live(session, cursor).DurationTicks);
+
+            session.Undo();
+            Assert.Equal(before, session.Project.ToJson());
+            Assert.Equal(Ms(8_000), Live(session, cursor).DurationTicks);
+        }
+
         // ------------------------------------------------------------------------------- refusals
 
         [Fact]

@@ -878,7 +878,6 @@ namespace Clowd.VideoSDK.Tests
                     SourceId = source.Id,
                     FontSize = 60,
                     LingerMs = 5000,
-                    FadeMs = 0,
                     PauseBreakMs = 10,
                 },
                 Transform = new ModelTransform { X = 0.5, Y = 0.85, Scale = 0.5 },

@@ -4,6 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:colors="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
     xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:insp="clr-namespace:Clowd.UI.VideoEditor.Inspector"
     xmlns:ve="clr-namespace:Clowd.UI.VideoEditor">
 
     <UserControl.Resources>
@@ -110,6 +111,48 @@
                 <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
             </Style>
             <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!--  The same ring box again, for the two pickers whose options come from a list rather
+              than from hand-written radios (the cursor styles, the click highlights). Content is
+              the item template's, so the theme only owns the box; the ink colours live in the
+              panel styles below, which is where a template style cannot reach.  -->
+        <ControlTheme x:Key="PickerTile" TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand" />
+            <!--  the gutter between tiles, cancelled at the grid's outer edge by the ListBox's own
+                  negative margin, so the tiles line up with the rows above and below  -->
+            <Setter Property="Margin" Value="0,0,4,4" />
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <!--  stretched, not centred: the tile's content decides where it sits, so
+                              the style tiles can sit left like the shape tiles' do while the
+                              highlight tiles stay centred on their preview  -->
+                        <ContentPresenter
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:selected /template/ Border#_box">
                 <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
                 <Setter Property="BorderThickness" Value="2" />
             </Style>
@@ -271,6 +314,21 @@
         <Style Selector="RadioButton.ratioTile:checked Path.ratioGlyph">
             <Setter Property="Fill" Value="White" />
         </Style>
+
+        <!--  the list-driven tiles' inner visuals (see PickerTile). The label brightens with the
+              selection exactly as the shape tiles' does; the style previews keep their artwork's
+              own colours — the point of them is that they are the real glyph — so only native's
+              outline follows the label.  -->
+        <Style Selector="TextBlock.tileText">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#CCCCCC" />
+        </Style>
+        <Style Selector="ListBoxItem:selected TextBlock.tileText">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="ListBoxItem:selected insp|CursorStylePreview">
+            <Setter Property="OutlineBrush" Value="White" />
+        </Style>
     </UserControl.Styles>
 
     <Panel>
@@ -378,7 +436,8 @@
                         <Button
                             x:Name="btnDesync"
                             HorizontalAlignment="Left"
-                            Content="Desync…" />
+                            Content="Desync…"
+                            IsVisible="{Binding CanDesync}" />
                     </StackPanel>
                 </Border>
 
@@ -839,14 +898,19 @@
                         <TextBlock Classes="label" Text="Color" />
                         <Border
                             x:Name="colorWell"
-                            Padding="5,3"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
                             HorizontalAlignment="Right"
                             Background="#454545"
                             BorderBrush="#666666"
                             BorderThickness="1"
-                            CornerRadius="3"
                             Cursor="Hand">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
                                 <Border
                                     Width="14"
                                     Height="14"
@@ -965,39 +1029,74 @@
 
                 <!--  cursor overlay: where it is drawn is the recording's business (the capture
                       file places it), so the whole section is about what it looks like. The size
-                      and shadow rows are disabled under the native style, which draws the
-                      recorded cursor box and carries both of its own.  -->
+                      and shadow rows leave the panel entirely under the native style, which draws
+                      the recorded cursor box and carries both of its own.  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowCursorTrack}">
                     <DockPanel>
                         <TextBlock Classes="section" Text="CURSOR" />
                         <Rectangle Classes="sectionRule" />
                     </DockPanel>
 
-                    <DockPanel Classes="row">
-                        <!--  the dot's default is the style option object, assigned in code-behind
-                              for the same reason ddSpeed's is  -->
-                        <Panel Classes="dot" DockPanel.Dock="Left">
-                            <controls:ResetDefaultButton x:Name="dotCursorStyle" CurrentValue="{Binding CursorStyle, Mode=TwoWay}" />
-                        </Panel>
-                        <TextBlock Classes="label" Text="Style" />
-                        <controls:DropDownButton x:Name="ddCursorStyle" SelectedItem="{Binding CursorStyle, Mode=TwoWay}" />
-                    </DockPanel>
+                    <!--  tiles, not a drop-down: the styles differ only in how the arrow looks, so
+                          a list of names would make the user try them one at a time. Each tile
+                          draws that style's own artwork (CursorStylePreview reads the compositor's
+                          asset table), and native — which has no artwork, it replays the recorded
+                          cursor — shows a plain outline. No label row above them: eight tiles
+                          showing eight cursors do not need to be told they are the style, and the
+                          shape picker sets the precedent.  -->
+                    <ListBox
+                        x:Name="listCursorStyle"
+                        Margin="0,0,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding CursorStyle, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <!--  the shape tiles' own inner metrics (MaskShapeTile): icon 22
+                                      wide, 8 to the label, 10 in from the tile's left edge  -->
+                                <StackPanel
+                                    Margin="10,0,4,0"
+                                    HorizontalAlignment="Left"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <insp:CursorStylePreview
+                                        Width="22"
+                                        Height="22"
+                                        VerticalAlignment="Center"
+                                        StyleName="{Binding Value}" />
+                                    <TextBlock
+                                        Classes="tileText"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
 
-                    <DockPanel Classes="row" IsEnabled="{Binding CursorGlyphEnabled}">
+                    <DockPanel Classes="row" IsVisible="{Binding CursorGlyphEnabled}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
-                            Max="3"
+                            Max="5"
                             Min="0.5"
                             SpinAmount="0.05"
                             Suffix="%"
                             Value="{Binding CursorSize, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <DockPanel Classes="row" IsEnabled="{Binding CursorGlyphEnabled}">
+                    <DockPanel Classes="row" IsVisible="{Binding CursorGlyphEnabled}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton x:Name="dotCursorDropShadow" CurrentValue="{Binding CursorDropShadow, Mode=TwoWay}" />
                         </Panel>
@@ -1005,18 +1104,106 @@
                         <CheckBox IsChecked="{Binding CursorDropShadow, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
                     </DockPanel>
 
-                    <DockPanel Classes="row">
+                    <!--  a sub-header, like CROP under ASPECT RATIO: what a click leaves behind is
+                          its own subject, not one more property of the pointer.  -->
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBlock Classes="section" Text="HIGHLIGHT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  the highlight tiles play the animation they name, on the row's own colour
+                          and dials and off the compositor's own constants: the press lands, holds,
+                          bursts, then a beat of nothing — which is what a click looks like in the
+                          finished video.  -->
+                    <ListBox
+                        x:Name="listCursorClick"
+                        Margin="0,0,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding CursorClickAnimation, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    Margin="0,6"
+                                    HorizontalAlignment="Center"
+                                    Orientation="Vertical"
+                                    Spacing="4"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <insp:ClickHighlightPreview
+                                        Width="30"
+                                        Height="30"
+                                        HorizontalAlignment="Center"
+                                        AnimationSpeed="{Binding $parent[ListBox].DataContext.CursorAnimationSpeed}"
+                                        Animation="{Binding Value}"
+                                        ClickSize="{Binding $parent[ListBox].DataContext.CursorClickSize}"
+                                        ColorArgb="{Binding $parent[ListBox].DataContext.CursorClickColor}"
+                                        HoldSize="{Binding $parent[ListBox].DataContext.CursorHoldSize}" />
+                                    <TextBlock
+                                        Classes="tileText"
+                                        HorizontalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!--  the three dials, gone entirely under "none" — there is no highlight to
+                          size or time then, and the tiles above already say so.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
-                            <controls:ResetDefaultButton x:Name="dotCursorClick" CurrentValue="{Binding CursorClickAnimation, Mode=TwoWay}" />
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorHoldSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
-                        <TextBlock Classes="label" Text="Clicks" />
-                        <controls:DropDownButton x:Name="ddCursorClick" SelectedItem="{Binding CursorClickAnimation, Mode=TwoWay}" />
+                        <TextBlock Classes="label" Text="Hold size" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.25"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorHoldSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorClickSize, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Click size" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.25"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorClickSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorAnimationSpeed, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Speed" />
+                        <controls:SpinnerTextBox
+                            Max="4"
+                            Min="0.25"
+                            SpinAmount="0.05"
+                            Suffix="x"
+                            Value="{Binding CursorAnimationSpeed, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 
-                <!--  keystroke overlay: how big the keys read, and the three times that decide how
-                      long a run stays and when the next one starts. Where the block sits and how
-                      wide it wraps are the placement section's business, above.  -->
+                <!--  keystroke overlay: how big the keys read, how long a run stays, when the next
+                      row starts, and the typing pill's own colours (the keycaps a special key
+                      draws keep their fixed livery). How a row arrives and leaves is the ANIMATION
+                      section below; where the block sits and how wide it wraps is placement,
+                      above.  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowKeyboardTrack}">
                     <DockPanel>
                         <TextBlock Classes="section" Text="KEYSTROKES" />
@@ -1025,7 +1212,7 @@
 
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left">
-                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFontSize, Mode=TwoWay}" DefaultValue="28" />
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFontSize, Mode=TwoWay}" DefaultValue="40" />
                         </Panel>
                         <TextBlock Classes="label" Text="Size" />
                         <controls:SpinnerTextBox
@@ -1039,7 +1226,7 @@
 
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left">
-                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardLingerMs, Mode=TwoWay}" DefaultValue="300" />
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardLingerMs, Mode=TwoWay}" DefaultValue="1000" />
                         </Panel>
                         <TextBlock Classes="label" Text="Linger" />
                         <controls:SpinnerTextBox
@@ -1049,20 +1236,6 @@
                             SpinAmount="50"
                             Suffix="ms"
                             Value="{Binding KeyboardLingerMs, Mode=TwoWay}" />
-                    </DockPanel>
-
-                    <DockPanel Classes="row">
-                        <Panel Classes="dot" DockPanel.Dock="Left">
-                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFadeMs, Mode=TwoWay}" DefaultValue="250" />
-                        </Panel>
-                        <TextBlock Classes="label" Text="Fade" />
-                        <controls:SpinnerTextBox
-                            Max="10000"
-                            Min="0"
-                            SnapToWholeNumber="True"
-                            SpinAmount="50"
-                            Suffix="ms"
-                            Value="{Binding KeyboardFadeMs, Mode=TwoWay}" />
                     </DockPanel>
 
                     <DockPanel Classes="row">
@@ -1078,9 +1251,86 @@
                             Suffix="ms"
                             Value="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" />
                     </DockPanel>
+
+                    <!--  the two colour wells share the text card's picker (see the code-behind)  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardTextColorHex, Mode=TwoWay}" DefaultValue="#FFFFFFFF" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Text" />
+                        <Border
+                            x:Name="keyTextColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="keyTextColorSwatch" Fill="White" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtKeyTextColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#FFFFFFFF" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardBackColorHex, Mode=TwoWay}" DefaultValue="#8C000000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Fill" />
+                        <Border
+                            x:Name="keyBackColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="keyBackColorSwatch" Fill="Black" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtKeyBackColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#8C000000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
                 </StackPanel>
 
-                <!--  animation (entry/exit transitions)  -->
+                <!--  animation (entry/exit transitions). On a keystroke overlay these animate each
+                      keystroke ROW as it arrives and leaves, not the block — same kinds, same
+                      lengths, applied per row by the compositor.  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowTransitions}">
                     <DockPanel>
                         <TextBlock Classes="section" Text="ANIMATION" />

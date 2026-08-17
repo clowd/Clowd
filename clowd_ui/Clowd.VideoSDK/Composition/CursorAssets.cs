@@ -15,6 +15,8 @@ namespace Clowd.VideoSDK.Composition
         internal CursorGlyphPath(string pathData, uint fill, uint stroke, float strokeWidth)
         {
             PathData = pathData;
+            FillArgb = fill;
+            StrokeArgb = stroke;
             Fill = new SKColor(fill);
             Stroke = new SKColor(stroke);
             StrokeWidth = strokeWidth;
@@ -34,6 +36,12 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>Halo width in viewBox units (0 when <see cref="Stroke"/> is transparent).</summary>
         public float StrokeWidth { get; }
+
+        /// <summary><see cref="Fill"/> as packed ARGB, and <see cref="Stroke"/> likewise — for the
+        /// non-Skia consumer (the inspector's style tiles draw the same layers through Avalonia).</summary>
+        public uint FillArgb { get; }
+
+        public uint StrokeArgb { get; }
 
         /// <summary>True when this layer wants a contrast halo painted behind its fill.</summary>
         public bool HasStroke => Stroke.Alpha > 0 && StrokeWidth > 0;

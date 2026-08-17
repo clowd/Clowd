@@ -164,15 +164,32 @@ namespace Clowd.UI.VideoEditor.Inspector
             FindOption(ClickAnimationOptions, "none");
 
         /// <summary>The one style that draws the recorded 512px box instead of a themed glyph —
-        /// the size and drop-shadow rows mean nothing while it is picked.</summary>
+        /// the size and drop-shadow rows mean nothing while it is picked, so they leave the panel
+        /// entirely (see <see cref="CursorGlyphEnabled"/>).</summary>
         public const string NativeCursorStyle = "native";
 
+        /// <summary><see cref="CursorContent.ClickColor"/>'s own default, mirrored so the highlight
+        /// previews have a colour before any cursor row is selected.</summary>
+        public const uint DefaultCursorClickColor = 0xFFFF0000;
+
+        /// <summary>The animation that draws no highlight at all — the one value that empties the
+        /// section below the picker.</summary>
+        public const string NoClickAnimation = "none";
+
+        /// <summary>The highlight dials' shared range and default, straight off the model so a
+        /// spinner cannot offer a number the project would refuse.</summary>
+        public const double MinHighlightFactor = CursorContent.MinHighlightFactor;
+
+        public const double MaxHighlightFactor = CursorContent.MaxHighlightFactor;
+
+        public const double DefaultHighlightFactor = 1.0;
+
         /// <summary>The glyph-size range the spinner offers. Narrower than the model's own
-        /// validated 0.25–4: those are the bounds a project may hold, these are the ones worth
+        /// validated 0.25–5: those are the bounds a project may hold, these are the ones worth
         /// dialling.</summary>
         public const double MinCursorSize = 0.5;
 
-        public const double MaxCursorSize = 3.0;
+        public const double MaxCursorSize = 5.0;
 
         public const double DefaultCursorSize = 1.0;
 
@@ -182,15 +199,20 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         public const double MaxKeyboardFontSize = 200;
 
-        public const double DefaultKeyboardFontSize = 28;
+        public const double DefaultKeyboardFontSize = KeyboardContent.DefaultFontSize;
 
         public const double MaxKeyboardMs = 10_000;
 
-        public const double DefaultKeyboardLingerMs = 300;
-
-        public const double DefaultKeyboardFadeMs = 250;
+        public const double DefaultKeyboardLingerMs = 1000;
 
         public const double DefaultKeyboardPauseBreakMs = 1000;
+
+        /// <summary><see cref="KeyboardContent.DefaultTextColor"/> and
+        /// <see cref="KeyboardContent.DefaultBackgroundColor"/> as the hex the colour wells (and
+        /// their reset dots, which are XAML strings) speak.</summary>
+        public const string DefaultKeyboardTextColorHex = "#FFFFFFFF";
+
+        public const string DefaultKeyboardBackColorHex = "#8C000000";
 
         public const double MinScale = 0.01;
         public const double MaxScale = 4.0;
@@ -319,6 +341,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private bool _trackHidden;
         private bool _trackMuted;
         private bool _isLinked;
+        private bool _canDesync;
 
         private bool _showSpeed;
         private double _speed = 1.0;
@@ -335,13 +358,18 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private string _cursorStyle = "ios-glyph";
         private double _cursorSize = DefaultCursorSize;
-        private bool _cursorDropShadow;
-        private string _cursorClickAnimation = "none";
+        private bool _cursorDropShadow = true;
+        private string _cursorClickAnimation = NoClickAnimation;
+        private uint _cursorClickColor = DefaultCursorClickColor;
+        private double _cursorHoldSize = DefaultHighlightFactor;
+        private double _cursorClickSize = DefaultHighlightFactor;
+        private double _cursorAnimationSpeed = DefaultHighlightFactor;
 
         private double _keyboardFontSize = DefaultKeyboardFontSize;
         private double _keyboardLingerMs = DefaultKeyboardLingerMs;
-        private double _keyboardFadeMs = DefaultKeyboardFadeMs;
         private double _keyboardPauseBreakMs = DefaultKeyboardPauseBreakMs;
+        private string _keyboardTextColorHex = DefaultKeyboardTextColorHex;
+        private string _keyboardBackColorHex = DefaultKeyboardBackColorHex;
 
         private bool _rampEntryEnabled;
         private double _rampEntryMs = DefaultTransitionMs;
@@ -355,7 +383,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             CommandUnlink = new RelayCommand
             {
                 Executed = _ => Unlink(),
-                CanExecute = _ => IsLinked,
+                CanExecute = _ => CanDesync,
                 Text = "Unlink row",
             };
         }
@@ -1226,6 +1254,11 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// <summary>True when the selected item still moves with the rest of its recording.</summary>
         public bool IsLinked => _isLinked;
 
+        /// <summary>Whether the synced-object banner offers the Desync button. The cursor and
+        /// keystroke overlays only make sense against the recording their input data came from,
+        /// so they can never be cut loose — the banner explains the lock but offers no way out.</summary>
+        public bool CanDesync => _canDesync;
+
         /// <summary>The Speed row: media items (video or audio) only, and only once the row is
         /// desynced — a linked segment keeps the recording's own clock, so re-timing it is not
         /// offered until the user cuts it loose.</summary>
@@ -1363,8 +1396,10 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        /// <summary>Whether the glyph rows (size, drop shadow) mean anything: the
-        /// <c>native</c> style draws the recorded box, which carries its own size and shadow.</summary>
+        /// <summary>Whether the glyph rows (size, drop shadow) mean anything — they are hidden, not
+        /// merely greyed, when they do not: the <c>native</c> style draws the recorded box, which
+        /// carries its own size and shadow, so a disabled spinner would only invite the question of
+        /// what it would have done.</summary>
         public bool CursorGlyphEnabled => _cursorStyle != NativeCursorStyle;
 
         /// <summary>Glyph size multiplier over the style's base size.</summary>
@@ -1404,7 +1439,60 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 _cursorClickAnimation = value.Value;
                 OnPropertyChanged(nameof(CursorClickAnimation));
+                OnPropertyChanged(nameof(CursorHighlightEnabled));
                 EditCursor("sel:cursorclick", c => c.ClickAnimation = value.Value);
+            }
+        }
+
+        /// <summary>Whether the highlight's three dials mean anything: <c>none</c> draws no
+        /// highlight, so its size and speed rows leave the panel rather than sit there inert — the
+        /// same trade the glyph rows make under the native style.</summary>
+        public bool CursorHighlightEnabled => _cursorClickAnimation != NoClickAnimation;
+
+        /// <summary>The highlight colour (packed ARGB) the composer draws clicks in. Read-only for
+        /// now — the panel has no colour well for it — but the highlight tiles preview in it, so it
+        /// has to reach the view.</summary>
+        public uint CursorClickColor => _cursorClickColor;
+
+        /// <summary>Size multiplier on the dot held under a pressed button.</summary>
+        public double CursorHoldSize
+        {
+            get => _cursorHoldSize;
+            set
+            {
+                value = Clamp(value, MinHighlightFactor, MaxHighlightFactor);
+                if (!Set(ref _cursorHoldSize, value) || _syncing)
+                    return;
+
+                EditCursor("sel:cursorholdsize", c => c.HoldSize = value);
+            }
+        }
+
+        /// <summary>Size multiplier on the animation the release fires.</summary>
+        public double CursorClickSize
+        {
+            get => _cursorClickSize;
+            set
+            {
+                value = Clamp(value, MinHighlightFactor, MaxHighlightFactor);
+                if (!Set(ref _cursorClickSize, value) || _syncing)
+                    return;
+
+                EditCursor("sel:cursorclicksize", c => c.ClickSize = value);
+            }
+        }
+
+        /// <summary>Playback-rate multiplier on that animation — 2 runs it in half the time.</summary>
+        public double CursorAnimationSpeed
+        {
+            get => _cursorAnimationSpeed;
+            set
+            {
+                value = Clamp(value, MinHighlightFactor, MaxHighlightFactor);
+                if (!Set(ref _cursorAnimationSpeed, value) || _syncing)
+                    return;
+
+                EditCursor("sel:cursoranimspeed", c => c.AnimationSpeed = value);
             }
         }
 
@@ -1423,7 +1511,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        /// <summary>How long a finished run stays fully visible before it starts fading.</summary>
+        /// <summary>How long a finished run stays fully visible before it plays its exit
+        /// animation (the item's <see cref="Item.Exit"/>, applied per row).</summary>
         public double KeyboardLingerMs
         {
             get => _keyboardLingerMs;
@@ -1437,16 +1526,34 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        public double KeyboardFadeMs
+        /// <summary>Colour of the typed text in the pill, as <c>#RRGGBB</c> or <c>#AARRGGBB</c>.
+        /// Half-typed values stay in the box unwritten, exactly as <see cref="TextColorHex"/>
+        /// does. The keycaps a special key draws keep their own fixed livery.</summary>
+        public string KeyboardTextColorHex
         {
-            get => _keyboardFadeMs;
+            get => _keyboardTextColorHex;
             set
             {
-                value = Clamp(value, 0, MaxKeyboardMs);
-                if (!Set(ref _keyboardFadeMs, value) || _syncing)
+                if (!Set(ref _keyboardTextColorHex, value) || _syncing)
                     return;
 
-                EditKeyboard("sel:keyfade", k => k.FadeMs = MsToInt(value));
+                if (TryParseArgb(value, out var argb))
+                    EditKeyboard("sel:keytextcolor", k => k.TextColor = argb);
+            }
+        }
+
+        /// <summary>Fill of the typing pill, alpha included — how translucent the block reads is
+        /// this colour's own alpha.</summary>
+        public string KeyboardBackColorHex
+        {
+            get => _keyboardBackColorHex;
+            set
+            {
+                if (!Set(ref _keyboardBackColorHex, value) || _syncing)
+                    return;
+
+                if (TryParseArgb(value, out var argb))
+                    EditKeyboard("sel:keybackcolor", k => k.BackgroundColor = argb);
             }
         }
 
@@ -1628,6 +1735,9 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _trackHidden, track?.Hidden ?? false, nameof(TrackHidden));
                 Set(ref _trackMuted, track?.Muted ?? false, nameof(TrackMuted));
                 Set(ref _isLinked, item?.LinkGroupId != null, nameof(IsLinked));
+                Set(ref _canDesync,
+                    _isLinked && item.Content is not CursorContent and not KeyboardContent,
+                    nameof(CanDesync));
                 CommandUnlink.RaiseCanExecuteChanged();
 
                 var media = item?.Content as MediaContent;
@@ -1651,15 +1761,21 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _cursorDropShadow, cursor.DropShadow, nameof(CursorDropShadow));
                     Set(ref _cursorClickAnimation, cursor.ClickAnimation ?? DefaultClickAnimationOption.Value,
                         nameof(CursorClickAnimation));
+                    Set(ref _cursorClickColor, cursor.ClickColor, nameof(CursorClickColor));
+                    Set(ref _cursorHoldSize, cursor.HoldSize, nameof(CursorHoldSize));
+                    Set(ref _cursorClickSize, cursor.ClickSize, nameof(CursorClickSize));
+                    Set(ref _cursorAnimationSpeed, cursor.AnimationSpeed, nameof(CursorAnimationSpeed));
                     OnPropertyChanged(nameof(CursorGlyphEnabled));
+                    OnPropertyChanged(nameof(CursorHighlightEnabled));
                 }
 
                 if (item?.Content is KeyboardContent keyboard)
                 {
                     Set(ref _keyboardFontSize, keyboard.FontSize, nameof(KeyboardFontSize));
                     Set(ref _keyboardLingerMs, keyboard.LingerMs, nameof(KeyboardLingerMs));
-                    Set(ref _keyboardFadeMs, keyboard.FadeMs, nameof(KeyboardFadeMs));
                     Set(ref _keyboardPauseBreakMs, keyboard.PauseBreakMs, nameof(KeyboardPauseBreakMs));
+                    Set(ref _keyboardTextColorHex, HexOfArgb(keyboard.TextColor), nameof(KeyboardTextColorHex));
+                    Set(ref _keyboardBackColorHex, HexOfArgb(keyboard.BackgroundColor), nameof(KeyboardBackColorHex));
                 }
 
                 var transform = item?.Transform ?? new Transform();
@@ -2050,6 +2166,26 @@ namespace Clowd.UI.VideoEditor.Inspector
 
             return true;
         }
+
+        /// <summary>The same literal, packed for the contents that store a colour as a number
+        /// rather than a string (<see cref="KeyboardContent"/>). A <c>#RRGGBB</c> without an alpha
+        /// is opaque.</summary>
+        private static bool TryParseArgb(string value, out uint argb)
+        {
+            argb = 0;
+            if (!IsHexColor(value))
+                return false;
+
+            var digits = value.Trim().Substring(1);
+            if (digits.Length == 6)
+                digits = "FF" + digits;
+
+            return UInt32.TryParse(digits, System.Globalization.NumberStyles.HexNumber,
+                System.Globalization.CultureInfo.InvariantCulture, out argb);
+        }
+
+        private static string HexOfArgb(uint argb) => "#" + argb.ToString("X8",
+            System.Globalization.CultureInfo.InvariantCulture);
 
         /// <summary>Math.Clamp with NaN collapsing to the lower bound — a spinner's text box hands
         /// over whatever parsed, and a NaN must not be able to poison the project.</summary>
