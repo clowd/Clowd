@@ -267,22 +267,27 @@ namespace Clowd.VideoSDK.Composition
         // --------------------------------------------------------------------- click highlight
 
         /// <summary>
-        /// Draws the click highlight at <paramref name="sourceMs"/>: a solid dot pinned to the
-        /// pointer for as long as a button is held (<see cref="InputFrame.Buttons"/> on
-        /// <paramref name="row"/>, so it follows a drag), and one expanding animation per mouse-<b>up</b>
-        /// event — the highlight explodes where the button was released. Both animate in
-        /// <b>project</b> time (the source-time window scales by <paramref name="speed"/> so a
-        /// sped-up clip does not compress the animation). Ripple = expanding fading circle (the
-        /// tracker's constants); pulse = the same fade with the radius shrinking instead. The item's
-        /// own <c>HoldSize</c>, <c>ClickSize</c> and <c>AnimationSpeed</c> scale the held dot, the
-        /// sweep and the clock respectively. Drawn beneath the glyph/sprite — callers invoke this
-        /// first.
+        /// Draws the click highlight at <paramref name="sourceMs"/>. Ripple/pulse: a solid dot
+        /// pinned to the pointer for as long as a button is held (<see cref="InputFrame.Buttons"/>
+        /// on <paramref name="row"/>, so it follows a drag), and one expanding animation per
+        /// mouse-<b>up</b> event — the highlight explodes where the button was released. Ring: a
+        /// circle outline pinned to the pointer at all times, easing inward while a button is held
+        /// and springing back out on the release. Everything animates in <b>project</b> time (the
+        /// source-time window scales by <paramref name="speed"/> so a sped-up clip does not
+        /// compress the animation). The item's own <c>HoldSize</c>, <c>ClickSize</c> and
+        /// <c>AnimationSpeed</c> scale the held dot, the sweep/radius and the clock respectively.
+        /// Drawn beneath the glyph/sprite — callers invoke this first. The <c>press</c> mode draws
+        /// nothing here: it is a warp of the screen pixels, drawn by <see cref="DrawPressWarp"/>
+        /// before this runs.
         /// </summary>
         internal static void DrawClickAnimations(SKCanvas target, InputCapture capture,
             in PictureMapping map, in InputFrame row, double sourceMs, double speed,
             CursorContent cursor, double monitorScale, double opacity)
         {
-            if (cursor == null || !ClickHighlight.TryParse(cursor.ClickAnimation, out bool pulse))
+            if (cursor == null)
+                return;
+            var mode = ClickHighlight.ModeOf(cursor.ClickAnimation);
+            if (mode is HighlightMode.None or HighlightMode.Press)
                 return;
 
             if (speed <= 0)
@@ -291,6 +296,35 @@ namespace Clowd.VideoSDK.Composition
             var header = capture.Header;
             var color = new SKColor(cursor.ClickColor);
             using var paint = new SKPaint { IsAntialias = true };
+
+            if (mode == HighlightMode.Ring)
+            {
+                var state = PressStateAt(capture, row, sourceMs, speed,
+                    (ClickHighlight.RingEngageMs + ClickHighlight.RingReleaseMs)
+                        / ClickHighlight.Factor(cursor.AnimationSpeed));
+                double scale = ClickHighlight.RingScale(state.SinceDownMs, state.SinceUpMs,
+                    state.PressDurationMs, cursor.AnimationSpeed);
+
+                float radius = (float)(ClickHighlight.RingRadiusDip
+                    * ClickHighlight.Factor(cursor.ClickSize) * scale * monitorScale * map.ScaleX);
+                var pos = map.Map(row.X - header.RegionX, row.Y - header.RegionY);
+
+                double fill = ClickHighlight.Clamp01(cursor.FillOpacity) * (color.Alpha / 255.0) * opacity;
+                if (fill > 0)
+                {
+                    paint.Style = SKPaintStyle.Fill;
+                    paint.Color = color.WithAlpha(FrameComposer.AlphaByte(fill));
+                    target.DrawCircle(pos, radius, paint);
+                }
+
+                paint.Style = SKPaintStyle.Stroke;
+                paint.StrokeWidth = (float)(ClickHighlight.RingStrokeDip * monitorScale * map.ScaleX);
+                paint.Color = color.WithAlpha(FrameComposer.AlphaByte((color.Alpha / 255.0) * opacity));
+                target.DrawCircle(pos, radius, paint);
+                return;
+            }
+
+            bool pulse = mode == HighlightMode.Pulse;
 
             if (row.Buttons != 0)
             {
@@ -323,6 +357,135 @@ namespace Clowd.VideoSDK.Composition
                 var pos = map.Map(e.X - header.RegionX, e.Y - header.RegionY);
                 target.DrawCircle(pos, radius, paint);
             }
+        }
+
+        // ------------------------------------------------------------------------ press warp
+
+        /// <summary>The SkSL pinch: every pixel inside the circle samples the source from a bit
+        /// further out along its own ray, hardest at the centre and exactly identity at the rim —
+        /// which is what stretches the surrounding pixels toward the pointer with no visible
+        /// seam. <c>src</c> is the screen frame in canvas coordinates.</summary>
+        private const string PressWarpSksl = @"
+uniform shader src;
+uniform float2 u_center;
+uniform float u_radius;
+uniform float u_amount;
+half4 main(float2 p) {
+    float2 d = p - u_center;
+    float t = clamp(length(d) / u_radius, 0.0, 1.0);
+    float k = 1.0 - t;
+    return src.eval(u_center + d * (1.0 + u_amount * k * k));
+}";
+
+        private static readonly Lazy<SKRuntimeEffect> PressWarpEffect = new Lazy<SKRuntimeEffect>(() =>
+        {
+            var effect = SKRuntimeEffect.CreateShader(PressWarpSksl, out string errors);
+            if (effect == null)
+                throw new InvalidOperationException($"press warp shader failed to compile: {errors}");
+            return effect;
+        });
+
+        /// <summary>
+        /// The <c>press</c> highlight: redraws the screen frame's pixels around the pointer,
+        /// stretched toward it, for as long as a button is held — pressing a finger into paper.
+        /// Eases in on the press and relaxes out after the release (see
+        /// <see cref="ClickHighlight.PressAmount"/>); a quick click dips in and out. Draws over
+        /// the already-composed screen pixels through the same <paramref name="map"/> they were
+        /// placed by, so the warped patch lands source-exactly on top of the unwarped one; the
+        /// caller has already applied the screen item's clips. <c>ClickSize</c> scales the reach,
+        /// <c>AnimationSpeed</c> the clock. No-op when nothing is pressed.
+        /// </summary>
+        internal static void DrawPressWarp(SKCanvas target, InputCapture capture,
+            in PictureMapping map, in InputFrame row, double sourceMs, double speed,
+            CursorContent cursor, double monitorScale, double opacity, SKImage screenImage)
+        {
+            if (cursor == null || screenImage == null || opacity <= 0)
+                return;
+            if (speed <= 0)
+                speed = 1.0;
+
+            var state = PressStateAt(capture, row, sourceMs, speed,
+                (ClickHighlight.PressEngageMs + ClickHighlight.PressReleaseMs)
+                    / ClickHighlight.Factor(cursor.AnimationSpeed));
+            double amount01 = ClickHighlight.PressAmount(state.SinceDownMs, state.SinceUpMs,
+                state.PressDurationMs, cursor.AnimationSpeed);
+            if (amount01 <= 0.001)
+                return;
+
+            var header = capture.Header;
+            var center = map.Map(row.X - header.RegionX, row.Y - header.RegionY);
+            float radius = (float)(ClickHighlight.PressRadiusDip
+                * ClickHighlight.Factor(cursor.ClickSize) * monitorScale * map.ScaleX);
+            if (radius <= 0)
+                return;
+
+            // the screen frame as a shader in canvas coordinates: image px → source-region px is
+            // the mapping's crop inset, then its px→canvas scale and dest offset.
+            var local = SKMatrix.CreateTranslation(-map.Source.Left, -map.Source.Top);
+            local = local.PostConcat(SKMatrix.CreateScale((float)map.ScaleX, (float)map.ScaleY));
+            local = local.PostConcat(SKMatrix.CreateTranslation(map.Dest.Left, map.Dest.Top));
+
+            var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
+            using var src = screenImage.ToShader(SKShaderTileMode.Clamp, SKShaderTileMode.Clamp,
+                sampling, local);
+
+            var effect = PressWarpEffect.Value;
+            var uniforms = new SKRuntimeEffectUniforms(effect)
+            {
+                ["u_center"] = new[] { center.X, center.Y },
+                ["u_radius"] = radius,
+                ["u_amount"] = (float)(ClickHighlight.PressMaxAmount * amount01),
+            };
+            var children = new SKRuntimeEffectChildren(effect) { ["src"] = src };
+
+            using var shader = effect.ToShader(uniforms, children);
+            using var paint = new SKPaint
+            {
+                IsAntialias = true,
+                Shader = shader,
+                Color = SKColors.White.WithAlpha(FrameComposer.AlphaByte(opacity)),
+            };
+            target.DrawCircle(center, radius, paint);
+        }
+
+        /// <summary>What the click clocks need to know at <paramref name="sourceMs"/>, in project
+        /// ms: <c>SinceDownMs</c>/<c>SinceUpMs</c>/<c>PressDurationMs</c> under the convention of
+        /// <see cref="ClickHighlight.RingScale"/> — null stands for "long ago / still held /
+        /// long enough", so an event that fell out of the scan window degrades to the fully-engaged
+        /// answer rather than a pop. The window is <paramref name="windowProjectMs"/> of project
+        /// time, scanned over <c>windowProjectMs · speed</c> of source time.</summary>
+        private static (double? SinceDownMs, double? SinceUpMs, double? PressDurationMs) PressStateAt(
+            InputCapture capture, in InputFrame row, double sourceMs, double speed, double windowProjectMs)
+        {
+            double windowSourceMs = windowProjectMs * speed;
+            var events = capture.EventsBetween(sourceMs - windowSourceMs, sourceMs + 0.001);
+
+            double lastDown = double.NaN, lastUp = double.NaN;
+            foreach (var e in events)
+            {
+                if (e.Kind == InputEventKind.MouseDown)
+                    lastDown = e.TimeMs;
+                else if (e.Kind == InputEventKind.MouseUp)
+                    lastUp = e.TimeMs;
+            }
+
+            if (row.Buttons != 0)
+            {
+                // held: a down more recent than the last up is the press being animated in;
+                // anything else (no down in the window) is a press old enough to be fully engaged
+                double? sinceDown = !double.IsNaN(lastDown) && (double.IsNaN(lastUp) || lastDown > lastUp)
+                    ? (sourceMs - lastDown) / speed
+                    : null;
+                return (sinceDown, null, null);
+            }
+
+            if (double.IsNaN(lastUp))
+                return (null, double.MaxValue, null); // idle: any release was long ago
+
+            double? pressDuration = !double.IsNaN(lastDown) && lastDown <= lastUp
+                ? (lastUp - lastDown) / speed
+                : null;
+            return (null, (sourceMs - lastUp) / speed, pressDuration);
         }
     }
 }

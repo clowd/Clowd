@@ -14,6 +14,14 @@
     <InternalsVisibleTo Include="Clowd.VideoSDK.Tests" />
   </ItemGroup>
   <ItemGroup>
+    <!-- The ful1e5 cursor packs' own SVG sources, read by CursorPackLoader. The logical name is
+         spelled out because the default one mangles the hyphen in a folder like `bibata-r` into an
+         underscore, and the loader addresses a pack by the name it has on disk. -->
+    <EmbeddedResource Include="Composition\CursorPacks\**\*.svg">
+      <LogicalName>Clowd.VideoSDK.Composition.CursorPacks.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.'))%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
     <!-- 7.1.1 is the FFmpeg.AutoGen series generated against FFmpeg 7.1
          (avcodec 61 / avformat 61 / avutil 59 / swscale 8 / swresample 5) — the exact
          majors of the DLLs shipped in the obs-express folder. FFmpegLoader asserts the

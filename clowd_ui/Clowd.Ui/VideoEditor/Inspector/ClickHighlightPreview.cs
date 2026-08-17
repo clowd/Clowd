@@ -89,10 +89,16 @@ namespace Clowd.UI.VideoEditor.Inspector
             AvaloniaProperty.Register<ClickHighlightPreview, double>(nameof(AnimationSpeed),
                 SelectedItemViewModel.DefaultHighlightFactor);
 
+        /// <summary>The item's <c>FillOpacity</c> — the ring tile's inner disc previews at the
+        /// opacity it will be drawn.</summary>
+        public static readonly StyledProperty<double> FillOpacityProperty =
+            AvaloniaProperty.Register<ClickHighlightPreview, double>(nameof(FillOpacity),
+                SelectedItemViewModel.DefaultCursorFillOpacity);
+
         static ClickHighlightPreview()
         {
             AffectsRender<ClickHighlightPreview>(ColorArgbProperty, HoldSizeProperty,
-                ClickSizeProperty, AnimationSpeedProperty);
+                ClickSizeProperty, AnimationSpeedProperty, FillOpacityProperty);
         }
 
         private readonly Stopwatch _clock = new Stopwatch();
@@ -130,6 +136,12 @@ namespace Clowd.UI.VideoEditor.Inspector
             set => SetValue(AnimationSpeedProperty, value);
         }
 
+        public double FillOpacity
+        {
+            get => GetValue(FillOpacityProperty);
+            set => SetValue(FillOpacityProperty, value);
+        }
+
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
         {
             base.OnAttachedToVisualTree(e);
@@ -157,17 +169,32 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         public override void Render(DrawingContext context)
         {
-            if (!_clock.IsRunning || !ClickHighlight.TryParse(Animation, out bool pulse))
+            var mode = ClickHighlight.ModeOf(Animation);
+            if (!_clock.IsRunning || mode == HighlightMode.None)
                 return;
 
             double extent = Math.Min(Bounds.Width, Bounds.Height) / 2;
             if (extent <= 0)
                 return;
 
-            double heldDip = ClickHighlight.HeldRadiusDip(HoldSize);
             double at = _clock.Elapsed.TotalMilliseconds % CycleMs;
+            var phase = PhaseAt(at);
+
+            if (mode == HighlightMode.Ring)
+            {
+                RenderRing(context, extent, at, phase);
+                return;
+            }
+            if (mode == HighlightMode.Press)
+            {
+                RenderPress(context, extent, at, phase);
+                return;
+            }
+
+            bool pulse = mode == HighlightMode.Pulse;
+            double heldDip = ClickHighlight.HeldRadiusDip(HoldSize);
             double radiusDip, opacity;
-            switch (PhaseAt(at))
+            switch (phase)
             {
                 case Phase.Press:
                     // the dot swells into its held size; opacity is already the held one, so what
@@ -205,6 +232,67 @@ namespace Clowd.UI.VideoEditor.Inspector
             context.DrawEllipse(brush, null,
                 new Point(Bounds.Width / 2, Bounds.Height / 2), radius, radius);
         }
+
+        /// <summary>The press/ring clocks the cycle's phase stands in for, in the convention of
+        /// <see cref="ClickHighlight.RingScale"/>: the press phase is a fresh hold, the held beat
+        /// a long one, the burst a release of a full press, and the blank beat plain idleness.</summary>
+        private (double? SinceDown, double? SinceUp, double? PressDuration) ClocksAt(double at, Phase phase)
+            => phase switch
+            {
+                Phase.Press => (at, null, null),
+                Phase.Hold => (null, null, null),
+                Phase.Burst => (null, at - PressEndMs, null),
+                _ => (null, double.MaxValue, null),
+            };
+
+        /// <summary>The ring tile: the resting ring sits there between cycles (unlike the burst
+        /// animations, the ring is always on screen), closes over the press, holds closed, and
+        /// springs back out — the compositor's own numbers throughout.</summary>
+        private void RenderRing(DrawingContext context, double extent, double at, Phase phase)
+        {
+            var (down, up, duration) = ClocksAt(at, phase);
+            double scale = ClickHighlight.RingScale(down, up, duration, AnimationSpeed);
+
+            // normalised against the overshoot's peak plus the stroke, so the breathe-out
+            // never clips against the tile's edge
+            double sizeDial = ClickHighlight.Factor(ClickSize);
+            double widestDip = ClickHighlight.RingRadiusDip * sizeDial * 1.06 + ClickHighlight.RingStrokeDip;
+            double radius = ClickHighlight.RingRadiusDip * sizeDial * scale / widestDip * extent;
+            double stroke = Math.Max(1.0, ClickHighlight.RingStrokeDip / widestDip * extent);
+
+            var color = Color.FromUInt32(ColorArgb);
+            byte fillAlpha = (byte)Math.Clamp(
+                Math.Round(ClickHighlight.Clamp01(FillOpacity) * color.A), 0, 255);
+            var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
+            context.DrawEllipse(
+                new SolidColorBrush(Color.FromArgb(fillAlpha, color.R, color.G, color.B)),
+                new Pen(new SolidColorBrush(color), stroke),
+                center, radius, radius);
+        }
+
+        /// <summary>The press tile: the warp cannot be previewed literally in a 30px vector tile,
+        /// so it is drawn schematically — concentric rings pulled toward the centre by the same
+        /// press envelope the compositor warps with, exaggerated to read at tile size. Colour is
+        /// deliberately neutral: the press has no colour of its own.</summary>
+        private void RenderPress(DrawingContext context, double extent, double at, Phase phase)
+        {
+            var (down, up, duration) = ClocksAt(at, phase);
+            double envelope = ClickHighlight.PressAmount(down, up, duration, AnimationSpeed);
+            double amount = 2 * ClickHighlight.PressMaxAmount * envelope;
+
+            var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
+            var pen = new Pen(new SolidColorBrush(Color.FromArgb(220, 144, 144, 144)), 1.5);
+            foreach (double fraction in RingFractions)
+            {
+                // where content originally at this radius lands once the warp samples outward:
+                // the display-space inverse of the shader's 1 + amount·(1−t)² stretch
+                double pull = 1 - fraction;
+                double shown = fraction * extent / (1 + amount * pull * pull);
+                context.DrawEllipse(null, pen, center, shown, shown);
+            }
+        }
+
+        private static readonly double[] RingFractions = { 0.35, 0.60, 0.85 };
 
         private Phase PhaseAt(double at)
         {

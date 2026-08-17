@@ -162,69 +162,59 @@ namespace Clowd.VideoSDK.Composition
     /// A style that declares no colourway has exactly one, unnamed, and stores a null variant.
     /// </para>
     /// <para>
-    /// Three packs live here, each covering every drawable kind in a dark and a light colourway.
-    /// <c>vision</c> (Vision Cursor) and <c>point</c> (Point.er) are by iDarques:
-    /// the first a conventional pointer set on a 128-unit viewBox, the second a minimal set built
-    /// from one dot and one triangular cap on a 64-unit one. Neither is traced — both are read out
-    /// of the packs' own Photoshop sources, whose files carry every cursor as a shape layer, and
-    /// whose vector masks are the path data below; each constant is named after the PSD layer it
-    /// came from. <c>numix</c> is the Numix set on a 32-unit viewBox, and comes from SVG rather than
-    /// PSD: its constants are the source files' own <c>d</c> attributes, verbatim and still in the
-    /// local space each sits in, with the group transform (and the stroke-to-fill of the shapes the
-    /// pack draws as bare strokes) applied by <see cref="BuildTable"/>. Each is named after the
-    /// source file's element.
+    /// Six styles live here, from two families that are built quite differently.
     /// </para>
     /// <para>
-    /// Faithfulness notes, all of them forced by what this table can hold (flat fills and one
-    /// centred contrast stroke per layer, no image assets and no SVG parser at runtime beyond the
-    /// pinned SkiaSharp):
+    /// <b>The iDarques packs</b> — <c>vision</c> (Vision Cursor, a conventional pointer set on a
+    /// 128-unit viewBox) and <c>point</c> (Point.er, a minimal set built from one dot and one
+    /// triangular cap on a 64-unit one) — each cover every drawable kind in a dark and a light
+    /// colourway, and their artwork is the path constants below. Neither is traced: both are read
+    /// out of the packs' own Photoshop sources, whose files carry every cursor as a shape layer and
+    /// whose vector masks are that path data. Each constant is named after the PSD layer it came
+    /// from.
+    /// </para>
+    /// <para>
+    /// <b>The ful1e5 packs</b> — <c>bibata</c>, <c>breezex</c>, <c>macos</c> and <c>fuchsia</c> —
+    /// carry no artwork here at all. Their SVG sources ship as embedded resources
+    /// under <c>Composition/CursorPacks</c> and <see cref="CursorPackLoader"/> reads them at table
+    /// build, so a pack is re-synced by re-copying files rather than by transcribing anything. Those
+    /// packs author against three placeholder colours and declare the real ones per theme, which is
+    /// what makes a colourway here: see <see cref="CursorPackPalette"/>. <c>bibata</c> is the one
+    /// style whose colourways are not purely a palette — its <c>R</c> and <c>S</c> halves are the
+    /// pack's rounded and sharp edge sets, which is two geometries — and only its left-hand cursors
+    /// are carried, the pack's <c>-Right</c> mirrors being a separate set for a different hand.
+    /// </para>
+    /// <para>
+    /// Faithfulness notes for the iDarques packs, all of them forced by what this table can hold
+    /// (flat fills and one centred contrast stroke per layer):
     /// </para>
     /// <list type="bullet">
-    /// <item>Vision and Point stroke their shapes <i>outside</i> the path. A centred stroke painted
-    /// under the layer's own fill is the same picture at double the authored width, which is where
-    /// their halo widths come from (Vision authors 8/6/4, Point 3). The caller must use round joins
-    /// for this to hold at a corner — see <c>CursorCompose.PaintGlyph</c>. Numix authors a
-    /// <i>centred</i> stroke instead, whose outer half is all that survives being painted under the
-    /// fill, so its widths carry over unchanged (1 unit everywhere, after its groups' scales).</item>
+    /// <item>Both stroke their shapes <i>outside</i> the path. A centred stroke painted under the
+    /// layer's own fill is the same picture at double the authored width, which is where their halo
+    /// widths come from (Vision authors 8/6/4, Point 3). The caller must use round joins for this to
+    /// hold at a corner — see <c>CursorCompose.PaintGlyph</c>.</item>
     /// <item>Photoshop marks a hole with a path operation and leaves the winding alone; the same
-    /// hole is spelled here as a reversed contour, which is what the nonzero fill rule wants. Numix
-    /// spells its one hole (the crosshair ring) with opposite windings already, and its
-    /// <c>fill-rule="evenodd"</c> is redundant.</item>
-    /// <item>Each pack's <c>wait</c>/<c>appstarting</c> are its two animated cursors. Each is stored
-    /// as a looping frame list (<see cref="CursorGlyph.Frames"/>), generated at table build from the
-    /// static artwork rather than pasted per frame: Vision's rotating gradient becomes a paper
-    /// sector orbiting the busy ring and a pointer whose fill pulses towards the accent; Point's
-    /// colour cycle is the source's own — the dot lerping between the colourway's base colour and
-    /// its link blue; Numix's is the source's own too — an <c>animateTransform</c> spinning its
-    /// gapped ring and arrowhead one turn per 1.4 s (<c>wait</c>) or 1.1 s (<c>appstarting</c>),
-    /// which becomes the same geometry re-placed at each frame's angle. A complex animation that
-    /// cannot be generated this way can still hand the same constructor hand-authored frames.</item>
-    /// <item>Vision's and Point's <c>help</c> badges are raster in the source — live text in DIN
-    /// Round Pro, a pixel layer — so those two glyphs are traced from the PSDs' own rasterised
-    /// layers. Numix draws its question mark as a stroked path, which needs no tracing.</item>
+    /// hole is spelled here as a reversed contour, which is what the nonzero fill rule wants.</item>
+    /// <item>Each pack's <c>wait</c>/<c>appstarting</c> are its two animated cursors, gradient-based
+    /// in the source. Each is stored as a looping frame list (<see cref="CursorGlyph.Frames"/>),
+    /// generated at table build from the static artwork rather than pasted per frame: Vision's
+    /// rotating gradient becomes a paper sector orbiting the busy ring and a pointer whose fill
+    /// pulses towards the accent; Point's colour cycle is the source's own — the dot lerping between
+    /// the colourway's base colour and its link blue. (The ful1e5 packs need none of this: they draw
+    /// every frame, and the loader reads them as they are.)</item>
+    /// <item>Both <c>help</c> badges are raster in the source — live text in DIN Round Pro, a pixel
+    /// layer — so those two glyphs are traced from the PSDs' own rasterised layers.</item>
     /// <item>Only one of the two diagonal-resize cursors is authored per PSD (Vision's Black source
     /// has the NESW one, Point's the NWSE one). Each pack's pair is one geometry mirrored about the
-    /// viewBox midline, so the two diagonals always match. Numix ships both, as the same arm placed
-    /// at two pairs of angles, which holds the same property.</item>
+    /// viewBox midline, so the two diagonals always match.</item>
     /// <item>Point's White source parks its dot at the <c>help</c> composition's lower position and
     /// omits the <c>vert</c>/<c>dgn</c> groups; geometry therefore comes from one file per pack,
-    /// with only the palette read per colourway. Numix's two SVG directories differ only in which
-    /// of its base colours fills and which strokes, so the same holds there.</item>
-    /// <item>Numix leaves a few layers unstroked (the help disc and its glyph, the person badge, the
-    /// pen's nib, the spinner) where every layer here must carry a halo. Each takes the colour that
-    /// reproduces the source: the colourway's halo colour where the layer meets video directly (the
-    /// help disc, the deny badge, the spinner), and the colour of the shape it already sits on where
-    /// a real halo would only bloat it (the question mark on its disc, the person on the hand, the
-    /// nib on the pen).</item>
-    /// <item>Numix's <c>location-select</c> — its hand under a map pin — has no <see cref="Kinds"/>
-    /// key to hang off, since no <c>CursorKind</c> the recorder reports means "location", so it is
-    /// the one file of the pack this table does not carry.</item>
+    /// with only the palette read per colourway.</item>
     /// </list>
     /// <para>
-    /// Every hotspot is the pack's own: Vision's and Point's off their <c>.cur</c> headers scaled to
-    /// the viewBox — which is why Vision points from a tip and Point from its dot — and Numix's off
-    /// the point each of its SVGs is drawn around (the pointer's tip is its group's origin, the
-    /// hand's is the fingertip, the pen's the nib).
+    /// Every hotspot is the pack's own: the iDarques ones off their <c>.cur</c> headers scaled to the
+    /// viewBox — which is why Vision points from a tip and Point from its dot — and the ful1e5 ones
+    /// off each pack's <c>configs/x.build.toml</c>, which quotes them against a 256-unit render.
     /// </para>
     /// </remarks>
     public static class CursorAssets
@@ -242,7 +232,13 @@ namespace Clowd.VideoSDK.Composition
 
         private const string PointStyle = "point";
 
-        private const string NumixStyle = "numix";
+        private const string BibataStyle = "bibata";
+
+        private const string BreezeXStyle = "breezex";
+
+        private const string MacOsStyle = "macos";
+
+        private const string FuchsiaStyle = "fuchsia";
 
         // Kind keys: the input-capture wire names, one per drawable CursorKind. `Custom` has none
         // (it falls back to the arrow) and `Hidden` draws nothing.
@@ -275,7 +271,7 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>The themed styles, in picker order. Excludes <see cref="NativeStyle"/>.</summary>
         public static IReadOnlyList<string> Styles { get; } = Array.AsReadOnly(new[]
         {
-            VisionStyle, PointStyle, NumixStyle,
+            VisionStyle, PointStyle, BibataStyle, BreezeXStyle, MacOsStyle, FuchsiaStyle,
         });
 
         /// <summary>
@@ -332,8 +328,124 @@ namespace Clowd.VideoSDK.Composition
         private static string Key(string style, string variant, string kind)
             => variant == null ? style + "/" + kind : style + "/" + variant + "/" + kind;
 
-        private static readonly Dictionary<string, CursorVariant[]> VariantTable
-            = new Dictionary<string, CursorVariant[]>(StringComparer.OrdinalIgnoreCase)
+        // ------------------------------------------------------------------------ ful1e5 packs
+
+        /// <summary>One colourway of a ful1e5 pack: the picker's two names for it, the artwork
+        /// folder it draws (only <see cref="BibataStyle"/> has more than one), and what its theme
+        /// paints the pack's three placeholder colours.</summary>
+        private sealed class PackTheme
+        {
+            internal PackTheme(string id, string label, string folder, uint body, uint outline,
+                uint accent = 0)
+            {
+                Id = id;
+                Label = label;
+                Folder = folder;
+                Palette = new CursorPackPalette(body, outline, accent == 0 ? body : accent);
+            }
+
+            internal string Id { get; }
+
+            internal string Label { get; }
+
+            internal string Folder { get; }
+
+            internal CursorPackPalette Palette { get; }
+        }
+
+        /// <summary>A ful1e5 pack as this table sees it: its colourways, how long each animation
+        /// frame shows, and the hotspots its build config overrides — everything else sits at the
+        /// config's own fallback, the centre of the 256-unit box.</summary>
+        private sealed class Pack
+        {
+            internal Pack(string style, float frameMs, (string Kind, float X, float Y)[] hotspots,
+                PackTheme[] themes)
+            {
+                Style = style;
+                FrameMs = frameMs;
+                Themes = themes;
+                Hotspots = new Dictionary<string, SKPoint>(StringComparer.OrdinalIgnoreCase);
+                foreach (var (kind, x, y) in hotspots)
+                    Hotspots[kind] = new SKPoint(x, y);
+            }
+
+            internal string Style { get; }
+
+            internal float FrameMs { get; }
+
+            internal PackTheme[] Themes { get; }
+
+            internal Dictionary<string, SKPoint> Hotspots { get; }
+
+            /// <summary>The pack's hotspot for a kind, in its own 256-unit space.</summary>
+            internal SKPoint HotspotOf(string kind)
+                => Hotspots.TryGetValue(kind, out var point) ? point : new SKPoint(128f, 128f);
+        }
+
+        // The packs' own colours, off each repository's render.json. A pack whose themes never name
+        // an accent leaves that role at its body colour, which is what the sources do too — the
+        // accent placeholder only ever appears in Bibata's artwork.
+        private static readonly Pack[] Packs =
+        {
+            // Bibata is the one pack with two geometries: `-r` is its Modern (rounded edge) set and
+            // `-s` its Original (sharp edge) one, and each of the three palettes is offered on both.
+            new Pack(BibataStyle, 40f, new (string, float, float)[]
+            {
+                (KindArrow, 55f, 17f), (KindAppStarting, 55f, 17f), (KindUpArrow, 127f, 17f),
+                (KindHand, 114f, 18f), (KindPerson, 114f, 18f), (KindPen, 46f, 211f),
+                (KindHelp, 42f, 86f),
+            }, new[]
+            {
+                new PackTheme("amber-r", "Amber R", "bibata-r", 0xFFFF8300, 0xFFFFFFFF, 0xFF001524),
+                new PackTheme("amber-s", "Amber S", "bibata-s", 0xFFFF8300, 0xFFFFFFFF, 0xFF001524),
+                new PackTheme("classic-r", "Classic R", "bibata-r", 0xFF000000, 0xFFFFFFFF, 0xFF000000),
+                new PackTheme("classic-s", "Classic S", "bibata-s", 0xFF000000, 0xFFFFFFFF, 0xFF000000),
+                new PackTheme("ice-r", "Ice R", "bibata-r", 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF),
+                new PackTheme("ice-s", "Ice S", "bibata-s", 0xFFFFFFFF, 0xFF000000, 0xFFFFFFFF),
+            }),
+            new Pack(BreezeXStyle, 10f, new (string, float, float)[]
+            {
+                (KindArrow, 69f, 30f), (KindAppStarting, 69f, 30f), (KindNo, 69f, 30f),
+                (KindHelp, 69f, 30f), (KindUpArrow, 128f, 30f), (KindHand, 117f, 36f),
+                (KindPerson, 117f, 36f), (KindPen, 40f, 210f), (KindSizeAll, 141f, 79f),
+                (KindSizeNwse, 127f, 124f), (KindSizeNesw, 126f, 125f), (KindSizeWe, 127f, 125f),
+                (KindSizeNs, 126f, 125f),
+            }, new[]
+            {
+                new PackTheme("dark", "Dark", "breezex", 0xFF4D4D4D, 0xFFFFFFFF),
+                new PackTheme("black", "Black", "breezex", 0xFF000000, 0xFFFFFFFF),
+                new PackTheme("light", "Light", "breezex", 0xFFFFFFFF, 0xFF4D4D4D),
+            }),
+            new Pack(MacOsStyle, 20f, new (string, float, float)[]
+            {
+                (KindArrow, 80f, 38f), (KindAppStarting, 56f, 17f), (KindNo, 56f, 17f),
+                (KindUpArrow, 128f, 34f), (KindHand, 92f, 53f), (KindPerson, 92f, 53f),
+                (KindPen, 37f, 218f), (KindHelp, 128f, 169f), (KindIBeam, 129f, 136f),
+                (KindSizeAll, 139f, 86f),
+            }, new[]
+            {
+                new PackTheme("black", "Black", "macos", 0xFF000000, 0xFFFFFFFF),
+                new PackTheme("white", "White", "macos", 0xFFFFFFFF, 0xFF000000),
+            }),
+            new Pack(FuchsiaStyle, 35f, new (string, float, float)[]
+            {
+                (KindArrow, 33f, 33f), (KindAppStarting, 32f, 32f), (KindNo, 33f, 33f),
+                (KindHelp, 33f, 33f), (KindHand, 33f, 33f), (KindPerson, 33f, 33f),
+                (KindUpArrow, 128f, 18f), (KindPen, 55f, 203f),
+            }, new[]
+            {
+                new PackTheme("fuchsia", "Fuchsia", "fuchsia", 0xFFE11C79, 0xFFFFFFFF),
+                new PackTheme("pop", "Pop", "fuchsia", 0xFFF8B572, 0xFFFFFFFF),
+                new PackTheme("red", "Red", "fuchsia", 0xFFFF0000, 0xFFFFFFFF),
+                new PackTheme("amber", "Amber", "fuchsia", 0xFFFFA400, 0xFFFFFFFF),
+            }),
+        };
+
+        private static readonly Dictionary<string, CursorVariant[]> VariantTable = BuildVariantTable();
+
+        private static Dictionary<string, CursorVariant[]> BuildVariantTable()
+        {
+            var table = new Dictionary<string, CursorVariant[]>(StringComparer.OrdinalIgnoreCase)
             {
                 // Dark first: an ink glyph with a paper halo is the one that reads on arbitrary
                 // video without being chosen, so it is what an unset variant draws.
@@ -347,12 +459,18 @@ namespace Clowd.VideoSDK.Composition
                     new CursorVariant("dark", "Dark"),
                     new CursorVariant("light", "Light"),
                 },
-                [NumixStyle] = new[]
-                {
-                    new CursorVariant("dark", "Dark"),
-                    new CursorVariant("light", "Light"),
-                },
             };
+
+            // A ful1e5 pack's colourways are its themes, in the order its own README lists them.
+            foreach (var pack in Packs)
+            {
+                var variants = new CursorVariant[pack.Themes.Length];
+                for (int i = 0; i < pack.Themes.Length; i++)
+                    variants[i] = new CursorVariant(pack.Themes[i].Id, pack.Themes[i].Label);
+                table[pack.Style] = variants;
+            }
+            return table;
+        }
 
         private static readonly Dictionary<string, CursorGlyph> Table = BuildTable();
 
@@ -380,56 +498,6 @@ namespace Clowd.VideoSDK.Composition
             path.ArcTo(inner, startDeg + sweepDeg, -sweepDeg, false);
             path.Close();
             return path.ToSvgPathData();
-        }
-
-        /// <summary>A circle as SVG path data — the <c>&lt;circle&gt;</c> elements Numix's sources
-        /// use where the other two packs spell everything as a path.</summary>
-        private static string Disc(float centreX, float centreY, float radius)
-        {
-            using var path = new SKPath();
-            path.AddCircle(centreX, centreY, radius);
-            return path.ToSvgPathData();
-        }
-
-        /// <summary>
-        /// A source group's <c>transform</c> baked into its path data, so what this table stores is
-        /// viewBox-space geometry like every hand-authored constant. Arguments are SVG's own, in
-        /// SVG's order — <c>translate(x y) rotate(deg) scale(s)</c>, i.e. the scale applies first.
-        /// </summary>
-        private static string Place(string pathData, float translateX, float translateY,
-            float rotateDeg = 0f, float scale = 1f)
-        {
-            using var path = SKPath.ParseSvgPathData(pathData);
-            var matrix = SKMatrix.Concat(
-                SKMatrix.CreateTranslation(translateX, translateY),
-                SKMatrix.Concat(
-                    SKMatrix.CreateRotationDegrees(rotateDeg),
-                    SKMatrix.CreateScale(scale, scale)));
-            path.Transform(matrix);
-            return path.ToSvgPathData();
-        }
-
-        /// <summary>
-        /// A stroke converted to the outline that fills the same pixels. Every layer here is a fill
-        /// (plus its own halo), so a source shape drawn as a bare stroke — Numix's spinner ring, its
-        /// deny badge, its question mark — has to become one before it can be stored. Widths and
-        /// caps are the source's, in the same local space as <paramref name="pathData"/>, so a
-        /// later <see cref="Place"/> scales the ink exactly as the group does.
-        /// </summary>
-        private static string Outline(string pathData, float strokeWidth,
-            SKStrokeCap cap = SKStrokeCap.Butt)
-        {
-            using var source = SKPath.ParseSvgPathData(pathData);
-            using var paint = new SKPaint
-            {
-                Style = SKPaintStyle.Stroke,
-                StrokeWidth = strokeWidth,
-                StrokeCap = cap,
-                StrokeJoin = SKStrokeJoin.Round,
-            };
-            using var filled = new SKPath();
-            paint.GetFillPath(source, filled);
-            return filled.ToSvgPathData();
         }
 
         /// <summary>Per-channel ARGB interpolation, <paramref name="t"/> ∈ [0, 1].</summary>
@@ -486,32 +554,6 @@ namespace Clowd.VideoSDK.Composition
         /// picture, on its smaller 64-unit viewBox.</summary>
         private const float PointHalo = 6f;
 
-        // ----------------------------------------------------------------------- numix palette
-
-        /// <summary>Numix's ink. Its paper is the shared <see cref="Paper"/>, and the two trade
-        /// places between its colourways exactly as the other packs' do.</summary>
-        private const uint NumixInk = 0xFF343434;
-
-        /// <summary>The red Numix fills every resize arm, its pen's cap and its map pin with; the
-        /// indigo of both spinners; the blue of the help badge's disc; and the softer red of the
-        /// deny badge. All four are the same in every colourway, as the source authors them.</summary>
-        private const uint NumixAccent = 0xFFF05049;
-
-        private const uint NumixSpin = 0xFF6C71C2;
-
-        private const uint NumixHelp = 0xFF2289D1;
-
-        private const uint NumixDeny = 0xFFDE4643;
-
-        /// <summary>Numix's 1-unit outline as the width that draws the same keyline here. The pack
-        /// authors it centred and <i>over</i> the fill, so all 1 unit of it shows and the ink stops
-        /// half a unit inside the path; a halo painted <i>under</i> the fill only ever shows its
-        /// outer half, so it takes double the width to read as thick — at the cost of half a unit
-        /// of the 32-unit viewBox on the silhouette, which is the closer of the two misses. (Every
-        /// group carries the same 1 unit: the hand's authored 1.5152 and 1.8182 are those groups'
-        /// 0.66 and 0.55 scales cancelled out.)</summary>
-        private const float NumixHalo = 2f;
-
         // ------------------------------------------------------------------ animation generation
 
         /// <summary>Frames per animation loop and how long each shows: 18 × 60 ms ≈ one revolution
@@ -522,13 +564,6 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>Sweep of the orbiting highlight sector, degrees.</summary>
         private const float SpinSweep = 100f;
-
-        /// <summary>Numix's two spinners turn at the rates its own <c>animateTransform</c> declares
-        /// rather than the shared cadence — one revolution per 1.4 s busy, 1.1 s working — sampled
-        /// at the same <see cref="SpinFrames"/> stills.</summary>
-        private const float NumixWaitPeriodMs = 1400f;
-
-        private const float NumixWorkPeriodMs = 1100f;
 
         // --------------------------------------------------------------------- vision artwork
         // Generated from the pack's PSD vector masks; see the class remarks. Each constant is
@@ -830,116 +865,6 @@ namespace Clowd.VideoSDK.Composition
             "M32 37C34.761 37 37 39.239 37 42C37 44.761 34.761 47 32 47C29.239 47 27 44.761 27 42" +
             "C27 39.239 29.239 37 32 37Z";
 
-        // ---------------------------------------------------------------------- numix artwork
-        // The source SVGs' own `d` attributes, verbatim, each still in the local space of the group
-        // it sits in; BuildTable places them. Each constant is named for the element it came from.
-
-        /// <summary>The pointer, tip at the origin — <c>normal</c>, and the base of
-        /// <c>help-select</c>, <c>unavailable</c>, <c>working-in-background</c> and (upright, from a
-        /// different origin) <c>alternate-select</c>.</summary>
-        private const string NumixPointer =
-            "M 0 0 L 6.4 15.7 C 3.46 16.05 1.33 18.09 0 21.8 C -1.33 18.09 -3.46 16.05 -6.4 15.7 Z";
-
-        /// <summary>The I-beam of <c>text-select</c>, authored in viewBox space outright.</summary>
-        private const string NumixBar =
-            "M 13 6.5 H 19 V 8.5 H 17 V 23.5 H 19 V 25.5 H 13 V 23.5 H 15 V 8.5 H 13 Z";
-
-        /// <summary>One resize arm, pointing up from the hub at the origin. Every resize cursor is
-        /// this shape at two or four angles, around the same central dot.</summary>
-        private const string NumixResizeArm = "M 0 -12.5 L 3.6 -7.4 L -3.6 -7.4 Z";
-
-        /// <summary>The ringed crosshair of <c>precision-select</c>, viewBox space. Its outer wheel
-        /// runs clockwise and its inner circle counter-clockwise, so the ring is already a nonzero
-        /// hole.</summary>
-        private const string NumixCrosshair =
-            "M 14.5 9.57 L 14.5 8.5 A 1.5 1.5 0 0 1 17.5 8.5 L 17.5 9.57" +
-            " A 6.6 6.6 0 0 1 22.43 14.5 L 23.5 14.5 A 1.5 1.5 0 0 1 23.5 17.5 L 22.43 17.5" +
-            " A 6.6 6.6 0 0 1 17.5 22.43 L 17.5 23.5 A 1.5 1.5 0 0 1 14.5 23.5 L 14.5 22.43" +
-            " A 6.6 6.6 0 0 1 9.57 17.5 L 8.5 17.5 A 1.5 1.5 0 0 1 8.5 14.5 L 9.57 14.5" +
-            " A 6.6 6.6 0 0 1 14.5 9.57 Z" +
-            " M 20.6 16 A 4.6 4.6 0 1 0 11.4 16 A 4.6 4.6 0 1 0 20.6 16 Z";
-
-        /// <summary>The hand of <c>link-select</c>, shared by <c>person-select</c> at a smaller
-        /// scale. Authored on the 48-unit grid the pack's source icon came from, fingertip at
-        /// (21, 8).</summary>
-        private const string NumixHand =
-            "M 21 8 C 22.117188 8 23 8.882813 23 10 L 23 16.1875" +
-            " C 22.984375 16.292969 22.984375 16.394531 23 16.5 L 23 25" +
-            " C 22.992188 25.308594 23.128906 25.601563 23.367188 25.796875" +
-            " C 23.601563 25.992188 23.917969 26.066406 24.21875 26" +
-            " C 24.320313 25.972656 24.414063 25.929688 24.5 25.875" +
-            " C 24.519531 25.867188 24.542969 25.855469 24.5625 25.84375" +
-            " C 24.621094 25.796875 24.671875 25.746094 24.71875 25.6875" +
-            " C 24.898438 25.503906 24.996094 25.257813 25 25 L 25 23" +
-            " C 25 21.882813 25.882813 21 27 21 C 28.117188 21 29 21.882813 29 23 L 29 25" +
-            " C 29.003906 25.0625 29.015625 25.125 29.03125 25.1875" +
-            " C 29.046875 25.285156 29.078125 25.378906 29.125 25.46875" +
-            " C 29.164063 25.558594 29.21875 25.644531 29.28125 25.71875" +
-            " C 29.328125 25.765625 29.382813 25.808594 29.4375 25.84375" +
-            " C 29.46875 25.867188 29.5 25.886719 29.53125 25.90625" +
-            " C 29.621094 25.953125 29.714844 25.984375 29.8125 26" +
-            " C 29.945313 26.027344 30.085938 26.027344 30.21875 26" +
-            " C 30.320313 25.972656 30.414063 25.929688 30.5 25.875" +
-            " C 30.519531 25.867188 30.542969 25.855469 30.5625 25.84375" +
-            " C 30.621094 25.796875 30.671875 25.746094 30.71875 25.6875" +
-            " C 30.898438 25.503906 30.996094 25.257813 31 25 L 31 24" +
-            " C 31 22.882813 31.882813 22 33 22 C 34.117188 22 35 22.882813 35 24 L 35 26" +
-            " C 35 26.03125 35 26.0625 35 26.09375 L 35 27" +
-            " C 34.996094 27.359375 35.183594 27.695313 35.496094 27.878906" +
-            " C 35.808594 28.058594 36.191406 28.058594 36.503906 27.878906" +
-            " C 36.816406 27.695313 37.003906 27.359375 37 27 L 37 26.15625" +
-            " C 37.003906 26.105469 37.003906 26.050781 37 26 C 37 24.882813 37.882813 24 39 24" +
-            " C 40.117188 24 41 24.882813 41 26 L 41 39 C 41 42.878906 37.878906 46 34 46" +
-            " L 26.71875 46 C 23.800781 46 21 44.84375 18.9375 42.78125 L 7.59375 31.40625" +
-            " C 6.804688 30.617188 6.804688 29.382813 7.59375 28.59375" +
-            " C 8.382813 27.804688 9.617188 27.804688 10.40625 28.59375 L 17.15625 35.3125" +
-            " C 17.191406 35.367188 17.234375 35.421875 17.28125 35.46875" +
-            " C 17.300781 35.492188 17.320313 35.511719 17.34375 35.53125" +
-            " C 17.476563 35.644531 17.640625 35.71875 17.8125 35.75" +
-            " C 17.945313 35.777344 18.085938 35.777344 18.21875 35.75" +
-            " C 18.28125 35.734375 18.347656 35.714844 18.40625 35.6875" +
-            " C 18.4375 35.667969 18.46875 35.648438 18.5 35.625" +
-            " C 18.785156 35.460938 18.972656 35.171875 19 34.84375" +
-            " C 19 34.832031 19 34.824219 19 34.8125 C 19 34.792969 19 34.769531 19 34.75" +
-            " C 19.003906 34.707031 19.003906 34.667969 19 34.625 L 19 16.4375" +
-            " C 19.015625 16.332031 19.015625 16.230469 19 16.125 L 19 10" +
-            " C 19 8.882813 19.882813 8 21 8 Z";
-
-        /// <summary>The shoulders of <c>person-select</c>'s badge, viewBox space; its head is a
-        /// circle (see <see cref="Disc"/>).</summary>
-        private const string NumixPersonBody =
-            "M 20.7 27.2 C 20.7 24.5 22.85 22.8 25.5 22.8 C 28.15 22.8 30.3 24.5 30.3 27.2 Z";
-
-        /// <summary>The three layers of <c>handwriting</c>, in the pen's own upright local space —
-        /// barrel, coloured cap and nib, the nib's point at (0, 25.5).</summary>
-        private const string NumixPenBody =
-            "M -3 1.2 A 1.2 1.2 0 0 1 -1.8 0 L 1.8 0 A 1.2 1.2 0 0 1 3 1.2 L 3 20 L 0 25.5" +
-            " L -3 20 Z";
-
-        private const string NumixPenCap =
-            "M -3 1.2 A 1.2 1.2 0 0 1 -1.8 0 L 1.8 0 A 1.2 1.2 0 0 1 3 1.2 L 3 5.2 L -3 5.2 Z";
-
-        private const string NumixPenNib = "M -1.255 23.2 L 1.255 23.2 L 0 25.5 Z";
-
-        /// <summary>The question mark's hook on <c>help-select</c>'s disc — a bare round-capped
-        /// 1.4-unit stroke in the source, outlined at build. Its dot is a circle.</summary>
-        private const string NumixHelpHook = "M 18.9 19.1 A 1.75 1.75 0 1 1 20.5 21.4 L 20.5 22.3";
-
-        /// <summary>The bar across <c>unavailable</c>'s badge, likewise a bare round-capped stroke
-        /// (1.8 units), and likewise outlined at build. Its ring is a stroked circle.</summary>
-        private const string NumixDenySlash = "M 17.35 24.65 L 23.65 18.35";
-
-        /// <summary>The spinner both animated cursors are built from, centred on the origin so a
-        /// frame is the whole thing re-placed at an angle: a 300° ring (a bare 1.6-unit stroke,
-        /// outlined at build) closed by a triangular arrowhead.</summary>
-        private const string NumixSpinRing = "M 0 -4.3 A 4.3 4.3 0 1 0 3.72 -2.15";
-
-        private const string NumixSpinHead = "M 1.9 -4.3 L -0.7 -2.5 L -0.7 -6.1 Z";
-
-        /// <summary>Where <c>busy-select</c> puts the spinner (centred, at 1.9×) and where
-        /// <c>working-in-background</c> does (beside the pointer's tail, at source size).</summary>
-        private const float NumixWaitScale = 1.9f;
-
         private static Dictionary<string, CursorGlyph> BuildTable()
         {
             var t = new Dictionary<string, CursorGlyph>(StringComparer.OrdinalIgnoreCase);
@@ -1087,133 +1012,26 @@ namespace Clowd.VideoSDK.Composition
                     P(PointHelpDot, ink, paper, PointHalo));
             }
 
-            // Numix, on a 32-unit viewBox. Its geometry is the source SVGs' groups placed into that
-            // space, which is a per-shape job rather than a per-colourway one — so it is done once,
-            // above the colourway loop, and the two colourways share the very strings.
-            string numixPointer = Place(NumixPointer, 2.6f, 2.3f, -22f);
-            string numixAlternate = Place(NumixPointer, 16f, 4f);
-            string numixHub = Disc(16f, 16f, 2.5f);
-            string NumixArm(float degrees) => Place(NumixResizeArm, 16f, 16f, degrees);
-            string numixCrossDot = Disc(16f, 16f, 1.4f);
-            string numixLinkHand = Place(NumixHand, 0f, -2.3f, 0f, 0.66f);
-            string numixBadgeHand = Place(NumixHand, -3f, -2.4f, 0f, 0.55f);
-            string numixPersonHead = Disc(25.5f, 19.4f, 2.4f);
-            string numixPenBody = Place(NumixPenBody, 22.3f, 6.6f, 45f);
-            string numixPenCap = Place(NumixPenCap, 22.3f, 6.6f, 45f);
-            string numixPenNib = Place(NumixPenNib, 22.3f, 6.6f, 45f);
-            string numixHelpDisc = Disc(20.5f, 21.5f, 6f);
-            string numixHelpHook = Outline(NumixHelpHook, 1.4f, SKStrokeCap.Round);
-            string numixHelpDot = Disc(20.5f, 24.4f, 0.95f);
-            string numixDenyRing = Outline(Disc(20.5f, 21.5f, 4.75f), 1.8f);
-            string numixDenySlash = Outline(NumixDenySlash, 1.8f, SKStrokeCap.Round);
-
-            // Both spinners are the one outlined ring and arrowhead, re-placed at each frame's
-            // angle — the source's `animateTransform` spelled as stills. Outlining happens in the
-            // spinner's own local space, so the wait cursor's 1.9× group scales the 1.6-unit ring
-            // exactly as the SVG does.
-            string numixSpinRing = Outline(NumixSpinRing, 1.6f);
-            var numixWaitRing = new string[SpinFrames];
-            var numixWaitHead = new string[SpinFrames];
-            var numixWorkRing = new string[SpinFrames];
-            var numixWorkHead = new string[SpinFrames];
-            for (int i = 0; i < SpinFrames; i++)
+            // The ful1e5 packs, straight off their own SVG sources — one lookup per (theme, kind),
+            // with `wait` and `appstarting` reading the frame folders the packs ship instead of a
+            // single file. A kind a pack somehow does not cover is left out rather than faked; the
+            // caller falls back to the style's arrow.
+            foreach (var pack in Packs)
             {
-                float turn = i * 360f / SpinFrames;
-                numixWaitRing[i] = Place(numixSpinRing, 16f, 16f, turn, NumixWaitScale);
-                numixWaitHead[i] = Place(NumixSpinHead, 16f, 16f, turn, NumixWaitScale);
-                numixWorkRing[i] = Place(numixSpinRing, 20.5f, 21.5f, turn);
-                numixWorkHead[i] = Place(NumixSpinHead, 20.5f, 21.5f, turn);
-            }
-
-            foreach (var (variant, ink, paper) in new[]
-            {
-                ("dark", NumixInk, Paper),
-                ("light", Paper, NumixInk),
-            })
-            {
-                // Hotspots are each group's own origin scaled into the viewBox: the pointer's tip
-                // is where its group sits (2.6, 2.3), the alternate pointer's is (16, 4), the
-                // fingertip is the hand's (21, 8) through each group's scale, and the pen's is its
-                // nib at local (0, 25.5) through the 45° turn.
-                t[Key(NumixStyle, variant, KindArrow)] = G(32f, 2.6f, 2.3f,
-                    P(numixPointer, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindIBeam)] = G(32f, 16f, 16f,
-                    P(NumixBar, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindUpArrow)] = G(32f, 16f, 4f,
-                    P(numixAlternate, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindCross)] = G(32f, 16f, 16f,
-                    P(NumixCrosshair, ink, paper, NumixHalo),
-                    P(numixCrossDot, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindHand)] = G(32f, 13.86f, 2.98f,
-                    P(numixLinkHand, ink, paper, NumixHalo));
-                // The person badge is unstroked in the source; it takes the hand's own fill as its
-                // halo, which is the colour already behind it.
-                t[Key(NumixStyle, variant, KindPerson)] = G(32f, 8.55f, 2.0f,
-                    P(numixBadgeHand, ink, paper, NumixHalo),
-                    P(numixPersonHead, paper, ink, NumixHalo),
-                    P(NumixPersonBody, paper, ink, NumixHalo));
-                // ...and the nib is stroked in its own colour, which is how the source thickens it.
-                t[Key(NumixStyle, variant, KindPen)] = G(32f, 4.269f, 24.631f,
-                    P(numixPenBody, ink, paper, NumixHalo),
-                    P(numixPenCap, NumixAccent, paper, NumixHalo),
-                    P(numixPenNib, paper, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindSizeNs)] = G(32f, 16f, 16f,
-                    P(NumixArm(0f), NumixAccent, paper, NumixHalo),
-                    P(NumixArm(180f), NumixAccent, paper, NumixHalo),
-                    P(numixHub, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindSizeWe)] = G(32f, 16f, 16f,
-                    P(NumixArm(90f), NumixAccent, paper, NumixHalo),
-                    P(NumixArm(270f), NumixAccent, paper, NumixHalo),
-                    P(numixHub, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindSizeAll)] = G(32f, 16f, 16f,
-                    P(NumixArm(0f), NumixAccent, paper, NumixHalo),
-                    P(NumixArm(90f), NumixAccent, paper, NumixHalo),
-                    P(NumixArm(180f), NumixAccent, paper, NumixHalo),
-                    P(NumixArm(270f), NumixAccent, paper, NumixHalo),
-                    P(numixHub, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindSizeNwse)] = G(32f, 16f, 16f,
-                    P(NumixArm(315f), NumixAccent, paper, NumixHalo),
-                    P(NumixArm(135f), NumixAccent, paper, NumixHalo),
-                    P(numixHub, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindSizeNesw)] = G(32f, 16f, 16f,
-                    P(NumixArm(45f), NumixAccent, paper, NumixHalo),
-                    P(NumixArm(225f), NumixAccent, paper, NumixHalo),
-                    P(numixHub, ink, paper, NumixHalo));
-                t[Key(NumixStyle, variant, KindNo)] = G(32f, 2.6f, 2.3f,
-                    P(numixPointer, ink, paper, NumixHalo),
-                    P(numixDenyRing, NumixDeny, paper, NumixHalo),
-                    P(numixDenySlash, NumixDeny, paper, NumixHalo));
-                // The question mark and its dot are unstroked white on the disc, so the disc's own
-                // blue stands in for their halo; only the disc itself meets the video.
-                t[Key(NumixStyle, variant, KindHelp)] = G(32f, 2.6f, 2.3f,
-                    P(numixPointer, ink, paper, NumixHalo),
-                    P(numixHelpDisc, NumixHelp, paper, NumixHalo),
-                    P(numixHelpHook, Paper, NumixHelp, NumixHalo),
-                    P(numixHelpDot, Paper, NumixHelp, NumixHalo));
-
-                // wait: the source's spinner turning once per 1.4 s, centred and at 1.9×. The
-                // spinner is unstroked in the source; it takes the pack's keyline rather than a
-                // 1.9× one, which around a ring only three units thick would read as a band.
-                var numixWaitFrames = new CursorGlyph[SpinFrames];
-                for (int i = 0; i < SpinFrames; i++)
+                foreach (var theme in pack.Themes)
                 {
-                    numixWaitFrames[i] = G(32f, 16f, 16f,
-                        P(numixWaitRing[i], NumixSpin, paper, NumixHalo),
-                        P(numixWaitHead[i], NumixSpin, paper, NumixHalo));
+                    foreach (var kind in Kinds)
+                    {
+                        var hotspot = pack.HotspotOf(kind);
+                        var glyph = kind is KindWait or KindAppStarting
+                            ? CursorPackLoader.LoadAnimated(theme.Folder, kind, theme.Palette,
+                                hotspot.X, hotspot.Y, pack.FrameMs)
+                            : CursorPackLoader.LoadStatic(theme.Folder, kind, theme.Palette,
+                                hotspot.X, hotspot.Y);
+                        if (glyph != null)
+                            t[Key(pack.Style, theme.Id, kind)] = glyph;
+                    }
                 }
-                t[Key(NumixStyle, variant, KindWait)] = A(NumixWaitPeriodMs / SpinFrames, numixWaitFrames);
-
-                // appstarting: the same spinner at source size beside the pointer, one turn per
-                // 1.1 s. The pointer layer is shared across frames so path caches key it once.
-                var numixWorkPointer = P(numixPointer, ink, paper, NumixHalo);
-                var numixWorkFrames = new CursorGlyph[SpinFrames];
-                for (int i = 0; i < SpinFrames; i++)
-                {
-                    numixWorkFrames[i] = G(32f, 2.6f, 2.3f, numixWorkPointer,
-                        P(numixWorkRing[i], NumixSpin, paper, NumixHalo),
-                        P(numixWorkHead[i], NumixSpin, paper, NumixHalo));
-                }
-                t[Key(NumixStyle, variant, KindAppStarting)] = A(NumixWorkPeriodMs / SpinFrames, numixWorkFrames);
             }
 
             return t;

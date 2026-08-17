@@ -1239,6 +1239,7 @@
                                         Animation="{Binding Value}"
                                         ClickSize="{Binding $parent[ListBox].DataContext.CursorClickSize}"
                                         ColorArgb="{Binding $parent[ListBox].DataContext.CursorClickColor}"
+                                        FillOpacity="{Binding $parent[ListBox].DataContext.CursorFillOpacity}"
                                         HoldSize="{Binding $parent[ListBox].DataContext.CursorHoldSize}" />
                                     <TextBlock
                                         Classes="tileText"
@@ -1249,10 +1250,13 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!--  the colour well and the three dials, gone entirely under "none" — there
+                    <!--  the colour well and the dials, gone entirely under "none" — there
                           is no highlight to colour, size or time then, and the tiles above
-                          already say so. The well shares the text card's picker (code-behind).  -->
-                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
+                          already say so. Pressure hides the colour too (it warps the pixels
+                          beneath rather than drawing anything), and only the ring shows the FILL
+                          dial.
+                          The well shares the text card's picker (code-behind).  -->
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightColorEnabled}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorClickColorHex, Mode=TwoWay}" DefaultValue="#FFFF0000" />
                         </Panel>
@@ -1289,7 +1293,21 @@
                         </Border>
                     </DockPanel>
 
-                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
+                    <DockPanel Classes="row" IsVisible="{Binding CursorRingFillEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorFillOpacity, Mode=TwoWay}" DefaultValue="0.15" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Fill opacity" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorFillOpacity, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHoldSizeEnabled}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorHoldSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
@@ -1307,7 +1325,7 @@
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorClickSize, Mode=TwoWay}" DefaultValue="1" />
                         </Panel>
-                        <TextBlock Classes="label" Text="Click size" />
+                        <TextBlock Classes="label" Text="Effect size" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
                             Max="4"

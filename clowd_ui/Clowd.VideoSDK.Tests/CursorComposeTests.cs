@@ -113,6 +113,18 @@ namespace Clowd.VideoSDK.Tests
                 return this;
             }
 
+            /// <summary>A screen frame with structure in it — what the press warp needs to have
+            /// any visible effect. Left of <paramref name="splitX"/> is blue, the rest red.</summary>
+            public MultiStreamSource SetSplit(int streamIndex, int size, int splitX)
+            {
+                using var surface = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Bgra8888, SKAlphaType.Premul));
+                surface.Canvas.Clear(Blue);
+                using var paint = new SKPaint { Color = Red };
+                surface.Canvas.DrawRect(new SKRect(splitX, 0, size, size), paint);
+                _streams[streamIndex] = surface.Snapshot();
+                return this;
+            }
+
             public bool TryGetFrame(Guid sourceId, int streamIndex, long sourceTimeTicks, out FrameRef frame)
             {
                 if (_streams.TryGetValue(streamIndex, out var image))
@@ -929,6 +941,136 @@ namespace Clowd.VideoSDK.Tests
             // late (progress 0.875): radius ≈ 14 — the same point is bare again
             var late = Render(p, (long)(1.35 * Sec), frames);
             AssertColor(Px(late, 20, 50), 255, 0, 0, tolerance: 3);
+        }
+
+        // -------------------------------------------------------------------------------- ring
+
+        [Fact]
+        public void Ring_rests_on_the_pointer_with_a_translucent_fill()
+        {
+            // no clicks anywhere: unlike the burst animations the ring is always on screen,
+            // resting at 18 DIP around the pointer
+            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "none");
+            ((CursorContent)cursor.Content).ClickAnimation = "ring";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+
+            // the outline (stroke centre at radius 18) is the colour, near enough opaque
+            Assert.True(Px(px, 50, 32).R > 150, "no ring outline at the resting radius");
+
+            // inside it the default 15% fill barely tints the screen
+            var centre = Px(px, 32, 32);
+            Assert.InRange(centre.R, 20, 80);
+            Assert.True(centre.B > 150, "the fill should stay translucent");
+
+            // and past the ring the screen is untouched
+            AssertColor(Px(px, 56, 32), 255, 0, 0, tolerance: 3);
+        }
+
+        [Fact]
+        public void Ring_closes_while_the_button_is_held()
+        {
+            // held since long before the composed instant: fully engaged at 0.65x → radius ~11.7
+            string capture = WriteCapture(Header,
+                Frame(0, 32, 32, buttons: 1),
+                MouseEvent("md", 0, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "none");
+            ((CursorContent)cursor.Content).ClickAnimation = "ring";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+
+            Assert.True(Px(px, 44, 32).R > 150, "no ring outline at the held radius");
+            AssertColor(Px(px, 50, 32), 255, 0, 0, tolerance: 3); // the resting radius is bare
+        }
+
+        [Fact]
+        public void Ring_fill_opacity_dials_the_inner_disc_only()
+        {
+            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "none");
+            var content = (CursorContent)cursor.Content;
+            content.ClickAnimation = "ring";
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+
+            content.FillOpacity = 0;
+            AssertColor(Px(Render(p, 5 * Sec, frames), 32, 32), 255, 0, 0, tolerance: 3);
+
+            content.FillOpacity = 0.8;
+            Assert.True(Px(Render(p, 5 * Sec, frames), 32, 32).R > 140,
+                "a strong fill should tint the disc strongly");
+
+            // a hand-edited NaN draws no fill rather than poisoning the alpha
+            content.FillOpacity = Double.NaN;
+            AssertColor(Px(Render(p, 5 * Sec, frames), 32, 32), 255, 0, 0, tolerance: 3);
+        }
+
+        [Fact]
+        public void Ring_radius_scales_with_click_size()
+        {
+            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            var (p, _, cursor) = CursorProject(capture, "none");
+            var content = (CursorContent)cursor.Content;
+            content.ClickAnimation = "ring";
+            content.ClickSize = 0.5; // resting radius 9
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+            Assert.True(Px(px, 41, 32).R > 150, "no ring outline at the halved radius");
+            AssertColor(Px(px, 50, 32), 255, 0, 0, tolerance: 3);
+        }
+
+        // ------------------------------------------------------------------------------- press
+
+        [Fact]
+        public void Press_stretches_the_screen_pixels_toward_the_held_pointer()
+        {
+            // the screen splits blue|red at x=40 and the pointer holds at (24,32). Fully engaged,
+            // the pixel at (39,32) — 15px out — samples ~1.22x further along its ray (x≈42.3),
+            // across the split: blue turns red exactly where the paper is being dragged inward.
+            string capture = WriteCapture(Header,
+                Frame(0, 24, 32, buttons: 1),
+                MouseEvent("md", 0, 24, 32));
+            var (p, _, cursor) = CursorProject(capture, "none");
+            ((CursorContent)cursor.Content).ClickAnimation = "pressure";
+
+            using var frames = new MultiStreamSource().SetSplit(0, 64, splitX: 40);
+            var held = Render(p, 5 * Sec, frames);
+            Assert.True(Px(held, 39, 32).R > 100, "the held press did not pull the split inward");
+
+            // the warp draws nothing of its own: a pixel whose stretched sample is still blue
+            // stays blue, and the pointer itself is not painted over
+            Assert.True(Px(held, 10, 32).B > 150, "the warp should only move pixels, not tint them");
+
+            // no buttons, no events: the same instant composes the plain split
+            string idleCapture = WriteCapture(Header, Frame(0, 24, 32));
+            var (idleProject, _, idleCursor) = CursorProject(idleCapture, "none");
+            ((CursorContent)idleCursor.Content).ClickAnimation = "pressure";
+            AssertColor(Px(Render(idleProject, 5 * Sec, frames), 39, 32), 255, 0, 0, tolerance: 3);
+        }
+
+        [Fact]
+        public void Press_relaxes_back_out_after_the_release()
+        {
+            string capture = WriteCapture(Header,
+                Frame(0, 24, 32, buttons: 1),
+                Frame(1000, 24, 32),
+                MouseEvent("md", 0, 24, 32),
+                MouseEvent("mu", 1000, 24, 32));
+            var (p, _, cursor) = CursorProject(capture, "none");
+            ((CursorContent)cursor.Content).ClickAnimation = "pressure";
+
+            using var frames = new MultiStreamSource().SetSplit(0, 64, splitX: 40);
+
+            // 50ms after the release the warp is still relaxing — the split is still pulled in
+            Assert.True(Px(Render(p, (long)(1.05 * Sec), frames), 39, 32).R > 100,
+                "the release should ease out, not snap");
+
+            // 400ms after it (past the 260ms release) the screen is exactly itself again
+            AssertColor(Px(Render(p, (long)(1.4 * Sec), frames), 39, 32), 255, 0, 0, tolerance: 3);
         }
     }
 }

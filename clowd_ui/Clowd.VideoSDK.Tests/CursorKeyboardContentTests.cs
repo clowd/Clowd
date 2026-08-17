@@ -59,6 +59,7 @@ namespace Clowd.VideoSDK.Tests
                     Size = 1.5,
                     ClickAnimation = "ripple",
                     ClickColor = 0xFF3366CC,
+                    FillOpacity = 0.4,
                     HoldSize = 1.25,
                     ClickSize = 0.75,
                     AnimationSpeed = 2.0,
@@ -141,6 +142,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(1.5, cursor.Size);
             Assert.Equal("ripple", cursor.ClickAnimation);
             Assert.Equal(0xFF3366CCu, cursor.ClickColor);
+            Assert.Equal(0.4, cursor.FillOpacity);
             Assert.Equal(1.25, cursor.HoldSize);
             Assert.Equal(0.75, cursor.ClickSize);
             Assert.Equal(2.0, cursor.AnimationSpeed);
@@ -196,6 +198,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(1.0, cursor.Size);
             Assert.Equal("none", cursor.ClickAnimation);
             Assert.Equal(0xFFFF0000u, cursor.ClickColor);
+            Assert.Equal(CursorContent.DefaultFillOpacity, cursor.FillOpacity);
             Assert.Equal(1.0, cursor.HoldSize);
             Assert.Equal(1.0, cursor.ClickSize);
             Assert.Equal(1.0, cursor.AnimationSpeed);
@@ -214,17 +217,19 @@ namespace Clowd.VideoSDK.Tests
             var cursor = new CursorContent
             {
                 SourceId = Guid.NewGuid(), Style = "vision", Variant = "light", Size = 2.0,
-                HoldSize = 1.5, ClickSize = 0.5, AnimationSpeed = 3.0,
+                FillOpacity = 0.6, HoldSize = 1.5, ClickSize = 0.5, AnimationSpeed = 3.0,
             };
             var cursorCopy = (CursorContent)cursor.Clone();
             cursorCopy.Style = "native";
             cursorCopy.Size = 0.5;
+            cursorCopy.FillOpacity = 0.1;
             cursorCopy.HoldSize = 4;
             cursorCopy.ClickSize = 4;
             cursorCopy.AnimationSpeed = 4;
             Assert.Equal("vision", cursor.Style);
             Assert.Equal("light", cursor.Variant);
             Assert.Equal(2.0, cursor.Size);
+            Assert.Equal(0.6, cursor.FillOpacity);
             Assert.Equal(1.5, cursor.HoldSize);
             Assert.Equal(0.5, cursor.ClickSize);
             Assert.Equal(3.0, cursor.AnimationSpeed);
@@ -356,6 +361,29 @@ namespace Clowd.VideoSDK.Tests
             cursor.HoldSize = factor;
             cursor.ClickSize = factor;
             cursor.AnimationSpeed = factor;
+
+            Assert.Empty(project.Validate());
+        }
+
+        [Theory]
+        [InlineData(-0.1)]
+        [InlineData(1.1)]
+        [InlineData(Double.NaN)]
+        public void Validate_rejects_out_of_range_fill_opacity(double opacity)
+        {
+            var project = OverlayProject(out _, out var cursorItem, out _);
+            ((CursorContent)cursorItem.Content).FillOpacity = opacity;
+
+            Assert.Contains(project.Validate(), e => e.Contains("fill opacity"));
+        }
+
+        [Theory]
+        [InlineData(0.0)]
+        [InlineData(1.0)]
+        public void Validate_accepts_boundary_fill_opacity(double opacity)
+        {
+            var project = OverlayProject(out _, out var cursorItem, out _);
+            ((CursorContent)cursorItem.Content).FillOpacity = opacity;
 
             Assert.Empty(project.Validate());
         }
