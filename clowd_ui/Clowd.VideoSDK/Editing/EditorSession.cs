@@ -1325,11 +1325,7 @@ namespace Clowd.VideoSDK.Editing
                     TimelineStartTicks = segment.TimelineStartTicks,
                     DurationTicks = segment.DurationTicks,
                     Content = cursor
-                        ? new CursorContent
-                        {
-                            SourceId = source.Id,
-                            StreamIndex = source.CursorStreamIndex ?? -1,
-                        }
+                        ? new CursorContent { SourceId = source.Id }
                         : new KeyboardContent { SourceId = source.Id },
                     // keyboard blocks anchor bottom-centre at half canvas width; the cursor's
                     // position is data-driven and ignores the transform entirely.
@@ -1337,8 +1333,8 @@ namespace Clowd.VideoSDK.Editing
                         ? new Transform()
                         : new Transform { X = 0.5, Y = 0.85, Scale = 0.5 },
                     // a themed glyph needs a shadow to read over light and dark alike, so a cursor
-                    // row starts with one (the native style ignores it — the recorded box carries
-                    // the system cursor's own). A keystroke block draws its own pill and does not.
+                    // row starts with one (the native style ignores it — see
+                    // FrameComposer.DrawCursorItem). A keystroke block draws its own pill and does not.
                     Surround = cursor
                         ? Surround.Create(SurroundKind.Shadow, cursor: true)
                         : null,

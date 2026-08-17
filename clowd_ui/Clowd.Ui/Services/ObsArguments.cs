@@ -184,10 +184,10 @@ namespace Clowd.UI
         public static void WriteSettingsFile(string path, SettingsRecording settings)
         {
             // input capture (which rides with multi-track, see Build) hands both cursor and click
-            // highlighting to the editor: the cursor is recorded as its own 512x512 track and the
-            // clicks live in the jsonl, so baking either into the screen frames would double them
-            // up in the composed output. Single-track recordings keep the legacy behavior — the
-            // flattened file is all the user ever gets, so the settings apply directly.
+            // highlighting to the editor: the jsonl carries the pointer positions and the cursor
+            // sprites alongside the clicks, so baking either into the screen frames would double
+            // them up in the composed output. Single-track recordings keep the legacy behavior —
+            // the flattened file is all the user ever gets, so the settings apply directly.
             var inputCapture = UsesMultiTrack(settings);
 
             var model = new ObsSettingsJson

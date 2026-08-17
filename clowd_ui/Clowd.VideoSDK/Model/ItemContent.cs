@@ -147,20 +147,16 @@ public sealed class ZoomContent : ItemContent
 /// data-driven (the captured cursor path), never the item's <see cref="Item.Transform"/>.</summary>
 public sealed class CursorContent : ItemContent
 {
-    /// <summary>The style names the editor offers, in menu order. <c>native</c> draws the
-    /// recorded 512px cursor box stream; every other style draws a themed vector glyph at the
-    /// captured position. An unrecognized value renders as the theme's arrow.</summary>
-    public static readonly IReadOnlyList<string> Styles = new[] { "native", "vision" };
+    /// <summary>The style names the editor offers, in menu order. <c>native</c> draws the cursor
+    /// sprites the recorder rasterized into the capture file (the real cursor, custom app cursors
+    /// included); every other style draws a themed vector glyph at the captured position. An
+    /// unrecognized value renders as the theme's arrow.</summary>
+    public static readonly IReadOnlyList<string> Styles = new[] { "native", "vision", "point" };
 
     /// <summary>The click animation names the editor offers, in menu order.</summary>
     public static readonly IReadOnlyList<string> ClickAnimations = new[] { "none", "ripple", "pulse" };
 
     public Guid SourceId { get; set; }
-
-    /// <summary>Stream index of the recording's 512x512 cursor-box video stream
-    /// (<see cref="Source.CursorStreamIndex"/>), or -1 when the recording carries none — the
-    /// <c>native</c> style then draws nothing and the themed styles are unaffected.</summary>
-    public int StreamIndex { get; set; } = -1;
 
     /// <summary>One of <see cref="Styles"/>.</summary>
     public string Style { get; set; } = "vision";
@@ -171,8 +167,8 @@ public sealed class CursorContent : ItemContent
     /// not offer falls back to its default rather than drawing nothing.</summary>
     public string Variant { get; set; }
 
-    /// <summary>Glyph size multiplier over the style's base size, validated to 0.25..5.
-    /// Ignored by the <c>native</c> style (the box stream is captured at recording scale).</summary>
+    /// <summary>Size multiplier, validated to 0.25..5: over the style's base size for themed
+    /// glyphs, over the sprite's recorded pixel size for the <c>native</c> style.</summary>
     public double Size { get; set; } = 1.0;
 
     /// <summary>One of <see cref="ClickAnimations"/>.</summary>
@@ -204,7 +200,6 @@ public sealed class CursorContent : ItemContent
     public override ItemContent Clone() => new CursorContent
     {
         SourceId = SourceId,
-        StreamIndex = StreamIndex,
         Style = Style,
         Variant = Variant,
         Size = Size,

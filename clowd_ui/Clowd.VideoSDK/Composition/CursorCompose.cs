@@ -7,10 +7,10 @@ namespace Clowd.VideoSDK.Composition
 {
     /// <summary>
     /// The pure pieces of cursor-overlay drawing: kind → glyph resolution, monitor/region math on
-    /// the capture header, and the primitive draws (the recorded 512-box, a themed vector glyph,
-    /// the click animations). <c>FrameComposer</c> owns placement — it resolves the screen item's
-    /// <see cref="PictureMapping"/>, applies its clips, and calls in here — so preview and render
-    /// share every number by construction.
+    /// the capture header, and the primitive draws (the recorded native cursor sprite, a themed
+    /// vector glyph, the click animations). <c>FrameComposer</c> owns placement — it resolves the
+    /// screen item's <see cref="PictureMapping"/>, applies its clips, and calls in here — so
+    /// preview and render share every number by construction.
     /// </summary>
     internal static class CursorCompose
     {
@@ -110,32 +110,54 @@ namespace Clowd.VideoSDK.Composition
             return first > 0 ? first : 1.0;
         }
 
-        // ------------------------------------------------------------------------------ box draw
+        // --------------------------------------------------------------------------- sprite draw
 
         /// <summary>
-        /// Draws the recorded cursor-box frame centred on the mapped hotspot: the box's pixels are
-        /// 1:1 with the screen's physical pixels (the recorder pins the sampled cursor position to
-        /// the box centre), so it scales by the same px→canvas factor as the screen frame itself.
-        /// Caller has already clipped to the screen item's rect.
+        /// Draws a recorded native cursor sprite with its hotspot on the mapped capture position:
+        /// sprite pixels are the screen's physical pixels (the recorder rasterizes the live cursor
+        /// at native size), so it scales by the same px→canvas factor as the screen frame itself,
+        /// times the item's <paramref name="sizeMultiplier"/>. An inverting cursor's XOR plane
+        /// (<see cref="CursorSprite.Mask"/>) draws over the bmp in
+        /// <see cref="SKBlendMode.Difference"/> — one draw handles all three mask values exactly:
+        /// a white pixel inverts the pixels beneath (|d − 1| = 1 − d), a black pixel is the
+        /// preserved no-op (|d − 0| = d), a transparent pixel does not apply. Caller has already
+        /// clipped to the screen item's rect.
         /// </summary>
-        internal static void DrawBox(SKCanvas target, SKImage box, in PictureMapping map,
-            double hotspotSourceX, double hotspotSourceY, double opacity)
+        internal static void DrawNativeSprite(SKCanvas target, CursorSprite sprite, in PictureMapping map,
+            double hotspotSourceX, double hotspotSourceY, double sizeMultiplier, double opacity)
         {
-            if (box == null || box.Width <= 0 || box.Height <= 0)
+            var bmp = sprite?.GetBmpImage();
+            if (bmp == null || sprite.Width <= 0 || sprite.Height <= 0 || sizeMultiplier <= 0)
                 return;
 
             var pos = map.Map(hotspotSourceX, hotspotSourceY);
-            float halfW = (float)(box.Width / 2.0 * map.ScaleX);
-            float halfH = (float)(box.Height / 2.0 * map.ScaleY);
-            var dest = new SKRect(pos.X - halfW, pos.Y - halfH, pos.X + halfW, pos.Y + halfH);
+            float left = pos.X - (float)(sprite.HotX * map.ScaleX * sizeMultiplier);
+            float top = pos.Y - (float)(sprite.HotY * map.ScaleY * sizeMultiplier);
+            var dest = new SKRect(left, top,
+                left + (float)(sprite.Width * map.ScaleX * sizeMultiplier),
+                top + (float)(sprite.Height * map.ScaleY * sizeMultiplier));
+            var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
 
             using var paint = new SKPaint
             {
                 IsAntialias = true,
                 Color = SKColors.White.WithAlpha(FrameComposer.AlphaByte(opacity)),
             };
-            var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
-            target.DrawImage(box, new SKRect(0, 0, box.Width, box.Height), dest, sampling, paint);
+            target.DrawImage(bmp, new SKRect(0, 0, bmp.Width, bmp.Height), dest, sampling, paint);
+
+            var mask = sprite.GetMaskImage();
+            if (mask != null)
+            {
+                // at opacity < 1 the Difference draw is a partial inversion, which reads as the
+                // sprite fading like any other — the exact-inversion contract holds at 1.
+                using var maskPaint = new SKPaint
+                {
+                    IsAntialias = true,
+                    BlendMode = SKBlendMode.Difference,
+                    Color = SKColors.White.WithAlpha(FrameComposer.AlphaByte(opacity)),
+                };
+                target.DrawImage(mask, new SKRect(0, 0, mask.Width, mask.Height), dest, sampling, maskPaint);
+            }
         }
 
         // ---------------------------------------------------------------------------- glyph draw
@@ -193,7 +215,16 @@ namespace Clowd.VideoSDK.Composition
         /// which is exactly what a single pass of every halo first would paint over.</summary>
         private static void PaintGlyph(SKCanvas target, CursorGlyph glyph)
         {
-            using var paint = new SKPaint { IsAntialias = true };
+            // Round joins/caps, not Skia's default miter: the halo stands in for an *outside*
+            // stroke in the source artwork, which offsets a corner into an arc. A miter join
+            // instead spikes out by up to the miter limit, which on a pointed shape (Point's
+            // triangular caps) visibly inflates the glyph.
+            using var paint = new SKPaint
+            {
+                IsAntialias = true,
+                StrokeJoin = SKStrokeJoin.Round,
+                StrokeCap = SKStrokeCap.Round,
+            };
 
             foreach (var layer in glyph.Paths)
             {
@@ -244,7 +275,7 @@ namespace Clowd.VideoSDK.Composition
         /// sped-up clip does not compress the animation). Ripple = expanding fading circle (the
         /// tracker's constants); pulse = the same fade with the radius shrinking instead. The item's
         /// own <c>HoldSize</c>, <c>ClickSize</c> and <c>AnimationSpeed</c> scale the held dot, the
-        /// sweep and the clock respectively. Drawn beneath the glyph/box — callers invoke this
+        /// sweep and the clock respectively. Drawn beneath the glyph/sprite — callers invoke this
         /// first.
         /// </summary>
         internal static void DrawClickAnimations(SKCanvas target, InputCapture capture,

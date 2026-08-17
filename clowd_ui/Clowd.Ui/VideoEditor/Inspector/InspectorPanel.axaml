@@ -1080,10 +1080,10 @@
                     <!--  tiles, not a drop-down: the styles differ only in how the arrow looks, so
                           a list of names would make the user try them one at a time. Each tile
                           draws that style's own artwork (CursorStylePreview reads the compositor's
-                          asset table), and native — which has no artwork, it replays the recorded
-                          cursor — shows a plain outline. No label row above them: tiles showing
-                          the cursors themselves do not need to be told they are the style, and
-                          the shape picker sets the precedent.  -->
+                          asset table), and native — which has no artwork, it draws the cursor the
+                          recording captured — shows one of those recorded sprites. No label row
+                          above them: tiles showing the cursors themselves do not need to be told
+                          they are the style, and the shape picker sets the precedent.  -->
                     <ListBox
                         x:Name="listCursorStyle"
                         Margin="0,0,-4,-4"
@@ -1112,6 +1112,7 @@
                                         Width="22"
                                         Height="22"
                                         VerticalAlignment="Center"
+                                        CapturePath="{Binding $parent[ListBox].DataContext.CursorCapturePath}"
                                         StyleName="{Binding Value}" />
                                     <TextBlock
                                         Classes="tileText"
@@ -1154,6 +1155,7 @@
                                         Width="22"
                                         Height="22"
                                         VerticalAlignment="Center"
+                                        CapturePath="{Binding $parent[ListBox].DataContext.CursorCapturePath}"
                                         StyleName="{Binding $parent[ListBox].DataContext.CursorStyle.Value}"
                                         VariantName="{Binding Value}" />
                                     <TextBlock
