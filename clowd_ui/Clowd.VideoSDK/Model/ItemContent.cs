@@ -147,11 +147,12 @@ public sealed class ZoomContent : ItemContent
 /// data-driven (the captured cursor path), never the item's <see cref="Item.Transform"/>.</summary>
 public sealed class CursorContent : ItemContent
 {
-    /// <summary>The style names the editor offers, in menu order. <c>native</c> draws the cursor
+    /// <summary>The style names the editor offers, in menu order. <c>none</c> draws no cursor at
+    /// all (the click highlight is its own setting and still draws); <c>native</c> draws the cursor
     /// sprites the recorder rasterized into the capture file (the real cursor, custom app cursors
     /// included); every other style draws a themed vector glyph at the captured position. An
     /// unrecognized value renders as the theme's arrow.</summary>
-    public static readonly IReadOnlyList<string> Styles = new[] { "native", "vision", "point" };
+    public static readonly IReadOnlyList<string> Styles = new[] { "none", "native", "vision", "point" };
 
     /// <summary>The click animation names the editor offers, in menu order.</summary>
     public static readonly IReadOnlyList<string> ClickAnimations = new[] { "none", "ripple", "pulse" };
