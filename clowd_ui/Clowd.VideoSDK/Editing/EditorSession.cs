@@ -790,6 +790,7 @@ namespace Clowd.VideoSDK.Editing
                         DurationTicks = item.DurationTicks,
                         Content = item.Content?.Clone(),
                         Transform = item.Transform?.Clone() ?? new Transform(),
+                        Surround = item.Surround?.Clone(),
                         Entry = item.Entry?.Clone(),
                         Exit = item.Exit?.Clone(),
                         Volume = item.Volume,
@@ -1335,6 +1336,12 @@ namespace Clowd.VideoSDK.Editing
                     Transform = cursor
                         ? new Transform()
                         : new Transform { X = 0.5, Y = 0.85, Scale = 0.5 },
+                    // a themed glyph needs a shadow to read over light and dark alike, so a cursor
+                    // row starts with one (the native style ignores it — the recorded box carries
+                    // the system cursor's own). A keystroke block draws its own pill and does not.
+                    Surround = cursor
+                        ? Surround.Create(SurroundKind.Shadow, cursor: true)
+                        : null,
                     // on a keyboard row entry/exit animate each keystroke ROW rather than the
                     // block (see FrameComposer.DrawKeyboard): rows slide up into place as they
                     // push the older ones along, and fade away once they have been read.

@@ -7,8 +7,9 @@ namespace Clowd.VideoSDK.Composition
     /// <summary>
     /// One filled/stroked shape of a themed cursor glyph. <see cref="PathData"/> is SVG path
     /// syntax accepted by <c>SKPath.ParseSvgPathData</c> and is expressed in the owning
-    /// <see cref="CursorGlyph.ViewBox"/> coordinate space. Layers are painted in list order
-    /// (first = bottom), which is the source SVG's document order.
+    /// <see cref="CursorGlyph.ViewBox"/> coordinate space, with holes spelled as reversed contours
+    /// (the nonzero fill rule, which is both SVG's default and Skia's). Layers are painted in list
+    /// order, each one's halo immediately under its own fill.
     /// </summary>
     public sealed class CursorGlyphPath
     {
@@ -25,13 +26,12 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>SVG path data, in viewBox units.</summary>
         public string PathData { get; }
 
-        /// <summary>Fill colour (ARGB; the source SVG's <c>fill</c> folded together with its
-        /// <c>opacity</c>). Never transparent — every stored layer is a real fill.</summary>
+        /// <summary>Fill colour (ARGB). Never transparent — every stored layer is a real fill.</summary>
         public SKColor Fill { get; }
 
         /// <summary>Contrast-halo colour (ARGB), or transparent when the layer has no halo.
-        /// The halo is a *centred* stroke, so a caller must paint the stroke pass first and the
-        /// fill on top, otherwise the halo eats half the glyph's ink.</summary>
+        /// The halo is a *centred* stroke, so a caller must paint the stroke first and this
+        /// layer's fill on top, otherwise the halo eats half of the layer's ink.</summary>
         public SKColor Stroke { get; }
 
         /// <summary>Halo width in viewBox units (0 when <see cref="Stroke"/> is transparent).</summary>
@@ -66,11 +66,32 @@ namespace Clowd.VideoSDK.Composition
         public float ViewBox { get; }
 
         /// <summary>The point of the glyph that sits on the sampled cursor position, in viewBox
-        /// units. See <see cref="CursorAssets"/> for how each kind's hotspot was derived.</summary>
+        /// units — the pack's own hotspot, off its <c>.cur</c> headers.</summary>
         public SKPoint Hotspot { get; }
 
         /// <summary>Layers, bottom-first.</summary>
         public IReadOnlyList<CursorGlyphPath> Paths { get; }
+    }
+
+    /// <summary>
+    /// One colourway of a cursor style. A style that ships more than one (see
+    /// <see cref="CursorAssets.Variants"/>) draws the same geometry in each — only the palette
+    /// differs — so <c>CursorContent.Variant</c> selects between them without changing anything
+    /// else about the glyph.
+    /// </summary>
+    public sealed class CursorVariant
+    {
+        internal CursorVariant(string id, string label)
+        {
+            Id = id;
+            Label = label;
+        }
+
+        /// <summary>The wire value stored in <c>CursorContent.Variant</c>.</summary>
+        public string Id { get; }
+
+        /// <summary>The picker's display name.</summary>
+        public string Label { get; }
     }
 
     /// <summary>
@@ -80,254 +101,427 @@ namespace Clowd.VideoSDK.Composition
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Artwork is icons8, normalised by hand into path data so nothing new is taken on beside the
-    /// pinned SkiaSharp (no SVG parser at runtime, no image assets). Normalisation rules applied:
-    /// <c>&lt;rect&gt;</c>/<c>&lt;polygon&gt;</c> primitives were expanded to explicit
-    /// <c>M…L…Z</c> paths with any <c>rotate()</c> baked into the emitted vertices; a layer's
-    /// <c>opacity</c> was folded into its fill alpha; and degenerate open "hairline" sub-paths —
-    /// contributing no area once implicitly closed — were dropped. No source path was reshaped.
+    /// A style covers a <b>kind</b> (see <see cref="Kinds"/> — the shapes the recorder reports, one
+    /// key per drawable <c>CursorKind</c>) in one or more <b>colourways</b>: one geometry, several
+    /// palettes, declared in <see cref="Variants"/> and selected by <c>CursorContent.Variant</c>.
+    /// A style that declares no colourway has exactly one, unnamed, and stores a null variant.
     /// </para>
     /// <para>
-    /// The five monochrome styles carry a white halo so a black glyph survives dark video; the two
-    /// paper/ink styles ship their own dark outline layers and get none.
+    /// The one style here is <c>vision</c> — the Vision Cursor pack by iDarques (CC BY-NC-ND 4.0),
+    /// which covers every drawable kind in a dark and a light colourway. It is read out of the
+    /// pack's own Photoshop sources rather than traced: <c>pointer128black.psd</c> and its White
+    /// twin carry every cursor as a shape layer, and their vector masks are the path data below at
+    /// the authored 128 document size. The constants are named after the PSD layer each came from.
     /// </para>
     /// <para>
-    /// Hotspot heuristics (all in viewBox units): <b>arrow</b> = the arrowhead's tip vertex read
-    /// off the source path — not the bounding-box corner, which sits outside the ink wherever the
-    /// tip is rounded; <b>hand</b> = the index fingertip, i.e. the mid-x of the index-finger column
-    /// at the finger's top edge; <b>ibeam</b> = the centre of the glyph bounds, matching the OS
-    /// I-beam whose hotspot is its middle. Every hotspot is inside its glyph's ink bounds
-    /// (asserted by <c>CursorAssetsTests</c>).
+    /// Faithfulness notes, all of them forced by what this table can hold (flat fills and one
+    /// centred contrast stroke per layer, no image assets and no SVG parser at runtime beyond the
+    /// pinned SkiaSharp):
     /// </para>
+    /// <list type="bullet">
+    /// <item>The pack strokes its shapes <i>outside</i> the path. A centred stroke painted under
+    /// the layer's own fill is the same picture at double the authored width, which is where the
+    /// 16/12/8 halo widths come from (the pack authors 8/6/4).</item>
+    /// <item>Photoshop marks a hole with a path operation and leaves the winding alone; the same
+    /// hole is spelled here as a reversed contour, which is what the nonzero fill rule wants.</item>
+    /// <item><c>wait</c> and <c>appstarting</c> are gradient-filled/stroked in the source (they are
+    /// the pack's two animated cursors). Each is flattened to the gradient's accent stop —
+    /// <see cref="Spin"/> — which is the colour that tells them apart from the plain pointer.</item>
+    /// <item>The <c>help</c> badge is live text in DIN Round Pro in the source, a font that cannot
+    /// be shipped, so that one glyph is traced from the PSD's own rasterised type layer.</item>
+    /// <item>Only one of the two diagonal-resize cursors is authored per file (the Black source has
+    /// the NESW one, the White source the NWSE one). Both colourways use the Black source's
+    /// geometry, mirrored about the viewBox midline for the other diagonal, so the pair matches.</item>
+    /// </list>
     /// <para>
-    /// Coverage gaps and substitutions: icons8 has no I-beam in the <c>softteal</c>,
-    /// <c>papercut</c> or <c>doodle</c> families (nor in the neighbouring <c>cotton</c>/<c>dusk</c>
-    /// ones), so <see cref="TryGet"/> returns null for those and the caller falls back to the
-    /// style's arrow, exactly as it does for <c>custom</c> and the unmodelled cursor kinds.
-    /// <c>softteal</c> has no hand-cursor either, so its "one finger" gesture — the same pointing
-    /// hand, same palette — stands in. <c>doodle</c> has neither, so its hand borrows
-    /// <c>papercut</c>'s hand-cursor (the closest playful colour icon that exists); its arrow is
-    /// icons8's doodle "select cursor".
+    /// Every glyph is checked against the pack's own rendered PNGs by <c>CursorAssetsTests</c>'
+    /// sibling verification, and every hotspot is the pack's own, off its <c>.cur</c> headers
+    /// scaled to 128 (pointer 2/32, link 7/32, alternate 16/2, the centred ones 16/16).
     /// </para>
     /// </remarks>
     public static class CursorAssets
     {
         /// <summary>The style <c>CursorContent.Style</c> defaults to.</summary>
-        public const string DefaultStyle = "ios-glyph";
+        public const string DefaultStyle = VisionStyle;
 
         /// <summary>The style that draws the recorded cursor box; never present in this table.</summary>
         public const string NativeStyle = "native";
 
-        /// <summary>Cursor kinds with dedicated artwork. Any other kind resolves to <c>arrow</c>.</summary>
+        private const string VisionStyle = "vision";
+
+        // Kind keys: the input-capture wire names, one per drawable CursorKind. `Custom` has none
+        // (it falls back to the arrow) and `Hidden` draws nothing.
         public const string KindArrow = "arrow";
-        public const string KindHand = "hand";
         public const string KindIBeam = "ibeam";
+        public const string KindWait = "wait";
+        public const string KindCross = "cross";
+        public const string KindUpArrow = "uparrow";
+        public const string KindSizeNwse = "sizenwse";
+        public const string KindSizeNesw = "sizenesw";
+        public const string KindSizeWe = "sizewe";
+        public const string KindSizeNs = "sizens";
+        public const string KindSizeAll = "sizeall";
+        public const string KindNo = "no";
+        public const string KindHand = "hand";
+        public const string KindAppStarting = "appstarting";
+        public const string KindHelp = "help";
+        public const string KindPen = "pen";
+        public const string KindPerson = "person";
 
-        private const uint Black = 0xFF000000;
-        private const uint Black35 = 0x59000000; // opacity=".35"
-        private const uint White = 0xFFFFFFFF;
-        private const uint Teal = 0xFF306263;
-        private const uint PaperBlue = 0xFF0037FF;
-        private const uint PaperSky = 0xFF52AFFF;
-        private const uint PaperInk35 = 0x59383838; // #383838 @ opacity=".35"
-        private const uint PaperSkinDeep = 0xFFFFA6A3;
-        private const uint PaperSkin = 0xFFFFC1BF;
-        private const uint DoodleBlue = 0xFF4B7BB2;
-
-        // Halo widths are 2 units at the ios-glyph 30-unit viewBox, carried across the other
-        // monochrome styles at the same visual weight (2/30 of the viewBox).
-        private const float Halo24 = 1.6f;
-        private const float Halo30 = 2.0f;
-        private const float Halo48 = 3.2f;
+        /// <summary>Every kind a style may carry artwork for. A style is free to cover only some;
+        /// the caller falls back to <see cref="KindArrow"/>, which every style must have.</summary>
+        public static IReadOnlyList<string> Kinds { get; } = Array.AsReadOnly(new[]
+        {
+            KindArrow, KindIBeam, KindWait, KindCross, KindUpArrow, KindSizeNwse, KindSizeNesw,
+            KindSizeWe, KindSizeNs, KindSizeAll, KindNo, KindHand, KindAppStarting, KindHelp,
+            KindPen, KindPerson,
+        });
 
         /// <summary>The themed styles, in picker order. Excludes <see cref="NativeStyle"/>.</summary>
         public static IReadOnlyList<string> Styles { get; } = Array.AsReadOnly(new[]
         {
-            "ios-glyph", "material", "fluent", "plumpy", "softteal", "papercut", "doodle",
+            VisionStyle,
         });
 
         /// <summary>
-        /// The glyph for a (style, kind) pair, or null when the pair has no artwork — an unknown
-        /// or <c>native</c> style, an unknown kind, or one of the documented per-style gaps. A
-        /// caller that gets null for a kind should retry with <see cref="KindArrow"/>.
+        /// The colourways a style offers, in picker order, or empty for a style with only one —
+        /// whose stored variant is then null, which is also what a project written before
+        /// colourways existed holds, so nothing needs migrating.
         /// </summary>
-        public static CursorGlyph TryGet(string style, string kind)
+        public static IReadOnlyList<CursorVariant> Variants(string style)
+            => style != null && VariantTable.TryGetValue(style, out var variants)
+                ? variants
+                : Array.Empty<CursorVariant>();
+
+        /// <summary>
+        /// The variant id a (style, variant) pair actually resolves to: the stored one when the
+        /// style offers it, else the style's first — an unrecognised colourway degrades to the
+        /// style's default the way an unrecognised style degrades to the default style. Null when
+        /// the style has no colourways to choose between (or is not a themed style at all).
+        /// </summary>
+        public static string ResolveVariant(string style, string variant)
+        {
+            var variants = Variants(style);
+            if (variants.Count == 0)
+                return null;
+            foreach (var candidate in variants)
+            {
+                if (string.Equals(candidate.Id, variant, StringComparison.OrdinalIgnoreCase))
+                    return candidate.Id;
+            }
+            return variants[0].Id;
+        }
+
+        /// <summary>The glyph for a (style, kind) pair in the style's default colourway; see the
+        /// three-argument overload.</summary>
+        public static CursorGlyph TryGet(string style, string kind) => TryGet(style, null, kind);
+
+        /// <summary>
+        /// The glyph for a (style, colourway, kind) triple, or null when it has no artwork — an
+        /// unknown or <c>native</c> style, an unknown kind, or a kind the style does not cover. A
+        /// caller that gets null for a kind should retry with <see cref="KindArrow"/>. An
+        /// unrecognised <paramref name="variant"/> is not a miss: it resolves to the style's
+        /// default (see <see cref="ResolveVariant"/>).
+        /// </summary>
+        public static CursorGlyph TryGet(string style, string variant, string kind)
         {
             if (string.IsNullOrEmpty(style) || string.IsNullOrEmpty(kind))
                 return null;
-            return Table.TryGetValue(style + "/" + kind, out var glyph) ? glyph : null;
+            return Table.TryGetValue(Key(style, ResolveVariant(style, variant), kind), out var glyph)
+                ? glyph
+                : null;
         }
+
+        /// <summary>The table key: a style with one colourway is keyed without a variant segment,
+        /// so giving a style colourways later is a table change and not a lookup change.</summary>
+        private static string Key(string style, string variant, string kind)
+            => variant == null ? style + "/" + kind : style + "/" + variant + "/" + kind;
+
+        private static readonly Dictionary<string, CursorVariant[]> VariantTable
+            = new Dictionary<string, CursorVariant[]>(StringComparer.OrdinalIgnoreCase)
+            {
+                // Dark first: an ink glyph with a paper halo is the one that reads on arbitrary
+                // video without being chosen, so it is what an unset variant draws.
+                [VisionStyle] = new[]
+                {
+                    new CursorVariant("dark", "Dark"),
+                    new CursorVariant("light", "Light"),
+                },
+            };
 
         private static readonly Dictionary<string, CursorGlyph> Table = BuildTable();
 
-        private static CursorGlyphPath P(string pathData, uint fill, uint stroke = 0, float strokeWidth = 0)
+        private static CursorGlyphPath P(string pathData, uint fill, uint stroke, float strokeWidth)
             => new CursorGlyphPath(pathData, fill, stroke, strokeWidth);
 
         private static CursorGlyph G(float viewBox, float hotspotX, float hotspotY, params CursorGlyphPath[] paths)
             => new CursorGlyph(viewBox, hotspotX, hotspotY, paths);
 
+        // ---------------------------------------------------------------------- vision palette
+
+        /// <summary>Vision's two base colours. They trade places between the colourways: the dark
+        /// one fills in <see cref="Ink"/> and haloes in <see cref="Paper"/>, the light one the
+        /// other way round.</summary>
+        private const uint Ink = 0xFF0C1E35;
+
+        private const uint Paper = 0xFFFFFFFF;
+
+        /// <summary>The "no entry" badge's red, and the accent the two animated cursors are built
+        /// on. Both are the same in every colourway — the source authors them that way.</summary>
+        private const uint Deny = 0xFFCF0000;
+
+        private const uint Spin = 0xFF50CAFF;
+
+        /// <summary>The pack's 8-, 6- and 4-unit outside strokes as the centred widths that draw
+        /// the same picture.</summary>
+        private const float Halo = 16f;
+
+        private const float HaloMid = 12f;
+
+        private const float HaloThin = 8f;
+
+        // --------------------------------------------------------------------- vision artwork
+        // Generated from the pack's PSD vector masks; see the class remarks. Each constant is
+        // named for the Photoshop layer it came from.
+
+        private const string VisionPointer =
+            "M40 65C37.737 66.694 34.882 67.303 32 67C26 65.667 20 64.333 14 63" +
+            "C12.481 62.769 11.077 62.085 10 61C8.43 59.419 7.752 57.193 8 55C8 41 8 27 8 13" +
+            "C7.826 11.354 8.627 9.786 10 9C11.227 8.297 12.748 8.308 14 9" +
+            "C25.333 17.667 36.667 26.333 48 35C48.925 36.194 49.605 37.549 50 39" +
+            "C50.534 40.962 50.527 43.026 50 45C47.333 51 44.667 57 42 63" +
+            "C41.425 63.763 40.757 64.433 40 65Z";
+
+        private const string VisionText =
+            "M64.139 25.839C64.139 25.839 64.396 25.839 64.396 25.839" +
+            "C66.432 25.839 68.083 27.49 68.083 29.527C68.083 29.527 68.083 98.661 68.083 98.661" +
+            "C68.083 100.697 66.432 102.348 64.396 102.348" +
+            "C64.396 102.348 64.139 102.348 64.139 102.348" +
+            "C62.103 102.348 60.452 100.697 60.452 98.661" +
+            "C60.452 98.661 60.452 29.527 60.452 29.527C60.452 27.49 62.103 25.839 64.139 25.839Z";
+
+        private const string VisionLink =
+            "M15 42C13.598 41.882 10.661 41.97 9 44C7.406 45.948 7.233 49.13 9 52" +
+            "C12.522 57.798 16.525 63.157 21 68C24.915 72.236 28.497 75.195 32.064 77.169" +
+            "C38.44 80.697 45.665 82.325 53 82C56.792 81.769 60.302 80.452 63 78" +
+            "C64.625 76.523 65.883 74.695 67 72C69.282 66.497 68.708 61.39 69 54" +
+            "C69.134 50.602 69.352 47.114 67 44C65.561 42.094 63.485 40.773 61 40" +
+            "C56.199 39.18 51.108 38.419 47 38C43.925 37.686 39.636 37.333 37 34" +
+            "C35.338 31.898 34.74 29.104 35 26C35 22 35 18 35 14C35 10.708 32.292 8 29 8" +
+            "C25.708 8 23 10.708 23 14C23 21.333 23 28.667 23 36C23 40 23 44 23 48" +
+            "C21.404 44.811 18.511 42.296 15 42Z";
+
+        private const string VisionAlternate =
+            "M64 8C62.427 8 60.944 8.742 60 10C54.667 18 49.333 26 44 34" +
+            "C43.864 34.652 43.852 35.327 44 36C44.271 37.228 45.149 38.286 46 39" +
+            "C49.797 42.186 59.965 42 64 42C68.035 42 78.203 42.186 82 39" +
+            "C82.851 38.286 83.729 37.228 84 36C84.148 35.327 84.136 34.652 84 34" +
+            "C78.667 26 73.333 18 68 10C67.056 8.742 65.573 8 64 8Z";
+
+        private const string VisionBusy =
+            "M64 33.75C80.707 33.75 94.25 47.293 94.25 64C94.25 80.707 80.707 94.25 64 94.25" +
+            "C47.293 94.25 33.75 80.707 33.75 64C33.75 47.293 47.293 33.75 64 33.75ZM64 44.062" +
+            "C52.989 44.062 44.062 52.989 44.062 64C44.062 75.011 52.989 83.938 64 83.938" +
+            "C75.011 83.938 83.938 75.011 83.938 64C83.938 52.989 75.011 44.062 64 44.062Z";
+
+        private const string VisionWork =
+            "M40 65C37.737 66.694 34.882 67.303 32 67C26 65.667 20 64.333 14 63" +
+            "C12.481 62.769 11.077 62.085 10 61C8.43 59.419 7.752 57.193 8 55C8 41 8 27 8 13" +
+            "C7.826 11.354 8.627 9.786 10 9C11.227 8.297 12.748 8.308 14 9" +
+            "C25.333 17.667 36.667 26.333 48 35C48.925 36.194 49.605 37.549 50 39" +
+            "C50.534 40.962 50.527 43.026 50 45C47.333 51 44.667 57 42 63" +
+            "C41.425 63.763 40.757 64.433 40 65Z";
+
+        private const string VisionCrossTop =
+            "M64.062 30.333C65.614 30.314 67.068 29.571 68 28.333" +
+            "C70.667 24.333 73.333 20.333 76 16.333C76.181 15.653 76.204 14.975 76 14.333" +
+            "C74.917 10.92 68.082 10.388 66 10.333C65.656 10.324 64 10.333 64 10.333" +
+            "C64 10.333 62.344 10.324 62 10.333C59.918 10.388 53.083 10.92 52 14.333" +
+            "C51.796 14.975 51.819 15.653 52 16.333C54.667 20.333 57.333 24.333 60 28.333" +
+            "C60.958 29.605 62.466 30.353 64.062 30.333Z";
+
+        private const string VisionCrossBottom =
+            "M63.938 97.667C62.386 97.686 60.932 98.429 60 99.667" +
+            "C57.333 103.667 54.667 107.667 52 111.667C51.819 112.347 51.796 113.025 52 113.667" +
+            "C53.083 117.08 59.918 117.612 62 117.667C62.344 117.676 64 117.667 64 117.667" +
+            "C64 117.667 65.656 117.676 66 117.667C68.082 117.612 74.917 117.08 76 113.667" +
+            "C76.204 113.025 76.181 112.347 76 111.667C73.333 107.667 70.667 103.667 68 99.667" +
+            "C67.042 98.395 65.534 97.647 63.938 97.667Z";
+
+        private const string VisionCrossRight =
+            "M97.667 64.062C97.686 65.614 98.429 67.068 99.667 68" +
+            "C103.667 70.667 107.667 73.333 111.667 76C112.347 76.181 113.025 76.204 113.667 76" +
+            "C117.08 74.917 117.612 68.082 117.667 66C117.676 65.656 117.667 64 117.667 64" +
+            "C117.667 64 117.676 62.344 117.667 62C117.612 59.918 117.08 53.083 113.667 52" +
+            "C113.025 51.796 112.347 51.819 111.667 52C107.667 54.667 103.667 57.333 99.667 60" +
+            "C98.395 60.958 97.647 62.466 97.667 64.062Z";
+
+        private const string VisionCrossLeft =
+            "M30.333 63.938C30.314 62.386 29.571 60.932 28.333 60" +
+            "C24.333 57.333 20.333 54.667 16.333 52C15.653 51.819 14.975 51.796 14.333 52" +
+            "C10.92 53.083 10.388 59.918 10.333 62C10.324 62.344 10.333 64 10.333 64" +
+            "C10.333 64 10.324 65.656 10.333 66C10.388 68.082 10.92 74.917 14.333 76" +
+            "C14.975 76.204 15.653 76.181 16.333 76C20.333 73.333 24.333 70.667 28.333 68" +
+            "C29.605 67.042 30.353 65.534 30.333 63.938Z";
+
+        private const string VisionCapTop =
+            "M63.938 9.667C62.386 9.686 60.932 10.429 60 11.667" +
+            "C57.333 15.667 54.667 19.667 52 23.667C51.819 24.347 51.796 25.025 52 25.667" +
+            "C53.083 29.08 59.918 29.612 62 29.667C62.344 29.676 64 29.667 64 29.667" +
+            "C64 29.667 65.656 29.676 66 29.667C68.082 29.612 74.917 29.08 76 25.667" +
+            "C76.204 25.025 76.181 24.347 76 23.667C73.333 19.667 70.667 15.667 68 11.667" +
+            "C67.042 10.395 65.534 9.647 63.938 9.667Z";
+
+        private const string VisionCapBottom =
+            "M64.062 118.333C65.614 118.314 67.068 117.571 68 116.333" +
+            "C70.667 112.333 73.333 108.333 76 104.333C76.181 103.653 76.204 102.975 76 102.333" +
+            "C74.917 98.92 68.082 98.388 66 98.333C65.656 98.324 64 98.333 64 98.333" +
+            "C64 98.333 62.344 98.324 62 98.333C59.918 98.388 53.083 98.92 52 102.333" +
+            "C51.796 102.975 51.819 103.653 52 104.333C54.667 108.333 57.333 112.333 60 116.333" +
+            "C60.958 117.605 62.466 118.353 64.062 118.333Z";
+
+        private const string VisionCapLeft =
+            "M9.667 64.062C9.686 65.614 10.429 67.068 11.667 68" +
+            "C15.667 70.667 19.667 73.333 23.667 76C24.347 76.181 25.025 76.204 25.667 76" +
+            "C29.08 74.917 29.612 68.082 29.667 66C29.676 65.656 29.667 64 29.667 64" +
+            "C29.667 64 29.676 62.344 29.667 62C29.612 59.918 29.08 53.083 25.667 52" +
+            "C25.025 51.796 24.347 51.819 23.667 52C19.667 54.667 15.667 57.333 11.667 60" +
+            "C10.395 60.958 9.647 62.466 9.667 64.062Z";
+
+        private const string VisionCapRight =
+            "M118.333 63.938C118.314 62.386 117.571 60.932 116.333 60" +
+            "C112.333 57.333 108.333 54.667 104.333 52C103.653 51.819 102.975 51.796 102.333 52" +
+            "C98.92 53.083 98.388 59.918 98.333 62C98.324 62.344 98.333 64 98.333 64" +
+            "C98.333 64 98.324 65.656 98.333 66C98.388 68.082 98.92 74.917 102.333 76" +
+            "C102.975 76.204 103.653 76.181 104.333 76C108.333 73.333 112.333 70.667 116.333 68" +
+            "C117.605 67.042 118.353 65.534 118.333 63.938Z";
+
+        private const string VisionCapNorthEast =
+            "M101.809 25.103C100.865 24.184 99.694 24 99.083 23.917" +
+            "C90.779 22.785 84.477 24.077 83.083 25.917C82.57 26.594 82.237 27.294 82.054 27.976" +
+            "C81.438 30.264 82.247 33.609 86.297 37.875C86.534 38.125 87.711 39.289 87.711 39.289" +
+            "C87.711 39.289 88.875 40.466 89.125 40.703C93.391 44.753 96.736 45.562 99.024 44.946" +
+            "C99.701 44.764 100.401 44.433 101.083 43.917" +
+            "C102.994 42.471 104.236 35.732 103.083 27.917" +
+            "C102.982 27.232 102.77 26.039 101.809 25.103Z";
+
+        private const string VisionCapSouthWest =
+            "M25.941 102.147C26.885 103.066 28.056 103.25 28.667 103.333" +
+            "C36.971 104.465 43.273 103.173 44.667 101.333" +
+            "C45.18 100.656 45.513 99.956 45.696 99.274C46.312 96.986 45.503 93.641 41.453 89.375" +
+            "C41.216 89.125 40.039 87.961 40.039 87.961C40.039 87.961 38.875 86.784 38.625 86.547" +
+            "C34.359 82.497 31.015 81.688 28.726 82.304C28.049 82.486 27.349 82.817 26.667 83.333" +
+            "C24.756 84.779 23.514 91.518 24.667 99.333" +
+            "C24.768 100.018 24.981 101.211 25.941 102.147Z";
+
+        private const string VisionCapNorthWest =
+            "M26.191 25.103C27.135 24.184 28.306 24 28.917 23.917" +
+            "C37.221 22.785 43.523 24.077 44.917 25.917C45.43 26.594 45.763 27.294 45.946 27.976" +
+            "C46.562 30.264 45.753 33.609 41.703 37.875C41.466 38.125 40.289 39.289 40.289 39.289" +
+            "C40.289 39.289 39.125 40.466 38.875 40.703C34.609 44.753 31.264 45.562 28.976 44.946" +
+            "C28.299 44.764 27.599 44.433 26.917 43.917C25.006 42.471 23.764 35.732 24.917 27.917" +
+            "C25.018 27.232 25.23 26.039 26.191 25.103Z";
+
+        private const string VisionCapSouthEast =
+            "M102.059 102.147C101.115 103.066 99.944 103.25 99.333 103.333" +
+            "C91.029 104.465 84.727 103.173 83.333 101.333" +
+            "C82.82 100.656 82.487 99.956 82.304 99.274C81.688 96.986 82.497 93.641 86.547 89.375" +
+            "C86.784 89.125 87.961 87.961 87.961 87.961C87.961 87.961 89.125 86.784 89.375 86.547" +
+            "C93.641 82.497 96.985 81.688 99.274 82.304" +
+            "C99.951 82.486 100.651 82.817 101.333 83.333" +
+            "C103.244 84.779 104.486 91.518 103.333 99.333" +
+            "C103.232 100.018 103.019 101.211 102.059 102.147Z";
+
+        private const string VisionDenyBadge =
+            "M49.565 15.565C56.985 8.145 69.015 8.145 76.435 15.565" +
+            "C83.855 22.985 83.855 35.015 76.435 42.435C69.015 49.855 56.985 49.855 49.565 42.435" +
+            "C42.145 35.015 42.145 22.985 49.565 15.565ZM53.696 19.696" +
+            "C48.557 24.834 48.557 33.166 53.696 38.304C58.834 43.443 67.166 43.443 72.304 38.304" +
+            "C77.443 33.166 77.443 24.834 72.304 19.696C67.166 14.557 58.834 14.557 53.696 19.696" +
+            "ZM49.652 19.895C49.652 19.895 53.895 15.652 53.895 15.652" +
+            "C53.895 15.652 75.573 37.331 75.573 37.331C75.573 37.331 71.331 41.573 71.331 41.573" +
+            "C71.331 41.573 49.652 19.895 49.652 19.895Z";
+
+        private const string VisionPersonBadge =
+            "M33.008 60.234C28.758 60.234 25.448 63.84 25.415 67.828" +
+            "C25.385 71.31 27.864 74.518 31.49 75.422C28.693 75.833 26.109 76.848 23.896 78.459" +
+            "C22.266 79.646 16.48 84.358 17.821 89.091C18.46 91.35 21.656 93.803 28.452 95.166" +
+            "C31.481 95.773 34.536 95.773 37.565 95.166C44.361 93.803 47.556 91.35 48.196 89.091" +
+            "C49.537 84.358 43.751 79.646 42.121 78.459C39.908 76.848 37.324 75.833 34.527 75.422" +
+            "C38.153 74.518 40.632 71.31 40.602 67.828C40.569 63.84 37.259 60.234 33.008 60.234Z";
+
+        private const string VisionPen =
+            "M52 40C51.037 38.837 49.121 36.698 46 36C44.484 35.661 40.747 35.253 38 38" +
+            "C35.253 40.747 35.661 44.484 36 46C36.698 49.121 38.837 51.037 40 52" +
+            "C46.68 57.532 69.338 73.686 84 84C73.686 69.338 57.532 46.68 52 40ZM12 24" +
+            "C13.42 25.893 15.432 27.254 17.75 27.75C19.298 28.081 23.037 28.463 25.75 25.75" +
+            "C28.463 23.037 28.081 19.298 27.75 17.75C27.254 15.432 25.893 13.42 24 12" +
+            "C18 10 12 8 6 6C8 12 10 18 12 24Z";
+
+        private const string VisionHelpBadge =
+            "M65.25 46.78C68.66 45.03 68.8 40.61 65.5 38.84C61.23 36.56 56.82 42 60.14 45.45" +
+            "C61.68 47.06 63.69 47.58 65.25 46.78ZM65.21 36.76C65.96 36.42 66.74 35.69 67.08 35" +
+            "C67.24 34.68 67.47 34.3 67.58 34.17C67.7 34.03 67.88 33.65 67.98 33.32" +
+            "C68.09 32.99 68.36 32.54 68.59 32.33C68.81 32.12 69 31.86 69 31.75" +
+            "C69 31.65 69.24 31.33 69.54 31.04C69.84 30.76 70.27 30.29 70.5 30" +
+            "C70.73 29.72 71.14 29.24 71.42 28.93C71.87 28.43 72.21 27.93 72.78 26.93" +
+            "C74.11 24.6 74.11 20.88 72.78 18.57C72.67 18.38 72.43 17.97 72.25 17.66" +
+            "C71.73 16.78 70.17 15.33 69.33 14.97C68.92 14.79 68.47 14.54 68.33 14.42" +
+            "C66.96 13.21 60.15 13.3 58.17 14.55C57.85 14.76 57.46 15 57.32 15.09" +
+            "C53.67 17.31 51.93 21.69 53.76 24.03C55.39 26.13 58.94 25.73 59.95 23.33" +
+            "C61.08 20.68 62.99 19.66 64.77 20.76C66.94 22.11 66.15 24.91 62.68 28.17" +
+            "C62.53 28.3 62.22 28.68 62 29C61.77 29.32 61.49 29.69 61.37 29.83" +
+            "C58.03 33.63 60.86 38.72 65.21 36.76Z";
+
         private static Dictionary<string, CursorGlyph> BuildTable()
         {
             var t = new Dictionary<string, CursorGlyph>(StringComparer.OrdinalIgnoreCase);
 
-            // ---- ios-glyph (icons8 ios11 glyphs, viewBox 30) — the default style ------------
-            t["ios-glyph/arrow"] = G(30f, 8.5f, 3.5f, P(
-                "M 9 3 A 1 1 0 0 0 8 4 L 8 21 A 1 1 0 0 0 9 22 A 1 1 0 0 0 9.796875 21.601562 " +
-                "L 12.919922 18.119141 L 16.382812 26.117188 C 16.701812 26.855187 17.566828 27.188469 " +
-                "18.298828 26.855469 C 19.020828 26.527469 19.340672 25.678078 19.013672 24.955078 " +
-                "L 15.439453 17.039062 L 21 17 A 1 1 0 0 0 22 16 A 1 1 0 0 0 21.628906 15.222656 " +
-                "L 9.7832031 3.3789062 A 1 1 0 0 0 9 3 z", Black, White, Halo30));
-            t["ios-glyph/hand"] = G(30f, 11f, 2.5f, P(
-                "M 11 2 C 9.895 2 9 2.895 9 4 L 9 12 L 9 13 L 9 19.5 C 6.448 18.201 5.289 18 4 18 " +
-                "C 2.503911 18 1.0097445 18.577311 1.0019531 20.486328 L 5.5 22.5 L 8.65625 25.65625 " +
-                "C 10.15625 27.15625 12.192453 28 14.314453 28 L 21 28 C 23.209 28 25 26.209 25 24 " +
-                "L 25 14 A 2 2 0 0 0 23 12 A 2 2 0 0 0 21.193359 13.148438 C 21.066812 13.062233 21 13 21 13 " +
-                "A 2 2 0 0 0 19 11 A 2 2 0 0 0 17 13 L 17 12 C 17 10.895 16.105 10 15 10 " +
-                "C 13.895 10 13 10.895 13 12 L 13 4 C 13 2.895 12.105 2 11 2 z " +
-                "M 1.0019531 20.486328 L 1 20.486328 L 1 20.5 C 1 20.494991 1.0019328 20.491319 1.0019531 20.486328 z",
-                Black, White, Halo30));
-            t["ios-glyph/ibeam"] = G(30f, 15f, 15f, P(
-                "M 9 3 A 1.0001 1.0001 0 1 0 9 5 L 12 5 C 13.104545 5 14 5.8954545 14 7 L 14 14 L 11 14 " +
-                "A 1.0001 1.0001 0 1 0 11 16 L 14 16 L 14 23 C 14 24.104545 13.104545 25 12 25 L 9 25 " +
-                "A 1.0001 1.0001 0 1 0 9 27 L 12 27 C 13.196286 27 14.264543 26.454192 15 25.611328 " +
-                "C 15.735457 26.454192 16.803714 27 18 27 L 21 27 A 1.0001 1.0001 0 1 0 21 25 L 18 25 " +
-                "C 16.895455 25 16 24.104545 16 23 L 16 16 L 19 16 A 1.0001 1.0001 0 1 0 19 14 L 16 14 " +
-                "L 16 7 C 16 5.8954545 16.895455 5 18 5 L 21 5 A 1.0001 1.0001 0 1 0 21 3 L 18 3 " +
-                "C 16.803714 3 15.735457 3.5458078 15 4.3886719 C 14.264543 3.5458078 13.196286 3 12 3 L 9 3 z",
-                Black, White, Halo30));
-
-            // ---- material (icons8 m_rounded, viewBox 24) ------------------------------------
-            t["material/arrow"] = G(24f, 7.4f, 3.3f, P(
-                "M8.3,3.213l9.468,8.836c0.475,0.443,0.2,1.24-0.447,1.296L13.2,13.7l2.807,6.21 " +
-                "c0.272,0.602,0.006,1.311-0.596,1.585l0,0 c-0.61,0.277-1.33,0-1.596-0.615L11.1,14.6l-2.833,2.695 " +
-                "C7.789,17.749,7,17.411,7,16.751V3.778C7,3.102,7.806,2.752,8.3,3.213z", Black, White, Halo24));
-            t["material/hand"] = G(24f, 9.5f, 1.5f, P(
-                "M 9.5 1 C 8.672 1 8 1.672 8 2.5 L 8 9 L 8 14 L 8 15.060547 L 5.3378906 13.710938 " +
-                "C 4.7798906 13.427938 4.1072344 13.492906 3.6152344 13.878906 C 2.8562344 14.474906 " +
-                "2.7887031 15.601203 3.4707031 16.283203 L 8.3085938 21.121094 C 8.8715937 21.684094 " +
-                "9.6346875 22 10.429688 22 L 17 22 C 18.657 22 20 20.657 20 19 L 20 12.193359 " +
-                "C 20 11.216359 19.292125 10.381703 18.328125 10.220703 L 11 9 L 11 2.5 C 11 1.672 10.328 1 9.5 1 z",
-                Black, White, Halo24));
-            t["material/ibeam"] = G(24f, 12f, 12f, P(
-                "M 9 2 A 1.0001 1.0001 0 1 0 9 4 C 9.8333333 4 10.421991 4.2041597 10.802734 4.3945312 " +
-                "C 10.899195 4.4427618 10.93573 4.4711718 11 4.5097656 L 11 11 L 9 11 A 1.0001 1.0001 0 1 0 9 13 " +
-                "L 11 13 L 11 19.490234 C 10.93573 19.528828 10.899195 19.557238 10.802734 19.605469 " +
-                "C 10.421991 19.79584 9.8333333 20 9 20 A 1.0001 1.0001 0 1 0 9 22 C 10.166667 22 11.078009 21.70416 " +
-                "11.697266 21.394531 C 11.883184 21.301572 11.85968 21.280666 12 21.1875 C 12.14032 21.28067 " +
-                "12.116816 21.301572 12.302734 21.394531 C 12.921991 21.70416 13.833333 22 15 22 " +
-                "A 1.0001 1.0001 0 1 0 15 20 C 14.166667 20 13.578009 19.79584 13.197266 19.605469 " +
-                "C 13.100805 19.557238 13.06427 19.528828 13 19.490234 L 13 13 L 15 13 A 1.0001 1.0001 0 1 0 15 11 " +
-                "L 13 11 L 13 4.5097656 C 13.06427 4.4711718 13.100805 4.4427618 13.197266 4.3945312 " +
-                "C 13.578009 4.2041597 14.166667 4 15 4 A 1.0001 1.0001 0 1 0 15 2 C 13.833333 2 12.921991 2.2958402 " +
-                "12.302734 2.6054688 C 12.116816 2.6984278 12.14032 2.7193337 12 2.8125 C 11.85968 2.7193337 " +
-                "11.883184 2.6984278 11.697266 2.6054688 C 11.078009 2.2958402 10.166667 2 9 2 z",
-                Black, White, Halo24));
-
-            // ---- fluent (icons8 fluent-systems-filled, viewBox 48) --------------------------
-            t["fluent/arrow"] = G(48f, 11.8f, 4f, P(
-                "M35.654,24.09L13.524,3.404c-0.437-0.407-1.074-0.517-1.622-0.28C11.354,3.362,11,3.902,11,4.5v30 " +
-                "c0,0.577,0.331,1.103,0.851,1.352c0.519,0.251,1.137,0.18,1.587-0.181l6.112-4.892l5.777,13.306 " +
-                "c0.33,0.76,1.214,1.109,1.973,0.778l4.586-1.992c0.76-0.33,1.108-1.213,0.778-1.973l-3.044-7.011 " +
-                "l-2.733-6.294l7.914-0.915c0.581-0.067,1.07-0.466,1.253-1.021C36.237,25.1,36.081,24.49,35.654,24.09z",
-                Black, White, Halo48));
-            t["fluent/hand"] = G(48f, 22.5f, 3.6f, P(
-                "M37.911,20.996c-0.216-0.058-0.437-0.106-0.658-0.147L27,19c0,0,0-11.162,0-11.5C27,5.015,24.985,3,22.5,3 " +
-                "S18,5.015,18,7.5C18,9.347,18,25,18,25c0,0.001-0.001,0.002-0.001,0.002S18,25,13.618,23.668 " +
-                "C12.092,23.203,10.76,23,9.629,23c-1.012,0-1.871,0.178-2.586,0.535c-2.072,1.031-3.095,2.798-3.04,5.255 " +
-                "c0.005,0.215,0.128,0.408,0.32,0.503c0,0,4.612,2.257,7.034,3.534c1.518,0.8,6.143,2.302,9.585,9.621 " +
-                "c0.875,1.86,3.118,2.729,5.23,2.524c5.713-0.555,6.416-0.616,10.211-1.001c2.441-0.248,3.512-1.946,4.256-4.178 " +
-                "c0.845-2.536,2.323-6.691,3.086-9.336C44.914,26.334,42.121,22.116,37.911,20.996z", Black, White, Halo48));
-            t["fluent/ibeam"] = G(48f, 24f, 24f, P(
-                "M 17 5 A 2.0002 2.0002 0 1 0 17 9 L 20.5 9 C 21.352124 9 22 9.647876 22 10.5 L 22 22 L 20 22 " +
-                "A 2.0002 2.0002 0 1 0 20 26 L 22 26 L 22 37.5 C 22 38.352124 21.352124 39 20.5 39 L 17 39 " +
-                "A 2.0002 2.0002 0 1 0 17 43 L 20.5 43 C 21.842913 43 23.039891 42.45261 24 41.638672 " +
-                "C 24.960109 42.45261 26.157087 43 27.5 43 L 31 43 A 2.0002 2.0002 0 1 0 31 39 L 27.5 39 " +
-                "C 26.647876 39 26 38.352124 26 37.5 L 26 26 L 28 26 A 2.0002 2.0002 0 1 0 28 22 L 26 22 " +
-                "L 26 10.5 C 26 9.647876 26.647876 9 27.5 9 L 31 9 A 2.0002 2.0002 0 1 0 31 5 L 27.5 5 " +
-                "C 26.157087 5 24.960109 5.5473905 24 6.3613281 C 23.039891 5.5473905 21.842913 5 20.5 5 L 17 5 z",
-                Black, White, Halo48));
-
-            // ---- plumpy (icons8 plumpy, viewBox 24) — body at 35% behind opaque detail ------
-            t["plumpy/arrow"] = G(24f, 6.8f, 2.4f,
-                P("M18.584,12.854L8.091,2.361C7.319,1.59,6,2.136,6,3.227v15.044c0,0.996,1.103,1.596,1.939,1.054 " +
-                  "l3.1-2.008l1.954-0.337l1.229-1.212l3.735-0.797C18.932,14.763,19.288,13.559,18.584,12.854z",
-                  Black35, White, Halo24),
-                P("M11.039,17.318l1.911,3.72c0.447,0.87,1.515,1.213,2.385,0.766l0,0c0.87-0.447,1.213-1.514,0.766-2.384 " +
-                  "l-1.878-3.651", Black, White, Halo24));
-            t["plumpy/hand"] = G(24f, 9f, 1.4f,
-                P("M17.493,9.082L11,8V3c0-1.104-0.896-2-2-2S7,1.896,7,3v10.064l-0.186-0.186c-1.172-1.172-3.071-1.172-4.243,0 " +
-                  "l-0.279,0.279c-0.391,0.391-0.391,1.024,0,1.414l5.641,5.641l0.141-0.141C8.682,20.643,9.494,21,10.395,21h7.335 " +
-                  "c1.254,0,2.27-1.016,2.27-2.27v-6.689C20,10.574,18.94,9.323,17.493,9.082z", Black35, White, Halo24),
-                P("M19.5,19c-0.386,0-11.614,0-12,0C6.672,19,6,19.672,6,20.5S6.672,22,7.5,22c0.386,0,11.614,0,12,0 " +
-                  "c0.828,0,1.5-0.672,1.5-1.5S20.328,19,19.5,19z", Black, White, Halo24));
-            t["plumpy/ibeam"] = G(24f, 12f, 12.5f,
-                P("M10.5,6.5C10.5,5.67,9.83,5,9,5H8.5C7.67,5,7,4.33,7,3.5C7,2.67,7.67,2,8.5,2H9c2.48,0,4.5,2.02,4.5,4.5V11h-3V6.5z",
-                  Black, White, Halo24),
-                P("M17,21.5c0,0.83-0.67,1.5-1.5,1.5H15c-2.48,0-4.5-2.02-4.5-4.5V14h3v4.5c0,0.83,0.67,1.5,1.5,1.5h0.5 " +
-                  "C16.33,20,17,20.67,17,21.5z", Black, White, Halo24),
-                P("M12,10c-0.829,0-1.5-0.671-1.5-1.5v-2C10.5,4.019,12.519,2,15,2h0.5C16.329,2,17,2.671,17,3.5S16.329,5,15.5,5H15 " +
-                  "c-0.827,0-1.5,0.673-1.5,1.5v2C13.5,9.329,12.829,10,12,10z", Black, White, Halo24),
-                P("M9,23H8.5C7.671,23,7,22.329,7,21.5S7.671,20,8.5,20H9c0.827,0,1.5-0.673,1.5-1.5v-2c0-0.829,0.671-1.5,1.5-1.5 " +
-                  "s1.5,0.671,1.5,1.5v2C13.5,20.981,11.481,23,9,23z", Black, White, Halo24),
-                P("M15.5,14h-2L12,15l-1.5-1h-2C7.671,14,7,13.329,7,12.5S7.671,11,8.5,11h2l1.5-1l1.5,1h2 " +
-                  "c0.829,0,1.5,0.671,1.5,1.5S16.329,14,15.5,14z", Black35, White, Halo24));
-
-            // ---- softteal (icons8 softteal, viewBox 24) — no I-beam in the family -----------
-            t["softteal/arrow"] = G(24f, 6.6f, 1.4f, P(
-                "M20.509,14.055L8.057,1.362C7.306,0.596,6.003,1.127,6.002,2.2L5.987,19.981 " +
-                "c-0.001,0.968,1.086,1.538,1.882,0.986l3.136-2.137c0.522-0.356,1.239-0.144,1.485,0.438l1.299,3.086 " +
-                "c0.223,0.529,0.83,0.781,1.362,0.564l0.71-0.29c0.54-0.22,0.796-0.84,0.57-1.377l-1.312-3.116 " +
-                "c-0.25-0.593,0.118-1.264,0.752-1.373l3.984-0.687C20.809,15.914,21.187,14.746,20.509,14.055z",
-                Teal, White, Halo24));
-            // "one finger" stands in for the missing hand-cursor: same pointing gesture, same palette.
-            t["softteal/hand"] = G(24f, 8.5f, 1.4f, P(
-                "M18.078,10.245c-0.393,0.192-0.682,0.32-1.086-0.065c-0.658-0.625-1.279-1-2.457-0.427 " +
-                "c-0.355,0.173-0.785,0.129-1.08-0.134c-0.985-0.878-1.74-0.849-2.74-0.034C10.29,9.93,10,9.748,10,9.229V2.5 " +
-                "C10,1.672,9.328,1,8.5,1S7,1.672,7,2.5v9.766c0,0.42-0.262,0.788-0.654,0.937C5.464,13.54,4,14.347,4,16 " +
-                "c0,1.818,1.225,3.462,2.319,4.567C7.242,21.499,8.513,22,9.824,22L16,22c2.209,0,4-1.791,4-4v-6.355 " +
-                "C20,10.358,18.906,9.841,18.078,10.245z", Teal, White, Halo24));
-
-            // ---- papercut (icons8 papercut, viewBox 120) — rect/polygon expanded to paths ---
-            // The two 35% layers are the source's offset drop shadows; they must stay under their
-            // coloured twins, hence source order is preserved verbatim.
-            t["papercut/arrow"] = G(120f, 28.014f, 10.007f,
-                P("M52.606,69.235 L72.658,56.047 L101.781,100.328 L81.729,113.516 Z", Black35),
-                P("M50.407,65.893 L70.459,52.705 L99.582,96.987 L79.530,110.174 Z", PaperBlue),
-                P("M105.926,59.869 L65.362,70.986 L39.085,103.827 L28.547,15.007 Z", Black35),
-                P("M105.392,54.869 L64.829,65.986 L38.551,98.827 L28.014,10.007 Z", PaperSky));
-            t["papercut/hand"] = G(120f, 51.5f, 12f,
-                P("M31.48,72.063l11.524,8.503V57.999h68v51h-70L10,75.999 C15.26,69.469,24.733,67.084,31.48,72.063z", PaperInk35),
-                P("M53.558,84.354l-10.554,20.645L10,70.838l0,0c5.26-6.53,14.733-7.754,21.48-2.775L53.558,84.354z", PaperSkinDeep),
-                P("M42.949,20.526v42.527h17.055V20.526c0-4.71-3.818-8.527-8.527-8.527l0,0 " +
-                  "C46.767,11.999,42.949,15.817,42.949,20.526z", PaperSkin),
-                P("M59.949,50.526v28.473h17.055V50.526c0-4.71-3.818-8.527-8.527-8.527l0,0 " +
-                  "C63.767,41.999,59.949,45.817,59.949,50.526z", PaperSkin),
-                P("M76.949,50.526v28.473h17.055V50.526c0-4.71-3.818-8.527-8.527-8.527l0,0 " +
-                  "C80.767,41.999,76.949,45.817,76.949,50.526z", PaperSkin),
-                P("M93.949,50.526v28.473h17.055V50.526c0-4.71-3.818-8.527-8.527-8.527l0,0 " +
-                  "C97.767,41.999,93.949,45.817,93.949,50.526z", PaperSkin),
-                P("M43.004,49.999 L111.004,49.999 L111.004,104.999 L43.004,104.999 Z", PaperSkin));
-
-            // ---- doodle (icons8 doodle, viewBox 48) — hand borrowed from papercut -----------
-            t["doodle/arrow"] = G(48f, 14.1f, 6f,
-                P("M41.886,28.191c-4.186,0.785-10.996,1.48-15.56,2.449C24,33.371,14.408,43.088,14.408,43.088 " +
-                  "c-0.309-12.571-0.309-24.201-0.309-37.116", DoodleBlue),
-                P("M14.908,43.088c-0.234-9.569-0.294-19.14-0.306-28.712c-0.003-2.801-0.003-5.602-0.003-8.404 " +
-                  "c-0.251,0.144-0.502,0.288-0.752,0.432c1.247,0.692,2.355,1.739,3.452,2.636c2.09,1.71,4.152,3.453,6.217,5.193 " +
-                  "c4.532,3.819,9.033,7.689,13.707,11.336c0.906,0.707,1.819,1.41,2.763,2.066c0.558,0.388,1.13,0.791,1.768,1.038 " +
-                  "c0-0.321,0-0.643,0-0.964c-3.034,0.564-6.102,0.931-9.155,1.371c-1.558,0.225-3.116,0.459-4.666,0.739 " +
-                  "c-0.55,0.099-1.52,0.106-1.96,0.467c-0.229,0.189-0.421,0.484-0.621,0.705c-2.805,3.116-5.766,6.098-8.697,9.094 " +
-                  "c-0.865,0.884-1.731,1.768-2.6,2.649c-0.453,0.458,0.254,1.166,0.707,0.707c2.172-2.201,4.332-4.413,6.479-6.638 " +
-                  "c1.444-1.497,2.887-2.997,4.295-4.529c0.253-0.276,0.506-0.553,0.754-0.833c0.082-0.092,0.159-0.215,0.255-0.291 " +
-                  "c0.159-0.126,0.461-0.142,0.763-0.2c1.51-0.294,3.03-0.533,4.551-0.759c3.386-0.503,6.794-0.892,10.161-1.518 " +
-                  "c0.535-0.1,0.41-0.805,0-0.964c0.064,0.025-0.084-0.037-0.182-0.088c-0.113-0.059-0.225-0.122-0.335-0.187 " +
-                  "c-0.297-0.176-0.585-0.368-0.869-0.563c-0.795-0.546-1.565-1.128-2.328-1.718c-2.14-1.653-4.228-3.376-6.308-5.103 " +
-                  "c-4.515-3.748-8.962-7.579-13.493-11.308c-1.317-1.084-2.651-2.367-4.152-3.2c-0.329-0.183-0.752,0.046-0.752,0.432 " +
-                  "c0,9.63-0.001,19.26,0.146,28.889c0.042,2.742,0.096,5.485,0.163,8.227C13.924,43.73,14.924,43.733,14.908,43.088z",
-                  Black),
-                P("M17.126,20.583c0.037-2.645-0.027-5.286,0.01-7.931c0.009-0.644-0.991-0.644-1,0 " +
-                  "c-0.037,2.645,0.027,5.286-0.01,7.931C16.117,21.226,17.117,21.227,17.126,20.583L17.126,20.583z", Black));
-            t["doodle/hand"] = t["papercut/hand"];
+            // One geometry, two palettes: `ink`/`paper` swap between the colourways, while a layer
+            // naming a palette constant outright (Deny, Spin, Paper) looks the same in both.
+            foreach (var (variant, ink, paper) in new[]
+            {
+                ("dark", Ink, Paper),
+                ("light", Paper, Ink),
+            })
+            {
+                t[Key(VisionStyle, variant, KindArrow)] = G(128f, 8f, 8f,
+                    P(VisionPointer, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindIBeam)] = G(128f, 64f, 64f,
+                    P(VisionText, ink, paper, HaloThin));
+                t[Key(VisionStyle, variant, KindHand)] = G(128f, 28f, 8f,
+                    P(VisionLink, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindUpArrow)] = G(128f, 64f, 8f,
+                    P(VisionAlternate, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindWait)] = G(128f, 64f, 64f,
+                    P(VisionBusy, Spin, Ink, Halo));
+                t[Key(VisionStyle, variant, KindAppStarting)] = G(128f, 8f, 8f,
+                    P(VisionWork, Paper, Spin, Halo));
+                t[Key(VisionStyle, variant, KindCross)] = G(128f, 64f, 64f,
+                    P(VisionCrossTop, ink, paper, Halo), P(VisionCrossBottom, ink, paper, Halo),
+                    P(VisionCrossRight, ink, paper, Halo), P(VisionCrossLeft, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindSizeNs)] = G(128f, 64f, 64f,
+                    P(VisionCapTop, ink, paper, Halo), P(VisionCapBottom, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindSizeWe)] = G(128f, 64f, 64f,
+                    P(VisionCapLeft, ink, paper, Halo), P(VisionCapRight, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindSizeAll)] = G(128f, 64f, 64f,
+                    P(VisionCapTop, ink, paper, Halo), P(VisionCapBottom, ink, paper, Halo),
+                    P(VisionCapLeft, ink, paper, Halo), P(VisionCapRight, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindSizeNesw)] = G(128f, 64f, 64f,
+                    P(VisionCapNorthEast, ink, paper, Halo),
+                    P(VisionCapSouthWest, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindSizeNwse)] = G(128f, 64f, 64f,
+                    P(VisionCapNorthWest, ink, paper, Halo),
+                    P(VisionCapSouthEast, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindNo)] = G(128f, 8f, 8f,
+                    P(VisionPointer, ink, paper, Halo), P(VisionDenyBadge, Deny, paper, HaloMid));
+                t[Key(VisionStyle, variant, KindPerson)] = G(128f, 28f, 8f,
+                    P(VisionLink, ink, paper, Halo), P(VisionPersonBadge, ink, paper, Halo));
+                t[Key(VisionStyle, variant, KindPen)] = G(128f, 8f, 8f,
+                    P(VisionPen, ink, paper, HaloMid));
+                t[Key(VisionStyle, variant, KindHelp)] = G(128f, 8f, 8f,
+                    P(VisionPointer, ink, paper, Halo), P(VisionHelpBadge, ink, paper, Halo));
+            }
 
             return t;
         }

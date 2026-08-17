@@ -150,8 +150,7 @@ public sealed class CursorContent : ItemContent
     /// <summary>The style names the editor offers, in menu order. <c>native</c> draws the
     /// recorded 512px cursor box stream; every other style draws a themed vector glyph at the
     /// captured position. An unrecognized value renders as the theme's arrow.</summary>
-    public static readonly IReadOnlyList<string> Styles = new[]
-        { "native", "ios-glyph", "material", "fluent", "plumpy", "softteal", "papercut", "doodle" };
+    public static readonly IReadOnlyList<string> Styles = new[] { "native", "vision" };
 
     /// <summary>The click animation names the editor offers, in menu order.</summary>
     public static readonly IReadOnlyList<string> ClickAnimations = new[] { "none", "ripple", "pulse" };
@@ -164,15 +163,17 @@ public sealed class CursorContent : ItemContent
     public int StreamIndex { get; set; } = -1;
 
     /// <summary>One of <see cref="Styles"/>.</summary>
-    public string Style { get; set; } = "ios-glyph";
+    public string Style { get; set; } = "vision";
+
+    /// <summary>Which of the style's colourways to draw (<c>CursorAssets.Variants</c>), or null
+    /// for its default — which is the only sensible value for the styles that ship just one, and
+    /// is why no project written before colourways existed needs migrating. A value the style does
+    /// not offer falls back to its default rather than drawing nothing.</summary>
+    public string Variant { get; set; }
 
     /// <summary>Glyph size multiplier over the style's base size, validated to 0.25..5.
     /// Ignored by the <c>native</c> style (the box stream is captured at recording scale).</summary>
     public double Size { get; set; } = 1.0;
-
-    /// <summary>Drop shadow under the themed glyph. Ignored by the <c>native</c> style (the box
-    /// stream already carries the system cursor's own shadow), which is why it can default on.</summary>
-    public bool DropShadow { get; set; } = true;
 
     /// <summary>One of <see cref="ClickAnimations"/>.</summary>
     public string ClickAnimation { get; set; } = "none";
@@ -205,8 +206,8 @@ public sealed class CursorContent : ItemContent
         SourceId = SourceId,
         StreamIndex = StreamIndex,
         Style = Style,
+        Variant = Variant,
         Size = Size,
-        DropShadow = DropShadow,
         ClickAnimation = ClickAnimation,
         ClickColor = ClickColor,
         HoldSize = HoldSize,

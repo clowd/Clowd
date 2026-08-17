@@ -18,7 +18,19 @@ namespace Clowd.UI.Controls
             set => SetValue(CurrentValueProperty, value);
         }
 
-        public object DefaultValue { get; set; }
+        /// <summary>The value the dot resets to, and the value it compares against to decide
+        /// whether to show at all. A styled property rather than a plain one so a row whose default
+        /// depends on the selection (the effect dials, whose meaning changes with the effect style)
+        /// can bind it — and so the dot re-evaluates when it moves, which a CLR property could not
+        /// tell it.</summary>
+        public static readonly StyledProperty<object> DefaultValueProperty =
+            AvaloniaProperty.Register<ResetDefaultButton, object>(nameof(DefaultValue));
+
+        public object DefaultValue
+        {
+            get => GetValue(DefaultValueProperty);
+            set => SetValue(DefaultValueProperty, value);
+        }
 
         public ResetDefaultButton()
         {
@@ -35,7 +47,7 @@ namespace Clowd.UI.Controls
         {
             base.OnPropertyChanged(change);
 
-            if (change.Property == CurrentValueProperty)
+            if (change.Property == CurrentValueProperty || change.Property == DefaultValueProperty)
                 EvaluateIsDefault();
         }
 

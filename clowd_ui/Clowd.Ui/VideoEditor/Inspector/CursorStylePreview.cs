@@ -10,18 +10,19 @@ using Clowd.VideoSDK.Composition;
 namespace Clowd.UI.VideoEditor.Inspector
 {
     /// <summary>
-    /// One cursor style's actual arrow, drawn from the same <see cref="CursorAssets"/> layers the
-    /// compositor paints — the style tiles show the glyph the render will produce rather than a
-    /// stand-in icon. The <c>native</c> style has no artwork of its own (it replays the recorded
+    /// One cursor style's actual arrow, in one of its colourways, drawn from the same
+    /// <see cref="CursorAssets"/> layers the compositor paints — the style tiles show the glyph the
+    /// render will produce rather than a stand-in icon, and the colourway tiles below them differ
+    /// only in the palette they pass. The <c>native</c> style has no artwork of its own (it replays the recorded
     /// cursor box), so its tile shows the live OS arrow via <see cref="SystemCursorImage"/>: the
     /// cursor the user is looking at right now is the closest thing to a preview of "whatever the
     /// recording had". Where that cannot be had — every platform but Windows — it falls back to the
     /// default style's arrow drawn as a bare monochrome outline.
     /// </summary>
     /// <remarks>
-    /// The layer painting order is <c>CursorCompose</c>'s: every halo stroke first, then
-    /// every fill on top, because a halo is a <i>centred</i> stroke and would otherwise eat half of
-    /// its own glyph's ink. The glyph is fitted by its ink bounds rather than its viewBox — the
+    /// The layer painting order is <c>CursorCompose</c>'s: each layer's halo stroke, then that
+    /// layer's fill on top, because a halo is a <i>centred</i> stroke and would otherwise eat half
+    /// of its own layer's ink. The glyph is fitted by its ink bounds rather than its viewBox — the
     /// artwork families leave very different margins, and a picker wants the arrows to read at one
     /// size. The system bitmap is fitted the same way, by its own bounds.
     /// </remarks>
@@ -31,6 +32,11 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly StyledProperty<string> StyleNameProperty =
             AvaloniaProperty.Register<CursorStylePreview, string>(nameof(StyleName));
 
+        /// <summary>The <c>CursorContent.Variant</c> colourway to draw it in, or null for the
+        /// style's default — which is all a style with one colourway ever has.</summary>
+        public static readonly StyledProperty<string> VariantNameProperty =
+            AvaloniaProperty.Register<CursorStylePreview, string>(nameof(VariantName));
+
         /// <summary>The ink the <c>native</c> outline is drawn in; unused by the themed styles,
         /// which carry their own colours.</summary>
         public static readonly StyledProperty<IBrush> OutlineBrushProperty =
@@ -39,13 +45,20 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         static CursorStylePreview()
         {
-            AffectsRender<CursorStylePreview>(StyleNameProperty, OutlineBrushProperty);
+            AffectsRender<CursorStylePreview>(
+                StyleNameProperty, VariantNameProperty, OutlineBrushProperty);
         }
 
         public string StyleName
         {
             get => GetValue(StyleNameProperty);
             set => SetValue(StyleNameProperty, value);
+        }
+
+        public string VariantName
+        {
+            get => GetValue(VariantNameProperty);
+            set => SetValue(VariantNameProperty, value);
         }
 
         public IBrush OutlineBrush
@@ -61,7 +74,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
             // no artwork = native (or a style name from a newer editor): show the real OS cursor,
             // or failing that the default theme's arrow as an outline
-            var glyph = CursorAssets.TryGet(StyleName, CursorAssets.KindArrow);
+            var glyph = CursorAssets.TryGet(StyleName, VariantName, CursorAssets.KindArrow);
             bool outlineOnly = glyph == null;
             if (outlineOnly && TryDrawSystemCursor(context))
                 return;
@@ -98,9 +111,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 {
                     if (layer.Halo != null)
                         context.DrawGeometry(null, layer.Halo, layer.Geometry);
-                }
-                foreach (var layer in layers)
                     context.DrawGeometry(layer.Fill, null, layer.Geometry);
+                }
             }
         }
 
