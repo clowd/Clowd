@@ -137,7 +137,10 @@ namespace Clowd.UI.VideoEditor.Inspector
             ["native"] = "Native",
             ["vision"] = "Vision",
             ["point"] = "Point",
-            ["numix"] = "Numix",
+            ["bibata"] = "Bibata",
+            ["breezex"] = "BreezeX",
+            ["macos"] = "macOS",
+            ["fuchsia"] = "Fuchsia",
         };
 
         private static readonly Dictionary<string, string> ClickAnimationLabels = new Dictionary<string, string>
@@ -145,6 +148,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             ["none"] = "None",
             ["ripple"] = "Ripple",
             ["pulse"] = "Pulse",
+            ["ring"] = "Ring",
+            ["pressure"] = "Pressure",
         };
 
         public static readonly IReadOnlyList<NamedOption> CursorStyleOptions =
@@ -208,6 +213,10 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// <summary>The animation that draws no highlight at all — the one value that empties the
         /// section below the picker.</summary>
         public const string NoClickAnimation = "none";
+
+        /// <summary>The ring highlight's inner fill default, straight off the model — what the
+        /// FILL row's reset dot writes back.</summary>
+        public const double DefaultCursorFillOpacity = CursorContent.DefaultFillOpacity;
 
         /// <summary>The highlight dials' shared range and default, straight off the model so a
         /// spinner cannot offer a number the project would refuse.</summary>
@@ -420,6 +429,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private string _cursorClickAnimation = NoClickAnimation;
         private uint _cursorClickColor = DefaultCursorClickColor;
         private string _cursorClickColorHex = DefaultCursorClickColorHex;
+        private double _cursorFillOpacity = DefaultCursorFillOpacity;
         private double _cursorHoldSize = DefaultHighlightFactor;
         private double _cursorClickSize = DefaultHighlightFactor;
         private double _cursorAnimationSpeed = DefaultHighlightFactor;
@@ -1535,15 +1545,38 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 _cursorClickAnimation = value.Value;
                 OnPropertyChanged(nameof(CursorClickAnimation));
-                OnPropertyChanged(nameof(CursorHighlightEnabled));
+                RaiseHighlightRowFlags();
                 EditCursor("sel:cursorclick", c => c.ClickAnimation = value.Value);
             }
         }
 
-        /// <summary>Whether the highlight's three dials mean anything: <c>none</c> draws no
+        /// <summary>Whether the highlight's dials mean anything: <c>none</c> draws no
         /// highlight, so its size and speed rows leave the panel rather than sit there inert — the
         /// same trade the glyph rows make under the native style.</summary>
         public bool CursorHighlightEnabled => _cursorClickAnimation != NoClickAnimation;
+
+        /// <summary>Whether the colour well means anything — every drawn highlight except
+        /// <c>pressure</c>, which colours nothing (it warps the pixels beneath).</summary>
+        public bool CursorHighlightColorEnabled =>
+            CursorHighlightEnabled && ClickHighlight.ModeOf(_cursorClickAnimation) != HighlightMode.Press;
+
+        /// <summary>Whether the hold-size dial means anything — only the burst animations draw
+        /// the held dot it scales; ring and press animate the hold themselves.</summary>
+        public bool CursorHoldSizeEnabled =>
+            ClickHighlight.ModeOf(_cursorClickAnimation) is HighlightMode.Ripple or HighlightMode.Pulse;
+
+        /// <summary>Whether the FILL row shows — the ring is the one highlight with an inner
+        /// fill of its own.</summary>
+        public bool CursorRingFillEnabled =>
+            ClickHighlight.ModeOf(_cursorClickAnimation) == HighlightMode.Ring;
+
+        private void RaiseHighlightRowFlags()
+        {
+            OnPropertyChanged(nameof(CursorHighlightEnabled));
+            OnPropertyChanged(nameof(CursorHighlightColorEnabled));
+            OnPropertyChanged(nameof(CursorHoldSizeEnabled));
+            OnPropertyChanged(nameof(CursorRingFillEnabled));
+        }
 
         /// <summary>The highlight colour (packed ARGB) the composer draws clicks in — the parsed
         /// twin of <see cref="CursorClickColorHex"/>, kept because the highlight preview tiles
@@ -1566,6 +1599,21 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 Set(ref _cursorClickColor, argb, nameof(CursorClickColor));
                 EditCursor("sel:cursorclickcolor", c => c.ClickColor = argb);
+            }
+        }
+
+        /// <summary>The ring highlight's inner fill opacity, 0..1 — the outline stays at the
+        /// colour's own alpha, this dials only the disc inside it.</summary>
+        public double CursorFillOpacity
+        {
+            get => _cursorFillOpacity;
+            set
+            {
+                value = Clamp(value, 0.0, 1.0);
+                if (!Set(ref _cursorFillOpacity, value) || _syncing)
+                    return;
+
+                EditCursor("sel:cursorfillopacity", c => c.FillOpacity = value);
             }
         }
 
@@ -2037,6 +2085,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                         nameof(CursorClickAnimation));
                     Set(ref _cursorClickColor, cursor.ClickColor, nameof(CursorClickColor));
                     Set(ref _cursorClickColorHex, HexOfArgb(cursor.ClickColor), nameof(CursorClickColorHex));
+                    Set(ref _cursorFillOpacity, cursor.FillOpacity, nameof(CursorFillOpacity));
                     Set(ref _cursorHoldSize, cursor.HoldSize, nameof(CursorHoldSize));
                     Set(ref _cursorClickSize, cursor.ClickSize, nameof(CursorClickSize));
                     Set(ref _cursorAnimationSpeed, cursor.AnimationSpeed, nameof(CursorAnimationSpeed));
@@ -2044,7 +2093,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                         _session?.Project?.Sources?.FirstOrDefault(s => s.Id == cursor.SourceId)?.InputCapturePath,
                         nameof(CursorCapturePath));
                     OnPropertyChanged(nameof(CursorGlyphEnabled));
-                    OnPropertyChanged(nameof(CursorHighlightEnabled));
+                    RaiseHighlightRowFlags();
                     OnPropertyChanged(nameof(CursorVariantOptions));
                     OnPropertyChanged(nameof(CursorVariantsVisible));
                 }

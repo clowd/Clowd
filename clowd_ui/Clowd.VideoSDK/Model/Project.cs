@@ -211,6 +211,8 @@ public sealed class Project
                     CheckHighlightFactor(errors, item.Id, "hold size", cursor.HoldSize);
                     CheckHighlightFactor(errors, item.Id, "click size", cursor.ClickSize);
                     CheckHighlightFactor(errors, item.Id, "animation speed", cursor.AnimationSpeed);
+                    if (!(cursor.FillOpacity >= 0 && cursor.FillOpacity <= 1))
+                        errors.Add($"Item {item.Id} has a highlight fill opacity {cursor.FillOpacity} outside 0..1.");
                     break;
 
                 case KeyboardContent keyboard:

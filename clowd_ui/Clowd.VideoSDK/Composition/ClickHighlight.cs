@@ -3,6 +3,29 @@ using Clowd.VideoSDK.Model;
 
 namespace Clowd.VideoSDK.Composition
 {
+    /// <summary>Which highlight a <see cref="CursorContent.ClickAnimation"/> wire name selects.
+    /// <see cref="None"/> covers null, <c>none</c> and every unknown value — a project written by
+    /// a newer editor degrades to no highlight, not a wrong one.</summary>
+    public enum HighlightMode
+    {
+        None,
+
+        /// <summary>An expanding, fading circle fired by each release.</summary>
+        Ripple,
+
+        /// <summary>The same fade with the radius shrinking instead.</summary>
+        Pulse,
+
+        /// <summary>A circle outline pinned to the pointer at all times: it eases inward while a
+        /// button is held and springs back out on the release, so a quick click reads as one
+        /// breath in and out.</summary>
+        Ring,
+
+        /// <summary>No drawn shape at all — the pixels under the pointer stretch toward it while
+        /// a button is held, like a finger pressing down on paper.</summary>
+        Press,
+    }
+
     /// <summary>
     /// The shape of the mouse-click highlight, in the abstract: how long it runs, how big it is and
     /// how solid, with no canvas and no Skia anywhere near it. <see cref="CursorCompose"/> draws the
@@ -35,24 +58,66 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>The widest the animation ever gets — what a preview scales its box against.</summary>
         public const double RadiusEndDip = RadiusStartDip + RadiusGrowthDip;
 
-        /// <summary>Whether <paramref name="animation"/> is a drawn highlight, and if so whether it
-        /// is the reversed (<c>pulse</c>) one. False for <c>none</c>, null and anything unknown —
+        // ------------------------------------------------------------------------------- ring
+
+        /// <summary>The ring's resting radius in DIP — the circle a still pointer wears. Sized to
+        /// sit comfortably around a 100% themed glyph (40px at monitor scale 1).</summary>
+        public const double RingRadiusDip = 18.0;
+
+        /// <summary>The ring outline's stroke width in DIP.</summary>
+        public const double RingStrokeDip = 2.5;
+
+        /// <summary>How far the ring closes under a held button, as a fraction of the resting
+        /// radius.</summary>
+        public const double RingShrink = 0.65;
+
+        /// <summary>How long the ring takes to ease in to its held size, in project-time ms.</summary>
+        public const double RingEngageMs = 130.0;
+
+        /// <summary>How long the ring takes to spring back out after the release. Longer than the
+        /// way in — the overshoot (see <see cref="RingScale"/>) needs room to settle.</summary>
+        public const double RingReleaseMs = 320.0;
+
+        // ------------------------------------------------------------------------------ press
+
+        /// <summary>How far out the press warp reaches, in DIP. Deliberately wide and shallow:
+        /// the effect is a dent in the page, not a lens.</summary>
+        public const double PressRadiusDip = 100.0;
+
+        /// <summary>The sampling stretch at the very centre of a fully-engaged press — how hard
+        /// the paper is pushed down.</summary>
+        public const double PressMaxAmount = 0.30;
+
+        /// <summary>How long the warp takes to press in / relax out, in project-time ms.</summary>
+        public const double PressEngageMs = 160.0;
+
+        public const double PressReleaseMs = 260.0;
+
+        /// <summary>Whether <paramref name="animation"/> is a drawn highlight, and if so which one.
+        /// False (and <see cref="HighlightMode.None"/>) for <c>none</c>, null and anything unknown —
         /// a project written by a newer editor degrades to no highlight, not a wrong one.</summary>
-        public static bool TryParse(string animation, out bool pulse)
+        public static bool TryParse(string animation, out HighlightMode mode)
+        {
+            mode = ModeOf(animation);
+            return mode != HighlightMode.None;
+        }
+
+        /// <summary>The mode a wire name selects; <see cref="HighlightMode.None"/> for anything
+        /// unrecognised.</summary>
+        public static HighlightMode ModeOf(string animation)
         {
             if (string.Equals(animation, "ripple", StringComparison.OrdinalIgnoreCase))
-            {
-                pulse = false;
-                return true;
-            }
+                return HighlightMode.Ripple;
             if (string.Equals(animation, "pulse", StringComparison.OrdinalIgnoreCase))
-            {
-                pulse = true;
-                return true;
-            }
-
-            pulse = false;
-            return false;
+                return HighlightMode.Pulse;
+            if (string.Equals(animation, "ring", StringComparison.OrdinalIgnoreCase))
+                return HighlightMode.Ring;
+            // "press" is the mode's original wire name, kept as an alias for projects written
+            // before it was renamed to "pressure"
+            if (string.Equals(animation, "pressure", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(animation, "press", StringComparison.OrdinalIgnoreCase))
+                return HighlightMode.Press;
+            return HighlightMode.None;
         }
 
         /// <summary>The circle's radius at <paramref name="progress"/> (0 at the release, 1 at the
@@ -91,6 +156,84 @@ namespace Clowd.VideoSDK.Composition
             if (double.IsNaN(value))
                 return 1.0;
             return Math.Clamp(value, CursorContent.MinHighlightFactor, CursorContent.MaxHighlightFactor);
+        }
+
+        /// <summary>An opacity as the drawing code may use it: 0..1, with NaN (a hand-edited
+        /// project) drawing nothing rather than poisoning the alpha arithmetic.</summary>
+        public static double Clamp01(double value)
+            => double.IsNaN(value) ? 0.0 : Math.Clamp(value, 0.0, 1.0);
+
+        // -------------------------------------------------------------------- press/ring clocks
+        //
+        // Both take the same picture of the click: how long ago the button went down
+        // (null = long ago / unknown, i.e. fully engaged), how long ago it came back up
+        // (null = still held), and how long it was down for (null = long enough to have fully
+        // engaged). All three are project-time ms; animationSpeed rescales the clocks exactly as
+        // it does the ripple's. A quick click hands the release a partial engagement, which is
+        // what makes it read as one breath rather than a snap.
+
+        /// <summary>The ring's radius multiplier at this moment: 1 at rest, eased down toward
+        /// <see cref="RingShrink"/> while held, and sprung back out on the release — deliberately
+        /// overshooting past 1 (ease-out-back) so a click breathes in and out instead of
+        /// stopping dead.</summary>
+        public static double RingScale(double? sinceDownMs, double? sinceUpMs,
+            double? pressDurationMs, double animationSpeed)
+        {
+            double engageMs = RingEngageMs / Factor(animationSpeed);
+            double releaseMs = RingReleaseMs / Factor(animationSpeed);
+
+            if (sinceUpMs == null)
+                return 1 - (1 - RingShrink) * Engagement(sinceDownMs, engageMs);
+
+            double r = Math.Clamp(sinceUpMs.Value / releaseMs, 0.0, 1.0);
+            if (r >= 1)
+                return 1.0;
+
+            double engaged = Engagement(pressDurationMs, engageMs);
+            return 1 - (1 - RingShrink) * engaged * (1 - EaseOutBack(r));
+        }
+
+        /// <summary>How hard the press warp pushes at this moment, 0..1: eased in while held,
+        /// eased back to nothing over <see cref="PressReleaseMs"/> after the release. A quick
+        /// click never reaches 1 and relaxes from wherever it got to.</summary>
+        public static double PressAmount(double? sinceDownMs, double? sinceUpMs,
+            double? pressDurationMs, double animationSpeed)
+        {
+            double engageMs = PressEngageMs / Factor(animationSpeed);
+            double releaseMs = PressReleaseMs / Factor(animationSpeed);
+
+            if (sinceUpMs == null)
+                return Engagement(sinceDownMs, engageMs);
+
+            double r = Math.Clamp(sinceUpMs.Value / releaseMs, 0.0, 1.0);
+            if (r >= 1)
+                return 0.0;
+            return Engagement(pressDurationMs, engageMs) * (1 - EaseOutCubic(r));
+        }
+
+        /// <summary>How far a press of <paramref name="heldMs"/> (null = long enough) has engaged,
+        /// 0..1, ease-out so the landing is quick and the settle soft.</summary>
+        private static double Engagement(double? heldMs, double engageMs)
+        {
+            if (heldMs == null)
+                return 1.0;
+            return EaseOutCubic(Math.Clamp(heldMs.Value / engageMs, 0.0, 1.0));
+        }
+
+        private static double EaseOutCubic(double t)
+        {
+            double u = 1 - t;
+            return 1 - u * u * u;
+        }
+
+        /// <summary>The standard back ease-out: rises past 1 (peak ≈1.10) before settling, which
+        /// is the ring's breathe-out.</summary>
+        private static double EaseOutBack(double t)
+        {
+            const double c1 = 1.70158;
+            const double c3 = c1 + 1;
+            double u = t - 1;
+            return 1 + c3 * u * u * u + c1 * u * u;
         }
     }
 }

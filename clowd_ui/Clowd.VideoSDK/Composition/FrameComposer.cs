@@ -184,7 +184,7 @@ namespace Clowd.VideoSDK.Composition
                     break;
 
                 case CursorContent cursor:
-                    DrawCursorItem(project, item, cursor, timeTicks, target, opacity,
+                    DrawCursorItem(project, item, cursor, timeTicks, frames, target, opacity,
                         canvasWidth, canvasHeight);
                     break;
 
@@ -334,7 +334,8 @@ namespace Clowd.VideoSDK.Composition
         /// nothing.
         /// </summary>
         private static void DrawCursorItem(Project project, Item item, CursorContent cursor,
-            long timeTicks, SKCanvas target, double opacity, int canvasWidth, int canvasHeight)
+            long timeTicks, IFrameSource frames, SKCanvas target, double opacity,
+            int canvasWidth, int canvasHeight)
         {
             var source = FindSource(project, cursor.SourceId);
             if (source == null || string.IsNullOrEmpty(source.InputCapturePath))
@@ -371,6 +372,18 @@ namespace Clowd.VideoSDK.Composition
             {
                 ApplyClips(target, screenTransform, screenFx, map.Dest);
                 target.ClipRect(map.Dest, SKClipOperation.Intersect, antialias: true);
+
+                // the press warp redraws (a stretched copy of) the screen frame itself, so it
+                // needs the frame the screen item just composed; items between the two rows are
+                // not re-warped — the cursor row normally sits directly above its screen row.
+                if (ClickHighlight.ModeOf(cursor.ClickAnimation) == HighlightMode.Press
+                    && frames != null
+                    && frames.TryGetFrame(media.SourceId, media.StreamIndex, sourceTicks, out var screenFrame)
+                    && screenFrame.Image != null)
+                {
+                    CursorCompose.DrawPressWarp(target, capture, map, row, sourceMs,
+                        TimelineOps.SpeedOf(media), cursor, monitorScale, opacity, screenFrame.Image);
+                }
 
                 CursorCompose.DrawClickAnimations(target, capture, map, row, sourceMs,
                     TimelineOps.SpeedOf(media), cursor, monitorScale, opacity);
