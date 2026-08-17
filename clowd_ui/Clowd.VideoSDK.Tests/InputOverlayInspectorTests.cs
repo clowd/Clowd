@@ -348,6 +348,55 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void HighlightRows_ShowOnlyWhatTheModeUses()
+        {
+            // colour: every drawn highlight except press (a warp colours nothing);
+            // hold size: only the bursts draw the held dot it scales; fill: the ring alone
+            var (session, vm) = NewInspector(out _);
+            var cursor = session.AddCursorTrack();
+            session.Select(cursor.Id);
+
+            Assert.False(vm.CursorHighlightColorEnabled);
+            Assert.False(vm.CursorHoldSizeEnabled);
+            Assert.False(vm.CursorRingFillEnabled);
+
+            vm.CursorClickAnimation = SelectedItemViewModel.ClickAnimationOptions.First(o => o.Value == "ripple");
+            Assert.True(vm.CursorHighlightColorEnabled);
+            Assert.True(vm.CursorHoldSizeEnabled);
+            Assert.False(vm.CursorRingFillEnabled);
+
+            vm.CursorClickAnimation = SelectedItemViewModel.ClickAnimationOptions.First(o => o.Value == "ring");
+            Assert.True(vm.CursorHighlightColorEnabled);
+            Assert.False(vm.CursorHoldSizeEnabled);
+            Assert.True(vm.CursorRingFillEnabled);
+
+            vm.CursorClickAnimation = SelectedItemViewModel.ClickAnimationOptions.First(o => o.Value == "pressure");
+            Assert.True(vm.CursorHighlightEnabled); // the size/speed dials still apply
+            Assert.False(vm.CursorHighlightColorEnabled);
+            Assert.False(vm.CursorHoldSizeEnabled);
+            Assert.False(vm.CursorRingFillEnabled);
+        }
+
+        [Fact]
+        public void FillOpacity_WritesTheWholeRowAndClamps()
+        {
+            var (session, vm) = NewInspector(out _);
+            var cursor = session.AddCursorTrack();
+            session.Select(cursor.Id);
+
+            Assert.Equal(SelectedItemViewModel.DefaultCursorFillOpacity, vm.CursorFillOpacity);
+
+            vm.CursorFillOpacity = 0.6;
+            Assert.All(CursorItems(session), c => Assert.Equal(0.6, c.FillOpacity));
+
+            // the spinner offers exactly the range Project.Validate accepts
+            vm.CursorFillOpacity = 1.5;
+            Assert.Equal(1.0, vm.CursorFillOpacity);
+            vm.CursorFillOpacity = -1;
+            Assert.Equal(0.0, vm.CursorFillOpacity);
+        }
+
+        [Fact]
         public void CursorSize_ClampsToTheSpinnersRange()
         {
             var (session, vm) = NewInspector(out _);
@@ -555,7 +604,7 @@ namespace Clowd.VideoSDK.Tests
                     CursorAssets.TryGet(o.Value, CursorAssets.KindArrow) == null));
 
             // the highlight tiles animate off ClickHighlight: "none" is the one that never does
-            Assert.Equal(new[] { "None", "Ripple", "Pulse" },
+            Assert.Equal(new[] { "None", "Ripple", "Pulse", "Ring", "Pressure" },
                 SelectedItemViewModel.ClickAnimationOptions.Select(o => o.Label).ToArray());
             Assert.All(SelectedItemViewModel.ClickAnimationOptions, o =>
                 Assert.Equal(o.Value != "none", ClickHighlight.TryParse(o.Value, out _)));

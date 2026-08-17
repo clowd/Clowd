@@ -152,10 +152,13 @@ public sealed class CursorContent : ItemContent
     /// sprites the recorder rasterized into the capture file (the real cursor, custom app cursors
     /// included); every other style draws a themed vector glyph at the captured position. An
     /// unrecognized value renders as the theme's arrow.</summary>
-    public static readonly IReadOnlyList<string> Styles = new[] { "none", "native", "vision", "point", "numix" };
+    public static readonly IReadOnlyList<string> Styles = new[] { "none", "native", "vision", "point", "bibata", "breezex", "macos", "fuchsia" };
 
-    /// <summary>The click animation names the editor offers, in menu order.</summary>
-    public static readonly IReadOnlyList<string> ClickAnimations = new[] { "none", "ripple", "pulse" };
+    /// <summary>The click animation names the editor offers, in menu order. <c>ripple</c>/<c>pulse</c>
+    /// fire one burst per release; <c>ring</c> is a circle outline pinned to the pointer that closes
+    /// while a button is held and springs back out; <c>pressure</c> draws nothing of its own and
+    /// instead stretches the recorded pixels toward the pointer while a button is held.</summary>
+    public static readonly IReadOnlyList<string> ClickAnimations = new[] { "none", "ripple", "pulse", "ring", "pressure" };
 
     public Guid SourceId { get; set; }
 
@@ -177,6 +180,13 @@ public sealed class CursorContent : ItemContent
 
     /// <summary>Click animation color, packed ARGB.</summary>
     public uint ClickColor { get; set; } = 0xFFFF0000;
+
+    /// <summary>The <c>ring</c> highlight's inner fill opacity, validated to 0..1: the outline is
+    /// drawn in <see cref="ClickColor"/> as-is and the disc inside it in the same colour at this
+    /// opacity. Ignored by every other animation.</summary>
+    public const double DefaultFillOpacity = 0.15;
+
+    public double FillOpacity { get; set; } = DefaultFillOpacity;
 
     /// <summary>The range every highlight multiplier below is validated to, and what the editor's
     /// spinners offer. One range for all three: they are all "a bit more / a bit less of the
@@ -206,6 +216,7 @@ public sealed class CursorContent : ItemContent
         Size = Size,
         ClickAnimation = ClickAnimation,
         ClickColor = ClickColor,
+        FillOpacity = FillOpacity,
         HoldSize = HoldSize,
         ClickSize = ClickSize,
         AnimationSpeed = AnimationSpeed,
