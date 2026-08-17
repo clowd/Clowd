@@ -143,8 +143,9 @@ pub fn create(device_id: &str, settings: &Settings) -> Result<Webcam, String> {
     // Track 1 is always x264 (CRF): predictable, no second hardware-encoder
     // session contention with the screen track. The encoder name becomes the
     // mp4 track name (mp4_output writes it into the track's udta box).
-    let encoder = ObsEncoder::create_video("obs_x264", "Webcam", Some(&encoder_settings(settings.crf)))
-        .map_err(|e| format!("Failed to create the webcam encoder: {e}"))?;
+    let encoder =
+        ObsEncoder::create_video("obs_x264", "Webcam", Some(&encoder_settings(settings.crf)))
+            .map_err(|e| format!("Failed to create the webcam encoder: {e}"))?;
     encoder.set_video(video);
 
     Ok(Webcam {

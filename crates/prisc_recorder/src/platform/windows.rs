@@ -18,9 +18,17 @@ use windows_sys::Win32::UI::HiDpi::{
     MDT_DEFAULT,
 };
 use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
-use windows_sys::Win32::UI::WindowsAndMessaging::{GetCursorPos, MONITORINFOF_PRIMARY};
+use windows_sys::Win32::UI::WindowsAndMessaging::{
+    GetCursorInfo, GetCursorPos, LoadCursorW, CURSORINFO, CURSOR_SHOWING, IDC_APPSTARTING,
+    IDC_ARROW, IDC_CROSS, IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL,
+    IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_UPARROW, IDC_WAIT,
+    MONITORINFOF_PRIMARY,
+};
 
-use super::{MonitorInfo, MouseInfo, ObsPaths};
+use super::{CursorKind, CursorState, MonitorInfo, MouseInfo, ObsPaths};
+
+/// `platform` field of the input-capture header (wire contract).
+pub const PLATFORM_NAME: &str = "windows";
 
 pub const GRAPHICS_MODULE: &CStr = c"libobs-d3d11";
 pub const DISPLAY_CAPTURE_ID: &str = "monitor_capture";
@@ -161,6 +169,97 @@ pub fn get_mouse_info() -> MouseInfo {
         pressed,
         scale: dpi_x as f64 / 96.0,
     }
+}
+
+/// The stock cursor table: `(HCURSOR, kind)` pairs cached from
+/// `LoadCursorW(NULL, IDC_*)`. Stock cursor handles are process-global
+/// constants (LoadCursorW with a null module returns the same shared handle
+/// every call), so caching once is sound. Entries whose cursor fails to load
+/// are skipped (IDC_PERSON / IDC_PIN are Win10-era additions and may be
+/// absent from some cursor themes) — an unmatched handle reads as `custom`.
+fn stock_cursor_table() -> &'static Vec<(isize, CursorKind)> {
+    use std::sync::OnceLock;
+    static TABLE: OnceLock<Vec<(isize, CursorKind)>> = OnceLock::new();
+    TABLE.get_or_init(|| {
+        // IDC_PIN (the Win10 "location/pin" cursor) is the closest stock match
+        // for the wire contract's `pen` kind — there is no IDC_PEN.
+        let ids: [(windows_sys::core::PCWSTR, CursorKind); 16] = [
+            (IDC_ARROW, CursorKind::Arrow),
+            (IDC_IBEAM, CursorKind::IBeam),
+            (IDC_WAIT, CursorKind::Wait),
+            (IDC_CROSS, CursorKind::Cross),
+            (IDC_UPARROW, CursorKind::UpArrow),
+            (IDC_SIZENWSE, CursorKind::SizeNwse),
+            (IDC_SIZENESW, CursorKind::SizeNesw),
+            (IDC_SIZEWE, CursorKind::SizeWe),
+            (IDC_SIZENS, CursorKind::SizeNs),
+            (IDC_SIZEALL, CursorKind::SizeAll),
+            (IDC_NO, CursorKind::No),
+            (IDC_HAND, CursorKind::Hand),
+            (IDC_APPSTARTING, CursorKind::AppStarting),
+            (IDC_HELP, CursorKind::Help),
+            (IDC_PIN, CursorKind::Pen),
+            (IDC_PERSON, CursorKind::Person),
+        ];
+        ids.into_iter()
+            .filter_map(|(id, kind)| {
+                let h = unsafe { LoadCursorW(std::ptr::null_mut(), id) };
+                (!h.is_null()).then_some((h as isize, kind))
+            })
+            .collect()
+    })
+}
+
+/// Cursor position + classified shape in one `GetCursorInfo` call (position,
+/// showing flag and the live HCURSOR come from the same snapshot, so the
+/// classification can never disagree with the sampled position).
+pub fn get_cursor_state() -> CursorState {
+    let mut info: CURSORINFO = unsafe { mem::zeroed() };
+    info.cbSize = mem::size_of::<CURSORINFO>() as u32;
+    if unsafe { GetCursorInfo(&mut info) } == 0 {
+        return CursorState {
+            x: 0,
+            y: 0,
+            kind: CursorKind::Hidden,
+        };
+    }
+    let kind = if info.flags & CURSOR_SHOWING == 0 {
+        CursorKind::Hidden
+    } else {
+        let h = info.hCursor as isize;
+        stock_cursor_table()
+            .iter()
+            .find(|(handle, _)| *handle == h)
+            .map(|(_, kind)| *kind)
+            .unwrap_or(CursorKind::Custom)
+    };
+    CursorState {
+        x: info.ptScreenPos.x,
+        y: info.ptScreenPos.y,
+        kind,
+    }
+}
+
+/// The display's DPI zoom (dpi/96) — the input-capture header's per-monitor
+/// `scale`, which the editor uses to size themed cursors like the OS does.
+/// Distinct from `MonitorInfo::scale` (capture px per coordinate unit, always
+/// 1.0 on Windows).
+pub fn monitor_display_scale(m: &MonitorInfo) -> f64 {
+    let center = POINT {
+        x: m.x + (m.width as i32 / 2),
+        y: m.y + (m.height as i32 / 2),
+    };
+    let hmon = unsafe { MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST) };
+    if hmon.is_null() {
+        return 1.0;
+    }
+    let mut dpi_x: u32 = 96;
+    let mut dpi_y: u32 = 96;
+    let hr = unsafe { GetDpiForMonitor(hmon, MDT_DEFAULT, &mut dpi_x, &mut dpi_y) };
+    if hr < 0 || dpi_x == 0 {
+        return 1.0;
+    }
+    dpi_x as f64 / 96.0
 }
 
 pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
@@ -314,12 +413,8 @@ mod endpoint_volume {
     struct IMMDeviceEnumeratorVtbl {
         unknown: IUnknownPrefix,
         enum_audio_endpoints: usize,
-        get_default_audio_endpoint: unsafe extern "system" fn(
-            *mut c_void,
-            i32,
-            i32,
-            *mut *mut c_void,
-        ) -> HRESULT,
+        get_default_audio_endpoint:
+            unsafe extern "system" fn(*mut c_void, i32, i32, *mut *mut c_void) -> HRESULT,
         get_device: unsafe extern "system" fn(*mut c_void, PCWSTR, *mut *mut c_void) -> HRESULT,
     }
 

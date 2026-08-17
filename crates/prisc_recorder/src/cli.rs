@@ -23,7 +23,7 @@ pub struct Cli {
         "output", "region", "monitor", "fps", "crf", "max_width", "max_height",
         "hw_accel", "low_cpu", "no_cursor", "tracker", "tracker_color", "pause",
         "speaker", "microphone", "speaker_volume_compensation", "settings",
-        "webcam", "multi_track",
+        "webcam", "multi_track", "input_capture",
     ])]
     pub list_cameras: bool,
 
@@ -42,6 +42,12 @@ pub struct Cli {
     /// color source (for machines without a camera).
     #[arg(long)]
     pub webcam: Option<String>,
+
+    /// Record cursor position/shape, mouse buttons and keys to a JSONL
+    /// sidecar at this path (DESIGN §1 wire format) alongside the video.
+    /// Session-fixed, like --output; the parent directory must exist.
+    #[arg(long)]
+    pub input_capture: Option<PathBuf>,
 
     /// Capture region "X,Y,W,H" in the platform capture coordinate space
     /// (Windows: physical px, virtual desktop; macOS: CG points).
@@ -154,6 +160,26 @@ impl Cli {
             _ => {}
         }
 
+        // Same parent-dir rule as --output: fail fast (exit 2) rather than
+        // discovering an unwritable sidecar path mid-pipeline.
+        if let Some(ref path) = self.input_capture {
+            match path.parent() {
+                Some(p) if !p.as_os_str().is_empty() && !p.is_dir() => {
+                    return Err(format!(
+                        "--input-capture parent directory does not exist: '{}'",
+                        p.display()
+                    ));
+                }
+                None => {
+                    return Err(format!(
+                        "--input-capture is not a file path: '{}'",
+                        path.display()
+                    ));
+                }
+                _ => {}
+            }
+        }
+
         // clap's conflicts_with already rejects --region + --monitor, but keep
         // the check for programmatic construction.
         if self.region.is_some() && self.monitor.is_some() {
@@ -238,6 +264,47 @@ mod tests {
     fn output_parent_must_exist() {
         let cli = parse(&["--output", "Z:/definitely/not/a/real/dir/video.mp4"]).unwrap();
         assert!(cli.validate().is_err());
+    }
+
+    #[test]
+    fn input_capture_parent_must_exist() {
+        let cli = parse(&[
+            "--output",
+            "a.mp4",
+            "--input-capture",
+            "Z:/definitely/not/a/real/dir/input.jsonl",
+        ])
+        .unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--input-capture"), "{err}");
+
+        // A bare file name (CWD parent) and an existing dir are both fine.
+        let cli = parse(&["--output", "a.mp4", "--input-capture", "input.jsonl"]).unwrap();
+        assert!(cli.validate().is_ok());
+        let dir = std::env::temp_dir().join("ic.jsonl");
+        let path = dir.to_string_lossy().into_owned();
+        let cli = parse(&["--output", "a.mp4", "--input-capture", &path]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn input_capture_coexists_with_settings_and_multi_track() {
+        // Session-fixed arg: NOT in the --settings conflicts list.
+        assert!(parse(&[
+            "--output",
+            "a.mp4",
+            "--settings",
+            "s.json",
+            "--multi-track",
+            "--input-capture",
+            "input.jsonl",
+        ])
+        .is_ok());
+        // ...but is a recording flag, so --list-cameras rejects it.
+        assert!(parse(&["--list-cameras", "--input-capture", "input.jsonl"]).is_err());
+        // The jsonl sidecar itself does not require --multi-track.
+        let cli = parse(&["--output", "a.mp4", "--input-capture", "input.jsonl"]).unwrap();
+        assert!(cli.validate().is_ok());
     }
 
     #[test]
@@ -460,7 +527,14 @@ mod tests {
         std::fs::write(&path, r#"{"webcam_device": "test"}"#).unwrap();
         let path_str = path.to_string_lossy().into_owned();
 
-        let cli = parse(&["--output", "a.mp4", "--multi-track", "--settings", &path_str]).unwrap();
+        let cli = parse(&[
+            "--output",
+            "a.mp4",
+            "--multi-track",
+            "--settings",
+            &path_str,
+        ])
+        .unwrap();
         assert_eq!(cli.validate().unwrap().webcam_device, "test");
 
         // The settings-file webcam hits the same multi-track requirement as

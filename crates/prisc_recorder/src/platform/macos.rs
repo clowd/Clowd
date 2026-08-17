@@ -8,7 +8,10 @@ use std::path::Path;
 
 use obs::data::ObsData;
 
-use super::{MonitorInfo, MouseInfo, ObsPaths};
+use super::{CursorKind, CursorState, MonitorInfo, MouseInfo, ObsPaths};
+
+/// `platform` field of the input-capture header (wire contract).
+pub const PLATFORM_NAME: &str = "macos";
 
 pub const GRAPHICS_MODULE: &CStr = c"libobs-metal.dylib";
 pub const DISPLAY_CAPTURE_ID: &str = "screen_capture";
@@ -202,6 +205,32 @@ pub fn get_mouse_info() -> MouseInfo {
         pressed,
         scale: 1.0,
     }
+}
+
+/// Compiling stub (DESIGN §2): position from the same CGEvent snapshot as
+/// `get_mouse_info`, shape classification not yet implemented — every sample
+/// reports `arrow` (the editor's universal fallback kind).
+pub fn get_cursor_state() -> CursorState {
+    let event = unsafe { CGEventCreate(std::ptr::null()) };
+    let (x, y) = if event.is_null() {
+        (0.0, 0.0)
+    } else {
+        let p = unsafe { CGEventGetLocation(event) };
+        unsafe { CFRelease(event) };
+        (p.x, p.y)
+    };
+    CursorState {
+        x: x as i32,
+        y: y as i32,
+        kind: CursorKind::Arrow,
+    }
+}
+
+/// The input-capture header's per-monitor `scale`. On macOS coordinates are
+/// points, so the Retina backing scale already stored on the monitor is the
+/// right density factor.
+pub fn monitor_display_scale(m: &MonitorInfo) -> f64 {
+    m.scale
 }
 
 pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
