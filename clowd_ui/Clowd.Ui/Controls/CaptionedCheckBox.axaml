@@ -31,11 +31,14 @@
                                  Width="10"
                                  Height="10"
                                  Margin="0,0,0,1">
+                            <!-- CornerRadius 0: the editor bars are all sharp edges, and the Semi
+                                 template rounds the box by default -->
                             <CheckBox Name="PART_CheckBox"
                                       Margin="0"
                                       Padding="0"
                                       MinWidth="0"
                                       MinHeight="0"
+                                      CornerRadius="0"
                                       HorizontalAlignment="Center"
                                       IsHitTestVisible="False"
                                       IsChecked="{TemplateBinding IsChecked, Mode=TwoWay}" />

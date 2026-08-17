@@ -6,6 +6,11 @@ public enum TrackKind
 {
     Video,
     Audio,
+
+    /// <summary>A row of effect items (<see cref="SpeedContent"/>/<see cref="ZoomContent"/>):
+    /// never painted or mixed, it modulates how the rest of the timeline plays. Appended so the
+    /// string-serialized enum stays wire-compatible.</summary>
+    Effect,
 }
 
 /// <summary>One timeline row. Tracks carry presentation state only — the items on a track live in

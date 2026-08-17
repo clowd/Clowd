@@ -102,6 +102,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         private IBrush _audioFill;
         private IBrush _textFill;
         private IBrush _imageFill;
+        private IBrush _speedFill;
+        private IBrush _zoomFill;
 
         /// <summary>Body fill for an item on a row of this kind. Video keeps the accent (it is the
         /// recording, the thing the editor is about); the other kinds get their own hue so a glance
@@ -111,6 +113,8 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Audio => _audioFill,
             TimelineRowKind.Text => _textFill,
             TimelineRowKind.Image => _imageFill,
+            TimelineRowKind.Speed => _speedFill,
+            TimelineRowKind.Zoom => _zoomFill,
             _ => _videoFill,
         };
 
@@ -197,11 +201,14 @@ namespace Clowd.UI.VideoEditor.Timeline
             var text3 = GetThemeColor(variant, "SemiColorText3", dark ? Color.FromRgb(140, 140, 140) : Color.FromRgb(130, 133, 138));
             var border = GetThemeColor(variant, "SemiColorBorder", dark ? Color.FromRgb(60, 60, 64) : Color.FromRgb(200, 202, 206));
 
-            // Per-kind hues. Audio/text/image are fixed rather than accent-derived: they have to
-            // stay apart from the accent (which the recording rows use) whatever the accent is.
+            // Per-kind hues. Audio/text/image/speed/zoom are fixed rather than accent-derived:
+            // they have to stay apart from the accent (which the recording rows use) whatever the
+            // accent is.
             var audio = dark ? Color.FromRgb(52, 140, 108) : Color.FromRgb(70, 165, 128);
             var text = dark ? Color.FromRgb(118, 92, 176) : Color.FromRgb(139, 112, 199);
             var image = dark ? Color.FromRgb(176, 122, 52) : Color.FromRgb(204, 148, 70);
+            var speed = dark ? Color.FromRgb(184, 70, 92) : Color.FromRgb(206, 86, 108);
+            var zoom = dark ? Color.FromRgb(46, 136, 150) : Color.FromRgb(54, 154, 170);
 
             var playheadColor = dark ? Color.FromRgb(240, 82, 82) : Color.FromRgb(212, 48, 48);
 
@@ -229,6 +236,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _audioFill = new SolidColorBrush(audio, dark ? 0.85 : 0.9),
                 _textFill = new SolidColorBrush(text, dark ? 0.85 : 0.9),
                 _imageFill = new SolidColorBrush(image, dark ? 0.85 : 0.9),
+                _speedFill = new SolidColorBrush(speed, dark ? 0.85 : 0.9),
+                _zoomFill = new SolidColorBrush(zoom, dark ? 0.85 : 0.9),
                 ItemBorderPen = new Pen(new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.35), 1),
                 ItemLabelBrush = new SolidColorBrush(dark ? Color.FromRgb(240, 240, 240) : Colors.White),
                 FilmstripPlaceholderFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.12),

@@ -65,13 +65,27 @@ namespace Clowd.VideoSDK.Composition
 
             foreach (var track in tracks)
             {
-                foreach (var item in project.Items)
+                // zoom rows above this track scale its whole picture about their focal points;
+                // the matrix is canvas-local, so the caller's own letterbox transform composes.
+                var zoom = ZoomMath.EffectiveMatrix(project, timeTicks, track.Order, canvasWidth, canvasHeight);
+                int save = target.Save();
+                try
                 {
-                    if (item.TrackId != track.Id)
-                        continue;
-                    if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
-                        continue;
-                    ComposeItem(item, timeTicks, frames, target, canvasWidth, canvasHeight, textScale);
+                    if (!zoom.IsIdentity)
+                        target.Concat(in zoom);
+
+                    foreach (var item in project.Items)
+                    {
+                        if (item.TrackId != track.Id)
+                            continue;
+                        if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
+                            continue;
+                        ComposeItem(item, timeTicks, frames, target, canvasWidth, canvasHeight, textScale);
+                    }
+                }
+                finally
+                {
+                    target.RestoreToCount(save);
                 }
             }
         }

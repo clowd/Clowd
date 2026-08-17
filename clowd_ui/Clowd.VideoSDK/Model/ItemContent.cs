@@ -5,7 +5,7 @@ namespace Clowd.VideoSDK.Model;
 
 /// <summary>
 /// What fills an <see cref="Item"/>'s span. Polymorphic on a <c>$type</c> discriminator
-/// (<c>media</c> / <c>text</c> / <c>image</c> / <c>solid</c>) via System.Text.Json's built-in
+/// (<c>media</c> / <c>text</c> / <c>image</c> / <c>solid</c> / <c>speed</c> / <c>zoom</c>) via System.Text.Json's built-in
 /// polymorphism, which the source-generated <see cref="ProjectJsonContext"/> supports. The
 /// discriminator strings are wire contract — renaming a class is free, renaming a discriminator
 /// breaks every saved project.
@@ -15,6 +15,8 @@ namespace Clowd.VideoSDK.Model;
 [JsonDerivedType(typeof(TextContent), "text")]
 [JsonDerivedType(typeof(ImageContent), "image")]
 [JsonDerivedType(typeof(SolidContent), "solid")]
+[JsonDerivedType(typeof(SpeedContent), "speed")]
+[JsonDerivedType(typeof(ZoomContent), "zoom")]
 public abstract class ItemContent
 {
     /// <summary>Deep copy, used by <see cref="TimelineOps.Split"/> so the two halves never share
@@ -97,4 +99,39 @@ public sealed class SolidContent : ItemContent
     public string Color { get; set; }
 
     public override ItemContent Clone() => new SolidContent { Color = Color };
+}
+
+/// <summary>A playback-speed effect: while the item is active the whole output plays at
+/// <see cref="Factor"/> (audio pitch rides with it, like <see cref="MediaContent.Speed"/>).
+/// Lives only on the single pinned <see cref="TrackKind.Effect"/> speed row; the item's
+/// Entry/Exit hold <see cref="TransitionKind.Ramp"/> transitions easing 1 → factor → 1.</summary>
+public sealed class SpeedContent : ItemContent
+{
+    /// <summary>Target speed factor, validated to 0.1..10.</summary>
+    public double Factor { get; set; } = 2.0;
+
+    public override ItemContent Clone() => new SpeedContent { Factor = Factor };
+}
+
+/// <summary>A zoom effect: scales every video track composited beneath its row (lower
+/// <see cref="Track.Order"/>) by <see cref="Zoom"/> about the focal point. Stacked zoom rows
+/// multiply; Entry/Exit hold <see cref="TransitionKind.Ramp"/> transitions easing
+/// 1 → zoom → 1.</summary>
+public sealed class ZoomContent : ItemContent
+{
+    /// <summary>Magnification, validated to 1.0..5.0.</summary>
+    public double Zoom { get; set; } = 1.5;
+
+    /// <summary>Focal point as a fraction of the canvas width, validated to 0..1.</summary>
+    public double FocusX { get; set; } = 0.5;
+
+    /// <summary>Focal point as a fraction of the canvas height, validated to 0..1.</summary>
+    public double FocusY { get; set; } = 0.5;
+
+    public override ItemContent Clone() => new ZoomContent
+    {
+        Zoom = Zoom,
+        FocusX = FocusX,
+        FocusY = FocusY,
+    };
 }

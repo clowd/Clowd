@@ -17,22 +17,24 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// </summary>
     internal static class TimelineReorder
     {
-        /// <summary>The rows the row at <paramref name="rowIndex"/> may be reordered among: the
-        /// video block or the audio block, which <see cref="TimelineRowLayout.Build"/> lays out
-        /// contiguously (video first, audio pinned below). A row cannot cross between the two —
-        /// its kind is a property of the track, not of where it sits. Inclusive at both ends.</summary>
+        /// <summary>The rows the row at <paramref name="rowIndex"/> may be reordered among: its
+        /// block — the pinned speed row, the video block (video and zoom rows), or the audio
+        /// block — which <see cref="TimelineRowLayout.Build"/> lays out contiguously in that
+        /// order. A row cannot cross between blocks — its kind is a property of the track, not of
+        /// where it sits — and the speed row is a block of one, which is what denies it a grip.
+        /// Inclusive at both ends.</summary>
         public static (int Start, int End) GroupRange(IReadOnlyList<TimelineRow> rows, int rowIndex)
         {
             RequireRow(rows, rowIndex);
 
-            var audio = IsAudio(rows, rowIndex);
+            var block = BlockOf(rows, rowIndex);
 
             var start = rowIndex;
-            while (start > 0 && IsAudio(rows, start - 1) == audio)
+            while (start > 0 && BlockOf(rows, start - 1) == block)
                 start--;
 
             var end = rowIndex;
-            while (end + 1 < rows.Count && IsAudio(rows, end + 1) == audio)
+            while (end + 1 < rows.Count && BlockOf(rows, end + 1) == block)
                 end++;
 
             return (start, end);
@@ -63,8 +65,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         ///
         /// <para>Two conversions happen here. The row is lifted out before it is put back, so a
         /// drop below its own slot lands one place higher than the boundary the indicator sat on;
-        /// and video rows are drawn highest layer first, so their display order is the reverse of
-        /// the model's — audio rows are listed in model order and need no flip.</para>
+        /// and video-block rows are drawn highest layer first, so their display order is the
+        /// reverse of the model's — audio rows are listed in model order and need no flip. The
+        /// video block's flip counts zoom rows too, matching the session's index space (non-audio
+        /// tracks minus the speed row); the speed row itself is always null — it is pinned.</para>
         /// </summary>
         public static int? TargetLayerIndex(IReadOnlyList<TimelineRow> rows, int rowIndex, int dropIndex)
         {
@@ -75,12 +79,28 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (target == rowIndex)
                 return null;
 
+            var block = BlockOf(rows, rowIndex);
+            if (block == RowBlock.Speed)
+                return null;
+
             var within = target - start;
-            return IsAudio(rows, rowIndex) ? within : end - start - within;
+            return block == RowBlock.Audio ? within : end - start - within;
         }
 
-        private static bool IsAudio(IReadOnlyList<TimelineRow> rows, int rowIndex) =>
-            rows[rowIndex].Kind == TimelineRowKind.Audio;
+        private enum RowBlock
+        {
+            Speed,
+            VideoZoom,
+            Audio,
+        }
+
+        private static RowBlock BlockOf(IReadOnlyList<TimelineRow> rows, int rowIndex) =>
+            rows[rowIndex].Kind switch
+            {
+                TimelineRowKind.Speed => RowBlock.Speed,
+                TimelineRowKind.Audio => RowBlock.Audio,
+                _ => RowBlock.VideoZoom,
+            };
 
         private static void RequireRow(IReadOnlyList<TimelineRow> rows, int rowIndex)
         {
