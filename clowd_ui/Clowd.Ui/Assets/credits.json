@@ -246,6 +246,12 @@
           "url": "https://github.com/madsmtm/objc2"
         },
         {
+          "name": "ocr-rs",
+          "version": "2.4.1",
+          "license": "Apache-2.0",
+          "url": "https://github.com/zibo-chen/rust-paddle-ocr"
+        },
+        {
           "name": "pollster",
           "version": "1.0.1",
           "license": "Apache-2.0/MIT",
