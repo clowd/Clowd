@@ -42,6 +42,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             comboRampExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             ddSpeed.ItemsSource = SelectedItemViewModel.SpeedOptions;
             ddSpeedTarget.ItemsSource = SelectedItemViewModel.SpeedTargetOptions;
+            ddKeyFilter.ItemsSource = SelectedItemViewModel.KeystrokeFilterOptions;
             listCursorStyle.ItemsSource = SelectedItemViewModel.CursorStyleOptions;
             listCursorClick.ItemsSource = SelectedItemViewModel.ClickAnimationOptions;
 
@@ -59,6 +60,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotCursorDebounce.DefaultValue = true;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
             dotSpeedTarget.DefaultValue = SelectedItemViewModel.DefaultSpeedTargetOption;
+            dotKeyFilter.DefaultValue = SelectedItemViewModel.DefaultKeystrokeFilterOption;
 
             btnFont.Click += async (_, _) => await PickFontAsync();
             btnDesync.Click += async (_, _) => await ConfirmDesyncAsync();

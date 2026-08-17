@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using Clowd.VideoSDK.Model;
 
 namespace Clowd.VideoSDK.Composition
 {
@@ -159,9 +160,14 @@ namespace Clowd.VideoSDK.Composition
         /// alone render nothing; shift never starts a chord (it is already folded into the
         /// translated character); printable keys use the captured character, everything else its
         /// VK name as a keycap token (Enter, Esc, Tab, Bksp, Left, F5, …). Mouse events are
-        /// ignored.
+        /// ignored. <paramref name="filter"/> drops runs before they form:
+        /// <see cref="KeystrokeFilter.Shortcuts"/> keeps only chords,
+        /// <see cref="KeystrokeFilter.Special"/> chords plus the non-printable keys that draw as
+        /// keycaps — the skipped keys neither extend a run's clock nor break one, so two special
+        /// keys with only typing between them still group by their own gap.
         /// </summary>
-        internal static IReadOnlyList<KeyRun> Segment(IReadOnlyList<InputEvent> events, int pauseBreakMs)
+        internal static IReadOnlyList<KeyRun> Segment(IReadOnlyList<InputEvent> events, int pauseBreakMs,
+            KeystrokeFilter filter = KeystrokeFilter.None)
         {
             var runs = new List<KeyRun>();
             if (events == null || events.Count == 0)
@@ -233,11 +239,15 @@ namespace Clowd.VideoSDK.Composition
                 if (isChord)
                     Close();
 
-                if (tokens.Count == 0)
-                    startMs = e.TimeMs;
-
                 string ch = Printable(e.Char);
                 bool special = ch == null;
+
+                // filtered-out keys vanish outright: they never open, extend or break a run
+                if (filter == KeystrokeFilter.Shortcuts || (filter == KeystrokeFilter.Special && !special))
+                    continue;
+
+                if (tokens.Count == 0)
+                    startMs = e.TimeMs;
                 string label = special ? VkName(e.Code) : ch;
                 string text = special
                     ? (tokens.Count == 0 ? label : " " + label)
@@ -633,21 +643,24 @@ namespace Clowd.VideoSDK.Composition
         // -------------------------------------------------------------------------------- cache
 
         /// <summary>
-        /// Process-wide run cache keyed by (capture path, pause-break): segmentation runs once per
-        /// distinct parameter pair, however many frames are composed (the ImageCache pattern —
-        /// immutable after load, failures included: a missing file caches its empty run list).
+        /// Process-wide run cache keyed by (capture path, pause-break, filter): segmentation runs
+        /// once per distinct parameter triple, however many frames are composed (the ImageCache
+        /// pattern — immutable after load, failures included: a missing file caches its empty run
+        /// list).
         /// </summary>
-        internal static IReadOnlyList<KeyRun> GetRuns(string capturePath, int pauseBreakMs)
+        internal static IReadOnlyList<KeyRun> GetRuns(string capturePath, int pauseBreakMs,
+            KeystrokeFilter filter = KeystrokeFilter.None)
         {
             if (string.IsNullOrEmpty(capturePath))
                 return Array.Empty<KeyRun>();
 
-            string key = pauseBreakMs.ToString(CultureInfo.InvariantCulture) + "|" + capturePath;
+            string key = pauseBreakMs.ToString(CultureInfo.InvariantCulture)
+                + "|" + (int)filter + "|" + capturePath;
             lock (CacheSync)
             {
                 if (!Cache.TryGetValue(key, out var runs))
                 {
-                    runs = Segment(InputCapture.Get(capturePath).Events, pauseBreakMs);
+                    runs = Segment(InputCapture.Get(capturePath).Events, pauseBreakMs, filter);
                     Cache[key] = runs;
                 }
                 return runs;
