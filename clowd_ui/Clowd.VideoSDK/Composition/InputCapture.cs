@@ -269,6 +269,7 @@ namespace Clowd.VideoSDK.Composition
         private readonly InputFrame[] _frames;
         private readonly InputEvent[] _events;
         private readonly Dictionary<int, CursorSprite> _sprites;
+        private readonly bool[] _inactive;
 
         private InputCapture(InputCaptureHeader header, InputFrame[] frames, InputEvent[] events,
             Dictionary<int, CursorSprite> sprites)
@@ -277,6 +278,47 @@ namespace Clowd.VideoSDK.Composition
             _frames = frames;
             _events = events;
             _sprites = sprites;
+            _inactive = ComputeInactive(frames);
+        }
+
+        /// <summary>How far (physical px, Euclidean) the pointer may drift from where it hid
+        /// before the debounce latch reads it as deliberate movement — sensor jitter and a
+        /// nudged desk should not resurrect a typing-hidden cursor.</summary>
+        internal const int DebounceMovePx = 3;
+
+        /// <summary>
+        /// The debounce latch behind <see cref="IsInactiveAt"/>, one forward pass at load. Windows
+        /// hides the cursor while the user types and flashes it back on every pause, so the raw
+        /// Hidden/visible transitions flicker; the latch turns them into "hidden until the pointer
+        /// actually does something": a Hidden frame sets it (and anchors it at that position), and
+        /// it clears only when the pointer moves more than <see cref="DebounceMovePx"/> from the
+        /// anchor — cumulative, so a slow drift still counts — or a button changes against the
+        /// previous frame.
+        /// </summary>
+        private static bool[] ComputeInactive(InputFrame[] frames)
+        {
+            var inactive = new bool[frames.Length];
+            bool latched = false;
+            int anchorX = 0, anchorY = 0;
+            for (int i = 0; i < frames.Length; i++)
+            {
+                ref readonly var f = ref frames[i];
+                if (f.Cursor == CursorKind.Hidden)
+                {
+                    latched = true;
+                    anchorX = f.X;
+                    anchorY = f.Y;
+                }
+                else if (latched)
+                {
+                    long dx = f.X - anchorX, dy = f.Y - anchorY;
+                    if (dx * dx + dy * dy > DebounceMovePx * DebounceMovePx
+                        || (i > 0 && f.Buttons != frames[i - 1].Buttons))
+                        latched = false;
+                }
+                inactive[i] = latched;
+            }
+            return inactive;
         }
 
         public InputCaptureHeader Header { get; }
@@ -344,6 +386,15 @@ namespace Clowd.VideoSDK.Composition
             var index = LatestAtOrBefore(timeMs);
             return index < 0 ? null : _frames[index];
         }
+
+        /// <summary>Whether the frame at <paramref name="index"/> (into <see cref="Frames"/>) sits
+        /// in a debounced-hidden stretch: the cursor went Hidden at some earlier frame and has
+        /// since neither moved more than <see cref="DebounceMovePx"/> from where it hid nor
+        /// pressed/released a button, even if CURSORINFO briefly reports it showing again
+        /// (Windows flashes the typing-hidden cursor back on every pause). True for every
+        /// genuinely Hidden frame too, so a debouncing caller need only test this.</summary>
+        public bool IsInactiveAt(int index)
+            => index >= 0 && index < _inactive.Length && _inactive[index];
 
         /// <summary>The index into <see cref="Frames"/> of the latest frame at or before
         /// <paramref name="timeMs"/>, or -1. The index form of <see cref="FrameAt"/> for callers

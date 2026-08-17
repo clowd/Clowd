@@ -495,6 +495,44 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Default_overlay_debounces_the_typing_hidden_flicker()
+        {
+            var p = NewProject();
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1),
+                Frame(100, 32, 32, "hidden"),
+                Frame(200, 32, 32, ci: 1),   // Windows flashing it back, unmoved: stays hidden
+                Frame(300, 40, 32, ci: 1));  // real movement: visible again
+            var source = AddCaptureSource(p, capture);
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            AssertColor(Px(Render(p, 0, frames), 34, 34), 0, 0, 255);              // red sprite
+            AssertColor(Px(Render(p, 200 * 10_000, frames), 34, 34), 255, 0, 0);   // bare screen
+            AssertColor(Px(Render(p, 300 * 10_000, frames), 42, 34), 0, 0, 255);   // red sprite
+        }
+
+        [Fact]
+        public void A_cursor_items_debounce_toggle_restores_the_raw_flicker()
+        {
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1),
+                Frame(100, 32, 32, "hidden"),
+                Frame(200, 32, 32, ci: 1));
+            var (p, _, cursor) = CursorProject(capture, "native");
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+
+            // on (the default): the unmoved reappearance stays hidden — bare screen
+            AssertColor(Px(Render(p, 200 * 10_000, frames), 34, 34), 255, 0, 0);
+
+            // off: the item draws exactly what the capture reported — the red sprite
+            ((CursorContent)cursor.Content).Debounce = false;
+            AssertColor(Px(Render(p, 200 * 10_000, frames), 34, 34), 0, 0, 255);
+        }
+
+        [Fact]
         public void Default_overlay_belongs_to_the_screen_stream_only()
         {
             // a webcam item (video stream 1 of the same source) must not composite the sprite

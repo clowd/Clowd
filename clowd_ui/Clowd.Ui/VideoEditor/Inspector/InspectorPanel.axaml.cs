@@ -56,6 +56,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampExitEasing.DefaultValue = SelectedItemViewModel.DefaultTransitionEasing;
             dotRampEntryEnabled.DefaultValue = false;
             dotRampExitEnabled.DefaultValue = false;
+            dotCursorDebounce.DefaultValue = true;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
             dotSpeedTarget.DefaultValue = SelectedItemViewModel.DefaultSpeedTargetOption;
 
