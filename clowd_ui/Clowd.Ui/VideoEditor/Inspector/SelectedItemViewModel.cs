@@ -137,6 +137,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             ["native"] = "Native",
             ["vision"] = "Vision",
             ["point"] = "Point",
+            ["numix"] = "Numix",
         };
 
         private static readonly Dictionary<string, string> ClickAnimationLabels = new Dictionary<string, string>
