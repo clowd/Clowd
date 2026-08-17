@@ -476,6 +476,22 @@ namespace Clowd.VideoSDK.Editing
             Mutate("Speed", ProjectChangeKind.Mapping, null, origin,
                 p => TimelineOps.SetSpeed(p, itemId, speed), failureValue: 1.0);
 
+        /// <summary>Sets a speed effect item's target factor (<see cref="SpeedContent.Factor"/>),
+        /// clamped to its valid range — the item's span is untouched, unlike
+        /// <see cref="SetItemSpeed"/>'s re-timing. Coalesced per item so spinner mashing is one
+        /// undo. Returns the factor actually stored (1.0 for non-speed content).</summary>
+        public double SetSpeedFactor(Guid itemId, double factor, object origin = null) =>
+            Mutate("Speed Target", ProjectChangeKind.Mapping, $"speed-factor:{itemId}", origin, p =>
+            {
+                var item = RequireItem(p, itemId);
+                if (item.Content is not SpeedContent speed)
+                    return 1.0;
+
+                factor = Math.Clamp(factor, 0.1, 10);
+                speed.Factor = factor;
+                return factor;
+            }, failureValue: 1.0);
+
         /// <summary>Wraps <see cref="TimelineOps.Split"/> (whole link group, all-or-nothing).</summary>
         public bool SplitAt(Guid itemId, long timelineTicks, object origin = null) =>
             Mutate("Split", ProjectChangeKind.Mapping, null, origin,
@@ -594,13 +610,14 @@ namespace Clowd.VideoSDK.Editing
         /// original, carrying a copy of every item on it. The copies are unlinked — a duplicate is
         /// its own material, not a new member of the recording's group (a linked copy would make
         /// every group move/split apply twice to the same content). The copy is never locked: a
-        /// duplicate exists to be edited. Returns false for an unknown id.
+        /// duplicate exists to be edited. Returns false for an unknown id, or for the speed row —
+        /// playback speed is a single global timeline, and a second speed row cannot validate.
         /// </summary>
         public bool DuplicateTrack(Guid trackId, object origin = null) =>
             Mutate("Duplicate Track", ProjectChangeKind.Structural, null, origin, p =>
             {
                 var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
-                if (track == null)
+                if (track == null || IsSpeedTrack(p, track))
                     return false;
 
                 // slot the copy in directly above the original: everything at or past that order
@@ -684,8 +701,9 @@ namespace Clowd.VideoSDK.Editing
         ///
         /// <para>Unlike <see cref="MoveTrackLayer"/> this accepts audio rows: their order is not a
         /// stacking order (audio does not composite) but it is the order the timeline lists them
-        /// in, which is worth arranging. Returns false — changing nothing — for an unknown id, an
-        /// index outside its group, or a move that lands where the row already is.</para>
+        /// in, which is worth arranging. The pinned speed row is excluded from the index space
+        /// and never moves. Returns false — changing nothing — for an unknown id, an index
+        /// outside its group, or a move that lands where the row already is.</para>
         /// </summary>
         public bool MoveTrackToIndex(Guid trackId, int index, object origin = null) =>
             Mutate("Reorder Row", ProjectChangeKind.Structural, null, origin,
@@ -704,7 +722,11 @@ namespace Clowd.VideoSDK.Editing
         /// </summary>
         private static bool Reorder(Project project, Guid trackId, Func<int, int> targetOf, bool audioMoves)
         {
-            var video = project.Tracks.Where(t => t.Kind != TrackKind.Audio)
+            // the speed row is pinned: it never moves, nothing moves past it, and it sits outside
+            // the layer-index space entirely (its Order is renumbered above everything below).
+            var speed = project.Tracks.Where(t => IsSpeedTrack(project, t))
+                                      .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
+            var video = project.Tracks.Where(t => t.Kind != TrackKind.Audio && !speed.Contains(t))
                                       .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
             var audio = project.Tracks.Where(t => t.Kind == TrackKind.Audio)
                                       .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
@@ -737,15 +759,18 @@ namespace Clowd.VideoSDK.Editing
             // puts those rows at the bottom of the timeline.
             foreach (var track in audio)
                 track.Order = order++;
+            foreach (var track in speed)
+                track.Order = order++;
 
             return true;
         }
 
         /// <summary>Whether <see cref="MoveTrackLayer"/> would do anything — the enablement the
-        /// timeline's context menu needs, without a speculative mutation.</summary>
+        /// timeline's context menu needs, without a speculative mutation. Always false for the
+        /// pinned speed row.</summary>
         public bool CanMoveTrackLayer(Guid trackId, bool towardsFront)
         {
-            var video = Project.Tracks.Where(t => t.Kind != TrackKind.Audio)
+            var video = Project.Tracks.Where(t => t.Kind != TrackKind.Audio && !IsSpeedTrack(Project, t))
                                       .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
 
             var index = video.FindIndex(t => t.Id == trackId);
@@ -854,6 +879,98 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>
+        /// Adds a speed effect item on <b>the</b> speed row — found by content, created above
+        /// everything when the project has none. The duration is clamped into the gap before the
+        /// next speed item; the add is refused — returning null — when an existing speed item
+        /// already covers <paramref name="startTicks"/> or the gap is shorter than
+        /// <see cref="TimelineOps.MinSegmentTicks"/>. Returns the live item.
+        /// </summary>
+        public Item AddSpeedEffect(long startTicks, long durationTicks, object origin = null)
+        {
+            Item created = null;
+            var committed = Mutate("Add Speed", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                // effect items don't extend the project, so an item past the content end would be
+                // unreachable on the timeline — clamp into the content span, refuse when there is
+                // no room.
+                var contentEnd = p.GetDurationTicks();
+                if (contentEnd < TimelineOps.MinSegmentTicks)
+                    return;
+                var start = Math.Clamp(startTicks, 0, contentEnd - TimelineOps.MinSegmentTicks);
+                var duration = Math.Min(durationTicks, contentEnd - start);
+
+                var track = FindSpeedTrack(p);
+                if (track != null)
+                {
+                    var next = long.MaxValue;
+                    foreach (var other in p.Items)
+                    {
+                        if (other.TrackId != track.Id)
+                            continue;
+                        if (other.TimelineStartTicks <= start && start < other.TimelineEndTicks)
+                            return;
+                        if (other.TimelineStartTicks > start)
+                            next = Math.Min(next, other.TimelineStartTicks);
+                    }
+
+                    if (next != long.MaxValue)
+                    {
+                        var gap = next - start;
+                        if (gap < TimelineOps.MinSegmentTicks)
+                            return;
+                        duration = Math.Min(duration, gap);
+                    }
+                }
+
+                track ??= InsertSpeedTrack(p);
+                created = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = track.Id,
+                    TimelineStartTicks = start,
+                    DurationTicks = Math.Max(duration, TimelineOps.MinSegmentTicks),
+                    Content = new SpeedContent(),
+                };
+                p.Items.Add(created);
+            });
+            return committed ? created : null;
+        }
+
+        /// <summary>Adds a zoom effect item on a <b>new</b> zoom row composited above the whole
+        /// video block — a zoom applies to the rows beneath it, and a new one starts by covering
+        /// all of them (drag the row down to narrow its reach). Returns the live item, or null
+        /// when rolled back.</summary>
+        public Item AddZoomEffect(long startTicks, long durationTicks, object origin = null)
+        {
+            Item created = null;
+            var committed = Mutate("Add Zoom", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                // clamp into the content span, exactly as AddSpeedEffect does: effect items don't
+                // extend the project, so anything past the content end would be unreachable.
+                var contentEnd = p.GetDurationTicks();
+                if (contentEnd < TimelineOps.MinSegmentTicks)
+                    return;
+                var start = Math.Clamp(startTicks, 0, contentEnd - TimelineOps.MinSegmentTicks);
+
+                var track = InsertEffectTrackOnTop(p, "Zoom");
+                created = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = track.Id,
+                    TimelineStartTicks = start,
+                    DurationTicks = Math.Min(durationTicks, contentEnd - start),
+                    Content = new ZoomContent(),
+                };
+                p.Items.Add(created);
+            });
+            return committed ? created : null;
+        }
+
+        /// <summary>Whether the project already carries the (single) speed row — the add-speed
+        /// command's CanExecute.</summary>
+        public bool HasSpeedTrack => FindSpeedTrack(Project) != null;
+
+        /// <summary>
         /// Imports an external media file as an overlay: one new <see cref="Source"/> with the
         /// probed streams (mapped exactly as a recording's are), one new track per stream — video
         /// rows stacked above the existing video rows, audio rows at the bottom — and one item per
@@ -902,7 +1019,16 @@ namespace Clowd.VideoSDK.Editing
 
                 for (var i = 0; i < audioStreams.Count; i++)
                 {
-                    var order = p.Tracks.Count > 0 ? p.Tracks.Max(t => t.Order) + 1 : 0;
+                    // above every existing row except the pinned speed row, which stays on top:
+                    // shift it (and only it) up, as the insert helpers renumber.
+                    var belowSpeed = p.Tracks.Where(t => !IsSpeedTrack(p, t))
+                                             .Select(t => t.Order).ToList();
+                    var order = belowSpeed.Count > 0 ? belowSpeed.Max() + 1 : 0;
+                    foreach (var existing in p.Tracks)
+                    {
+                        if (existing.Order >= order)
+                            existing.Order++;
+                    }
                     var track = new Track
                     {
                         Id = Guid.NewGuid(),
@@ -1355,10 +1481,54 @@ namespace Clowd.VideoSDK.Editing
             return created;
         }
 
+        /// <summary>Adds a zoom row composited above the whole video block — video and zoom rows
+        /// alike — shifting whatever sits at or above the slot (the audio rows and the speed row)
+        /// up one, exactly as <see cref="InsertVideoTrackOnTop"/> renumbers.</summary>
+        private static Track InsertEffectTrackOnTop(Project project, string name)
+        {
+            var blockOrders = project.Tracks.Where(t => t.Kind != TrackKind.Audio && !IsSpeedTrack(project, t))
+                                            .Select(t => t.Order).ToList();
+            var order = blockOrders.Count > 0 ? blockOrders.Max() + 1 : 0;
+            foreach (var track in project.Tracks)
+            {
+                if (track.Order >= order)
+                    track.Order++;
+            }
+
+            var created = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Effect, Name = name, Order = order };
+            project.Tracks.Add(created);
+            return created;
+        }
+
+        /// <summary>Adds <b>the</b> speed row, ordered above every existing row: it is excluded
+        /// from z-order and paint entirely, and keeping it on top means the video and audio
+        /// blocks never step over it.</summary>
+        private static Track InsertSpeedTrack(Project project)
+        {
+            var order = project.Tracks.Count > 0 ? project.Tracks.Max(t => t.Order) + 1 : 0;
+            var created = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Effect, Name = "Speed", Order = order };
+            project.Tracks.Add(created);
+            return created;
+        }
+
+        /// <summary>The row carrying the project's speed items, or null. Resolved by content, not
+        /// name — <see cref="Project.Validate"/> keeps it unique.</summary>
+        private static Track FindSpeedTrack(Project project) =>
+            project.Tracks.FirstOrDefault(t => IsSpeedTrack(project, t));
+
+        /// <summary>Whether this is the pinned speed row: an effect row is a speed row or a zoom
+        /// row by what its items are, and empty effect rows never survive a commit (see
+        /// <see cref="PruneEmptyTracks"/>).</summary>
+        private static bool IsSpeedTrack(Project project, Track track) =>
+            track.Kind == TrackKind.Effect &&
+            project.Items.Any(i => i.TrackId == track.Id && i.Content is SpeedContent);
+
         /// <summary>Removes tracks that were created during this session (not part of the project
-        /// the session opened with) and no longer carry any item.</summary>
+        /// the session opened with) and no longer carry any item. Effect rows are pruned
+        /// regardless of when they were created: the timeline classifies an effect row by its
+        /// items' content, so an empty one is unclassifiable and must never survive.</summary>
         private void PruneEmptyTracks(Project project) =>
-            project.Tracks.RemoveAll(t => !_initialTrackIds.Contains(t.Id) &&
+            project.Tracks.RemoveAll(t => (t.Kind == TrackKind.Effect || !_initialTrackIds.Contains(t.Id)) &&
                                           project.Items.All(i => i.TrackId != t.Id));
 
         /// <summary>Probe → <see cref="SourceStream"/> list, video then audio — the identical

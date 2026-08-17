@@ -147,9 +147,11 @@ namespace Clowd.UI.VideoEditor.Timeline
             // ------- drag grip, leftmost. Its cell is reserved on every row; the dots (and the
             // drag) are only there when the row has somewhere to go — a locked row is one the
             // context menu's Move Up/Down refuse too, and a lone row of its kind cannot reorder
-            // against anything.
+            // against anything. The speed row is a block of one by construction (see
+            // TimelineReorder.GroupRange), but it is pinned by meaning, so say so here too.
             var group = TimelineReorder.GroupRange(_rows, rowIndex);
-            var draggable = !track.Locked && group.End > group.Start;
+            var draggable = !track.Locked && group.End > group.Start &&
+                            row.Kind != TimelineRowKind.Speed;
             var grip = _drag.BuildGrip(rowIndex, draggable, palette.GripBrush, palette.GripHoverBrush,
                 new Thickness(GripMarginX, 2, GripMarginX, 2));
             DockPanel.SetDock(grip, Dock.Left);
@@ -169,6 +171,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             DockPanel.SetDock(delete, Dock.Right);
             dock.Children.Add(delete);
 
+            // effect rows keep the eye — Hidden switches the effect off — but "hide" would be the
+            // wrong word for something that was never in the picture.
+            var isEffect = row.Kind is TimelineRowKind.Speed or TimelineRowKind.Zoom;
             var enabled = isAudio ? !track.Muted : !track.Hidden;
             var enable = RowIconButton.Build(
                 TimelineIcons.Find(isAudio
@@ -177,7 +182,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 buttonBrush,
                 isAudio
                     ? (enabled ? "Mute this row" : "Include this audio in the mix")
-                    : (enabled ? "Hide this row" : "Show this track in the picture"),
+                    : isEffect
+                        ? (enabled ? "Disable this effect" : "Enable this effect")
+                        : (enabled ? "Hide this row" : "Show this track in the picture"),
                 buttonSize,
                 // white when on, faded back when off: at the label's weight the "on" state read as
                 // dirt rather than as a lit control.
@@ -195,11 +202,16 @@ namespace Clowd.UI.VideoEditor.Timeline
             DockPanel.SetDock(enable, Dock.Right);
             dock.Children.Add(enable);
 
-            var duplicate = RowIconButton.Build(TimelineIcons.Find("IconCopy"), buttonBrush,
-                "Duplicate this row and its clips", buttonSize);
-            duplicate.Click += (_, _) => _session?.DuplicateTrack(trackId, this);
-            DockPanel.SetDock(duplicate, Dock.Right);
-            dock.Children.Add(duplicate);
+            // no duplicate on the speed row: playback speed is a single global timeline, and the
+            // session refuses a second one anyway (see EditorSession.DuplicateTrack).
+            if (row.Kind != TimelineRowKind.Speed)
+            {
+                var duplicate = RowIconButton.Build(TimelineIcons.Find("IconCopy"), buttonBrush,
+                    "Duplicate this row and its clips", buttonSize);
+                duplicate.Click += (_, _) => _session?.DuplicateTrack(trackId, this);
+                DockPanel.SetDock(duplicate, Dock.Right);
+                dock.Children.Add(duplicate);
+            }
 
             // ------- link badge: a label saying the row's items move with the recording, not a
             // control. Built on every row and collapsed when unlinked, so RefreshLinkBadges can
@@ -218,7 +230,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             _linkBadges.Add((trackId, badge));
 
             // ------- kind icon (the row's only left-side label — see LastChildFill above)
-            var icon = TimelineIcons.NewIcon(KindIconKey(row.Kind), 13, palette.LabelBrush);
+            var icon = TimelineIcons.NewIcon(KindIconGeometry(row.Kind), 13, palette.LabelBrush);
             icon.VerticalAlignment = VerticalAlignment.Center;
             icon.Margin = new Thickness(0, 0, 6, 0);
             DockPanel.SetDock(icon, Dock.Left);
@@ -262,12 +274,14 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _session?.MoveTrackToIndex(_rows[fromRow].TrackId, layerIndex.Value, this);
         }
 
-        private static string KindIconKey(TimelineRowKind kind) => kind switch
+        private static Geometry KindIconGeometry(TimelineRowKind kind) => kind switch
         {
-            TimelineRowKind.Audio => "IconMusicNote",
-            TimelineRowKind.Text => "IconToolText",
-            TimelineRowKind.Image => "IconImage",
-            _ => "IconVideoClip",
+            TimelineRowKind.Audio => TimelineIcons.Find("IconMusicNote"),
+            TimelineRowKind.Text => TimelineIcons.Find("IconToolText"),
+            TimelineRowKind.Image => TimelineIcons.Find("IconImage"),
+            TimelineRowKind.Speed => TimelineIcons.SpeedometerGeometry,
+            TimelineRowKind.Zoom => TimelineIcons.MagnifierGeometry,
+            _ => TimelineIcons.Find("IconVideoClip"),
         };
     }
 
@@ -310,6 +324,43 @@ namespace Clowd.UI.VideoEditor.Timeline
             "L 6.6992188 20.714844 L 8.6992188 18.755859 L 7.3007812 17.328125 z " +
             "M 16.699219 17.328125 L 15.300781 18.755859 L 17.300781 20.714844 " +
             "L 18.699219 19.285156 L 16.699219 17.328125 z M 11 19 L 11 22 L 13 22 L 13 19 L 11 19 z");
+
+        /// <summary>A speedometer for the speed effect row and its items (24x24 box; Icons8
+        /// "Speed", Material Outlined #93731) — a gauge with the needle at speed.</summary>
+        public static readonly Geometry SpeedometerGeometry = StreamGeometry.Parse(
+            "M 12 3 C 5.9365932 3 1 7.9365932 1 14 C 1 16.000192 1.536449 17.883667 " +
+            "2.4726562 19.501953 A 1.0001 1.0001 0 0 0 3.3378906 20.001953 L 20.662109 20 " +
+            "A 1.0001 1.0001 0 0 0 21.527344 19.5 C 22.463453 17.881884 23 16.000192 23 14 " +
+            "C 23 7.9365932 18.063407 3 12 3 z M 12 5 C 16.982593 5 21 9.0174068 21 14 " +
+            "C 21 15.450887 20.612539 16.789626 20.005859 18 L 18.974609 18 A 1 1 0 0 0 " +
+            "19 17.78125 A 1 1 0 0 0 18 16.78125 A 1 1 0 0 0 17 17.78125 A 1 1 0 0 0 " +
+            "17.025391 18 L 6.8632812 18.001953 A 1 1 0 0 0 7 17.5 A 1 1 0 0 0 6 16.5 " +
+            "A 1 1 0 0 0 5 17.5 A 1 1 0 0 0 5.1367188 18.001953 L 3.9960938 18.001953 " +
+            "C 3.3888684 16.790962 3 15.451647 3 14 C 3 9.0174068 7.0174068 5 12 5 z " +
+            "M 12 6 A 1 1 0 0 0 11 7 A 1 1 0 0 0 12 8 A 1 1 0 0 0 13 7 A 1 1 0 0 0 12 6 z " +
+            "M 8.5 7 A 1 1 0 0 0 7.5 8 A 1 1 0 0 0 8.5 9 A 1 1 0 0 0 9.5 8 A 1 1 0 0 0 " +
+            "8.5 7 z M 15.4375 7 A 1 1 0 0 0 14.4375 8 A 1 1 0 0 0 15.4375 9 A 1 1 0 0 0 " +
+            "16.4375 8 A 1 1 0 0 0 15.4375 7 z M 18.041016 9.3964844 L 13.005859 12.273438 " +
+            "A 2 2 0 0 0 12 12 A 2 2 0 0 0 10 14 A 2 2 0 0 0 12 16 A 2 2 0 0 0 14 14.009766 " +
+            "L 19.033203 11.132812 L 18.041016 9.3964844 z M 6 9.5 A 1 1 0 0 0 5 10.5 " +
+            "A 1 1 0 0 0 6 11.5 A 1 1 0 0 0 7 10.5 A 1 1 0 0 0 6 9.5 z M 5 13 A 1 1 0 0 0 " +
+            "4 14 A 1 1 0 0 0 5 15 A 1 1 0 0 0 6 14 A 1 1 0 0 0 5 13 z M 19 13 A 1 1 0 0 0 " +
+            "18 14 A 1 1 0 0 0 19 15 A 1 1 0 0 0 20 14 A 1 1 0 0 0 19 13 z");
+
+        /// <summary>A magnifier with a plus for the zoom effect rows and their items (24x24 box) —
+        /// the same glyph the sidebar's add-zoom button carries.</summary>
+        public static readonly Geometry MagnifierGeometry = StreamGeometry.Parse(
+            "M 9 2 C 5.1458514 2 2 5.1458514 2 9 C 2 12.854149 5.1458514 16 9 16 " +
+            "C 10.747998 16 12.345009 15.348024 13.574219 14.28125 L 14 14.707031 L 14 16 " +
+            "L 19.585938 21.585938 C 20.137937 22.137937 21.033938 22.137938 21.585938 " +
+            "21.585938 C 22.137938 21.033938 22.137938 20.137938 21.585938 19.585938 " +
+            "L 16 14 L 14.707031 14 L 14.28125 13.574219 C 15.348024 12.345009 16 " +
+            "10.747998 16 9 C 16 5.1458514 12.854149 2 9 2 z M 9 4 C 11.773268 4 14 " +
+            "6.2267316 14 9 C 14 11.773268 11.773268 14 9 14 C 6.2267316 14 4 11.773268 " +
+            "4 9 C 4 6.2267316 6.2267316 4 9 4 z M 8.984375 5.9863281 A 1.0001 1.0001 0 0 0 " +
+            "8 7 L 8 8 L 7 8 A 1.0001 1.0001 0 1 0 7 10 L 8 10 L 8 11 A 1.0001 1.0001 0 1 0 " +
+            "10 11 L 10 10 L 11 10 A 1.0001 1.0001 0 1 0 11 8 L 10 8 L 10 7 A 1.0001 1.0001 " +
+            "0 0 0 8.984375 5.9863281 z");
 
         /// <summary>A simple chain-link glyph (24x24 box); VectorIcons has no link icon.</summary>
         public static readonly Geometry LinkGeometry = StreamGeometry.Parse(

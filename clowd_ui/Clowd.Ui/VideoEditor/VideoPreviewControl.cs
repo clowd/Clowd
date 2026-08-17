@@ -63,10 +63,12 @@ namespace Clowd.UI.VideoEditor
             _surface = new PreviewSurface(this) { IsHitTestVisible = false };
             PosterImage = new Image { Stretch = Stretch.Uniform };
             Gizmo = new TransformGizmoControl();
+            ZoomFocus = new ZoomFocusControl();
 
             Children.Add(_surface);
             Children.Add(PosterImage);
             Children.Add(Gizmo);
+            Children.Add(ZoomFocus);
 
             PointerPressed += OnCanvasPressed;
         }
@@ -78,6 +80,11 @@ namespace Clowd.UI.VideoEditor
         /// no geometry of its own: this control resolves the selected item's composed rect and
         /// arranges the gizmo onto it, or onto nothing when there is no gizmo to show.</summary>
         public TransformGizmoControl Gizmo { get; }
+
+        /// <summary>The zoom effect's focal-point reticle, shown (over the whole video rect, in
+        /// place of the gizmo) while a zoom item is selected with the playhead inside its span —
+        /// the zoom overlay's answer to the gizmo, resolved the same way on every layout pass.</summary>
+        public ZoomFocusControl ZoomFocus { get; }
 
         /// <summary>The letterboxed video rectangle from the last arrange, in local coordinates.</summary>
         public Rect VideoRect { get; private set; }
@@ -133,6 +140,7 @@ namespace Clowd.UI.VideoEditor
                 }
 
                 Gizmo.Session = value;
+                ZoomFocus.Session = value;
                 InvalidateArrange();
             }
         }
@@ -338,6 +346,9 @@ namespace Clowd.UI.VideoEditor
             Gizmo.CanvasRect = videoRect;
             Gizmo.Arrange(ResolveGizmoRect(videoRect));
 
+            ZoomFocus.CanvasRect = videoRect;
+            ZoomFocus.Arrange(ResolveZoomFocusRect(videoRect));
+
             return finalSize;
         }
 
@@ -450,6 +461,55 @@ namespace Clowd.UI.VideoEditor
             var inflated = new Rect(videoRect.X + placed.X, videoRect.Y + placed.Y, placed.W, placed.H)
                 .Inflate(TransformGizmoControl.HandlePad);
             return inflated.WithWidth(inflated.Width + TransformGizmoControl.RotatePad);
+        }
+
+        /// <summary>
+        /// Where the zoom focal-point reticle belongs this pass: the whole video rectangle while
+        /// the primary selection is a zoom item on a live (non-hidden, non-locked) effect row with
+        /// the playhead inside its span — the gizmo's own gate, minus the placement resolve a zoom
+        /// item does not have (its "picture" is the frame itself). Everything else — a speed item,
+        /// no selection, playhead outside — is the empty "no reticle" arrange. The gizmo shows for
+        /// none of these (<see cref="ResolveGizmoRect"/> requires a video track), so the two
+        /// overlays are never up at once.
+        /// </summary>
+        private Rect ResolveZoomFocusRect(Rect videoRect)
+        {
+            var empty = new Rect(0, 0, 0, 0);
+            var session = _session;
+            if (session == null || videoRect.Width <= 0 || videoRect.Height <= 0)
+            {
+                ZoomFocus.SetTarget(Guid.Empty);
+                return empty;
+            }
+
+            var project = session.Project;
+            var item = session.PrimarySelectedItem;
+
+            Track track = null;
+            if (item?.Content is ZoomContent)
+            {
+                foreach (var candidate in project.Tracks)
+                {
+                    if (candidate.Id == item.TrackId)
+                    {
+                        track = candidate;
+                        break;
+                    }
+                }
+            }
+
+            var ticks = ComposedTicks(project);
+
+            if (item?.Content is not ZoomContent ||
+                track is not { Kind: TrackKind.Effect, Hidden: false, Locked: false } ||
+                ticks < item.TimelineStartTicks || ticks >= item.TimelineEndTicks)
+            {
+                ZoomFocus.SetTarget(Guid.Empty);
+                return empty;
+            }
+
+            ZoomFocus.SetTarget(item.Id);
+            return videoRect;
         }
     }
 }

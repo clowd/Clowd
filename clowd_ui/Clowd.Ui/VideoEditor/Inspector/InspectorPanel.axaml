@@ -117,6 +117,59 @@
                 <Setter Property="Opacity" Value="0.45" />
             </Style>
         </ControlTheme>
+
+        <!--  The panel's own checkbox. The themed one is drawn from the app's tokens, which are
+              the light palette this fixed-dark sidebar deliberately does not use, so the box is
+              hand-coloured from the same values as the text boxes (and takes the accent the
+              shape/ratio tiles take when it is on). Padding, not size: the box stays 16px while
+              the press target reaches the row's full height.  -->
+        <ControlTheme x:Key="InspectorCheckBox" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <!--  no right padding: the box's right edge lines up with the dropdowns and
+                          spinners that end the other rows  -->
+                    <Border Padding="8,3,0,3" Background="Transparent">
+                        <Border
+                            Name="_box"
+                            Width="16"
+                            Height="16"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            CornerRadius="0">
+                            <Path
+                                Name="_check"
+                                Width="9"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{DynamicResource IconCheckmark}"
+                                Fill="White"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="Background" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+            </Style>
+            <Style Selector="^:checked /template/ Path#_check">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
     </UserControl.Resources>
 
     <!--  The editor window's chrome is a fixed dark palette (NOT Semi tokens), so this panel is
@@ -837,6 +890,76 @@
                     </DockPanel>
                 </StackPanel>
 
+                <!--  speed effect: the whole output plays at this factor while the item is under
+                      the playhead, so the item has one property and it is this one  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowSpeedEffect}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="SPEED" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <!--  the dot's default is the 2x option object, assigned in code-behind
+                              for the same reason ddSpeed's is  -->
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotSpeedTarget" CurrentValue="{Binding SpeedTarget, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Target" />
+                        <controls:DropDownButton x:Name="ddSpeedTarget" SelectedItem="{Binding SpeedTarget, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  zoom effect: how far in, and what the picture zooms towards. The focal point
+                      is the same pair of numbers the preview's crosshair drags.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowZoomEffect}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ZOOM" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ZoomFactor, Mode=TwoWay}" DefaultValue="1.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Zoom" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="5"
+                            Min="1"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding ZoomFactor, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusX, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Focus X" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding ZoomFocusX, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusY, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Focus Y" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding ZoomFocusY, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
                 <!--  animation (entry/exit transitions)  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowTransitions}">
                     <DockPanel>
@@ -905,6 +1028,80 @@
                         </Panel>
                         <TextBlock Classes="label" Text="Easing" />
                         <controls:DropDownButton x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  animation (ramps): the same two ends, for the items whose animation is a ramp
+                      of their own value rather than a way of arriving on screen — an audio item's
+                      volume, a speed item's factor, a zoom item's magnification. No kind picker:
+                      a checkbox says whether the end ramps at all, and its length and shape are
+                      the questions underneath it, asked only once it is ticked.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowRamp}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ANIMATION" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  bool default is assigned in code-behind for the same reason the
+                                  enum ones are: a XAML DefaultValue is a string  -->
+                            <controls:ResetDefaultButton x:Name="dotRampEntryEnabled" CurrentValue="{Binding RampEntryEnabled, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Entry" />
+                        <CheckBox IsChecked="{Binding RampEntryEnabled, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampEntryEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding RampEntryMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="10"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding RampEntryMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampEntryEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotRampEntryEasing" CurrentValue="{Binding RampEntryEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <controls:DropDownButton x:Name="comboRampEntryEasing" SelectedItem="{Binding RampEntryEasing, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" Margin="0,6,0,0">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotRampExitEnabled" CurrentValue="{Binding RampExitEnabled, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Exit" />
+                        <CheckBox IsChecked="{Binding RampExitEnabled, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampExitEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding RampExitMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="10"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding RampExitMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampExitEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotRampExitEasing" CurrentValue="{Binding RampExitEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <controls:DropDownButton x:Name="comboRampExitEasing" SelectedItem="{Binding RampExitEasing, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 

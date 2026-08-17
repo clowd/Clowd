@@ -15,7 +15,13 @@ namespace Clowd.VideoSDK.Playback
     /// (sourceId, streamIndex) — reusing <see cref="Demuxer"/>/<see cref="VideoDecodeWorker"/>
     /// unchanged — against ONE shared <see cref="PlaybackClock"/> that runs in <b>output-timeline
     /// time</b>. Workers pace their source-stamped frames through the project's timeline↔source
-    /// mapping (<see cref="ProjectTimelineMap"/>); presented frames land in the
+    /// mapping (<see cref="ProjectTimelineMap"/>) and, when speed items bend time, the project's
+    /// <see cref="TimeWarp"/>: the clock runs linearly in <b>warped output time</b> (scaled only
+    /// by the user's <see cref="PlaybackRate"/>), and <see cref="Position"/> — the project-time
+    /// contract everything external keeps speaking — is the warp's inverse of it, so a speed
+    /// ramp glides continuously with no rate change or audio flush anywhere inside it; an
+    /// identity warp keeps both domains coincident and every conversion a pass-through.
+    /// Presented frames land in the
     /// <see cref="PlaybackFrameSource"/> the preview's draw operation composes from
     /// (<see cref="TryGetFrameSource"/>). Audio never rides the demuxers: every unmuted audio
     /// stream is mixed in timeline time by one <see cref="AudioMixWorker"/> running the literal
@@ -67,6 +73,7 @@ namespace Clowd.VideoSDK.Playback
 
         private volatile PipelineSet _pipelines;
         private volatile ProjectTimelineMap _map;
+        private volatile TimeWarp _warp;
         private volatile Project _project;
         private PlaybackClock _clock;
         private VideoOpenOptions _options;
@@ -152,6 +159,16 @@ namespace Clowd.VideoSDK.Playback
         /// <summary>Timeline length — the duration transport/seeking operates in.</summary>
         public TimeSpan Duration => new TimeSpan(_map?.DurationTicks ?? 0);
 
+        /// <summary>Warped (output-time) length for the transport's total readout; equals
+        /// <see cref="Duration"/> while no speed item bends time. Seeking, <see cref="Position"/>
+        /// and every internal clamp stay in project time.</summary>
+        public long OutputDurationTicks => _warp?.OutputDurationTicks ?? _map?.DurationTicks ?? 0;
+
+        /// <summary>Maps a project-time instant (the domain of <see cref="Position"/> and
+        /// <see cref="SeekAsync"/>) into output time, so a transport can show elapsed against
+        /// <see cref="OutputDurationTicks"/> in the same warped domain.</summary>
+        public long ToOutputTicks(long projectTicks) => _warp?.ToOutput(projectTicks) ?? projectTicks;
+
         /// <summary>The frame source the preview's draw operation composes from. Stable for the
         /// player's lifetime (pipeline rebuilds re-register their streams into it).</summary>
         public PlaybackFrameSource FrameSource => _frameSource;
@@ -174,6 +191,8 @@ namespace Clowd.VideoSDK.Playback
         /// surfaces exclusively through the Failed state, never as a thrown exception.</summary>
         public Exception LastError { get; private set; }
 
+        /// <summary>The playhead in project time — the warp's inverse of the output-time clock,
+        /// so it eases smoothly through speed ramps while the clock underneath stays linear.</summary>
         public TimeSpan Position
         {
             get
@@ -189,9 +208,10 @@ namespace Clowd.VideoSDK.Playback
                 var pos = clock.Position;
                 if (pos < TimeSpan.Zero)
                     return TimeSpan.Zero;
-                if (dur > 0 && pos.Ticks > dur)
+                long tl = ClockToProjectTicks(pos.Ticks);
+                if (dur > 0 && tl > dur)
                     return new TimeSpan(dur);
-                return pos;
+                return new TimeSpan(tl);
             }
         }
 
@@ -231,19 +251,25 @@ namespace Clowd.VideoSDK.Playback
                 if (rate == _playbackRate)
                     return;
 
-                _playbackRate = rate;
-                var clock = _clock;
-                if (clock == null)
-                    return; // not open yet — OpenCore applies it to the clock it builds
+                // applied under the lifecycle lock so a rebuild (ReopenCore/BuildPipelines)
+                // can't hand a fresh mix worker a stale rate while the clock already runs at
+                // the new one.
+                lock (_lifecycleSync)
+                {
+                    _playbackRate = rate;
+                    var clock = _clock;
+                    if (clock == null)
+                        return; // not open yet — OpenCore applies it to the clock it builds
 
-                clock.Rate = rate; // rebases: the position is continuous across the change
-                var mix = _pipelines?.MixWorker;
-                if (mix == null)
-                    return;
+                    clock.Rate = rate; // rebases: the position is continuous across the change
+                    var mix = _pipelines?.MixWorker;
+                    if (mix == null)
+                        return;
 
-                // the mix worker adopts the speed at its next chunk and flushes itself; the seek
-                // lands video on the same instant so the two agree from the first sample on.
-                mix.SetSpeed(rate);
+                    // the mix worker adopts the speed at its next chunk and flushes itself; the seek
+                    // lands video on the same instant so the two agree from the first sample on.
+                    mix.SetSpeed(rate);
+                }
                 if (_state is PlayerState.Paused or PlayerState.Playing or PlayerState.Ended)
                     _ = SeekAsync(Position, SeekMode.Exact);
             }
@@ -286,6 +312,7 @@ namespace Clowd.VideoSDK.Playback
         private void OpenCore(Project project, VideoOpenOptions options)
         {
             _options = options;
+            _warp = TimeWarp.Build(project);
             _clock = new PlaybackClock { Rate = _playbackRate };
 
             var map = ProjectTimelineMap.Build(project);
@@ -414,7 +441,7 @@ namespace Clowd.VideoSDK.Playback
                     set.AudioRing = new AudioRingBuffer(mixRate); // ~500ms float stereo
                     set.AudioSink = new NAudioSink(mixRate, 2, set.AudioRing, _options.CreateAudioOutput?.Invoke());
                     set.AudioSink.Volume = _volume;
-                    set.MixWorker = new AudioMixWorker(project, set.AudioRing, set.AudioSink, mixRate);
+                    set.MixWorker = new AudioMixWorker(project, set.AudioRing, set.AudioSink, mixRate, _warp);
                     if (_playbackRate != 1.0)
                         set.MixWorker.SetSpeed(_playbackRate); // a rebuild keeps the chosen speed
                     Interlocked.Increment(ref _decoderOpens); // the audio pipeline, as one
@@ -506,25 +533,42 @@ namespace Clowd.VideoSDK.Playback
         /// sight. Caller holds <see cref="_lifecycleSync"/>.</summary>
         private void ApplyMappingSwap(Project project, ProjectTimelineMap map, PipelineSet set)
         {
+            // captured through the OLD warp before anything swaps: the project position is the
+            // stable anchor an edit must preserve, whatever it does to the output timeline.
+            long positionTicks = Position.Ticks;
+
             _project = project;
             _map = map;
+            var warp = TimeWarp.Build(project);
+            bool warpChanged = !warp.MappingEquals(_warp);
+            _warp = warp;
             _frameSource.SetCutSchedules(BuildCutSchedules(map));
+            if (positionTicks > map.DurationTicks)
+                positionTicks = map.DurationTicks;
             if (set.MixWorker != null)
             {
                 bool wasEof = set.MixWorker.EofReached;
-                set.MixWorker.UpdateProject(project);
+                set.MixWorker.UpdateProject(project, warp);
                 // an edit that extends the audio revives a worker idling at the old audio end;
                 // without a re-base it would resume mixing THERE (its next-frame cursor and the
                 // sink's timing base froze at the old end), and OnTick's re-attach would yank
                 // the master clock backwards. Flush production onto the live position instead —
                 // the mix thread adopts the project before the seek in the same iteration, so
                 // the grown end is seen first and the seek then re-bases cursor + sink timing.
-                if (wasEof)
-                    set.MixWorker.PrepareSeek(Position);
+                // A changed warp mapping needs the same flush: the sink's timing describes the
+                // old output domain until production re-bases on the playhead under the new one.
+                if (wasEof || warpChanged)
+                    set.MixWorker.PrepareSeek(new TimeSpan(positionTicks));
             }
             // _activeOffsetTicks intentionally kept: if the current position's segment
             // offset changed under the new map (e.g. a cut moved past the playhead), the
             // next tick's seam check sees the mismatch and hops the pipelines.
+
+            // a speed edit re-shapes the output timeline under the playhead: keep the project
+            // position and re-anchor the clock's output time to it under the new warp — paused
+            // included. Every edit that leaves the mapping alone leaves the clock alone.
+            if (warpChanged)
+                _clock.SetPosition(new TimeSpan(warp.ToOutput(positionTicks)));
         }
 
         /// <summary>Drains queued project updates on a background task, same discipline as
@@ -598,6 +642,7 @@ namespace Clowd.VideoSDK.Playback
 
             _project = project;
             _map = map;
+            _warp = TimeWarp.Build(project);
             _frameSource.SetCutSchedules(BuildCutSchedules(map));
 
             if (pos.Ticks > map.DurationTicks)
@@ -617,7 +662,7 @@ namespace Clowd.VideoSDK.Playback
 
             _pipelines = set;
             PrimeAndStart(set, map, pos.Ticks);
-            _clock.SetPosition(pos);
+            _clock.SetPosition(new TimeSpan(ProjectToClockTicks(pos.Ticks)));
             if (_state == PlayerState.Failed)
                 SetState(PlayerState.Paused); // a retried rebuild succeeded — transport is back
 
@@ -751,7 +796,7 @@ namespace Clowd.VideoSDK.Playback
             // OnImmediatePresented), so a clock still holding the pre-seek position would race it.
             _lastSeekWasFast = mode == SeekMode.Fast;
             Volatile.Write(ref _activeOffsetTicks, PrimaryOffsetAt(map, tl));
-            _clock.SetPosition(target);
+            _clock.SetPosition(new TimeSpan(ProjectToClockTicks(tl)));
 
             // the mix worker seeks in timeline time — no source-domain mapping exists for audio.
             if (flushAudio)
@@ -910,44 +955,19 @@ namespace Clowd.VideoSDK.Playback
                         .ContinueWith(_ => Interlocked.Exchange(ref _skipSeekBusy, 0));
                 }
 
-                // audio finished before video: hand the clock to the stopwatch so video plays
+                // audio finished before video — hand the clock to the stopwatch so video plays
                 // out. The reverse transition brings the audio master back when the worker
                 // produces again (a seek's optimistic EofReached clear lost the race to the mix
-                // thread, or an edit extended the audio). Both directions are serialized against
-                // DoSeek/ReopenCore — TryEnter, never lock: the transition self-retries next
-                // tick, and the timer thread must not block behind a hundreds-of-ms rebuild.
+                // thread, or an edit extended the audio). Serialized against DoSeek/ReopenCore —
+                // TryEnter, never lock: the work self-retries next tick, and the timer thread
+                // must not block behind a hundreds-of-ms rebuild.
                 if (set?.MixWorker != null && Monitor.TryEnter(_lifecycleSync))
                 {
                     try
                     {
                         // re-check under the lock: a rebuild may have swapped the set out
                         if (!_disposed && _pipelines == set)
-                        {
-                            bool audioEof = set.MixWorker.EofReached && set.AudioRing.Available == 0;
-                            if (!_audioDetached && audioEof)
-                            {
-                                _audioDetached = true;
-                                _clock.SetAudioSource(null);
-                            }
-                            else if (_audioDetached && !set.MixWorker.EofReached)
-                            {
-                                // only trust the sink as master when its timing describes the
-                                // playhead: after an EOF idle the base pts is still frozen where
-                                // production parked, and attaching that snaps the clock backwards.
-                                var sink = set.AudioSink;
-                                if (sink.HasTiming && (pos - sink.PlayedTime).Duration() <= AudioReattachTolerance)
-                                {
-                                    _audioDetached = false;
-                                    _clock.SetAudioSource(sink);
-                                }
-                                else
-                                {
-                                    // flush + re-base production on the playhead; re-attach on a
-                                    // later tick once the re-based timing lands.
-                                    set.MixWorker.PrepareSeek(pos);
-                                }
-                            }
-                        }
+                            TickAudioAttach(set, pos);
                     }
                     finally
                     {
@@ -989,6 +1009,38 @@ namespace Clowd.VideoSDK.Playback
             }
         }
 
+        /// <summary>The tick's audio-master state machine (detach at end-of-audio, re-attach when
+        /// production resumes). Caller holds <see cref="_lifecycleSync"/>.</summary>
+        private void TickAudioAttach(PipelineSet set, TimeSpan pos)
+        {
+            bool audioEof = set.MixWorker.EofReached && set.AudioRing.Available == 0;
+            if (!_audioDetached && audioEof)
+            {
+                _audioDetached = true;
+                _clock.SetAudioSource(null);
+            }
+            else if (_audioDetached && !set.MixWorker.EofReached)
+            {
+                // only trust the sink as master when its timing describes the
+                // playhead: after an EOF idle the base pts is still frozen where
+                // production parked, and attaching that snaps the clock backwards.
+                // The sink's timing lives in the clock's (output) domain.
+                var sink = set.AudioSink;
+                var posOut = new TimeSpan(ProjectToClockTicks(pos.Ticks));
+                if (sink.HasTiming && (posOut - sink.PlayedTime).Duration() <= AudioReattachTolerance)
+                {
+                    _audioDetached = false;
+                    _clock.SetAudioSource(sink);
+                }
+                else
+                {
+                    // flush + re-base production on the playhead; re-attach on a
+                    // later tick once the re-based timing lands.
+                    set.MixWorker.PrepareSeek(pos);
+                }
+            }
+        }
+
         public PlaybackStatistics GetStatistics()
         {
             var set = _pipelines;
@@ -1009,12 +1061,30 @@ namespace Clowd.VideoSDK.Playback
 
         // ------------------------------------------------------------------------------ mapping
 
+        /// <summary>Project → clock domain: the clock runs in warped output time, so every value
+        /// handed to it (seek targets, adopted frame pts) maps through the warp. An identity warp
+        /// keeps the domains coincident and both conversions exact pass-throughs.</summary>
+        private long ProjectToClockTicks(long projectTicks)
+        {
+            var warp = _warp;
+            return warp is { IsIdentity: false } ? warp.ToOutput(projectTicks) : projectTicks;
+        }
+
+        private long ClockToProjectTicks(long clockTicks)
+        {
+            var warp = _warp;
+            return warp is { IsIdentity: false } ? warp.ToProject(clockTicks) : clockTicks;
+        }
+
+        /// <summary>Source pts → the clock's domain (project timeline, then through the warp):
+        /// what the decode workers pace their presentation against.</summary>
         private long MapVideoPtsToClock((Guid, int) key, long srcTicks)
         {
             var map = _map;
-            if (map != null && map.TryGetVideo(key, out var sm))
-                return sm.SourceToTimeline(srcTicks);
-            return srcTicks;
+            long tl = map != null && map.TryGetVideo(key, out var sm)
+                ? sm.SourceToTimeline(srcTicks)
+                : srcTicks;
+            return ProjectToClockTicks(tl);
         }
 
         private static long VideoSourceTarget(ProjectTimelineMap map, (Guid, int) key, long tlTicks)

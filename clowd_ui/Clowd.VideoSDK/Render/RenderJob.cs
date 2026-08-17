@@ -7,6 +7,7 @@ using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
+using Clowd.VideoSDK.Playback;
 using SkiaSharp;
 
 namespace Clowd.VideoSDK.Render
@@ -26,9 +27,10 @@ namespace Clowd.VideoSDK.Render
         public Action<string> DiagnosticLog { get; init; }
 
         /// <summary>
-        /// Optional explicit output-frame schedule (100ns ticks, strictly increasing): one output
-        /// frame is composed and encoded at each instant, instead of the uniform
-        /// <c>FpsNum/FpsDen</c> grid. This is how the v1 compat path reproduces vid-render's VFR
+        /// Optional explicit output-frame schedule (100ns ticks in <b>output time</b>, strictly
+        /// increasing): one output frame is composed and encoded at each instant, instead of the
+        /// uniform <c>FpsNum/FpsDen</c> grid. Instants map through the project's speed warp like
+        /// the grid does (a warp-free project composes them verbatim). This is how the v1 compat path reproduces vid-render's VFR
         /// passthrough — vid-render re-encoded every kept source frame on its own source
         /// timestamp, while the v2 model renders CFR. Null renders the normal CFR grid.
         /// </summary>
@@ -66,7 +68,9 @@ namespace Clowd.VideoSDK.Render
 
     /// <summary>
     /// Renders a <see cref="Project"/> to an mp4 — the work-order's render loop: for each output
-    /// frame <c>n</c>, <c>FrameComposer.Compose</c> at <c>TimeBase.FrameIndexToTicks(n)</c> into a
+    /// frame <c>n</c>, <c>FrameComposer.Compose</c> at the project instant the speed warp maps
+    /// <c>TimeBase.FrameIndexToTicks(n)</c> to (<see cref="TimeWarp.ToProject"/>; the identity
+    /// map when there are no speed items) into a
     /// factory surface on the <see cref="ComposerThread"/>, read the pixels back to a BGRA staging
     /// buffer, and hand them to <see cref="Mp4Writer"/>. Two surfaces and two staging buffers are
     /// in flight, so frame N+1 composes on the composer thread while frame N encodes on the
@@ -115,6 +119,12 @@ namespace Clowd.VideoSDK.Render
             if (durationTicks <= 0)
                 throw new InvalidOperationException("The project has no items — nothing to render.");
 
+            // The output runs on warped time: speed items compress/stretch the project onto the
+            // encode grid. An identity warp maps every instant to itself exactly, so warp-free
+            // projects render precisely as before.
+            var warp = TimeWarp.Build(project);
+            long outputDurationTicks = warp.OutputDurationTicks;
+
             // Explicit schedule (v1 VFR passthrough) renders one frame per instant; otherwise the
             // CFR grid: frames n with FrameIndexToTicks(n) < duration — the largest covered
             // index, plus one.
@@ -132,14 +142,14 @@ namespace Clowd.VideoSDK.Render
             }
 
             long frameCount = schedule?.Count
-                ?? TimeBase.TicksToFrameIndex(durationTicks - 1, output.FpsNum, output.FpsDen) + 1;
+                ?? TimeBase.TicksToFrameIndex(outputDurationTicks - 1, output.FpsNum, output.FpsDen) + 1;
             bool hasAudio = AudioMixer.HasAudioItems(project);
             // The audio stream runs to the end of the last audio item, not to the video's end:
             // where the source audio track is shorter than the video (real recordings routinely
             // are, by a few hundredths of a second), vid-render's atrim/concat chain ended the
             // output audio there too rather than padding silence to the video duration.
-            long audioEndTicks = Math.Min(durationTicks, AudioMixer.GetAudioEndTicks(project));
-            long totalAudioFrames = hasAudio ? AudioTime.SamplesCeil(audioEndTicks, output.SampleRate) : 0;
+            long audioEndOutputTicks = warp.ToOutput(Math.Min(durationTicks, AudioMixer.GetAudioEndTicks(project)));
+            long totalAudioFrames = hasAudio ? AudioTime.SamplesCeil(audioEndOutputTicks, output.SampleRate) : 0;
 
             ComposerThread composer = null;
             var pool = new FrameBufferPool();
@@ -180,12 +190,13 @@ namespace Clowd.VideoSDK.Render
                     for (int i = 0; i < InFlight; i++)
                         staging[i] = pool.Rent(rowBytes * output.HeightPx);
 
-                    AudioMixer mixer = null;
+                    WarpAudioResampler audioWarp = null;
                     float[] mixBuffer = null;
                     if (hasAudio)
                     {
                         audioSource = new SequentialAudioSource(project);
-                        mixer = new AudioMixer(project, audioSource);
+                        audioWarp = new WarpAudioResampler(new AudioMixer(project, audioSource),
+                            warp, output.SampleRate);
                         // one video frame's worth of audio is the largest per-iteration chunk
                         long perFrame = AudioTime.SamplesCeil(
                             TimeBase.FrameIndexToTicks(1, output.FpsNum, output.FpsDen), output.SampleRate);
@@ -227,8 +238,13 @@ namespace Clowd.VideoSDK.Render
                             long n = submitted;
                             var surface = surfaces[n % InFlight];
                             var stage = staging[n % InFlight];
-                            long tTicks = schedule?[(int)n]
-                                ?? TimeBase.FrameIndexToTicks(n, output.FpsNum, output.FpsDen);
+                            // the frame's output-time instant, mapped to the project instant it
+                            // shows (an identity warp passes both grids through exactly); the
+                            // warp's rounding may land exactly on the half-open project end, so
+                            // clamp to keep the unwarped grid's tTicks < duration invariant
+                            long tTicks = Math.Min(durationTicks - 1,
+                                warp.ToProject(schedule?[(int)n]
+                                    ?? TimeBase.FrameIndexToTicks(n, output.FpsNum, output.FpsDen)));
                             composer.Post(() =>
                             {
                                 try
@@ -253,17 +269,18 @@ namespace Clowd.VideoSDK.Render
                         done.Error?.Throw();
 
                         // drive audio up to this frame's end before muxing the frame, so the
-                        // interleaver always has both streams' data for the span
-                        if (mixer != null)
+                        // interleaver always has both streams' data for the span — pacing runs
+                        // entirely in output time; the resampler maps back to project time.
+                        if (audioWarp != null)
                         {
                             // frame end = the next scheduled instant (schedule mode) or the next
                             // grid instant; the last frame drives audio out to its full extent.
                             long frameEndTicks = schedule != null
-                                ? (done.Frame + 1 < frameCount ? schedule[(int)(done.Frame + 1)] : audioEndTicks)
+                                ? (done.Frame + 1 < frameCount ? schedule[(int)(done.Frame + 1)] : audioEndOutputTicks)
                                 : TimeBase.FrameIndexToTicks(done.Frame + 1, output.FpsNum, output.FpsDen);
                             long target = Math.Min(totalAudioFrames,
                                 AudioTime.SamplesFloor(frameEndTicks, output.SampleRate));
-                            audioPos = MixUpTo(mixer, writer, mixBuffer, audioPos, target);
+                            audioPos = MixUpTo(audioWarp, writer, mixBuffer, audioPos, target);
                         }
 
                         // pts: frame index on the CFR grid, microseconds under a schedule
@@ -278,8 +295,8 @@ namespace Clowd.VideoSDK.Render
 
                     if (!cancelled)
                     {
-                        if (mixer != null && audioPos < totalAudioFrames)
-                            MixUpTo(mixer, writer, mixBuffer, audioPos, totalAudioFrames);
+                        if (audioWarp != null && audioPos < totalAudioFrames)
+                            MixUpTo(audioWarp, writer, mixBuffer, audioPos, totalAudioFrames);
                         writer.Finish();
                         finished = true;
                         outputBytes = new FileInfo(outputPath).Length;
@@ -343,14 +360,14 @@ namespace Clowd.VideoSDK.Render
 
         /// <summary>Mixes and submits audio in encoder-friendly chunks until <paramref name="target"/>
         /// (absolute output sample frames); returns the new position.</summary>
-        private static long MixUpTo(AudioMixer mixer, Mp4Writer writer, float[] buffer,
+        private static long MixUpTo(WarpAudioResampler audio, Mp4Writer writer, float[] buffer,
             long position, long target)
         {
             int capacity = buffer.Length / AudioMixer.Channels;
             while (position < target)
             {
                 int chunk = (int)Math.Min(capacity, target - position);
-                mixer.MixChunk(position, chunk, buffer);
+                audio.ReadChunk(position, chunk, buffer);
                 writer.SubmitAudioSamples(buffer, chunk);
                 position += chunk;
             }

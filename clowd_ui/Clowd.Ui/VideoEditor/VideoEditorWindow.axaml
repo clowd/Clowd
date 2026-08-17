@@ -341,6 +341,23 @@
                     IconPath="{StaticResource IconToolText}"
                     ToolTip.Tip="Add text at the playhead" />
 
+                <controls:ToolButton
+                    x:Name="btnAddZoom"
+                    Padding="6"
+                    Command="{Binding CommandAddZoomEffect}"
+                    IconPath="{StaticResource IconZoomEffect}"
+                    ToolTip.Tip="Add zoom" />
+
+                <!--  tooltip swaps in code-behind with HasSpeedTrack (the disabled state explains
+                      itself), so it shows on the disabled button too  -->
+                <controls:ToolButton
+                    x:Name="btnAddSpeed"
+                    Padding="6"
+                    Command="{Binding CommandAddSpeedEffect}"
+                    IconPath="{StaticResource IconSpeedEffect}"
+                    ToolTip.ShowOnDisabled="True"
+                    ToolTip.Tip="Add speed change" />
+
                 <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton
                     Padding="6"
