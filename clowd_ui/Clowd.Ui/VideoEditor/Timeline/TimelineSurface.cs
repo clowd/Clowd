@@ -97,8 +97,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>Runs the parent control's <c>DeleteSelection</c> — the context menu must not
-        /// carry a second copy of the ripple/group/lock rules the Delete key follows.</summary>
+        /// carry a second copy of the selection/lock rules the Delete key follows.</summary>
         public Func<bool> DeleteSelection { get; set; }
+
+        /// <summary>Runs the parent control's <c>RippleDeleteSelection</c> — the cross-track cut
+        /// the context menu offers beside the plain delete.</summary>
+        public Func<bool> RippleDeleteSelection { get; set; }
 
         // ------------------------------------------------------------------------------- wiring
 
@@ -709,6 +713,12 @@ namespace Clowd.UI.VideoEditor.Timeline
                 () => _session.SplitItemAt(itemId, cursorTicks, this)));
 
             menu.Items.Add(NewMenuItem("Delete", !track.Locked, () => DeleteSelection?.Invoke()));
+
+            // the cross-track cut: this clip's span removed from its whole recording and the gap
+            // closed on every row. Named for what it does to the rest of the timeline, because
+            // that is exactly what plain Delete no longer touches.
+            menu.Items.Add(NewMenuItem("Ripple Delete", !track.Locked,
+                () => RippleDeleteSelection?.Invoke()));
 
             var trackId = track.Id;
 

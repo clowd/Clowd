@@ -659,9 +659,10 @@ namespace Clowd.VideoSDK.Editing
                 return any;
             });
 
-        /// <summary>Wraps <see cref="TimelineOps.RippleDelete"/> (whole link group, gap closes on
-        /// all tracks), then prunes any non-initial track that lost its last item — inside the
-        /// same mutation, so one undo restores tracks and items together.</summary>
+        /// <summary>Wraps <see cref="TimelineOps.RippleDelete"/> (the clip's span cut out of its
+        /// link group, gap closes on all tracks), then prunes any non-initial track that lost its
+        /// last item — inside the same mutation, so one undo restores tracks and items
+        /// together.</summary>
         public void RippleDeleteItem(Guid itemId, object origin = null) =>
             Mutate("Delete", ProjectChangeKind.Structural, null, origin, p =>
             {
@@ -678,25 +679,22 @@ namespace Clowd.VideoSDK.Editing
                     PruneEmptyTracks(p);
             });
 
-        /// <summary>Removes every member of the item's link group in place — no ripple — with the
-        /// same track prune, all in one mutation. The delete for an imported file's rows, whose
-        /// group means "streams of one file", not "contiguous recording segments" (see
-        /// <see cref="IsRippleGroup"/>): closing the gap under everything else is the recording
-        /// cut's semantics, not the overlay's.</summary>
+        /// <summary>Wraps <see cref="TimelineOps.DeleteLinked"/> (the clip's span cut out of its
+        /// link group in place — no ripple) with the same track prune, all in one mutation. The
+        /// delete for an imported file's rows, whose group means "streams of one file", not
+        /// "contiguous recording segments" (see <see cref="IsRippleGroup"/>): closing the gap
+        /// under everything else is the recording cut's semantics, not the overlay's.</summary>
         public void DeleteGroup(Guid itemId, object origin = null) =>
             Mutate("Delete", ProjectChangeKind.Structural, null, origin, p =>
             {
-                foreach (var member in TimelineOps.GetLinkedItems(p, itemId))
-                    p.Items.Remove(member);
+                TimelineOps.DeleteLinked(p, itemId);
                 PruneEmptyTracks(p);
             });
 
         /// <summary>
         /// True when the item's link group is a recording-segment group — one with a member on a
         /// track the session opened with — as opposed to the per-file group an import gets. The
-        /// discriminator the UI keys ripple semantics (and the recording's move gate) off: deleting
-        /// a recording segment closes the gap on all rows, deleting an imported overlay lifts just
-        /// that file's items (<see cref="DeleteGroup"/>); a recording group is pinned in place
+        /// discriminator the UI keys the move gate off: a recording group is pinned in place
         /// while an import moves as one. False for unlinked items.
         /// </summary>
         public bool IsRippleGroup(Guid itemId)
