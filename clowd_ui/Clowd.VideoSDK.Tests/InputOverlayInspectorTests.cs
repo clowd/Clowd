@@ -544,12 +544,14 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("vision", SelectedItemViewModel.DefaultCursorStyleOption.Value);
             Assert.Equal("none", SelectedItemViewModel.DefaultClickAnimationOption.Value);
             Assert.Equal("Vision", SelectedItemViewModel.DefaultCursorStyleOption.Label);
-            Assert.Equal("Native", SelectedItemViewModel.CursorStyleOptions[0].Label);
+            Assert.Equal("None", SelectedItemViewModel.CursorStyleOptions[0].Label);
+            Assert.Equal("Native", SelectedItemViewModel.CursorStyleOptions[1].Label);
 
-            // every style tile but native draws real artwork; native's tile is the outline
-            // stand-in, so it is the one — and only one — the asset table has nothing for
+            // every themed style tile draws real artwork; none (the ban sign) and native (the
+            // recorded sprite / outline stand-in) are the two the asset table has nothing for
             Assert.All(SelectedItemViewModel.CursorStyleOptions, o =>
-                Assert.Equal(o.Value == SelectedItemViewModel.NativeCursorStyle,
+                Assert.Equal(o.Value == SelectedItemViewModel.NativeCursorStyle
+                        || o.Value == SelectedItemViewModel.NoneCursorStyle,
                     CursorAssets.TryGet(o.Value, CursorAssets.KindArrow) == null));
 
             // the highlight tiles animate off ClickHighlight: "none" is the one that never does

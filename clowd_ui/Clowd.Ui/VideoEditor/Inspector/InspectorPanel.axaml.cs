@@ -69,6 +69,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 () => _vm.KeyboardBackColorHex, hex => _vm.KeyboardBackColorHex = hex);
             surroundColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
                 () => _vm.SurroundColorHex, hex => _vm.SurroundColorHex = hex);
+            cursorClickColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
+                () => _vm.CursorClickColorHex, hex => _vm.CursorClickColorHex = hex);
             miniColor.Cancelled += (_, _) => colorPopup.IsOpen = false;
 
             DataContextChanged += (_, _) => AttachViewModel(DataContext as SelectedItemViewModel);
@@ -121,6 +123,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 case nameof(SelectedItemViewModel.KeyboardTextColorHex):
                 case nameof(SelectedItemViewModel.KeyboardBackColorHex):
                 case nameof(SelectedItemViewModel.SurroundColorHex):
+                case nameof(SelectedItemViewModel.CursorClickColorHex):
                     RefreshColorWells();
                     break;
                 case nameof(SelectedItemViewModel.ShowKeyboardTrack):
@@ -153,6 +156,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 SelectedItemViewModel.DefaultKeyboardBackColorHex);
             RefreshColorWell(txtSurroundColorHex, surroundColorSwatch, _vm?.SurroundColorHex,
                 _vm?.DefaultSurroundColorHex ?? "#80000000");
+            RefreshColorWell(txtCursorClickColorHex, cursorClickColorSwatch, _vm?.CursorClickColorHex,
+                SelectedItemViewModel.DefaultCursorClickColorHex);
         }
 
         private static void RefreshColorWell(TextBlock label, Shape swatch, string hex, string fallback)

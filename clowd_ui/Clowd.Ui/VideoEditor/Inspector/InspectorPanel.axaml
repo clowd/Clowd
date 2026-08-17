@@ -1073,6 +1073,29 @@
                       the recorded cursor box and carries both of its own.  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowCursorTrack}">
                     <DockPanel>
+                        <TextBlock Classes="section" Text="PLACEMENT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  the size dial rides above the style picker because it applies to whatever
+                          the picker chooses — sprite and glyph alike scale by it. It stays put
+                          under "none" too: a leading section that blinked out with one tile below
+                          it would read as the panel breaking, not as a dial retiring.  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Size" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="5"
+                            Min="0.5"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Margin="0,8,0,0">
                         <TextBlock Classes="section" Text="CURSOR" />
                         <Rectangle Classes="sectionRule" />
                     </DockPanel>
@@ -1123,11 +1146,19 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!--  a second row of the same tiles for the picked style's colourways, and only
-                          for a style that has more than one — the row is absent rather than
-                          single-tiled, so it reads as part of the style above it rather than as a
-                          setting of its own. Each tile draws the style's own arrow in the palette
-                          it names, which is the whole of what the choice does.  -->
+                    <!--  the colourway row gets its own sub-header, like HIGHLIGHT below: which
+                          palette the pack draws in is its own subject, not one more style tile.
+                          Header and tiles show and hide together — only for a themed style that
+                          has more than one palette to choose between.  -->
+                    <DockPanel Margin="0,8,0,0" IsVisible="{Binding CursorVariantsVisible}">
+                        <TextBlock Classes="section" Text="THEME" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  the same tiles as the style row, one per colourway of the picked style —
+                          absent rather than single-tiled for a style with only one. Each tile
+                          draws the style's own arrow in the palette it names, which is the whole
+                          of what the choice does.  -->
                     <ListBox
                         Margin="0,4,-4,-4"
                         Padding="0"
@@ -1166,20 +1197,6 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
-
-                    <DockPanel Classes="row" IsVisible="{Binding CursorGlyphEnabled}">
-                        <Panel Classes="dot" DockPanel.Dock="Left">
-                            <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
-                        </Panel>
-                        <TextBlock Classes="label" Text="Size" />
-                        <controls:SpinnerTextBox
-                            DisplayScale="100"
-                            Max="5"
-                            Min="0.5"
-                            SpinAmount="0.05"
-                            Suffix="%"
-                            Value="{Binding CursorSize, Mode=TwoWay}" />
-                    </DockPanel>
 
                     <!--  a sub-header, like CROP under ASPECT RATIO: what a click leaves behind is
                           its own subject, not one more property of the pointer.  -->
@@ -1232,8 +1249,46 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!--  the three dials, gone entirely under "none" — there is no highlight to
-                          size or time then, and the tiles above already say so.  -->
+                    <!--  the colour well and the three dials, gone entirely under "none" — there
+                          is no highlight to colour, size or time then, and the tiles above
+                          already say so. The well shares the text card's picker (code-behind).  -->
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorClickColorHex, Mode=TwoWay}" DefaultValue="#FFFF0000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="cursorClickColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="cursorClickColorSwatch" Fill="Red" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtCursorClickColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#FFFF0000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
                     <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorHoldSize, Mode=TwoWay}" DefaultValue="1" />
