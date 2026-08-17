@@ -119,6 +119,41 @@
             </Style>
         </ControlTheme>
 
+        <!--  The same ring box, left-aligned: for a radio whose "icon" is a live control rather than
+              a Path, so it cannot ride in MaskShapeTile's template. The content lays itself out on
+              the shape tiles' own metrics (10 in from the left edge, 8 to the label), which is why
+              the presenter stretches instead of centring like the ratio tiles' does.  -->
+        <ControlTheme x:Key="PreviewTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <ContentPresenter
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
         <!--  The same ring box again, for the two pickers whose options come from a list rather
               than from hand-written radios (the cursor styles, the click highlights). Content is
               the item template's, so the theme only owns the box; the ink colours live in the
@@ -324,6 +359,11 @@
             <Setter Property="Foreground" Value="#CCCCCC" />
         </Style>
         <Style Selector="ListBoxItem:selected TextBlock.tileText">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <!--  the same label, on the hand-written radios that carry a live preview (the surround
+              tiles): a checked radio brightens its label exactly as a selected list tile does  -->
+        <Style Selector="RadioButton:checked TextBlock.tileText">
             <Setter Property="Foreground" Value="White" />
         </Style>
         <Style Selector="ListBoxItem:selected insp|CursorStylePreview">
@@ -1041,9 +1081,9 @@
                           a list of names would make the user try them one at a time. Each tile
                           draws that style's own artwork (CursorStylePreview reads the compositor's
                           asset table), and native — which has no artwork, it replays the recorded
-                          cursor — shows a plain outline. No label row above them: eight tiles
-                          showing eight cursors do not need to be told they are the style, and the
-                          shape picker sets the precedent.  -->
+                          cursor — shows a plain outline. No label row above them: tiles showing
+                          the cursors themselves do not need to be told they are the style, and
+                          the shape picker sets the precedent.  -->
                     <ListBox
                         x:Name="listCursorStyle"
                         Margin="0,0,-4,-4"
@@ -1082,6 +1122,49 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
+                    <!--  a second row of the same tiles for the picked style's colourways, and only
+                          for a style that has more than one — the row is absent rather than
+                          single-tiled, so it reads as part of the style above it rather than as a
+                          setting of its own. Each tile draws the style's own arrow in the palette
+                          it names, which is the whole of what the choice does.  -->
+                    <ListBox
+                        Margin="0,4,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        IsVisible="{Binding CursorVariantsVisible}"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ItemsSource="{Binding CursorVariantOptions}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding CursorVariant, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    Margin="10,0,4,0"
+                                    HorizontalAlignment="Left"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <insp:CursorStylePreview
+                                        Width="22"
+                                        Height="22"
+                                        VerticalAlignment="Center"
+                                        StyleName="{Binding $parent[ListBox].DataContext.CursorStyle.Value}"
+                                        VariantName="{Binding Value}" />
+                                    <TextBlock
+                                        Classes="tileText"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
                     <DockPanel Classes="row" IsVisible="{Binding CursorGlyphEnabled}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
@@ -1094,14 +1177,6 @@
                             SpinAmount="0.05"
                             Suffix="%"
                             Value="{Binding CursorSize, Mode=TwoWay}" />
-                    </DockPanel>
-
-                    <DockPanel Classes="row" IsVisible="{Binding CursorGlyphEnabled}">
-                        <Panel Classes="dot" DockPanel.Dock="Left">
-                            <controls:ResetDefaultButton x:Name="dotCursorDropShadow" CurrentValue="{Binding CursorDropShadow, Mode=TwoWay}" />
-                        </Panel>
-                        <TextBlock Classes="label" Text="Shadow" />
-                        <CheckBox IsChecked="{Binding CursorDropShadow, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
                     </DockPanel>
 
                     <!--  a sub-header, like CROP under ASPECT RATIO: what a click leaves behind is
@@ -1325,6 +1400,195 @@
                                     Text="#8C000000" />
                             </StackPanel>
                         </Border>
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  surround: what the item's silhouette casts (a shadow, a glow) or wears (an
+                      outline). Shared by the pictures and the cursor glyph — the two things the
+                      compositor draws a silhouette for — which is why it is its own section after
+                      CURSOR rather than one more row inside it. Everything about it is measured in
+                      fractions of the item's drawn extent, so the rows read as percentages and the
+                      surround keeps its proportions at any canvas size. Deliberately NOT called an
+                      effect: that name is being kept for what may later be applied to the item's own
+                      pixels (a blur, a colour grade) — inside the silhouette, not around it.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowSurround}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="SURROUND" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  a 2x2 grid of tiles: each draws the same chip in the same place on the same
+                          plate, so the only difference between them is what is drawn around it — the
+                          real thing, off the compositor's own numbers, at the settings the rows below
+                          hold (see SurroundPreview, which exaggerates so a tile-sized shadow is
+                          visible at all). Left-aligned like the shape tiles, and the 6px left margin
+                          is the gap the 30px plate already leaves above and below it in a 42px tile,
+                          so the plate is inset by the same amount on three sides.  -->
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="4">
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundNone, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Draw the item with nothing around it">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview Width="30" Height="30" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="None" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundShadow, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Drop a shadow behind the item, down and to the right">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview
+                                    Width="30"
+                                    Height="30"
+                                    Surround="{Binding SurroundPreviewShadow}" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="Shadow" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundGlow, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Surround the item with a soft halo of colour">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview
+                                    Width="30"
+                                    Height="30"
+                                    Surround="{Binding SurroundPreviewGlow}" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="Glow" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundOutline, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Trace the item's edge with a solid ring of colour">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview
+                                    Width="30"
+                                    Height="30"
+                                    Surround="{Binding SurroundPreviewOutline}" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="Outline" />
+                            </StackPanel>
+                        </RadioButton>
+                    </Grid>
+
+                    <!--  the well shares the text card's picker (see the code-behind); its alpha is
+                          the surround's strength, exactly as the keystroke pill's fill works  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowSurroundColor}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding SurroundColorHex, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundColorHex}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Colour" />
+                        <Border
+                            x:Name="surroundColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="surroundColorSwatch" Fill="Black" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtSurroundColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#80000000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <!--  a shadow's own row: how far it falls. The light direction is the
+                          compositor's and fixed, so there is no angle to set.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowSurroundDistance}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding SurroundDistance, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundDistance}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Distance" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.5"
+                            Min="0"
+                            SpinAmount="0.005"
+                            Suffix="%"
+                            Value="{Binding SurroundDistance, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  one dial, three names (see SurroundSizeLabel): the number means how far a
+                          shadow or glow bleeds out, and how thick an outline is drawn.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowSurroundSize}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding SurroundSize, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundSize}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="{Binding SurroundSizeLabel}" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.5"
+                            Min="0"
+                            SpinAmount="0.005"
+                            Suffix="%"
+                            Value="{Binding SurroundSize, Mode=TwoWay}" />
                     </DockPanel>
                 </StackPanel>
 

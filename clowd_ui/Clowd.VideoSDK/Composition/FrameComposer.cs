@@ -158,7 +158,8 @@ namespace Clowd.VideoSDK.Composition
                     if (!frames.TryGetFrame(media.SourceId, media.StreamIndex, sourceTicks, out var frame)
                         || frame.Image == null)
                         return;
-                    DrawPicture(target, frame.Image, transform, fx, opacity, canvasWidth, canvasHeight);
+                    DrawPicture(target, frame.Image, transform, item.Surround, fx, opacity,
+                        canvasWidth, canvasHeight);
                     DrawDefaultCursorOverlay(project, media, timeTicks, sourceTicks, frame.Image,
                         transform, fx, opacity, frames, target, canvasWidth, canvasHeight);
                     break;
@@ -169,7 +170,8 @@ namespace Clowd.VideoSDK.Composition
                     var image = ImageCache.Get(img.Path);
                     if (image == null)
                         return;
-                    DrawPicture(target, image, transform, fx, opacity, canvasWidth, canvasHeight);
+                    DrawPicture(target, image, transform, item.Surround, fx, opacity,
+                        canvasWidth, canvasHeight);
                     break;
                 }
 
@@ -204,8 +206,16 @@ namespace Clowd.VideoSDK.Composition
 
         // ------------------------------------------------------------------------------- media
 
+        /// <summary>
+        /// A video frame or a still, placed by its mapping and wearing the item's
+        /// <paramref name="surround"/>. It is drawn from the <b>masked</b> silhouette but outside the
+        /// mask itself: its layer opens before <see cref="ApplyClips"/>, so the clip shapes what
+        /// casts the shadow while the shadow is free to fall beyond it. A surround is a
+        /// decoration-only filter (see <see cref="SurroundMath"/>), so the picture is drawn
+        /// twice — once to cast, once to be seen.
+        /// </summary>
         private static void DrawPicture(SKCanvas target, SKImage image, Transform transform,
-            ItemEffects fx, double opacity, int canvasWidth, int canvasHeight)
+            Surround surround, ItemEffects fx, double opacity, int canvasWidth, int canvasHeight)
         {
             // crop/aspect insets, dest rect and the px→canvas factors all live in the mapping —
             // shared with the cursor overlay, which maps captured positions through the same math.
@@ -213,21 +223,45 @@ namespace Clowd.VideoSDK.Composition
                     canvasWidth, canvasHeight, out var map))
                 return;
 
-            int save = target.Save();
-            try
+            var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
+            using var decoration = SurroundMath.CreateDecoration(
+                surround, SurroundMath.ReferenceExtent(map.Dest));
+
+            // pass 0 paints the decoration (skipped when there is none), pass 1 the picture itself
+            for (int pass = decoration != null ? 0 : 1; pass <= 1; pass++)
             {
-                ApplyClips(target, transform, fx, map.Dest);
-                using var paint = new SKPaint
+                int save = target.Save();
+                try
                 {
-                    IsAntialias = true,
-                    Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
-                };
-                var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
-                target.DrawImage(image, map.Source, map.Dest, sampling, paint);
-            }
-            finally
-            {
-                target.RestoreToCount(save);
+                    if (pass == 0)
+                    {
+                        // no bounds hint on the layer: the rotation lives inside it (ApplyClips),
+                        // so an axis-aligned rect measured out here would clip a rotated item's
+                        // surround. A surround therefore costs a canvas-sized layer per frame —
+                        // which is why the filter is built once, above, and skipped when it draws
+                        // nothing.
+                        using var layer = new SKPaint
+                        {
+                            ImageFilter = decoration,
+                            Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
+                        };
+                        target.SaveLayer(layer);
+                    }
+
+                    ApplyClips(target, transform, fx, map.Dest);
+                    using var paint = new SKPaint
+                    {
+                        IsAntialias = true,
+                        // the decoration pass carries the item's opacity on its layer instead, so
+                        // a translucent item's shadow fades once rather than twice
+                        Color = SKColors.White.WithAlpha(AlphaByte(pass == 0 ? 1 : opacity)),
+                    };
+                    target.DrawImage(image, map.Source, map.Dest, sampling, paint);
+                }
+                finally
+                {
+                    target.RestoreToCount(save);
+                }
             }
         }
 
@@ -348,14 +382,14 @@ namespace Clowd.VideoSDK.Composition
                 }
                 else
                 {
-                    var glyph = CursorCompose.ResolveGlyph(cursor.Style, row.Cursor);
+                    var glyph = CursorCompose.ResolveGlyph(cursor.Style, cursor.Variant, row.Cursor);
                     if (glyph != null)
                     {
                         double sizeSourcePx = (cursor.Size > 0 ? cursor.Size : 1.0)
                             * CursorCompose.BaseCursorPx * monitorScale;
                         var pos = map.Map(row.X - header.RegionX, row.Y - header.RegionY);
                         CursorCompose.DrawGlyph(target, glyph, pos,
-                            (float)(sizeSourcePx * map.ScaleX), cursor.DropShadow, opacity);
+                            (float)(sizeSourcePx * map.ScaleX), item.Surround, opacity);
                     }
                 }
             }

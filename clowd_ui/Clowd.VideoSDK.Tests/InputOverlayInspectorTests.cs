@@ -169,20 +169,55 @@ namespace Clowd.VideoSDK.Tests
             session.Select(cursor.Id);
 
             Assert.Equal(2, CursorItems(session).Length);
-            Assert.Equal("ios-glyph", vm.CursorStyle.Value);
+            Assert.Equal("vision", vm.CursorStyle.Value);
             Assert.True(vm.CursorGlyphEnabled);
 
-            vm.CursorStyle = SelectedItemViewModel.CursorStyleOptions.First(o => o.Value == "material");
+            vm.CursorStyle = SelectedItemViewModel.CursorStyleOptions.First(o => o.Value == "native");
 
-            Assert.All(CursorItems(session), c => Assert.Equal("material", c.Style));
-            Assert.Equal("material", vm.CursorStyle.Value);
+            Assert.All(CursorItems(session), c => Assert.Equal("native", c.Style));
+            Assert.Equal("native", vm.CursorStyle.Value);
+        }
+
+        /// <summary>The colourway row is the style's own: it appears only for a style that offers
+        /// more than one, and writing it fans out over the row exactly as the style does.</summary>
+        [Fact]
+        public void CursorVariant_ShowsOnlyForAStyleWithColourwaysAndWritesTheWholeRow()
+        {
+            var (session, vm) = NewInspector(out _);
+            var cursor = session.AddCursorTrack();
+            session.Select(cursor.Id);
+
+            // vision offers two; nothing is stored until the user picks, and the getter reads the
+            // style's default rather than showing an empty tile row
+            Assert.True(vm.CursorVariantsVisible);
+            Assert.Equal(new[] { "dark", "light" }, vm.CursorVariantOptions.Select(o => o.Value).ToArray());
+            Assert.Equal("dark", vm.CursorVariant.Value);
+            Assert.All(CursorItems(session), c => Assert.Null(c.Variant));
+
+            vm.CursorVariant = vm.CursorVariantOptions.First(o => o.Value == "light");
+
+            Assert.All(CursorItems(session), c => Assert.Equal("light", c.Variant));
+            Assert.Equal("light", vm.CursorVariant.Value);
+
+            // native has no artwork at all, so it has no colourways and the row leaves the panel
+            vm.CursorStyle = SelectedItemViewModel.CursorStyleOptions
+                .First(o => o.Value == SelectedItemViewModel.NativeCursorStyle);
+
+            Assert.False(vm.CursorVariantsVisible);
+            Assert.Empty(vm.CursorVariantOptions);
+            Assert.Null(vm.CursorVariant);
+
+            // ...and the pick survives the trip: going back re-selects what was stored
+            vm.CursorStyle = SelectedItemViewModel.DefaultCursorStyleOption;
+            Assert.True(vm.CursorVariantsVisible);
+            Assert.Equal("light", vm.CursorVariant.Value);
         }
 
         [Fact]
         public void NativeStyle_HidesTheGlyphOnlyRows()
         {
-            // the size and shadow rows bind their IsVisible to this: under native they do not
-            // merely grey out, they leave the panel
+            // the size row and the whole EFFECT section bind their IsVisible to this: under native
+            // they do not merely grey out, they leave the panel
             var (session, vm) = NewInspector(out _);
             var cursor = session.AddCursorTrack();
             session.Select(cursor.Id);
@@ -191,9 +226,11 @@ namespace Clowd.VideoSDK.Tests
                 .First(o => o.Value == SelectedItemViewModel.NativeCursorStyle);
 
             Assert.False(vm.CursorGlyphEnabled);
+            Assert.False(vm.ShowSurround);
 
             vm.CursorStyle = SelectedItemViewModel.DefaultCursorStyleOption;
             Assert.True(vm.CursorGlyphEnabled);
+            Assert.True(vm.ShowSurround);
         }
 
         [Fact]
@@ -239,24 +276,21 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void CursorSizeShadowAndClicks_WriteTheWholeRow()
+        public void CursorSizeAndClicks_WriteTheWholeRow()
         {
             var (session, vm) = NewInspector(out _);
             var cursor = session.AddCursorTrack();
             session.Select(cursor.Id);
 
             Assert.Equal(1.0, vm.CursorSize);
-            Assert.True(vm.CursorDropShadow);
             Assert.Equal("none", vm.CursorClickAnimation.Value);
 
             vm.CursorSize = 2.0;
-            vm.CursorDropShadow = false;
             vm.CursorClickAnimation = SelectedItemViewModel.ClickAnimationOptions.First(o => o.Value == "ripple");
 
             Assert.All(CursorItems(session), c =>
             {
                 Assert.Equal(2.0, c.Size);
-                Assert.False(c.DropShadow);
                 Assert.Equal("ripple", c.ClickAnimation);
             });
         }
@@ -342,18 +376,16 @@ namespace Clowd.VideoSDK.Tests
             session.EditItem(cursor.Id, i =>
             {
                 var content = (CursorContent)i.Content;
-                content.Style = "doodle";
+                content.Style = "native";
                 content.Size = 1.75;
-                content.DropShadow = false;
                 content.ClickAnimation = "pulse";
                 content.HoldSize = 1.5;
                 content.ClickSize = 2.5;
                 content.AnimationSpeed = 0.75;
             }, "test", structural: false, origin: new object());
 
-            Assert.Equal("doodle", vm.CursorStyle.Value);
+            Assert.Equal("native", vm.CursorStyle.Value);
             Assert.Equal(1.75, vm.CursorSize);
-            Assert.False(vm.CursorDropShadow);
             Assert.Equal("pulse", vm.CursorClickAnimation.Value);
             Assert.True(vm.CursorHighlightEnabled);
             Assert.Equal(1.5, vm.CursorHoldSize);
@@ -511,9 +543,9 @@ namespace Clowd.VideoSDK.Tests
             // the tile pickers select by reference, so the defaults must be list members
             Assert.Contains(SelectedItemViewModel.DefaultCursorStyleOption, SelectedItemViewModel.CursorStyleOptions);
             Assert.Contains(SelectedItemViewModel.DefaultClickAnimationOption, SelectedItemViewModel.ClickAnimationOptions);
-            Assert.Equal("ios-glyph", SelectedItemViewModel.DefaultCursorStyleOption.Value);
+            Assert.Equal("vision", SelectedItemViewModel.DefaultCursorStyleOption.Value);
             Assert.Equal("none", SelectedItemViewModel.DefaultClickAnimationOption.Value);
-            Assert.Equal("iOS Glyph", SelectedItemViewModel.DefaultCursorStyleOption.Label);
+            Assert.Equal("Vision", SelectedItemViewModel.DefaultCursorStyleOption.Label);
             Assert.Equal("Native", SelectedItemViewModel.CursorStyleOptions[0].Label);
 
             // every style tile but native draws real artwork; native's tile is the outline

@@ -58,7 +58,6 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampExitEnabled.DefaultValue = false;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
             dotSpeedTarget.DefaultValue = SelectedItemViewModel.DefaultSpeedTargetOption;
-            dotCursorDropShadow.DefaultValue = true;
 
             btnFont.Click += async (_, _) => await PickFontAsync();
             btnDesync.Click += async (_, _) => await ConfirmDesyncAsync();
@@ -68,6 +67,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 () => _vm.KeyboardTextColorHex, hex => _vm.KeyboardTextColorHex = hex);
             keyBackColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
                 () => _vm.KeyboardBackColorHex, hex => _vm.KeyboardBackColorHex = hex);
+            surroundColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
+                () => _vm.SurroundColorHex, hex => _vm.SurroundColorHex = hex);
             miniColor.Cancelled += (_, _) => colorPopup.IsOpen = false;
 
             DataContextChanged += (_, _) => AttachViewModel(DataContext as SelectedItemViewModel);
@@ -119,6 +120,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 case nameof(SelectedItemViewModel.TextColorHex):
                 case nameof(SelectedItemViewModel.KeyboardTextColorHex):
                 case nameof(SelectedItemViewModel.KeyboardBackColorHex):
+                case nameof(SelectedItemViewModel.SurroundColorHex):
                     RefreshColorWells();
                     break;
                 case nameof(SelectedItemViewModel.ShowKeyboardTrack):
@@ -149,6 +151,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 SelectedItemViewModel.DefaultKeyboardTextColorHex);
             RefreshColorWell(txtKeyBackColorHex, keyBackColorSwatch, _vm?.KeyboardBackColorHex,
                 SelectedItemViewModel.DefaultKeyboardBackColorHex);
+            RefreshColorWell(txtSurroundColorHex, surroundColorSwatch, _vm?.SurroundColorHex,
+                _vm?.DefaultSurroundColorHex ?? "#80000000");
         }
 
         private static void RefreshColorWell(TextBlock label, Shape swatch, string hex, string fallback)
