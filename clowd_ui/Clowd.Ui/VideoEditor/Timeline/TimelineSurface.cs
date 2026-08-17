@@ -836,6 +836,16 @@ namespace Clowd.UI.VideoEditor.Timeline
                     RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconImage"),
                         System.IO.Path.GetFileName(image.Path));
                     break;
+                case SpeedContent speed:
+                    RenderTransitions(context, palette, item, body);
+                    RenderGlyphLabel(context, palette, body, TimelineIcons.SpeedometerGeometry,
+                        speed.Factor.ToString("0.##", CultureInfo.InvariantCulture) + "×");
+                    break;
+                case ZoomContent zoom:
+                    RenderTransitions(context, palette, item, body);
+                    RenderGlyphLabel(context, palette, body, TimelineIcons.MagnifierGeometry,
+                        Math.Round(zoom.Zoom * 100).ToString("0", CultureInfo.InvariantCulture) + "%");
+                    break;
                 default:
                     RenderTransitions(context, palette, item, body);
                     break;

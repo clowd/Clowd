@@ -148,7 +148,10 @@ namespace Clowd.VideoSDK.Tests
             session.Select(audio.Id);
 
             Assert.True(vm.ShowAudio);
-            Assert.True(vm.ShowTransitions);
+            // an audio item's entry/exit is a volume ramp, not a way of arriving on screen: the
+            // kind-based section is off and the ramp section is what it gets instead
+            Assert.False(vm.ShowTransitions);
+            Assert.True(vm.ShowRamp);
             Assert.True(vm.ShowTrackMuted);
             Assert.False(vm.ShowTransform);
             Assert.False(vm.ShowMask);

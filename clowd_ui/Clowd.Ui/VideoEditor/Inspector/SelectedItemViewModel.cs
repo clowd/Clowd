@@ -85,10 +85,48 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly SpeedOption DefaultSpeedOption =
             SpeedOptions.First(o => o.Value == 1.0);
 
+        /// <summary>The speed <i>effect</i> item's target menu — its own list, not the per-clip
+        /// one: this one re-times the whole output while an item is active, so it reaches further
+        /// in both directions (and keeps 1.0 as the "hold, but change nothing" option).</summary>
+        public static readonly IReadOnlyList<SpeedOption> SpeedTargetOptions = new[]
+        {
+            new SpeedOption(0.25, "0.25×"),
+            new SpeedOption(0.5, "0.5×"),
+            new SpeedOption(0.75, "0.75×"),
+            new SpeedOption(1.0, "1.0× (no change)"),
+            new SpeedOption(1.25, "1.25×"),
+            new SpeedOption(1.5, "1.5×"),
+            new SpeedOption(2.0, "2×"),
+            new SpeedOption(3.0, "3×"),
+            new SpeedOption(4.0, "4×"),
+            new SpeedOption(5.0, "5×"),
+            new SpeedOption(8.0, "8×"),
+            new SpeedOption(10.0, "10×"),
+        };
+
+        /// <summary>What a new speed item is created at (<see cref="SpeedContent.Factor"/>'s own
+        /// default), and what the target row's reset dot writes back.</summary>
+        public static readonly SpeedOption DefaultSpeedTargetOption =
+            SpeedTargetOptions.First(o => o.Value == 2.0);
+
         public const double MinScale = 0.01;
         public const double MaxScale = 4.0;
         public const double MaxVolume = 2.0;
         public const double MaxTransitionMs = 10_000;
+
+        /// <summary>Shortest ramp the length spinner offers. A ramp is switched on and off by its
+        /// checkbox now, so a zero-length one would be a switched-on ramp that does nothing — "no
+        /// ramp" keeps exactly one representation (a null transition).</summary>
+        public const double MinRampMs = 10;
+
+        /// <summary>The zoom effect's range and starting magnification — the model's own validated
+        /// bounds (<see cref="ZoomContent"/>), repeated here so the spinner cannot offer a number
+        /// the project would refuse.</summary>
+        public const double MinZoom = 1.0;
+
+        public const double MaxZoom = 5.0;
+
+        public const double DefaultZoom = 1.5;
 
         /// <summary>Largest inset per side: a crop that reached 1 would leave nothing to draw.</summary>
         public const double MaxCropInset = 0.95;
@@ -201,6 +239,21 @@ namespace Clowd.UI.VideoEditor.Inspector
         private bool _showSpeed;
         private double _speed = 1.0;
 
+        private bool _showSpeedEffect;
+        private bool _showZoomEffect;
+        private bool _showRamp;
+        private double _speedFactor = 2.0;
+        private double _zoomFactor = DefaultZoom;
+        private double _zoomFocusX = 0.5;
+        private double _zoomFocusY = 0.5;
+
+        private bool _rampEntryEnabled;
+        private double _rampEntryMs = DefaultTransitionMs;
+        private TransitionEasing _rampEntryEasing = DefaultTransitionEasing;
+        private bool _rampExitEnabled;
+        private double _rampExitMs = DefaultTransitionMs;
+        private TransitionEasing _rampExitEasing = DefaultTransitionEasing;
+
         public SelectedItemViewModel()
         {
             CommandUnlink = new RelayCommand
@@ -275,7 +328,21 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// (audio streams are their own items on their own rows).</summary>
         public bool ShowAudio => _showAudio;
 
+        /// <summary>The kind-based entry/exit section (fade/slide/wipe) — pictures and text only.
+        /// Audio and the effect items animate through <see cref="ShowRamp"/> instead, where the only
+        /// question is how long the ramp is: there is nothing to slide.</summary>
         public bool ShowTransitions => _showTransitions;
+
+        /// <summary>The kind-free entry/exit section: a switch, a length and an easing, shown for
+        /// the items whose animation is a ramp of their own value — an audio item's volume, a speed
+        /// item's factor, a zoom item's magnification.</summary>
+        public bool ShowRamp => _showRamp;
+
+        /// <summary>The speed effect item's target section.</summary>
+        public bool ShowSpeedEffect => _showSpeedEffect;
+
+        /// <summary>The zoom effect item's magnification + focal point section.</summary>
+        public bool ShowZoomEffect => _showZoomEffect;
 
         public bool ShowTrackHidden => _showTrackHidden;
 
@@ -1088,6 +1155,171 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        // ------------------------------------------------------------------------ effect items
+
+        /// <summary>The speed item's target factor, as one of <see cref="SpeedTargetOptions"/>.
+        /// Unlike <see cref="SpeedChoice"/> this leaves the item where it is — the factor re-times
+        /// the output, not the item's span — so nothing the setters do not mirror moves and the
+        /// write carries <c>origin: this</c>.</summary>
+        public SpeedOption SpeedTarget
+        {
+            get
+            {
+                SpeedOption best = null;
+                foreach (var option in SpeedTargetOptions)
+                {
+                    if (best == null || Math.Abs(option.Value - _speedFactor) < Math.Abs(best.Value - _speedFactor))
+                        best = option;
+                }
+                return best;
+            }
+            set
+            {
+                if (value == null || _syncing)
+                    return;
+
+                var item = SelectedItem;
+                if (item?.Content is not SpeedContent || value.Value == _speedFactor)
+                    return;
+
+                _speedFactor = value.Value;
+                OnPropertyChanged(nameof(SpeedTarget));
+                _session.SetSpeedFactor(item.Id, value.Value, this);
+            }
+        }
+
+        /// <summary>The zoom item's magnification (1 = untouched). Single-item like every other
+        /// property of an effect item: effect items are never linked into a row.</summary>
+        public double ZoomFactor
+        {
+            get => _zoomFactor;
+            set
+            {
+                value = Clamp(value, MinZoom, MaxZoom);
+                if (!Set(ref _zoomFactor, value) || _syncing)
+                    return;
+
+                EditZoom("sel:zoom", z => z.Zoom = value);
+            }
+        }
+
+        /// <summary>Focal point X, 0-1 of the canvas width — the preview's crosshair writes the
+        /// same field from the other end.</summary>
+        public double ZoomFocusX
+        {
+            get => _zoomFocusX;
+            set
+            {
+                value = Clamp(value, 0, 1);
+                if (!Set(ref _zoomFocusX, value) || _syncing)
+                    return;
+
+                EditZoom("sel:zoomx", z => z.FocusX = value);
+            }
+        }
+
+        public double ZoomFocusY
+        {
+            get => _zoomFocusY;
+            set
+            {
+                value = Clamp(value, 0, 1);
+                if (!Set(ref _zoomFocusY, value) || _syncing)
+                    return;
+
+                EditZoom("sel:zoomy", z => z.FocusY = value);
+            }
+        }
+
+        // ------------------------------------------------------------------------------- ramps
+
+        /// <summary>Whether the item ramps in at all — the section's switch, and the only thing
+        /// that decides whether <see cref="Item.Entry"/> exists. Checking writes the ramp the two
+        /// rows below describe, which are sticky, so it is the one the user last had (or the
+        /// editor's default the first time); unchecking removes it and leaves them showing it.
+        /// The length and easing rows are only shown while this is on.</summary>
+        public bool RampEntryEnabled
+        {
+            get => _rampEntryEnabled;
+            set
+            {
+                if (!Set(ref _rampEntryEnabled, value) || _syncing)
+                    return;
+
+                if (value)
+                    SeedRampLength(entry: true);
+
+                ApplyRamp(entry: true);
+            }
+        }
+
+        /// <summary>Length of the entry ramp in milliseconds. Inert while the ramp is off: the
+        /// number is remembered, not written, until the checkbox puts it back on the item.</summary>
+        public double RampEntryMs
+        {
+            get => _rampEntryMs;
+            set
+            {
+                value = Clamp(value, MinRampMs, MaxTransitionMs);
+                if (!Set(ref _rampEntryMs, value) || _syncing || !_rampEntryEnabled)
+                    return;
+
+                ApplyRamp(entry: true);
+            }
+        }
+
+        public TransitionEasing RampEntryEasing
+        {
+            get => _rampEntryEasing;
+            set
+            {
+                if (!Set(ref _rampEntryEasing, value) || _syncing || !_rampEntryEnabled)
+                    return;
+
+                ApplyRamp(entry: true);
+            }
+        }
+
+        public bool RampExitEnabled
+        {
+            get => _rampExitEnabled;
+            set
+            {
+                if (!Set(ref _rampExitEnabled, value) || _syncing)
+                    return;
+
+                if (value)
+                    SeedRampLength(entry: false);
+
+                ApplyRamp(entry: false);
+            }
+        }
+
+        public double RampExitMs
+        {
+            get => _rampExitMs;
+            set
+            {
+                value = Clamp(value, MinRampMs, MaxTransitionMs);
+                if (!Set(ref _rampExitMs, value) || _syncing || !_rampExitEnabled)
+                    return;
+
+                ApplyRamp(entry: false);
+            }
+        }
+
+        public TransitionEasing RampExitEasing
+        {
+            get => _rampExitEasing;
+            set
+            {
+                if (!Set(ref _rampExitEasing, value) || _syncing || !_rampExitEnabled)
+                    return;
+
+                ApplyRamp(entry: false);
+            }
+        }
+
         // ---------------------------------------------------------------------- session events
 
         private void Session_SelectionChanged(object sender, EventArgs e)
@@ -1121,8 +1353,12 @@ namespace Clowd.UI.VideoEditor.Inspector
                 var item = SelectedItem;
                 var track = SelectedTrack;
                 var isAudio = track is { Kind: TrackKind.Audio };
+                // an effect item paints nothing and carries no sound: none of the placement, mask,
+                // crop, per-clip speed or volume rows mean anything on one, so the whole visual
+                // half of the panel is off and only the effect's own section is left.
+                var isEffect = item?.Content is SpeedContent or ZoomContent;
                 var isText = item?.Content is TextContent;
-                var visual = item != null && !isAudio;
+                var visual = item != null && !isAudio && !isEffect;
                 var isPicture = visual && item.Content is MediaContent or ImageContent;
 
                 Set(ref _hasSelection, item != null, nameof(HasSelection));
@@ -1132,8 +1368,12 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _showCrop, isPicture, nameof(ShowCrop));
                 Set(ref _showText, isText, nameof(ShowText));
                 Set(ref _showAudio, isAudio, nameof(ShowAudio));
-                Set(ref _showTransitions, item != null, nameof(ShowTransitions));
-                Set(ref _showTrackHidden, visual, nameof(ShowTrackHidden));
+                Set(ref _showTransitions, visual, nameof(ShowTransitions));
+                Set(ref _showRamp, item != null && (isAudio || isEffect), nameof(ShowRamp));
+                Set(ref _showSpeedEffect, item?.Content is SpeedContent, nameof(ShowSpeedEffect));
+                Set(ref _showZoomEffect, item?.Content is ZoomContent, nameof(ShowZoomEffect));
+                // the eye stays: hiding an effect row is how the effect is turned off
+                Set(ref _showTrackHidden, item != null && !isAudio, nameof(ShowTrackHidden));
                 Set(ref _showTrackMuted, isAudio, nameof(ShowTrackMuted));
 
                 Set(ref _subjectName, track?.Name ?? "", nameof(SubjectName));
@@ -1147,6 +1387,16 @@ namespace Clowd.UI.VideoEditor.Inspector
                 var media = item?.Content as MediaContent;
                 Set(ref _showSpeed, media != null && item.LinkGroupId == null, nameof(ShowSpeed));
                 Set(ref _speed, TimelineOps.SpeedOf(media), nameof(SpeedChoice));
+
+                if (item?.Content is SpeedContent speedEffect)
+                    Set(ref _speedFactor, speedEffect.Factor, nameof(SpeedTarget));
+
+                if (item?.Content is ZoomContent zoom)
+                {
+                    Set(ref _zoomFactor, zoom.Zoom, nameof(ZoomFactor));
+                    Set(ref _zoomFocusX, zoom.FocusX, nameof(ZoomFocusX));
+                    Set(ref _zoomFocusY, zoom.FocusY, nameof(ZoomFocusY));
+                }
 
                 var transform = item?.Transform ?? new Transform();
                 Set(ref _positionX, transform.X, nameof(PositionX));
@@ -1197,6 +1447,11 @@ namespace Clowd.UI.VideoEditor.Inspector
                     nameof(EntryKind), nameof(EntryDurationMs), nameof(EntryEasing), nameof(ShowEntryOptions));
                 SyncTransition(item?.Exit, ref _exitKind, ref _exitDurationMs, ref _exitEasing,
                     nameof(ExitKind), nameof(ExitDurationMs), nameof(ExitEasing), nameof(ShowExitOptions));
+
+                SyncRamp(item?.Entry, ref _rampEntryEnabled, ref _rampEntryMs, ref _rampEntryEasing,
+                    nameof(RampEntryEnabled), nameof(RampEntryMs), nameof(RampEntryEasing));
+                SyncRamp(item?.Exit, ref _rampExitEnabled, ref _rampExitMs, ref _rampExitEasing,
+                    nameof(RampExitEnabled), nameof(RampExitMs), nameof(RampExitEasing));
             }
             finally
             {
@@ -1217,6 +1472,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
 
             OnPropertyChanged(showName);
+        }
+
+        /// <summary>The ramp's half of the same read: the checkbox says whether the item has one,
+        /// and both values are sticky — an item without a ramp leaves the length and easing rows
+        /// showing whatever they last did (they are hidden anyway), so ticking the box back on
+        /// offers the ramp the user was working with rather than the defaults.</summary>
+        private void SyncRamp(Transition transition, ref bool enabled, ref double durationMs,
+            ref TransitionEasing easing, string enabledName, string durationName, string easingName)
+        {
+            Set(ref enabled, transition != null, enabledName);
+
+            if (transition != null)
+            {
+                Set(ref durationMs, transition.DurationTicks / (double)TimeSpan.TicksPerMillisecond, durationName);
+                Set(ref easing, transition.Easing, easingName);
+            }
         }
 
         // ------------------------------------------------------------------------- write paths
@@ -1273,6 +1544,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
         }
 
+        /// <summary>The zoom write, content-guarded on both sides like <see cref="EditText"/>: the
+        /// zoom section's bindings stay live while it is hidden, so a stale write must find nothing
+        /// to do.</summary>
+        private void EditZoom(string coalesceKey, Action<ZoomContent> edit)
+        {
+            var item = SelectedItem;
+            if (item?.Content is not ZoomContent)
+                return;
+
+            _session.EditItem(item.Id, i =>
+            {
+                if (i.Content is ZoomContent zoom)
+                    edit(zoom);
+            }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
+        }
+
         private void SetMaskFlags(bool square, bool circle, bool rounded, bool squircle)
         {
             Set(ref _maskSquare, square, nameof(MaskSquare));
@@ -1324,6 +1611,43 @@ namespace Clowd.UI.VideoEditor.Inspector
                 EditSelected("sel:entry", i => i.Entry = new Transition { Kind = kind, DurationTicks = ticks, Easing = easing });
             else
                 EditSelected("sel:exit", i => i.Exit = new Transition { Kind = kind, DurationTicks = ticks, Easing = easing });
+        }
+
+        /// <summary>Writes the ramp the section currently describes: switched off it is removed
+        /// (null, not a zero-length transition — "no ramp" has one representation on disk, the same
+        /// trade the crop makes), switched on it stores a fresh <see cref="TransitionKind.Ramp"/>
+        /// of the length and easing the rows show. The transition is built inside the mutation so a
+        /// replayed edit can never hand two projects the same object.</summary>
+        /// <summary>A ramp being switched on must have a length to be: the sticky one if there is
+        /// one, the editor's default otherwise — which is where a never-touched section, and an
+        /// item read with a zero-length ramp, both start.</summary>
+        private void SeedRampLength(bool entry)
+        {
+            if (entry)
+            {
+                if (_rampEntryMs < MinRampMs)
+                    Set(ref _rampEntryMs, DefaultTransitionMs, nameof(RampEntryMs));
+            }
+            else if (_rampExitMs < MinRampMs)
+            {
+                Set(ref _rampExitMs, DefaultTransitionMs, nameof(RampExitMs));
+            }
+        }
+
+        private void ApplyRamp(bool entry)
+        {
+            var enabled = entry ? _rampEntryEnabled : _rampExitEnabled;
+            var ticks = MsToTicks(entry ? _rampEntryMs : _rampExitMs);
+            var easing = entry ? _rampEntryEasing : _rampExitEasing;
+
+            Transition Build() => !enabled
+                ? null
+                : new Transition { Kind = TransitionKind.Ramp, DurationTicks = ticks, Easing = easing };
+
+            if (entry)
+                EditSelected("sel:rampentry", i => i.Entry = Build());
+            else
+                EditSelected("sel:rampexit", i => i.Exit = Build());
         }
 
         private void Unlink()
@@ -1378,6 +1702,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             TextContent => "Text",
             ImageContent => "Image",
             SolidContent => "Color",
+            SpeedContent => "Speed",
+            ZoomContent => "Zoom",
             _ => "Item",
         };
 

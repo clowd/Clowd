@@ -45,14 +45,30 @@ public sealed class Project
 
     /// <summary>The timeline's length in 100ns ticks: the maximum <see cref="Item.TimelineEndTicks"/>
     /// across all items, 0 for an empty project. This is the duration the renderer produces —
-    /// output runs to the end of the last item, wherever it sits.</summary>
+    /// output runs to the end of the last item, wherever it sits. Items on
+    /// <see cref="TrackKind.Effect"/> tracks are excluded: they modulate playback, they are not
+    /// content, so a speed/zoom row hanging past the last clip extends nothing.</summary>
     public long GetDurationTicks()
     {
         long max = 0;
         if (Items != null)
         {
+            HashSet<Guid> effectTracks = null;
+            if (Tracks != null)
+            {
+                foreach (var track in Tracks)
+                {
+                    if (track.Kind == TrackKind.Effect)
+                        (effectTracks ??= new HashSet<Guid>()).Add(track.Id);
+                }
+            }
+
             foreach (var item in Items)
+            {
+                if (effectTracks != null && effectTracks.Contains(item.TrackId))
+                    continue;
                 max = Math.Max(max, item.TimelineEndTicks);
+            }
         }
         return max;
     }
@@ -173,13 +189,68 @@ public sealed class Project
                         errors.Add($"Item {item.Id} has a non-positive playback speed ({media.Speed}).");
                     break;
 
+                case SpeedContent speed:
+                    // negated comparisons so NaN fails the check rather than sailing through.
+                    if (!(speed.Factor >= 0.1 && speed.Factor <= 10))
+                        errors.Add($"Item {item.Id} has a speed factor {speed.Factor} outside 0.1..10.");
+                    break;
+
+                case ZoomContent zoom:
+                    if (!(zoom.Zoom >= 1.0 && zoom.Zoom <= 5.0))
+                        errors.Add($"Item {item.Id} has a zoom factor {zoom.Zoom} outside 1..5.");
+                    if (!(zoom.FocusX >= 0 && zoom.FocusX <= 1) || !(zoom.FocusY >= 0 && zoom.FocusY <= 1))
+                        errors.Add($"Item {item.Id} has a zoom focus ({zoom.FocusX}, {zoom.FocusY}) outside 0..1.");
+                    break;
+
                 default:
                     // text / image / solid are picture content — meaningless on an audio row.
                     if (track is { Kind: TrackKind.Audio })
                         errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on audio track {track.Id}.");
                     break;
             }
+
+            if (item.Content is SpeedContent or ZoomContent)
+            {
+                if (track != null && track.Kind != TrackKind.Effect)
+                    errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on non-effect track {track.Id}.");
+                if (item.LinkGroupId != null)
+                    errors.Add($"Effect item {item.Id} carries a link group.");
+                if (item.Entry != null && item.Entry.Kind != TransitionKind.Ramp)
+                    errors.Add($"Effect item {item.Id} has a non-ramp entry transition ({item.Entry.Kind}).");
+                if (item.Exit != null && item.Exit.Kind != TransitionKind.Ramp)
+                    errors.Add($"Effect item {item.Id} has a non-ramp exit transition ({item.Exit.Kind}).");
+            }
+            else if (item.Content != null && track is { Kind: TrackKind.Effect })
+            {
+                errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on effect track {track.Id}.");
+            }
         }
+
+        // effect rows are homogeneous (a row is a speed row or a zoom row, decided by its items)
+        // and the speed row is unique — playback speed is a single global timeline.
+        var speedTracks = 0;
+        foreach (var track in tracks)
+        {
+            if (track.Kind != TrackKind.Effect)
+                continue;
+
+            var hasSpeed = false;
+            var hasZoom = false;
+            foreach (var item in items)
+            {
+                if (item.TrackId != track.Id)
+                    continue;
+                hasSpeed |= item.Content is SpeedContent;
+                hasZoom |= item.Content is ZoomContent;
+            }
+
+            if (hasSpeed && hasZoom)
+                errors.Add($"Effect track {track.Id} mixes speed and zoom items.");
+            if (hasSpeed)
+                speedTracks++;
+        }
+        if (speedTracks > 1)
+            errors.Add($"{speedTracks} tracks carry speed items; at most one speed row is allowed.");
 
         // overlap check per track, only over items whose geometry survived the checks above —
         // a negative-duration item would make the interval math meaningless.

@@ -136,6 +136,8 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandRedo { get; }
         public RelayCommand CommandAddText { get; }
         public RelayCommand CommandAddImage { get; }
+        public RelayCommand CommandAddZoomEffect { get; }
+        public RelayCommand CommandAddSpeedEffect { get; }
         public RelayCommand CommandImportMedia { get; }
         public RelayCommand CommandImportAudio { get; }
         public RelayCommand CommandRender { get; }
@@ -183,6 +185,13 @@ namespace Clowd.UI.VideoEditor
             };
             CommandAddText = new RelayCommand { Executed = _ => AddText(), Text = "Add _Text" };
             CommandAddImage = new RelayCommand { Executed = _ => _ = AddImageAsync(), Text = "Add _Image" };
+            CommandAddZoomEffect = new RelayCommand { Executed = _ => AddZoomEffect(), Text = "Add _Zoom" };
+            CommandAddSpeedEffect = new RelayCommand
+            {
+                Executed = _ => AddSpeedEffect(),
+                CanExecute = _ => _editor is { HasSpeedTrack: false },
+                Text = "Add _Speed",
+            };
             CommandImportMedia = new RelayCommand
             {
                 Executed = _ => _ = ImportMediaAsync("Import media", MediaFileTypes.AnyMedia),
@@ -479,10 +488,12 @@ namespace Clowd.UI.VideoEditor
             {
                 CommandUndo.RaiseCanExecuteChanged();
                 CommandRedo.RaiseCanExecuteChanged();
+                RefreshAddSpeedButton();
             };
             _editor.SelectionChanged += Editor_SelectionChanged;
             CommandUndo.RaiseCanExecuteChanged();
             CommandRedo.RaiseCanExecuteChanged();
+            RefreshAddSpeedButton();
 
             Inspector.Session = _editor;
             timeline.Session = _editor;
@@ -603,6 +614,7 @@ namespace Clowd.UI.VideoEditor
             preview.SetVideo(new Size(output.WidthPx, output.HeightPx));
             RefreshResolutionPicker();
             RefreshFrameRatePicker();
+            RefreshAddSpeedButton();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -671,6 +683,11 @@ namespace Clowd.UI.VideoEditor
                 if (_closing || !PlayerReady)
                     return;
             }
+
+            // the update just rebuilt the player's warp, so repaint the readout with the fresh
+            // output duration — the early repaint above ran against the pre-update snapshot, and
+            // Preview (mid-gesture) changes never get the re-seek below to repair it.
+            UpdatePositionReadout(_player.Position);
 
             // Any committed edit while paused: re-seek so the decoded frame matches the new
             // mapping (the frame source is hold-last and no tick runs while paused — a trim that
@@ -881,6 +898,42 @@ namespace Clowd.UI.VideoEditor
             var item = _editor.AddImage(picked[0], PlayheadTicks, AddedItemDurationTicks);
             if (item != null)
                 RevealNewItem(item);
+        }
+
+        /// <summary>Adds a zoom effect at the playhead — always a new zoom row above the video
+        /// block, so stacking zooms is adding another one.</summary>
+        private void AddZoomEffect()
+        {
+            if (!CanAddToProject)
+                return;
+
+            var item = _editor.AddZoomEffect(PlayheadTicks, AddedItemDurationTicks);
+            if (item != null)
+                RevealNewItem(item);
+        }
+
+        /// <summary>Adds a speed-change item at the playhead, on the one pinned Speed row (created
+        /// on first use). The session may refuse (null): the playhead is inside an existing speed
+        /// item, or the gap before the next one is too small to hold anything.</summary>
+        private void AddSpeedEffect()
+        {
+            if (!CanAddToProject)
+                return;
+
+            var item = _editor.AddSpeedEffect(PlayheadTicks, AddedItemDurationTicks);
+            if (item != null)
+                RevealNewItem(item);
+        }
+
+        /// <summary>The add-speed button is single-use (one Speed row per project): re-evaluates
+        /// its CanExecute and swaps its tooltip so the disabled state explains itself. Called on
+        /// every project/history change — an undo can create or remove the row.</summary>
+        private void RefreshAddSpeedButton()
+        {
+            CommandAddSpeedEffect.RaiseCanExecuteChanged();
+            ToolTip.SetTip(btnAddSpeed, _editor is { HasSpeedTrack: true }
+                ? "A Speed row already exists — split or modify the existing Speed row instead."
+                : "Add speed change");
         }
 
         /// <summary>Imports an external file as an overlay: probed off the UI thread (the same
@@ -1430,10 +1483,20 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>The one funnel every position change passes through (playback ticks, scrubs,
         /// edits) — so it is also where the preview learns the playhead, which decides whether the
-        /// selected item is on screen and therefore whether its gizmo is.</summary>
+        /// selected item is on screen and therefore whether its gizmo is. The readout speaks
+        /// output time (both halves mapped through the player's speed warp, so elapsed and total
+        /// agree with the clock on the wall); everything else — the preview's playhead, the
+        /// timeline, the seeks — stays project time. With no warp (or no player yet) both maps are
+        /// identity and this is the project-time readout it always was.</summary>
         private void UpdatePositionReadout(TimeSpan position)
         {
-            txtPosition.Text = FormatTime(position) + " / " + FormatTime(Duration);
+            var elapsedTicks = _player?.ToOutputTicks(position.Ticks) ?? position.Ticks;
+            var totalTicks = _player?.OutputDurationTicks ?? 0;
+            if (totalTicks <= 0)
+                totalTicks = Duration.Ticks;
+
+            txtPosition.Text = FormatTime(TimeSpan.FromTicks(elapsedTicks)) + " / " +
+                FormatTime(TimeSpan.FromTicks(totalTicks));
             preview.PositionTicks = position.Ticks;
         }
 

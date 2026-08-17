@@ -97,14 +97,16 @@ namespace Clowd.VideoSDK.Composition
             bool hasWipe = false;
             double wipeFrom = 0, wipeTo = 1;
 
-            if (IsActive(item.Entry))
+            // Ramp transitions modulate an effect/audio quantity over time (speed, zoom, volume);
+            // they have no visual identity of their own, so the picture evaluation skips them.
+            if (IsActive(item.Entry) && item.Entry.Kind != TransitionKind.Ramp)
             {
                 double shown = EntryProgress(item, timeTicks);
                 if (shown < 1)
                     Apply(item.Entry.Kind, shown, isExit: false, ref opacity, ref dx, ref dy, ref hasWipe, ref wipeFrom, ref wipeTo);
             }
 
-            if (IsActive(item.Exit))
+            if (IsActive(item.Exit) && item.Exit.Kind != TransitionKind.Ramp)
             {
                 double shown = ExitProgress(item, timeTicks);
                 if (shown < 1)

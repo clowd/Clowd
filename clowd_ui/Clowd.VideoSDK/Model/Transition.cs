@@ -11,6 +11,12 @@ public enum TransitionKind
     SlideUp,
     SlideDown,
     Wipe,
+
+    /// <summary>An effect item's entry/exit ramp: eases the item's factor from/to neutral over
+    /// <see cref="Transition.DurationTicks"/>. No visual effect — only meaningful on
+    /// <see cref="SpeedContent"/>/<see cref="ZoomContent"/> items. Appended so the
+    /// string-serialized enum stays wire-compatible.</summary>
+    Ramp,
 }
 
 public enum TransitionEasing

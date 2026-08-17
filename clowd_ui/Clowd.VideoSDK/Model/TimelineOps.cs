@@ -322,6 +322,11 @@ public static class TimelineOps
     public static bool TryRelinkTrack(Project project, Guid trackId)
     {
         var row = project.Items.Where(i => i.TrackId == trackId).ToList();
+
+        // effect items never link: they have no source clock to be in sync with.
+        if (row.Any(i => i.Content is SpeedContent or ZoomContent))
+            return false;
+
         var candidates = project.Items.Where(i => i.TrackId != trackId && i.LinkGroupId != null).ToList();
 
         var resolved = new List<(Item Item, Guid Group)>(row.Count);

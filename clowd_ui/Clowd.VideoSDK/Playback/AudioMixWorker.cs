@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Clowd.VideoSDK.Audio;
+using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
 
 namespace Clowd.VideoSDK.Playback
@@ -12,10 +13,15 @@ namespace Clowd.VideoSDK.Playback
     /// drains. The mix itself is the <b>literal render mixer</b> — <see cref="AudioMixer.MixChunk"/>,
     /// per-sample gain <c>Item.Volume × TransitionMath entry/exit progress</c> — pulled over a
     /// <see cref="SeekableAudioSource"/>, so what preview plays is what render writes, by
-    /// construction. The worker runs in <b>timeline time</b>: chunk positions are output sample
-    /// frames of the timeline, and the sink's base pts after a flush is the timeline position
-    /// itself — there is no source↔clock mapping on the audio path (a cut seam is just two
-    /// adjacent items to the mixer, and timeline gaps mix to silence).
+    /// construction. The worker's stream domain is <b>warped output time</b>: chunk positions and
+    /// the sink's base pts after a flush live in the domain the player's clock runs in. While no
+    /// speed item bends time the domains coincide and the mix runs untouched in timeline time —
+    /// there is no source↔clock mapping on the audio path (a cut seam is just two adjacent items
+    /// to the mixer, and timeline gaps mix to silence). Under a <see cref="TimeWarp"/> each
+    /// device frame's project position comes from the warp's spans and the mixed project frames
+    /// are resampled per-sample onto the output grid (see <see cref="MixWarpedChunk"/>), so a
+    /// speed ramp glides continuously — pitch riding with the speed — with no flush or timing
+    /// rebase anywhere inside it.
     ///
     /// <para>
     /// Concurrency, copied from <see cref="AudioDecodeWorker"/>'s shape: ALL mixing state (mixer,
@@ -61,18 +67,35 @@ namespace Clowd.VideoSDK.Playback
         // to 0 makes the first chunk after Start establish flush + timing even without a
         // PrepareSeek.
         private long _pendingSeekTicks;
-        private Project _pendingProject;
+        private PendingUpdate _pendingUpdate;
         private double _pendingSpeed;
         private Exception _error;
         private volatile bool _running;
         private volatile bool _eofReached;
 
-        // mix-thread-owned state
+        // mix-thread-owned state. _nextFrame/_endFrame are stream-domain sample frames — output
+        // frames under a warp, timeline frames otherwise; _srcEndFrame is always the
+        // project-domain mixing limit (equal to _endFrame while unwarped).
         private Project _project;
         private AudioMixer _mixer;
         private long _nextFrame;
         private long _endFrame;
+        private long _srcEndFrame;
         private bool _basePtsPending = true;
+
+        // warp state (mix-thread-owned; the ctor seeds it before Start). The span table mirrors
+        // Render.WarpAudioResampler's: direct (speed-1) spans keep an exact integer frame offset
+        // so unwarped stretches stay verbatim copies of the project mix, warped spans map each
+        // output instant through the warp inverse. _outPos is the fractional output frame the
+        // next device frame sits at, _lastPos the monotone clamp on project positions across
+        // span joins.
+        private TimeWarp _warp;
+        private bool _warped;
+        private WarpSpan[] _spans;
+        private int _spanIndex;
+        private double _outPos;
+        private double _lastPos = -1;
+        private double[] _positions = Array.Empty<double>();
 
         // playback speed state (mix-thread-owned; all unused while _speed == 1). _srcPos is the
         // fractional timeline frame the next output frame samples at, _carry holds the tail
@@ -89,7 +112,8 @@ namespace Clowd.VideoSDK.Playback
         private Thread _thread;
         private bool _disposed;
 
-        public AudioMixWorker(Project project, AudioRingBuffer ring, NAudioSink sink, int sampleRate)
+        public AudioMixWorker(Project project, AudioRingBuffer ring, NAudioSink sink, int sampleRate,
+            TimeWarp warp = null)
         {
             ArgumentNullException.ThrowIfNull(project);
             ArgumentNullException.ThrowIfNull(ring);
@@ -107,7 +131,8 @@ namespace Clowd.VideoSDK.Playback
             _source = new SeekableAudioSource(_project);
             _readSource = new FaultIsolatingSource(this);
             _mixer = new AudioMixer(_project, _readSource);
-            _endFrame = EndFrameOf(_project);
+            AdoptWarp(warp);
+            UpdateEndFrames(_project);
         }
 
         /// <summary>True once every producible sample up to the audio end is in the ring; cleared
@@ -138,9 +163,11 @@ namespace Clowd.VideoSDK.Playback
             _thread.Start();
         }
 
-        /// <summary>Controller thread: restart production at the timeline position. The mix thread
-        /// adopts it at the next chunk boundary — flushing the ring (it is the producer), resetting
-        /// sink timing, and re-basing the sink's pts on the target directly (timeline time).</summary>
+        /// <summary>Controller thread: restart production at the timeline (project-time) position.
+        /// The mix thread adopts it at the next chunk boundary — flushing the ring (it is the
+        /// producer), resetting sink timing, and re-basing the sink's pts on the target mapped
+        /// into the stream domain (its warped output instant; the target itself while no warp
+        /// bends time).</summary>
         public void PrepareSeek(TimeSpan target)
         {
             Interlocked.Exchange(ref _pendingSeekTicks, Math.Max(0, target.Ticks));
@@ -163,11 +190,20 @@ namespace Clowd.VideoSDK.Playback
         /// <summary>Controller thread: swap in an edited project at the next chunk boundary
         /// (latest wins). Builds a fresh mixer snapshot over the SAME source — decoders are never
         /// touched, which is what keeps volume/transition edits cheap. The caller must hand over a
-        /// snapshot it will not mutate (the mixer reads items live).</summary>
-        public void UpdateProject(Project project)
+        /// snapshot it will not mutate (the mixer reads items live). A null <paramref name="warp"/>
+        /// keeps the current warp; a caller changing the mapping must pair the update with a
+        /// <see cref="PrepareSeek"/> (the player does), since the sink's timing describes the old
+        /// mapping until the flush lands.</summary>
+        public void UpdateProject(Project project, TimeWarp warp = null)
         {
             ArgumentNullException.ThrowIfNull(project);
-            Interlocked.Exchange(ref _pendingProject, project);
+            Interlocked.Exchange(ref _pendingUpdate, new PendingUpdate { Project = project, Warp = warp });
+        }
+
+        private sealed class PendingUpdate
+        {
+            public Project Project;
+            public TimeWarp Warp;
         }
 
         private void MixLoop()
@@ -190,9 +226,9 @@ namespace Clowd.VideoSDK.Playback
 
         private void MixIteration()
         {
-            var project = Interlocked.Exchange(ref _pendingProject, null);
-            if (project != null)
-                ApplyProject(project);
+            var update = Interlocked.Exchange(ref _pendingUpdate, null);
+            if (update != null)
+                ApplyProject(update);
 
             long seek = Interlocked.Exchange(ref _pendingSeekTicks, long.MinValue);
 
@@ -201,9 +237,14 @@ namespace Clowd.VideoSDK.Playback
             {
                 _speed = speed;
                 // the sink maps device frames to media time through the speed, so the change
-                // only makes sense from a flushed stream on: force one if none was asked for.
+                // only makes sense from a flushed stream on: force one if none was asked for
+                // (the seek slot carries project time — map the stream cursor back for it).
                 if (seek == long.MinValue)
+                {
                     seek = AudioTime.TicksFloor(_nextFrame, _rate);
+                    if (_warped)
+                        seek = _warp.ToProject(seek);
+                }
             }
 
             if (seek != long.MinValue)
@@ -212,8 +253,12 @@ namespace Clowd.VideoSDK.Playback
                 _sink.ResetTiming(_speed);
                 _source.Reset(); // the timeline moved: every stream repositions on its next read
                 _mixer = new AudioMixer(_project, _readSource);
-                _nextFrame = AudioTime.SamplesFloor(seek, _rate);
+                long streamTicks = _warped ? _warp.ToOutput(seek) : seek;
+                _nextFrame = AudioTime.SamplesFloor(streamTicks, _rate);
                 _srcPos = _nextFrame;
+                _outPos = _nextFrame;
+                _spanIndex = 0;
+                _lastPos = -1;
                 _carryCount = 0;
                 _basePtsPending = true;
             }
@@ -229,6 +274,12 @@ namespace Clowd.VideoSDK.Playback
             if (_ring.Available >= _maxBufferedFloats)
             {
                 Thread.Sleep(5); // enough lead buffered; wait for the device to drain
+                return;
+            }
+
+            if (_warped)
+            {
+                MixWarpedChunk();
                 return;
             }
 
@@ -364,6 +415,134 @@ namespace Clowd.VideoSDK.Playback
             _nextFrame = (long)Math.Floor(nextPos);
         }
 
+        /// <summary>
+        /// The warped chunk (any speed): each device frame's output position advances by the
+        /// playback speed; its project position comes from the span table — direct spans keep an
+        /// exact integer frame offset, warped spans map the instant through the warp inverse,
+        /// clamped monotone across span joins — and the mixed project frames are linearly
+        /// interpolated at those positions. This is <see cref="Render.WarpAudioResampler"/>'s
+        /// per-sample design run over this worker's carry window, so the mixer is still asked for
+        /// each project frame exactly once and a mixer snapshot swap (volume edit) never
+        /// repositions a source. On a direct span at speed 1 the positions are exact integers and
+        /// the interpolation degenerates to verbatim copies — unwarped stretches keep the
+        /// preview/render sample parity.
+        /// </summary>
+        private void MixWarpedChunk()
+        {
+            int outFrames = _chunkFrames;
+            if (_positions.Length < outFrames)
+                _positions = new double[outFrames];
+
+            double last = _lastPos;
+            for (int i = 0; i < outFrames; i++)
+                last = _positions[i] = ProjectPositionAt(_outPos + i * _speed, last);
+
+            long mixStart = _carryCount > 0 ? _carryStart + _carryCount : (long)Math.Floor(_positions[0]);
+            long lastNeeded = (long)Math.Floor(_positions[outFrames - 1]) + 1;
+            long needed = Math.Min(lastNeeded + 1 - mixStart, _srcEndFrame - mixStart);
+            if (needed < 0)
+                needed = 0;
+
+            if (needed > 0)
+            {
+                EnsureSrcCapacity((int)needed);
+                try
+                {
+                    _mixer.MixChunk(mixStart, (int)needed, _src);
+                }
+                catch (Exception ex)
+                {
+                    RecordError(ex);
+                    Array.Clear(_src, 0, (int)needed * Channels);
+                }
+            }
+
+            long avail = mixStart + needed;
+            int produced = 0;
+            for (int i = 0; i < outFrames; i++)
+            {
+                double p = _positions[i];
+                long f0 = (long)Math.Floor(p);
+                if (f0 >= avail)
+                    break; // the project audio ran out inside this chunk
+
+                long f1 = Math.Min(f0 + 1, avail - 1);
+                float frac = (float)(p - f0);
+                for (int ch = 0; ch < Channels; ch++)
+                {
+                    float a = SampleAt(f0, mixStart, ch);
+                    float b = SampleAt(f1, mixStart, ch);
+                    _chunk[i * Channels + ch] = a + (b - a) * frac;
+                }
+
+                produced++;
+            }
+
+            if (produced == 0)
+            {
+                _nextFrame = _endFrame; // the cursor sits past the last sample: end of audio
+                _eofReached = true;
+                Thread.Sleep(10);
+                return;
+            }
+
+            if (_basePtsPending)
+            {
+                _sink.TrySetBasePts(new TimeSpan(AudioTime.TicksFloor((long)Math.Floor(_outPos), _rate)));
+                _basePtsPending = false;
+            }
+
+            if (!WriteToRing(new ReadOnlySpan<float>(_chunk, 0, produced * Channels)))
+                return; // superseded by a seek — cursors and carry stay where they were
+
+            double nextOut = _outPos + produced * _speed;
+            double nextP = ProjectPositionAt(nextOut, last);
+            long nextCursor = Math.Min((long)Math.Floor(nextP), avail);
+            int overlap = (int)(avail - nextCursor);
+            if (overlap > 0 && overlap <= CarryFrames)
+            {
+                for (int i = 0; i < overlap; i++)
+                {
+                    for (int ch = 0; ch < Channels; ch++)
+                        _carry[i * Channels + ch] = SampleAt(nextCursor + i, mixStart, ch);
+                }
+
+                _carryStart = nextCursor;
+                _carryCount = overlap;
+            }
+            else
+            {
+                _carryCount = 0;
+            }
+
+            _outPos = nextOut;
+            _lastPos = nextP;
+            _nextFrame = (long)Math.Floor(nextOut);
+        }
+
+        /// <summary>The fractional project frame a fractional output frame samples at, clamped
+        /// monotone (span joins quantize two ways and can regress a fraction of a frame).</summary>
+        private double ProjectPositionAt(double outputFrames, double floor)
+        {
+            while (outputFrames >= _spans[_spanIndex].OutEnd)
+                _spanIndex++;
+            var span = _spans[_spanIndex];
+            double p;
+            if (span.Direct)
+            {
+                p = outputFrames + span.OffsetFrames;
+            }
+            else
+            {
+                long whole = (long)outputFrames;
+                long tick = AudioTime.TicksFloor(whole, _rate)
+                            + (long)((outputFrames - whole) * TimeBase.TicksPerSecond / _rate);
+                p = _warp.ToProject(tick) * (double)_rate / TimeBase.TicksPerSecond;
+            }
+
+            return p < floor ? floor : p;
+        }
+
         /// <summary>One timeline frame of the resampler's window: carried tail frames first, then
         /// the freshly mixed chunk starting at <paramref name="mixStart"/>.</summary>
         private float SampleAt(long frame, long mixStart, int channel)
@@ -386,9 +565,9 @@ namespace Clowd.VideoSDK.Playback
                 _src = new float[floats];
         }
 
-        private void ApplyProject(Project project)
+        private void ApplyProject(PendingUpdate update)
         {
-            project = NormalizeRate(project);
+            var project = NormalizeRate(update.Project);
             AudioMixer mixer;
             try
             {
@@ -402,13 +581,68 @@ namespace Clowd.VideoSDK.Playback
 
             _project = project;
             _mixer = mixer;
-            _endFrame = EndFrameOf(project);
+            if (update.Warp != null && !ReferenceEquals(update.Warp, _warp))
+                AdoptWarp(update.Warp);
+            UpdateEndFrames(project);
         }
 
-        private long EndFrameOf(Project project)
+        private void AdoptWarp(TimeWarp warp)
+        {
+            _warp = warp;
+            _warped = warp is { IsIdentity: false };
+            _spans = _warped ? BuildSpans(warp, _rate) : null;
+            _spanIndex = 0;
+        }
+
+        private void UpdateEndFrames(Project project)
         {
             long endTicks = Math.Min(project.GetDurationTicks(), AudioMixer.GetAudioEndTicks(project));
-            return AudioTime.SamplesCeil(endTicks, _rate);
+            _srcEndFrame = AudioTime.SamplesCeil(endTicks, _rate);
+            _endFrame = _warped ? AudioTime.SamplesCeil(_warp.ToOutput(endTicks), _rate) : _srcEndFrame;
+        }
+
+        /// <summary>One warp segment in the output sample-frame domain (the audio mirror of
+        /// <see cref="Render.WarpAudioResampler"/>'s span table): direct (speed-1) spans read
+        /// project frame <c>output + OffsetFrames</c>, others map through the warp inverse.</summary>
+        private readonly struct WarpSpan
+        {
+            public WarpSpan(long outEnd, bool direct, long offsetFrames)
+            {
+                OutEnd = outEnd;
+                Direct = direct;
+                OffsetFrames = offsetFrames;
+            }
+
+            public long OutEnd { get; }      // exclusive; the trailing span is long.MaxValue
+            public bool Direct { get; }
+            public long OffsetFrames { get; }
+        }
+
+        private static WarpSpan[] BuildSpans(TimeWarp warp, int rate)
+        {
+            var spans = new List<WarpSpan>();
+            long projectEndTicks = 0, outputEndTicks = 0;
+            foreach (var seg in warp.Segments)
+            {
+                // segments tile in ticks, so ceiling both boundaries keeps the sample spans
+                // contiguous (a segment narrower than one sample simply contributes none)
+                long outStart = AudioTime.SamplesCeil(seg.OutputStartTicks, rate);
+                long outEnd = AudioTime.SamplesCeil(seg.OutputEndTicks, rate);
+                projectEndTicks = seg.ProjectEndTicks;
+                outputEndTicks = seg.OutputEndTicks;
+                if (outEnd <= outStart)
+                    continue;
+
+                bool direct = !seg.IsRamp && seg.Speed == 1.0;
+                spans.Add(new WarpSpan(outEnd, direct, direct
+                    ? AudioTime.SamplesNearest(seg.ProjectStartTicks - seg.OutputStartTicks, rate)
+                    : 0));
+            }
+
+            // past the last segment the warp continues at speed 1 — a trailing direct span
+            spans.Add(new WarpSpan(long.MaxValue, true,
+                AudioTime.SamplesNearest(projectEndTicks - outputEndTicks, rate)));
+            return spans.ToArray();
         }
 
         /// <summary>The mix rate is pinned for the pipeline's lifetime (ring/sink formats, and it
