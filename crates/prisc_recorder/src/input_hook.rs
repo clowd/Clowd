@@ -960,7 +960,7 @@ mod tests {
         assert_eq!(modifier_mask(54), modifier_mask(55)); // command
         assert_eq!(modifier_mask(58), modifier_mask(61)); // option
         assert_eq!(modifier_mask(59), modifier_mask(62)); // control
-        // Distinct modifiers must not collide.
+                                                          // Distinct modifiers must not collide.
         assert_ne!(modifier_mask(56), modifier_mask(59));
         assert_ne!(modifier_mask(57), modifier_mask(63));
         // A normal key (kVK_ANSI_A) is not a modifier.

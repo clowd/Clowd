@@ -27,10 +27,9 @@ use obs::volmeter::ObsVolmeter;
 
 use crate::cli::{Cli, MAX_AUDIO_SOURCES};
 use crate::commands::{self, Command};
-use crate::cursor_track::{self, CursorTrack};
 use crate::encoder_config::{self, EncoderConfig};
 use crate::input_capture::InputCapture;
-use crate::platform::{self, MonitorInfo};
+use crate::platform;
 use crate::region::{self, Rect};
 use crate::settings::Settings;
 use crate::status::{self, LevelPeaks, RecordingClock};
@@ -237,11 +236,6 @@ pub struct Recorder {
     /// tick sampler + writer thread). Session-fixed; `configure` never touches
     /// it. Every exit path must `close()` it before `emit_stopped_recording`.
     input_capture: Option<InputCapture>,
-    /// 512x512 cursor video track (`--input-capture` + `--multi-track`), with
-    /// its own view mix and x264 encoder on the track after the webcam's.
-    /// Presence is session-fixed, but the chain itself is torn down and
-    /// rebuilt around `obs_reset_video` exactly like the webcam's.
-    cursor_track: Option<CursorTrack>,
     /// One encoder per audio track, in output track order; each reads the
     /// libobs mixer of its own index. Single-track mode always has exactly
     /// one (mixer 0).
@@ -259,9 +253,6 @@ pub struct Recorder {
     /// canvas and scene items never change (region and monitors are fixed);
     /// only the fps and the output downscale can.
     capture_region: Rect,
-    /// The monitor list from startup (fixed for the session, like the
-    /// region), kept for cursor-track rebuilds around `obs_reset_video`.
-    monitors: Vec<MonitorInfo>,
     canvas: (u32, u32),
     canvas_scale: f64,
     encoder_types: Vec<String>,
@@ -535,19 +526,6 @@ impl Recorder {
             None => None,
         };
 
-        // Cursor 512x512 track: only with BOTH --input-capture (the sidecar
-        // provides the per-frame positions the editor recomposites with) and
-        // --multi-track (ffmpeg_muxer silently drops video tracks > 0). The
-        // sidecar alone works without it.
-        let cursor_chain = if cli.input_capture.is_some() && multi_track {
-            match cursor_track::create(&settings, capture_region, &monitors) {
-                Ok(c) => Some(c),
-                Err(e) => fail(e),
-            }
-        } else {
-            None
-        };
-
         // Output: "ffmpeg_muxer" (single video track, one mixed audio track)
         // unless --multi-track opts into "mp4_output" (Hybrid MP4), which
         // carries a track per stream, fragments continuously
@@ -573,13 +551,6 @@ impl Recorder {
             // Track 1 = webcam. Only honored by multi-track outputs
             // (mp4_output); ffmpeg_muxer would silently drop it.
             output.set_video_encoder2(Some(&w.encoder), 1);
-        }
-        if let Some(ref c) = cursor_chain {
-            // The cursor takes the track after the webcam's (1 without one).
-            output.set_video_encoder2(
-                Some(&c.encoder),
-                cursor_track::track_index(webcam_chain.is_some()),
-            );
         }
         for (idx, encoder) in audio_encoders.iter().enumerate() {
             output.set_audio_encoder(Some(encoder), idx);
@@ -607,12 +578,6 @@ impl Recorder {
             }
             None => None,
         };
-        // The cursor track recenters on the input-capture tick's cursor
-        // sample — the same one each frame row records (DESIGN §1 consistency
-        // contract), so the box and the sidecar can never disagree.
-        if let (Some(ic), Some(ct)) = (&input_capture, &cursor_chain) {
-            ic.set_cursor_observer(Some(ct.positioner()));
-        }
 
         // 10. Signals → command-loop injection.
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
@@ -649,7 +614,6 @@ impl Recorder {
             webcam_from_cli,
             multi_track,
             input_capture,
-            cursor_track: cursor_chain,
             audio_encoders,
             audio_tracks,
             _sig_start: sig_start,
@@ -658,7 +622,6 @@ impl Recorder {
             context,
             settings,
             capture_region,
-            monitors,
             canvas: plan.canvas,
             canvas_scale: plan.canvas_scale,
             encoder_types,
@@ -757,7 +720,7 @@ impl Recorder {
                         let c = Arc::new(RecordingClock::new());
                         status_handle = Some(status::start_status_thread(
                             self.output.as_ptr(),
-                            1 + self.webcam.is_some() as i64 + self.cursor_track.is_some() as i64,
+                            1 + self.webcam.is_some() as i64,
                             c.clone(),
                             status_stop.clone(),
                         ));
@@ -1010,22 +973,11 @@ impl Recorder {
         // current encoder is bound to.
         if video_changed {
             // CRITICAL invariant (verified in libobs 32.1.2): obs_reset_video
-            // destroys ALL obs_view video mixes — the webcam's AND the cursor
-            // track's; their encoders would keep dangling video_t's. Tear
-            // both chains down first (detaching their encoders), then rebuild
-            // and rebind after the reset. Phase-2 configure work MUST keep
-            // this ordering for every future obs_reset_video call site.
-            if self.cursor_track.is_some() {
-                // Stop the graphics thread repositioning the outgoing items,
-                // then detach the encoder from its current slot (which
-                // depends on the webcam still being attached).
-                if let Some(ref ic) = self.input_capture {
-                    ic.set_cursor_observer(None);
-                }
-                self.output
-                    .set_video_encoder2(None, cursor_track::track_index(self.webcam.is_some()));
-                self.cursor_track = None;
-            }
+            // destroys ALL obs_view video mixes — the webcam's included; its
+            // encoder would keep a dangling video_t. Tear the webcam chain
+            // down first (detaching its encoder), then rebuild and rebind
+            // after the reset. Phase-2 configure work MUST keep this ordering
+            // for every future obs_reset_video call site.
             if self.webcam.is_some() {
                 self.output.set_video_encoder2(None, 1);
                 self.webcam = None;
@@ -1071,46 +1023,10 @@ impl Recorder {
                     }
                 }
             }
-
-            // Rebuild the cursor chain under the new fps/crf (the reset
-            // destroyed its view mix). Presence is session-fixed (CLI flags),
-            // so it comes back exactly when it existed before the reset —
-            // possibly at a new index if the webcam came or went above.
-            if self.input_capture.is_some() && self.multi_track {
-                match cursor_track::create(&new, self.capture_region, &self.monitors) {
-                    Ok(ct) => {
-                        self.output.set_video_encoder2(
-                            Some(&ct.encoder),
-                            cursor_track::track_index(self.webcam.is_some()),
-                        );
-                        if let Some(ref ic) = self.input_capture {
-                            ic.set_cursor_observer(Some(ct.positioner()));
-                        }
-                        self.cursor_track = Some(ct);
-                    }
-                    Err(e) => {
-                        // Same reasoning as the webcam: the recording would
-                        // silently miss a promised track — parent respawns.
-                        return status::emit_configure_error(
-                            &format!("Failed to rebuild the cursor track: {e}"),
-                            true,
-                        );
-                    }
-                }
-            }
         } else if webcam_changed {
             // No video reset needed: swap the webcam chain alone (legal
             // pre-start — the output is inactive). Teardown before build:
-            // the outgoing chain may hold the same physical camera. The
-            // cursor track's index follows the webcam's presence, so its
-            // encoder is detached first and reattached at the (possibly
-            // shifted) index after the swap — the chain itself is untouched
-            // (no reset, its view mix survives). A fatal early return below
-            // leaves it detached, which is fine: fatal means respawn.
-            if self.cursor_track.is_some() {
-                self.output
-                    .set_video_encoder2(None, cursor_track::track_index(self.webcam.is_some()));
-            }
+            // the outgoing chain may hold the same physical camera.
             if self.webcam.is_some() {
                 self.output.set_video_encoder2(None, 1);
                 self.webcam = None;
@@ -1133,20 +1049,11 @@ impl Recorder {
                     }
                 }
             }
-            if let Some(ref ct) = self.cursor_track {
-                self.output.set_video_encoder2(
-                    Some(&ct.encoder),
-                    cursor_track::track_index(self.webcam.is_some()),
-                );
-            }
         } else if new.crf != cur.crf {
-            // No reset needed: refresh the second-track encoders' quality in
-            // place (safe pre-start — the encoders have not initialized yet).
+            // No reset needed: refresh the webcam encoder's quality in place
+            // (safe pre-start — the encoder has not initialized yet).
             if let Some(ref w) = self.webcam {
                 w.encoder.update(&webcam::encoder_settings(new.crf));
-            }
-            if let Some(ref ct) = self.cursor_track {
-                ct.encoder.update(&webcam::encoder_settings(new.crf));
             }
         }
 
@@ -1265,15 +1172,14 @@ impl Recorder {
     }
 
     /// Per-track stream map for `started_recording` / `stopped_recording`:
-    /// `{"screen":{"index":0,..},"webcam":{..},"cursor":{..},"audio":[..]}`.
+    /// `{"screen":{"index":0,..},"webcam":{..},"audio":[..]}`.
     ///
-    /// The `webcam` and `cursor` entries are ABSENT (not null) without the
-    /// corresponding track — consumers treat a missing key as "no such
-    /// track". Screen dims are the encoded output size (canvas after the
-    /// max_width / max_height downscale — the same computation `reset_video`
-    /// was given); webcam dims are its track-1 mix canvas; the cursor track
-    /// is always its fixed 512x512 box. `index` is per media type
-    /// (video / audio), matching the container's per-type stream numbering.
+    /// The `webcam` entry is ABSENT (not null) without a webcam track —
+    /// consumers treat a missing key as "no such track". Screen dims are the
+    /// encoded output size (canvas after the max_width / max_height downscale
+    /// — the same computation `reset_video` was given); webcam dims are its
+    /// track-1 mix canvas. `index` is per media type (video / audio),
+    /// matching the container's per-type stream numbering.
     ///
     /// `audio` always has at least one entry: single-track recordings report
     /// their one `"mixed"` track, multi-track ones a `"speaker"` /
@@ -1304,13 +1210,6 @@ impl Recorder {
         if let Some(ref w) = self.webcam {
             tracks["webcam"] = serde_json::json!({
                 "index": 1, "width": w.canvas.0, "height": w.canvas.1,
-            });
-        }
-        if self.cursor_track.is_some() {
-            tracks["cursor"] = serde_json::json!({
-                "index": cursor_track::track_index(self.webcam.is_some()),
-                "width": cursor_track::SIZE,
-                "height": cursor_track::SIZE,
             });
         }
         tracks

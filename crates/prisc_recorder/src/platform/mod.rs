@@ -112,6 +112,11 @@ pub struct CursorState {
     pub x: i32,
     pub y: i32,
     pub kind: CursorKind,
+    /// Platform-private shape identity from the same snapshot as `x`/`y`,
+    /// consumed by `take_cursor_sprite` so sprite pixels always match the
+    /// sampled position. Windows: the live `HCURSOR`; macOS: 0 (identity is
+    /// the cursor seed inside the classifier, not a handle).
+    pub handle: isize,
 }
 
 /// Paths handed to `obs_add_module_path` / `obs_add_data_path`. `module_bin` /

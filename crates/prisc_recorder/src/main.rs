@@ -1,7 +1,7 @@
 mod cameras;
 mod cli;
 mod commands;
-mod cursor_track;
+mod cursor_sprite;
 mod encoder_config;
 mod input_capture;
 mod input_hook;

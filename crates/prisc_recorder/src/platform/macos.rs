@@ -8,6 +8,8 @@ use std::path::Path;
 
 use obs::data::ObsData;
 
+use crate::cursor_sprite::SpriteEvent;
+
 use super::{CursorKind, CursorState, MonitorInfo, MouseInfo, ObsPaths};
 
 /// `platform` field of the input-capture header (wire contract).
@@ -238,7 +240,19 @@ pub fn get_cursor_state() -> CursorState {
         x: x.round() as i32,
         y: y.round() as i32,
         kind,
+        // No cursor handle exists on macOS: identity lives in the classifier's
+        // seed gate, which `take_cursor_sprite` piggybacks on.
+        handle: 0,
     }
+}
+
+/// Rasterizes the current cursor into a sprite event, piggybacking the
+/// classifier's seed gate: `Unchanged` while the seed holds, a fresh PNG
+/// sprite only on the ticks where the cursor actually changed (the same
+/// frames that already pay for a full classify). Hidden state comes from the
+/// sampled `CursorState`, i.e. the existing `CGCursorIsVisible` check.
+pub fn take_cursor_sprite(state: &CursorState) -> SpriteEvent {
+    cursor_shape::take_sprite(state.kind)
 }
 
 /// Identifies the active system cursor by matching its image against the stock
@@ -263,7 +277,8 @@ mod cursor_shape {
     use std::sync::{Mutex, OnceLock};
     use std::time::{Duration, Instant};
 
-    use super::CursorKind;
+    use super::{CGPoint, CGSize, CursorKind};
+    use crate::cursor_sprite::{RawSprite, SpriteEvent, SpritePixels};
 
     /// How stale a sample may get when the seed is unavailable. At 60 fps this
     /// caps the cost of the fallback path at roughly 0.5% of one core.
@@ -284,6 +299,13 @@ mod cursor_shape {
     type Msg0Ptr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
     type Msg0Len = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
     type Msg1Isize = unsafe extern "C" fn(*mut c_void, *mut c_void, isize) -> bool;
+    type Msg1Ptr = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
+    type Msg2UsizePtr =
+        unsafe extern "C" fn(*mut c_void, *mut c_void, usize, *mut c_void) -> *mut c_void;
+    /// NSPoint/NSSize are two doubles — returned in registers on both arm64
+    /// and x86_64, so plain `objc_msgSend` (not `_stret`) is the right call.
+    type Msg0Point = unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGPoint;
+    type Msg0Size = unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGSize;
 
     unsafe fn class(name: &str) -> *mut c_void {
         let n = CString::new(name).unwrap();
@@ -310,6 +332,45 @@ mod cursor_shape {
             return 0;
         }
         let f: Msg0Len = std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector(sel))
+    }
+
+    /// `[obj sel:arg]` with an object argument, returning an object pointer.
+    unsafe fn msg1(obj: *mut c_void, sel: &str, arg: *mut c_void) -> *mut c_void {
+        if obj.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: Msg1Ptr = std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector(sel), arg)
+    }
+
+    /// `[obj sel:int arg2:obj]`, returning an object pointer.
+    unsafe fn msg2(obj: *mut c_void, sel: &str, arg1: usize, arg2: *mut c_void) -> *mut c_void {
+        if obj.is_null() {
+            return std::ptr::null_mut();
+        }
+        let f: Msg2UsizePtr = std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector(sel), arg1, arg2)
+    }
+
+    /// `[obj sel]` returning an NSPoint.
+    unsafe fn msg_point(obj: *mut c_void, sel: &str) -> CGPoint {
+        if obj.is_null() {
+            return CGPoint { x: 0.0, y: 0.0 };
+        }
+        let f: Msg0Point = std::mem::transmute(objc_msgSend as *const ());
+        f(obj, selector(sel))
+    }
+
+    /// `[obj sel]` returning an NSSize.
+    unsafe fn msg_size(obj: *mut c_void, sel: &str) -> CGSize {
+        if obj.is_null() {
+            return CGSize {
+                width: 0.0,
+                height: 0.0,
+            };
+        }
+        let f: Msg0Size = std::mem::transmute(objc_msgSend as *const ());
         f(obj, selector(sel))
     }
 
@@ -408,7 +469,10 @@ mod cursor_shape {
             if p.is_null() {
                 None
             } else {
-                Some(std::mem::transmute::<*mut c_void, unsafe extern "C" fn() -> i32>(p))
+                Some(std::mem::transmute::<
+                    *mut c_void,
+                    unsafe extern "C" fn() -> i32,
+                >(p))
             }
         });
         f.map(|f| unsafe { f() })
@@ -471,6 +535,119 @@ mod cursor_shape {
             kind,
         });
         kind
+    }
+
+    /// `NSBitmapImageRepFileTypePNG`.
+    const BITMAP_FILE_TYPE_PNG: usize = 4;
+
+    /// Sprite-side twin of [`Cache`]: its own seed snapshot, so classify and
+    /// sprite capture can be called independently without stealing each
+    /// other's change edges.
+    struct SpriteCache {
+        seed: Option<i32>,
+        sampled_at: Instant,
+    }
+
+    static SPRITE_CACHE: Mutex<Option<SpriteCache>> = Mutex::new(None);
+
+    /// The current cursor as a sprite event, captured at most once per actual
+    /// change (the same seed gate as [`current`], with the same
+    /// [`RESAMPLE_INTERVAL`] fallback when the seed SPI is absent).
+    pub fn take_sprite(kind: CursorKind) -> SpriteEvent {
+        if kind == CursorKind::Hidden {
+            // A `Hidden` event makes the writer drop its `ci` ref, and only a
+            // fresh `Candidate` can restore it — so the seed cache must be
+            // dropped too. The seed does not necessarily change across a
+            // hide/unhide, and a stale cache would read as `Unchanged` and
+            // pin the ref absent until the cursor next changes shape.
+            *SPRITE_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            return SpriteEvent::Hidden;
+        }
+        let now_seed = seed();
+        {
+            let cache = SPRITE_CACHE.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some(c) = cache.as_ref() {
+                let fresh = match (now_seed, c.seed) {
+                    (Some(now), Some(then)) => now == then,
+                    _ => c.sampled_at.elapsed() < RESAMPLE_INTERVAL,
+                };
+                if fresh {
+                    return SpriteEvent::Unchanged;
+                }
+            }
+        }
+        // The cache only advances once a sprite was actually produced; a
+        // failed capture clears it instead, so the next tick retries rather
+        // than reporting `Unchanged` for a sprite the writer never received.
+        let (event, cache) = match capture_sprite(kind) {
+            Some(s) => (
+                SpriteEvent::Candidate(s),
+                Some(SpriteCache {
+                    seed: now_seed,
+                    sampled_at: Instant::now(),
+                }),
+            ),
+            // Unreadable cursor (the `currentSystemCursor` deprecation path):
+            // report unavailable so frame rows drop their `ci` ref, rather
+            // than `Unchanged`, which would pin them to a stale sprite.
+            None => (SpriteEvent::Hidden, None),
+        };
+        *SPRITE_CACHE.lock().unwrap_or_else(|e| e.into_inner()) = cache;
+        event
+    }
+
+    /// Reads `currentSystemCursor` into a PNG sprite. AppKit's own PNG encode
+    /// (`representationUsingType:`) yields canonical straight-alpha bytes, so
+    /// unlike Windows there is no raw plane for the writer to encode — and the
+    /// cost sits behind the seed gate, exactly like the classify. macOS
+    /// cursors are plain alpha bitmaps: `mask` is always `None`.
+    fn capture_sprite(kind: CursorKind) -> Option<RawSprite> {
+        ensure_appkit();
+        unsafe {
+            let cursor = msg(class("NSCursor"), "currentSystemCursor");
+            let image = msg(cursor, "image");
+            let tiff = msg(image, "TIFFRepresentation");
+            let rep = msg1(class("NSBitmapImageRep"), "imageRepWithData:", tiff);
+            let png = msg2(
+                rep,
+                "representationUsingType:properties:",
+                BITMAP_FILE_TYPE_PNG,
+                std::ptr::null_mut(),
+            );
+            let bytes = msg(png, "bytes") as *const u8;
+            let len = msg_len(png, "length");
+            if bytes.is_null() || len == 0 {
+                return None;
+            }
+            let w = msg_len(rep, "pixelsWide") as u32;
+            let h = msg_len(rep, "pixelsHigh") as u32;
+            if w == 0 || h == 0 {
+                return None;
+            }
+            // hotSpot is in points; the sprite is pixel-sized, so scale by the
+            // image's pixels-per-point ratio (2 on Retina).
+            let hot = msg_point(cursor, "hotSpot");
+            let size = msg_size(image, "size");
+            let sx = if size.width > 0.0 {
+                w as f64 / size.width
+            } else {
+                1.0
+            };
+            let sy = if size.height > 0.0 {
+                h as f64 / size.height
+            } else {
+                1.0
+            };
+            Some(RawSprite {
+                kind: kind.as_str(),
+                w,
+                h,
+                hotx: (hot.x * sx).round() as i32,
+                hoty: (hot.y * sy).round() as i32,
+                bmp: SpritePixels::Png(std::slice::from_raw_parts(bytes, len).to_vec()),
+                mask: None,
+            })
+        }
     }
 }
 

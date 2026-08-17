@@ -28,10 +28,9 @@ pub const MAX_AUDIO_TRACKS: usize = 6;
 // slot.
 const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_AUDIO_MIXES as usize);
 const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_OUTPUT_AUDIO_ENCODERS as usize);
-// The webcam occupies video track 1 and the cursor track the slot after it
-// (`webcam::create` / `cursor_track::create` / `Recorder::new`), so a
-// screen + webcam + cursor recording needs three video encoder slots.
-const _: () = assert!(obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 3);
+// The webcam occupies video track 1 (`webcam::create` / `Recorder::new`), so
+// a screen + webcam recording needs two video encoder slots.
+const _: () = assert!(obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioKind {
