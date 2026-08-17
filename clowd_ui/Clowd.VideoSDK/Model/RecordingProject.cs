@@ -92,6 +92,9 @@ public sealed class RecordingProjectSpec
     /// <summary>Placement of the webcam items on the canvas; null = the default (full frame).</summary>
     public Transform WebcamTransform { get; set; }
 
+    /// <summary>Surround drawn on the webcam items, or null for none.</summary>
+    public Surround WebcamSurround { get; set; }
+
     /// <summary>Whether the webcam row is excluded from the picture (the editor's "show webcam
     /// overlay" toggle, off). The items stay on the timeline so turning it back on cannot lose
     /// the placement.</summary>
@@ -241,7 +244,7 @@ public static class RecordingProject
 
             if (camTrack != null)
                 AddItem(project, camTrack, source.Id, cam.StreamIndex, timelineStart, durationTicks,
-                    startTicks, ids.LinkGroupId, camTransform?.Clone());
+                    startTicks, ids.LinkGroupId, camTransform?.Clone(), spec.WebcamSurround?.Clone());
 
             for (var i = 0; i < audioTracks.Length; i++)
             {
@@ -298,7 +301,7 @@ public static class RecordingProject
 
     private static void AddItem(Project project, Track track, Guid sourceId, int streamIndex,
         long timelineStartTicks, long durationTicks, long sourceInTicks, Guid linkGroup,
-        Transform transform)
+        Transform transform, Surround surround = null)
     {
         project.Items.Add(new Item
         {
@@ -313,6 +316,7 @@ public static class RecordingProject
                 SourceInTicks = sourceInTicks,
             },
             Transform = transform ?? new Transform(),
+            Surround = surround,
             LinkGroupId = linkGroup,
         });
     }
