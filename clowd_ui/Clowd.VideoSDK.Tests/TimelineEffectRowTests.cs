@@ -130,15 +130,22 @@ namespace Clowd.VideoSDK.Tests
         // ------------------------------------------------------------------------------- reorder
 
         /// <summary>Rows as the header panel sees them, stacked from y = 0 with each kind's real
-        /// height.</summary>
+        /// height. The display here is the exact model reverse, so video-block layer indexes run
+        /// count-1 down to 0, audio indexes 0 upward, and the speed row sits outside both
+        /// spaces — what <c>TimelineRowLayout.Build</c> would stamp on the same shape.</summary>
         private static IReadOnlyList<TimelineRow> Rows(params TimelineRowKind[] kinds)
         {
+            var videoLayer = kinds.Count(k => k != TimelineRowKind.Speed && k != TimelineRowKind.Audio);
+            var audioLayer = 0;
             var rows = new List<TimelineRow>();
             double top = 0;
             foreach (var kind in kinds)
             {
                 var height = TimelineRowLayout.HeightOf(kind);
-                rows.Add(new TimelineRow(Guid.NewGuid(), kind, top, height));
+                var layer = kind == TimelineRowKind.Speed ? -1
+                    : kind == TimelineRowKind.Audio ? audioLayer++
+                    : --videoLayer;
+                rows.Add(new TimelineRow(Guid.NewGuid(), kind, top, height, layer));
                 top += height;
             }
 

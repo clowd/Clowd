@@ -68,26 +68,62 @@ namespace Clowd.VideoSDK.Composition
                 // zoom rows above this track scale its whole picture about their focal points;
                 // the matrix is canvas-local, so the caller's own letterbox transform composes.
                 var zoom = ZoomMath.EffectiveMatrix(project, timeTicks, track.Order, canvasWidth, canvasHeight);
-                int save = target.Save();
-                try
-                {
-                    if (!zoom.IsIdentity)
-                        target.Concat(in zoom);
 
-                    foreach (var item in project.Items)
+                foreach (var item in project.Items)
+                {
+                    if (item.TrackId != track.Id)
+                        continue;
+                    if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
+                        continue;
+
+                    // a cursor item borrows all of its geometry from the linked screen item
+                    // (DrawCursorItem maps through the screen's PictureMapping), so it must
+                    // borrow the screen row's zoom too — a zoom row reordered to sit between
+                    // the screen row and the cursor row would otherwise zoom the pixels and
+                    // leave the cursor pointing at the wrong content.
+                    var itemZoom = item.Content is CursorContent cursorContent
+                        ? CursorItemZoom(project, item, cursorContent, timeTicks, zoom, canvasWidth, canvasHeight)
+                        : zoom;
+
+                    int save = target.Save();
+                    try
                     {
-                        if (item.TrackId != track.Id)
-                            continue;
-                        if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
-                            continue;
-                        ComposeItem(item, timeTicks, frames, target, canvasWidth, canvasHeight, textScale);
+                        // keyboard overlays caption the viewport, not the picture — they alone
+                        // ride outside the zoom.
+                        if (!itemZoom.IsIdentity && item.Content is not KeyboardContent)
+                            target.Concat(in itemZoom);
+                        ComposeItem(project, item, timeTicks, frames, target, canvasWidth, canvasHeight, textScale);
+                    }
+                    finally
+                    {
+                        target.RestoreToCount(save);
                     }
                 }
-                finally
-                {
-                    target.RestoreToCount(save);
-                }
             }
+        }
+
+        /// <summary>
+        /// The zoom matrix a cursor item composes under: evaluated at its linked <b>screen</b>
+        /// track's <see cref="Track.Order"/>, not the cursor row's own — the cursor's placement is
+        /// only correct when both receive the identical matrix, and an effect row whose order
+        /// falls between the two rows would otherwise split them. Falls back to the cursor row's
+        /// own matrix when the screen item is gone (the item draws nothing then anyway).
+        /// </summary>
+        private static SKMatrix CursorItemZoom(Project project, Item item, CursorContent cursor,
+            long timeTicks, SKMatrix fallback, int canvasWidth, int canvasHeight)
+        {
+            var source = FindSource(project, cursor.SourceId);
+            var screen = source == null ? null
+                : FindScreenMediaItem(project, source, item.LinkGroupId, timeTicks);
+            if (screen == null)
+                return fallback;
+
+            foreach (var track in project.Tracks)
+            {
+                if (track.Id == screen.TrackId)
+                    return ZoomMath.EffectiveMatrix(project, timeTicks, track.Order, canvasWidth, canvasHeight);
+            }
+            return fallback;
         }
 
         /// <summary>Canvas-height / output-height: what one output pixel of font size measures on
@@ -95,7 +131,7 @@ namespace Clowd.VideoSDK.Composition
         private static double TextScaleOf(Project project, double canvasHeight) =>
             project?.Output is { HeightPx: > 0 } output ? canvasHeight / output.HeightPx : 1.0;
 
-        private static void ComposeItem(Item item, long timeTicks, IFrameSource frames,
+        private static void ComposeItem(Project project, Item item, long timeTicks, IFrameSource frames,
             SKCanvas target, int canvasWidth, int canvasHeight, double textScale)
         {
             var transform = item.Transform ?? new Transform();
@@ -114,14 +150,13 @@ namespace Clowd.VideoSDK.Composition
                     if (frames == null)
                         return;
                     // elapsed timeline time consumes source time at the item's playback speed
-                    long elapsed = timeTicks - item.TimelineStartTicks;
-                    double speed = TimelineOps.SpeedOf(media);
-                    long sourceTicks = media.SourceInTicks +
-                        (speed == 1.0 ? elapsed : (long)Math.Round(elapsed * speed));
+                    long sourceTicks = SourceTimeTicks(media, item, timeTicks);
                     if (!frames.TryGetFrame(media.SourceId, media.StreamIndex, sourceTicks, out var frame)
                         || frame.Image == null)
                         return;
                     DrawPicture(target, frame.Image, transform, fx, opacity, canvasWidth, canvasHeight);
+                    DrawDefaultCursorOverlay(project, media, timeTicks, sourceTicks, frame.Image,
+                        transform, fx, opacity, frames, target, canvasWidth, canvasHeight);
                     break;
                 }
 
@@ -141,7 +176,26 @@ namespace Clowd.VideoSDK.Composition
                 case TextContent text:
                     DrawText(target, text, transform, fx, opacity, canvasWidth, canvasHeight, textScale);
                     break;
+
+                case CursorContent cursor:
+                    DrawCursorItem(project, item, cursor, timeTicks, frames, target, opacity,
+                        canvasWidth, canvasHeight);
+                    break;
+
+                case KeyboardContent keyboard:
+                    DrawKeyboard(project, item, keyboard, timeTicks, target, transform, opacity,
+                        canvasWidth, canvasHeight, textScale);
+                    break;
             }
+        }
+
+        /// <summary>Source time for a media item at output time <paramref name="timeTicks"/> —
+        /// exact for realtime so speed-1 projects keep integer-perfect maths.</summary>
+        private static long SourceTimeTicks(MediaContent media, Item item, long timeTicks)
+        {
+            long elapsed = timeTicks - item.TimelineStartTicks;
+            double speed = TimelineOps.SpeedOf(media);
+            return media.SourceInTicks + (speed == 1.0 ? elapsed : (long)Math.Round(elapsed * speed));
         }
 
         // ------------------------------------------------------------------------------- media
@@ -149,47 +203,419 @@ namespace Clowd.VideoSDK.Composition
         private static void DrawPicture(SKCanvas target, SKImage image, Transform transform,
             ItemEffects fx, double opacity, int canvasWidth, int canvasHeight)
         {
-            double imgW = image.Width, imgH = image.Height;
-            if (imgW <= 0 || imgH <= 0)
-                return;
-
-            // The displayed source region: the aspect ratio's own crop (fill) combined with the
-            // user's crop on top of it — one resolver shared with the editor's placement math.
-            var (cl, ct, cr, cb) = AspectMath.SourceInsets(transform, imgW, imgH);
-            if (cl + cr >= 1 || ct + cb >= 1)
-                return; // cropped to nothing
-
-            var src = new SKRect(
-                (float)(cl * imgW), (float)(ct * imgH),
-                (float)((1 - cr) * imgW), (float)((1 - cb) * imgH));
-
-            // Scale = width fraction of the canvas; height follows the displayed aspect (the
-            // region's own ratio, or the stretch target), unless an explicit height overrides it.
-            double destW = transform.Scale * canvasWidth;
-            double destH = transform.ScaleY is { } scaleY
-                ? scaleY * canvasHeight
-                : destW * (AspectMath.DisplayAspect(transform, imgW, imgH)
-                           ?? (imgH * (1 - ct - cb)) / (imgW * (1 - cl - cr)));
-
-            var rect = PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
-            if (rect.Width <= 0 || rect.Height <= 0)
+            // crop/aspect insets, dest rect and the px→canvas factors all live in the mapping —
+            // shared with the cursor overlay, which maps captured positions through the same math.
+            if (!PictureMapping.TryMap(transform, fx, image.Width, image.Height,
+                    canvasWidth, canvasHeight, out var map))
                 return;
 
             int save = target.Save();
             try
             {
-                ApplyClips(target, transform, fx, rect);
+                ApplyClips(target, transform, fx, map.Dest);
                 using var paint = new SKPaint
                 {
                     IsAntialias = true,
                     Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
                 };
                 var sampling = new SKSamplingOptions(SKFilterMode.Linear, SKMipmapMode.None);
-                target.DrawImage(image, src, rect, sampling, paint);
+                target.DrawImage(image, map.Source, map.Dest, sampling, paint);
             }
             finally
             {
                 target.RestoreToCount(save);
+            }
+        }
+
+        // ---------------------------------------------------------------------- cursor overlay
+
+        /// <summary>
+        /// The default native cursor: a new-format recording (one whose <see cref="Source"/>
+        /// carries a cursor-box stream) composites the recorded 512-box over its screen item even
+        /// without a cursor track, so the cursor is never simply lost. Drawn through the screen
+        /// item's own <see cref="PictureMapping"/> and clips — the box lands exactly where the
+        /// recorder sampled it, crop/aspect included. Suppressed the moment any
+        /// <see cref="CursorContent"/> item for the source is active at <paramref name="timeTicks"/>
+        /// (the cursor track owns the cursor then, whatever its style), and skipped for hidden
+        /// cursors and positions outside the capture region.
+        /// </summary>
+        private static void DrawDefaultCursorOverlay(Project project, MediaContent media,
+            long timeTicks, long sourceTicks, SKImage screenImage, Transform transform,
+            ItemEffects fx, double opacity, IFrameSource frames, SKCanvas target,
+            int canvasWidth, int canvasHeight)
+        {
+            var source = FindSource(project, media.SourceId);
+            if (source?.CursorStreamIndex is not int cursorStream
+                || string.IsNullOrEmpty(source.InputCapturePath))
+                return;
+            if (!IsScreenStream(source, media.StreamIndex))
+                return; // the overlay belongs to the screen stream, not webcam/box items
+            if (HasActiveCursorItem(project, media.SourceId, timeTicks))
+                return;
+
+            var capture = InputCapture.Get(source.InputCapturePath);
+            if (capture.FrameAt(sourceTicks / (double)TimeSpan.TicksPerMillisecond) is not { } row
+                || row.Cursor == CursorKind.Hidden
+                || !CursorCompose.IsInsideRegion(capture.Header, row.X, row.Y))
+                return;
+
+            if (!frames.TryGetFrame(media.SourceId, cursorStream, sourceTicks, out var box)
+                || box.Image == null)
+                return;
+            if (!PictureMapping.TryMap(transform, fx, screenImage.Width, screenImage.Height,
+                    canvasWidth, canvasHeight, out var map))
+                return;
+
+            int save = target.Save();
+            try
+            {
+                ApplyClips(target, transform, fx, map.Dest);
+                target.ClipRect(map.Dest, SKClipOperation.Intersect, antialias: true);
+                CursorCompose.DrawBox(target, box.Image, map,
+                    row.X - capture.Header.RegionX, row.Y - capture.Header.RegionY, opacity);
+            }
+            finally
+            {
+                target.RestoreToCount(save);
+            }
+        }
+
+        /// <summary>
+        /// A cursor-track item: position and shape are data-driven (the capture file), placement
+        /// rides the linked screen item's mapping — the cursor lands on the same canvas point the
+        /// recorded pixel would, crop/aspect/mask included. <c>native</c> draws the recorded box
+        /// via this item's own stream ref; every other style draws a themed glyph sized by
+        /// <c>Size · 32 px · monitor scale</c> in source pixels, then through the same px→canvas
+        /// factor as the screen frame. Click animations draw beneath. A hidden cursor, a position
+        /// outside the region, or a missing screen item draws nothing.
+        /// </summary>
+        private static void DrawCursorItem(Project project, Item item, CursorContent cursor,
+            long timeTicks, IFrameSource frames, SKCanvas target, double opacity,
+            int canvasWidth, int canvasHeight)
+        {
+            var source = FindSource(project, cursor.SourceId);
+            if (source == null || string.IsNullOrEmpty(source.InputCapturePath))
+                return;
+            var capture = InputCapture.Get(source.InputCapturePath);
+            if (capture.Frames.Count == 0)
+                return;
+
+            // the linked screen item defines both the time mapping and the placement math —
+            // hard sync means the cursor has no clock or geometry of its own.
+            var screen = FindScreenMediaItem(project, source, item.LinkGroupId, timeTicks);
+            if (screen?.Content is not MediaContent media)
+                return;
+            long sourceTicks = SourceTimeTicks(media, screen, timeTicks);
+            double sourceMs = sourceTicks / (double)TimeSpan.TicksPerMillisecond;
+
+            var (imgW, imgH) = ScreenDims(source, media.StreamIndex, capture.Header);
+            var screenTransform = screen.Transform ?? new Transform();
+            var screenFx = TransitionMath.Evaluate(screen, timeTicks);
+            if (!PictureMapping.TryMap(screenTransform, screenFx, imgW, imgH,
+                    canvasWidth, canvasHeight, out var map))
+                return;
+
+            if (capture.FrameAt(sourceMs) is not { } row
+                || row.Cursor == CursorKind.Hidden
+                || !CursorCompose.IsInsideRegion(capture.Header, row.X, row.Y))
+                return;
+
+            var header = capture.Header;
+            double monitorScale = CursorCompose.MonitorScaleAt(header, row.X, row.Y);
+
+            int save = target.Save();
+            try
+            {
+                ApplyClips(target, screenTransform, screenFx, map.Dest);
+                target.ClipRect(map.Dest, SKClipOperation.Intersect, antialias: true);
+
+                CursorCompose.DrawClickAnimations(target, capture, map, sourceMs,
+                    TimelineOps.SpeedOf(media), cursor.ClickAnimation, cursor.ClickColor,
+                    monitorScale, opacity);
+
+                if (string.Equals(cursor.Style, CursorAssets.NativeStyle, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (cursor.StreamIndex >= 0 && frames != null
+                        && frames.TryGetFrame(cursor.SourceId, cursor.StreamIndex, sourceTicks, out var box)
+                        && box.Image != null)
+                    {
+                        CursorCompose.DrawBox(target, box.Image, map,
+                            row.X - header.RegionX, row.Y - header.RegionY, opacity);
+                    }
+                }
+                else
+                {
+                    var glyph = CursorCompose.ResolveGlyph(cursor.Style, row.Cursor);
+                    if (glyph != null)
+                    {
+                        double sizeSourcePx = (cursor.Size > 0 ? cursor.Size : 1.0)
+                            * CursorCompose.BaseCursorPx * monitorScale;
+                        var pos = map.Map(row.X - header.RegionX, row.Y - header.RegionY);
+                        CursorCompose.DrawGlyph(target, glyph, pos,
+                            (float)(sizeSourcePx * map.ScaleX), cursor.DropShadow, opacity);
+                    }
+                }
+            }
+            finally
+            {
+                target.RestoreToCount(save);
+            }
+        }
+
+        /// <summary>Whether any <see cref="CursorContent"/> item for the source is active at
+        /// <paramref name="timeTicks"/> — the cursor track owns the cursor then and the default
+        /// overlay stands down (a hidden cursor track therefore hides the cursor, deliberately).</summary>
+        internal static bool HasActiveCursorItem(Project project, Guid sourceId, long timeTicks)
+        {
+            if (project?.Items == null)
+                return false;
+            foreach (var item in project.Items)
+            {
+                if (item.Content is CursorContent cursor && cursor.SourceId == sourceId
+                    && timeTicks >= item.TimelineStartTicks && timeTicks < item.TimelineEndTicks)
+                    return true;
+            }
+            return false;
+        }
+
+        private static Source FindSource(Project project, Guid sourceId)
+        {
+            if (project?.Sources == null)
+                return null;
+            foreach (var source in project.Sources)
+            {
+                if (source.Id == sourceId)
+                    return source;
+            }
+            return null;
+        }
+
+        /// <summary>Whether the stream is the source's screen recording: its lowest-index probed
+        /// video stream that is not the cursor box (webcam/box streams always probe after the
+        /// screen). With no probed video streams, stream 0 — the container convention.</summary>
+        public static bool IsScreenStream(Source source, int streamIndex)
+        {
+            if (source.CursorStreamIndex == streamIndex)
+                return false;
+
+            int best = -1;
+            if (source.Streams != null)
+            {
+                foreach (var stream in source.Streams)
+                {
+                    if (stream.Kind != StreamKind.Video || stream.Index == source.CursorStreamIndex)
+                        continue;
+                    if (best < 0 || stream.Index < best)
+                        best = stream.Index;
+                }
+            }
+            return best < 0 ? streamIndex == 0 : streamIndex == best;
+        }
+
+        /// <summary>
+        /// The screen media item an overlay item follows: an active-at-<paramref name="timeTicks"/>
+        /// screen-stream item of the source on a video track, preferring the overlay's own link
+        /// group (the hard-sync partner) when several qualify. Null when the screen row is gone —
+        /// overlays then draw nothing (cursor) or fall back to item-relative time (keyboard).
+        /// </summary>
+        internal static Item FindScreenMediaItem(Project project, Source source,
+            Guid? linkGroupId, long timeTicks)
+        {
+            if (project?.Items == null || project.Tracks == null || source == null)
+                return null;
+
+            var videoTracks = new HashSet<Guid>();
+            foreach (var track in project.Tracks)
+            {
+                if (track.Kind == TrackKind.Video)
+                    videoTracks.Add(track.Id);
+            }
+
+            Item best = null;
+            foreach (var item in project.Items)
+            {
+                if (item.Content is not MediaContent media || media.SourceId != source.Id)
+                    continue;
+                if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
+                    continue;
+                if (!videoTracks.Contains(item.TrackId) || !IsScreenStream(source, media.StreamIndex))
+                    continue;
+                if (linkGroupId != null && item.LinkGroupId == linkGroupId)
+                    return item;
+                best ??= item;
+            }
+            return best;
+        }
+
+        /// <summary>The screen stream's pixel dimensions: the probe's numbers (what
+        /// <see cref="DrawPicture"/>'s frames decode to), else the capture region — enough to map
+        /// even when the probe is missing.</summary>
+        private static (double Width, double Height) ScreenDims(Source source, int streamIndex,
+            InputCaptureHeader header)
+        {
+            if (source.Streams != null)
+            {
+                foreach (var stream in source.Streams)
+                {
+                    if (stream.Index == streamIndex && stream.Width > 0 && stream.Height > 0)
+                        return (stream.Width, stream.Height);
+                }
+            }
+            return (header.RegionWidth, header.RegionHeight);
+        }
+
+        // ---------------------------------------------------------------------------- keyboard
+
+        /// <summary>
+        /// The pill geometry of one keyboard row, derived from the font size in canvas pixels:
+        /// the padding round the text, the gap between stacked rows, the row's own height and the
+        /// pill's corner radius. It lives in one place because two callers measure with it — the
+        /// drawing below, and the editor's transform gizmo, which boxes the block through
+        /// <see cref="MeasureKeyboardHeight"/> and would otherwise drift from the drawn pills the
+        /// first time a proportion here was touched.
+        /// </summary>
+        internal readonly struct KeyboardMetrics
+        {
+            public KeyboardMetrics(float fontPx, float lineSpacing)
+            {
+                PadH = fontPx * 0.55f;
+                PadV = fontPx * 0.30f;
+                Gap = fontPx * 0.25f;
+                RowHeight = lineSpacing + 2 * PadV;
+            }
+
+            /// <summary>Horizontal padding inside a pill, each side.</summary>
+            public float PadH { get; }
+
+            /// <summary>Vertical padding inside a pill, above and below the line.</summary>
+            public float PadV { get; }
+
+            /// <summary>Vertical space between two stacked pills.</summary>
+            public float Gap { get; }
+
+            /// <summary>One pill's height: the line pitch plus its vertical padding.</summary>
+            public float RowHeight { get; }
+
+            public float CornerRadius => RowHeight * 0.3f;
+
+            /// <summary>The block height of <paramref name="rows"/> stacked pills, gaps
+            /// included.</summary>
+            public float BlockHeight(int rows) =>
+                rows <= 0 ? 0 : rows * RowHeight + (rows - 1) * Gap;
+        }
+
+        /// <summary><see cref="KeyboardContent.FontSize"/> — output pixels, mapped onto this canvas
+        /// by <paramref name="textScale"/> exactly as <see cref="TextContent"/> is — with the
+        /// model's default standing in for a non-positive size.</summary>
+        private static float KeyboardFontPx(KeyboardContent keyboard, double textScale) =>
+            (float)((keyboard.FontSize > 0 ? keyboard.FontSize : 28) * textScale);
+
+        /// <summary>
+        /// The drawn height of a keyboard overlay of <paramref name="rows"/> pill rows on a canvas
+        /// of the given height, in canvas pixels — measured from the very metrics
+        /// <see cref="DrawKeyboard"/> lays the pills out on, and exposed so the editor's transform
+        /// gizmo can box the block without re-deriving it. The <b>width</b> is not measured: it is
+        /// the wrap box the transform sets (<c>Scale</c> · canvas width), which is why the block is
+        /// the one content whose gizmo sizes horizontally alone.
+        ///
+        /// A non-positive <paramref name="outputHeightPx"/> measures at output resolution.
+        /// Returns 0 for a block that draws nothing.
+        /// </summary>
+        public static double MeasureKeyboardHeight(KeyboardContent keyboard, int rows,
+            double canvasHeight, double outputHeightPx)
+        {
+            if (keyboard == null || rows <= 0)
+                return 0;
+
+            float fontPx = KeyboardFontPx(keyboard,
+                outputHeightPx > 0 ? canvasHeight / outputHeightPx : 1.0);
+            if (fontPx <= 0)
+                return 0;
+
+            using var typeface = SKTypeface.CreateDefault();
+            using var font = new SKFont(typeface, fontPx) { Subpixel = true };
+            return new KeyboardMetrics(fontPx, font.Spacing).BlockHeight(rows);
+        }
+
+        /// <summary>
+        /// A keyboard-track item: the capture's keystroke runs as dark pill rows, the active run
+        /// at the anchored bottom (<see cref="Transform.X"/>/<see cref="Transform.Y"/> = the block
+        /// bottom centre), finished runs pushed up, each lingering then fading out. Text wraps at
+        /// <see cref="Transform.Scale"/> · canvas width; <see cref="KeyboardContent.FontSize"/> is
+        /// output pixels, mapped by <paramref name="textScale"/> exactly like
+        /// <see cref="TextContent"/>. The composing track skips the zoom matrix (see
+        /// <see cref="Compose"/>) — the overlay captions the viewport.
+        /// </summary>
+        private static void DrawKeyboard(Project project, Item item, KeyboardContent keyboard,
+            long timeTicks, SKCanvas target, Transform transform, double opacity,
+            int canvasWidth, int canvasHeight, double textScale)
+        {
+            var source = FindSource(project, keyboard.SourceId);
+            if (source == null || string.IsNullOrEmpty(source.InputCapturePath))
+                return;
+            var runs = KeyboardLayout.GetRuns(source.InputCapturePath, Math.Max(0, keyboard.PauseBreakMs));
+            if (runs.Count == 0)
+                return;
+
+            // time rides the linked screen item like the cursor's; with the screen row gone the
+            // item's own span stands in (SourceIn 0, realtime) so the overlay degrades, not dies.
+            double speed = 1.0;
+            long sourceTicks = timeTicks - item.TimelineStartTicks;
+            var screen = FindScreenMediaItem(project, source, item.LinkGroupId, timeTicks);
+            if (screen?.Content is MediaContent media)
+            {
+                speed = TimelineOps.SpeedOf(media);
+                sourceTicks = SourceTimeTicks(media, screen, timeTicks);
+            }
+            double sourceMs = sourceTicks / (double)TimeSpan.TicksPerMillisecond;
+
+            var rows = KeyboardLayout.VisibleRowsAt(runs, sourceMs, speed,
+                Math.Max(0, keyboard.LingerMs), Math.Max(0, keyboard.FadeMs));
+            if (rows.Count == 0)
+                return;
+
+            float fontPx = KeyboardFontPx(keyboard, textScale);
+            if (fontPx <= 0)
+                return;
+
+            using var typeface = SKTypeface.CreateDefault();
+            using var font = new SKFont(typeface, fontPx) { Subpixel = true };
+            var metrics = new KeyboardMetrics(fontPx, font.Spacing);
+            float wrapWidth = Math.Max(fontPx,
+                (float)(transform.Scale * canvasWidth) - 2 * metrics.PadH);
+
+            // flatten runs into pill rows, oldest first: a wrapped run keeps its opacity per line
+            var lines = new List<(string Text, double Opacity)>();
+            foreach (var (text, runOpacity) in rows)
+            {
+                foreach (var line in KeyboardLayout.Wrap(text, font, wrapWidth))
+                    lines.Add((line, runOpacity));
+            }
+            if (lines.Count == 0)
+                return;
+
+            float centerX = (float)(transform.X * canvasWidth);
+            float bottom = (float)(transform.Y * canvasHeight);
+
+            using var pill = new SKPaint { IsAntialias = true };
+            using var text2 = new SKPaint { IsAntialias = true };
+            for (int i = lines.Count - 1; i >= 0; i--)
+            {
+                var (line, rowOpacity) = lines[i];
+                double alpha = opacity * rowOpacity;
+                float halfW = font.MeasureText(line) / 2 + metrics.PadH;
+                var rect = new SKRect(centerX - halfW, bottom - metrics.RowHeight,
+                    centerX + halfW, bottom);
+
+                pill.Color = SKColors.Black.WithAlpha(AlphaByte(alpha * 0.55));
+                using (var rr = new SKRoundRect(rect, metrics.CornerRadius, metrics.CornerRadius))
+                    target.DrawRoundRect(rr, pill);
+
+                text2.Color = SKColors.White.WithAlpha(AlphaByte(alpha));
+                target.DrawText(line, centerX, rect.Top + metrics.PadV - font.Metrics.Ascent,
+                    SKTextAlign.Center, font, text2);
+
+                bottom = rect.Top - metrics.Gap;
             }
         }
 
@@ -370,7 +796,7 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>Places a dest rect of the given size: centred at the normalized
         /// <see cref="Transform.X"/>/<see cref="Transform.Y"/>, shifted by the transition's
         /// slide offset (fractions of the item's own extent).</summary>
-        private static SKRect PlaceRect(Transform transform, ItemEffects fx,
+        internal static SKRect PlaceRect(Transform transform, ItemEffects fx,
             double destW, double destH, int canvasWidth, int canvasHeight)
         {
             double cx = transform.X * canvasWidth + fx.OffsetXFrac * destW;
@@ -442,7 +868,7 @@ namespace Clowd.VideoSDK.Composition
 
         private static double Clamp01(double v) => v < 0 ? 0 : v > 1 ? 1 : v;
 
-        private static byte AlphaByte(double opacity)
+        internal static byte AlphaByte(double opacity)
             => (byte)Math.Clamp((int)Math.Round(Clamp01(opacity) * 255), 0, 255);
 
         /// <summary>Parses a <c>#AARRGGBB</c> (or <c>#RRGGBB</c>) model color string.</summary>

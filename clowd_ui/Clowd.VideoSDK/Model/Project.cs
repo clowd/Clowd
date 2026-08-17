@@ -202,6 +202,27 @@ public sealed class Project
                         errors.Add($"Item {item.Id} has a zoom focus ({zoom.FocusX}, {zoom.FocusY}) outside 0..1.");
                     break;
 
+                case CursorContent cursor:
+                    if (!sourceById.ContainsKey(cursor.SourceId))
+                        errors.Add($"Item {item.Id} references unknown source {cursor.SourceId}.");
+                    // negated comparison so NaN fails the check rather than sailing through.
+                    if (!(cursor.Size >= 0.25 && cursor.Size <= 4))
+                        errors.Add($"Item {item.Id} has a cursor size {cursor.Size} outside 0.25..4.");
+                    break;
+
+                case KeyboardContent keyboard:
+                    if (!sourceById.ContainsKey(keyboard.SourceId))
+                        errors.Add($"Item {item.Id} references unknown source {keyboard.SourceId}.");
+                    if (!(keyboard.FontSize >= 8 && keyboard.FontSize <= 200))
+                        errors.Add($"Item {item.Id} has a keyboard font size {keyboard.FontSize} outside 8..200.");
+                    if (keyboard.LingerMs < 0 || keyboard.LingerMs > 10000)
+                        errors.Add($"Item {item.Id} has a keyboard linger {keyboard.LingerMs}ms outside 0..10000.");
+                    if (keyboard.FadeMs < 0 || keyboard.FadeMs > 10000)
+                        errors.Add($"Item {item.Id} has a keyboard fade {keyboard.FadeMs}ms outside 0..10000.");
+                    if (keyboard.PauseBreakMs < 0 || keyboard.PauseBreakMs > 10000)
+                        errors.Add($"Item {item.Id} has a keyboard pause break {keyboard.PauseBreakMs}ms outside 0..10000.");
+                    break;
+
                 default:
                     // text / image / solid are picture content — meaningless on an audio row.
                     if (track is { Kind: TrackKind.Audio })
@@ -223,6 +244,16 @@ public sealed class Project
             else if (item.Content != null && track is { Kind: TrackKind.Effect })
             {
                 errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on effect track {track.Id}.");
+            }
+
+            // input-overlay items live on video rows only and are hard-synced to their
+            // recording: an item without a link group could drift from the screen it annotates.
+            if (item.Content is CursorContent or KeyboardContent)
+            {
+                if (track != null && track.Kind != TrackKind.Video)
+                    errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on non-video track {track.Id}.");
+                if (item.LinkGroupId == null)
+                    errors.Add($"Input overlay item {item.Id} carries no link group.");
             }
         }
 

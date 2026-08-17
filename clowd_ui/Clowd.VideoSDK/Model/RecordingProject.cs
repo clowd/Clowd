@@ -16,6 +16,15 @@ public sealed class RecordingIds
 
     public Guid WebcamTrackId { get; init; }
 
+    /// <summary>Row id for a cursor overlay track. Minted eagerly like <see cref="WebcamTrackId"/>
+    /// even though <see cref="RecordingProject.Build"/> never creates the row itself — the editor's
+    /// AddCursorTrack does — so a host that wires the row up can keep its identity stable across
+    /// rebuilds.</summary>
+    public Guid CursorTrackId { get; init; }
+
+    /// <summary>Row id for a keyboard overlay track; see <see cref="CursorTrackId"/>.</summary>
+    public Guid KeyboardTrackId { get; init; }
+
     /// <summary>One id per audio stream, in the order the streams become rows. A recording with
     /// separate mic/system tracks has one entry each; a silent one has none.</summary>
     public IReadOnlyList<Guid> AudioTrackIds { get; init; } = Array.Empty<Guid>();
@@ -36,6 +45,8 @@ public sealed class RecordingIds
             SourceId = Guid.NewGuid(),
             ScreenTrackId = Guid.NewGuid(),
             WebcamTrackId = Guid.NewGuid(),
+            CursorTrackId = Guid.NewGuid(),
+            KeyboardTrackId = Guid.NewGuid(),
             AudioTrackIds = audioTrackIds,
             LinkGroupId = Guid.NewGuid(),
         };
@@ -57,6 +68,15 @@ public sealed class RecordingProjectSpec
 
     /// <summary>The webcam stream, or null when the recording carries none.</summary>
     public VideoStreamProbe Webcam { get; set; }
+
+    /// <summary>The 512x512 cursor-box video stream, or null when the recording carries none.
+    /// Recorded onto the source (<see cref="Source.CursorStreamIndex"/>); no track is built for
+    /// it — cursor/keyboard rows exist only via the editor's factories.</summary>
+    public VideoStreamProbe Cursor { get; set; }
+
+    /// <summary>Full path to the recording's input-capture JSONL sidecar, or null when the
+    /// recording carries none (<see cref="Source.InputCapturePath"/>).</summary>
+    public string InputCapturePath { get; set; }
 
     /// <summary>The audio streams, in the order they become rows — one row each. Null or empty
     /// when the recording carries no audio.</summary>
@@ -177,10 +197,18 @@ public static class RecordingProject
             },
         };
 
-        var source = new Source { Id = ids.SourceId, Path = spec.InputPath };
+        var source = new Source
+        {
+            Id = ids.SourceId,
+            Path = spec.InputPath,
+            InputCapturePath = spec.InputCapturePath,
+            CursorStreamIndex = spec.Cursor?.StreamIndex,
+        };
         source.Streams.Add(ToSourceStream(screen));
         if (cam != null)
             source.Streams.Add(ToSourceStream(cam));
+        if (spec.Cursor != null)
+            source.Streams.Add(ToSourceStream(spec.Cursor));
         foreach (var audio in audioStreams)
             source.Streams.Add(new SourceStream
             {

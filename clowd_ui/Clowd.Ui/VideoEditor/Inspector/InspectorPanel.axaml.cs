@@ -41,6 +41,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             comboRampExitEasing.ItemsSource = Enum.GetValues<TransitionEasing>();
             ddSpeed.ItemsSource = SelectedItemViewModel.SpeedOptions;
             ddSpeedTarget.ItemsSource = SelectedItemViewModel.SpeedTargetOptions;
+            ddCursorStyle.ItemsSource = SelectedItemViewModel.CursorStyleOptions;
+            ddCursorClick.ItemsSource = SelectedItemViewModel.ClickAnimationOptions;
 
             // enum reset-dot defaults live here, not in XAML: an attribute would be the string
             // "None", which neither equality nor the reset write-back can hand to an enum binding
@@ -54,6 +56,9 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampExitEnabled.DefaultValue = false;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
             dotSpeedTarget.DefaultValue = SelectedItemViewModel.DefaultSpeedTargetOption;
+            dotCursorStyle.DefaultValue = SelectedItemViewModel.DefaultCursorStyleOption;
+            dotCursorClick.DefaultValue = SelectedItemViewModel.DefaultClickAnimationOption;
+            dotCursorDropShadow.DefaultValue = false;
 
             btnFont.Click += async (_, _) => await PickFontAsync();
             btnDesync.Click += async (_, _) => await ConfirmDesyncAsync();

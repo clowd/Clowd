@@ -339,8 +339,10 @@ namespace Clowd.UI
                 // separate track and is composited nowhere until the user places it, so the editor
                 // *is* the "open when finished" action for those — it overrides the setting rather
                 // than dropping the user on a Recents row whose thumbnail shows no webcam at all.
-                // Recordings without one honour the setting.
-                if (session != null && session.HasWebcamTrack && session.CanEditVideo)
+                // A cursor track is the same situation (the screen frames were recorded without
+                // the cursor baked in; only the editor puts it back). Recordings with neither
+                // honour the setting.
+                if (session != null && (session.HasWebcamTrack || session.HasCursorTrack) && session.CanEditVideo)
                     finishAction = RecordingFinishAction.VideoEditor;
 
                 // the editor cannot open every entry (it is Windows-only for now, CreateSession can
@@ -937,6 +939,8 @@ namespace Clowd.UI
             session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
             session.OriginalBounds = _region;
             session.WebcamTrack = ResolveWebcamTrack();
+            session.CursorTrack = ResolveCursorTrack();
+            session.InputCapturePath = ResolveInputCapturePath();
             session.AudioTracks = ResolveAudioTracks();
             // the track layout is fixed when the recorder is spawned, so this reports what the file
             // actually got — not what the settings say now, which a mid-recording edit can no
@@ -993,11 +997,16 @@ namespace Clowd.UI
 
                 var info = MediaProbe.Probe(_savedPath);
                 // stream 0 is the screen, stream 1 (when present) is the webcam — the order the
-                // recorder writes the tracks in, and the order the editor reads them back in.
+                // recorder writes the tracks in, and the order the editor reads them back in. A
+                // 512x512 stream is the cursor box, never a camera (ResolveCursorTrack claims it),
+                // though in practice a recorder new enough to write one also reports its tracks.
                 if (info?.VideoStreams == null || info.VideoStreams.Count < 2)
                     return null;
 
                 var webcam = info.VideoStreams[1];
+                if (IsCursorBox(webcam.Width, webcam.Height))
+                    return null;
+
                 return new SessionVideoTrack
                 {
                     Index = webcam.StreamIndex,
@@ -1008,6 +1017,93 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Could not determine the recording's webcam track: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The 512x512 cursor-box track this recording ended up with, or null if it has none —
+        /// <see cref="ResolveWebcamTrack"/>'s sibling: report-first, with a probe fallback that
+        /// classifies by the box's fixed size (the screen is stream 0 and is never mistaken for
+        /// it, even when a 512x512 region was recorded).
+        /// </summary>
+        private SessionVideoTrack ResolveCursorTrack()
+        {
+            try
+            {
+                var reported = _obs?.LastTracks;
+                if (reported != null)
+                {
+                    return reported.Cursor == null
+                        ? null
+                        : new SessionVideoTrack
+                        {
+                            Index = reported.Cursor.Index,
+                            Width = reported.Cursor.Width,
+                            Height = reported.Cursor.Height,
+                        };
+                }
+
+                // only a multi-track spawn was asked for input capture, so anything else cannot
+                // carry the box — no point probing.
+                if (!_appliedMultiTrack)
+                    return null;
+
+                if (!OperatingSystem.IsWindows() || !FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+                    return null;
+
+                var info = MediaProbe.Probe(_savedPath);
+                if (info?.VideoStreams == null)
+                    return null;
+
+                for (var i = 1; i < info.VideoStreams.Count; i++)
+                {
+                    var stream = info.VideoStreams[i];
+                    if (!IsCursorBox(stream.Width, stream.Height))
+                        continue;
+
+                    return new SessionVideoTrack
+                    {
+                        Index = stream.StreamIndex,
+                        Width = stream.Width,
+                        Height = stream.Height,
+                    };
+                }
+
+                return null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Could not determine the recording's cursor track: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>The recorder's cursor box is always exactly 512x512 — its one distinguishing
+        /// mark in a file whose report went missing.</summary>
+        private static bool IsCursorBox(int width, int height) => width == 512 && height == 512;
+
+        /// <summary>
+        /// The input-capture jsonl this recording wrote, or null when there is none on disk —
+        /// report-first like the tracks, falling back to the well-known session path the recorder
+        /// was given (a recorder too old to echo it back never wrote one, but the check is free).
+        /// Existence is the test either way: a path the recorder claims but never flushed is no
+        /// better than no data, which is what the editor would degrade to anyway.
+        /// </summary>
+        private string ResolveInputCapturePath()
+        {
+            try
+            {
+                var reported = _obs?.LastTracks?.InputCapturePath;
+                if (!String.IsNullOrEmpty(reported) && File.Exists(reported))
+                    return reported;
+
+                var expected = ObsArguments.GetInputCapturePath(_sessionDir);
+                return File.Exists(expected) ? expected : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Could not determine the recording's input-capture file: " + ex.Message);
                 return null;
             }
         }

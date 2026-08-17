@@ -11,15 +11,23 @@ namespace Clowd.VideoSDK.Tests
     public class TimelineReorderTests
     {
         /// <summary>Rows as the header panel sees them: video rows top to bottom (frontmost layer
-        /// first), then the audio block, stacked from y = 0 with each kind's real height.</summary>
+        /// first), then the audio block, stacked from y = 0 with each kind's real height. The
+        /// display here is the exact model reverse (no displaced overlay rows), so video-block
+        /// layer indexes run count-1 down to 0 and audio indexes 0 upward — what
+        /// <c>TimelineRowLayout.Build</c> would stamp on the same shape.</summary>
         private static IReadOnlyList<TimelineRow> Rows(params TimelineRowKind[] kinds)
         {
+            var videoLayer = kinds.Count(k => k != TimelineRowKind.Speed && k != TimelineRowKind.Audio);
+            var audioLayer = 0;
             var rows = new List<TimelineRow>();
             double top = 0;
             foreach (var kind in kinds)
             {
                 var height = TimelineRowLayout.HeightOf(kind);
-                rows.Add(new TimelineRow(Guid.NewGuid(), kind, top, height));
+                var layer = kind == TimelineRowKind.Speed ? -1
+                    : kind == TimelineRowKind.Audio ? audioLayer++
+                    : --videoLayer;
+                rows.Add(new TimelineRow(Guid.NewGuid(), kind, top, height, layer));
                 top += height;
             }
 

@@ -104,6 +104,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         private IBrush _imageFill;
         private IBrush _speedFill;
         private IBrush _zoomFill;
+        private IBrush _cursorFill;
+        private IBrush _keyboardFill;
 
         /// <summary>Body fill for an item on a row of this kind. Video keeps the accent (it is the
         /// recording, the thing the editor is about); the other kinds get their own hue so a glance
@@ -115,6 +117,8 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Image => _imageFill,
             TimelineRowKind.Speed => _speedFill,
             TimelineRowKind.Zoom => _zoomFill,
+            TimelineRowKind.Cursor => _cursorFill,
+            TimelineRowKind.Keyboard => _keyboardFill,
             _ => _videoFill,
         };
 
@@ -223,6 +227,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             var speed = dark ? Color.FromRgb(184, 70, 92) : Color.FromRgb(206, 86, 108);
             var zoom = dark ? Color.FromRgb(46, 136, 150) : Color.FromRgb(54, 154, 170);
 
+            // the two input-capture overlays. They sit right against the (accent) recording rows,
+            // so both stay well off blue: orchid for the cursor and olive for the keys, which also
+            // keeps them apart from the purple text row directly and from each other at a glance.
+            var cursor = dark ? Color.FromRgb(158, 74, 158) : Color.FromRgb(182, 92, 182);
+            var keyboard = dark ? Color.FromRgb(132, 144, 56) : Color.FromRgb(152, 166, 70);
+
             var playheadColor = dark ? Color.FromRgb(240, 82, 82) : Color.FromRgb(212, 48, 48);
 
             var surfaceColor = dark ? Color.FromRgb(30, 30, 32) : Color.FromRgb(232, 233, 236);
@@ -255,6 +265,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _imageFill = new SolidColorBrush(image, dark ? 0.85 : 0.9),
                 _speedFill = new SolidColorBrush(speed, dark ? 0.85 : 0.9),
                 _zoomFill = new SolidColorBrush(zoom, dark ? 0.85 : 0.9),
+                _cursorFill = new SolidColorBrush(cursor, dark ? 0.85 : 0.9),
+                _keyboardFill = new SolidColorBrush(keyboard, dark ? 0.85 : 0.9),
                 ItemBorderPen = new Pen(new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.35), 1),
                 ItemLabelBrush = new SolidColorBrush(dark ? Color.FromRgb(240, 240, 240) : Colors.White),
                 FilmstripPlaceholderFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.12),

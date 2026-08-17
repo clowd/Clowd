@@ -351,6 +351,164 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(one.Height * 2, two.Height, 3);
         }
 
+        // ------------------------------------------------------------------------ keyboard block
+
+        /// <summary>
+        /// A keyboard overlay is the one content the transform anchors by its <b>bottom</b> centre:
+        /// the rows stack upward from it (<c>FrameComposer.DrawKeyboard</c>), so the gizmo's rect
+        /// hangs above the anchor rather than being centred on it. Ground truth is composed pixels
+        /// — the pills darken a white background, and their bounding box is the block the gizmo
+        /// must land on, three nominal rows tall.
+        /// </summary>
+        [Fact]
+        public void Keyboard_placement_boxes_the_composed_block_above_its_anchor()
+        {
+            const int CanvasW = 800, CanvasH = 450;
+
+            var capture = WriteCapture();
+            try
+            {
+                var project = KeyboardProject(capture, out var item, out _);
+
+                Assert.True(ItemPlacement.TryResolve(project, item, CanvasW, CanvasH, out var placed));
+                Assert.Equal(400, placed.W, 3);                 // Scale 0.5 of the canvas width
+                Assert.Equal(0.85 * CanvasH, placed.Bottom, 3); // …anchored by its bottom, not its centre
+                Assert.Equal(placed.H / placed.W, placed.Aspect, 6);
+                Assert.Equal(CanvasW, placed.ScaleDenominatorPx, 6);
+                Assert.Equal(placed.H, placed.ScaleDenominatorYPx, 6);
+
+                // the three pills the capture's three runs draw, measured off the canvas
+                var pixels = Compose(project, CanvasW, CanvasH, frames: null);
+                var pills = DarkBounds(pixels, CanvasW, CanvasH);
+                Assert.NotNull(pills);
+                var (left, top, right, bottom) = pills.Value;
+
+                Assert.InRange(bottom, placed.Bottom - 2, placed.Bottom + 2);
+                Assert.InRange(top, placed.Y - 2, placed.Y + 2);
+
+                // the box is the wrap width, deliberately wider than the pills a short run draws:
+                // it is what the user sizes (text wraps at it), not the ink of the moment.
+                Assert.True(right - left < placed.W, $"pills {right - left} vs wrap box {placed.W}");
+                Assert.InRange((left + right) / 2, placed.X + placed.W / 2 - 2, placed.X + placed.W / 2 + 2);
+            }
+            finally
+            {
+                File.Delete(capture);
+            }
+        }
+
+        /// <summary>The block's width is the wrap box <c>Scale</c> sets, but its height is the
+        /// font's — so widening it must not make it taller, which is exactly where the picture rule
+        /// (height derived from the width and an aspect) would be wrong.</summary>
+        [Fact]
+        public void Keyboard_width_scales_with_the_transform_and_the_height_does_not()
+        {
+            var capture = WriteCapture();
+            try
+            {
+                var project = KeyboardProject(capture, out var item, out _);
+
+                Assert.True(ItemPlacement.TryResolve(project, item, 800, 450, out var half));
+                item.Transform.Scale = 1.0;
+                Assert.True(ItemPlacement.TryResolve(project, item, 800, 450, out var full));
+
+                Assert.Equal(400, half.W, 3);
+                Assert.Equal(800, full.W, 3);
+                Assert.Equal(half.H, full.H, 6);   // the font's height, untouched by the width
+                Assert.Equal(half.Bottom, full.Bottom, 6);
+            }
+            finally
+            {
+                File.Delete(capture);
+            }
+        }
+
+        /// <summary>
+        /// <see cref="KeyboardContent.FontSize"/> is in output pixels like <see cref="TextContent"/>'s,
+        /// so the block is the same fraction of the preview's letterboxed canvas as of the exported
+        /// frame — the WYSIWYG rule the gizmo has to inherit, or its box would drift with the
+        /// window.
+        /// </summary>
+        [Fact]
+        public void Keyboard_block_is_the_same_fraction_of_every_canvas_size()
+        {
+            var capture = WriteCapture();
+            try
+            {
+                var project = KeyboardProject(capture, out var item, out _);
+
+                Assert.True(ItemPlacement.TryResolve(project, item, 1920, 1080, out var big));
+                Assert.True(ItemPlacement.TryResolve(project, item, 835, 470, out var lil));
+
+                Assert.InRange(lil.H / 470.0, big.H / 1080.0 - 0.01, big.H / 1080.0 + 0.01);
+                Assert.InRange(lil.W / 835.0, big.W / 1920.0 - 0.01, big.W / 1920.0 + 0.01);
+            }
+            finally
+            {
+                File.Delete(capture);
+            }
+        }
+
+        /// <summary>A keyboard block is clickable on the preview: the whole wrap box selects it,
+        /// and the picture beneath keeps every other point.</summary>
+        [Fact]
+        public void Hit_test_picks_a_keyboard_block_over_the_picture_beneath()
+        {
+            const int CanvasW = 800, CanvasH = 450;
+
+            var capture = WriteCapture();
+            try
+            {
+                var project = KeyboardProject(capture, out var item, out var background);
+                Assert.True(ItemPlacement.TryResolve(project, item, CanvasW, CanvasH, out var placed));
+
+                Assert.Equal(item.Id, ItemPlacement.HitTest(project, TimeSpan.TicksPerSecond,
+                    placed.X + placed.W / 2, placed.Bottom - 1, CanvasW, CanvasH)?.Id);
+
+                // just under the anchored bottom edge is outside the block
+                Assert.Equal(background.Id, ItemPlacement.HitTest(project, TimeSpan.TicksPerSecond,
+                    placed.X + placed.W / 2, placed.Bottom + 1, CanvasW, CanvasH)?.Id);
+            }
+            finally
+            {
+                File.Delete(capture);
+            }
+        }
+
+        /// <summary>
+        /// A cursor item is deliberately unplaceable: its position comes from the capture, not from
+        /// its <c>Transform</c> (the composer ignores it), so there is nothing a gizmo could move.
+        /// No aspect, no placement — and therefore no chrome and no click of its own, which is what
+        /// keeps the picture underneath selectable through a full-frame cursor row.
+        /// </summary>
+        [Fact]
+        public void Cursor_items_are_excluded_from_placement_and_the_hit_test()
+        {
+            const int CanvasW = 800, CanvasH = 450;
+
+            var project = MediaProject(1920, 1080, out var background);
+            var track = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Cursor", Order = 5 };
+            var cursor = new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = track.Id,
+                TimelineStartTicks = 0,
+                DurationTicks = 5 * TimeSpan.TicksPerSecond,
+                Content = new CursorContent { SourceId = project.Sources[0].Id, StreamIndex = 1 },
+                Transform = new ModelTransform(),
+                LinkGroupId = Guid.NewGuid(),
+            };
+            project.Tracks.Add(track);
+            project.Items.Add(cursor);
+
+            Assert.Null(ItemPlacement.ContentAspect(project, cursor, CanvasW, CanvasH));
+            Assert.False(ItemPlacement.TryResolve(project, cursor, CanvasW, CanvasH, out _));
+
+            // the topmost row is the cursor's, and the click still lands on the picture below it
+            Assert.Equal(background.Id,
+                ItemPlacement.HitTest(project, 0, 400, 225, CanvasW, CanvasH)?.Id);
+        }
+
         // ---------------------------------------------------------------------------- hit-testing
 
         /// <summary>The preview's click-to-select walks the composed stack from the top down, so an
@@ -665,6 +823,75 @@ namespace Clowd.VideoSDK.Tests
             return project;
         }
 
+        /// <summary>A capture sidecar holding three single-key runs 100ms apart — three display
+        /// rows once <see cref="KeyboardContent.PauseBreakMs"/> is below that gap. Written to a
+        /// unique path each time: <c>InputCapture</c> and <c>KeyboardLayout</c> both cache by
+        /// path for the life of the process.</summary>
+        private static string WriteCapture()
+        {
+            var path = Path.Combine(Path.GetTempPath(),
+                "clowd-input-capture-" + Guid.NewGuid().ToString("N") + ".jsonl");
+            File.WriteAllText(path, """
+                {"type":"header","version":1,"region":[0,0,1920,1080],"fps_num":30,"fps_den":1,"platform":"windows","monitors":[{"x":0,"y":0,"w":1920,"h":1080,"scale":1.0}]}
+                {"type":"event","t":0,"kind":"kd","vk":65,"ch":"a"}
+                {"type":"event","t":100,"kind":"kd","vk":66,"ch":"b"}
+                {"type":"event","t":200,"kind":"kd","vk":67,"ch":"c"}
+                """);
+            return path;
+        }
+
+        /// <summary>A white full-frame background with a keyboard overlay row over it, at the
+        /// transform <c>EditorSession.AddKeyboardTrack</c> creates (bottom centre at 0.85, half the
+        /// canvas wide). The runs linger long enough that all three are visible at the one second
+        /// <see cref="Compose"/> draws.</summary>
+        private static Project KeyboardProject(string capturePath, out Item item, out Item background)
+        {
+            var project = NewProject();
+            var source = new Source
+            {
+                Id = Guid.NewGuid(),
+                Path = VideoPath,
+                InputCapturePath = capturePath,
+                Streams = new List<SourceStream>(),
+            };
+            project.Sources.Add(source);
+
+            var backTrack = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Back", Order = 0 };
+            background = new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = backTrack.Id,
+                TimelineStartTicks = 0,
+                DurationTicks = 5 * TimeSpan.TicksPerSecond,
+                Content = new SolidContent { Color = "#FFFFFFFF" },
+            };
+
+            var keyTrack = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Keys", Order = 1 };
+            item = new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = keyTrack.Id,
+                TimelineStartTicks = 0,
+                DurationTicks = 5 * TimeSpan.TicksPerSecond,
+                Content = new KeyboardContent
+                {
+                    SourceId = source.Id,
+                    FontSize = 60,
+                    LingerMs = 5000,
+                    FadeMs = 0,
+                    PauseBreakMs = 10,
+                },
+                Transform = new ModelTransform { X = 0.5, Y = 0.85, Scale = 0.5 },
+                LinkGroupId = Guid.NewGuid(),
+            };
+
+            project.Tracks.Add(backTrack);
+            project.Tracks.Add(keyTrack);
+            project.Items.Add(background);
+            project.Items.Add(item);
+            return project;
+        }
+
         private static Project TextProject(string text, double size, out Item item)
         {
             var project = NewProject();
@@ -753,6 +980,30 @@ namespace Clowd.VideoSDK.Tests
             }
 
             return top < 0 ? (0, 0) : (top, bottom + 1);
+        }
+
+        /// <summary>Bounding box of everything <i>darker</i> than the canvas, or null when nothing
+        /// is — the inverse of <see cref="InkBounds"/>, for the keyboard's semi-transparent black
+        /// pills over a white background (which the ink scan cannot see, both being bright).</summary>
+        private static (double Left, double Top, double Right, double Bottom)? DarkBounds(
+            byte[] bgra, int width, int height)
+        {
+            int left = Int32.MaxValue, top = Int32.MaxValue, right = -1, bottom = -1;
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    if (bgra[(y * width + x) * 4 + 1] > 200)
+                        continue;
+
+                    left = Math.Min(left, x);
+                    top = Math.Min(top, y);
+                    right = Math.Max(right, x);
+                    bottom = Math.Max(bottom, y);
+                }
+            }
+
+            return right < 0 ? null : (left, top, right + 1, bottom + 1);
         }
 
         /// <summary>Bounding box of everything drawn on the canvas (any non-black pixel), or null

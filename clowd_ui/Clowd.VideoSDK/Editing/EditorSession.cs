@@ -576,10 +576,17 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>Wraps <see cref="TimelineOps.UnlinkTrack"/> — the row's sync toggle turned
-        /// off. Link groups only affect editing, never playback, so this is a mapping change.</summary>
-        public void UnlinkTrack(Guid trackId, object origin = null) =>
+        /// off. Link groups only affect editing, never playback, so this is a mapping change.
+        /// Refused for cursor/keyboard rows: their items are hard-synced to the recording
+        /// (validation requires the link group), so the toggle never comes off.</summary>
+        public void UnlinkTrack(Guid trackId, object origin = null)
+        {
+            if (IsInputOverlayTrack(Project, trackId))
+                return;
+
             Mutate("Unlink Track", ProjectChangeKind.Mapping, null, origin,
                 p => TimelineOps.UnlinkTrack(p, trackId));
+        }
 
         /// <summary>Wraps <see cref="TimelineOps.TryRelinkTrack"/>. False means the row has
         /// drifted and the toggle stays off — the project is untouched.</summary>
@@ -617,7 +624,7 @@ namespace Clowd.VideoSDK.Editing
             Mutate("Duplicate Track", ProjectChangeKind.Structural, null, origin, p =>
             {
                 var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
-                if (track == null || IsSpeedTrack(p, track))
+                if (track == null || IsSpeedTrack(p, track) || IsInputOverlayTrack(p, trackId))
                     return false;
 
                 // slot the copy in directly above the original: everything at or past that order
@@ -722,6 +729,11 @@ namespace Clowd.VideoSDK.Editing
         /// </summary>
         private static bool Reorder(Project project, Guid trackId, Func<int, int> targetOf, bool audioMoves)
         {
+            // cursor/keyboard rows are pinned directly above their recording's screen row — they
+            // never reorder themselves (other video rows may still step around them).
+            if (IsInputOverlayTrack(project, trackId))
+                return false;
+
             // the speed row is pinned: it never moves, nothing moves past it, and it sits outside
             // the layer-index space entirely (its Order is renumbered above everything below).
             var speed = project.Tracks.Where(t => IsSpeedTrack(project, t))
@@ -752,6 +764,13 @@ namespace Clowd.VideoSDK.Editing
             group.RemoveAt(index);
             group.Insert(target, moved);
 
+            // the pin is two-sided: the overlay rows never move themselves (above), and no move
+            // may land the screen row above its own cursor/keyboard rows — they composite over
+            // it by contract, and buried beneath the opaque screen frame the cursor would simply
+            // vanish (the default overlay stands down while a cursor item is active).
+            if (group == video && OverlayPinViolated(project, video))
+                return false;
+
             var order = 0;
             foreach (var track in video)
                 track.Order = order++;
@@ -767,9 +786,13 @@ namespace Clowd.VideoSDK.Editing
 
         /// <summary>Whether <see cref="MoveTrackLayer"/> would do anything — the enablement the
         /// timeline's context menu needs, without a speculative mutation. Always false for the
-        /// pinned speed row.</summary>
+        /// pinned speed row, and for a step that would raise a screen row above its own
+        /// cursor/keyboard rows (the same refusal <see cref="Reorder"/> applies).</summary>
         public bool CanMoveTrackLayer(Guid trackId, bool towardsFront)
         {
+            if (IsInputOverlayTrack(Project, trackId))
+                return false;
+
             var video = Project.Tracks.Where(t => t.Kind != TrackKind.Audio && !IsSpeedTrack(Project, t))
                                       .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
 
@@ -777,7 +800,72 @@ namespace Clowd.VideoSDK.Editing
             if (index < 0)
                 return false;
 
-            return towardsFront ? index + 1 < video.Count : index > 0;
+            var target = towardsFront ? index + 1 : index - 1;
+            if (target < 0 || target >= video.Count)
+                return false;
+
+            var moved = video[index];
+            video.RemoveAt(index);
+            video.Insert(target, moved);
+            return !OverlayPinViolated(Project, video);
+        }
+
+        /// <summary>
+        /// Whether the tentative video arrangement (list index = eventual paint order) buries a
+        /// cursor/keyboard row beneath its own screen row. Only the screen-vs-overlay relation is
+        /// pinned: other rows — the webcam, imports, zoom effect rows — may still step between or
+        /// around the pair.
+        /// </summary>
+        private static bool OverlayPinViolated(Project project, List<Track> video)
+        {
+            for (var i = 0; i < video.Count; i++)
+            {
+                if (!IsInputOverlayTrack(project, video[i].Id))
+                    continue;
+
+                var screen = FindOverlayScreenTrack(project, video[i]);
+                if (screen != null && video.IndexOf(screen) > i)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>The screen row an overlay row is pinned above: the video row of the
+        /// screen-stream media item sharing a link group with one of the overlay's items — the
+        /// hard-sync partner <see cref="AddInputOverlayTrack"/> wired. Null when the screen row
+        /// is gone (the overlay then draws nothing and pins to nothing).</summary>
+        private static Track FindOverlayScreenTrack(Project project, Track overlay)
+        {
+            foreach (var item in project.Items)
+            {
+                if (item.TrackId != overlay.Id || item.LinkGroupId == null)
+                    continue;
+
+                Guid sourceId;
+                if (item.Content is CursorContent cursor)
+                    sourceId = cursor.SourceId;
+                else if (item.Content is KeyboardContent keyboard)
+                    sourceId = keyboard.SourceId;
+                else
+                    continue;
+
+                var source = project.Sources.FirstOrDefault(s => s.Id == sourceId);
+                if (source == null)
+                    continue;
+
+                foreach (var partner in project.Items)
+                {
+                    if (partner.LinkGroupId != item.LinkGroupId
+                        || partner.Content is not MediaContent media || media.SourceId != sourceId
+                        || !Composition.FrameComposer.IsScreenStream(source, media.StreamIndex))
+                        continue;
+
+                    var track = project.Tracks.FirstOrDefault(t => t.Id == partner.TrackId);
+                    if (track?.Kind == TrackKind.Video)
+                        return track;
+                }
+            }
+            return null;
         }
 
         /// <summary>Renames a row. Coalesced per track so typing in the header textbox is one undo
@@ -969,6 +1057,166 @@ namespace Clowd.VideoSDK.Editing
         /// <summary>Whether the project already carries the (single) speed row — the add-speed
         /// command's CanExecute.</summary>
         public bool HasSpeedTrack => FindSpeedTrack(Project) != null;
+
+        // ------------------------------------------------------------------- input overlay rows
+
+        /// <summary>
+        /// Adds the cursor overlay row: a <see cref="TrackKind.Video"/> track named "Cursor"
+        /// directly above the recording's screen row (above the keyboard row when one exists),
+        /// carrying one <see cref="CursorContent"/> item per screen keep-segment — mirroring each
+        /// segment's span and link group, which is what hard-syncs the row to the recording's
+        /// trims and cuts. Returns the first live item, or null when refused: no source with
+        /// input-capture data, the row already exists, or the screen row has no segments.
+        /// </summary>
+        public Item AddCursorTrack(object origin = null)
+        {
+            Item created = null;
+            var committed = Mutate("Add Cursor", ProjectChangeKind.Structural, null, origin,
+                p => { created = AddInputOverlayTrack(p, cursor: true); });
+            return committed ? created : null;
+        }
+
+        /// <summary>The keyboard counterpart of <see cref="AddCursorTrack"/>: a row named "Keys"
+        /// directly above the screen row but below an existing cursor row, one
+        /// <see cref="KeyboardContent"/> item per screen keep-segment.</summary>
+        public Item AddKeyboardTrack(object origin = null)
+        {
+            Item created = null;
+            var committed = Mutate("Add Keys", ProjectChangeKind.Structural, null, origin,
+                p => { created = AddInputOverlayTrack(p, cursor: false); });
+            return committed ? created : null;
+        }
+
+        /// <summary>Whether the project carries a cursor overlay row — by content, like
+        /// <see cref="HasSpeedTrack"/>, so the flag flips off the moment the last item goes.</summary>
+        public bool HasCursorTrack => FindInputOverlayTrack(Project, cursor: true) != null;
+
+        /// <summary>Whether the project carries a keyboard overlay row; see
+        /// <see cref="HasCursorTrack"/>.</summary>
+        public bool HasKeyboardTrack => FindInputOverlayTrack(Project, cursor: false) != null;
+
+        /// <summary>True when any source carries input-capture data whose file exists — what
+        /// gates the add-cursor/add-keyboard commands. The existence probe is cached per path:
+        /// the flag is polled from CanExecute refreshes, and a sidecar neither appears nor
+        /// disappears mid-session.</summary>
+        public bool HasInputCapture
+        {
+            get
+            {
+                foreach (var source in Project.Sources)
+                {
+                    if (!String.IsNullOrEmpty(source.InputCapturePath) &&
+                        InputCaptureFileExists(source.InputCapturePath))
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        private readonly Dictionary<string, bool> _inputCaptureExists =
+            new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        private bool InputCaptureFileExists(string path)
+        {
+            if (!_inputCaptureExists.TryGetValue(path, out var exists))
+                _inputCaptureExists[path] = exists = File.Exists(path);
+            return exists;
+        }
+
+        /// <summary>The shared body of both overlay factories. Returns the first created item, or
+        /// null when the add is refused (see <see cref="AddCursorTrack"/>).</summary>
+        private static Item AddInputOverlayTrack(Project project, bool cursor)
+        {
+            var source = project.Sources.FirstOrDefault(s => !String.IsNullOrEmpty(s.InputCapturePath));
+            if (source == null || FindInputOverlayTrack(project, cursor) != null)
+                return null;
+
+            // the screen row: the backmost video row playing the capture's *screen stream*. The
+            // webcam row plays the same source (a different stream), and the user may have ordered
+            // it behind the screen row — matching by source alone would pin to it there, and an
+            // overlay row inserted behind the screen frame composes invisibly.
+            var screen = project.Tracks
+                .Where(t => t.Kind == TrackKind.Video && project.Items.Any(i =>
+                    i.TrackId == t.Id && i.Content is MediaContent m && m.SourceId == source.Id
+                    && Composition.FrameComposer.IsScreenStream(source, m.StreamIndex)))
+                .OrderBy(t => t.Order).ThenBy(t => t.Id)
+                .FirstOrDefault();
+            if (screen == null)
+                return null;
+
+            var segments = project.Items
+                .Where(i => i.TrackId == screen.Id && i.Content is MediaContent)
+                .OrderBy(i => i.TimelineStartTicks).ToList();
+            if (segments.Count == 0)
+                return null;
+
+            // cursor sits above the keyboard row when both exist; the keyboard slots directly
+            // above the screen row, which leaves it below an existing cursor row.
+            var below = screen.Order;
+            if (cursor && FindInputOverlayTrack(project, cursor: false) is { } keys)
+                below = Math.Max(below, keys.Order);
+            var order = below + 1;
+            foreach (var t in project.Tracks)
+            {
+                if (t.Order >= order)
+                    t.Order++;
+            }
+
+            var track = new Track
+            {
+                Id = Guid.NewGuid(),
+                Kind = TrackKind.Video,
+                Name = cursor ? "Cursor" : "Keys",
+                Order = order,
+            };
+            project.Tracks.Add(track);
+
+            Item first = null;
+            foreach (var segment in segments)
+            {
+                // hard-sync: the overlay item joins the segment's link group. A screen segment
+                // that was unlinked gets a fresh group shared with its overlay — the overlay
+                // must follow the screen either way.
+                segment.LinkGroupId ??= Guid.NewGuid();
+
+                var item = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = track.Id,
+                    TimelineStartTicks = segment.TimelineStartTicks,
+                    DurationTicks = segment.DurationTicks,
+                    Content = cursor
+                        ? new CursorContent
+                        {
+                            SourceId = source.Id,
+                            StreamIndex = source.CursorStreamIndex ?? -1,
+                        }
+                        : new KeyboardContent { SourceId = source.Id },
+                    // keyboard blocks anchor bottom-centre at half canvas width; the cursor's
+                    // position is data-driven and ignores the transform entirely.
+                    Transform = cursor
+                        ? new Transform()
+                        : new Transform { X = 0.5, Y = 0.85, Scale = 0.5 },
+                    LinkGroupId = segment.LinkGroupId,
+                };
+                project.Items.Add(item);
+                first ??= item;
+            }
+            return first;
+        }
+
+        /// <summary>The video row carrying cursor (or keyboard) overlay items, or null — by
+        /// content, exactly as <see cref="IsSpeedTrack"/> classifies the speed row, and empty
+        /// rows never survive a commit (see <see cref="PruneEmptyTracks"/>).</summary>
+        private static Track FindInputOverlayTrack(Project project, bool cursor) =>
+            project.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Video && project.Items.Any(i =>
+                i.TrackId == t.Id && (cursor ? i.Content is CursorContent : i.Content is KeyboardContent)));
+
+        /// <summary>Whether the row's items are cursor/keyboard overlays — the rows whose sync,
+        /// reorder and duplicate are refused (their placement and link groups are structural, not
+        /// user-arrangeable).</summary>
+        private static bool IsInputOverlayTrack(Project project, Guid trackId) =>
+            project.Items.Any(i => i.TrackId == trackId && i.Content is CursorContent or KeyboardContent);
 
         /// <summary>
         /// Imports an external media file as an overlay: one new <see cref="Source"/> with the
@@ -1172,8 +1420,16 @@ namespace Clowd.VideoSDK.Editing
         public static bool SourceFileExists(Source source) =>
             !String.IsNullOrEmpty(source?.Path) && File.Exists(source.Path);
 
-        private static bool PlaysSource(Item item, Guid sourceId) =>
-            item.Content is MediaContent media && media.SourceId == sourceId;
+        /// <summary>Whether the item consumes this source's data — media streams, and the input
+        /// overlays that read its capture sidecar, so removing a source takes its cursor/keyboard
+        /// rows with it rather than stranding items that fail validation.</summary>
+        private static bool PlaysSource(Item item, Guid sourceId) => item.Content switch
+        {
+            MediaContent media => media.SourceId == sourceId,
+            CursorContent cursor => cursor.SourceId == sourceId,
+            KeyboardContent keyboard => keyboard.SourceId == sourceId,
+            _ => false,
+        };
 
         // ------------------------------------------------------------------------------ undo/redo
 
@@ -1445,13 +1701,17 @@ namespace Clowd.VideoSDK.Editing
         ///
         /// <para>Hidden and locked rows are never candidates, for the same reason: an item added to
         /// a hidden row is composed by nothing (the webcam row is Hidden on every fresh edit that
-        /// never enabled the overlay). Reuse is still the common case — a second card at a
-        /// different time lands on the same overlay row rather than stacking up empty ones.</para>
+        /// never enabled the overlay). Cursor/keyboard rows are never candidates either — they are
+        /// video rows, but their content is structural (pinned, refuses reorder/duplicate, deleted
+        /// with the row), and a text card must not inherit any of that. Reuse is still the common
+        /// case — a second card at a different time lands on the same overlay row rather than
+        /// stacking up empty ones.</para>
         /// </summary>
         private static Track FindOrCreateFreeVideoTrack(Project project, long startTicks, long durationTicks)
         {
             var end = startTicks + durationTicks;
-            var frontmost = project.Tracks.Where(t => t.Kind == TrackKind.Video && !t.Hidden && !t.Locked)
+            var frontmost = project.Tracks.Where(t => t.Kind == TrackKind.Video && !t.Hidden && !t.Locked
+                                                      && !IsInputOverlayTrack(project, t.Id))
                                           .OrderByDescending(t => t.Order)
                                           .ThenByDescending(t => t.Id)
                                           .FirstOrDefault();

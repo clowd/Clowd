@@ -13,6 +13,17 @@ public sealed class Source
     /// <summary>Full path to the media file.</summary>
     public string Path { get; set; }
 
+    /// <summary>Full path to the recording's input-capture JSONL sidecar (cursor positions, key
+    /// and mouse events), or null when the recording carries none. A missing/corrupt file
+    /// degrades to no data — it never blocks the project.</summary>
+    public string InputCapturePath { get; set; }
+
+    /// <summary>Index of the recording's 512x512 cursor-box video stream within the container,
+    /// or null when the recording carries none. Set only by new recordings — its presence is what
+    /// enables the default native-cursor overlay, so legacy recordings with the cursor baked into
+    /// the screen stream are never double-composited.</summary>
+    public int? CursorStreamIndex { get; set; }
+
     public List<SourceStream> Streams { get; set; } = new List<SourceStream>();
 }
 

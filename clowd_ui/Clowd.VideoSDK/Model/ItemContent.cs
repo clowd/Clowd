@@ -1,11 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Clowd.VideoSDK.Model;
 
 /// <summary>
 /// What fills an <see cref="Item"/>'s span. Polymorphic on a <c>$type</c> discriminator
-/// (<c>media</c> / <c>text</c> / <c>image</c> / <c>solid</c> / <c>speed</c> / <c>zoom</c>) via System.Text.Json's built-in
+/// (<c>media</c> / <c>text</c> / <c>image</c> / <c>solid</c> / <c>speed</c> / <c>zoom</c> /
+/// <c>cursor</c> / <c>keyboard</c>) via System.Text.Json's built-in
 /// polymorphism, which the source-generated <see cref="ProjectJsonContext"/> supports. The
 /// discriminator strings are wire contract — renaming a class is free, renaming a discriminator
 /// breaks every saved project.
@@ -17,6 +19,8 @@ namespace Clowd.VideoSDK.Model;
 [JsonDerivedType(typeof(SolidContent), "solid")]
 [JsonDerivedType(typeof(SpeedContent), "speed")]
 [JsonDerivedType(typeof(ZoomContent), "zoom")]
+[JsonDerivedType(typeof(CursorContent), "cursor")]
+[JsonDerivedType(typeof(KeyboardContent), "keyboard")]
 public abstract class ItemContent
 {
     /// <summary>Deep copy, used by <see cref="TimelineOps.Split"/> so the two halves never share
@@ -133,5 +137,89 @@ public sealed class ZoomContent : ItemContent
         Zoom = Zoom,
         FocusX = FocusX,
         FocusY = FocusY,
+    };
+}
+
+/// <summary>A rendered cursor overlay driven by the recording's input-capture data
+/// (<see cref="Source.InputCapturePath"/>). Lives on a <see cref="TrackKind.Video"/> row that is
+/// hard-synced to its recording: every item always carries the recording's
+/// <see cref="Item.LinkGroupId"/>, so it moves/trims/splits with the screen row. Position is
+/// data-driven (the captured cursor path), never the item's <see cref="Item.Transform"/>.</summary>
+public sealed class CursorContent : ItemContent
+{
+    /// <summary>The style names the editor offers, in menu order. <c>native</c> draws the
+    /// recorded 512px cursor box stream; every other style draws a themed vector glyph at the
+    /// captured position. An unrecognized value renders as the theme's arrow.</summary>
+    public static readonly IReadOnlyList<string> Styles = new[]
+        { "native", "ios-glyph", "material", "fluent", "plumpy", "softteal", "papercut", "doodle" };
+
+    /// <summary>The click animation names the editor offers, in menu order.</summary>
+    public static readonly IReadOnlyList<string> ClickAnimations = new[] { "none", "ripple", "pulse" };
+
+    public Guid SourceId { get; set; }
+
+    /// <summary>Stream index of the recording's 512x512 cursor-box video stream
+    /// (<see cref="Source.CursorStreamIndex"/>), or -1 when the recording carries none — the
+    /// <c>native</c> style then draws nothing and the themed styles are unaffected.</summary>
+    public int StreamIndex { get; set; } = -1;
+
+    /// <summary>One of <see cref="Styles"/>.</summary>
+    public string Style { get; set; } = "ios-glyph";
+
+    /// <summary>Glyph size multiplier over the style's base size, validated to 0.25..4.
+    /// Ignored by the <c>native</c> style (the box stream is captured at recording scale).</summary>
+    public double Size { get; set; } = 1.0;
+
+    /// <summary>Drop shadow under the themed glyph. Ignored by the <c>native</c> style.</summary>
+    public bool DropShadow { get; set; }
+
+    /// <summary>One of <see cref="ClickAnimations"/>.</summary>
+    public string ClickAnimation { get; set; } = "none";
+
+    /// <summary>Click animation color, packed ARGB.</summary>
+    public uint ClickColor { get; set; } = 0xFFFF0000;
+
+    public override ItemContent Clone() => new CursorContent
+    {
+        SourceId = SourceId,
+        StreamIndex = StreamIndex,
+        Style = Style,
+        Size = Size,
+        DropShadow = DropShadow,
+        ClickAnimation = ClickAnimation,
+        ClickColor = ClickColor,
+    };
+}
+
+/// <summary>A keystroke overlay driven by the recording's input-capture data
+/// (<see cref="Source.InputCapturePath"/>). Same hard-sync rules as <see cref="CursorContent"/>;
+/// unlike it, placement <b>is</b> the item's <see cref="Item.Transform"/> — X/Y anchor the
+/// block's bottom centre and Scale is the wrap width as a fraction of the canvas, with rows
+/// stacking upward from the anchor.</summary>
+public sealed class KeyboardContent : ItemContent
+{
+    public Guid SourceId { get; set; }
+
+    /// <summary>Font size in output-canvas pixels, validated to 8..200.</summary>
+    public double FontSize { get; set; } = 28;
+
+    /// <summary>How long a finished run of keystrokes stays fully visible after its last key,
+    /// in ms, validated to 0..10000.</summary>
+    public int LingerMs { get; set; } = 300;
+
+    /// <summary>Fade-out length after the linger, in ms, validated to 0..10000.</summary>
+    public int FadeMs { get; set; } = 250;
+
+    /// <summary>Typing gap that ends a run and starts a new row, in ms, validated to
+    /// 0..10000.</summary>
+    public int PauseBreakMs { get; set; } = 1000;
+
+    public override ItemContent Clone() => new KeyboardContent
+    {
+        SourceId = SourceId,
+        FontSize = FontSize,
+        LingerMs = LingerMs,
+        FadeMs = FadeMs,
+        PauseBreakMs = PauseBreakMs,
     };
 }
