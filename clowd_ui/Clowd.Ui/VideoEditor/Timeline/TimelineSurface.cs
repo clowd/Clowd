@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Clowd.Drawing;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 
@@ -30,6 +31,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         private const double TrimHandleWidth = 9;   // full-height slab at each edge, drawn inside the body's rounded clip
         private const double GlyphSize = 12;
         private const double OffscreenSlackPx = 50; // keep rects for items just off screen so a scrolled-out edge still hit-tests honestly
+        private const double EdgeFadeWidth = 24;    // fade-to-row-background over a viewport-cut item end (see FadeEdgeScrollViewer)
+        private const double JumpGlyphSize = 10;    // the chevron inside the fade that jumps to the cut-off end
 
         /// <summary>Caps the cached waveform geometry per item; past this a bucket covers more
         /// than a pixel, which only happens when a single item spans thousands of on-screen pixels
@@ -61,6 +64,11 @@ namespace Clowd.UI.VideoEditor.Timeline
         private IPointer _dragPointer;
         private long? _snapGuideTicks;
         private Guid _hoverItemId;
+
+        /// <summary>The clickable edge-jump chevrons drawn this frame — rebuilt on every render,
+        /// so a press/hover reads exactly what is on screen.</summary>
+        private readonly List<EdgeJump> _edgeJumps = new List<EdgeJump>();
+        private (Guid ItemId, bool Left)? _hoverJump;
 
         private DispatcherTimer _previewThrottle;
         private Cursor _cursorResize;
@@ -238,6 +246,16 @@ namespace Clowd.UI.VideoEditor.Timeline
             Focus();
 
             var pos = e.GetPosition(this);
+
+            // the edge-jump chevrons sit over item bodies, so they claim the press first.
+            if (HitJump(pos) is { } jump)
+            {
+                var jumpItem = FindItem(jump.ItemId);
+                if (jumpItem != null)
+                    _viewport.EnsureVisible(jump.Left ? jumpItem.TimelineStartTicks : jumpItem.TimelineEndTicks);
+                return;
+            }
+
             var hit = HitTestAt(pos);
 
             switch (hit.Kind)
@@ -312,6 +330,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             _grabOffsetTicks = grabOffsetTicks;
             _dragPointer = e.Pointer;
             e.Pointer.Capture(this);
+
+            if (mode == DragMode.MoveItem)
+                Cursor = DragCursors.Grabbing;
         }
 
         protected override void OnPointerMoved(PointerEventArgs e)
@@ -348,9 +369,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                 return;
 
             var mode = _dragMode;
-            var ticks = _viewport.XToTicksClamped(e.GetPosition(this).X);
+            var pos = e.GetPosition(this);
+            var ticks = _viewport.XToTicksClamped(pos.X);
             FinishDrag(commit: true); // before Capture(null): it re-enters OnPointerCaptureLost
             e.Pointer.Capture(null);
+            UpdateHover(pos); // restore the grab/resize cursor for whatever is under the release
 
             if (mode == DragMode.Scrub)
                 ScrubCompleted?.Invoke(this, ticks);
@@ -375,9 +398,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             base.OnPointerExited(e);
 
-            if (_hoverItemId != Guid.Empty)
+            if (_hoverItemId != Guid.Empty || _hoverJump != null)
             {
                 _hoverItemId = Guid.Empty;
+                _hoverJump = null;
                 InvalidateVisual();
             }
         }
@@ -401,9 +425,15 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             var gesture = _gesture;
             _gesture = null;
+            var mode = _dragMode;
             _dragMode = DragMode.None;
             _dragPointer = null;
             SetSnapGuide(null);
+
+            // back from the grabbing fist; the release handler's hover pass re-applies the open
+            // grab if the pointer is still over the item.
+            if (mode == DragMode.MoveItem)
+                Cursor = null;
 
             if (gesture != null)
             {
@@ -555,6 +585,14 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private void UpdateHover(Point pos)
         {
+            var jump = HitJump(pos);
+            var jumpKey = jump is { } j ? ((Guid, bool)?)(j.ItemId, j.Left) : null;
+            if (jumpKey != _hoverJump)
+            {
+                _hoverJump = jumpKey;
+                InvalidateVisual();
+            }
+
             var hit = HitTestAt(pos);
             var hover = hit.Kind is TimelineHitKind.ItemBody or TimelineHitKind.ItemStart or TimelineHitKind.ItemEnd
                 ? hit.ItemId
@@ -563,6 +601,13 @@ namespace Clowd.UI.VideoEditor.Timeline
             {
                 _hoverItemId = hover;
                 InvalidateVisual();
+            }
+
+            // a chevron owns the cursor while under it — the press goes to the jump, not the item.
+            if (jumpKey != null)
+            {
+                Cursor = _cursorHand ??= new Cursor(StandardCursorType.Hand);
+                return;
             }
 
             switch (hit.Kind)
@@ -583,9 +628,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                     var track = item == null ? null : FindTrack(item.TrackId);
                     var movable = item != null && track is { Locked: false } &&
                                   _session?.IsRippleGroup(item.Id) != true;
-                    // Arrow (not Hand) on a recording-synced or locked body: no move affordance
-                    // IS the cue. Import groups move as one, so their bodies keep the Hand.
-                    Cursor = movable ? (_cursorHand ??= new Cursor(StandardCursorType.Hand)) : null;
+                    // Arrow (not the grab hand) on a recording-synced or locked body: no move
+                    // affordance IS the cue. Import groups move as one, so their bodies keep it.
+                    // Grab (not the pointing Hand — that one belongs to the edge-jump chevrons)
+                    // says "this drags".
+                    Cursor = movable ? DragCursors.Grab : null;
                     break;
                 }
 
@@ -740,6 +787,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             var palette = TimelinePalette.ForVariant(ActualThemeVariant);
             context.FillRectangle(palette.SurfaceBackground, new Rect(Bounds.Size));
 
+            _edgeJumps.Clear();
             var project = _session?.Project;
             if (project == null)
                 return;
@@ -772,7 +820,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                         continue;
 
                     var body = new Rect(x, row.Top + ItemPadY, w, Math.Max(1, row.Height - ItemPadY * 2));
-                    RenderItem(context, palette, project, track, row, item, body, selection.Contains(item.Id));
+                    RenderItem(context, palette, project, track, row, item, body, selection.Contains(item.Id),
+                        evenRow: i % 2 == 0);
                 }
             }
 
@@ -808,46 +857,45 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         private void RenderItem(DrawingContext context, TimelinePalette palette, Project project,
-            Track track, TimelineRow row, Item item, Rect body, bool selected)
+            Track track, TimelineRow row, Item item, Rect body, bool selected, bool evenRow)
         {
             context.DrawRectangle(palette.ItemFill(row.Kind), palette.ItemBorderPen, body,
                 ItemCornerRadius, ItemCornerRadius);
 
-            // Media content sits UNDER the transition ramps (the ramp shows what the picture/audio
-            // fades over), but a text/image card's glyph label goes ON TOP — an entry ramp covers
-            // the card's left edge, which is exactly where the label lives, and an unreadable
-            // label defeats its purpose.
             switch (item.Content)
             {
                 case MediaContent media when row.Kind == TimelineRowKind.Audio:
                     RenderWaveform(context, palette, item, media, body);
-                    RenderTransitions(context, palette, item, body);
                     break;
                 case MediaContent media:
                     RenderFilmstrip(context, palette, project, item, media, body);
-                    RenderTransitions(context, palette, item, body);
                     break;
+            }
+
+            // Media content sits UNDER the transition ramps (the ramp shows what the picture/audio
+            // fades over), and the edge fades sit over both; a card's glyph label goes ON TOP of
+            // it all — an entry ramp covers the card's left edge, which is exactly where the label
+            // lives (and a pinned label sits right over the fade), and an unreadable label defeats
+            // its purpose.
+            RenderTransitions(context, palette, item, body);
+            RenderEdgeFades(context, palette, item, body, evenRow);
+
+            switch (item.Content)
+            {
                 case TextContent text:
-                    RenderTransitions(context, palette, item, body);
                     RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconToolText"), text.Text);
                     break;
                 case ImageContent image:
-                    RenderTransitions(context, palette, item, body);
                     RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconImage"),
                         System.IO.Path.GetFileName(image.Path));
                     break;
                 case SpeedContent speed:
-                    RenderTransitions(context, palette, item, body);
                     RenderGlyphLabel(context, palette, body, TimelineIcons.SpeedometerGeometry,
                         speed.Factor.ToString("0.##", CultureInfo.InvariantCulture) + "×");
                     break;
                 case ZoomContent zoom:
-                    RenderTransitions(context, palette, item, body);
                     RenderGlyphLabel(context, palette, body, TimelineIcons.MagnifierGeometry,
                         Math.Round(zoom.Zoom * 100).ToString("0", CultureInfo.InvariantCulture) + "%");
-                    break;
-                default:
-                    RenderTransitions(context, palette, item, body);
                     break;
             }
 
@@ -902,6 +950,102 @@ namespace Clowd.UI.VideoEditor.Timeline
                     context.FillRectangle(line, new Rect(x0 + 5, lineY, 1, lineHeight));
                 }
             }
+        }
+
+        /// <summary>How far along [0..1] the edge treatment is for an item end scrolled
+        /// <paramref name="overshootPx"/> past the viewport: it eases in over one fade-width of
+        /// scrolling instead of popping the moment a pixel is cut off.</summary>
+        private static double EdgeCutAmount(double overshootPx) =>
+            Math.Clamp(overshootPx / EdgeFadeWidth, 0, 1);
+
+        /// <summary>
+        /// Dissolves whichever end of the item the viewport cuts off into the row background — the
+        /// cue <see cref="Controls.FadeEdgeScrollViewer"/> gives scrolled lists: a hard clip line
+        /// reads as "the clip ends here", the fade as "it keeps going". A chevron drawn inside each
+        /// fade jumps the view to the cut-off end when clicked (hit rects are collected per frame,
+        /// so hover/press always read what is on screen). Both fade and chevron ease in with
+        /// <see cref="EdgeCutAmount"/> as the edge scrolls out.
+        /// </summary>
+        private void RenderEdgeFades(DrawingContext context, TimelinePalette palette, Item item,
+            Rect body, bool evenRow)
+        {
+            var cutLeft = EdgeCutAmount(-body.X);
+            var cutRight = EdgeCutAmount(body.Right - Bounds.Width);
+            if (cutLeft <= 0 && cutRight <= 0)
+                return;
+
+            using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
+            {
+                if (cutLeft > 0)
+                {
+                    using (context.PushOpacity(cutLeft))
+                    {
+                        context.FillRectangle(palette.ItemEdgeFade(evenRow, leftEdge: true),
+                            new Rect(0, body.Y, EdgeFadeWidth, body.Height));
+                        RenderEdgeJump(context, palette, item, body, left: true, amount: cutLeft);
+                    }
+                }
+
+                if (cutRight > 0)
+                {
+                    using (context.PushOpacity(cutRight))
+                    {
+                        context.FillRectangle(palette.ItemEdgeFade(evenRow, leftEdge: false),
+                            new Rect(Bounds.Width - EdgeFadeWidth, body.Y, EdgeFadeWidth, body.Height));
+                        RenderEdgeJump(context, palette, item, body, left: false, amount: cutRight);
+                    }
+                }
+            }
+        }
+
+        private void RenderEdgeJump(DrawingContext context, TimelinePalette palette, Item item,
+            Rect body, bool left, double amount)
+        {
+            var x = left ? 4 : Bounds.Width - JumpGlyphSize - 4;
+            var hovered = _hoverJump == (item.Id, left);
+
+            // resting at 0.6 opacity so hovering snaps it to full — a clearer "you are on the
+            // button" cue than the brush change alone.
+            using (context.PushOpacity(hovered ? 1.0 : 0.6))
+                DrawGlyph(context, left ? TimelineIcons.JumpLeftGeometry : TimelineIcons.JumpRightGeometry,
+                    hovered ? palette.GripHoverBrush : palette.GripBrush,
+                    new Point(x, body.Center.Y - JumpGlyphSize / 2), JumpGlyphSize);
+
+            // the hit rect is the full fade column over this row — the glyph alone would be a
+            // 10px target. Only once the chevron is mostly faded in, though: a half-invisible
+            // button must not steal the item's own press yet.
+            if (amount >= 0.5)
+                _edgeJumps.Add(new EdgeJump(item.Id, left,
+                    new Rect(left ? 0 : Bounds.Width - EdgeFadeWidth, body.Y, EdgeFadeWidth, body.Height)));
+        }
+
+        private EdgeJump? HitJump(Point pos)
+        {
+            foreach (var jump in _edgeJumps)
+            {
+                if (jump.Rect.Contains(pos))
+                    return jump;
+            }
+
+            return null;
+        }
+
+        private readonly struct EdgeJump
+        {
+            public EdgeJump(Guid itemId, bool left, Rect rect)
+            {
+                ItemId = itemId;
+                Left = left;
+                Rect = rect;
+            }
+
+            public Guid ItemId { get; }
+
+            /// <summary>True when this chevron sits at the left viewport edge (jumps to the item's
+            /// start); false for the right edge (jumps to its end).</summary>
+            public bool Left { get; }
+
+            public Rect Rect { get; }
         }
 
         private void RenderFilmstrip(DrawingContext context, TimelinePalette palette, Project project,
@@ -1046,6 +1190,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                 context.DrawGeometry(palette.WaveformBrush, null, cache.Geometry);
         }
 
+        private static readonly char[] NewlineChars = { '\r', '\n' };
+
         private void RenderGlyphLabel(DrawingContext context, TimelinePalette palette, Rect body,
             Geometry glyph, string label)
         {
@@ -1053,7 +1199,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             {
                 // inset past the trim handles (they draw inside the body on hover/selection) so
                 // the glyph and text never sit under a handle — and never shift when one appears.
-                var x = body.X + TrimHandleWidth + 3;
+                // When the item's start scrolls out of view the label glides to a pin past the
+                // edge fade (still-solid body), at the same rate the fade eases in — no jump the
+                // frame the edge crosses the viewport.
+                var cutLeft = EdgeCutAmount(-body.X);
+                var naturalX = body.X + TrimHandleWidth + 3;
+                var x = naturalX + (EdgeFadeWidth + 3 - naturalX) * cutLeft;
                 if (glyph != null)
                 {
                     DrawGlyph(context, glyph, palette.ItemLabelBrush,
@@ -1064,7 +1215,18 @@ namespace Clowd.UI.VideoEditor.Timeline
                 if (String.IsNullOrEmpty(label))
                     return;
 
-                var maxWidth = body.Right - TrimHandleWidth - 3 - x;
+                // multi-line text (a Text card) collapses to one line — MaxLineCount alone would
+                // cut it at the first newline however much room the item has.
+                if (label.IndexOfAny(NewlineChars) >= 0)
+                    label = String.Join(" ", label.Split(NewlineChars, StringSplitOptions.RemoveEmptyEntries));
+
+                // capped at the viewport too, so text on an item running past the right edge
+                // ellipsizes where it can still be read — clear of the fade and its chevron —
+                // easing there at the same rate that fade appears.
+                var cutRight = EdgeCutAmount(body.Right - Bounds.Width);
+                var naturalLimit = body.Right - TrimHandleWidth - 3;
+                var rightLimit = naturalLimit + (Bounds.Width - EdgeFadeWidth - 3 - naturalLimit) * cutRight;
+                var maxWidth = rightLimit - x;
                 if (maxWidth <= 8)
                     return;
 
