@@ -107,11 +107,12 @@ namespace Clowd.VideoSDK.Composition
     /// A style that declares no colourway has exactly one, unnamed, and stores a null variant.
     /// </para>
     /// <para>
-    /// The one style here is <c>vision</c> — the Vision Cursor pack by iDarques (CC BY-NC-ND 4.0),
-    /// which covers every drawable kind in a dark and a light colourway. It is read out of the
-    /// pack's own Photoshop sources rather than traced: <c>pointer128black.psd</c> and its White
-    /// twin carry every cursor as a shape layer, and their vector masks are the path data below at
-    /// the authored 128 document size. The constants are named after the PSD layer each came from.
+    /// Both styles here are packs by iDarques (CC BY-NC-ND 4.0), each covering every drawable kind
+    /// in a dark and a light colourway: <c>vision</c> is Vision Cursor, a conventional pointer set
+    /// on a 128-unit viewBox; <c>point</c> is Point.er, a minimal set built from one dot and one
+    /// triangular cap on a 64-unit one. Neither is traced — both are read out of the packs' own
+    /// Photoshop sources, whose files carry every cursor as a shape layer, and whose vector masks
+    /// are the path data below. Each constant is named after the PSD layer it came from.
     /// </para>
     /// <para>
     /// Faithfulness notes, all of them forced by what this table can hold (flat fills and one
@@ -119,24 +120,28 @@ namespace Clowd.VideoSDK.Composition
     /// pinned SkiaSharp):
     /// </para>
     /// <list type="bullet">
-    /// <item>The pack strokes its shapes <i>outside</i> the path. A centred stroke painted under
+    /// <item>Both packs stroke their shapes <i>outside</i> the path. A centred stroke painted under
     /// the layer's own fill is the same picture at double the authored width, which is where the
-    /// 16/12/8 halo widths come from (the pack authors 8/6/4).</item>
+    /// halo widths come from (Vision authors 8/6/4, Point 3). The caller must use round joins for
+    /// this to hold at a corner — see <c>CursorCompose.PaintGlyph</c>.</item>
     /// <item>Photoshop marks a hole with a path operation and leaves the winding alone; the same
     /// hole is spelled here as a reversed contour, which is what the nonzero fill rule wants.</item>
-    /// <item><c>wait</c> and <c>appstarting</c> are gradient-filled/stroked in the source (they are
-    /// the pack's two animated cursors). Each is flattened to the gradient's accent stop —
-    /// <see cref="Spin"/> — which is the colour that tells them apart from the plain pointer.</item>
-    /// <item>The <c>help</c> badge is live text in DIN Round Pro in the source, a font that cannot
-    /// be shipped, so that one glyph is traced from the PSD's own rasterised type layer.</item>
-    /// <item>Only one of the two diagonal-resize cursors is authored per file (the Black source has
-    /// the NESW one, the White source the NWSE one). Both colourways use the Black source's
-    /// geometry, mirrored about the viewBox midline for the other diagonal, so the pair matches.</item>
+    /// <item>Each pack's <c>wait</c>/<c>appstarting</c> are its two animated cursors, gradient-based
+    /// in the source. Each is flattened to the colour that tells it apart from the plain pointer:
+    /// the gradient's accent stop for Vision, the animation's midpoint for Point.</item>
+    /// <item>Both <c>help</c> badges are raster in the source — live text in DIN Round Pro (Vision),
+    /// a pixel layer (Point) — so those two glyphs are traced from the PSDs' own rasterised layers.</item>
+    /// <item>Only one of the two diagonal-resize cursors is authored per file (Vision's Black source
+    /// has the NESW one, Point's the NWSE one). Each pack's pair is one geometry mirrored about the
+    /// viewBox midline, so the two diagonals always match.</item>
+    /// <item>Point's White source parks its dot at the <c>help</c> composition's lower position and
+    /// omits the <c>vert</c>/<c>dgn</c> groups; geometry therefore comes from one file per pack,
+    /// with only the palette read per colourway.</item>
     /// </list>
     /// <para>
-    /// Every glyph is checked against the pack's own rendered PNGs by <c>CursorAssetsTests</c>'
+    /// Every glyph is checked against its pack's own rendered PNGs by <c>CursorAssetsTests</c>'
     /// sibling verification, and every hotspot is the pack's own, off its <c>.cur</c> headers
-    /// scaled to 128 (pointer 2/32, link 7/32, alternate 16/2, the centred ones 16/16).
+    /// scaled to the viewBox — which is why Vision points from a tip and Point from its dot.
     /// </para>
     /// </remarks>
     public static class CursorAssets
@@ -148,6 +153,8 @@ namespace Clowd.VideoSDK.Composition
         public const string NativeStyle = "native";
 
         private const string VisionStyle = "vision";
+
+        private const string PointStyle = "point";
 
         // Kind keys: the input-capture wire names, one per drawable CursorKind. `Custom` has none
         // (it falls back to the arrow) and `Hidden` draws nothing.
@@ -180,7 +187,7 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>The themed styles, in picker order. Excludes <see cref="NativeStyle"/>.</summary>
         public static IReadOnlyList<string> Styles { get; } = Array.AsReadOnly(new[]
         {
-            VisionStyle,
+            VisionStyle, PointStyle,
         });
 
         /// <summary>
@@ -247,6 +254,11 @@ namespace Clowd.VideoSDK.Composition
                     new CursorVariant("dark", "Dark"),
                     new CursorVariant("light", "Light"),
                 },
+                [PointStyle] = new[]
+                {
+                    new CursorVariant("dark", "Dark"),
+                    new CursorVariant("light", "Light"),
+                },
             };
 
         private static readonly Dictionary<string, CursorGlyph> Table = BuildTable();
@@ -279,6 +291,31 @@ namespace Clowd.VideoSDK.Composition
         private const float HaloMid = 12f;
 
         private const float HaloThin = 8f;
+
+        // ----------------------------------------------------------------------- point palette
+
+        /// <summary>Point's ink. Its paper is the shared <see cref="Paper"/>, and the two trade
+        /// places between its colourways exactly as Vision's do.</summary>
+        private const uint PointInk = 0xFF2F303A;
+
+        /// <summary>The blue Point builds its link cursor and its wait ring on, and the red pair
+        /// its "no entry" dot — the same in every colourway, as the source authors them.</summary>
+        private const uint PointLink = 0xFF3DA6FF;
+
+        private const uint PointDeny = 0xFFD50000;
+
+        private const uint PointDenyEdge = 0xFF720000;
+
+        /// <summary>The busy pointer, whose animation cycles the dot between the colourway's own
+        /// base colour and <see cref="PointLink"/>; a still frame takes the midpoint, which stays
+        /// distinct from the plain pointer in either colourway.</summary>
+        private const uint PointWorkDark = 0xFF3A8ED8;
+
+        private const uint PointWorkLight = 0xFF64B8FF;
+
+        /// <summary>Point's 3-unit outside stroke as the centred width that draws the same
+        /// picture, on its smaller 64-unit viewBox.</summary>
+        private const float PointHalo = 6f;
 
         // --------------------------------------------------------------------- vision artwork
         // Generated from the pack's PSD vector masks; see the class remarks. Each constant is
@@ -473,6 +510,113 @@ namespace Clowd.VideoSDK.Composition
             "C62.53 28.3 62.22 28.68 62 29C61.77 29.32 61.49 29.69 61.37 29.83" +
             "C58.03 33.63 60.86 38.72 65.21 36.76Z";
 
+        // ---------------------------------------------------------------------- point artwork
+        // Generated from the pack's PSD vector masks; see the class remarks. Each constant is
+        // named for the Photoshop layer it came from.
+
+        private const string PointDot =
+            "M32 27C34.761 27 37 29.239 37 32C37 34.761 34.761 37 32 37C29.239 37 27 34.761 27 32" +
+            "C27 29.239 29.239 27 32 27Z";
+
+        private const string PointBusyRing =
+            "M32 13.98C41.952 13.98 50.02 22.048 50.02 32C50.02 41.952 41.952 50.02 32 50.02" +
+            "C22.048 50.02 13.98 41.952 13.98 32C13.98 22.048 22.048 13.98 32 13.98ZM32 20.112" +
+            "C25.435 20.112 20.112 25.435 20.112 32C20.112 38.565 25.435 43.888 32 43.888" +
+            "C38.565 43.888 43.888 38.565 43.888 32C43.888 25.435 38.565 20.112 32 20.112Z";
+
+        private const string PointCrossTop =
+            "M32 18C33.667 15.333 35.333 12.667 37 10C35.415 10.66 33.717 11 32 11" +
+            "C30.283 11 28.585 10.66 27 10C28.667 12.667 30.333 15.333 32 18Z";
+
+        private const string PointCrossBottom =
+            "M32 46C33.667 48.667 35.333 51.333 37 54C35.415 53.34 33.717 53 32 53" +
+            "C30.283 53 28.585 53.34 27 54C28.667 51.333 30.333 48.667 32 46Z";
+
+        private const string PointCrossLeft =
+            "M18 32C15.333 30.333 12.667 28.667 10 27C10.66 28.585 11 30.283 11 32" +
+            "C11 33.717 10.66 35.415 10 37C12.667 35.333 15.333 33.667 18 32Z";
+
+        private const string PointCrossRight =
+            "M46 32C48.667 30.333 51.333 28.667 54 27C53.34 28.585 53 30.283 53 32" +
+            "C53 33.717 53.34 35.415 54 37C51.333 35.333 48.667 33.667 46 32Z";
+
+        private const string PointCapTop =
+            "M32 10C33.667 12.667 35.333 15.333 37 18C35.415 17.34 33.717 17 32 17" +
+            "C30.283 17 28.585 17.34 27 18C28.667 15.333 30.333 12.667 32 10Z";
+
+        private const string PointCapBottom =
+            "M32 54C33.667 51.333 35.333 48.667 37 46C35.415 46.66 33.717 47 32 47" +
+            "C30.283 47 28.585 46.66 27 46C28.667 48.667 30.333 51.333 32 54Z";
+
+        private const string PointCapLeft =
+            "M10 32C12.667 30.333 15.333 28.667 18 27C17.34 28.585 17 30.283 17 32" +
+            "C17 33.717 17.34 35.415 18 37C15.333 35.333 12.667 33.667 10 32Z";
+
+        private const string PointCapRight =
+            "M54 32C51.333 30.333 48.667 28.667 46 27C46.66 28.585 47 30.283 47 32" +
+            "C47 33.717 46.66 35.415 46 37C48.667 35.333 51.333 33.667 54 32Z";
+
+        private const string PointCapNorthWest =
+            "M16.444 16.444C19.508 17.151 22.572 17.858 25.636 18.565" +
+            "C24.049 19.219 22.607 20.179 21.393 21.393C20.179 22.607 19.219 24.049 18.565 25.636" +
+            "C17.858 22.572 17.151 19.508 16.444 16.444Z";
+
+        private const string PointCapSouthEast =
+            "M48.556 48.556C47.849 45.492 47.142 42.428 46.435 39.364" +
+            "C45.781 40.951 44.821 42.393 43.607 43.607C42.393 44.821 40.951 45.781 39.364 46.435" +
+            "C42.428 47.142 45.492 47.849 48.556 48.556Z";
+
+        private const string PointCapNorthEast =
+            "M47.556 16.444C44.492 17.151 41.428 17.858 38.364 18.565" +
+            "C39.951 19.219 41.393 20.179 42.607 21.393C43.821 22.607 44.781 24.049 45.435 25.636" +
+            "C46.142 22.572 46.849 19.508 47.556 16.444Z";
+
+        private const string PointCapSouthWest =
+            "M15.444 48.556C16.151 45.492 16.858 42.428 17.565 39.364" +
+            "C18.219 40.951 19.179 42.393 20.393 43.607C21.607 44.821 23.049 45.781 24.636 46.435" +
+            "C21.572 47.142 18.508 47.849 15.444 48.556Z";
+
+        private const string PointPerson =
+            "M32 27C29.201 27 27.022 29.374 27 32C26.981 34.293 28.613 36.405 31 37" +
+            "C29.158 37.271 27.457 37.939 26 39C24.927 39.781 21.118 42.884 22 46" +
+            "C22.421 47.487 24.525 49.103 29 50C30.994 50.4 33.006 50.4 35 50" +
+            "C39.475 49.103 41.579 47.487 42 46C42.882 42.884 39.073 39.781 38 39" +
+            "C36.543 37.939 34.842 37.271 33 37C35.387 36.405 37.019 34.293 37 32" +
+            "C36.978 29.374 34.799 27 32 27Z";
+
+        private const string PointPen =
+            "M35 29C34.518 28.418 33.56 27.349 32 27C31.242 26.831 29.374 26.626 28 28" +
+            "C26.626 29.374 26.831 31.242 27 32C27.349 33.56 28.418 34.518 29 35" +
+            "C32.34 37.766 43.669 45.843 51 51C45.843 43.669 37.766 32.34 35 29Z";
+
+        private const string PointHelpBadge =
+            "M33.71 31.5C33.92 31.33 34.27 31.09 34.48 30.98C34.69 30.86 34.98 30.56 35.12 30.29" +
+            "C35.26 30.03 35.5 29.66 35.64 29.48C35.84 29.23 35.92 28.92 35.97 28.23" +
+            "C36.03 27.27 36.5 26.58 37.45 26.09C38.31 25.63 41.12 22.75 41.12 22.32" +
+            "C41.12 22.23 41.29 21.95 41.49 21.7C41.69 21.44 41.9 21.06 41.94 20.84" +
+            "C41.99 20.62 42.23 19.99 42.48 19.44C43.15 17.96 43.18 14.76 42.53 13.52" +
+            "C42.31 13.1 42.07 12.49 42 12.17C41.67 10.74 39.23 7.72 37.75 6.94" +
+            "C37.44 6.78 37.09 6.53 36.97 6.39C36.85 6.25 36.6 6.1 36.41 6.06" +
+            "C36.22 6.02 35.72 5.87 35.31 5.73C33.21 5.02 32.91 4.98 31.13 5.05" +
+            "C29.63 5.12 29.37 5.16 28.69 5.48C28.27 5.68 27.63 5.91 27.27 5.99" +
+            "C26.88 6.09 26.41 6.32 26.11 6.58C25.83 6.81 25.53 7 25.43 7" +
+            "C25.2 7 24.19 7.9 23.4 8.8C23.04 9.22 22.61 9.7 22.44 9.88" +
+            "C22.27 10.05 22.05 10.44 21.94 10.75C21.83 11.05 21.63 11.42 21.5 11.56" +
+            "C21.02 12.08 20.8 13.95 21.12 14.8C21.29 15.25 22.46 16.66 22.82 16.85" +
+            "C23.92 17.42 24.7 17.53 25.78 17.24C27.14 16.87 27.59 16.47 28.88 14.48" +
+            "C29.72 13.17 30.96 12.73 32.69 13.12C33.63 13.32 34.81 14.54 34.94 15.43" +
+            "C35.32 17.96 34.13 19.39 31.2 19.92C29.88 20.15 29.33 20.58 28.53 22" +
+            "C27.93 23.05 27.79 28.76 28.34 29.46C28.5 29.65 28.74 30.05 28.88 30.33" +
+            "C29.06 30.68 29.27 30.9 29.54 31.01C29.76 31.09 30.08 31.29 30.25 31.44" +
+            "C30.89 32.01 33.04 32.05 33.71 31.5ZM32.8 17.8C32.95 17.65 33 17.34 33 16.5" +
+            "C33 15.66 32.95 15.35 32.8 15.2C32.65 15.05 32.34 15 31.5 15" +
+            "C30.05 15 30 15.05 30 16.5C30 17.34 30.05 17.65 30.2 17.8" +
+            "C30.35 17.95 30.66 18 31.5 18C32.34 18 32.65 17.95 32.8 17.8Z";
+
+        private const string PointHelpDot =
+            "M32 37C34.761 37 37 39.239 37 42C37 44.761 34.761 47 32 47C29.239 47 27 44.761 27 42" +
+            "C27 39.239 29.239 37 32 37Z";
+
         private static Dictionary<string, CursorGlyph> BuildTable()
         {
             var t = new Dictionary<string, CursorGlyph>(StringComparer.OrdinalIgnoreCase);
@@ -521,6 +665,64 @@ namespace Clowd.VideoSDK.Composition
                     P(VisionPen, ink, paper, HaloMid));
                 t[Key(VisionStyle, variant, KindHelp)] = G(128f, 8f, 8f,
                     P(VisionPointer, ink, paper, Halo), P(VisionHelpBadge, ink, paper, Halo));
+            }
+
+            // Point is the same two-colourway arrangement on a 64-unit viewBox: `work` is its one
+            // extra colourway-varying colour (the busy pointer's tint), which is why it rides the
+            // loop rather than naming a constant.
+            foreach (var (variant, ink, paper, work) in new[]
+            {
+                ("dark", PointInk, Paper, PointWorkDark),
+                ("light", Paper, PointInk, PointWorkLight),
+            })
+            {
+                t[Key(PointStyle, variant, KindArrow)] = G(64f, 32f, 32f,
+                    P(PointDot, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindUpArrow)] = G(64f, 32f, 32f,
+                    P(PointDot, paper, ink, PointHalo));
+                t[Key(PointStyle, variant, KindHand)] = G(64f, 32f, 32f,
+                    P(PointDot, PointLink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindNo)] = G(64f, 32f, 32f,
+                    P(PointDot, PointDeny, PointDenyEdge, PointHalo));
+                t[Key(PointStyle, variant, KindAppStarting)] = G(64f, 32f, 32f,
+                    P(PointDot, work, paper, PointHalo));
+                t[Key(PointStyle, variant, KindWait)] = G(64f, 32f, 32f,
+                    P(PointBusyRing, PointLink, paper, PointHalo),
+                    P(PointDot, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindIBeam)] = G(64f, 32f, 32f,
+                    P(PointCrossTop, ink, paper, PointHalo),
+                    P(PointCrossBottom, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindCross)] = G(64f, 32f, 32f,
+                    P(PointCrossTop, ink, paper, PointHalo),
+                    P(PointCrossBottom, ink, paper, PointHalo),
+                    P(PointCrossLeft, ink, paper, PointHalo),
+                    P(PointCrossRight, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindSizeNs)] = G(64f, 32f, 32f,
+                    P(PointCapTop, ink, paper, PointHalo),
+                    P(PointCapBottom, ink, paper, PointHalo), P(PointDot, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindSizeWe)] = G(64f, 32f, 32f,
+                    P(PointCapLeft, ink, paper, PointHalo),
+                    P(PointCapRight, ink, paper, PointHalo), P(PointDot, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindSizeAll)] = G(64f, 32f, 32f,
+                    P(PointCapTop, ink, paper, PointHalo),
+                    P(PointCapBottom, ink, paper, PointHalo),
+                    P(PointCapLeft, ink, paper, PointHalo),
+                    P(PointCapRight, ink, paper, PointHalo), P(PointDot, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindSizeNwse)] = G(64f, 32f, 32f,
+                    P(PointCapNorthWest, ink, paper, PointHalo),
+                    P(PointCapSouthEast, ink, paper, PointHalo),
+                    P(PointDot, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindSizeNesw)] = G(64f, 32f, 32f,
+                    P(PointCapNorthEast, ink, paper, PointHalo),
+                    P(PointCapSouthWest, ink, paper, PointHalo),
+                    P(PointDot, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindPerson)] = G(64f, 32f, 32f,
+                    P(PointPerson, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindPen)] = G(64f, 32f, 32f,
+                    P(PointPen, ink, paper, PointHalo));
+                t[Key(PointStyle, variant, KindHelp)] = G(64f, 32f, 42f,
+                    P(PointHelpBadge, ink, paper, PointHalo),
+                    P(PointHelpDot, ink, paper, PointHalo));
             }
 
             return t;

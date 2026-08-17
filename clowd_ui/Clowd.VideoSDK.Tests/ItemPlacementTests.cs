@@ -494,7 +494,7 @@ namespace Clowd.VideoSDK.Tests
                 TrackId = track.Id,
                 TimelineStartTicks = 0,
                 DurationTicks = 5 * TimeSpan.TicksPerSecond,
-                Content = new CursorContent { SourceId = project.Sources[0].Id, StreamIndex = 1 },
+                Content = new CursorContent { SourceId = project.Sources[0].Id },
                 Transform = new ModelTransform(),
                 LinkGroupId = Guid.NewGuid(),
             };

@@ -103,8 +103,8 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>Input capture rides with multi-track: every composed recording gets the jsonl
-        /// (and the 512x512 cursor box track), written into the session directory beside the mp4.
-        /// A single-track recording has no editor to read it, so it is not asked for.</summary>
+        /// (cursor sprites, key and mouse events), written into the session directory beside the
+        /// mp4. A single-track recording has no editor to read it, so it is not asked for.</summary>
         [Fact]
         public void Multi_track_recordings_also_capture_input()
         {
@@ -134,8 +134,8 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
-        /// <summary>With input capture active the editor owns the cursor (its own 512 track) and
-        /// the click highlight (the jsonl) — baking either into the screen frames would double
+        /// <summary>With input capture active the editor owns the cursor (the jsonl's sprites) and
+        /// the click highlight (its events) — baking either into the screen frames would double
         /// them up in the composed output, so the settings file forces both off whatever the user's
         /// settings say.</summary>
         [Fact]
@@ -236,35 +236,39 @@ namespace Clowd.VideoSDK.Tests
                 tracks.Audio);
         }
 
-        /// <summary>An input-capture recording's report also names the cursor box track (inside
-        /// <c>tracks</c>) and echoes the jsonl path back (top level, beside it).</summary>
+        /// <summary>An input-capture recording's report echoes the jsonl path back (a top-level
+        /// field beside <c>tracks</c>) — the mp4 carries no cursor track anymore, the sprites live
+        /// in the jsonl itself.</summary>
         [Fact]
-        public void An_input_capture_report_carries_the_cursor_track_and_jsonl_path()
+        public void An_input_capture_report_carries_the_jsonl_path()
         {
             var tracks = Parse("""
                 {"type":"started_recording","input_capture":"C:\\s\\input-capture.jsonl","tracks":{
                   "screen":{"index":0,"width":1920,"height":1080},
-                  "webcam":{"index":1,"width":1280,"height":720},
-                  "cursor":{"index":2,"width":512,"height":512}}}
+                  "webcam":{"index":1,"width":1280,"height":720}}}
                 """);
 
-            Assert.Equal(new ObsTrackInfo(2, 512, 512), tracks.Cursor);
             Assert.Equal(@"C:\s\input-capture.jsonl", tracks.InputCapturePath);
         }
 
-        /// <summary>Both fields are optional and forward-tolerant: a recorder that predates them
-        /// (or a malformed value) reads as "no cursor, no jsonl", never as a failure.</summary>
+        /// <summary>The field is optional and forward-tolerant: a recorder that predates it (or a
+        /// malformed value) reads as "no jsonl", never as a failure — and a stale report still
+        /// naming the retired <c>cursor</c> box track is read straight past.</summary>
         [Fact]
         public void A_report_without_input_capture_reads_as_none()
         {
             var tracks = Parse("""{"tracks":{"screen":{"index":0,"width":800,"height":600}}}""");
-            Assert.Null(tracks.Cursor);
             Assert.Null(tracks.InputCapturePath);
 
             Assert.Null(Parse("""{"input_capture":42,"tracks":{"screen":{"index":0}}}""").InputCapturePath);
             Assert.Null(Parse("""{"input_capture":"","tracks":{"screen":{"index":0}}}""").InputCapturePath);
-            Assert.Null(Parse("""{"tracks":{"screen":{"index":0},"cursor":null}}""").Cursor);
-            Assert.Null(Parse("""{"tracks":{"screen":{"index":0},"cursor":7}}""").Cursor);
+
+            var stale = Parse("""
+                {"tracks":{"screen":{"index":0,"width":800,"height":600},
+                           "cursor":{"index":2,"width":512,"height":512}}}
+                """);
+            Assert.Equal(new ObsTrackInfo(0, 800, 600), stale.Screen);
+            Assert.Null(stale.Webcam);
         }
 
         /// <summary>stopped_recording is the second report; a message carrying none must not clear

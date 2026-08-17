@@ -10,8 +10,9 @@ using Xunit;
 namespace Clowd.VideoSDK.Tests
 {
     // Cursor overlay drawing: the shared picture mapping (crop/aspect respected), glyph
-    // resolution fallbacks, the default native-box overlay and its suppression by a cursor
-    // track, themed glyph/click-animation pixels. Mirrors ComposeTests' CPU-factory pattern.
+    // resolution fallbacks, the default native-sprite overlay and its suppression by a cursor
+    // track, sprite placement/mask exactness, themed glyph/click-animation pixels. Mirrors
+    // ComposeTests' CPU-factory pattern.
     public class CursorComposeTests
     {
         private const long Sec = 10_000_000;
@@ -47,7 +48,7 @@ namespace Clowd.VideoSDK.Tests
             return item;
         }
 
-        /// <summary>A recording source: screen stream 0 (64x64), cursor box stream 1.</summary>
+        /// <summary>A recording source: screen stream 0 (64x64) with an input-capture sidecar.</summary>
         private static Source AddCaptureSource(Project p, string capturePath)
         {
             var source = new Source
@@ -55,10 +56,8 @@ namespace Clowd.VideoSDK.Tests
                 Id = Guid.NewGuid(),
                 Path = "recording.mp4",
                 InputCapturePath = capturePath,
-                CursorStreamIndex = 1,
             };
             source.Streams.Add(new SourceStream { Index = 0, Kind = StreamKind.Video, Width = W, Height = H });
-            source.Streams.Add(new SourceStream { Index = 1, Kind = StreamKind.Video, Width = 512, Height = 512 });
             p.Sources.Add(source);
             return source;
         }
@@ -71,16 +70,37 @@ namespace Clowd.VideoSDK.Tests
         }
 
         private const string Header =
-            "{\"type\":\"header\",\"version\":1,\"region\":[0,0,64,64],\"fps_num\":30,\"fps_den\":1," +
+            "{\"type\":\"header\",\"version\":2,\"region\":[0,0,64,64],\"fps_num\":30,\"fps_den\":1," +
             "\"platform\":\"windows\",\"monitors\":[{\"x\":0,\"y\":0,\"w\":64,\"h\":64,\"scale\":1.0}]}";
 
-        private static string Frame(double t, int x, int y, string kind = "arrow", int buttons = 0) =>
-            $"{{\"type\":\"frame\",\"t\":{t},\"x\":{x},\"y\":{y},\"b\":{buttons},\"c\":\"{kind}\"}}";
+        private static string Frame(double t, int x, int y, string kind = "arrow", int buttons = 0, int ci = -1) =>
+            $"{{\"type\":\"frame\",\"t\":{t},\"x\":{x},\"y\":{y},\"b\":{buttons},\"c\":\"{kind}\"" +
+            (ci >= 0 ? $",\"ci\":{ci}" : "") + "}";
 
         private static string MouseEvent(string kind, double t, int x, int y) =>
             $"{{\"type\":\"event\",\"t\":{t},\"kind\":\"{kind}\",\"btn\":1,\"x\":{x},\"y\":{y}}}";
 
-        /// <summary>Per-stream still frames: stream 0 = the screen, stream 1 = the cursor box.</summary>
+        /// <summary>PNG-encodes a solid <paramref name="color"/> square — a sprite fixture's bmp or
+        /// mask plane (Transparent = a plane with no ink), byte-exact the way the recorder writes
+        /// them.</summary>
+        private static byte[] SpritePng(int size, SKColor color)
+        {
+            using var surface = SKSurface.Create(new SKImageInfo(size, size, SKColorType.Bgra8888, SKAlphaType.Premul));
+            surface.Canvas.Clear(color);
+            using var image = surface.Snapshot();
+            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+            return data.ToArray();
+        }
+
+        /// <summary>A <c>cursor_image</c> row exactly as the recorder emits it — base64 PNG planes,
+        /// <c>mask</c> omitted for a plain alpha cursor.</summary>
+        private static string CursorImage(int id, int size, byte[] bmp, byte[] mask = null,
+            string kind = "arrow", int hotx = 0, int hoty = 0) =>
+            $"{{\"type\":\"cursor_image\",\"id\":{id},\"kind\":\"{kind}\",\"w\":{size},\"h\":{size}," +
+            $"\"hotx\":{hotx},\"hoty\":{hoty},\"bmp\":\"{Convert.ToBase64String(bmp)}\"" +
+            (mask == null ? "" : $",\"mask\":\"{Convert.ToBase64String(mask)}\"") + "}";
+
+        /// <summary>Per-stream still frames: stream 0 = the screen, stream 1 = the webcam.</summary>
         private sealed class MultiStreamSource : IFrameSource, IDisposable
         {
             private readonly Dictionary<int, SKImage> _streams = new Dictionary<int, SKImage>();
@@ -256,7 +276,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var header = new InputCaptureHeader
             {
-                Version = 1,
+                Version = 2,
                 RegionX = 10,
                 RegionY = 20,
                 RegionWidth = 100,
@@ -284,31 +304,95 @@ namespace Clowd.VideoSDK.Tests
         // ---------------------------------------------------------------- default native overlay
 
         [Fact]
-        public void Default_overlay_draws_the_box_at_the_captured_position()
+        public void Default_overlay_draws_the_sprite_at_the_captured_position()
         {
             var p = NewProject();
-            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
             var source = AddCaptureSource(p, capture);
             AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
 
-            AssertColor(Px(px, 32, 32), 0, 0, 255); // 16px red box centred on the hotspot
+            AssertColor(Px(px, 34, 34), 0, 0, 255); // sprite ink inside [32,40)
             AssertColor(Px(px, 8, 8), 255, 0, 0);   // screen blue elsewhere
+        }
+
+        [Fact]
+        public void The_hotspot_pins_the_sprite_to_the_captured_position()
+        {
+            // hotspot (4,4) on an 8px sprite: the frame position (32,32) is the sprite's centre,
+            // so its ink covers [28,36) rather than [32,40)
+            var p = NewProject();
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red), hotx: 4, hoty: 4),
+                Frame(0, 32, 32, ci: 1));
+            var source = AddCaptureSource(p, capture);
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+
+            AssertColor(Px(px, 30, 30), 0, 0, 255); // inside the offset rect
+            AssertColor(Px(px, 26, 26), 255, 0, 0); // before its left/top edge
+            AssertColor(Px(px, 38, 38), 255, 0, 0); // past where the unoffset rect would reach
+        }
+
+        [Fact]
+        public void A_white_mask_inverts_the_pixels_beneath_exactly()
+        {
+            // an inverting cursor: empty bmp, all-white XOR plane — Difference against white is
+            // 1 − d per channel, exactly
+            var p = NewProject();
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, SKColors.Transparent), mask: SpritePng(8, SKColors.White)),
+                Frame(0, 32, 32, ci: 1));
+            var source = AddCaptureSource(p, capture);
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
+
+            using var blue = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, blue);
+            AssertColor(Px(px, 34, 34), 0, 255, 255); // |blue − white| = yellow
+            AssertColor(Px(px, 8, 8), 255, 0, 0);     // outside the sprite: untouched
+
+            // mid-gray 128 inverts to 127 — the off-by-one is the arithmetic's own (255 − 128)
+            using var gray = new MultiStreamSource().Set(0, new SKColor(128, 128, 128), 64);
+            AssertColor(Px(Render(p, 5 * Sec, gray), 34, 34), 127, 127, 127, tolerance: 2);
+        }
+
+        [Fact]
+        public void A_black_mask_pixel_leaves_the_pixels_beneath_unchanged()
+        {
+            // the preserved no-op cell of the XOR plane: Difference against black is d itself
+            var p = NewProject();
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, SKColors.Transparent), mask: SpritePng(8, SKColors.Black)),
+                Frame(0, 32, 32, ci: 1));
+            var source = AddCaptureSource(p, capture);
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            AssertColor(Px(Render(p, 5 * Sec, frames), 34, 34), 255, 0, 0);
         }
 
         [Fact]
         public void Default_overlay_skips_hidden_cursor_and_positions_outside_the_region()
         {
-            var hiddenCapture = WriteCapture(Header, Frame(0, 32, 32, kind: "hidden"));
+            byte[] bmp = SpritePng(8, Red);
+            var hiddenCapture = WriteCapture(Header,
+                CursorImage(1, 8, bmp),
+                Frame(0, 32, 32, kind: "hidden"));
             var p1 = NewProject();
             var s1 = AddCaptureSource(p1, hiddenCapture);
             AddItem(p1, AddVideoTrack(p1), new MediaContent { SourceId = s1.Id, StreamIndex = 0 });
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             AssertColor(Px(Render(p1, 5 * Sec, frames), 32, 32), 255, 0, 0);
 
-            var outsideCapture = WriteCapture(Header, Frame(0, 200, 32));
+            var outsideCapture = WriteCapture(Header,
+                CursorImage(1, 8, bmp),
+                Frame(0, 200, 32, ci: 1));
             var p2 = NewProject();
             var s2 = AddCaptureSource(p2, outsideCapture);
             AddItem(p2, AddVideoTrack(p2), new MediaContent { SourceId = s2.Id, StreamIndex = 0 });
@@ -328,52 +412,93 @@ namespace Clowd.VideoSDK.Tests
                 Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.jsonl"));
             AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames); // must not throw
             AssertColor(Px(px, 32, 32), 255, 0, 0);
+        }
+
+        [Fact]
+        public void Default_overlay_draws_nothing_when_the_frame_carries_no_sprite()
+        {
+            // a v1 file or a degraded capture: frames without ci reference nothing to draw
+            var p = NewProject();
+            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            var source = AddCaptureSource(p, capture);
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            AssertColor(Px(Render(p, 5 * Sec, frames), 32, 32), 255, 0, 0);
         }
 
         [Fact]
         public void Default_overlay_is_suppressed_while_a_cursor_item_is_active()
         {
             var p = NewProject();
-            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
             var source = AddCaptureSource(p, capture);
             var screenTrack = AddVideoTrack(p, order: 0);
             AddItem(p, screenTrack, new MediaContent { SourceId = source.Id, StreamIndex = 0 });
 
-            // a native-style cursor item with no box stream draws nothing itself, so a blue
-            // hotspot pixel proves the default overlay stood down
+            // a native cursor item on a hidden row composes nothing itself but still owns the
+            // cursor, so a bare screen pixel at the hotspot proves the default overlay stood
+            // down — this is exactly how the row's eye toggle hides the cursor
             var cursorTrack = AddVideoTrack(p, order: 1);
+            cursorTrack.Hidden = true;
             var cursorItem = AddItem(p, cursorTrack,
-                new CursorContent { SourceId = source.Id, StreamIndex = -1, Style = "native" },
+                new CursorContent { SourceId = source.Id, Style = "native" },
                 linkGroup: Guid.NewGuid());
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
-            AssertColor(Px(Render(p, 5 * Sec, frames), 32, 32), 255, 0, 0);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            AssertColor(Px(Render(p, 5 * Sec, frames), 34, 34), 255, 0, 0);
 
             // an inactive cursor item (span elsewhere) suppresses nothing
             cursorItem.TimelineStartTicks = 8 * Sec;
             cursorItem.DurationTicks = 1 * Sec;
-            AssertColor(Px(Render(p, 5 * Sec, frames), 32, 32), 0, 0, 255);
+            AssertColor(Px(Render(p, 5 * Sec, frames), 34, 34), 0, 0, 255);
+        }
+
+        [Fact]
+        public void A_native_item_without_sprites_still_suppresses_the_overlay()
+        {
+            // frames with ci absent: the native-style item draws nothing of its own, and the
+            // default overlay must stand down all the same — the cursor track owns the cursor
+            var p = NewProject();
+            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            var source = AddCaptureSource(p, capture);
+            var group = Guid.NewGuid();
+            AddItem(p, AddVideoTrack(p, order: 0),
+                new MediaContent { SourceId = source.Id, StreamIndex = 0 }, linkGroup: group);
+            AddItem(p, AddVideoTrack(p, order: 1),
+                new CursorContent { SourceId = source.Id, Style = "native" }, linkGroup: group);
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+            for (int y = 0; y < H; y += 8)
+            {
+                for (int x = 0; x < W; x += 8)
+                    AssertColor(Px(px, x, y), 255, 0, 0);
+            }
         }
 
         [Fact]
         public void Default_overlay_belongs_to_the_screen_stream_only()
         {
-            // a webcam item (video stream 2 of the same source) must not composite the box
+            // a webcam item (video stream 1 of the same source) must not composite the sprite
             var p = NewProject();
-            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
             var source = AddCaptureSource(p, capture);
-            source.Streams.Add(new SourceStream { Index = 2, Kind = StreamKind.Video, Width = 64, Height = 64 });
-            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 2 });
+            source.Streams.Add(new SourceStream { Index = 1, Kind = StreamKind.Video, Width = 64, Height = 64 });
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 1 });
 
-            using var frames = new MultiStreamSource().Set(1, Red, 16).Set(2, Green, 64);
-            AssertColor(Px(Render(p, 5 * Sec, frames), 32, 32), 0, 255, 0);
+            using var frames = new MultiStreamSource().Set(1, Green, 64);
+            AssertColor(Px(Render(p, 5 * Sec, frames), 34, 34), 0, 255, 0);
 
             Assert.True(FrameComposer.IsScreenStream(source, 0));
-            Assert.False(FrameComposer.IsScreenStream(source, 1)); // the box stream itself
-            Assert.False(FrameComposer.IsScreenStream(source, 2)); // the webcam
+            Assert.False(FrameComposer.IsScreenStream(source, 1)); // the webcam
         }
 
         // ------------------------------------------------------------------- cursor track items
@@ -387,21 +512,60 @@ namespace Clowd.VideoSDK.Tests
             AddItem(p, AddVideoTrack(p, order: 0),
                 new MediaContent { SourceId = source.Id, StreamIndex = 0 }, linkGroup: group);
             var cursor = AddItem(p, AddVideoTrack(p, order: 1),
-                new CursorContent { SourceId = source.Id, StreamIndex = 1, Style = style },
+                new CursorContent { SourceId = source.Id, Style = style },
                 linkGroup: group);
             return (p, source, cursor);
         }
 
         [Fact]
-        public void Native_style_item_draws_its_own_box_stream()
+        public void Native_style_item_draws_the_recorded_sprite()
         {
-            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
             var (p, _, _) = CursorProject(capture, "native");
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
-            AssertColor(Px(px, 32, 32), 0, 0, 255);
+            AssertColor(Px(px, 34, 34), 0, 0, 255);
             AssertColor(Px(px, 8, 8), 255, 0, 0);
+        }
+
+        [Fact]
+        public void Size_scales_the_native_sprite()
+        {
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
+            var (p, _, cursor) = CursorProject(capture, "native");
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+
+            // at 1x the 8px sprite covers [32,40): a point 12px out is bare screen
+            AssertColor(Px(Render(p, 5 * Sec, frames), 44, 44), 255, 0, 0);
+
+            // at 2x it covers [32,48) and reaches the same point
+            ((CursorContent)cursor.Content).Size = 2.0;
+            AssertColor(Px(Render(p, 5 * Sec, frames), 44, 44), 0, 0, 255);
+        }
+
+        [Fact]
+        public void Native_maps_through_the_screen_items_crop()
+        {
+            // left half of the screen cropped away (ScaleY pinned so the mapping is 2x horizontal):
+            // a cursor captured at x=48 must land at canvas x=32, its sprite stretched to 16px wide
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 48, 32, ci: 1));
+            var (p, _, _) = CursorProject(capture, "native");
+            var screen = p.Items[0];
+            screen.Transform.Crop = new CropRect { Left = 0.5 };
+            screen.Transform.ScaleY = 1.0;
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+            AssertColor(Px(px, 40, 34), 0, 0, 255); // inside the crop-mapped [32,48) rect
+            AssertColor(Px(px, 52, 34), 255, 0, 0); // where the un-mapped position would be
         }
 
         private static bool AnyInkNear(byte[] px, int x0, int y0, int x1, int y1)
@@ -424,7 +588,7 @@ namespace Clowd.VideoSDK.Tests
             string capture = WriteCapture(Header, Frame(0, 32, 32));
             var (p, _, _) = CursorProject(capture, "vision");
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
 
             // black-and-white arrow ink below/right of the hotspot; none far away from it
@@ -443,7 +607,7 @@ namespace Clowd.VideoSDK.Tests
             screen.Transform.Crop = new CropRect { Left = 0.5 };
             screen.Transform.ScaleY = 1.0;
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
             Assert.True(AnyInkNear(px, 32, 32, 48, 48), "no glyph ink at the crop-mapped position");
             Assert.False(AnyInkNear(px, 48, 0, 64, 16), "ink where the un-mapped position would be");
@@ -455,7 +619,7 @@ namespace Clowd.VideoSDK.Tests
             string capture = WriteCapture(Header, Frame(0, 32, 32, kind: "hidden"));
             var (p, _, _) = CursorProject(capture, "vision");
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
             for (int y = 0; y < H; y++)
             {
@@ -477,7 +641,7 @@ namespace Clowd.VideoSDK.Tests
             var (p, _, cursor) = CursorProject(capture, "vision");
             cursor.Surround = Surround.Create(kind, cursor: true);
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
             Assert.True(AnyInkNear(px, 32, 32, 48, 48));
         }
@@ -489,7 +653,9 @@ namespace Clowd.VideoSDK.Tests
             // borrows all of its geometry from the screen item, so it must borrow the screen
             // row's zoom matrix too — evaluated at its own order it would stay unzoomed and
             // detach from the pixels it annotates.
-            string capture = WriteCapture(Header, Frame(0, 16, 16));
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 16, 16, ci: 1));
             var p = NewProject();
             var source = AddCaptureSource(p, capture);
             var group = Guid.NewGuid();
@@ -501,13 +667,13 @@ namespace Clowd.VideoSDK.Tests
             AddItem(p, zoomTrack, new ZoomContent { Zoom = 2.0, FocusX = 0.5, FocusY = 0.5 });
 
             AddItem(p, AddVideoTrack(p, order: 2),
-                new CursorContent { SourceId = source.Id, StreamIndex = 1, Style = "native" },
+                new CursorContent { SourceId = source.Id, Style = "native" },
                 linkGroup: group);
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
 
-            // 2x zoom about the centre maps the hotspot (16,16) → (0,0): the red box must land
+            // 2x zoom about the centre maps the hotspot (16,16) → (0,0): the sprite must land
             // at the canvas corner with the zoomed pixels, not stay at the unzoomed (16,16).
             AssertColor(Px(px, 2, 2), 0, 0, 255);
             AssertColor(Px(px, 24, 24), 255, 0, 0);
@@ -516,14 +682,16 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Cursor_item_without_a_screen_item_draws_nothing()
         {
-            string capture = WriteCapture(Header, Frame(0, 32, 32));
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
             var p = NewProject();
             var source = AddCaptureSource(p, capture);
             AddItem(p, AddVideoTrack(p),
-                new CursorContent { SourceId = source.Id, StreamIndex = 1, Style = "vision" },
+                new CursorContent { SourceId = source.Id, Style = "vision" },
                 linkGroup: Guid.NewGuid());
 
-            using var frames = new MultiStreamSource().Set(1, Red, 16);
+            using var frames = new MultiStreamSource();
             var px = Render(p, 5 * Sec, frames); // must not throw; black canvas
             for (int y = 0; y < H; y += 8)
             {
@@ -544,7 +712,7 @@ namespace Clowd.VideoSDK.Tests
             var (p, _, cursor) = CursorProject(capture, "vision");
             ((CursorContent)cursor.Content).ClickAnimation = "ripple";
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, (long)(1.2 * Sec), frames);
 
             var inside = Px(px, 30, 20); // 10px from centre, well inside radius 25
@@ -566,7 +734,7 @@ namespace Clowd.VideoSDK.Tests
             var (p, _, cursor) = CursorProject(capture, "vision");
             ((CursorContent)cursor.Content).ClickAnimation = "ripple";
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, (long)(1.2 * Sec), frames);
             AssertColor(Px(px, 30, 20), 255, 0, 0, tolerance: 3);
             AssertColor(Px(px, 20, 20), 255, 0, 0, tolerance: 3);
@@ -575,8 +743,9 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Held_button_draws_a_dot_that_follows_the_cursor()
         {
-            // native with no box stream draws no cursor of its own, so every pixel below is the
-            // highlight's. Buttons are held from 1000ms, and the pointer drags (20,20) → (40,40).
+            // native with no sprites in the capture draws no cursor of its own, so every pixel
+            // below is the highlight's. Buttons are held from 1000ms, and the pointer drags
+            // (20,20) → (40,40).
             string capture = WriteCapture(Header,
                 Frame(0, 20, 20),
                 Frame(1000, 20, 20, buttons: 1),
@@ -584,10 +753,9 @@ namespace Clowd.VideoSDK.Tests
                 MouseEvent("md", 1000, 20, 20));
             var (p, _, cursor) = CursorProject(capture, "native");
             var content = (CursorContent)cursor.Content;
-            content.StreamIndex = -1;
             content.ClickAnimation = "ripple";
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
 
             var atPress = Render(p, (long)(1.05 * Sec), frames);
             Assert.True(Px(atPress, 20, 20).R > 60, "no held dot at the press position");
@@ -618,7 +786,6 @@ namespace Clowd.VideoSDK.Tests
                 MouseEvent("mu", 1400, 40, 40));
             var (p, _, cursor) = CursorProject(capture, "native");
             var content = (CursorContent)cursor.Content;
-            content.StreamIndex = -1;
             content.ClickAnimation = "ripple";
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
@@ -637,7 +804,6 @@ namespace Clowd.VideoSDK.Tests
                 MouseEvent("md", 0, 32, 32));
             var (p, _, cursor) = CursorProject(capture, "native");
             var content = (CursorContent)cursor.Content;
-            content.StreamIndex = -1;
             content.ClickAnimation = "ripple";
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
@@ -663,7 +829,6 @@ namespace Clowd.VideoSDK.Tests
                 MouseEvent("mu", 1000, 32, 32));
             var (p, _, cursor) = CursorProject(capture, "native");
             var content = (CursorContent)cursor.Content;
-            content.StreamIndex = -1;
             content.ClickAnimation = "ripple";
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
@@ -686,7 +851,6 @@ namespace Clowd.VideoSDK.Tests
                 MouseEvent("mu", 1000, 32, 32));
             var (p, _, cursor) = CursorProject(capture, "native");
             var content = (CursorContent)cursor.Content;
-            content.StreamIndex = -1;
             content.ClickAnimation = "ripple";
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
@@ -718,7 +882,6 @@ namespace Clowd.VideoSDK.Tests
                 MouseEvent("mu", 1000, 32, 32));
             var (p, _, cursor) = CursorProject(capture, "native");
             var content = (CursorContent)cursor.Content;
-            content.StreamIndex = -1;
             content.ClickAnimation = "ripple";
             content.HoldSize = 0;
             content.ClickSize = Double.NaN;
@@ -739,7 +902,7 @@ namespace Clowd.VideoSDK.Tests
             var (p, _, cursor) = CursorProject(capture, "vision");
             ((CursorContent)cursor.Content).ClickAnimation = "pulse";
 
-            using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
 
             // early (progress 0.125): radius ≈ 36 — the point 30px out is covered
             var early = Render(p, (long)(1.05 * Sec), frames);

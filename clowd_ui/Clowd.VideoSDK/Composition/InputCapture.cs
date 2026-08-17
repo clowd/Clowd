@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using SkiaSharp;
 
 namespace Clowd.VideoSDK.Composition
 {
@@ -50,7 +51,8 @@ namespace Clowd.VideoSDK.Composition
     /// timebase as the recording's PTS.</summary>
     public readonly struct InputFrame
     {
-        public InputFrame(double timeMs, int x, int y, int buttons, IReadOnlyList<int> keys, CursorKind cursor)
+        public InputFrame(double timeMs, int x, int y, int buttons, IReadOnlyList<int> keys, CursorKind cursor,
+            int spriteId = -1)
         {
             TimeMs = timeMs;
             X = x;
@@ -58,6 +60,7 @@ namespace Clowd.VideoSDK.Composition
             Buttons = buttons;
             Keys = keys;
             Cursor = cursor;
+            SpriteId = spriteId;
         }
 
         public double TimeMs { get; }
@@ -73,6 +76,93 @@ namespace Clowd.VideoSDK.Composition
         public IReadOnlyList<int> Keys { get; }
 
         public CursorKind Cursor { get; }
+
+        /// <summary>Id of the native cursor sprite live on this frame
+        /// (<see cref="InputCapture.TryGetSprite"/>), or -1 when none was captured — a hidden
+        /// cursor, a degraded capture (cache cap, oversized skip) or a v1 file.</summary>
+        public int SpriteId { get; }
+    }
+
+    /// <summary>
+    /// One rasterized native cursor shape from a <c>cursor_image</c> row: the recorder's
+    /// PNG-encoded snapshot of the live cursor, referenced by frame rows through
+    /// <see cref="InputFrame.SpriteId"/>. <see cref="Mask"/> is the XOR plane of an inverting
+    /// cursor — white pixels screen-invert, black pixels are a preserved no-op, transparent pixels
+    /// do not apply (<see cref="Bmp"/> owns them) — or null for a plain alpha cursor.
+    /// </summary>
+    public sealed class CursorSprite
+    {
+        public CursorSprite(CursorKind kind, int width, int height, int hotX, int hotY,
+            byte[] bmp, byte[] mask)
+        {
+            Kind = kind;
+            Width = width;
+            Height = height;
+            HotX = hotX;
+            HotY = hotY;
+            Bmp = bmp;
+            Mask = mask;
+        }
+
+        /// <summary>The shape's classified kind, recorded on the sprite row itself so sprite-level
+        /// consumers (the inspector's native preview tile) need not scan frame rows for a
+        /// reference.</summary>
+        public CursorKind Kind { get; }
+
+        /// <summary>Sprite width in native physical pixels.</summary>
+        public int Width { get; }
+
+        public int Height { get; }
+
+        /// <summary>Hotspot within the sprite, in sprite pixels — the point the frame row's
+        /// position pins to the screen.</summary>
+        public int HotX { get; }
+
+        public int HotY { get; }
+
+        /// <summary>The colour/alpha pixels, PNG-encoded (straight alpha).</summary>
+        public byte[] Bmp { get; }
+
+        /// <summary>The XOR plane, PNG-encoded, or null when the cursor carries none.</summary>
+        public byte[] Mask { get; }
+
+        private readonly object _decodeSync = new object();
+        private SKImage _bmpImage;
+        private SKImage _maskImage;
+        private bool _bmpDecoded;
+        private bool _maskDecoded;
+
+        /// <summary>The decoded <see cref="Bmp"/>, decoded once on first use and shared by every
+        /// draw thereafter (an SKImage is immutable — callers must not dispose it). Null when the
+        /// PNG fails to decode; the failure is cached too, so a corrupt sprite costs one probe,
+        /// not one per composed frame.</summary>
+        public SKImage GetBmpImage()
+        {
+            lock (_decodeSync)
+            {
+                if (!_bmpDecoded)
+                {
+                    _bmpDecoded = true;
+                    _bmpImage = SKImage.FromEncodedData(Bmp);
+                }
+                return _bmpImage;
+            }
+        }
+
+        /// <summary>The decoded <see cref="Mask"/>; same contract as <see cref="GetBmpImage"/>,
+        /// and null when the sprite has no mask at all.</summary>
+        public SKImage GetMaskImage()
+        {
+            lock (_decodeSync)
+            {
+                if (!_maskDecoded)
+                {
+                    _maskDecoded = true;
+                    _maskImage = Mask == null ? null : SKImage.FromEncodedData(Mask);
+                }
+                return _maskImage;
+            }
+        }
     }
 
     /// <summary>One sub-frame-precise input edge from the recorder's low-level hooks, on the same
@@ -173,16 +263,20 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>The no-data instance: what a missing/corrupt file loads as, and what lookups
         /// on nothing return against.</summary>
         public static readonly InputCapture Empty =
-            new InputCapture(new InputCaptureHeader(), Array.Empty<InputFrame>(), Array.Empty<InputEvent>());
+            new InputCapture(new InputCaptureHeader(), Array.Empty<InputFrame>(), Array.Empty<InputEvent>(),
+                new Dictionary<int, CursorSprite>());
 
         private readonly InputFrame[] _frames;
         private readonly InputEvent[] _events;
+        private readonly Dictionary<int, CursorSprite> _sprites;
 
-        private InputCapture(InputCaptureHeader header, InputFrame[] frames, InputEvent[] events)
+        private InputCapture(InputCaptureHeader header, InputFrame[] frames, InputEvent[] events,
+            Dictionary<int, CursorSprite> sprites)
         {
             Header = header;
             _frames = frames;
             _events = events;
+            _sprites = sprites;
         }
 
         public InputCaptureHeader Header { get; }
@@ -195,6 +289,49 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>True when the file yielded no rows at all — the missing/corrupt degrade.</summary>
         public bool IsEmpty => _frames.Length == 0 && _events.Length == 0;
+
+        /// <summary>Looks up a native cursor sprite by the id a frame row's
+        /// <see cref="InputFrame.SpriteId"/> carries. False for -1 and for ids the file never
+        /// defined (a torn <c>cursor_image</c> row — the frame degrades to no sprite).</summary>
+        public bool TryGetSprite(int id, out CursorSprite sprite)
+            => _sprites.TryGetValue(id, out sprite);
+
+        /// <summary>
+        /// A representative sprite for a static preview (the inspector's native style tile):
+        /// prefers a mask-less <see cref="CursorKind.Arrow"/> — the shape a user pictures as "the
+        /// cursor", drawable without the underlying pixels a mask needs — then the first mask-less
+        /// sprite, then the first sprite at all, each in id (emission) order. False when the
+        /// capture carries none (v1 files, degraded capture).
+        /// </summary>
+        public bool TryGetPreviewSprite(out CursorSprite sprite)
+        {
+            sprite = null;
+            if (_sprites.Count == 0)
+                return false;
+
+            var ids = new int[_sprites.Count];
+            _sprites.Keys.CopyTo(ids, 0);
+            Array.Sort(ids);
+
+            CursorSprite first = null, maskless = null;
+            foreach (var id in ids)
+            {
+                var candidate = _sprites[id];
+                first ??= candidate;
+                if (candidate.Mask == null)
+                {
+                    if (candidate.Kind == CursorKind.Arrow)
+                    {
+                        sprite = candidate;
+                        return true;
+                    }
+                    maskless ??= candidate;
+                }
+            }
+
+            sprite = maskless ?? first;
+            return true;
+        }
 
         // ------------------------------------------------------------------------------- lookups
 
@@ -319,6 +456,7 @@ namespace Clowd.VideoSDK.Composition
             InputCaptureHeader header = null;
             var frames = new List<InputFrame>();
             var events = new List<InputEvent>();
+            var sprites = new Dictionary<int, CursorSprite>();
 
             while (!bytes.IsEmpty)
             {
@@ -332,7 +470,7 @@ namespace Clowd.VideoSDK.Composition
 
                 try
                 {
-                    ParseLine(line, ref header, frames, events);
+                    ParseLine(line, ref header, frames, events, sprites);
                 }
                 catch (JsonException)
                 {
@@ -357,22 +495,24 @@ namespace Clowd.VideoSDK.Composition
             Array.Sort(frameArray, (a, b) => a.TimeMs.CompareTo(b.TimeMs));
             Array.Sort(eventArray, (a, b) => a.TimeMs.CompareTo(b.TimeMs));
 
-            if (header == null && frameArray.Length == 0 && eventArray.Length == 0)
+            if (header == null && frameArray.Length == 0 && eventArray.Length == 0 && sprites.Count == 0)
                 return Empty;
 
-            return new InputCapture(header ?? new InputCaptureHeader(), frameArray, eventArray);
+            return new InputCapture(header ?? new InputCaptureHeader(), frameArray, eventArray, sprites);
         }
 
         private static void ParseLine(ReadOnlySpan<byte> line, ref InputCaptureHeader header,
-            List<InputFrame> frames, List<InputEvent> events)
+            List<InputFrame> frames, List<InputEvent> events, Dictionary<int, CursorSprite> sprites)
         {
             var reader = new Utf8JsonReader(line);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
                 return;
 
             string type = null, platform = null, kind = null, ch = null, cursor = null;
+            string bmp = null, mask = null;
             double t = 0;
             int x = 0, y = 0, buttons = 0, vk = 0, btn = 0;
+            int ci = -1, id = -1, w = 0, h = 0, hotx = 0, hoty = 0;
             int version = 0, fpsNum = 0, fpsDen = 0;
             int[] region = null;
             IReadOnlyList<int> keys = Array.Empty<int>();
@@ -404,6 +544,24 @@ namespace Clowd.VideoSDK.Composition
                     { if (Next(ref reader, JsonTokenType.Number)) btn = (int)reader.GetDouble(); }
                 else if (reader.ValueTextEquals("ch"))
                     { if (Next(ref reader, JsonTokenType.String)) ch = reader.GetString(); }
+                else if (reader.ValueTextEquals("ci"))
+                    { if (Next(ref reader, JsonTokenType.Number)) ci = (int)reader.GetDouble(); }
+                else if (reader.ValueTextEquals("id"))
+                    { if (Next(ref reader, JsonTokenType.Number)) id = (int)reader.GetDouble(); }
+                else if (reader.ValueTextEquals("w"))
+                    { if (Next(ref reader, JsonTokenType.Number)) w = (int)reader.GetDouble(); }
+                else if (reader.ValueTextEquals("h"))
+                    { if (Next(ref reader, JsonTokenType.Number)) h = (int)reader.GetDouble(); }
+                else if (reader.ValueTextEquals("hotx"))
+                    { if (Next(ref reader, JsonTokenType.Number)) hotx = (int)reader.GetDouble(); }
+                else if (reader.ValueTextEquals("hoty"))
+                    { if (Next(ref reader, JsonTokenType.Number)) hoty = (int)reader.GetDouble(); }
+                else if (reader.ValueTextEquals("bmp"))
+                    { if (Next(ref reader, JsonTokenType.String)) bmp = reader.GetString(); }
+                else if (reader.ValueTextEquals("mask"))
+                    // a JSON null (no XOR plane) fails the type check and leaves mask null —
+                    // exactly the absent-field reading.
+                    { if (Next(ref reader, JsonTokenType.String)) mask = reader.GetString(); }
                 else if (reader.ValueTextEquals("version"))
                     { if (Next(ref reader, JsonTokenType.Number)) version = (int)reader.GetDouble(); }
                 else if (reader.ValueTextEquals("fps_num"))
@@ -442,7 +600,17 @@ namespace Clowd.VideoSDK.Composition
                     break;
 
                 case "frame":
-                    frames.Add(new InputFrame(t, x, y, buttons, keys, ParseCursorKind(cursor)));
+                    frames.Add(new InputFrame(t, x, y, buttons, keys, ParseCursorKind(cursor), ci));
+                    break;
+
+                case "cursor_image":
+                    // Convert.FromBase64String throws FormatException on garbage, which the
+                    // caller's per-line tolerance catches — the sprite is lost, the file survives.
+                    // A duplicate id (malformed file) keeps the last definition.
+                    if (id >= 0 && bmp != null)
+                        sprites[id] = new CursorSprite(ParseCursorKind(kind), w, h, hotx, hoty,
+                            Convert.FromBase64String(bmp),
+                            mask == null ? null : Convert.FromBase64String(mask));
                     break;
 
                 case "event":

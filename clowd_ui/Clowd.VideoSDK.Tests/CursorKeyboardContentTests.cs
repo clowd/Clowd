@@ -26,11 +26,9 @@ namespace Clowd.VideoSDK.Tests
                 Id = Guid.NewGuid(),
                 Path = @"C:\rec\in.mp4",
                 InputCapturePath = @"C:\rec\input-capture.jsonl",
-                CursorStreamIndex = 2,
                 Streams =
                 {
                     new SourceStream { Index = 0, Kind = StreamKind.Video, Width = 1920, Height = 1080 },
-                    new SourceStream { Index = 2, Kind = StreamKind.Video, Width = 512, Height = 512 },
                 },
             };
 
@@ -57,7 +55,6 @@ namespace Clowd.VideoSDK.Tests
                 Content = new CursorContent
                 {
                     SourceId = source.Id,
-                    StreamIndex = 2,
                     Style = "vision",
                     Size = 1.5,
                     ClickAnimation = "ripple",
@@ -140,7 +137,6 @@ namespace Clowd.VideoSDK.Tests
             var restoredCursorItem = restored.Items.Single(i => i.Id == cursorItem.Id);
             var cursor = (CursorContent)restoredCursorItem.Content;
             Assert.Equal(((CursorContent)cursorItem.Content).SourceId, cursor.SourceId);
-            Assert.Equal(2, cursor.StreamIndex);
             Assert.Equal("vision", cursor.Style);
             Assert.Equal(1.5, cursor.Size);
             Assert.Equal("ripple", cursor.ClickAnimation);
@@ -190,14 +186,12 @@ namespace Clowd.VideoSDK.Tests
 
             var source = restored.Sources.Single();
             Assert.Equal(@"C:\rec\input-capture.jsonl", source.InputCapturePath);
-            Assert.Equal(2, source.CursorStreamIndex);
         }
 
         [Fact]
         public void Defaults_match_the_design()
         {
             var cursor = new CursorContent();
-            Assert.Equal(-1, cursor.StreamIndex);
             Assert.Equal("vision", cursor.Style);
             Assert.Equal(1.0, cursor.Size);
             Assert.Equal("none", cursor.ClickAnimation);
@@ -219,7 +213,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var cursor = new CursorContent
             {
-                SourceId = Guid.NewGuid(), StreamIndex = 2, Style = "vision", Variant = "light", Size = 2.0,
+                SourceId = Guid.NewGuid(), Style = "vision", Variant = "light", Size = 2.0,
                 HoldSize = 1.5, ClickSize = 0.5, AnimationSpeed = 3.0,
             };
             var cursorCopy = (CursorContent)cursor.Clone();
@@ -235,7 +229,6 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0.5, cursor.ClickSize);
             Assert.Equal(3.0, cursor.AnimationSpeed);
             Assert.Equal(cursor.SourceId, cursorCopy.SourceId);
-            Assert.Equal(2, cursorCopy.StreamIndex);
 
             var keyboard = new KeyboardContent
             {
@@ -414,21 +407,10 @@ namespace Clowd.VideoSDK.Tests
             Assert.Empty(project.Validate());
         }
 
-        [Fact]
-        public void Validate_accepts_a_cursor_without_a_box_stream()
-        {
-            // a recording whose sidecar exists but whose box stream does not: StreamIndex -1
-            // (the native style draws nothing) must not be rejected against Source.Streams.
-            var project = OverlayProject(out _, out var cursorItem, out _);
-            ((CursorContent)cursorItem.Content).StreamIndex = -1;
-
-            Assert.Empty(project.Validate());
-        }
-
         // -------------------------------------------------------------------- recording project
 
         [Fact]
-        public void Build_wires_the_capture_fields_and_cursor_stream()
+        public void Build_wires_the_capture_path()
         {
             var spec = new RecordingProjectSpec
             {
@@ -436,12 +418,6 @@ namespace Clowd.VideoSDK.Tests
                 Screen = new VideoStreamProbe
                 {
                     StreamIndex = 0, Width = 1920, Height = 1080,
-                    AvgFrameRateNum = 30, AvgFrameRateDen = 1,
-                    DurationTicks = Ms(30_000),
-                },
-                Cursor = new VideoStreamProbe
-                {
-                    StreamIndex = 1, Width = 512, Height = 512,
                     AvgFrameRateNum = 30, AvgFrameRateDen = 1,
                     DurationTicks = Ms(30_000),
                 },
@@ -456,8 +432,6 @@ namespace Clowd.VideoSDK.Tests
             Assert.Empty(project.Validate());
             var source = project.Sources.Single();
             Assert.Equal(@"C:\rec\input-capture.jsonl", source.InputCapturePath);
-            Assert.Equal(1, source.CursorStreamIndex);
-            Assert.Contains(source.Streams, s => s.Index == 1 && s.Kind == StreamKind.Video && s.Width == 512);
 
             // no cursor/keyboard tracks are auto-created — the editor factories own that.
             Assert.All(project.Tracks, t => Assert.NotEqual("Cursor", t.Name));
@@ -485,7 +459,6 @@ namespace Clowd.VideoSDK.Tests
             var source = RecordingProject.Build(spec).Sources.Single();
 
             Assert.Null(source.InputCapturePath);
-            Assert.Null(source.CursorStreamIndex);
         }
 
         [Fact]

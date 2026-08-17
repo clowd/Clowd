@@ -8,14 +8,15 @@ using Xunit;
 namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
-    /// The input-capture JSONL parser: header/frame/event rows into sorted arrays, the
-    /// binary-search lookups, forward tolerance (unknown rows/fields/value shapes skipped, torn
-    /// lines dropped) and the missing/corrupt degrade to <see cref="InputCapture.Empty"/>.
+    /// The input-capture JSONL parser: header/frame/event/cursor_image rows into sorted arrays
+    /// and the sprite table, the binary-search lookups, forward tolerance (unknown rows/fields/
+    /// value shapes skipped, torn lines dropped) and the missing/corrupt degrade to
+    /// <see cref="InputCapture.Empty"/>.
     /// </summary>
     public class InputCaptureParserTests
     {
         private const string Header =
-            """{"type":"header","version":1,"region":[100,200,1920,1080],"fps_num":30,"fps_den":1,"platform":"windows","monitors":[{"x":0,"y":0,"w":2560,"h":1440,"scale":1.5},{"x":2560,"y":0,"w":1920,"h":1080,"scale":1.0}]}""";
+            """{"type":"header","version":2,"region":[100,200,1920,1080],"fps_num":30,"fps_den":1,"platform":"windows","monitors":[{"x":0,"y":0,"w":2560,"h":1440,"scale":1.5},{"x":2560,"y":0,"w":1920,"h":1080,"scale":1.0}]}""";
 
         private static InputCapture Parse(params string[] lines) =>
             InputCapture.Parse(Encoding.UTF8.GetBytes(String.Join("\n", lines)));
@@ -28,7 +29,7 @@ namespace Clowd.VideoSDK.Tests
             var capture = Parse(Header);
 
             var h = capture.Header;
-            Assert.Equal(1, h.Version);
+            Assert.Equal(2, h.Version);
             Assert.Equal(100, h.RegionX);
             Assert.Equal(200, h.RegionY);
             Assert.Equal(1920, h.RegionWidth);
@@ -129,6 +130,141 @@ namespace Clowd.VideoSDK.Tests
             var mu = capture.Events[3];
             Assert.Equal(InputEventKind.MouseUp, mu.Kind);
             Assert.Equal(150.5, mu.TimeMs);
+        }
+
+        // ------------------------------------------------------------------------ cursor sprites
+
+        /// <summary>A <c>cursor_image</c> row over arbitrary plane bytes — the parser stores the
+        /// decoded base64 verbatim and never inspects the PNG, so fixtures need none.</summary>
+        private static string SpriteRow(int id, byte[] bmp, string mask = "absent",
+            string kind = "arrow", int w = 32, int h = 32, int hotx = 2, int hoty = 3)
+        {
+            var maskJson = mask switch
+            {
+                "absent" => "",
+                null => ",\"mask\":null",
+                _ => $",\"mask\":\"{mask}\"",
+            };
+            return $"{{\"type\":\"cursor_image\",\"id\":{id},\"kind\":\"{kind}\",\"w\":{w},\"h\":{h}," +
+                   $"\"hotx\":{hotx},\"hoty\":{hoty},\"bmp\":\"{Convert.ToBase64String(bmp)}\"{maskJson}}}";
+        }
+
+        [Fact]
+        public void A_cursor_image_row_round_trips_with_its_mask()
+        {
+            byte[] bmp = { 1, 2, 3, 4 };
+            byte[] mask = { 9, 8, 7 };
+            var capture = Parse(
+                Header,
+                SpriteRow(1, bmp, Convert.ToBase64String(mask), kind: "ibeam", w: 24, h: 40, hotx: 11, hoty: 19),
+                """{"type":"frame","t":0,"x":1,"y":2,"c":"ibeam","ci":1}""");
+
+            Assert.True(capture.TryGetSprite(1, out var sprite));
+            Assert.Equal(CursorKind.IBeam, sprite.Kind);
+            Assert.Equal(24, sprite.Width);
+            Assert.Equal(40, sprite.Height);
+            Assert.Equal(11, sprite.HotX);
+            Assert.Equal(19, sprite.HotY);
+            Assert.Equal(bmp, sprite.Bmp);
+            Assert.Equal(mask, sprite.Mask);
+        }
+
+        [Fact]
+        public void A_null_or_absent_mask_is_a_plain_alpha_sprite()
+        {
+            var capture = Parse(
+                Header,
+                SpriteRow(1, new byte[] { 1 }, mask: null),
+                SpriteRow(2, new byte[] { 2 }));
+
+            Assert.True(capture.TryGetSprite(1, out var withNull));
+            Assert.Null(withNull.Mask);
+            Assert.True(capture.TryGetSprite(2, out var withAbsent));
+            Assert.Null(withAbsent.Mask);
+        }
+
+        [Fact]
+        public void Frames_reference_sprites_by_ci_and_default_to_none()
+        {
+            var capture = Parse(
+                Header,
+                SpriteRow(3, new byte[] { 1, 2 }),
+                """{"type":"frame","t":0,"x":1,"y":2,"c":"arrow","ci":3}""",
+                """{"type":"frame","t":33,"x":1,"y":2,"c":"arrow"}""");
+
+            Assert.Equal(3, capture.Frames[0].SpriteId);
+            Assert.True(capture.TryGetSprite(capture.Frames[0].SpriteId, out _));
+
+            // ci omitted (hidden/degraded) — and -1 never resolves to a sprite
+            Assert.Equal(-1, capture.Frames[1].SpriteId);
+            Assert.False(capture.TryGetSprite(-1, out _));
+            Assert.False(capture.TryGetSprite(99, out _)); // an id the file never defined
+        }
+
+        [Fact]
+        public void A_bad_base64_sprite_is_dropped_and_the_rest_kept()
+        {
+            var capture = Parse(
+                Header,
+                """{"type":"cursor_image","id":1,"kind":"arrow","w":8,"h":8,"hotx":0,"hoty":0,"bmp":"not base64!!"}""",
+                SpriteRow(2, new byte[] { 5 }),
+                """{"type":"frame","t":0,"x":1,"y":2,"c":"arrow","ci":1}""");
+
+            Assert.False(capture.TryGetSprite(1, out _)); // the torn sprite is lost…
+            Assert.True(capture.TryGetSprite(2, out _));  // …its neighbours are not
+            Assert.Single(capture.Frames);                // and the frame still references id 1
+            Assert.Equal(1, capture.Frames[0].SpriteId);  // — the lookup just misses
+        }
+
+        [Fact]
+        public void A_duplicate_sprite_id_keeps_the_last_definition()
+        {
+            var capture = Parse(
+                Header,
+                SpriteRow(1, new byte[] { 1 }),
+                SpriteRow(1, new byte[] { 2 }));
+
+            Assert.True(capture.TryGetSprite(1, out var sprite));
+            Assert.Equal(new byte[] { 2 }, sprite.Bmp);
+        }
+
+        [Fact]
+        public void A_v1_file_yields_no_sprites()
+        {
+            var capture = Parse(
+                """{"type":"header","version":1,"region":[0,0,64,64],"fps_num":30,"fps_den":1,"platform":"windows"}""",
+                """{"type":"frame","t":0,"x":1,"y":2,"c":"arrow"}""");
+
+            Assert.Equal(-1, capture.Frames[0].SpriteId);
+            Assert.False(capture.TryGetPreviewSprite(out _));
+        }
+
+        [Fact]
+        public void The_preview_sprite_prefers_a_maskless_arrow()
+        {
+            // masked arrow (needs pixels beneath), maskless ibeam, maskless arrow: the tile
+            // wants the last — then the first maskless shape, then anything at all
+            var capture = Parse(
+                Header,
+                SpriteRow(1, new byte[] { 1 }, Convert.ToBase64String(new byte[] { 9 })),
+                SpriteRow(2, new byte[] { 2 }, kind: "ibeam"),
+                SpriteRow(3, new byte[] { 3 }));
+
+            Assert.True(capture.TryGetPreviewSprite(out var sprite));
+            Assert.Equal(new byte[] { 3 }, sprite.Bmp);
+
+            var noArrow = Parse(
+                Header,
+                SpriteRow(1, new byte[] { 1 }, Convert.ToBase64String(new byte[] { 9 })),
+                SpriteRow(2, new byte[] { 2 }, kind: "ibeam"));
+            Assert.True(noArrow.TryGetPreviewSprite(out sprite));
+            Assert.Equal(new byte[] { 2 }, sprite.Bmp);
+
+            var maskedOnly = Parse(
+                Header,
+                SpriteRow(1, new byte[] { 1 }, Convert.ToBase64String(new byte[] { 9 })));
+            Assert.True(maskedOnly.TryGetPreviewSprite(out sprite));
+            Assert.Equal(new byte[] { 1 }, sprite.Bmp);
         }
 
         // ------------------------------------------------------------------------------- lookups
@@ -239,7 +375,7 @@ namespace Clowd.VideoSDK.Tests
                 "",
                 """{"type":"frame","t":10,"x":1,"y":2,"c":"arrow"}""");
 
-            Assert.Equal(1, capture.Header.Version);
+            Assert.Equal(2, capture.Header.Version);
             Assert.Single(capture.Frames);
         }
 

@@ -43,9 +43,9 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Vision_is_the_one_themed_style_native_excluded()
+        public void The_themed_styles_are_the_two_packs_native_excluded()
         {
-            Assert.Equal(new[] { "vision" }, CursorAssets.Styles);
+            Assert.Equal(new[] { "vision", "point" }, CursorAssets.Styles);
             Assert.DoesNotContain(CursorAssets.NativeStyle, CursorAssets.Styles);
             Assert.Equal("vision", CursorAssets.DefaultStyle);
         }
@@ -69,7 +69,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Vision_covers_every_kind_in_both_colourways()
+        public void Every_pack_covers_every_kind_in_every_colourway()
         {
             foreach (var (style, variant) in AllStyles())
                 foreach (var kind in CursorAssets.Kinds)
@@ -77,12 +77,15 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Only_vision_declares_colourways_and_dark_is_its_default()
+        public void Each_pack_declares_a_dark_and_a_light_colourway_dark_first()
         {
-            Assert.Equal(new[] { "dark", "light" },
-                CursorAssets.Variants("vision").Select(v => v.Id).ToArray());
-            Assert.Equal(new[] { "Dark", "Light" },
-                CursorAssets.Variants("vision").Select(v => v.Label).ToArray());
+            foreach (var style in CursorAssets.Styles)
+            {
+                Assert.Equal(new[] { "dark", "light" },
+                    CursorAssets.Variants(style).Select(v => v.Id).ToArray());
+                Assert.Equal(new[] { "Dark", "Light" },
+                    CursorAssets.Variants(style).Select(v => v.Label).ToArray());
+            }
 
             Assert.Empty(CursorAssets.Variants(CursorAssets.NativeStyle));
             Assert.Empty(CursorAssets.Variants("no-such-style"));
@@ -105,15 +108,18 @@ namespace Clowd.VideoSDK.Tests
                 CursorAssets.TryGet("vision", CursorAssets.KindArrow));
         }
 
-        [Fact]
-        public void The_two_colourways_are_one_geometry_with_the_palette_swapped()
+        /// <summary>A pack's colourways are one geometry drawn in two palettes — nothing about the
+        /// shapes, hotspots or halo widths may differ between them, which is the property that
+        /// lets the picker present the choice as a palette and nothing more.</summary>
+        [Theory]
+        [InlineData("vision")]
+        [InlineData("point")]
+        public void A_packs_colourways_are_one_geometry_in_two_palettes(string style)
         {
-            const uint ink = 0xFF0C1E35, paper = 0xFFFFFFFF;
-
             foreach (var kind in CursorAssets.Kinds)
             {
-                var dark = CursorAssets.TryGet("vision", "dark", kind);
-                var light = CursorAssets.TryGet("vision", "light", kind);
+                var dark = CursorAssets.TryGet(style, "dark", kind);
+                var light = CursorAssets.TryGet(style, "light", kind);
                 Assert.NotSame(dark, light);
                 Assert.Equal(dark.ViewBox, light.ViewBox);
                 Assert.Equal(dark.Hotspot, light.Hotspot);
@@ -121,22 +127,28 @@ namespace Clowd.VideoSDK.Tests
 
                 for (int i = 0; i < dark.Paths.Count; i++)
                 {
-                    var a = dark.Paths[i];
-                    var b = light.Paths[i];
-                    Assert.Equal(a.PathData, b.PathData);
-                    Assert.Equal(a.StrokeWidth, b.StrokeWidth);
-
-                    // A layer drawn in the pack's two base colours trades them between the
-                    // colourways; one drawn in an accent (the deny red, the wait cyan, the busy
-                    // pointer's white body) is the same colour in both, deliberately.
-                    foreach (var (x, y) in new[] { (a.FillArgb, b.FillArgb), (a.StrokeArgb, b.StrokeArgb) })
-                    {
-                        bool swapped = (x == ink && y == paper) || (x == paper && y == ink);
-                        Assert.True(swapped || x == y,
-                            $"vision/{kind}: layer {i} colour {x:X8}/{y:X8} neither swaps nor holds");
-                    }
+                    Assert.Equal(dark.Paths[i].PathData, light.Paths[i].PathData);
+                    Assert.Equal(dark.Paths[i].StrokeWidth, light.Paths[i].StrokeWidth);
                 }
             }
+        }
+
+        /// <summary>The plain pointer is where a pack's two base colours show plainest: its fill
+        /// and halo trade places between the colourways. (Other kinds hold an accent that is the
+        /// same in both — the deny red, the wait blue — so only this one is universal.)</summary>
+        [Theory]
+        [InlineData("vision")]
+        [InlineData("point")]
+        public void The_arrows_two_colourways_trade_the_packs_base_colours(string style)
+        {
+            var dark = CursorAssets.TryGet(style, "dark", CursorAssets.KindArrow);
+            var light = CursorAssets.TryGet(style, "light", CursorAssets.KindArrow);
+
+            var layer = Assert.Single(dark.Paths);
+            var other = Assert.Single(light.Paths);
+            Assert.Equal(layer.FillArgb, other.StrokeArgb);
+            Assert.Equal(layer.StrokeArgb, other.FillArgb);
+            Assert.NotEqual(layer.FillArgb, layer.StrokeArgb);
         }
 
         [Theory]
@@ -204,65 +216,96 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>
-        /// Where each kind's hotspot has to be, which is what the recorded position means. A
-        /// pointer-shaped cursor points with its top-left tip; the hand and its badged variant with
-        /// the fingertip; everything else is centred on the ink, which is what the OS does for the
-        /// resize, crosshair and text cursors.
+        /// Where each Vision kind's hotspot has to be, which is what the recorded position means
+        /// for that pack: a pointer-shaped cursor points with its top-left tip, the hand and its
+        /// badged variant with the fingertip, and everything else is centred on the ink, which is
+        /// what the OS does for the resize, crosshair and text cursors. This is Vision's shape, not
+        /// a rule about packs — see the Point case below.
         /// </summary>
         [Theory]
-        [MemberData(nameof(AllGlyphs))]
-        public void The_hotspot_is_where_the_kind_points_from(string style, string variant, string kind)
+        [InlineData("dark")]
+        [InlineData("light")]
+        public void Visions_hotspots_are_the_tip_the_fingertip_or_the_centre(string variant)
         {
-            var glyph = CursorAssets.TryGet(style, variant, kind);
-            var ink = InkOf(glyph);
+            foreach (var kind in CursorAssets.Kinds)
+            {
+                var glyph = CursorAssets.TryGet("vision", variant, kind);
+                var ink = InkOf(glyph);
 
-            bool tipped = kind is CursorAssets.KindArrow or CursorAssets.KindNo
-                or CursorAssets.KindHelp or CursorAssets.KindPen or CursorAssets.KindAppStarting;
-            bool fingered = kind is CursorAssets.KindHand or CursorAssets.KindPerson;
+                bool tipped = kind is CursorAssets.KindArrow or CursorAssets.KindNo
+                    or CursorAssets.KindHelp or CursorAssets.KindPen or CursorAssets.KindAppStarting;
+                bool fingered = kind is CursorAssets.KindHand or CursorAssets.KindPerson;
 
-            if (tipped || fingered)
-            {
-                Assert.True(glyph.Hotspot.Y <= ink.Top + ink.Height * 0.2f,
-                    $"{style}/{variant}/{kind}: hotspot is not near the top of the glyph");
-                if (tipped)
-                    Assert.True(glyph.Hotspot.X <= ink.Left + ink.Width * 0.2f,
-                        $"{style}/{variant}/{kind}: hotspot is not near the tip");
-            }
-            else if (kind == CursorAssets.KindUpArrow)
-            {
-                // "alternate select" points straight up: top edge, horizontally centred
-                Assert.True(glyph.Hotspot.Y <= ink.Top + ink.Height * 0.2f);
-                Assert.Equal(ink.MidX, glyph.Hotspot.X, 0);
-            }
-            else
-            {
-                Assert.Equal(ink.MidX, glyph.Hotspot.X, 0);
-                Assert.Equal(ink.MidY, glyph.Hotspot.Y, 0);
+                if (tipped || fingered)
+                {
+                    Assert.True(glyph.Hotspot.Y <= ink.Top + ink.Height * 0.2f,
+                        $"vision/{variant}/{kind}: hotspot is not near the top of the glyph");
+                    if (tipped)
+                        Assert.True(glyph.Hotspot.X <= ink.Left + ink.Width * 0.2f,
+                            $"vision/{variant}/{kind}: hotspot is not near the tip");
+                }
+                else if (kind == CursorAssets.KindUpArrow)
+                {
+                    // "alternate select" points straight up: top edge, horizontally centred
+                    Assert.True(glyph.Hotspot.Y <= ink.Top + ink.Height * 0.2f);
+                    Assert.Equal(ink.MidX, glyph.Hotspot.X, 0);
+                }
+                else
+                {
+                    Assert.Equal(ink.MidX, glyph.Hotspot.X, 0);
+                    Assert.Equal(ink.MidY, glyph.Hotspot.Y, 0);
+                }
             }
         }
 
-        /// <summary>The two diagonal-resize cursors are one shape and its mirror, and they lean
-        /// opposite ways — the pair is generated by reflecting one source, so a mistake here would
-        /// hand every NW-SE drag the NE-SW cursor.</summary>
-        [Fact]
-        public void The_diagonal_resize_cursors_mirror_each_other()
+        /// <summary>Point is a dot cursor: every kind points from the dot, wherever the rest of the
+        /// glyph sits. Only <c>help</c> moves it, and it moves the dot with it.</summary>
+        [Theory]
+        [InlineData("dark")]
+        [InlineData("light")]
+        public void Points_hotspots_are_always_its_dot(string variant)
         {
-            var nwse = InkOf(CursorAssets.TryGet("vision", "dark", CursorAssets.KindSizeNwse));
-            var nesw = InkOf(CursorAssets.TryGet("vision", "dark", CursorAssets.KindSizeNesw));
+            foreach (var kind in CursorAssets.Kinds)
+            {
+                var glyph = CursorAssets.TryGet("point", variant, kind);
+                var expected = kind == CursorAssets.KindHelp ? 42f : 32f;
+                Assert.Equal(32f, glyph.Hotspot.X);
+                Assert.Equal(expected, glyph.Hotspot.Y);
+            }
+        }
+
+        /// <summary>Each pack's two diagonal-resize cursors are one shape and its mirror, and they
+        /// lean opposite ways — the pair is generated by reflecting one source, so a mistake here
+        /// would hand every NW-SE drag the NE-SW cursor.</summary>
+        [Theory]
+        [InlineData("vision")]
+        [InlineData("point")]
+        public void The_diagonal_resize_cursors_mirror_each_other(string style)
+        {
+            var nwse = CursorAssets.TryGet(style, "dark", CursorAssets.KindSizeNwse);
+            var nesw = CursorAssets.TryGet(style, "dark", CursorAssets.KindSizeNesw);
+            float mid = nwse.ViewBox / 2;
 
             // same extent, both centred in the viewBox
-            Assert.Equal(nwse.Width, nesw.Width, 1);
-            Assert.Equal(nwse.Height, nesw.Height, 1);
-            Assert.Equal(64f, nwse.MidX, 0);
-            Assert.Equal(64f, nesw.MidX, 0);
+            Assert.Equal(InkOf(nwse).Width, InkOf(nesw).Width, 1);
+            Assert.Equal(InkOf(nwse).Height, InkOf(nesw).Height, 1);
+            Assert.Equal(mid, InkOf(nwse).MidX, 0);
+            Assert.Equal(mid, InkOf(nesw).MidX, 0);
 
-            // ...but the ink sits in the opposite corners: compare where each layer's own centre is
-            var nwseLayers = LayerCentres("sizenwse");
-            var neswLayers = LayerCentres("sizenesw");
-            Assert.All(nwseLayers, c => Assert.True((c.X < 64) == (c.Y < 64),
-                "sizenwse should run top-left to bottom-right"));
-            Assert.All(neswLayers, c => Assert.True((c.X < 64) != (c.Y < 64),
-                "sizenesw should run bottom-left to top-right"));
+            // ...but the arms sit in opposite corners. A layer sitting on the centre (Point's dot)
+            // belongs to neither diagonal and is skipped.
+            foreach (var (glyph, sameSign, label) in new[]
+            {
+                (nwse, true, "sizenwse should run top-left to bottom-right"),
+                (nesw, false, "sizenesw should run bottom-left to top-right"),
+            })
+            {
+                var arms = LayerCentres(glyph)
+                    .Where(c => Math.Abs(c.X - mid) > 1 && Math.Abs(c.Y - mid) > 1)
+                    .ToArray();
+                Assert.NotEmpty(arms);
+                Assert.All(arms, c => Assert.Equal(sameSign, (c.X < mid) == (c.Y < mid)));
+            }
         }
 
         [Fact]
@@ -296,10 +339,10 @@ namespace Clowd.VideoSDK.Tests
             return ink;
         }
 
-        private static List<SKPoint> LayerCentres(string kind)
+        private static List<SKPoint> LayerCentres(CursorGlyph glyph)
         {
             var centres = new List<SKPoint>();
-            foreach (var layer in CursorAssets.TryGet("vision", "dark", kind).Paths)
+            foreach (var layer in glyph.Paths)
             {
                 using var path = SKPath.ParseSvgPathData(layer.PathData);
                 centres.Add(new SKPoint(path.Bounds.MidX, path.Bounds.MidY));

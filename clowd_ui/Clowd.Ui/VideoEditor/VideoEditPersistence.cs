@@ -48,17 +48,16 @@ namespace Clowd.UI.VideoEditor
 
     /// <summary>
     /// What the recording's session knows about its video streams beyond what a probe can see:
-    /// which stream is the webcam and which the cursor box (by index, from the recorder's own
-    /// tracks report), and where the input-capture jsonl lives. Decoration over the probe, in the
-    /// exact spirit of the audio labels — the probe still decides which streams exist, these only
-    /// classify them — and null (or a null member) simply falls back to the loader's heuristics.
-    /// Built from a <see cref="SessionInfo"/> rather than passed as one so the dev harness and the
-    /// tests, which have no session, can construct it (or skip it) directly.
+    /// which stream is the webcam (by index, from the recorder's own tracks report), and where the
+    /// input-capture jsonl lives. Decoration over the probe, in the exact spirit of the audio
+    /// labels — the probe still decides which streams exist, these only classify them — and null
+    /// (or a null member) simply falls back to the loader's heuristics. Built from a
+    /// <see cref="SessionInfo"/> rather than passed as one so the dev harness and the tests, which
+    /// have no session, can construct it (or skip it) directly.
     /// </summary>
     internal sealed class RecordingTrackHints
     {
         public SessionVideoTrack Webcam { get; set; }
-        public SessionVideoTrack Cursor { get; set; }
         public string InputCapturePath { get; set; }
 
         public static RecordingTrackHints From(SessionInfo session) => session == null
@@ -66,7 +65,6 @@ namespace Clowd.UI.VideoEditor
             : new RecordingTrackHints
             {
                 Webcam = session.WebcamTrack,
-                Cursor = session.CursorTrack,
                 InputCapturePath = session.InputCapturePath,
             };
     }
@@ -220,20 +218,12 @@ namespace Clowd.UI.VideoEditor
             // shares, and the one the session never needs to hint at.
             var screen = videoStreams[0];
 
-            // the cursor box before the webcam, so the positional webcam fallback below can never
-            // mistake the box for a camera: session hint by stream index first, else the box's
-            // fixed 512x512 shape (never the screen — a 512x512 *region* is a legal recording).
-            // Old recordings have neither a hint nor a 512 stream, so they get no cursor at all —
-            // which is the guard that keeps a pre-input-capture edit from growing an overlay.
-            var cursor = FindHintedStream(videoStreams, hints?.Cursor)
-                         ?? FindCursorBox(videoStreams);
-
             // the webcam by the session's reported index when it has one; the fallback is the old
-            // "track 1" positional rule (skipping a claimed cursor box), which is all a session
-            // written before the report existed — or a dev-harness open with no session — has.
+            // "track 1" positional rule, which is all a session written before the report existed
+            // — or a dev-harness open with no session — has.
             var cam = FindHintedStream(videoStreams, hints?.Webcam)
-                      ?? FindPositionalWebcam(videoStreams, cursor);
-            if (cam is not { Width: > 0, Height: > 0 } || ReferenceEquals(cam, cursor))
+                      ?? FindPositionalWebcam(videoStreams);
+            if (cam is not { Width: > 0, Height: > 0 })
                 cam = null;
 
             var audioStreams = probe.AudioStreams ?? Array.Empty<AudioStreamProbe>();
@@ -254,7 +244,6 @@ namespace Clowd.UI.VideoEditor
                 InputPath = videoPath,
                 Screen = screen,
                 Webcam = cam,
-                Cursor = cursor,
                 // only ever from the session: the jsonl's location is nothing a probe can see, and
                 // an old recording without one must not be pointed at a path that was never there.
                 InputCapturePath = hints?.InputCapturePath,
@@ -289,27 +278,12 @@ namespace Clowd.UI.VideoEditor
             return null;
         }
 
-        /// <summary>The recorder's cursor box is always exactly 512x512 — its one distinguishing
-        /// mark in a recording whose session carries no report of it.</summary>
-        private static VideoStreamProbe FindCursorBox(IReadOnlyList<VideoStreamProbe> videoStreams)
+        /// <summary>The legacy positional rule: the webcam is the second video stream. The screen
+        /// and the camera are the only video tracks a recording carries, so nothing else can sit
+        /// there.</summary>
+        private static VideoStreamProbe FindPositionalWebcam(IReadOnlyList<VideoStreamProbe> videoStreams)
         {
-            for (var i = 1; i < videoStreams.Count; i++)
-            {
-                if (videoStreams[i] is { Width: 512, Height: 512 })
-                    return videoStreams[i];
-            }
-
-            return null;
-        }
-
-        /// <summary>The legacy positional rule: the webcam is the second video stream — unless that
-        /// stream is a claimed cursor box, in which case the recording has no camera at all (the
-        /// recorder writes the webcam before the cursor, so the box coming second means nothing sat
-        /// between them).</summary>
-        private static VideoStreamProbe FindPositionalWebcam(IReadOnlyList<VideoStreamProbe> videoStreams,
-            VideoStreamProbe cursor)
-        {
-            if (videoStreams.Count < 2 || ReferenceEquals(videoStreams[1], cursor))
+            if (videoStreams.Count < 2)
                 return null;
 
             return videoStreams[1];

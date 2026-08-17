@@ -40,12 +40,10 @@ namespace Clowd.VideoSDK.Tests
                         Id = sourceId,
                         Path = @"C:\rec\input.mp4",
                         InputCapturePath = CapturePath,
-                        CursorStreamIndex = 2,
                         Streams =
                         {
                             new SourceStream { Index = 0, Kind = StreamKind.Video, Width = 1920, Height = 1080, AvgFrameRateNum = 30, AvgFrameRateDen = 1, DurationTicks = Ms(60_000) },
                             new SourceStream { Index = 1, Kind = StreamKind.Audio, DurationTicks = Ms(60_000) },
-                            new SourceStream { Index = 2, Kind = StreamKind.Video, Width = 512, Height = 512, DurationTicks = Ms(60_000) },
                         },
                     },
                 },

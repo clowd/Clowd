@@ -69,11 +69,6 @@ public sealed class RecordingProjectSpec
     /// <summary>The webcam stream, or null when the recording carries none.</summary>
     public VideoStreamProbe Webcam { get; set; }
 
-    /// <summary>The 512x512 cursor-box video stream, or null when the recording carries none.
-    /// Recorded onto the source (<see cref="Source.CursorStreamIndex"/>); no track is built for
-    /// it — cursor/keyboard rows exist only via the editor's factories.</summary>
-    public VideoStreamProbe Cursor { get; set; }
-
     /// <summary>Full path to the recording's input-capture JSONL sidecar, or null when the
     /// recording carries none (<see cref="Source.InputCapturePath"/>).</summary>
     public string InputCapturePath { get; set; }
@@ -202,13 +197,10 @@ public static class RecordingProject
             Id = ids.SourceId,
             Path = spec.InputPath,
             InputCapturePath = spec.InputCapturePath,
-            CursorStreamIndex = spec.Cursor?.StreamIndex,
         };
         source.Streams.Add(ToSourceStream(screen));
         if (cam != null)
             source.Streams.Add(ToSourceStream(cam));
-        if (spec.Cursor != null)
-            source.Streams.Add(ToSourceStream(spec.Cursor));
         foreach (var audio in audioStreams)
             source.Streams.Add(new SourceStream
             {
