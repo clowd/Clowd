@@ -161,7 +161,7 @@ namespace Clowd.VideoSDK.Composition
                     DrawPicture(target, frame.Image, transform, item.Surround, fx, opacity,
                         canvasWidth, canvasHeight);
                     DrawDefaultCursorOverlay(project, media, timeTicks, sourceTicks, frame.Image,
-                        transform, fx, opacity, frames, target, canvasWidth, canvasHeight);
+                        transform, fx, opacity, target, canvasWidth, canvasHeight);
                     break;
                 }
 
@@ -184,7 +184,7 @@ namespace Clowd.VideoSDK.Composition
                     break;
 
                 case CursorContent cursor:
-                    DrawCursorItem(project, item, cursor, timeTicks, frames, target, opacity,
+                    DrawCursorItem(project, item, cursor, timeTicks, target, opacity,
                         canvasWidth, canvasHeight);
                     break;
 
@@ -268,26 +268,26 @@ namespace Clowd.VideoSDK.Composition
         // ---------------------------------------------------------------------- cursor overlay
 
         /// <summary>
-        /// The default native cursor: a new-format recording (one whose <see cref="Source"/>
-        /// carries a cursor-box stream) composites the recorded 512-box over its screen item even
-        /// without a cursor track, so the cursor is never simply lost. Drawn through the screen
-        /// item's own <see cref="PictureMapping"/> and clips — the box lands exactly where the
-        /// recorder sampled it, crop/aspect included. Suppressed the moment any
+        /// The default native cursor: a recording that carries an input-capture sidecar
+        /// (<see cref="Source.InputCapturePath"/>) composites the recorded cursor sprite over its
+        /// screen item even without a cursor track — the screen stream is captured cursor-less, so
+        /// the cursor would otherwise simply be lost. Drawn through the screen item's own
+        /// <see cref="PictureMapping"/> and clips — the sprite lands exactly where the recorder
+        /// sampled it, crop/aspect included. Suppressed the moment any
         /// <see cref="CursorContent"/> item for the source is active at <paramref name="timeTicks"/>
         /// (the cursor track owns the cursor then, whatever its style), and skipped for hidden
-        /// cursors and positions outside the capture region.
+        /// cursors, positions outside the capture region and frames carrying no sprite (a v1 file
+        /// or a degraded capture).
         /// </summary>
         private static void DrawDefaultCursorOverlay(Project project, MediaContent media,
             long timeTicks, long sourceTicks, SKImage screenImage, Transform transform,
-            ItemEffects fx, double opacity, IFrameSource frames, SKCanvas target,
-            int canvasWidth, int canvasHeight)
+            ItemEffects fx, double opacity, SKCanvas target, int canvasWidth, int canvasHeight)
         {
             var source = FindSource(project, media.SourceId);
-            if (source?.CursorStreamIndex is not int cursorStream
-                || string.IsNullOrEmpty(source.InputCapturePath))
+            if (source == null || string.IsNullOrEmpty(source.InputCapturePath))
                 return;
             if (!IsScreenStream(source, media.StreamIndex))
-                return; // the overlay belongs to the screen stream, not webcam/box items
+                return; // the overlay belongs to the screen stream, not webcam items
             if (HasActiveCursorItem(project, media.SourceId, timeTicks))
                 return;
 
@@ -297,8 +297,7 @@ namespace Clowd.VideoSDK.Composition
                 || !CursorCompose.IsInsideRegion(capture.Header, row.X, row.Y))
                 return;
 
-            if (!frames.TryGetFrame(media.SourceId, cursorStream, sourceTicks, out var box)
-                || box.Image == null)
+            if (row.SpriteId < 0 || !capture.TryGetSprite(row.SpriteId, out var sprite))
                 return;
             if (!PictureMapping.TryMap(transform, fx, screenImage.Width, screenImage.Height,
                     canvasWidth, canvasHeight, out var map))
@@ -309,8 +308,8 @@ namespace Clowd.VideoSDK.Composition
             {
                 ApplyClips(target, transform, fx, map.Dest);
                 target.ClipRect(map.Dest, SKClipOperation.Intersect, antialias: true);
-                CursorCompose.DrawBox(target, box.Image, map,
-                    row.X - capture.Header.RegionX, row.Y - capture.Header.RegionY, opacity);
+                CursorCompose.DrawNativeSprite(target, sprite, map,
+                    row.X - capture.Header.RegionX, row.Y - capture.Header.RegionY, 1.0, opacity);
             }
             finally
             {
@@ -321,15 +320,19 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>
         /// A cursor-track item: position and shape are data-driven (the capture file), placement
         /// rides the linked screen item's mapping — the cursor lands on the same canvas point the
-        /// recorded pixel would, crop/aspect/mask included. <c>native</c> draws the recorded box
-        /// via this item's own stream ref; every other style draws a themed glyph sized by
+        /// recorded pixel would, crop/aspect/mask included. <c>native</c> draws the frame's
+        /// recorded sprite (<see cref="InputFrame.SpriteId"/>) at its captured pixel size times
+        /// <c>Size</c>; every other style draws a themed glyph sized by
         /// <c>Size · 40 px · monitor scale</c> in source pixels, then through the same px→canvas
-        /// factor as the screen frame. The click highlight draws beneath. A hidden cursor, a position
-        /// outside the region, or a missing screen item draws nothing.
+        /// factor as the screen frame. The native style ignores the item's shadow surround: the OS
+        /// pointer shadow is DWM-composited, never part of the cursor shape the recorder
+        /// rasterizes (routing the sprite through <see cref="CursorCompose.DrawGlyph"/>'s
+        /// decoration layer is the easy follow-up if one is wanted). The click highlight draws
+        /// beneath. A hidden cursor, a position outside the region, or a missing screen item draws
+        /// nothing.
         /// </summary>
         private static void DrawCursorItem(Project project, Item item, CursorContent cursor,
-            long timeTicks, IFrameSource frames, SKCanvas target, double opacity,
-            int canvasWidth, int canvasHeight)
+            long timeTicks, SKCanvas target, double opacity, int canvasWidth, int canvasHeight)
         {
             var source = FindSource(project, cursor.SourceId);
             if (source == null || string.IsNullOrEmpty(source.InputCapturePath))
@@ -372,12 +375,11 @@ namespace Clowd.VideoSDK.Composition
 
                 if (string.Equals(cursor.Style, CursorAssets.NativeStyle, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (cursor.StreamIndex >= 0 && frames != null
-                        && frames.TryGetFrame(cursor.SourceId, cursor.StreamIndex, sourceTicks, out var box)
-                        && box.Image != null)
+                    if (row.SpriteId >= 0 && capture.TryGetSprite(row.SpriteId, out var sprite))
                     {
-                        CursorCompose.DrawBox(target, box.Image, map,
-                            row.X - header.RegionX, row.Y - header.RegionY, opacity);
+                        CursorCompose.DrawNativeSprite(target, sprite, map,
+                            row.X - header.RegionX, row.Y - header.RegionY,
+                            cursor.Size > 0 ? cursor.Size : 1.0, opacity);
                     }
                 }
                 else
@@ -428,19 +430,16 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>Whether the stream is the source's screen recording: its lowest-index probed
-        /// video stream that is not the cursor box (webcam/box streams always probe after the
-        /// screen). With no probed video streams, stream 0 — the container convention.</summary>
+        /// video stream (the webcam always probes after the screen). With no probed video streams,
+        /// stream 0 — the container convention.</summary>
         public static bool IsScreenStream(Source source, int streamIndex)
         {
-            if (source.CursorStreamIndex == streamIndex)
-                return false;
-
             int best = -1;
             if (source.Streams != null)
             {
                 foreach (var stream in source.Streams)
                 {
-                    if (stream.Kind != StreamKind.Video || stream.Index == source.CursorStreamIndex)
+                    if (stream.Kind != StreamKind.Video)
                         continue;
                     if (best < 0 || stream.Index < best)
                         best = stream.Index;

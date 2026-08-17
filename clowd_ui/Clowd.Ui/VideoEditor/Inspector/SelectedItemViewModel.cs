@@ -135,6 +135,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         {
             ["native"] = "Native",
             ["vision"] = "Vision",
+            ["point"] = "Point",
         };
 
         private static readonly Dictionary<string, string> ClickAnimationLabels = new Dictionary<string, string>
@@ -409,6 +410,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _cursorHoldSize = DefaultHighlightFactor;
         private double _cursorClickSize = DefaultHighlightFactor;
         private double _cursorAnimationSpeed = DefaultHighlightFactor;
+        private string _cursorCapturePath;
 
         private double _keyboardFontSize = DefaultKeyboardFontSize;
         private double _keyboardLingerMs = DefaultKeyboardLingerMs;
@@ -1481,6 +1483,13 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        /// <summary>The capture sidecar of the recording the selected cursor overlay is synced to
+        /// (<see cref="Source.InputCapturePath"/>), or null when the item is not a cursor overlay or
+        /// its source is gone. Read-only, and here only for the <c>native</c> style tile: that style
+        /// draws the sprites the recorder rasterized into this file, so its preview has to read
+        /// them out of it.</summary>
+        public string CursorCapturePath => _cursorCapturePath;
+
         /// <summary>Whether the glyph rows (the size row, and the whole SURROUND section) mean
         /// anything — they are hidden, not merely greyed, when they do not: the <c>native</c> style
         /// draws the recorded box, which carries its own size and the system cursor's own shadow, so
@@ -1997,6 +2006,9 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _cursorHoldSize, cursor.HoldSize, nameof(CursorHoldSize));
                     Set(ref _cursorClickSize, cursor.ClickSize, nameof(CursorClickSize));
                     Set(ref _cursorAnimationSpeed, cursor.AnimationSpeed, nameof(CursorAnimationSpeed));
+                    Set(ref _cursorCapturePath,
+                        _session?.Project?.Sources?.FirstOrDefault(s => s.Id == cursor.SourceId)?.InputCapturePath,
+                        nameof(CursorCapturePath));
                     OnPropertyChanged(nameof(CursorGlyphEnabled));
                     OnPropertyChanged(nameof(CursorHighlightEnabled));
                     OnPropertyChanged(nameof(CursorVariantOptions));
