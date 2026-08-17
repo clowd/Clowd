@@ -58,14 +58,22 @@ namespace Clowd.VideoSDK.Tests
                 {
                     SourceId = source.Id,
                     StreamIndex = 2,
-                    Style = "material",
+                    Style = "vision",
                     Size = 1.5,
-                    DropShadow = true,
                     ClickAnimation = "ripple",
                     ClickColor = 0xFF3366CC,
                     HoldSize = 1.25,
                     ClickSize = 0.75,
                     AnimationSpeed = 2.0,
+                },
+                // the glyph's decoration lives on the ITEM, not the content — a cursor row is the
+                // one overlay that carries one by default (a shadow, replaced here by a glow)
+                Surround = new Surround
+                {
+                    Kind = SurroundKind.Glow,
+                    Color = 0x8022CCFF,
+                    Size = 0.11,
+                    Distance = 0, // a glow sits on the glyph; only a shadow falls
                 },
                 LinkGroupId = group,
             };
@@ -129,17 +137,23 @@ namespace Clowd.VideoSDK.Tests
             var project = OverlayProject(out _, out var cursorItem, out var keyboardItem);
             var restored = Project.FromJson(project.ToJson());
 
-            var cursor = (CursorContent)restored.Items.Single(i => i.Id == cursorItem.Id).Content;
+            var restoredCursorItem = restored.Items.Single(i => i.Id == cursorItem.Id);
+            var cursor = (CursorContent)restoredCursorItem.Content;
             Assert.Equal(((CursorContent)cursorItem.Content).SourceId, cursor.SourceId);
             Assert.Equal(2, cursor.StreamIndex);
-            Assert.Equal("material", cursor.Style);
+            Assert.Equal("vision", cursor.Style);
             Assert.Equal(1.5, cursor.Size);
-            Assert.True(cursor.DropShadow);
             Assert.Equal("ripple", cursor.ClickAnimation);
             Assert.Equal(0xFF3366CCu, cursor.ClickColor);
             Assert.Equal(1.25, cursor.HoldSize);
             Assert.Equal(0.75, cursor.ClickSize);
             Assert.Equal(2.0, cursor.AnimationSpeed);
+
+            var effect = restoredCursorItem.Surround;
+            Assert.Equal(SurroundKind.Glow, effect.Kind);
+            Assert.Equal(0x8022CCFFu, effect.Color);
+            Assert.Equal(0.11, effect.Size);
+            Assert.Equal(0, effect.Distance);
 
             var keyboard = (KeyboardContent)restored.Items.Single(i => i.Id == keyboardItem.Id).Content;
             Assert.Equal(((KeyboardContent)keyboardItem.Content).SourceId, keyboard.SourceId);
@@ -184,9 +198,8 @@ namespace Clowd.VideoSDK.Tests
         {
             var cursor = new CursorContent();
             Assert.Equal(-1, cursor.StreamIndex);
-            Assert.Equal("ios-glyph", cursor.Style);
+            Assert.Equal("vision", cursor.Style);
             Assert.Equal(1.0, cursor.Size);
-            Assert.True(cursor.DropShadow);
             Assert.Equal("none", cursor.ClickAnimation);
             Assert.Equal(0xFFFF0000u, cursor.ClickColor);
             Assert.Equal(1.0, cursor.HoldSize);
@@ -206,7 +219,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var cursor = new CursorContent
             {
-                SourceId = Guid.NewGuid(), StreamIndex = 2, Style = "fluent", Size = 2.0,
+                SourceId = Guid.NewGuid(), StreamIndex = 2, Style = "vision", Variant = "light", Size = 2.0,
                 HoldSize = 1.5, ClickSize = 0.5, AnimationSpeed = 3.0,
             };
             var cursorCopy = (CursorContent)cursor.Clone();
@@ -215,7 +228,8 @@ namespace Clowd.VideoSDK.Tests
             cursorCopy.HoldSize = 4;
             cursorCopy.ClickSize = 4;
             cursorCopy.AnimationSpeed = 4;
-            Assert.Equal("fluent", cursor.Style);
+            Assert.Equal("vision", cursor.Style);
+            Assert.Equal("light", cursor.Variant);
             Assert.Equal(2.0, cursor.Size);
             Assert.Equal(1.5, cursor.HoldSize);
             Assert.Equal(0.5, cursor.ClickSize);

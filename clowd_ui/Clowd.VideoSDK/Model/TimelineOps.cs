@@ -226,6 +226,7 @@ public static class TimelineOps
                 DurationTicks = m.TimelineEndTicks - timelineTicks,
                 Content = content,
                 Transform = m.Transform?.Clone() ?? new Transform(),
+                Surround = m.Surround?.Clone(),
                 Entry = null,
                 Exit = m.Exit,
                 Volume = m.Volume,

@@ -231,6 +231,20 @@ public sealed class Project
                     break;
             }
 
+            // a surround is optional on every item and ignored by the contents that do not draw a
+            // silhouette, so the only questions are whether its dials are in range and whether it
+            // is a real one — "nothing around it" is a null surround, never a stored kind of None.
+            if (item.Surround is { } surround)
+            {
+                if (surround.Kind == SurroundKind.None)
+                    errors.Add($"Item {item.Id} carries a surround of kind None (nothing around it is a null surround).");
+                // negated comparisons so NaN fails the check rather than sailing through.
+                if (!(surround.Size >= 0 && surround.Size <= Surround.MaxSize))
+                    errors.Add($"Item {item.Id} has a surround size {surround.Size} outside 0..{Surround.MaxSize}.");
+                if (!(surround.Distance >= 0 && surround.Distance <= Surround.MaxDistance))
+                    errors.Add($"Item {item.Id} has a surround distance {surround.Distance} outside 0..{Surround.MaxDistance}.");
+            }
+
             if (item.Content is SpeedContent or ZoomContent)
             {
                 if (track != null && track.Kind != TrackKind.Effect)

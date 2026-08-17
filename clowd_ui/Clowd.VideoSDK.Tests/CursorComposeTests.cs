@@ -199,27 +199,38 @@ namespace Clowd.VideoSDK.Tests
         // ---------------------------------------------------------------------- glyph resolution
 
         [Fact]
-        public void ResolveGlyph_returns_the_styles_own_artwork()
+        public void ResolveGlyph_returns_the_styles_own_artwork_for_every_kind()
         {
-            Assert.Same(CursorAssets.TryGet("ios-glyph", "arrow"),
-                CursorCompose.ResolveGlyph("ios-glyph", CursorKind.Arrow));
-            Assert.Same(CursorAssets.TryGet("material", "hand"),
-                CursorCompose.ResolveGlyph("material", CursorKind.Hand));
-            Assert.Same(CursorAssets.TryGet("fluent", "ibeam"),
-                CursorCompose.ResolveGlyph("fluent", CursorKind.IBeam));
+            foreach (var kind in Enum.GetValues<CursorKind>())
+            {
+                if (kind is CursorKind.Custom or CursorKind.Hidden)
+                    continue;
+                Assert.Same(CursorAssets.TryGet("vision", "dark", CursorCompose.KindKey(kind)),
+                    CursorCompose.ResolveGlyph("vision", kind));
+            }
+        }
+
+        [Fact]
+        public void ResolveGlyph_draws_the_asked_for_colourway()
+        {
+            Assert.Same(CursorAssets.TryGet("vision", "light", "hand"),
+                CursorCompose.ResolveGlyph("vision", "light", CursorKind.Hand));
+
+            // an unrecognised colourway is the style's default, not a miss
+            Assert.Same(CursorAssets.TryGet("vision", "dark", "hand"),
+                CursorCompose.ResolveGlyph("vision", "sepia", CursorKind.Hand));
+            Assert.Same(CursorAssets.TryGet("vision", "dark", "hand"),
+                CursorCompose.ResolveGlyph("vision", null, CursorKind.Hand));
         }
 
         [Fact]
         public void ResolveGlyph_unsupported_kinds_fall_back_to_the_styles_arrow()
         {
-            var arrow = CursorAssets.TryGet("ios-glyph", "arrow");
-            Assert.Same(arrow, CursorCompose.ResolveGlyph("ios-glyph", CursorKind.Wait));
-            Assert.Same(arrow, CursorCompose.ResolveGlyph("ios-glyph", CursorKind.SizeAll));
-            Assert.Same(arrow, CursorCompose.ResolveGlyph("ios-glyph", CursorKind.Custom));
-
-            // softteal has no ibeam artwork — the documented gap degrades to its arrow
-            Assert.Same(CursorAssets.TryGet("softteal", "arrow"),
-                CursorCompose.ResolveGlyph("softteal", CursorKind.IBeam));
+            // Custom is an application's own cursor: no pack can have artwork for it
+            Assert.Same(CursorAssets.TryGet("vision", "arrow"),
+                CursorCompose.ResolveGlyph("vision", CursorKind.Custom));
+            Assert.Same(CursorAssets.TryGet("vision", "light", "arrow"),
+                CursorCompose.ResolveGlyph("vision", "light", CursorKind.Custom));
         }
 
         [Fact]
@@ -234,7 +245,8 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void ResolveGlyph_hidden_draws_nothing()
         {
-            Assert.Null(CursorCompose.ResolveGlyph("ios-glyph", CursorKind.Hidden));
+            Assert.Null(CursorCompose.ResolveGlyph("vision", CursorKind.Hidden));
+            Assert.Null(CursorCompose.ResolveGlyph("vision", "light", CursorKind.Hidden));
         }
 
         // ------------------------------------------------------------------------- header math
@@ -410,7 +422,7 @@ namespace Clowd.VideoSDK.Tests
         public void Themed_style_item_draws_a_glyph_at_the_captured_position()
         {
             string capture = WriteCapture(Header, Frame(0, 32, 32));
-            var (p, _, _) = CursorProject(capture, "ios-glyph");
+            var (p, _, _) = CursorProject(capture, "vision");
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
             var px = Render(p, 5 * Sec, frames);
@@ -426,7 +438,7 @@ namespace Clowd.VideoSDK.Tests
             // left half of the screen cropped away (ScaleY pinned so the mapping is 2x horizontal):
             // a cursor captured at x=48 must land at canvas x=32
             string capture = WriteCapture(Header, Frame(0, 48, 32));
-            var (p, _, _) = CursorProject(capture, "ios-glyph");
+            var (p, _, _) = CursorProject(capture, "vision");
             var screen = p.Items[0];
             screen.Transform.Crop = new CropRect { Left = 0.5 };
             screen.Transform.ScaleY = 1.0;
@@ -441,7 +453,7 @@ namespace Clowd.VideoSDK.Tests
         public void Themed_style_hidden_cursor_draws_nothing()
         {
             string capture = WriteCapture(Header, Frame(0, 32, 32, kind: "hidden"));
-            var (p, _, _) = CursorProject(capture, "ios-glyph");
+            var (p, _, _) = CursorProject(capture, "vision");
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
             var px = Render(p, 5 * Sec, frames);
@@ -452,12 +464,18 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
-        [Fact]
-        public void Drop_shadow_still_draws_the_glyph()
+        /// <summary>Every effect draws the glyph twice — once through a decoration-only filter, once
+        /// plainly on top (see <c>SurroundMath</c>) — so the one thing every kind must still do
+        /// is leave the glyph itself visible.</summary>
+        [Theory]
+        [InlineData(SurroundKind.Shadow)]
+        [InlineData(SurroundKind.Glow)]
+        [InlineData(SurroundKind.Outline)]
+        public void An_effect_still_draws_the_glyph(SurroundKind kind)
         {
             string capture = WriteCapture(Header, Frame(0, 32, 32));
-            var (p, _, cursor) = CursorProject(capture, "material");
-            ((CursorContent)cursor.Content).DropShadow = true;
+            var (p, _, cursor) = CursorProject(capture, "vision");
+            cursor.Surround = Surround.Create(kind, cursor: true);
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
             var px = Render(p, 5 * Sec, frames);
@@ -502,7 +520,7 @@ namespace Clowd.VideoSDK.Tests
             var p = NewProject();
             var source = AddCaptureSource(p, capture);
             AddItem(p, AddVideoTrack(p),
-                new CursorContent { SourceId = source.Id, StreamIndex = 1, Style = "ios-glyph" },
+                new CursorContent { SourceId = source.Id, StreamIndex = 1, Style = "vision" },
                 linkGroup: Guid.NewGuid());
 
             using var frames = new MultiStreamSource().Set(1, Red, 16);
@@ -523,7 +541,7 @@ namespace Clowd.VideoSDK.Tests
             // opacity 0.425 red over blue
             string capture = WriteCapture(Header, Frame(0, 32, 32),
                 MouseEvent("mu", 1000, 20, 20));
-            var (p, _, cursor) = CursorProject(capture, "ios-glyph");
+            var (p, _, cursor) = CursorProject(capture, "vision");
             ((CursorContent)cursor.Content).ClickAnimation = "ripple";
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
@@ -545,7 +563,7 @@ namespace Clowd.VideoSDK.Tests
             // button held); the animation belongs to the release, which never comes here
             string capture = WriteCapture(Header, Frame(0, 32, 32),
                 MouseEvent("md", 1000, 20, 20));
-            var (p, _, cursor) = CursorProject(capture, "ios-glyph");
+            var (p, _, cursor) = CursorProject(capture, "vision");
             ((CursorContent)cursor.Content).ClickAnimation = "ripple";
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);
@@ -718,7 +736,7 @@ namespace Clowd.VideoSDK.Tests
         {
             string capture = WriteCapture(Header, Frame(0, 32, 32),
                 MouseEvent("mu", 1000, 20, 20));
-            var (p, _, cursor) = CursorProject(capture, "ios-glyph");
+            var (p, _, cursor) = CursorProject(capture, "vision");
             ((CursorContent)cursor.Content).ClickAnimation = "pulse";
 
             using var frames = new MultiStreamSource().Set(0, Blue, 64).Set(1, Red, 16);

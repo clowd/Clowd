@@ -21,30 +21,52 @@ namespace Clowd.VideoSDK.Composition
         /// screen row shown at its recorded logical size whatever the recording's DPI was.</summary>
         internal const double BaseCursorPx = 40.0;
 
-        /// <summary>The <see cref="CursorAssets"/> kind key for a captured cursor kind, or null
-        /// for the kinds without dedicated artwork (they fall back to the style's arrow).</summary>
+        /// <summary>The <see cref="CursorAssets"/> kind key for a captured cursor kind — the same
+        /// wire names the recorder writes. Null for <see cref="CursorKind.Custom"/> (an
+        /// application's own cursor, which no pack can have artwork for) and for
+        /// <see cref="CursorKind.Hidden"/>; both fall back to the style's arrow, and Hidden is
+        /// dropped before that by <see cref="ResolveGlyph"/>.</summary>
         internal static string KindKey(CursorKind kind) => kind switch
         {
             CursorKind.Arrow => CursorAssets.KindArrow,
-            CursorKind.Hand => CursorAssets.KindHand,
             CursorKind.IBeam => CursorAssets.KindIBeam,
+            CursorKind.Wait => CursorAssets.KindWait,
+            CursorKind.Cross => CursorAssets.KindCross,
+            CursorKind.UpArrow => CursorAssets.KindUpArrow,
+            CursorKind.SizeNWSE => CursorAssets.KindSizeNwse,
+            CursorKind.SizeNESW => CursorAssets.KindSizeNesw,
+            CursorKind.SizeWE => CursorAssets.KindSizeWe,
+            CursorKind.SizeNS => CursorAssets.KindSizeNs,
+            CursorKind.SizeAll => CursorAssets.KindSizeAll,
+            CursorKind.No => CursorAssets.KindNo,
+            CursorKind.Hand => CursorAssets.KindHand,
+            CursorKind.AppStarting => CursorAssets.KindAppStarting,
+            CursorKind.Help => CursorAssets.KindHelp,
+            CursorKind.Pen => CursorAssets.KindPen,
+            CursorKind.Person => CursorAssets.KindPerson,
             _ => null,
         };
 
+        /// <summary>The glyph for a (style, kind) pair in the style's default colourway; see the
+        /// three-argument overload.</summary>
+        internal static CursorGlyph ResolveGlyph(string style, CursorKind kind)
+            => ResolveGlyph(style, null, kind);
+
         /// <summary>
-        /// The glyph to draw for a (style, kind) pair: the style's artwork for the kind, else the
-        /// style's arrow (unmodelled/custom kinds and the documented per-style gaps), else the
-        /// default style's equivalent for an unknown style name. Null only for
+        /// The glyph to draw for a (style, colourway, kind) triple: the style's artwork for the
+        /// kind, else the style's arrow (unmodelled/custom kinds and the documented per-style
+        /// gaps), else the default style's equivalent for an unknown style name. An unrecognised
+        /// colourway is not a miss — it resolves to the style's default. Null only for
         /// <see cref="CursorKind.Hidden"/> — nothing is drawn then.
         /// </summary>
-        internal static CursorGlyph ResolveGlyph(string style, CursorKind kind)
+        internal static CursorGlyph ResolveGlyph(string style, string variant, CursorKind kind)
         {
             if (kind == CursorKind.Hidden)
                 return null;
 
             string key = KindKey(kind);
-            var glyph = key != null ? CursorAssets.TryGet(style, key) : null;
-            glyph ??= CursorAssets.TryGet(style, CursorAssets.KindArrow);
+            var glyph = key != null ? CursorAssets.TryGet(style, variant, key) : null;
+            glyph ??= CursorAssets.TryGet(style, variant, CursorAssets.KindArrow);
             if (glyph == null)
             {
                 // unknown style (or "native" reaching here by mistake): the default theme
@@ -120,61 +142,73 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>
         /// Draws a themed glyph with its hotspot on <paramref name="pos"/> at
-        /// <paramref name="sizePx"/> canvas pixels. Layers paint halo-strokes first, then every
-        /// fill in document order — the halo is a centred stroke, so fills must land on top of it
-        /// (see <see cref="CursorGlyphPath.Stroke"/>). The drop shadow (and any translucency)
-        /// wraps the whole glyph in one layer so overlapping strokes/fills never double-blend.
+        /// <paramref name="sizePx"/> canvas pixels, wearing the item's
+        /// <paramref name="surround"/> — the glyph's drawn box is its reference extent, so a bigger
+        /// cursor casts a proportionally bigger shadow. A surround is a decoration-only
+        /// filter (see <see cref="SurroundMath"/>), which is why the glyph is painted twice:
+        /// once inside the filtered layer to produce the decoration, once plainly on top. Each pass
+        /// goes through one layer so overlapping strokes/fills never double-blend.
         /// </summary>
         internal static void DrawGlyph(SKCanvas target, CursorGlyph glyph, SKPoint pos,
-            float sizePx, bool dropShadow, double opacity)
+            float sizePx, Surround surround, double opacity)
         {
             if (glyph == null || sizePx <= 0 || opacity <= 0)
                 return;
 
+            using var decoration = SurroundMath.CreateDecoration(surround, sizePx);
             float scale = sizePx / glyph.ViewBox;
-            int save = target.Save();
-            try
+
+            // pass 0 paints the decoration (skipped when there is none), pass 1 the glyph itself
+            for (int pass = decoration != null ? 0 : 1; pass <= 1; pass++)
             {
-                if (dropShadow || opacity < 1)
+                int save = target.Save();
+                try
                 {
-                    using var layer = new SKPaint
+                    if (pass == 0 || opacity < 1)
                     {
-                        Color = SKColors.White.WithAlpha(FrameComposer.AlphaByte(opacity)),
-                    };
-                    if (dropShadow)
-                    {
-                        layer.ImageFilter = SKImageFilter.CreateDropShadow(
-                            sizePx * 0.06f, sizePx * 0.09f, sizePx * 0.06f, sizePx * 0.06f,
-                            SKColors.Black.WithAlpha(128));
+                        using var layer = new SKPaint
+                        {
+                            Color = SKColors.White.WithAlpha(FrameComposer.AlphaByte(opacity)),
+                            ImageFilter = pass == 0 ? decoration : null,
+                        };
+                        target.SaveLayer(layer);
                     }
-                    target.SaveLayer(layer);
+
+                    target.Translate(pos.X - glyph.Hotspot.X * scale, pos.Y - glyph.Hotspot.Y * scale);
+                    target.Scale(scale);
+                    PaintGlyph(target, glyph);
                 }
-
-                target.Translate(pos.X - glyph.Hotspot.X * scale, pos.Y - glyph.Hotspot.Y * scale);
-                target.Scale(scale);
-
-                using var paint = new SKPaint { IsAntialias = true };
-
-                paint.Style = SKPaintStyle.Stroke;
-                foreach (var layer in glyph.Paths)
+                finally
                 {
-                    if (!layer.HasStroke)
-                        continue;
+                    target.RestoreToCount(save);
+                }
+            }
+        }
+
+        /// <summary>The glyph's own ink in the caller's (already translated and scaled) space:
+        /// each layer's halo-stroke immediately followed by that layer's fill, in document order.
+        /// The halo is a centred stroke, so a layer's own fill has to land on top of it (see
+        /// <see cref="CursorGlyphPath.Stroke"/>); doing it per layer rather than in two global
+        /// passes is what lets a badge sit on a base shape — the badge's halo separates the two,
+        /// which is exactly what a single pass of every halo first would paint over.</summary>
+        private static void PaintGlyph(SKCanvas target, CursorGlyph glyph)
+        {
+            using var paint = new SKPaint { IsAntialias = true };
+
+            foreach (var layer in glyph.Paths)
+            {
+                var path = GetPath(layer);
+                if (layer.HasStroke)
+                {
+                    paint.Style = SKPaintStyle.Stroke;
                     paint.Color = layer.Stroke;
                     paint.StrokeWidth = layer.StrokeWidth;
-                    target.DrawPath(GetPath(layer), paint);
+                    target.DrawPath(path, paint);
                 }
 
                 paint.Style = SKPaintStyle.Fill;
-                foreach (var layer in glyph.Paths)
-                {
-                    paint.Color = layer.Fill;
-                    target.DrawPath(GetPath(layer), paint);
-                }
-            }
-            finally
-            {
-                target.RestoreToCount(save);
+                paint.Color = layer.Fill;
+                target.DrawPath(path, paint);
             }
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Clowd.UI.Helpers;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 
@@ -133,13 +134,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private static readonly Dictionary<string, string> CursorStyleLabels = new Dictionary<string, string>
         {
             ["native"] = "Native",
-            ["ios-glyph"] = "iOS Glyph",
-            ["material"] = "Material",
-            ["fluent"] = "Fluent",
-            ["plumpy"] = "Plumpy",
-            ["softteal"] = "Softteal",
-            ["papercut"] = "Papercut",
-            ["doodle"] = "Doodle",
+            ["vision"] = "Vision",
         };
 
         private static readonly Dictionary<string, string> ClickAnimationLabels = new Dictionary<string, string>
@@ -152,10 +147,35 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly IReadOnlyList<NamedOption> CursorStyleOptions =
             BuildOptions(CursorContent.Styles, CursorStyleLabels);
 
+        /// <summary>The colourway tiles for each style that has more than one, keyed by style —
+        /// built once off <see cref="CursorAssets.Variants"/>, so a pack that declares its own
+        /// colourways gets its own row of tiles without the picker knowing the pack exists. A style
+        /// with one colourway has no entry and shows no second row (see
+        /// <see cref="CursorVariantsVisible"/>).</summary>
+        private static readonly Dictionary<string, IReadOnlyList<NamedOption>> CursorVariantOptionsByStyle
+            = BuildVariantOptions();
+
+        private static Dictionary<string, IReadOnlyList<NamedOption>> BuildVariantOptions()
+        {
+            var byStyle = new Dictionary<string, IReadOnlyList<NamedOption>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var style in CursorContent.Styles)
+            {
+                var variants = CursorAssets.Variants(style);
+                if (variants.Count < 2)
+                    continue;
+
+                var options = new List<NamedOption>(variants.Count);
+                foreach (var variant in variants)
+                    options.Add(new NamedOption(variant.Id, variant.Label));
+                byStyle[style] = options;
+            }
+            return byStyle;
+        }
+
         /// <summary>What a new cursor item is created at (<see cref="CursorContent.Style"/>'s own
         /// default), and what the style row's reset dot writes back.</summary>
         public static readonly NamedOption DefaultCursorStyleOption =
-            FindOption(CursorStyleOptions, "ios-glyph");
+            FindOption(CursorStyleOptions, "vision");
 
         public static readonly IReadOnlyList<NamedOption> ClickAnimationOptions =
             BuildOptions(CursorContent.ClickAnimations, ClickAnimationLabels);
@@ -214,6 +234,13 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         public const string DefaultKeyboardBackColorHex = "#8C000000";
 
+        /// <summary>The surround dials' range — the model's own bounds (<see cref="Surround"/>),
+        /// repeated so a spinner cannot offer a number the project would refuse. Both dials are
+        /// fractions of the item's drawn extent, so both are shown as percentages.</summary>
+        public const double MaxSurroundSize = Surround.MaxSize;
+
+        public const double MaxSurroundDistance = Surround.MaxDistance;
+
         public const double MinScale = 0.01;
         public const double MaxScale = 4.0;
         public const double MaxVolume = 2.0;
@@ -253,6 +280,16 @@ namespace Clowd.UI.VideoEditor.Inspector
             (AspectTile.R32, 3 / 2.0),
             (AspectTile.R43, 4 / 3.0),
         };
+
+        /// <summary>Which kind of item the EFFECT section is currently describing — the dials'
+        /// defaults differ between the two (see <see cref="Surround.DefaultsFor"/>), and a
+        /// cursor only offers the section while a themed glyph is drawn.</summary>
+        private enum SurroundSubject
+        {
+            None,
+            Picture,
+            Cursor,
+        }
 
         private enum AspectTile
         {
@@ -356,9 +393,17 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _zoomFocusX = 0.5;
         private double _zoomFocusY = 0.5;
 
-        private string _cursorStyle = "ios-glyph";
+        private SurroundSubject _surroundSubject;
+        private SurroundKind _surroundKind;
+        private string _surroundColorHex = HexOfArgb(Surround.DefaultShadowColor);
+        private double _surroundSize;
+        private double _surroundDistance;
+
+        private string _cursorStyle = "vision";
+
+        /// <summary>Null until the user picks one: the style's own default colourway.</summary>
+        private string _cursorVariant;
         private double _cursorSize = DefaultCursorSize;
-        private bool _cursorDropShadow = true;
         private string _cursorClickAnimation = NoClickAnimation;
         private uint _cursorClickColor = DefaultCursorClickColor;
         private double _cursorHoldSize = DefaultHighlightFactor;
@@ -1392,14 +1437,54 @@ namespace Clowd.UI.VideoEditor.Inspector
                 _cursorStyle = value.Value;
                 OnPropertyChanged(nameof(CursorStyle));
                 OnPropertyChanged(nameof(CursorGlyphEnabled));
+                // the colourway row belongs to the style above it: which tiles it offers, whether
+                // it is there at all, and which of them reads as picked all change with the style
+                OnPropertyChanged(nameof(CursorVariantOptions));
+                OnPropertyChanged(nameof(CursorVariantsVisible));
+                OnPropertyChanged(nameof(CursorVariant));
+                // the SURROUND section decorates the themed glyph; the native style has none
+                OnPropertyChanged(nameof(ShowSurround));
                 EditCursor("sel:cursorstyle", c => c.Style = value.Value);
             }
         }
 
-        /// <summary>Whether the glyph rows (size, drop shadow) mean anything — they are hidden, not
-        /// merely greyed, when they do not: the <c>native</c> style draws the recorded box, which
-        /// carries its own size and shadow, so a disabled spinner would only invite the question of
-        /// what it would have done.</summary>
+        /// <summary>The colourway tiles the picked style offers — empty for a style with only one,
+        /// which is when the row is not shown at all.</summary>
+        public IReadOnlyList<NamedOption> CursorVariantOptions =>
+            CursorVariantOptionsByStyle.TryGetValue(_cursorStyle ?? "", out var options)
+                ? options
+                : Array.Empty<NamedOption>();
+
+        /// <summary>Whether the colourway row is on show: only for a themed style that has more
+        /// than one palette to choose between.</summary>
+        public bool CursorVariantsVisible => CursorGlyphEnabled && CursorVariantOptions.Count > 0;
+
+        /// <summary>
+        /// Which of the style's colourways is drawn. The stored value is deliberately left alone
+        /// when the style changes — a project remembers "light" across a trip through another style
+        /// — and the getter resolves whatever is stored against the style actually picked, so a
+        /// colourway that style does not offer reads as its default exactly as the compositor
+        /// draws it.
+        /// </summary>
+        public NamedOption CursorVariant
+        {
+            get => FindOption(CursorVariantOptions,
+                CursorAssets.ResolveVariant(_cursorStyle, _cursorVariant));
+            set
+            {
+                if (value == null || _syncing || value.Value == _cursorVariant)
+                    return;
+
+                _cursorVariant = value.Value;
+                OnPropertyChanged(nameof(CursorVariant));
+                EditCursor("sel:cursorvariant", c => c.Variant = value.Value);
+            }
+        }
+
+        /// <summary>Whether the glyph rows (the size row, and the whole SURROUND section) mean
+        /// anything — they are hidden, not merely greyed, when they do not: the <c>native</c> style
+        /// draws the recorded box, which carries its own size and the system cursor's own shadow, so
+        /// a disabled spinner would only invite the question of what it would have done.</summary>
         public bool CursorGlyphEnabled => _cursorStyle != NativeCursorStyle;
 
         /// <summary>Glyph size multiplier over the style's base size.</summary>
@@ -1413,18 +1498,6 @@ namespace Clowd.UI.VideoEditor.Inspector
                     return;
 
                 EditCursor("sel:cursorsize", c => c.Size = value);
-            }
-        }
-
-        public bool CursorDropShadow
-        {
-            get => _cursorDropShadow;
-            set
-            {
-                if (!Set(ref _cursorDropShadow, value) || _syncing)
-                    return;
-
-                EditCursor("sel:cursorshadow", c => c.DropShadow = value);
             }
         }
 
@@ -1569,6 +1642,165 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 EditKeyboard("sel:keypause", k => k.PauseBreakMs = MsToInt(value));
             }
+        }
+
+        // ---------------------------------------------------------------------------- surround
+
+        /// <summary>
+        /// Whether the SURROUND section is on show. Pictures (video and image items) always offer it;
+        /// a cursor row offers it only while a themed glyph is drawn — under <c>native</c> the
+        /// recorded box already carries the system cursor's own shadow and there is nothing here to
+        /// decorate. Everything else (text, colour, the keystroke block, the effect items) draws no
+        /// silhouette the compositor would put a surround around, so the section stays away.
+        /// </summary>
+        public bool ShowSurround => _surroundSubject == SurroundSubject.Picture
+            || (_surroundSubject == SurroundSubject.Cursor && CursorGlyphEnabled);
+
+        /// <summary>The surround tiles, with mask-tile semantics: only a true write applies, and the
+        /// radio group's deselection of the losers writes nothing. <see cref="SurroundNone"/> stores a
+        /// null surround rather than a kind (<see cref="SurroundKind.None"/> is never written).</summary>
+        public bool SurroundNone
+        {
+            get => _surroundKind == SurroundKind.None;
+            set => SetSurroundKind(SurroundKind.None, value);
+        }
+
+        public bool SurroundShadow
+        {
+            get => _surroundKind == SurroundKind.Shadow;
+            set => SetSurroundKind(SurroundKind.Shadow, value);
+        }
+
+        public bool SurroundGlow
+        {
+            get => _surroundKind == SurroundKind.Glow;
+            set => SetSurroundKind(SurroundKind.Glow, value);
+        }
+
+        public bool SurroundOutline
+        {
+            get => _surroundKind == SurroundKind.Outline;
+            set => SetSurroundKind(SurroundKind.Outline, value);
+        }
+
+        /// <summary>The colour and size rows: every surround has both, and None has neither.</summary>
+        public bool ShowSurroundColor => _surroundKind != SurroundKind.None;
+
+        public bool ShowSurroundSize => _surroundKind != SurroundKind.None;
+
+        /// <summary>The distance row — a shadow's alone. A glow and an outline sit on the item, so
+        /// there is nothing to move them by.</summary>
+        public bool ShowSurroundDistance => _surroundKind == SurroundKind.Shadow;
+
+        /// <summary>What the size row is called, because the one number means a different thing per
+        /// style: how far a shadow or glow bleeds out, how thick an outline is drawn.</summary>
+        public string SurroundSizeLabel => _surroundKind switch
+        {
+            SurroundKind.Glow => "Spread",
+            SurroundKind.Outline => "Thickness",
+            _ => "Softness",
+        };
+
+        /// <summary>The surround colour as <c>#RRGGBB</c> or <c>#AARRGGBB</c> — alpha included, which
+        /// is how strongly it reads. A half-typed value stays in the well unwritten, exactly
+        /// as <see cref="TextColorHex"/> does.</summary>
+        public string SurroundColorHex
+        {
+            get => _surroundColorHex;
+            set
+            {
+                if (!Set(ref _surroundColorHex, value) || _syncing)
+                    return;
+
+                RaiseSurroundPreviews();
+
+                if (TryParseArgb(value, out var argb))
+                    EditSurround("sel:surroundcolor", s => s.Color = argb);
+            }
+        }
+
+        /// <summary>How far the surround spreads, as a fraction of the item's drawn extent (the panel
+        /// shows it as a percentage) — see <see cref="SurroundSizeLabel"/> for what it means per
+        /// style.</summary>
+        public double SurroundSize
+        {
+            get => _surroundSize;
+            set
+            {
+                value = Clamp(value, 0, MaxSurroundSize);
+                if (!Set(ref _surroundSize, value) || _syncing)
+                    return;
+
+                RaiseSurroundPreviews();
+                EditSurround("sel:surroundsize", s => s.Size = value);
+            }
+        }
+
+        /// <summary>How far the shadow falls, as the same kind of fraction. The light direction is
+        /// the compositor's and fixed (down-right), so distance is the only dial.</summary>
+        public double SurroundDistance
+        {
+            get => _surroundDistance;
+            set
+            {
+                value = Clamp(value, 0, MaxSurroundDistance);
+                if (!Set(ref _surroundDistance, value) || _syncing)
+                    return;
+
+                RaiseSurroundPreviews();
+                EditSurround("sel:surrounddistance", s => s.Distance = value);
+            }
+        }
+
+        /// <summary>What the three surround rows' reset dots offer: the current style's own starting
+        /// numbers for the current kind of item, which is why the dots bind these rather than
+        /// carrying a fixed attribute.</summary>
+        public string DefaultSurroundColorHex => HexOfArgb(SurroundDefaults().Color);
+
+        public double DefaultSurroundSize => SurroundDefaults().Size;
+
+        public double DefaultSurroundDistance => SurroundDefaults().Distance;
+
+        private (uint Color, double Size, double Distance) SurroundDefaults() =>
+            Surround.DefaultsFor(_surroundKind, _surroundSubject == SurroundSubject.Cursor);
+
+        /// <summary>
+        /// What each tile draws: the kind that tile stands for, at the numbers it would be drawn
+        /// with — the <b>live</b> ones for the style currently picked, so the picked tile follows the
+        /// rows below it as they are dialled, and the style's own defaults for the other two (they
+        /// have no configuration of their own until they are chosen). The None tile needs none of
+        /// this: it draws the bare item.
+        /// </summary>
+        /// <remarks>A fresh object on every read, which is what makes the tile's binding repaint —
+        /// and why these are raised by hand wherever a dial moves.</remarks>
+        public Surround SurroundPreviewShadow => SurroundPreviewOf(SurroundKind.Shadow);
+
+        public Surround SurroundPreviewGlow => SurroundPreviewOf(SurroundKind.Glow);
+
+        public Surround SurroundPreviewOutline => SurroundPreviewOf(SurroundKind.Outline);
+
+        private Surround SurroundPreviewOf(SurroundKind kind)
+        {
+            var cursor = _surroundSubject == SurroundSubject.Cursor;
+            if (kind != _surroundKind)
+                return Surround.Create(kind, cursor);
+
+            return new Surround
+            {
+                Kind = kind,
+                Color = TryParseArgb(_surroundColorHex, out var argb)
+                    ? argb
+                    : Surround.DefaultsFor(kind, cursor).Color,
+                Size = _surroundSize,
+                Distance = _surroundDistance,
+            };
+        }
+
+        private void RaiseSurroundPreviews()
+        {
+            OnPropertyChanged(nameof(SurroundPreviewShadow));
+            OnPropertyChanged(nameof(SurroundPreviewGlow));
+            OnPropertyChanged(nameof(SurroundPreviewOutline));
         }
 
         // ------------------------------------------------------------------------------- ramps
@@ -1757,8 +1989,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (item?.Content is CursorContent cursor)
                 {
                     Set(ref _cursorStyle, cursor.Style ?? DefaultCursorStyleOption.Value, nameof(CursorStyle));
+                    Set(ref _cursorVariant, cursor.Variant, nameof(CursorVariant));
                     Set(ref _cursorSize, cursor.Size, nameof(CursorSize));
-                    Set(ref _cursorDropShadow, cursor.DropShadow, nameof(CursorDropShadow));
                     Set(ref _cursorClickAnimation, cursor.ClickAnimation ?? DefaultClickAnimationOption.Value,
                         nameof(CursorClickAnimation));
                     Set(ref _cursorClickColor, cursor.ClickColor, nameof(CursorClickColor));
@@ -1767,6 +1999,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _cursorAnimationSpeed, cursor.AnimationSpeed, nameof(CursorAnimationSpeed));
                     OnPropertyChanged(nameof(CursorGlyphEnabled));
                     OnPropertyChanged(nameof(CursorHighlightEnabled));
+                    OnPropertyChanged(nameof(CursorVariantOptions));
+                    OnPropertyChanged(nameof(CursorVariantsVisible));
                 }
 
                 if (item?.Content is KeyboardContent keyboard)
@@ -1777,6 +2011,28 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _keyboardTextColorHex, HexOfArgb(keyboard.TextColor), nameof(KeyboardTextColorHex));
                     Set(ref _keyboardBackColorHex, HexOfArgb(keyboard.BackgroundColor), nameof(KeyboardBackColorHex));
                 }
+
+                // the surround section is shared by the pictures and the cursor glyph; which of the
+                // two it is decides what its dials default to, so the subject is read before them.
+                _surroundSubject = isPicture ? SurroundSubject.Picture
+                    : isCursor ? SurroundSubject.Cursor
+                    : SurroundSubject.None;
+                OnPropertyChanged(nameof(ShowSurround));
+
+                var surround = item?.Surround;
+                SetSurroundFlags(surround?.Kind ?? SurroundKind.None);
+                // no surround = keep whatever the rows last showed (they are hidden anyway), so the
+                // numbers do not flicker as the selection moves between bare items
+                if (surround != null)
+                {
+                    Set(ref _surroundColorHex, HexOfArgb(surround.Color), nameof(SurroundColorHex));
+                    Set(ref _surroundSize, surround.Size, nameof(SurroundSize));
+                    Set(ref _surroundDistance, surround.Distance, nameof(SurroundDistance));
+                }
+
+                // the tiles preview the live numbers, and the subject decides what the unpicked
+                // styles would start at — both have just moved
+                RaiseSurroundPreviews();
 
                 var transform = item?.Transform ?? new Transform();
                 Set(ref _positionX, transform.X, nameof(PositionX));
@@ -1968,6 +2224,109 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (i.Content is TContent content)
                     edit(content);
             }, $"{coalesceKey}:{scope}", structural: false, origin: this);
+        }
+
+        /// <summary>Tile setter body: mask-tile semantics (only a true write applies), then the new
+        /// style's own starting numbers. Nothing carries over from the style being left behind — the
+        /// two dials mean different things per style (see <see cref="Surround.DefaultsFor"/>), so
+        /// a remembered softness would arrive as a nonsense thickness.</summary>
+        private void SetSurroundKind(SurroundKind kind, bool selected)
+        {
+            if (!selected)
+            {
+                // a radio group deselecting the loser; the winner's own set does the work
+                if (_surroundKind == kind && !_syncing)
+                    OnPropertyChanged(SurroundTileProperty(kind));
+                return;
+            }
+
+            if (_surroundKind == kind)
+                return;
+
+            SetSurroundFlags(kind);
+
+            if (_syncing)
+                return;
+
+            var (color, size, distance) = SurroundDefaults();
+            Set(ref _surroundColorHex, HexOfArgb(color), nameof(SurroundColorHex));
+            Set(ref _surroundSize, size, nameof(SurroundSize));
+            Set(ref _surroundDistance, distance, nameof(SurroundDistance));
+            // AFTER the seeding, not only inside SetSurroundFlags above: the newly picked tile
+            // previews the live dials, and until this line they are still the previous style's (a
+            // tile picked from None would preview a zero-sized surround, which draws nothing).
+            RaiseSurroundPreviews();
+            ApplySurround();
+        }
+
+        /// <summary>Moves the selection to <paramref name="kind"/>, raising the tiles that flipped
+        /// plus everything the kind decides (which rows show, what the size row is called, what the
+        /// dots reset to).</summary>
+        private void SetSurroundFlags(SurroundKind kind)
+        {
+            var previous = _surroundKind;
+            _surroundKind = kind;
+
+            foreach (var name in new[] { previous, kind }.Distinct().Select(SurroundTileProperty))
+                OnPropertyChanged(name);
+
+            OnPropertyChanged(nameof(ShowSurroundColor));
+            OnPropertyChanged(nameof(ShowSurroundSize));
+            OnPropertyChanged(nameof(ShowSurroundDistance));
+            OnPropertyChanged(nameof(SurroundSizeLabel));
+            OnPropertyChanged(nameof(DefaultSurroundColorHex));
+            OnPropertyChanged(nameof(DefaultSurroundSize));
+            OnPropertyChanged(nameof(DefaultSurroundDistance));
+            // the picked tile previews the live numbers and the others their own defaults, so which
+            // tile is picked changes what all three of them draw
+            RaiseSurroundPreviews();
+        }
+
+        private static string SurroundTileProperty(SurroundKind kind) => kind switch
+        {
+            SurroundKind.Shadow => nameof(SurroundShadow),
+            SurroundKind.Glow => nameof(SurroundGlow),
+            SurroundKind.Outline => nameof(SurroundOutline),
+            _ => nameof(SurroundNone),
+        };
+
+        /// <summary>Writes the surround the section currently describes, or removes it for None
+        /// (null, not a stored kind of None — "nothing around it" has exactly one representation on
+        /// disk, the trade the crop and the ramps make). Built inside the mutation so a replayed edit
+        /// can never hand two projects the same object.</summary>
+        private void ApplySurround()
+        {
+            if (_surroundKind == SurroundKind.None)
+            {
+                EditRow("sel:surround", i => i.Surround = null);
+                return;
+            }
+
+            var kind = _surroundKind;
+            var color = TryParseArgb(_surroundColorHex, out var argb) ? argb : SurroundDefaults().Color;
+            var size = _surroundSize;
+            var distance = _surroundDistance;
+
+            EditRow("sel:surround", i => i.Surround = new Surround
+            {
+                Kind = kind,
+                Color = color,
+                Size = size,
+                Distance = distance,
+            });
+        }
+
+        /// <summary>A surround dial's write: row-wide like every other property of how the row's
+        /// picture is drawn, and a no-op on an item with no surround — the section's bindings stay
+        /// live while it is hidden, so a stale write must find nothing to do
+        /// (<see cref="EditText"/>'s rule).</summary>
+        private void EditSurround(string coalesceKey, Action<Surround> edit)
+        {
+            EditRow(coalesceKey, i =>
+            {
+                if (i.Surround != null)
+                    edit(i.Surround);
+            });
         }
 
         private void SetMaskFlags(bool square, bool circle, bool rounded, bool squircle)

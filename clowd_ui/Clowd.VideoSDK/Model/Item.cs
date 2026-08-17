@@ -34,6 +34,13 @@ public sealed class Item
 
     public Transform Transform { get; set; } = new Transform();
 
+    /// <summary>What is drawn AROUND the item's silhouette (shadow / glow / outline), or null for a
+    /// bare item. Read by the picture draws and the themed cursor glyph only. Deliberately not
+    /// called an effect: an effect will mean something applied to the item's own pixels (a blur, a
+    /// colour grade), which is a different thing on a different side of the silhouette — see
+    /// <see cref="Clowd.VideoSDK.Model.Surround"/>.</summary>
+    public Surround Surround { get; set; }
+
     /// <summary>Transition played over the first part of the item, or null for a hard start.</summary>
     public Transition Entry { get; set; }
 
