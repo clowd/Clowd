@@ -231,6 +231,21 @@ public sealed class CursorContent : ItemContent
     };
 }
 
+/// <summary>Which keystroke runs the overlay shows. Serialized as a string (see
+/// <see cref="ProjectJsonContext"/>), so the names are wire contract.</summary>
+public enum KeystrokeFilter
+{
+    /// <summary>Everything the capture recorded — typing included.</summary>
+    None,
+
+    /// <summary>Only the keys that draw as keycaps: shortcuts, plus every non-printable key the
+    /// overlay would render as a key (Esc, Enter, F5, …). Plain typing is dropped.</summary>
+    Special,
+
+    /// <summary>Only shortcut chords (a non-shift modifier + keys, e.g. Ctrl+C).</summary>
+    Shortcuts,
+}
+
 /// <summary>A keystroke overlay driven by the recording's input-capture data
 /// (<see cref="Source.InputCapturePath"/>). Same hard-sync rules as <see cref="CursorContent"/>;
 /// unlike it, placement <b>is</b> the item's <see cref="Item.Transform"/> — X/Y anchor the
@@ -263,6 +278,9 @@ public sealed class KeyboardContent : ItemContent
     /// 0..10000.</summary>
     public int PauseBreakMs { get; set; } = 1000;
 
+    /// <summary>Which keystrokes the overlay shows (see <see cref="KeystrokeFilter"/>).</summary>
+    public KeystrokeFilter Filter { get; set; } = KeystrokeFilter.None;
+
     /// <summary>Typed text colour, packed ARGB. Styles the plain-typing pill's text only — the
     /// special keys draw as keycaps with their own fixed livery.</summary>
     public uint TextColor { get; set; } = DefaultTextColor;
@@ -277,6 +295,7 @@ public sealed class KeyboardContent : ItemContent
         FontSize = FontSize,
         LingerMs = LingerMs,
         PauseBreakMs = PauseBreakMs,
+        Filter = Filter,
         TextColor = TextColor,
         BackgroundColor = BackgroundColor,
     };

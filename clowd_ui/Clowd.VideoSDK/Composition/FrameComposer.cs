@@ -273,12 +273,13 @@ namespace Clowd.VideoSDK.Composition
         /// screen item even without a cursor track — the screen stream is captured cursor-less, so
         /// the cursor would otherwise simply be lost. Drawn through the screen item's own
         /// <see cref="PictureMapping"/> and clips — the sprite lands exactly where the recorder
-        /// sampled it, crop/aspect included. Suppressed the moment any
-        /// <see cref="CursorContent"/> item for the source is active at <paramref name="timeTicks"/>
-        /// (the cursor track owns the cursor then, whatever its style), and skipped for hidden
-        /// cursors (always debounced — see <see cref="InputCapture.IsInactiveAt"/>), positions
-        /// outside the capture region and frames carrying no sprite (a v1 file or a degraded
-        /// capture).
+        /// sampled it, crop/aspect included. Suppressed the moment the project holds any
+        /// <see cref="CursorContent"/> item for the source — active at this instant or not: once a
+        /// cursor track exists, it owns the cursor outright, so a gap the user cut into it means
+        /// "no cursor here", not "back to the default" (deleting the track's last item restores
+        /// the default). Also skipped for hidden cursors (always debounced — see
+        /// <see cref="InputCapture.IsInactiveAt"/>), positions outside the capture region and
+        /// frames carrying no sprite (a v1 file or a degraded capture).
         /// </summary>
         private static void DrawDefaultCursorOverlay(Project project, MediaContent media,
             long timeTicks, long sourceTicks, SKImage screenImage, Transform transform,
@@ -289,7 +290,7 @@ namespace Clowd.VideoSDK.Composition
                 return;
             if (!IsScreenStream(source, media.StreamIndex))
                 return; // the overlay belongs to the screen stream, not webcam items
-            if (HasActiveCursorItem(project, media.SourceId, timeTicks))
+            if (HasCursorItem(project, media.SourceId))
                 return;
 
             var capture = InputCapture.Get(source.InputCapturePath);
@@ -437,17 +438,18 @@ namespace Clowd.VideoSDK.Composition
             }
         }
 
-        /// <summary>Whether any <see cref="CursorContent"/> item for the source is active at
-        /// <paramref name="timeTicks"/> — the cursor track owns the cursor then and the default
-        /// overlay stands down (a hidden cursor track therefore hides the cursor, deliberately).</summary>
-        internal static bool HasActiveCursorItem(Project project, Guid sourceId, long timeTicks)
+        /// <summary>Whether the project holds any <see cref="CursorContent"/> item for the source,
+        /// anywhere on the timeline — the cursor track owns the cursor then and the default
+        /// overlay stands down everywhere: in a gap the user trimmed into the track, under a
+        /// hidden track, all of it deliberate. Only deleting the track's last cursor item hands
+        /// the cursor back to the default overlay.</summary>
+        internal static bool HasCursorItem(Project project, Guid sourceId)
         {
             if (project?.Items == null)
                 return false;
             foreach (var item in project.Items)
             {
-                if (item.Content is CursorContent cursor && cursor.SourceId == sourceId
-                    && timeTicks >= item.TimelineStartTicks && timeTicks < item.TimelineEndTicks)
+                if (item.Content is CursorContent cursor && cursor.SourceId == sourceId)
                     return true;
             }
             return false;
@@ -699,7 +701,8 @@ namespace Clowd.VideoSDK.Composition
             var source = FindSource(project, keyboard.SourceId);
             if (source == null || string.IsNullOrEmpty(source.InputCapturePath))
                 return;
-            var runs = KeyboardLayout.GetRuns(source.InputCapturePath, Math.Max(0, keyboard.PauseBreakMs));
+            var runs = KeyboardLayout.GetRuns(source.InputCapturePath, Math.Max(0, keyboard.PauseBreakMs),
+                keyboard.Filter);
             if (runs.Count == 0)
                 return;
 

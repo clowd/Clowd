@@ -124,6 +124,81 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Shortcuts_filter_keeps_only_chords()
+        {
+            var events = new List<InputEvent>();
+            double t = 0;
+            Type(events, ref t, "hello");
+            events.Add(Kd(t, 27)); // Esc — special, but not a chord
+            t += 50;
+            events.Add(Kd(t, 162)); // Ctrl down
+            t += 50;
+            events.Add(Kd(t, 67));
+            t += 50;
+            events.Add(Ku(t, 162));
+
+            var runs = KeyboardLayout.Segment(events, pauseBreakMs: 1000, KeystrokeFilter.Shortcuts);
+
+            var run = Assert.Single(runs);
+            Assert.True(run.IsChord);
+            Assert.Equal("Ctrl+C", run.FullText);
+        }
+
+        [Fact]
+        public void Special_filter_keeps_keycaps_and_chords_and_drops_typing()
+        {
+            // the typing between the two special keys neither joins the run nor breaks it — the
+            // specials group by their own gap
+            var events = new List<InputEvent>();
+            double t = 0;
+            Type(events, ref t, "abc");
+            events.Add(Kd(t, 8)); // Bksp
+            t += 50;
+            Type(events, ref t, "de");
+            events.Add(Kd(t, 27)); // Esc closes the run, key included
+            t += 50;
+            events.Add(Kd(t, 162)); // Ctrl down
+            t += 50;
+            events.Add(Kd(t, 75)); // K
+            t += 50;
+            events.Add(Ku(t, 162));
+
+            var runs = KeyboardLayout.Segment(events, pauseBreakMs: 1000, KeystrokeFilter.Special);
+
+            Assert.Equal(2, runs.Count);
+            Assert.Equal("Bksp Esc", runs[0].FullText);
+            Assert.False(runs[0].IsChord);
+            Assert.Equal("Ctrl+K", runs[1].FullText);
+            Assert.True(runs[1].IsChord);
+        }
+
+        [Fact]
+        public void Filtered_runs_are_cached_per_filter()
+        {
+            string path = Path.Combine(Path.GetTempPath(), $"kbfilter-{Guid.NewGuid():N}.jsonl");
+            File.WriteAllLines(path, new[]
+            {
+                """{"type":"header","version":2,"region":[0,0,1920,1080],"fps_num":30,"fps_den":1,"platform":"windows"}""",
+                """{"type":"event","t":0,"kind":"kd","vk":65,"ch":"a"}""",
+                """{"type":"event","t":50,"kind":"kd","vk":27}""",
+            });
+            try
+            {
+                var all = KeyboardLayout.GetRuns(path, 1000);
+                var special = KeyboardLayout.GetRuns(path, 1000, KeystrokeFilter.Special);
+                Assert.NotSame(all, special);
+                Assert.Same(special, KeyboardLayout.GetRuns(path, 1000, KeystrokeFilter.Special));
+                Assert.Equal("a Esc", Assert.Single(all).FullText);
+                Assert.Equal("Esc", Assert.Single(special).FullText);
+                Assert.Empty(KeyboardLayout.GetRuns(path, 1000, KeystrokeFilter.Shortcuts));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
         public void Shift_alone_never_chords()
         {
             var runs = KeyboardLayout.Segment(new List<InputEvent>
