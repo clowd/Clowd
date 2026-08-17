@@ -368,6 +368,15 @@ namespace Clowd.UI.VideoEditor.Timeline
             "15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1," +
             "13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z");
 
+        /// <summary>Fast-forward chevrons without the end bar (16x16 box): the "this clip keeps
+        /// going past the viewport edge" jump affordance on the timeline surface.</summary>
+        public static readonly Geometry JumpRightGeometry = StreamGeometry.Parse(
+            "M2,3 L8,8 L2,13 Z M8,3 L14,8 L8,13 Z");
+
+        /// <summary>The same, mirrored for the left edge.</summary>
+        public static readonly Geometry JumpLeftGeometry = StreamGeometry.Parse(
+            "M14,3 L8,8 L14,13 Z M8,3 L2,8 L8,13 Z");
+
         /// <summary>A <see cref="GlyphIcon"/> drawing <paramref name="key"/>'s glyph centred in a
         /// <paramref name="box"/> square — see that class for why a <see cref="Path"/> with
         /// <c>Stretch.Uniform</c> would hang wide glyphs (the old 26 x 14 camera icon) above the
