@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Clowd.UI.VideoEditor.Inspector;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Xunit;
@@ -178,8 +179,10 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void NativeStyle_TurnsOffTheGlyphOnlyRows()
+        public void NativeStyle_HidesTheGlyphOnlyRows()
         {
+            // the size and shadow rows bind their IsVisible to this: under native they do not
+            // merely grey out, they leave the panel
             var (session, vm) = NewInspector(out _);
             var cursor = session.AddCursorTrack();
             session.Select(cursor.Id);
@@ -194,6 +197,48 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void OverlayRows_AreSyncedButOfferNoDesync()
+        {
+            // the overlays read the recording's input capture at the recording's own times, so
+            // their sync is not a toggle: the banner shows, the Desync button does not
+            var (session, vm) = NewInspector(out var screen);
+            var cursor = session.AddCursorTrack();
+            var keys = session.AddKeyboardTrack();
+
+            session.Select(cursor.Id);
+            Assert.True(vm.IsLinked);
+            Assert.False(vm.CanDesync);
+            Assert.False(((System.Windows.Input.ICommand)vm.CommandUnlink).CanExecute(null));
+
+            session.Select(keys.Id);
+            Assert.True(vm.IsLinked);
+            Assert.False(vm.CanDesync);
+            Assert.False(((System.Windows.Input.ICommand)vm.CommandUnlink).CanExecute(null));
+
+            // an ordinary linked media row keeps the way out
+            session.Select(screen.Id);
+            Assert.True(vm.IsLinked);
+            Assert.True(vm.CanDesync);
+            Assert.True(((System.Windows.Input.ICommand)vm.CommandUnlink).CanExecute(null));
+        }
+
+        [Fact]
+        public void ClickColor_ReachesTheHighlightPreviews()
+        {
+            var (session, vm) = NewInspector(out _);
+            var cursor = session.AddCursorTrack();
+            session.Select(cursor.Id);
+
+            Assert.Equal(SelectedItemViewModel.DefaultCursorClickColor, vm.CursorClickColor);
+            Assert.All(CursorItems(session), c => Assert.Equal(vm.CursorClickColor, c.ClickColor));
+
+            session.EditItem(cursor.Id, i => ((CursorContent)i.Content).ClickColor = 0x8000FF00,
+                "test", structural: false, origin: new object());
+
+            Assert.Equal(0x8000FF00u, vm.CursorClickColor);
+        }
+
+        [Fact]
         public void CursorSizeShadowAndClicks_WriteTheWholeRow()
         {
             var (session, vm) = NewInspector(out _);
@@ -201,19 +246,73 @@ namespace Clowd.VideoSDK.Tests
             session.Select(cursor.Id);
 
             Assert.Equal(1.0, vm.CursorSize);
-            Assert.False(vm.CursorDropShadow);
+            Assert.True(vm.CursorDropShadow);
             Assert.Equal("none", vm.CursorClickAnimation.Value);
 
             vm.CursorSize = 2.0;
-            vm.CursorDropShadow = true;
+            vm.CursorDropShadow = false;
             vm.CursorClickAnimation = SelectedItemViewModel.ClickAnimationOptions.First(o => o.Value == "ripple");
 
             Assert.All(CursorItems(session), c =>
             {
                 Assert.Equal(2.0, c.Size);
-                Assert.True(c.DropShadow);
+                Assert.False(c.DropShadow);
                 Assert.Equal("ripple", c.ClickAnimation);
             });
+        }
+
+        [Fact]
+        public void HighlightDials_WriteTheWholeRowAndClampToTheModelsRange()
+        {
+            var (session, vm) = NewInspector(out _);
+            var cursor = session.AddCursorTrack();
+            session.Select(cursor.Id);
+
+            Assert.Equal(1.0, vm.CursorHoldSize);
+            Assert.Equal(1.0, vm.CursorClickSize);
+            Assert.Equal(1.0, vm.CursorAnimationSpeed);
+
+            vm.CursorHoldSize = 2.5;
+            vm.CursorClickSize = 0.5;
+            vm.CursorAnimationSpeed = 3.0;
+
+            Assert.All(CursorItems(session), c =>
+            {
+                Assert.Equal(2.5, c.HoldSize);
+                Assert.Equal(0.5, c.ClickSize);
+                Assert.Equal(3.0, c.AnimationSpeed);
+            });
+
+            // the spinners offer exactly the range Project.Validate accepts, so a clamped write
+            // can never produce a project that fails validation
+            vm.CursorHoldSize = 99;
+            vm.CursorClickSize = -1;
+            vm.CursorAnimationSpeed = Double.NaN;
+
+            Assert.Equal(SelectedItemViewModel.MaxHighlightFactor, vm.CursorHoldSize);
+            Assert.Equal(SelectedItemViewModel.MinHighlightFactor, vm.CursorClickSize);
+            Assert.Equal(SelectedItemViewModel.MinHighlightFactor, vm.CursorAnimationSpeed);
+            Assert.Equal(CursorContent.MinHighlightFactor, SelectedItemViewModel.MinHighlightFactor);
+            Assert.Equal(CursorContent.MaxHighlightFactor, SelectedItemViewModel.MaxHighlightFactor);
+        }
+
+        [Fact]
+        public void HighlightDials_AreHiddenWhileNothingIsDrawn()
+        {
+            // the three rows bind their IsVisible to this: "none" draws no highlight, so its size
+            // and speed dials leave the panel rather than sit there inert
+            var (session, vm) = NewInspector(out _);
+            var cursor = session.AddCursorTrack();
+            session.Select(cursor.Id);
+
+            Assert.Equal("none", vm.CursorClickAnimation.Value);
+            Assert.False(vm.CursorHighlightEnabled);
+
+            vm.CursorClickAnimation = SelectedItemViewModel.ClickAnimationOptions.First(o => o.Value == "pulse");
+            Assert.True(vm.CursorHighlightEnabled);
+
+            vm.CursorClickAnimation = SelectedItemViewModel.DefaultClickAnimationOption;
+            Assert.False(vm.CursorHighlightEnabled);
         }
 
         [Fact]
@@ -245,14 +344,21 @@ namespace Clowd.VideoSDK.Tests
                 var content = (CursorContent)i.Content;
                 content.Style = "doodle";
                 content.Size = 1.75;
-                content.DropShadow = true;
+                content.DropShadow = false;
                 content.ClickAnimation = "pulse";
+                content.HoldSize = 1.5;
+                content.ClickSize = 2.5;
+                content.AnimationSpeed = 0.75;
             }, "test", structural: false, origin: new object());
 
             Assert.Equal("doodle", vm.CursorStyle.Value);
             Assert.Equal(1.75, vm.CursorSize);
-            Assert.True(vm.CursorDropShadow);
+            Assert.False(vm.CursorDropShadow);
             Assert.Equal("pulse", vm.CursorClickAnimation.Value);
+            Assert.True(vm.CursorHighlightEnabled);
+            Assert.Equal(1.5, vm.CursorHoldSize);
+            Assert.Equal(2.5, vm.CursorClickSize);
+            Assert.Equal(0.75, vm.CursorAnimationSpeed);
         }
 
         // ------------------------------------------------------------------------------ keyboard
@@ -265,23 +371,50 @@ namespace Clowd.VideoSDK.Tests
             session.Select(keys.Id);
 
             Assert.Equal(2, KeyboardItems(session).Length);
-            Assert.Equal(28, vm.KeyboardFontSize);
-            Assert.Equal(300, vm.KeyboardLingerMs);
-            Assert.Equal(250, vm.KeyboardFadeMs);
+            Assert.Equal(40, vm.KeyboardFontSize);
+            Assert.Equal(1000, vm.KeyboardLingerMs);
             Assert.Equal(1000, vm.KeyboardPauseBreakMs);
 
-            vm.KeyboardFontSize = 40;
+            // every one of these differs from the default, or the write would coalesce away and
+            // the fan-out would go untested
+            vm.KeyboardFontSize = 56;
             vm.KeyboardLingerMs = 500;
-            vm.KeyboardFadeMs = 100;
             vm.KeyboardPauseBreakMs = 2000;
 
             Assert.All(KeyboardItems(session), k =>
             {
-                Assert.Equal(40, k.FontSize);
+                Assert.Equal(56, k.FontSize);
                 Assert.Equal(500, k.LingerMs);
-                Assert.Equal(100, k.FadeMs);
                 Assert.Equal(2000, k.PauseBreakMs);
             });
+        }
+
+        [Fact]
+        public void KeyboardColorWells_WriteTheWholeRow()
+        {
+            var (session, vm) = NewInspector(out _);
+            var keys = session.AddKeyboardTrack();
+            session.Select(keys.Id);
+
+            Assert.Equal(SelectedItemViewModel.DefaultKeyboardTextColorHex, vm.KeyboardTextColorHex);
+            Assert.Equal(SelectedItemViewModel.DefaultKeyboardBackColorHex, vm.KeyboardBackColorHex);
+
+            vm.KeyboardTextColorHex = "#FF11AA33";
+            vm.KeyboardBackColorHex = "#402244FF";
+
+            Assert.All(KeyboardItems(session), k =>
+            {
+                Assert.Equal(0xFF11AA33u, k.TextColor);
+                Assert.Equal(0x402244FFu, k.BackgroundColor);
+            });
+
+            // a #RRGGBB literal is opaque; half-typed values stay in the box unwritten
+            vm.KeyboardTextColorHex = "#00FF00";
+            Assert.All(KeyboardItems(session), k => Assert.Equal(0xFF00FF00u, k.TextColor));
+
+            vm.KeyboardTextColorHex = "#00FF0";
+            Assert.Equal("#00FF0", vm.KeyboardTextColorHex);
+            Assert.All(KeyboardItems(session), k => Assert.Equal(0xFF00FF00u, k.TextColor));
         }
 
         [Fact]
@@ -293,18 +426,15 @@ namespace Clowd.VideoSDK.Tests
 
             vm.KeyboardFontSize = 5000;
             vm.KeyboardLingerMs = 99_999;
-            vm.KeyboardFadeMs = -1;
             vm.KeyboardPauseBreakMs = Double.NaN;
 
             Assert.Equal(SelectedItemViewModel.MaxKeyboardFontSize, vm.KeyboardFontSize);
             Assert.Equal(SelectedItemViewModel.MaxKeyboardMs, vm.KeyboardLingerMs);
-            Assert.Equal(0, vm.KeyboardFadeMs);
             Assert.Equal(0, vm.KeyboardPauseBreakMs);
 
             var content = (KeyboardContent)Live(session, keys.Id).Content;
             Assert.Equal(SelectedItemViewModel.MaxKeyboardFontSize, content.FontSize);
             Assert.Equal((int)SelectedItemViewModel.MaxKeyboardMs, content.LingerMs);
-            Assert.Equal(0, content.FadeMs);
             Assert.Equal(0, content.PauseBreakMs);
         }
 
@@ -335,14 +465,37 @@ namespace Clowd.VideoSDK.Tests
                 var content = (KeyboardContent)i.Content;
                 content.FontSize = 64;
                 content.LingerMs = 111;
-                content.FadeMs = 222;
                 content.PauseBreakMs = 333;
+                content.TextColor = 0xFF010203;
+                content.BackgroundColor = 0x11223344;
             }, "test", structural: false, origin: new object());
 
             Assert.Equal(64, vm.KeyboardFontSize);
             Assert.Equal(111, vm.KeyboardLingerMs);
-            Assert.Equal(222, vm.KeyboardFadeMs);
             Assert.Equal(333, vm.KeyboardPauseBreakMs);
+            Assert.Equal("#FF010203", vm.KeyboardTextColorHex);
+            Assert.Equal("#11223344", vm.KeyboardBackColorHex);
+        }
+
+        /// <summary>The animation section stays on for a keystroke overlay — it is what animates
+        /// each row — and the factory's defaults are the ones the user sees.</summary>
+        [Fact]
+        public void KeyboardRows_ArriveWithTheFactorysRowAnimation()
+        {
+            var (session, vm) = NewInspector(out _);
+            var keys = session.AddKeyboardTrack();
+            session.Select(keys.Id);
+
+            Assert.True(vm.ShowTransitions);
+            Assert.Equal(TransitionKind.SlideUp, vm.EntryKind);
+            Assert.Equal(TransitionKind.Fade, vm.ExitKind);
+            Assert.Equal(300, vm.EntryDurationMs);
+            Assert.Equal(300, vm.ExitDurationMs);
+
+            // transitions are per item, not per overlay row — the same rule every other item
+            // kind's animation follows, and the only keystroke editor that does not fan out
+            vm.EntryKind = TransitionKind.Fade;
+            Assert.Equal(TransitionKind.Fade, Live(session, keys.Id).Entry.Kind);
         }
 
         // ------------------------------------------------------------------------------- options
@@ -355,13 +508,25 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(CursorContent.ClickAnimations.ToArray(),
                 SelectedItemViewModel.ClickAnimationOptions.Select(o => o.Value).ToArray());
 
-            // the dropdown selects by reference, so the defaults must be list members
+            // the tile pickers select by reference, so the defaults must be list members
             Assert.Contains(SelectedItemViewModel.DefaultCursorStyleOption, SelectedItemViewModel.CursorStyleOptions);
             Assert.Contains(SelectedItemViewModel.DefaultClickAnimationOption, SelectedItemViewModel.ClickAnimationOptions);
             Assert.Equal("ios-glyph", SelectedItemViewModel.DefaultCursorStyleOption.Value);
             Assert.Equal("none", SelectedItemViewModel.DefaultClickAnimationOption.Value);
             Assert.Equal("iOS Glyph", SelectedItemViewModel.DefaultCursorStyleOption.Label);
             Assert.Equal("Native", SelectedItemViewModel.CursorStyleOptions[0].Label);
+
+            // every style tile but native draws real artwork; native's tile is the outline
+            // stand-in, so it is the one — and only one — the asset table has nothing for
+            Assert.All(SelectedItemViewModel.CursorStyleOptions, o =>
+                Assert.Equal(o.Value == SelectedItemViewModel.NativeCursorStyle,
+                    CursorAssets.TryGet(o.Value, CursorAssets.KindArrow) == null));
+
+            // the highlight tiles animate off ClickHighlight: "none" is the one that never does
+            Assert.Equal(new[] { "None", "Ripple", "Pulse" },
+                SelectedItemViewModel.ClickAnimationOptions.Select(o => o.Label).ToArray());
+            Assert.All(SelectedItemViewModel.ClickAnimationOptions, o =>
+                Assert.Equal(o.Value != "none", ClickHighlight.TryParse(o.Value, out _)));
         }
 
         [Fact]

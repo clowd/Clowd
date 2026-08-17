@@ -63,6 +63,9 @@ namespace Clowd.VideoSDK.Tests
                     DropShadow = true,
                     ClickAnimation = "ripple",
                     ClickColor = 0xFF3366CC,
+                    HoldSize = 1.25,
+                    ClickSize = 0.75,
+                    AnimationSpeed = 2.0,
                 },
                 LinkGroupId = group,
             };
@@ -77,8 +80,9 @@ namespace Clowd.VideoSDK.Tests
                     SourceId = source.Id,
                     FontSize = 36,
                     LingerMs = 500,
-                    FadeMs = 200,
                     PauseBreakMs = 1500,
+                    TextColor = 0xFF22DD88,
+                    BackgroundColor = 0x66112233,
                 },
                 Transform = new Transform { X = 0.5, Y = 0.85, Scale = 0.5 },
                 LinkGroupId = group,
@@ -133,13 +137,35 @@ namespace Clowd.VideoSDK.Tests
             Assert.True(cursor.DropShadow);
             Assert.Equal("ripple", cursor.ClickAnimation);
             Assert.Equal(0xFF3366CCu, cursor.ClickColor);
+            Assert.Equal(1.25, cursor.HoldSize);
+            Assert.Equal(0.75, cursor.ClickSize);
+            Assert.Equal(2.0, cursor.AnimationSpeed);
 
             var keyboard = (KeyboardContent)restored.Items.Single(i => i.Id == keyboardItem.Id).Content;
             Assert.Equal(((KeyboardContent)keyboardItem.Content).SourceId, keyboard.SourceId);
             Assert.Equal(36, keyboard.FontSize);
             Assert.Equal(500, keyboard.LingerMs);
-            Assert.Equal(200, keyboard.FadeMs);
             Assert.Equal(1500, keyboard.PauseBreakMs);
+            Assert.Equal(0xFF22DD88u, keyboard.TextColor);
+            Assert.Equal(0x66112233u, keyboard.BackgroundColor);
+        }
+
+        /// <summary>The fade time is gone: rows now leave with the item's exit transition. The
+        /// property was never on a shipped wire format, and the reader skips unmapped members, so
+        /// a project that somehow carries one still opens — the old value is simply dropped.</summary>
+        [Fact]
+        public void A_keyboard_item_no_longer_writes_a_fade_and_tolerates_a_stale_one()
+        {
+            var project = OverlayProject(out _, out _, out var keyboardItem);
+            Assert.DoesNotContain("fadeMs", project.ToJson(), StringComparison.OrdinalIgnoreCase);
+
+            var stale = project.ToJson().Replace(
+                "\"lingerMs\": 500", "\"fadeMs\": 250,\n        \"lingerMs\": 500");
+            var restored = Project.FromJson(stale);
+
+            var keyboard = (KeyboardContent)restored.Items.Single(i => i.Id == keyboardItem.Id).Content;
+            Assert.Equal(500, keyboard.LingerMs);
+            Assert.Empty(restored.Validate());
         }
 
         [Fact]
@@ -160,35 +186,54 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(-1, cursor.StreamIndex);
             Assert.Equal("ios-glyph", cursor.Style);
             Assert.Equal(1.0, cursor.Size);
-            Assert.False(cursor.DropShadow);
+            Assert.True(cursor.DropShadow);
             Assert.Equal("none", cursor.ClickAnimation);
             Assert.Equal(0xFFFF0000u, cursor.ClickColor);
+            Assert.Equal(1.0, cursor.HoldSize);
+            Assert.Equal(1.0, cursor.ClickSize);
+            Assert.Equal(1.0, cursor.AnimationSpeed);
 
             var keyboard = new KeyboardContent();
-            Assert.Equal(28, keyboard.FontSize);
-            Assert.Equal(300, keyboard.LingerMs);
-            Assert.Equal(250, keyboard.FadeMs);
+            Assert.Equal(40, keyboard.FontSize);
+            Assert.Equal(1000, keyboard.LingerMs);
             Assert.Equal(1000, keyboard.PauseBreakMs);
+            Assert.Equal(0xFFFFFFFFu, keyboard.TextColor);
+            Assert.Equal(0x8C000000u, keyboard.BackgroundColor); // black at 55%
         }
 
         [Fact]
         public void Overlay_content_clones_are_independent()
         {
-            var cursor = new CursorContent { SourceId = Guid.NewGuid(), StreamIndex = 2, Style = "fluent", Size = 2.0 };
+            var cursor = new CursorContent
+            {
+                SourceId = Guid.NewGuid(), StreamIndex = 2, Style = "fluent", Size = 2.0,
+                HoldSize = 1.5, ClickSize = 0.5, AnimationSpeed = 3.0,
+            };
             var cursorCopy = (CursorContent)cursor.Clone();
             cursorCopy.Style = "native";
             cursorCopy.Size = 0.5;
+            cursorCopy.HoldSize = 4;
+            cursorCopy.ClickSize = 4;
+            cursorCopy.AnimationSpeed = 4;
             Assert.Equal("fluent", cursor.Style);
             Assert.Equal(2.0, cursor.Size);
+            Assert.Equal(1.5, cursor.HoldSize);
+            Assert.Equal(0.5, cursor.ClickSize);
+            Assert.Equal(3.0, cursor.AnimationSpeed);
             Assert.Equal(cursor.SourceId, cursorCopy.SourceId);
             Assert.Equal(2, cursorCopy.StreamIndex);
 
-            var keyboard = new KeyboardContent { SourceId = Guid.NewGuid(), FontSize = 40, LingerMs = 100 };
+            var keyboard = new KeyboardContent
+            {
+                SourceId = Guid.NewGuid(), FontSize = 40, LingerMs = 100, TextColor = 0xFF00FF00,
+            };
             var keyboardCopy = (KeyboardContent)keyboard.Clone();
             keyboardCopy.FontSize = 12;
             keyboardCopy.LingerMs = 900;
+            keyboardCopy.TextColor = 0xFF0000FF;
             Assert.Equal(40, keyboard.FontSize);
             Assert.Equal(100, keyboard.LingerMs);
+            Assert.Equal(0xFF00FF00u, keyboard.TextColor);
             Assert.Equal(keyboard.SourceId, keyboardCopy.SourceId);
         }
 
@@ -251,7 +296,7 @@ namespace Clowd.VideoSDK.Tests
 
         [Theory]
         [InlineData(0.2)]
-        [InlineData(4.1)]
+        [InlineData(5.1)]
         [InlineData(0)]
         [InlineData(Double.NaN)]
         public void Validate_rejects_out_of_range_cursor_sizes(double size)
@@ -265,7 +310,7 @@ namespace Clowd.VideoSDK.Tests
         [Theory]
         [InlineData(0.25)]
         [InlineData(1.0)]
-        [InlineData(4.0)]
+        [InlineData(5.0)]
         public void Validate_accepts_boundary_cursor_sizes(double size)
         {
             var project = OverlayProject(out _, out var cursorItem, out _);
@@ -275,38 +320,82 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData(7.9, 0, 0, 0)]
-        [InlineData(201, 0, 0, 0)]
-        [InlineData(Double.NaN, 0, 0, 0)]
-        [InlineData(28, -1, 0, 0)]
-        [InlineData(28, 10_001, 0, 0)]
-        [InlineData(28, 0, -1, 0)]
-        [InlineData(28, 0, 10_001, 0)]
-        [InlineData(28, 0, 0, -1)]
-        [InlineData(28, 0, 0, 10_001)]
-        public void Validate_rejects_out_of_range_keyboard_values(double fontSize, int linger, int fade, int pause)
+        [InlineData(0.2)]
+        [InlineData(4.1)]
+        [InlineData(0)]
+        [InlineData(Double.NaN)]
+        public void Validate_rejects_out_of_range_highlight_factors(double factor)
+        {
+            var project = OverlayProject(out _, out var cursorItem, out _);
+            var cursor = (CursorContent)cursorItem.Content;
+            cursor.HoldSize = factor;
+            cursor.ClickSize = factor;
+            cursor.AnimationSpeed = factor;
+
+            var errors = project.Validate();
+            Assert.Contains(errors, e => e.Contains("hold size"));
+            Assert.Contains(errors, e => e.Contains("click size"));
+            Assert.Contains(errors, e => e.Contains("animation speed"));
+        }
+
+        [Theory]
+        [InlineData(0.25)]
+        [InlineData(1.0)]
+        [InlineData(4.0)]
+        public void Validate_accepts_boundary_highlight_factors(double factor)
+        {
+            var project = OverlayProject(out _, out var cursorItem, out _);
+            var cursor = (CursorContent)cursorItem.Content;
+            cursor.HoldSize = factor;
+            cursor.ClickSize = factor;
+            cursor.AnimationSpeed = factor;
+
+            Assert.Empty(project.Validate());
+        }
+
+        [Theory]
+        [InlineData(7.9, 0, 0)]
+        [InlineData(201, 0, 0)]
+        [InlineData(Double.NaN, 0, 0)]
+        [InlineData(28, -1, 0)]
+        [InlineData(28, 10_001, 0)]
+        [InlineData(28, 0, -1)]
+        [InlineData(28, 0, 10_001)]
+        public void Validate_rejects_out_of_range_keyboard_values(double fontSize, int linger, int pause)
         {
             var project = OverlayProject(out _, out _, out var keyboardItem);
             var content = (KeyboardContent)keyboardItem.Content;
             content.FontSize = fontSize;
             content.LingerMs = linger;
-            content.FadeMs = fade;
             content.PauseBreakMs = pause;
 
             Assert.Contains(project.Validate(), e => e.Contains("keyboard"));
         }
 
         [Theory]
-        [InlineData(8, 0, 0, 0)]
-        [InlineData(200, 10_000, 10_000, 10_000)]
-        public void Validate_accepts_boundary_keyboard_values(double fontSize, int linger, int fade, int pause)
+        [InlineData(8, 0, 0)]
+        [InlineData(200, 10_000, 10_000)]
+        public void Validate_accepts_boundary_keyboard_values(double fontSize, int linger, int pause)
         {
             var project = OverlayProject(out _, out _, out var keyboardItem);
             var content = (KeyboardContent)keyboardItem.Content;
             content.FontSize = fontSize;
             content.LingerMs = linger;
-            content.FadeMs = fade;
             content.PauseBreakMs = pause;
+
+            Assert.Empty(project.Validate());
+        }
+
+        /// <summary>A keystroke row's entry/exit are ordinary picture transitions — the ramp-only
+        /// rule belongs to effect items, and must not reach across to these.</summary>
+        [Theory]
+        [InlineData(TransitionKind.SlideUp, TransitionKind.Fade)]
+        [InlineData(TransitionKind.Wipe, TransitionKind.SlideDown)]
+        public void Validate_accepts_row_transitions_on_a_keyboard_item(TransitionKind entry, TransitionKind exit)
+        {
+            var project = OverlayProject(out _, out _, out var keyboardItem);
+            keyboardItem.Entry = new Transition { Kind = entry, DurationTicks = Ms(300) };
+            keyboardItem.Exit = new Transition { Kind = exit, DurationTicks = Ms(300) };
 
             Assert.Empty(project.Validate());
         }
