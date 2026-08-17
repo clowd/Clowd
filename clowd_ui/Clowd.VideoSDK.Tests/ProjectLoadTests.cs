@@ -270,6 +270,123 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(whole, Shape(VideoEditPersistence.LoadOrCreate(TempPath(), VideoPath, Probe())));
         }
 
+        // ------------------------------------------------------------------ stream classification
+
+        private static VideoStreamProbe CursorStream(int index = 2) => new VideoStreamProbe
+        {
+            StreamIndex = index,
+            Width = 512,
+            Height = 512,
+            AvgFrameRateNum = 30,
+            AvgFrameRateDen = 1,
+            RFrameRateNum = 30,
+            RFrameRateDen = 1,
+            DurationTicks = DurationMs * Ms,
+        };
+
+        private static MediaProbeResult ProbeOf(params VideoStreamProbe[] streams) => new MediaProbeResult
+        {
+            Path = VideoPath,
+            DurationTicks = DurationMs * Ms,
+            VideoStreams = streams,
+            AudioStreams = new[]
+            {
+                new AudioStreamProbe { StreamIndex = streams.Length, SampleRate = 48_000, Channels = 2, DurationTicks = DurationMs * Ms },
+            },
+            HasAudio = true,
+        };
+
+        private static SessionVideoTrack SessionTrack(int index, int w, int h)
+            => new SessionVideoTrack { Index = index, Width = w, Height = h };
+
+        /// <summary>The session's recorder report says which stream is which; the built project
+        /// records the cursor box and the jsonl on its source (no cursor <i>row</i> — only the
+        /// editor's own factory adds one) and gives the webcam its row as ever.</summary>
+        [Fact]
+        public void Session_hints_classify_the_recordings_streams()
+        {
+            var hints = new RecordingTrackHints
+            {
+                Webcam = SessionTrack(1, 640, 480),
+                Cursor = SessionTrack(2, 512, 512),
+                InputCapturePath = @"C:\recordings\input-capture.jsonl",
+            };
+
+            var project = VideoEditPersistence.LoadOrCreate(null, VideoPath,
+                ProbeOf(ScreenStream(), WebcamStream(), CursorStream()), null, hints);
+
+            Assert.Empty(project.Validate());
+            var source = Assert.Single(project.Sources);
+            Assert.Equal(2, source.CursorStreamIndex);
+            Assert.Equal(@"C:\recordings\input-capture.jsonl", source.InputCapturePath);
+            Assert.Equal(new[] { 0, 1, 2, 3 }, source.Streams.Select(s => s.Index));
+            Assert.Contains(project.Tracks, t => t.Name == "Webcam");
+            Assert.DoesNotContain(project.Tracks, t => t.Name == "Cursor");
+        }
+
+        /// <summary>Without hints (a session predating the report, or none at all) the box is
+        /// still recognized by its fixed 512x512 shape — and crucially never mistaken for a
+        /// webcam, which the old positional rule would have made of it.</summary>
+        [Fact]
+        public void A_512_box_with_no_hints_is_the_cursor_not_a_webcam()
+        {
+            var project = VideoEditPersistence.LoadOrCreate(null, VideoPath,
+                ProbeOf(ScreenStream(), CursorStream(index: 1)));
+
+            var source = Assert.Single(project.Sources);
+            Assert.Equal(1, source.CursorStreamIndex);
+            // only a session knows where the jsonl is; the probe never invents a path
+            Assert.Null(source.InputCapturePath);
+            Assert.DoesNotContain(project.Tracks, t => t.Name == "Webcam");
+        }
+
+        /// <summary>A hint naming a stream the file does not have (a re-encoded copy, a stale
+        /// session) is dropped, and the shape heuristic takes over.</summary>
+        [Fact]
+        public void A_hinted_cursor_index_missing_from_the_file_falls_back_to_the_shape()
+        {
+            var hints = new RecordingTrackHints { Cursor = SessionTrack(5, 512, 512) };
+
+            var project = VideoEditPersistence.LoadOrCreate(null, VideoPath,
+                ProbeOf(ScreenStream(), WebcamStream(), CursorStream(index: 2)), null, hints);
+
+            Assert.Equal(2, Assert.Single(project.Sources).CursorStreamIndex);
+        }
+
+        /// <summary>Old recordings must not grow a cursor overlay: no hint and no 512 box means no
+        /// cursor data on the source at all.</summary>
+        [Fact]
+        public void A_recording_without_input_capture_gets_no_cursor_at_all()
+        {
+            var source = Assert.Single(VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe()).Sources);
+
+            Assert.Null(source.CursorStreamIndex);
+            Assert.Null(source.InputCapturePath);
+        }
+
+        /// <summary>A recording of a 512x512 <i>region</i> is a legal capture whose screen stream
+        /// happens to have the box's shape — stream 0 is always the screen and never claimed.</summary>
+        [Fact]
+        public void A_512x512_recording_region_is_still_the_screen()
+        {
+            var screen = new VideoStreamProbe
+            {
+                StreamIndex = 0,
+                Width = 512,
+                Height = 512,
+                AvgFrameRateNum = 30,
+                AvgFrameRateDen = 1,
+                RFrameRateNum = 30,
+                RFrameRateDen = 1,
+                DurationTicks = DurationMs * Ms,
+            };
+
+            var project = VideoEditPersistence.LoadOrCreate(null, VideoPath, ProbeOf(screen));
+
+            Assert.Null(Assert.Single(project.Sources).CursorStreamIndex);
+            Assert.Equal(512, project.Output.WidthPx);
+        }
+
         // ------------------------------------------------------------------ v1 migration
 
         [Fact]

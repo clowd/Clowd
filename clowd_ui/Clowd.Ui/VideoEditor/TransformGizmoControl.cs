@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -17,7 +18,8 @@ namespace Clowd.UI.VideoEditor
     /// composed preview on whatever item is selected, drawing only the selection chrome (an outline
     /// following the item's mask, the true rectangular extent, and the resize handles — four
     /// corners, plus the four edge midpoints once the item's aspect ratio is unlocked, plus the
-    /// rotate handle floating off the right edge, exactly as the image editor's). The picture
+    /// rotate handle floating off the right edge, exactly as the image editor's — or, for a
+    /// bottom-anchored keyboard overlay, the two side handles alone). The picture
     /// itself is composed by the SDK's <c>FrameComposer</c> underneath — that is the deliberate cost
     /// of WYSIWYG: the gizmo can no longer disagree with the render, because it does not draw the
     /// item at all.
@@ -96,6 +98,7 @@ namespace Clowd.UI.VideoEditor
         private double _rotation;
         private bool _cropMode;
         private bool _freeResize;
+        private bool _widthOnly;
 
         /// <summary>Smallest fraction of the source picture a crop drag can leave on either axis —
         /// stops a handle from crossing its opposite edge (and a 0-sized item from killing the
@@ -232,14 +235,22 @@ namespace Clowd.UI.VideoEditor
             _itemId = itemId;
             if (itemId != Guid.Empty)
             {
+                var current = CurrentItem();
                 _aspect = placed.Aspect;
                 _scaleDenominatorPx = placed.ScaleDenominatorPx;
                 _scaleDenominatorYPx = placed.ScaleDenominatorYPx;
-                _rotation = CurrentItem()?.Transform?.Rotation ?? 0;
+                _widthOnly = current?.Content is KeyboardContent;
+                // a bottom-anchored block is drawn upright whatever Transform.Rotation says
+                // (see FrameComposer.DrawKeyboard), so the chrome must not render-rotate away
+                // from it — and with _rotation pinned to 0, the side-handle drag stays on the
+                // unrotated write path, which is the only one whose Y keeps bottom-anchor
+                // semantics.
+                _rotation = _widthOnly ? 0 : current?.Transform?.Rotation ?? 0;
             }
             else
             {
                 _rotation = 0;
+                _widthOnly = false;
             }
 
             // The whole control (outline, handles, hit area) rotates the way the composer rotates
@@ -384,7 +395,7 @@ namespace Clowd.UI.VideoEditor
                 _drag = DragKind.Rotate;
                 _dragHandle = handle;
             }
-            else if (handle >= 0 && _cropMode)
+            else if (handle >= 0 && _cropMode && !_widthOnly)
             {
                 _drag = DragKind.Crop;
                 _dragHandle = handle;
@@ -811,25 +822,45 @@ namespace Clowd.UI.VideoEditor
         /// resize (the Unlocked tile) — a ratio-holding item resizes by its corners alone.</summary>
         private bool ShowEdgeHandles => _cropMode || _freeResize;
 
-        /// <summary>The handle positions in this control's coordinates, indexed by the Handle*
-        /// constants. Edge handles are included only when the item has them.</summary>
-        private static Point[] HandlePoints(Rect b, bool withEdges)
+        /// <summary>
+        /// The handle positions in this control's coordinates, paired with their Handle* index.
+        /// Edge handles are included only when the item has them.
+        ///
+        /// <paramref name="widthOnly"/> is a keyboard overlay: its transform anchors the block's
+        /// bottom centre rather than its centre, and its height is the font's — so it is offered
+        /// the two side handles and nothing else. Every other handle would write a centre-derived
+        /// <c>Y</c> (or a <c>ScaleY</c>/<c>Rotation</c> the composer does not read for it) and jump
+        /// the block out from under the pointer; the drag it does get, an anchored horizontal
+        /// resize, writes exactly the wrap-width fraction and centre-x the composer draws with.
+        /// </summary>
+        private static (int Index, Point Point)[] HandlePoints(Rect b, bool withEdges, bool widthOnly)
         {
-            var points = new Point[withEdges ? 8 : 4];
-            points[HandleTopLeft] = b.TopLeft;
-            points[HandleTopRight] = b.TopRight;
-            points[HandleBottomLeft] = b.BottomLeft;
-            points[HandleBottomRight] = b.BottomRight;
+            if (widthOnly)
+            {
+                return new[]
+                {
+                    (HandleLeft, new Point(b.Left, b.Center.Y)),
+                    (HandleRight, new Point(b.Right, b.Center.Y)),
+                };
+            }
+
+            var points = new List<(int, Point)>(withEdges ? 8 : 4)
+            {
+                (HandleTopLeft, b.TopLeft),
+                (HandleTopRight, b.TopRight),
+                (HandleBottomLeft, b.BottomLeft),
+                (HandleBottomRight, b.BottomRight),
+            };
 
             if (withEdges)
             {
-                points[HandleLeft] = new Point(b.Left, b.Center.Y);
-                points[HandleTop] = new Point(b.Center.X, b.Top);
-                points[HandleRight] = new Point(b.Right, b.Center.Y);
-                points[HandleBottom] = new Point(b.Center.X, b.Bottom);
+                points.Add((HandleLeft, new Point(b.Left, b.Center.Y)));
+                points.Add((HandleTop, new Point(b.Center.X, b.Top)));
+                points.Add((HandleRight, new Point(b.Right, b.Center.Y)));
+                points.Add((HandleBottom, new Point(b.Center.X, b.Bottom)));
             }
 
-            return points;
+            return points.ToArray();
         }
 
         /// <summary>The rotate handle's centre: floating <see cref="RotateHandleOffset"/> past the
@@ -850,15 +881,16 @@ namespace Clowd.UI.VideoEditor
 
             // crop mode always offers all eight handles (every edge is croppable on its own) and
             // parks the rotate handle.
-            var points = HandlePoints(b, ShowEdgeHandles);
-            for (int i = 0; i < points.Length; i++)
+            foreach (var (index, point) in HandlePoints(b, ShowEdgeHandles, _widthOnly))
             {
-                if (Math.Abs(local.X - points[i].X) <= HandleHitSize / 2 &&
-                    Math.Abs(local.Y - points[i].Y) <= HandleHitSize / 2)
-                    return i;
+                if (Math.Abs(local.X - point.X) <= HandleHitSize / 2 &&
+                    Math.Abs(local.Y - point.Y) <= HandleHitSize / 2)
+                    return index;
             }
 
-            if (!_cropMode)
+            // …and a bottom-anchored block has no rotation to offer either (the composer draws it
+            // upright whatever Transform.Rotation says).
+            if (!_cropMode && !_widthOnly)
             {
                 var rotate = RotateHandleCenter(b);
                 if (Math.Abs(local.X - rotate.X) <= HandleHitSize / 2 &&
@@ -940,13 +972,13 @@ namespace Clowd.UI.VideoEditor
                 // crop mode: a dashed marquee with all eight handles and no rotate affordance —
                 // visually distinct from the solid selection chrome, so the mode is legible at a
                 // glance.
-                if (_owner._cropMode)
+                if (_owner._cropMode && !_owner._widthOnly)
                 {
                     context.DrawRectangle(null,
                         new Pen(accent, 1.5) { DashStyle = new DashStyle(new double[] { 4, 3 }, 0) },
                         bounds);
 
-                    foreach (var point in HandlePoints(bounds, withEdges: true))
+                    foreach (var (_, point) in HandlePoints(bounds, withEdges: true, widthOnly: false))
                         DrawHandle(context, point, accent);
 
                     return;
@@ -979,9 +1011,15 @@ namespace Clowd.UI.VideoEditor
                     context.DrawRectangle(null, new Pen(new SolidColorBrush(Colors.White, 0.35), 1), bounds);
 
                 // Edge handles only in free-resize (Unlocked) mode: a ratio-holding item resizes
-                // by its four corners alone.
-                foreach (var point in HandlePoints(bounds, _owner.ShowEdgeHandles))
+                // by its four corners alone. A width-only block gets its two side handles instead
+                // of all of these.
+                foreach (var (_, point) in HandlePoints(bounds, _owner.ShowEdgeHandles, _owner._widthOnly))
                     DrawHandle(context, point, accent);
+
+                // …and no rotate affordance for one either, for the same reason: the composer
+                // draws it upright.
+                if (_owner._widthOnly)
+                    return;
 
                 // The rotate handle, drawn as the image editor draws its own
                 // (GraphicRectangle.DrawRotationTracker): a line from the right-edge midpoint out

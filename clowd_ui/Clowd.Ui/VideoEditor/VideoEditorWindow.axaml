@@ -358,6 +358,25 @@
                     ToolTip.ShowOnDisabled="True"
                     ToolTip.Tip="Add speed change" />
 
+                <!--  the two input-overlay rows: one each per project, and only for a recording
+                      that carries input-capture data — so both tooltips swap in code-behind
+                      (RefreshInputOverlayButtons) to say which of the two reasons disabled them  -->
+                <controls:ToolButton
+                    x:Name="btnAddCursor"
+                    Padding="6"
+                    Command="{Binding CommandAddCursorTrack}"
+                    IconPath="{StaticResource IconCursorArrow}"
+                    ToolTip.ShowOnDisabled="True"
+                    ToolTip.Tip="Add Cursor Track" />
+
+                <controls:ToolButton
+                    x:Name="btnAddKeyboard"
+                    Padding="6"
+                    Command="{Binding CommandAddKeyboardTrack}"
+                    IconPath="{StaticResource IconKeyboard}"
+                    ToolTip.ShowOnDisabled="True"
+                    ToolTip.Tip="Add Keyboard Track" />
+
                 <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton
                     Padding="6"

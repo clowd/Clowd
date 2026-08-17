@@ -65,6 +65,12 @@ namespace Clowd.UI.Controls
         /// whole list, unless the host partitions rows into blocks a drag cannot cross.</summary>
         (int Start, int End) SlotGroup(int row);
 
+        /// <summary>Bends the slot the pointer asked for to one the host's model will actually
+        /// honour — for boundaries a block cannot express, e.g. a pair of rows glued together that
+        /// nothing may land between. Called on every move, so it must be idempotent and cheap; the
+        /// default accepts whatever the pointer picked.</summary>
+        int CoerceSlot(int row, int slot) => slot;
+
         /// <summary>False refuses the press outright — e.g. while another control's gesture owns
         /// the model and a mid-gesture mutation would be rolled back with it.</summary>
         bool CanBeginDrag { get; }
@@ -247,7 +253,8 @@ namespace Clowd.UI.Controls
             }
 
             var (start, end) = _host.SlotGroup(_fromRow);
-            SetDropSlot(RowReorderMath.DropSlot(start, end, y, _host.RowExtent), start, end);
+            SetDropSlot(_host.CoerceSlot(_fromRow, RowReorderMath.DropSlot(start, end, y, _host.RowExtent)),
+                start, end);
         }
 
         private void Owner_PointerReleased(object sender, PointerReleasedEventArgs e)

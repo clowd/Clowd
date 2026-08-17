@@ -42,7 +42,10 @@ namespace Clowd.UI.VideoEditor
     /// to know about: its <c>Size</c> is in output pixels, mapped onto the canvas by
     /// <c>canvasHeight / Output.HeightPx</c> (the same rule <c>FrameComposer.DrawText</c> applies),
     /// and <c>Scale</c> multiplies that measured block rather than mapping to a canvas-width
-    /// fraction.
+    /// fraction. A keyboard overlay is the second exception, in the other direction: its
+    /// <c>Scale</c> is a canvas-width fraction like a picture's, but the transform anchors the
+    /// block's <b>bottom</b> centre (the rows stack upward from it) and its height is measured from
+    /// the font, not derived from the width.
     ///
     /// Rotation is deliberately not modelled in the <b>placement</b>: the composer rotates about
     /// the item centre, so the unrotated rect is still the item's extent — the gizmo is arranged on
@@ -114,7 +117,23 @@ namespace Clowd.UI.VideoEditor
             var transform = item.Transform ?? new ModelTransform();
 
             double x, y, w, h, aspect, denominator, denominatorY;
-            if (item.Content is TextContent text)
+            if (item.Content is KeyboardContent keyboard)
+            {
+                // The one placement that is NOT centred on the transform: FrameComposer.DrawKeyboard
+                // treats X/Y as the block's bottom centre and stacks the rows upward from it, so the
+                // rect hangs above the anchor. Width is the wrap box (Scale · canvas width, the
+                // picture rule); the height is the font's, measured — never a scale's.
+                (w, h) = KeyboardBlock(project, keyboard, transform, canvasWidth, canvasHeight);
+                if (!(w > 0) || !(h > 0))
+                    return false;
+
+                aspect = h / w;
+                denominator = canvasWidth;
+                denominatorY = h;
+                x = transform.X * canvasWidth - w / 2;
+                y = transform.Y * canvasHeight - h;
+            }
+            else if (item.Content is TextContent text)
             {
                 var (naturalW, naturalH) = FrameComposer.MeasureText(text, canvasHeight,
                     project.Output?.HeightPx ?? 0);
@@ -179,9 +198,45 @@ namespace Clowd.UI.VideoEditor
                     // canvas (and crop does not apply to it at all).
                     return canvasWidth > 0 ? canvasHeight / canvasWidth : null;
 
+                case KeyboardContent keyboard:
+                {
+                    var (w, h) = KeyboardBlock(project, keyboard, item.Transform, canvasWidth, canvasHeight);
+                    return w > 0 && h > 0 ? h / w : null;
+                }
+
+                case CursorContent:
+                    // Deliberately none. A cursor item's position comes from the capture, not from
+                    // its Transform (FrameComposer.DrawCursorItem ignores it) — there is nothing a
+                    // gizmo could move, so it gets no placement, no chrome and no hit-test either.
+                    return null;
+
                 default:
                     return null;
             }
+        }
+
+        /// <summary>
+        /// Nominal rows the gizmo boxes a keyboard overlay at. The drawn block's height is
+        /// content-driven — it grows and shrinks frame by frame as runs arrive and fade — and a
+        /// gizmo that resized itself under the pointer would be unaimable (and would vanish
+        /// entirely on a silent frame). Three rows is a typical burst, and the one drag the block
+        /// offers sizes it horizontally anyway, so a nominal height costs the user nothing.
+        /// </summary>
+        internal const int KeyboardGizmoRows = 3;
+
+        /// <summary>
+        /// The keyboard overlay's block in canvas pixels: the wrap box <c>Scale</c> sets, and
+        /// <see cref="KeyboardGizmoRows"/> rows of the composer's own pill metrics
+        /// (<see cref="FrameComposer.MeasureKeyboardHeight"/> — measured there, not mirrored here,
+        /// so a change to the pill proportions moves the gizmo with the pixels).
+        /// </summary>
+        private static (double Width, double Height) KeyboardBlock(Project project,
+            KeyboardContent keyboard, ModelTransform transform, double canvasWidth, double canvasHeight)
+        {
+            double width = (transform?.Scale ?? 1.0) * canvasWidth;
+            double height = FrameComposer.MeasureKeyboardHeight(keyboard, KeyboardGizmoRows,
+                canvasHeight, project?.Output?.HeightPx ?? 0);
+            return (width, height);
         }
 
         /// <summary>
@@ -223,9 +278,11 @@ namespace Clowd.UI.VideoEditor
 
                     // the composer rotates the picture about its centre, so test the point in the
                     // item's unrotated space — otherwise a rotated item claims its empty AABB
-                    // corners and disowns the pixels it actually covers.
+                    // corners and disowns the pixels it actually covers. The keyboard block is
+                    // the exception: the composer draws it upright whatever Transform.Rotation
+                    // says, so its hit test must stay upright too.
                     double hx = x, hy = y;
-                    if (item.Transform is { Rotation: not 0 } t)
+                    if (item.Content is not KeyboardContent && item.Transform is { Rotation: not 0 } t)
                         (hx, hy) = GizmoMath.RotateAbout(x, y,
                             placed.X + placed.W / 2, placed.Y + placed.H / 2, -t.Rotation);
 

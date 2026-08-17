@@ -37,6 +37,13 @@ namespace Clowd.UI.VideoEditor.Timeline
         private const string SyncedTip =
             "Synced — moves and splits with the other recording tracks. Unsync from the properties panel.";
 
+        /// <summary>The cursor/keyboard rows' badge tip: their sync is not a toggle. The overlay
+        /// reads the recording's input capture at the recording's own times, so an unsynced one
+        /// would draw the wrong moment — the session refuses to unlink it (see
+        /// <c>EditorSession.UnlinkTrack</c>) and the properties panel offers nothing to click.</summary>
+        private const string PinnedSyncTip =
+            "Always synced — this overlay follows the recording it was captured with.";
+
         /// <summary>Breathing room either side of the grip: it is the first thing in the row, so
         /// without it the dots crowd both the panel edge and the kind icon.</summary>
         private const double GripMarginX = 5;
@@ -149,9 +156,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             // context menu's Move Up/Down refuse too, and a lone row of its kind cannot reorder
             // against anything. The speed row is a block of one by construction (see
             // TimelineReorder.GroupRange), but it is pinned by meaning, so say so here too.
+            // …and the cursor/keyboard rows are pinned to their screen row the same way (blocks of
+            // one as well — the session refuses to reorder them at all).
             var group = TimelineReorder.GroupRange(_rows, rowIndex);
+            var isInputOverlay = TimelineRowLayout.IsInputOverlay(row.Kind);
             var draggable = !track.Locked && group.End > group.Start &&
-                            row.Kind != TimelineRowKind.Speed;
+                            row.Kind != TimelineRowKind.Speed && !isInputOverlay;
             var grip = _drag.BuildGrip(rowIndex, draggable, palette.GripBrush, palette.GripHoverBrush,
                 new Thickness(GripMarginX, 2, GripMarginX, 2));
             DockPanel.SetDock(grip, Dock.Left);
@@ -203,8 +213,10 @@ namespace Clowd.UI.VideoEditor.Timeline
             dock.Children.Add(enable);
 
             // no duplicate on the speed row: playback speed is a single global timeline, and the
-            // session refuses a second one anyway (see EditorSession.DuplicateTrack).
-            if (row.Kind != TimelineRowKind.Speed)
+            // session refuses a second one anyway (see EditorSession.DuplicateTrack). Nor on a
+            // cursor/keyboard row: the copy could not be pinned or hard-synced, and the session
+            // refuses it for the same reason.
+            if (row.Kind != TimelineRowKind.Speed && !isInputOverlay)
             {
                 var duplicate = RowIconButton.Build(TimelineIcons.Find("IconCopy"), buttonBrush,
                     "Duplicate this row and its clips", buttonSize);
@@ -224,7 +236,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 Child = TimelineIcons.NewIcon(TimelineIcons.LinkGeometry, buttonSize * 0.6, palette.LinkBadgeBrush),
                 Background = Brushes.Transparent, // a null background is not hit-testable — no tooltip
             };
-            ToolTip.SetTip(badge, SyncedTip);
+            ToolTip.SetTip(badge, isInputOverlay ? PinnedSyncTip : SyncedTip);
             DockPanel.SetDock(badge, Dock.Right);
             dock.Children.Add(badge);
             _linkBadges.Add((trackId, badge));
@@ -256,6 +268,13 @@ namespace Clowd.UI.VideoEditor.Timeline
         (int Start, int End) IRowReorderDragHost.SlotGroup(int row) =>
             TimelineReorder.GroupRange(_rows, row);
 
+        /// <summary>Keeps the indicator off the boundaries between a screen row and the
+        /// cursor/keyboard rows pinned above it — the layout would put a row dropped there
+        /// somewhere else entirely, and an indicator that lies is worse than one that will not
+        /// follow the pointer.</summary>
+        int IRowReorderDragHost.CoerceSlot(int row, int slot) =>
+            TimelineReorder.CoerceDropIndex(_rows, row, slot);
+
         /// <summary>A press while another control's drag owns the session would land its drop as
         /// a mid-gesture Preview and be rolled back with it.</summary>
         bool IRowReorderDragHost.CanBeginDrag => _session is { IsGestureActive: false };
@@ -281,6 +300,8 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Image => TimelineIcons.Find("IconImage"),
             TimelineRowKind.Speed => TimelineIcons.SpeedometerGeometry,
             TimelineRowKind.Zoom => TimelineIcons.MagnifierGeometry,
+            TimelineRowKind.Cursor => TimelineIcons.CursorArrowGeometry,
+            TimelineRowKind.Keyboard => TimelineIcons.KeyboardGeometry,
             _ => TimelineIcons.Find("IconVideoClip"),
         };
     }
@@ -361,6 +382,25 @@ namespace Clowd.UI.VideoEditor.Timeline
             "8 7 L 8 8 L 7 8 A 1.0001 1.0001 0 1 0 7 10 L 8 10 L 8 11 A 1.0001 1.0001 0 1 0 " +
             "10 11 L 10 10 L 11 10 A 1.0001 1.0001 0 1 0 11 8 L 10 8 L 10 7 A 1.0001 1.0001 " +
             "0 0 0 8.984375 5.9863281 z");
+
+        /// <summary>The classic pointer for the cursor overlay row and its items (24x24 box):
+        /// tip top-left, tail bottom-right. Hand-authored — VectorIcons has no pointer glyph, and
+        /// the row's job is exactly "this is where the mouse was".</summary>
+        public static readonly Geometry CursorArrowGeometry = StreamGeometry.Parse(
+            "M5,2 L5,19.4 L9.4,15.4 L12.1,21.5 L14.6,20.4 L11.9,14.4 L17.6,14.4 Z");
+
+        /// <summary>A keyboard for the keystroke overlay row and its items (24x24 box): a slab
+        /// with two rows of keys and a space bar punched out of it (even-odd fill, so the keys are
+        /// holes rather than a second shape to keep aligned).</summary>
+        public static readonly Geometry KeyboardGeometry = StreamGeometry.Parse(
+            "M2,5 L22,5 L22,19 L2,19 Z " +
+            "M5,7.5 L7,7.5 L7,9.5 L5,9.5 Z M8,7.5 L10,7.5 L10,9.5 L8,9.5 Z " +
+            "M11,7.5 L13,7.5 L13,9.5 L11,9.5 Z M14,7.5 L16,7.5 L16,9.5 L14,9.5 Z " +
+            "M17,7.5 L19,7.5 L19,9.5 L17,9.5 Z " +
+            "M5,11 L7,11 L7,13 L5,13 Z M8,11 L10,11 L10,13 L8,13 Z " +
+            "M11,11 L13,11 L13,13 L11,13 Z M14,11 L16,11 L16,13 L14,13 Z " +
+            "M17,11 L19,11 L19,13 L17,13 Z " +
+            "M8,14.5 L16,14.5 L16,16.5 L8,16.5 Z");
 
         /// <summary>A simple chain-link glyph (24x24 box); VectorIcons has no link icon.</summary>
         public static readonly Geometry LinkGeometry = StreamGeometry.Parse(
