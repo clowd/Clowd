@@ -425,8 +425,18 @@ mod cursor_shape {
                 .map(|(_, k)| *k)
                 .unwrap_or(CursorKind::Custom),
             // No readable image: report the fallback kind rather than invent a
-            // shape. `currentSystemCursor` is deprecated as of macOS 15, so
-            // this is the path a future removal would take.
+            // shape.
+            //
+            // This is the path Apple has signposted. `currentSystemCursor` is
+            // deprecated, and the AppKit header is unusually blunt about it —
+            // "This property will always be `nil` in a future version of
+            // macOS". The suggested replacement is ScreenCaptureKit's
+            // `SCStreamConfiguration.showsCursor`, which composites the cursor
+            // into the captured pixels and reports no shape at all, so there is
+            // no supported successor for classification. When that day comes
+            // this falls back to reporting `arrow` for every visible sample,
+            // which is precisely the behavior this function replaced — a
+            // degradation, not a break.
             None => CursorKind::Arrow,
         }
     }
