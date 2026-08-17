@@ -149,8 +149,11 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>The style <c>CursorContent.Style</c> defaults to.</summary>
         public const string DefaultStyle = VisionStyle;
 
-        /// <summary>The style that draws the recorded cursor box; never present in this table.</summary>
+        /// <summary>The style that draws the recorded cursor sprites; never present in this table.</summary>
         public const string NativeStyle = "native";
+
+        /// <summary>The style that draws no cursor at all; never present in this table.</summary>
+        public const string NoneStyle = "none";
 
         private const string VisionStyle = "vision";
 

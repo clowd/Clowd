@@ -133,6 +133,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// a style with no entry here shows its wire name rather than disappearing.</summary>
         private static readonly Dictionary<string, string> CursorStyleLabels = new Dictionary<string, string>
         {
+            ["none"] = "None",
             ["native"] = "Native",
             ["vision"] = "Vision",
             ["point"] = "Point",
@@ -184,14 +185,24 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly NamedOption DefaultClickAnimationOption =
             FindOption(ClickAnimationOptions, "none");
 
-        /// <summary>The one style that draws the recorded 512px box instead of a themed glyph —
-        /// the size and drop-shadow rows mean nothing while it is picked, so they leave the panel
-        /// entirely (see <see cref="CursorGlyphEnabled"/>).</summary>
+        /// <summary>The one style that draws the recorded cursor sprites instead of a themed glyph —
+        /// the glyph-only rows (colourways, SURROUND) mean nothing while it is picked, so they leave
+        /// the panel entirely (see <see cref="CursorGlyphEnabled"/>); the size row stays, because the
+        /// composer scales the sprite by it too.</summary>
         public const string NativeCursorStyle = "native";
+
+        /// <summary>The style that hides the cursor outright — the glyph-only rows leave the panel
+        /// while it is picked (see <see cref="CursorGlyphEnabled"/>); the PLACEMENT size row and the
+        /// HIGHLIGHT section (a click's own subject) stay.</summary>
+        public const string NoneCursorStyle = "none";
 
         /// <summary><see cref="CursorContent.ClickColor"/>'s own default, mirrored so the highlight
         /// previews have a colour before any cursor row is selected.</summary>
         public const uint DefaultCursorClickColor = 0xFFFF0000;
+
+        /// <summary><see cref="DefaultCursorClickColor"/> as the colour well's hex — what its
+        /// reset dot writes back.</summary>
+        public const string DefaultCursorClickColorHex = "#FFFF0000";
 
         /// <summary>The animation that draws no highlight at all — the one value that empties the
         /// section below the picker.</summary>
@@ -407,6 +418,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _cursorSize = DefaultCursorSize;
         private string _cursorClickAnimation = NoClickAnimation;
         private uint _cursorClickColor = DefaultCursorClickColor;
+        private string _cursorClickColorHex = DefaultCursorClickColorHex;
         private double _cursorHoldSize = DefaultHighlightFactor;
         private double _cursorClickSize = DefaultHighlightFactor;
         private double _cursorAnimationSpeed = DefaultHighlightFactor;
@@ -1490,11 +1502,12 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// them out of it.</summary>
         public string CursorCapturePath => _cursorCapturePath;
 
-        /// <summary>Whether the glyph rows (the size row, and the whole SURROUND section) mean
-        /// anything — they are hidden, not merely greyed, when they do not: the <c>native</c> style
-        /// draws the recorded box, which carries its own size and the system cursor's own shadow, so
-        /// a disabled spinner would only invite the question of what it would have done.</summary>
-        public bool CursorGlyphEnabled => _cursorStyle != NativeCursorStyle;
+        /// <summary>Whether the glyph-only rows (the colourway tiles, the whole SURROUND section)
+        /// mean anything — they are hidden, not merely greyed, when they do not: <c>native</c>
+        /// draws the recorded sprite, which carries its own palette and the system cursor's own
+        /// shadow, and <c>none</c> draws nothing at all, so a disabled control would only invite
+        /// the question of what it would have done.</summary>
+        public bool CursorGlyphEnabled => _cursorStyle != NativeCursorStyle && _cursorStyle != NoneCursorStyle;
 
         /// <summary>Glyph size multiplier over the style's base size.</summary>
         public double CursorSize
@@ -1531,10 +1544,29 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// same trade the glyph rows make under the native style.</summary>
         public bool CursorHighlightEnabled => _cursorClickAnimation != NoClickAnimation;
 
-        /// <summary>The highlight colour (packed ARGB) the composer draws clicks in. Read-only for
-        /// now — the panel has no colour well for it — but the highlight tiles preview in it, so it
-        /// has to reach the view.</summary>
+        /// <summary>The highlight colour (packed ARGB) the composer draws clicks in — the parsed
+        /// twin of <see cref="CursorClickColorHex"/>, kept because the highlight preview tiles
+        /// bind a packed colour, not a hex string.</summary>
         public uint CursorClickColor => _cursorClickColor;
+
+        /// <summary>The highlight colour as <c>#RRGGBB</c> or <c>#AARRGGBB</c> — the colour well's
+        /// face of <see cref="CursorClickColor"/>. Half-typed values stay in the box unwritten,
+        /// exactly as <see cref="KeyboardTextColorHex"/> does.</summary>
+        public string CursorClickColorHex
+        {
+            get => _cursorClickColorHex;
+            set
+            {
+                if (!Set(ref _cursorClickColorHex, value) || _syncing)
+                    return;
+
+                if (!TryParseArgb(value, out var argb))
+                    return;
+
+                Set(ref _cursorClickColor, argb, nameof(CursorClickColor));
+                EditCursor("sel:cursorclickcolor", c => c.ClickColor = argb);
+            }
+        }
 
         /// <summary>Size multiplier on the dot held under a pressed button.</summary>
         public double CursorHoldSize
@@ -2003,6 +2035,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _cursorClickAnimation, cursor.ClickAnimation ?? DefaultClickAnimationOption.Value,
                         nameof(CursorClickAnimation));
                     Set(ref _cursorClickColor, cursor.ClickColor, nameof(CursorClickColor));
+                    Set(ref _cursorClickColorHex, HexOfArgb(cursor.ClickColor), nameof(CursorClickColorHex));
                     Set(ref _cursorHoldSize, cursor.HoldSize, nameof(CursorHoldSize));
                     Set(ref _cursorClickSize, cursor.ClickSize, nameof(CursorClickSize));
                     Set(ref _cursorAnimationSpeed, cursor.AnimationSpeed, nameof(CursorAnimationSpeed));

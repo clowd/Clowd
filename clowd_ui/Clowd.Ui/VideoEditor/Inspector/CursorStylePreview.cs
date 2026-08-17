@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Clowd.VideoSDK.Composition;
+using SkiaSharp;
 
 namespace Clowd.UI.VideoEditor.Inspector
 {
@@ -85,6 +86,14 @@ namespace Clowd.UI.VideoEditor.Inspector
             if (Bounds.Width <= 0 || Bounds.Height <= 0)
                 return;
 
+            // "none" is the absence of a cursor, so no artwork could stand for it — the tile
+            // shows the universal ban sign instead, in the same ink as the outline fallback
+            if (string.Equals(StyleName, CursorAssets.NoneStyle, StringComparison.OrdinalIgnoreCase))
+            {
+                DrawNone(context);
+                return;
+            }
+
             // no artwork = native (or a style name from a newer editor): show the recorded cursor,
             // or failing that the default theme's arrow as an outline
             var glyph = CursorAssets.TryGet(StyleName, VariantName, CursorAssets.KindArrow);
@@ -127,6 +136,26 @@ namespace Clowd.UI.VideoEditor.Inspector
                     context.DrawGeometry(layer.Fill, null, layer.Geometry);
                 }
             }
+        }
+
+        /// <summary>The ban sign — a circle with a diagonal slash — sized to the glyph tiles'
+        /// visual weight and drawn in <see cref="OutlineBrush"/>, matching the outline fallback
+        /// it sits beside.</summary>
+        private void DrawNone(DrawingContext context)
+        {
+            double extent = Math.Min(Bounds.Width, Bounds.Height);
+            double thickness = extent / 11.0;
+            double radius = extent / 2 - thickness;
+            if (radius <= 0)
+                return;
+
+            var centre = new Point(Bounds.Width / 2, Bounds.Height / 2);
+            var pen = new Pen(OutlineBrush, thickness, lineCap: PenLineCap.Round);
+            context.DrawEllipse(null, pen, centre, radius, radius);
+            double reach = radius / Math.Sqrt(2);
+            context.DrawLine(pen,
+                new Point(centre.X - reach, centre.Y - reach),
+                new Point(centre.X + reach, centre.Y + reach));
         }
 
         /// <summary>
@@ -238,9 +267,12 @@ namespace Clowd.UI.VideoEditor.Inspector
         private static readonly Dictionary<CursorSprite, Bitmap> SpriteCache =
             new Dictionary<CursorSprite, Bitmap>();
 
-        /// <summary>The sprite's colour plane as an Avalonia bitmap, decoded straight from the PNG
-        /// bytes the capture file carries. Null when they do not decode — cached like a success, so
-        /// a corrupt sprite costs one attempt rather than one per render.</summary>
+        /// <summary>The sprite's colour plane as an Avalonia bitmap, decoded from the PNG bytes the
+        /// capture file carries and trimmed to its ink. The trim is what makes the tile read: a
+        /// cursor bitmap is mostly transparent border (a small arrow parked in a 32-or-larger
+        /// square), and fitting the untrimmed square would render the arrow at a fraction of the
+        /// tile. Null when the bytes do not decode or hold no visible pixel — cached like a
+        /// success, so a corrupt sprite costs one attempt rather than one per render.</summary>
         private static Bitmap BitmapOf(CursorSprite sprite)
         {
             if (SpriteCache.TryGetValue(sprite, out var cached))
@@ -249,16 +281,44 @@ namespace Clowd.UI.VideoEditor.Inspector
             Bitmap bitmap = null;
             try
             {
-                bitmap = new Bitmap(new MemoryStream(sprite.Bmp));
+                bitmap = DecodeTrimmed(sprite.Bmp);
             }
             catch (Exception e) when (e is ArgumentException or InvalidDataException or NotSupportedException)
             {
-                // PNG bytes this decoder cannot read leave the tile to the outline fallback: a
+                // PNG bytes a decoder cannot read leave the tile to the outline fallback: a
                 // picker tile is not worth throwing out of a render over
             }
 
             SpriteCache[sprite] = bitmap;
             return bitmap;
+        }
+
+        private static Bitmap DecodeTrimmed(byte[] png)
+        {
+            using var decoded = SKBitmap.Decode(png);
+            if (decoded == null)
+                return null;
+
+            int left = decoded.Width, top = decoded.Height, right = -1, bottom = -1;
+            for (int y = 0; y < decoded.Height; y++)
+            for (int x = 0; x < decoded.Width; x++)
+            {
+                if (decoded.GetPixel(x, y).Alpha == 0)
+                    continue;
+                if (x < left) left = x;
+                if (x > right) right = x;
+                if (y < top) top = y;
+                if (y > bottom) bottom = y;
+            }
+
+            if (right < 0)
+                return null; // fully transparent — the outline fallback beats an empty tile
+
+            var ink = SKRectI.Create(left, top, right - left + 1, bottom - top + 1);
+            using var image = SKImage.FromBitmap(decoded);
+            using var subset = image.Subset(ink);
+            using var data = subset.Encode(SKEncodedImageFormat.Png, 100);
+            return new Bitmap(data.AsStream());
         }
     }
 }

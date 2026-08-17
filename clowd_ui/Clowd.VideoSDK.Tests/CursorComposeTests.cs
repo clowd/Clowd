@@ -532,6 +532,24 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void None_style_item_draws_no_cursor_at_all()
+        {
+            // a recorded sprite is on the frame, but "none" hides the cursor outright
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
+            var (p, _, _) = CursorProject(capture, "none");
+
+            using var frames = new MultiStreamSource().Set(0, Blue, 64);
+            var px = Render(p, 5 * Sec, frames);
+            for (int y = 0; y < H; y++)
+            {
+                for (int x = 0; x < W; x++)
+                    AssertColor(Px(px, x, y), 255, 0, 0);
+            }
+        }
+
+        [Fact]
         public void Size_scales_the_native_sprite()
         {
             string capture = WriteCapture(Header,

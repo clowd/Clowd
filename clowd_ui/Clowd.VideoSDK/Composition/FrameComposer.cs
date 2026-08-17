@@ -320,7 +320,8 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>
         /// A cursor-track item: position and shape are data-driven (the capture file), placement
         /// rides the linked screen item's mapping — the cursor lands on the same canvas point the
-        /// recorded pixel would, crop/aspect/mask included. <c>native</c> draws the frame's
+        /// recorded pixel would, crop/aspect/mask included. <c>none</c> draws no cursor at all
+        /// (the click highlight, its own setting, still does); <c>native</c> draws the frame's
         /// recorded sprite (<see cref="InputFrame.SpriteId"/>) at its captured pixel size times
         /// <c>Size</c>; every other style draws a themed glyph sized by
         /// <c>Size · 40 px · monitor scale</c> in source pixels, then through the same px→canvas
@@ -373,7 +374,12 @@ namespace Clowd.VideoSDK.Composition
                 CursorCompose.DrawClickAnimations(target, capture, map, row, sourceMs,
                     TimelineOps.SpeedOf(media), cursor, monitorScale, opacity);
 
-                if (string.Equals(cursor.Style, CursorAssets.NativeStyle, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(cursor.Style, CursorAssets.NoneStyle, StringComparison.OrdinalIgnoreCase))
+                {
+                    // deliberately nothing — the style that hides the cursor outright. The click
+                    // highlight above still draws: it is its own subject with its own "none".
+                }
+                else if (string.Equals(cursor.Style, CursorAssets.NativeStyle, StringComparison.OrdinalIgnoreCase))
                 {
                     if (row.SpriteId >= 0 && capture.TryGetSprite(row.SpriteId, out var sprite))
                     {
