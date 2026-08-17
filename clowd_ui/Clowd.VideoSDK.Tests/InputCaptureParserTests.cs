@@ -97,6 +97,53 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(expected, InputCapture.ParseCursorKind(wire));
         }
 
+        // ---------------------------------------------------------------------- debounce latch
+
+        private static string Frame(double t, int x, int y, string kind = "arrow", int buttons = 0) =>
+            $"{{\"type\":\"frame\",\"t\":{t},\"x\":{x},\"y\":{y},\"b\":{buttons},\"c\":\"{kind}\"}}";
+
+        [Fact]
+        public void Inactivity_latches_on_hidden_and_holds_until_real_movement()
+        {
+            var capture = Parse(
+                Header,
+                Frame(0, 110, 210),
+                Frame(10, 110, 210, "hidden"),
+                Frame(20, 110, 210),            // the typing flicker: visible again, unmoved
+                Frame(30, 112, 211),            // 2,1 from the anchor — inside the 3px threshold
+                Frame(40, 114, 210));           // 4,0 from the anchor — deliberate movement
+
+            Assert.False(capture.IsInactiveAt(0));
+            Assert.True(capture.IsInactiveAt(1));  // hidden frames themselves read inactive
+            Assert.True(capture.IsInactiveAt(2));
+            Assert.True(capture.IsInactiveAt(3));  // jitter accumulates against the hide anchor,
+            Assert.False(capture.IsInactiveAt(4)); // not frame-to-frame — the drift still counts
+        }
+
+        [Fact]
+        public void Inactivity_clears_on_a_button_change_without_movement()
+        {
+            var capture = Parse(
+                Header,
+                Frame(0, 110, 210, "hidden"),
+                Frame(10, 110, 210),
+                Frame(20, 110, 210, buttons: 1));
+
+            Assert.True(capture.IsInactiveAt(1));
+            Assert.False(capture.IsInactiveAt(2));
+        }
+
+        [Fact]
+        public void Inactivity_is_false_out_of_range_and_before_any_hide()
+        {
+            var capture = Parse(Header, Frame(0, 110, 210), Frame(10, 150, 250));
+            Assert.False(capture.IsInactiveAt(-1));
+            Assert.False(capture.IsInactiveAt(0));
+            Assert.False(capture.IsInactiveAt(1));
+            Assert.False(capture.IsInactiveAt(2));
+            Assert.False(InputCapture.Empty.IsInactiveAt(0));
+        }
+
         // -------------------------------------------------------------------------------- events
 
         [Fact]

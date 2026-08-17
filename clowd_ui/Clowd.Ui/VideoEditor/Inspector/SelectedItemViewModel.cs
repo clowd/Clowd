@@ -426,6 +426,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// <summary>Null until the user picks one: the style's own default colourway.</summary>
         private string _cursorVariant;
         private double _cursorSize = DefaultCursorSize;
+        private bool _cursorDebounce = true;
         private string _cursorClickAnimation = NoClickAnimation;
         private uint _cursorClickColor = DefaultCursorClickColor;
         private string _cursorClickColorHex = DefaultCursorClickColorHex;
@@ -1534,6 +1535,21 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        /// <summary>Debounces the capture's typing-hidden flicker (see
+        /// <see cref="CursorContent.Debounce"/>): on keeps a hidden cursor hidden until it moves
+        /// or clicks again; off draws exactly what the recorder sampled.</summary>
+        public bool CursorDebounce
+        {
+            get => _cursorDebounce;
+            set
+            {
+                if (!Set(ref _cursorDebounce, value) || _syncing)
+                    return;
+
+                EditCursor("sel:cursordebounce", c => c.Debounce = value);
+            }
+        }
+
         /// <summary>What a mouse click draws, as one of <see cref="ClickAnimationOptions"/>.</summary>
         public NamedOption CursorClickAnimation
         {
@@ -2081,6 +2097,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _cursorStyle, cursor.Style ?? DefaultCursorStyleOption.Value, nameof(CursorStyle));
                     Set(ref _cursorVariant, cursor.Variant, nameof(CursorVariant));
                     Set(ref _cursorSize, cursor.Size, nameof(CursorSize));
+                    Set(ref _cursorDebounce, cursor.Debounce, nameof(CursorDebounce));
                     Set(ref _cursorClickAnimation, cursor.ClickAnimation ?? DefaultClickAnimationOption.Value,
                         nameof(CursorClickAnimation));
                     Set(ref _cursorClickColor, cursor.ClickColor, nameof(CursorClickColor));

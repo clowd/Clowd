@@ -175,6 +175,13 @@ public sealed class CursorContent : ItemContent
     /// glyphs, over the sprite's recorded pixel size for the <c>native</c> style.</summary>
     public double Size { get; set; } = 1.0;
 
+    /// <summary>Debounces the capture's Hidden/visible flicker: Windows hides the cursor while
+    /// the user types and flashes it back on every pause, so with this on (the default, and the
+    /// only behaviour before the setting existed) a hidden cursor stays hidden until it actually
+    /// moves (more than a few pixels — jitter does not count) or clicks again. Off draws exactly
+    /// what CURSORINFO reported frame by frame.</summary>
+    public bool Debounce { get; set; } = true;
+
     /// <summary>One of <see cref="ClickAnimations"/>.</summary>
     public string ClickAnimation { get; set; } = "none";
 
@@ -214,6 +221,7 @@ public sealed class CursorContent : ItemContent
         Style = Style,
         Variant = Variant,
         Size = Size,
+        Debounce = Debounce,
         ClickAnimation = ClickAnimation,
         ClickColor = ClickColor,
         FillOpacity = FillOpacity,
