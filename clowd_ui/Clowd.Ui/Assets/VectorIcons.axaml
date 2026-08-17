@@ -160,7 +160,7 @@
 
     <!-- icons8 "Image" (Material Rounded #112935, 24x24): framed landscape photo; the video
          editor's image rows/buttons (IconPhoto stays for the rest of the app) -->
-    <StreamGeometry x:Key="IconImage">M20,4H4C2.895,4,2,4.895,2,6v12c0,1.105,0.895,2,2,2h16c1.105,0,2-0.895,2-2V6C22,4.895,21.105,4,20,4z M10,8 c0.552,0,1,0.448,1,1c0,0.552-0.448,1-1,1S9,9.552,9,9C9,8.448,9.448,8,10,8z M18,17H6.022c-0.416,0-0.65-0.479-0.394-0.807 l2.49-3.202c0.196-0.252,0.575-0.258,0.779-0.012L11,15.51l3.098-3.992c0.202-0.261,0.597-0.257,0.795,0.007L18.4,16.2 C18.647,16.53,18.412,17,18,17z</StreamGeometry>
+    <StreamGeometry x:Key="IconImage">M 4 4 C 2.9069372 4 2 4.9069372 2 6 L 2 18 C 2 19.093063 2.9069372 20 4 20 L 20 20 C 21.093063 20 22 19.093063 22 18 L 22 6 C 22 4.9069372 21.093063 4 20 4 L 4 4 z M 4 6 L 20 6 L 20 18 L 4 18 L 4 6 z M 10 8 A 1 1 0 0 0 9 9 A 1 1 0 0 0 10 10 A 1 1 0 0 0 11 9 A 1 1 0 0 0 10 8 z M 14.5 11 L 11 15 L 8.5 12.5 L 5.7773438 16 L 18.25 16 L 14.5 11 z</StreamGeometry>
 
     <!-- icons8 "Video" (Material Rounded #111366, 24x24): rounded frame with a play triangle;
          the video editor's video rows/buttons (IconVideo stays for the rest of the app) -->
