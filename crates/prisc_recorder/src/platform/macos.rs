@@ -50,6 +50,10 @@ extern "C" {
     /// Reads button state without an event tap, so no Accessibility /
     /// Input Monitoring permission is involved.
     fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
+    /// Whether the cursor is currently drawn. Deprecated since 10.9 but still
+    /// the only public answer, and it needs no permission — the alternative is
+    /// private CGS SPI.
+    fn CGCursorIsVisible() -> bool;
 }
 
 /// `kCGEventSourceStateCombinedSessionState` — the session's combined state,
@@ -207,9 +211,17 @@ pub fn get_mouse_info() -> MouseInfo {
     }
 }
 
-/// Compiling stub (DESIGN §2): position from the same CGEvent snapshot as
-/// `get_mouse_info`, shape classification not yet implemented — every sample
-/// reports `arrow` (the editor's universal fallback kind).
+/// Position from the same CGEvent snapshot as `get_mouse_info`, plus the
+/// visible/hidden distinction.
+///
+/// Shape classification is not implemented: every visible sample reports
+/// `arrow` (the editor's universal fallback kind). Unlike Windows, where
+/// `GetCursorInfo` hands back a comparable `HCURSOR`, macOS exposes no public,
+/// cheap way to identify the active cursor — `NSCursor.currentSystemCursor`
+/// means linking AppKit and hashing a fresh TIFF per sample, far too expensive
+/// for a per-frame call on the graphics thread. `Hidden` is still worth
+/// reporting on its own: it stops the editor compositing an arrow over content
+/// where macOS was drawing nothing.
 pub fn get_cursor_state() -> CursorState {
     let event = unsafe { CGEventCreate(std::ptr::null()) };
     let (x, y) = if event.is_null() {
@@ -219,10 +231,18 @@ pub fn get_cursor_state() -> CursorState {
         unsafe { CFRelease(event) };
         (p.x, p.y)
     };
+    let kind = if unsafe { CGCursorIsVisible() } {
+        CursorKind::Arrow
+    } else {
+        CursorKind::Hidden
+    };
+    // Points are fractional here (Windows' GetCursorInfo is integral), so round
+    // rather than truncate — truncation biases toward zero and would skew
+    // negative coordinates on displays left of / above the primary.
     CursorState {
-        x: x as i32,
-        y: y as i32,
-        kind: CursorKind::Arrow,
+        x: x.round() as i32,
+        y: y.round() as i32,
+        kind,
     }
 }
 
