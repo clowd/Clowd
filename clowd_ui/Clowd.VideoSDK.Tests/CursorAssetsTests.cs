@@ -308,6 +308,63 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
+        /// <summary>The two kinds each pack animates in its source are stored as generated frame
+        /// loops; everything else stays a static glyph. The container presents frame 0 outright,
+        /// which is what keeps every structural sweep above (and the inspector's tiles) honest
+        /// without asking for a time.</summary>
+        [Theory]
+        [MemberData(nameof(AllGlyphs))]
+        public void Wait_and_appstarting_animate_and_everything_else_is_static(
+            string style, string variant, string kind)
+        {
+            var glyph = CursorAssets.TryGet(style, variant, kind);
+
+            if (kind is not (CursorAssets.KindWait or CursorAssets.KindAppStarting))
+            {
+                Assert.Null(glyph.Frames);
+                Assert.Equal(0f, glyph.FrameDurationMs);
+                Assert.Same(glyph, glyph.FrameAt(0));
+                Assert.Same(glyph, glyph.FrameAt(12345.6));
+                return;
+            }
+
+            Assert.NotNull(glyph.Frames);
+            Assert.True(glyph.Frames.Count > 1);
+            Assert.True(glyph.FrameDurationMs > 0);
+            Assert.Same(glyph.Paths, glyph.Frames[0].Paths);
+
+            foreach (var frame in glyph.Frames)
+            {
+                Assert.Null(frame.Frames); // stills, not nested animations
+                Assert.Equal(glyph.ViewBox, frame.ViewBox);
+                Assert.Equal(glyph.Hotspot, frame.Hotspot);
+                foreach (var layer in frame.Paths)
+                {
+                    using var path = SKPath.ParseSvgPathData(layer.PathData);
+                    Assert.False(path == null || path.IsEmpty,
+                        $"{style}/{variant}/{kind}: generated frame layer does not parse");
+                    Assert.True(layer.HasStroke,
+                        $"{style}/{variant}/{kind}: generated frame layer without a halo");
+                }
+            }
+        }
+
+        /// <summary>Frame selection is a pure function of time — same time, same frame, any order,
+        /// negative times included — which is the property scrubbing and render determinism ride on.</summary>
+        [Fact]
+        public void Frame_selection_is_deterministic_and_loops()
+        {
+            var glyph = CursorAssets.TryGet("vision", "dark", CursorAssets.KindWait);
+            int n = glyph.Frames.Count;
+            double period = n * (double)glyph.FrameDurationMs;
+
+            Assert.Same(glyph.Frames[0], glyph.FrameAt(0));
+            Assert.Same(glyph.Frames[1], glyph.FrameAt(glyph.FrameDurationMs * 1.5));
+            Assert.Same(glyph.FrameAt(0), glyph.FrameAt(period));
+            Assert.Same(glyph.FrameAt(123), glyph.FrameAt(123 + period * 7));
+            Assert.Same(glyph.Frames[n - 1], glyph.FrameAt(-1));
+        }
+
         [Fact]
         public void Unsupported_lookups_return_null_rather_than_throwing()
         {
