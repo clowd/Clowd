@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Clowd.VideoSDK.Ai;
 using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Media;
@@ -696,6 +697,250 @@ namespace Clowd.VideoSDK.Tests
             await player.UpdateProject(muteEdit);
             Assert.True(player.DecoderOpenCount > opens);
             Assert.False(player.GetStatistics().HasAudio);
+        }
+
+        [Fact]
+        public async Task Denoise_toggle_rebuilds_and_the_strength_dial_rides_the_cheap_path()
+        {
+            RequireFFmpeg();
+
+            var project = NewProject();
+            var a = AddAvSource(project, EncodeAvFixture(2));
+            AddMediaItem(project, AddVideoTrack(project), a, 0, 2 * Second, 0);
+            AddAudioItem(project, a, 0, 2 * Second);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, SilentOptions());
+            int opens = player.DecoderOpenCount;
+
+            // the toggle changes what the mix decodes (raw stream vs denoise sidecar), so it is
+            // part of the stream signature: applying it must rebuild even though the referenced
+            // (sourceId, streamIndex) set is unchanged. No sidecar exists here, so the rebuilt
+            // mix degrades to the raw stream — the rebuild is still the observable contract.
+            var toggled = Project.FromJson(project.ToJson());
+            foreach (var track in toggled.Tracks)
+            {
+                if (track.Kind == TrackKind.Audio)
+                    track.Denoise = true;
+            }
+            await player.UpdateProject(toggled);
+            Assert.True(player.DecoderOpenCount > opens, "denoise toggle must rebuild the pipelines");
+            Assert.True(player.GetStatistics().HasAudio);
+
+            // the strength dial is per-sample math over the same streams: cheap path, no reopen
+            opens = player.DecoderOpenCount;
+            var strengthEdit = Project.FromJson(toggled.ToJson());
+            foreach (var track in strengthEdit.Tracks)
+            {
+                if (track.Kind == TrackKind.Audio)
+                    track.DenoiseStrength = 0.4;
+            }
+            var applied = player.UpdateProject(strengthEdit);
+            Assert.True(applied.IsCompleted, "strength edit must take the synchronous cheap path");
+            await applied;
+            Assert.Equal(opens, player.DecoderOpenCount);
+        }
+
+        [Fact]
+        public async Task Matte_effect_toggle_rebuilds_and_plain_blur_rides_the_cheap_path()
+        {
+            RequireFFmpeg();
+
+            var project = NewProject();
+            var a = AddVideoSource(project, EncodeVideoFixture(2));
+            AddMediaItem(project, AddVideoTrack(project), a, 0, 2 * Second, 0);
+
+            using var player = new CompositionPlayer();
+            await player.OpenAsync(project, new VideoOpenOptions { EnableHardwareDecode = false });
+            int opens = player.DecoderOpenCount;
+
+            // a plain blur is per-pixel math over the same stream: cheap path, no reopen
+            var blurred = Project.FromJson(project.ToJson());
+            blurred.Items[0].Effect = new VideoEffect { Kind = VideoEffectKind.Blur, Amount = 0.8 };
+            var applied = player.UpdateProject(blurred);
+            Assert.True(applied.IsCompleted, "a plain blur edit must take the synchronous cheap path");
+            await applied;
+            Assert.Equal(opens, player.DecoderOpenCount);
+
+            // a segmented kind changes what the pipeline set decodes (the matte sidecar joins
+            // the stream identity), so it must rebuild — no sidecar exists here, so the rebuilt
+            // set simply has no matte pipe; the rebuild is still the observable contract.
+            var segmented = Project.FromJson(blurred.ToJson());
+            segmented.Items[0].Effect = new VideoEffect { Kind = VideoEffectKind.BgBlur };
+            await player.UpdateProject(segmented);
+            Assert.True(player.DecoderOpenCount > opens, "matte toggle must rebuild the pipelines");
+
+            // and clearing it rebuilds back out of the matte identity
+            opens = player.DecoderOpenCount;
+            var cleared = Project.FromJson(segmented.ToJson());
+            cleared.Items[0].Effect = null;
+            await player.UpdateProject(cleared);
+            Assert.True(player.DecoderOpenCount > opens);
+        }
+
+        [Fact]
+        public async Task A_valid_matte_sidecar_feeds_masks_into_the_frame_source()
+        {
+            RequireFFmpeg();
+
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-matte-preview-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(cacheDir);
+            try
+            {
+                var project = NewProject();
+                string videoPath = EncodeVideoFixture(2);
+                var a = AddVideoSource(project, videoPath);
+                AddMediaItem(project, AddVideoTrack(project), a, 0, 2 * Second, 0)
+                    .Effect = new VideoEffect { Kind = VideoEffectKind.BgRemove };
+
+                WriteSyntheticMatte(cacheDir, a, videoPath);
+
+                using var player = new CompositionPlayer();
+                await player.OpenAsync(project, new VideoOpenOptions
+                {
+                    EnableHardwareDecode = false,
+                    SidecarCacheDir = cacheDir,
+                });
+
+                // one stream, two pipelines: the frame's and its matte's
+                Assert.Equal(2, player.DecoderOpenCount);
+
+                using var factory = new CpuSurfaceFactory();
+                using var cache = new FrameTextureCache(factory);
+                MaskSample mask = default;
+                Assert.True(WaitUntil(() =>
+                {
+                    if (!player.TryGetFrameSource(out var source, out long tl))
+                        return false;
+                    source.Pump(cache);
+                    if (!source.TryGetFrame(a, 0, tl, out var frame) || frame.Mask == null)
+                        return false;
+                    mask = new MaskSample(frame.Mask.Width, CenterGray(frame.Mask));
+                    return true;
+                }, 10000), "no mask reached the frame source");
+
+                Assert.Equal(W, mask.Width);
+                Assert.InRange(mask.Gray, 200 - 12, 200 + 12);
+            }
+            finally
+            {
+                try { Directory.Delete(cacheDir, recursive: true); }
+                catch { /* best effort */ }
+            }
+        }
+
+        [Fact]
+        public async Task A_matte_sidecar_completing_mid_session_reaches_the_preview()
+        {
+            RequireFFmpeg();
+
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-matte-late-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(cacheDir);
+            try
+            {
+                var project = NewProject();
+                string videoPath = EncodeVideoFixture(2);
+                var a = AddVideoSource(project, videoPath);
+                AddMediaItem(project, AddVideoTrack(project), a, 0, 2 * Second, 0)
+                    .Effect = new VideoEffect { Kind = VideoEffectKind.BgRemove };
+
+                using var player = new CompositionPlayer();
+                await player.OpenAsync(project, new VideoOpenOptions
+                {
+                    EnableHardwareDecode = false,
+                    SidecarCacheDir = cacheDir,
+                });
+
+                // the matte is wanted but still generating: only the frame's pipeline exists
+                Assert.Equal(1, player.DecoderOpenCount);
+
+                // the sidecar completes and the analysis manager pushes an UNCHANGED project:
+                // the sidecar's on-disk readiness alone must flip the stream signature, so the
+                // push rebuilds the pipelines and the matte pipe finally opens
+                WriteSyntheticMatte(cacheDir, a, videoPath);
+                await player.UpdateProject(Project.FromJson(project.ToJson()));
+                Assert.Equal(3, player.DecoderOpenCount);
+
+                using var factory = new CpuSurfaceFactory();
+                using var cache = new FrameTextureCache(factory);
+                MaskSample mask = default;
+                Assert.True(WaitUntil(() =>
+                {
+                    if (!player.TryGetFrameSource(out var source, out long tl))
+                        return false;
+                    source.Pump(cache);
+                    if (!source.TryGetFrame(a, 0, tl, out var frame) || frame.Mask == null)
+                        return false;
+                    mask = new MaskSample(frame.Mask.Width, CenterGray(frame.Mask));
+                    return true;
+                }, 10000), "no mask reached the frame source");
+
+                Assert.Equal(W, mask.Width);
+                Assert.InRange(mask.Gray, 200 - 12, 200 + 12);
+            }
+            finally
+            {
+                try { Directory.Delete(cacheDir, recursive: true); }
+                catch { /* best effort */ }
+            }
+        }
+
+        /// <summary>Writes a valid matte sidecar for <paramref name="sourceId"/>'s stream 0 into
+        /// <paramref name="cacheDir"/>: a synthetic 2s matte on the source's PTS grid — solid
+        /// gray 200, 64x64 (the analysis size of a 64x64 source) — plus the validating
+        /// companion.</summary>
+        private static void WriteSyntheticMatte(string cacheDir, Guid sourceId, string videoPath)
+        {
+            string mattePath = AiSidecars.MattePath(cacheDir, sourceId, 0);
+            using (var writer = new Mp4Writer(mattePath, new Mp4WriterOptions
+            {
+                Width = W,
+                Height = H,
+                FpsNum = Fps,
+                FpsDen = 1,
+            }))
+            {
+                var bgra = new byte[W * H * 4];
+                for (int i = 0; i < bgra.Length; i += 4)
+                {
+                    bgra[i] = bgra[i + 1] = bgra[i + 2] = 200;
+                    bgra[i + 3] = 0xFF;
+                }
+                var pin = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+                try
+                {
+                    for (int n = 0; n < 2 * Fps; n++)
+                        writer.SubmitVideoFrame(pin.AddrOfPinnedObject(), W * 4, W, H, n);
+                }
+                finally
+                {
+                    pin.Free();
+                }
+                writer.Finish();
+            }
+            Assert.True(AiSidecars.TryWriteCompanion(mattePath, AiSidecars.DescribeSource(videoPath, W, H)));
+        }
+
+        /// <summary>What the pump observed of a delivered mask — sampled inside the poll, because
+        /// the image itself is only valid until the next pump.</summary>
+        private readonly record struct MaskSample(int Width, byte Gray);
+
+        private static byte CenterGray(SkiaSharp.SKImage image)
+        {
+            var native = Marshal.AllocHGlobal(4);
+            try
+            {
+                var info = new SkiaSharp.SKImageInfo(1, 1, SkiaSharp.SKColorType.Bgra8888,
+                    SkiaSharp.SKAlphaType.Premul);
+                Assert.True(image.ReadPixels(info, native, 4, image.Width / 2, image.Height / 2));
+                var px = new byte[4];
+                Marshal.Copy(native, px, 0, 4);
+                return px[1];
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(native);
+            }
         }
 
         [Fact]

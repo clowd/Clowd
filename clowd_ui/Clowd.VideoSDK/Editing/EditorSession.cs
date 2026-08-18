@@ -739,6 +739,25 @@ namespace Clowd.VideoSDK.Editing
             Mutate(value ? "Mute Track" : "Unmute Track", ProjectChangeKind.Structural, null, origin,
                 p => RequireTrack(p, trackId).Muted = value);
 
+        /// <summary>Audio rows' AI-denoise toggle. Structural like <see cref="SetTrackMuted"/>:
+        /// the flag decides whether the player decodes the raw stream or its denoise
+        /// sidecar.</summary>
+        public void SetTrackDenoise(Guid trackId, bool value, object origin = null) =>
+            Mutate(value ? "Enable Denoise" : "Disable Denoise", ProjectChangeKind.Structural, null, origin,
+                p => RequireTrack(p, trackId).Denoise = value);
+
+        /// <summary>Sets the row's denoise dry/wet mix, clamped to 0..1 (NaN falls back to fully
+        /// denoised). A mapping change — the blend is applied per sample over streams already
+        /// decoded — coalesced per track so slider drags are one undo. Returns the strength
+        /// actually stored.</summary>
+        public double SetTrackDenoiseStrength(Guid trackId, double strength, object origin = null) =>
+            Mutate("Denoise Strength", ProjectChangeKind.Mapping, $"denoise-strength:{trackId}", origin, p =>
+            {
+                strength = Double.IsNaN(strength) ? 1.0 : Math.Clamp(strength, 0, 1);
+                RequireTrack(p, trackId).DenoiseStrength = strength;
+                return strength;
+            }, failureValue: 1.0);
+
         public void SetTrackLocked(Guid trackId, bool value, object origin = null) =>
             Mutate(value ? "Lock Track" : "Unlock Track", ProjectChangeKind.Structural, null, origin,
                 p => RequireTrack(p, trackId).Locked = value);
@@ -775,6 +794,8 @@ namespace Clowd.VideoSDK.Editing
                     Order = order,
                     Hidden = track.Hidden,
                     Muted = track.Muted,
+                    Denoise = track.Denoise,
+                    DenoiseStrength = track.DenoiseStrength,
                 };
                 p.Tracks.Add(copy);
 
@@ -789,6 +810,7 @@ namespace Clowd.VideoSDK.Editing
                         Content = item.Content?.Clone(),
                         Transform = item.Transform?.Clone() ?? new Transform(),
                         Surround = item.Surround?.Clone(),
+                        Effect = item.Effect?.Clone(),
                         Entry = item.Entry?.Clone(),
                         Exit = item.Exit?.Clone(),
                         Volume = item.Volume,
@@ -1021,6 +1043,20 @@ namespace Clowd.VideoSDK.Editing
 
             Mutate("Edit", structural ? ProjectChangeKind.Structural : ProjectChangeKind.Mapping,
                 coalesceKey, origin, p => edit(RequireItem(p, itemId)));
+        }
+
+        /// <summary>The inspector's effect write: replaces the item's <see cref="Item.Effect"/>
+        /// (null clears it; the stored effect is a clone, so the caller's instance stays its own).
+        /// Structural exactly when the matte need changes — a kind moving to or from
+        /// BgBlur/BgRemove changes which sidecar streams the player consumes, while an amount
+        /// tweak or a plain blur toggle is a mapping change. Coalesced per item so dial drags are
+        /// one undo.</summary>
+        public void SetItemEffect(Guid itemId, VideoEffect effect, object origin = null)
+        {
+            var current = Project.Items.FirstOrDefault(i => i.Id == itemId)?.Effect;
+            var structural = VideoEffect.NeedsMatte(current?.Kind ?? VideoEffectKind.None)
+                != VideoEffect.NeedsMatte(effect?.Kind ?? VideoEffectKind.None);
+            EditItem(itemId, i => i.Effect = effect?.Clone(), $"item-effect:{itemId}", structural, origin);
         }
 
         /// <summary>The multi-item form of <see cref="EditItem"/>: every id is edited inside one

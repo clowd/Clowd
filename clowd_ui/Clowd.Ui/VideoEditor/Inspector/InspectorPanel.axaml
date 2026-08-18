@@ -995,6 +995,37 @@
                             Suffix="%"
                             Value="{Binding Volume, Mode=TwoWay}" />
                     </DockPanel>
+
+                    <!--  AI denoise, a property of the row like the mute it sits under: the mix
+                          plays the generated sidecar instead of the raw stream (and degrades to
+                          raw until the analysis below finishes)  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  bool default is assigned in code-behind for the same reason the
+                                  enum ones are: a XAML DefaultValue is a string  -->
+                            <controls:ResetDefaultButton x:Name="dotDenoise" CurrentValue="{Binding Denoise, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Denoise" />
+                        <CheckBox IsChecked="{Binding Denoise, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowDenoiseStrength}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding DenoiseStrength, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Strength" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding DenoiseStrength, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowDenoiseStatus}">
+                        <TextBlock Classes="label" Text="{Binding DenoiseStatusText}" ToolTip.Tip="{Binding DenoiseStatusDetail}" />
+                    </DockPanel>
                 </StackPanel>
 
                 <!--  speed effect: the whole output plays at this factor while the item is under
@@ -1500,6 +1531,82 @@
                                     Text="#8C000000" />
                             </StackPanel>
                         </Border>
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  effect: what is applied to the item's OWN pixels — the name the SURROUND
+                      comment below reserved. Video items only: the effects run over decoded
+                      frames, and the background kinds read the stream's person matte (generated
+                      offline — the status line below narrates that analysis). Tiles like the
+                      shape picker's: four ways to treat the same frame, so each icon draws the
+                      treatment inside the same viewfinder.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowEffect}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="EFFECT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="4">
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Content="None"
+                            GroupName="ItemEffect"
+                            IsChecked="{Binding EffectNone, Mode=TwoWay}"
+                            Tag="{StaticResource IconEffectNone}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Draw the video untouched" />
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            Content="Blur"
+                            GroupName="ItemEffect"
+                            IsChecked="{Binding EffectBlur, Mode=TwoWay}"
+                            Tag="{StaticResource IconEffectBlur}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Blur the whole picture" />
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Content="Bg Blur"
+                            GroupName="ItemEffect"
+                            IsChecked="{Binding EffectBgBlur, Mode=TwoWay}"
+                            Tag="{StaticResource IconEffectBgBlur}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Blur everything behind the person" />
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Content="Bg Remove"
+                            GroupName="ItemEffect"
+                            IsChecked="{Binding EffectBgRemove, Mode=TwoWay}"
+                            Tag="{StaticResource IconEffectBgRemove}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Remove everything behind the person" />
+                    </Grid>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEffectAmount}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  the model's own default, assigned in code-behind so the dot and
+                                  the kind seeding can never disagree  -->
+                            <controls:ResetDefaultButton x:Name="dotEffectAmount" CurrentValue="{Binding EffectAmount, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Amount" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding EffectAmount, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEffectStatus}">
+                        <TextBlock Classes="label" Text="{Binding EffectStatusText}" ToolTip.Tip="{Binding EffectStatusDetail}" />
                     </DockPanel>
                 </StackPanel>
 

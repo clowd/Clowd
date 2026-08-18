@@ -21,3 +21,11 @@ pub const NO_SCREEN_PERMISSION: i32 = 3;
 /// Also what the scrolling-capture driver exits with on a platform where
 /// it is not implemented.
 pub const CAPTURE_FAILED: i32 = 4;
+
+/// "No ONNX Runtime library could be loaded" (`clowd_tractnni`, which loads
+/// the runtime dynamically from beside its own executable or from
+/// `--ort-dylib`/`ORT_DYLIB_PATH`). Distinct from a crash so the shell's AI
+/// effect generators can tell "inference is unavailable on this install"
+/// apart from "the child died" and fall back to raw passthrough without a
+/// crash report — matches `TractnniClient.cs`'s `ExitInferenceUnavailable`.
+pub const INFERENCE_UNAVAILABLE: i32 = 7;

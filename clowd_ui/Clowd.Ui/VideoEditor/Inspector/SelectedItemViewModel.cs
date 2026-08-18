@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Clowd.UI.Helpers;
+using Clowd.UI.Services;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
@@ -448,6 +449,15 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _zoomFocusX = 0.5;
         private double _zoomFocusY = 0.5;
 
+        private bool _showEffect;
+        private VideoEffectKind _effectKind;
+        private double _effectAmount = VideoEffect.DefaultAmount;
+
+        private bool _denoise;
+        private double _denoiseStrength = 1.0;
+
+        private AiAnalysisManager _analysis;
+
         private SurroundSubject _surroundSubject;
         private SurroundKind _surroundKind;
         private string _surroundColorHex = HexOfArgb(Surround.DefaultShadowColor);
@@ -520,6 +530,29 @@ namespace Clowd.UI.VideoEditor.Inspector
                 }
 
                 Sync();
+            }
+        }
+
+        /// <summary>The AI analysis manager feeding the EFFECT/AUDIO status rows. Assigned by the
+        /// window beside <see cref="Session"/> (and cleared with it); null in the tests and before
+        /// a session opens, which every status read tolerates — the rows simply stay away.</summary>
+        public AiAnalysisManager Analysis
+        {
+            get => _analysis;
+            set
+            {
+                if (ReferenceEquals(_analysis, value))
+                    return;
+
+                if (_analysis != null)
+                    _analysis.Changed -= Analysis_Changed;
+
+                _analysis = value;
+
+                if (_analysis != null)
+                    _analysis.Changed += Analysis_Changed;
+
+                RaiseAnalysisStatus();
             }
         }
 
@@ -1356,6 +1389,62 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        /// <summary>The row's AI-denoise toggle — a property of the track, like the mute it sits
+        /// under, so it fans out over the row by construction. Turning it on is what queues the
+        /// sidecar generation (the analysis manager watches the same change).</summary>
+        public bool Denoise
+        {
+            get => _denoise;
+            set
+            {
+                if (!Set(ref _denoise, value) || _syncing)
+                    return;
+
+                var track = SelectedTrack;
+                if (track is { Kind: TrackKind.Audio } && track.Denoise != value)
+                    _session.SetTrackDenoise(track.Id, value, this);
+
+                OnPropertyChanged(nameof(ShowDenoiseStrength));
+                RaiseAnalysisStatus();
+            }
+        }
+
+        /// <summary>The Strength row, shown only while the toggle is on. Inert while it is off:
+        /// the section's bindings stay live, so a stale write must find nothing to do
+        /// (<see cref="RampEntryMs"/>'s rule).</summary>
+        public bool ShowDenoiseStrength => _showAudio && _denoise;
+
+        /// <summary>Dry/wet mix, 0..1 (shown as a percentage): 1 is the fully denoised sidecar,
+        /// less blends the raw signal back in. Coalesced per track by the session, so a spinner
+        /// drag is one undo.</summary>
+        public double DenoiseStrength
+        {
+            get => _denoiseStrength;
+            set
+            {
+                value = Clamp(value, 0, 1);
+                if (!Set(ref _denoiseStrength, value) || _syncing || !_denoise)
+                    return;
+
+                var track = SelectedTrack;
+                if (track is { Kind: TrackKind.Audio })
+                    _session.SetTrackDenoiseStrength(track.Id, value, this);
+            }
+        }
+
+        /// <summary>The AUDIO section's analysis note, and whether it is on show at all — non-null
+        /// only while the denoised stream's sidecar job is queued, running, failed or the engine
+        /// is unavailable (a valid sidecar has no story to tell).</summary>
+        public bool ShowDenoiseStatus => DenoiseStatusText != null;
+
+        public string DenoiseStatusText =>
+            _showAudio && _denoise ? AnalysisStatusText(AiSidecarKind.Denoise, "Analyzing audio") : null;
+
+        /// <summary>The failed run's exception message, as the status row's tooltip — null (no
+        /// tooltip) in every other state.</summary>
+        public string DenoiseStatusDetail =>
+            _showAudio && _denoise ? AnalysisStatusDetail(AiSidecarKind.Denoise) : null;
+
         /// <summary>True when the selected item still moves with the rest of its recording.</summary>
         public bool IsLinked => _isLinked;
 
@@ -1800,6 +1889,125 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        // ------------------------------------------------------------------------ video effect
+
+        /// <summary>
+        /// Whether the EFFECT section is on show: video items only. The effects are applied to
+        /// decoded video frames — and the background kinds read the stream's person matte — so an
+        /// image, text or overlay item has nothing for them to work on (see
+        /// <see cref="VideoEffect"/>).
+        /// </summary>
+        public bool ShowEffect => _showEffect;
+
+        /// <summary>The effect tiles, with mask-tile semantics: only a true write applies, and the
+        /// radio group's deselection of the losers writes nothing. <see cref="EffectNone"/> stores
+        /// a null effect rather than a kind (<see cref="VideoEffectKind.None"/> is never
+        /// written).</summary>
+        public bool EffectNone
+        {
+            get => _effectKind == VideoEffectKind.None;
+            set => SetEffectKind(VideoEffectKind.None, value);
+        }
+
+        public bool EffectBlur
+        {
+            get => _effectKind == VideoEffectKind.Blur;
+            set => SetEffectKind(VideoEffectKind.Blur, value);
+        }
+
+        public bool EffectBgBlur
+        {
+            get => _effectKind == VideoEffectKind.BgBlur;
+            set => SetEffectKind(VideoEffectKind.BgBlur, value);
+        }
+
+        public bool EffectBgRemove
+        {
+            get => _effectKind == VideoEffectKind.BgRemove;
+            set => SetEffectKind(VideoEffectKind.BgRemove, value);
+        }
+
+        /// <summary>The Amount row: the blur kinds' dial. BgRemove has none — removal is not a
+        /// quantity.</summary>
+        public bool ShowEffectAmount =>
+            _showEffect && _effectKind is VideoEffectKind.Blur or VideoEffectKind.BgBlur;
+
+        /// <summary>Blur strength, 0..1 (shown as a percentage). Per segment like volume — the
+        /// user split the row precisely to vary things like this — and inert while the stored
+        /// effect has no dial (the row's binding stays live while hidden, so a stale write must
+        /// find nothing to do).</summary>
+        public double EffectAmount
+        {
+            get => _effectAmount;
+            set
+            {
+                value = Clamp(value, 0, 1);
+                if (!Set(ref _effectAmount, value) || _syncing)
+                    return;
+
+                var item = SelectedItem;
+                if (item?.Effect is not { Kind: VideoEffectKind.Blur or VideoEffectKind.BgBlur } effect)
+                    return;
+
+                _session.SetItemEffect(item.Id, new VideoEffect { Kind = effect.Kind, Amount = value }, this);
+            }
+        }
+
+        /// <summary>The EFFECT section's analysis note — non-null only while a background kind is
+        /// picked and its matte job is queued, running, failed or the engine is unavailable
+        /// (see <see cref="DenoiseStatusText"/>, its AUDIO twin).</summary>
+        public bool ShowEffectStatus => EffectStatusText != null;
+
+        public string EffectStatusText =>
+            _showEffect && VideoEffect.NeedsMatte(_effectKind)
+                ? AnalysisStatusText(AiSidecarKind.Matte, "Analyzing background")
+                : null;
+
+        /// <summary>See <see cref="DenoiseStatusDetail"/>, its AUDIO twin.</summary>
+        public string EffectStatusDetail =>
+            _showEffect && VideoEffect.NeedsMatte(_effectKind) ? AnalysisStatusDetail(AiSidecarKind.Matte) : null;
+
+        /// <summary>The selected stream's job as the status rows word it, or null for "no note"
+        /// — no manager attached (tests, no session yet), no job (the sidecar is fine), or a
+        /// non-media selection.</summary>
+        private string AnalysisStatusText(AiSidecarKind kind, string verb)
+        {
+            if (SelectedItem?.Content is not MediaContent media)
+                return null;
+
+            var status = _analysis?.GetStatus(kind, media.SourceId, media.StreamIndex);
+            return status?.State switch
+            {
+                AiAnalysisState.Queued => verb + "…",
+                AiAnalysisState.Running => $"{verb}… {(int)(status.Progress * 100)}%",
+                AiAnalysisState.Unavailable => "AI engine unavailable",
+                AiAnalysisState.Failed => "Analysis failed",
+                _ => null,
+            };
+        }
+
+        private string AnalysisStatusDetail(AiSidecarKind kind)
+        {
+            if (SelectedItem?.Content is not MediaContent media)
+                return null;
+
+            return _analysis?.GetStatus(kind, media.SourceId, media.StreamIndex)?.Detail;
+        }
+
+        private void Analysis_Changed(object sender, EventArgs e) => RaiseAnalysisStatus();
+
+        /// <summary>Both status rows read the manager live, so everything that moves them — the
+        /// manager's progress, the selection, the kinds picked — funnels through this.</summary>
+        private void RaiseAnalysisStatus()
+        {
+            OnPropertyChanged(nameof(ShowEffectStatus));
+            OnPropertyChanged(nameof(EffectStatusText));
+            OnPropertyChanged(nameof(EffectStatusDetail));
+            OnPropertyChanged(nameof(ShowDenoiseStatus));
+            OnPropertyChanged(nameof(DenoiseStatusText));
+            OnPropertyChanged(nameof(DenoiseStatusDetail));
+        }
+
         // ---------------------------------------------------------------------------- surround
 
         /// <summary>
@@ -2122,6 +2330,12 @@ namespace Clowd.UI.VideoEditor.Inspector
 
                 Set(ref _trackHidden, track?.Hidden ?? false, nameof(TrackHidden));
                 Set(ref _trackMuted, track?.Muted ?? false, nameof(TrackMuted));
+                Set(ref _denoise, track is { Kind: TrackKind.Audio, Denoise: true }, nameof(Denoise));
+                // strength is sticky like the surround dials: a row without denoise keeps whatever
+                // the spinner last showed (it is hidden anyway)
+                if (track is { Kind: TrackKind.Audio })
+                    Set(ref _denoiseStrength, track.DenoiseStrength, nameof(DenoiseStrength));
+                OnPropertyChanged(nameof(ShowDenoiseStrength));
                 Set(ref _isLinked, item?.LinkGroupId != null, nameof(IsLinked));
                 Set(ref _canDesync,
                     _isLinked && item.Content is not CursorContent and not KeyboardContent,
@@ -2174,6 +2388,15 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _keyboardTextColorHex, HexOfArgb(keyboard.TextColor), nameof(KeyboardTextColorHex));
                     Set(ref _keyboardBackColorHex, HexOfArgb(keyboard.BackgroundColor), nameof(KeyboardBackColorHex));
                 }
+
+                Set(ref _showEffect, isPicture && item.Content is MediaContent, nameof(ShowEffect));
+
+                var effect = item?.Effect;
+                SetEffectFlags(effect?.Kind ?? VideoEffectKind.None);
+                // no effect = keep whatever the Amount row last showed (it is hidden anyway), the
+                // same stickiness the surround dials keep below
+                if (effect != null)
+                    Set(ref _effectAmount, effect.Amount, nameof(EffectAmount));
 
                 // the surround section is shared by the pictures and the cursor glyph; which of the
                 // two it is decides what its dials default to, so the subject is read before them.
@@ -2388,6 +2611,61 @@ namespace Clowd.UI.VideoEditor.Inspector
                     edit(content);
             }, $"{coalesceKey}:{scope}", structural: false, origin: this);
         }
+
+        /// <summary>Tile setter body, on <see cref="SetSurroundKind"/>'s terms: only a true write
+        /// applies, and a fresh kind starts at the model's own default amount — the number means a
+        /// different strength per kind, so nothing carries over. Origin null (not <c>this</c>):
+        /// the write can flip the player's stream set (a matte joining or leaving — see
+        /// <see cref="EditorSession.SetItemEffect"/>), and the status row follows the analysis
+        /// manager's reaction to it, so the inspector wants its own re-read.</summary>
+        private void SetEffectKind(VideoEffectKind kind, bool selected)
+        {
+            if (!selected)
+            {
+                // a radio group deselecting the loser; the winner's own set does the work
+                if (_effectKind == kind && !_syncing)
+                    OnPropertyChanged(EffectTileProperty(kind));
+                return;
+            }
+
+            if (_effectKind == kind)
+                return;
+
+            SetEffectFlags(kind);
+
+            if (_syncing)
+                return;
+
+            Set(ref _effectAmount, VideoEffect.DefaultAmount, nameof(EffectAmount));
+
+            var item = SelectedItem;
+            if (item?.Content is not MediaContent)
+                return;
+
+            _session.SetItemEffect(item.Id, VideoEffect.Create(kind), origin: null);
+        }
+
+        /// <summary>Moves the selection to <paramref name="kind"/>, raising the tiles that flipped
+        /// plus everything the kind decides (the Amount row, the status note).</summary>
+        private void SetEffectFlags(VideoEffectKind kind)
+        {
+            var previous = _effectKind;
+            _effectKind = kind;
+
+            foreach (var name in new[] { previous, kind }.Distinct().Select(EffectTileProperty))
+                OnPropertyChanged(name);
+
+            OnPropertyChanged(nameof(ShowEffectAmount));
+            RaiseAnalysisStatus();
+        }
+
+        private static string EffectTileProperty(VideoEffectKind kind) => kind switch
+        {
+            VideoEffectKind.Blur => nameof(EffectBlur),
+            VideoEffectKind.BgBlur => nameof(EffectBgBlur),
+            VideoEffectKind.BgRemove => nameof(EffectBgRemove),
+            _ => nameof(EffectNone),
+        };
 
         /// <summary>Tile setter body: mask-tile semantics (only a true write applies), then the new
         /// style's own starting numbers. Nothing carries over from the style being left behind — the
