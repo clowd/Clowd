@@ -158,8 +158,8 @@ namespace Clowd.VideoSDK.Composition
                     if (!frames.TryGetFrame(media.SourceId, media.StreamIndex, sourceTicks, out var frame)
                         || frame.Image == null)
                         return;
-                    DrawPicture(target, frame.Image, transform, item.Surround, fx, opacity,
-                        canvasWidth, canvasHeight);
+                    DrawPicture(target, frame.Image, frame.Mask, transform, item.Surround,
+                        item.Effect, fx, opacity, canvasWidth, canvasHeight);
                     DrawDefaultCursorOverlay(project, media, timeTicks, sourceTicks, frame.Image,
                         transform, fx, opacity, target, canvasWidth, canvasHeight);
                     break;
@@ -170,8 +170,8 @@ namespace Clowd.VideoSDK.Composition
                     var image = ImageCache.Get(img.Path);
                     if (image == null)
                         return;
-                    DrawPicture(target, image, transform, item.Surround, fx, opacity,
-                        canvasWidth, canvasHeight);
+                    DrawPicture(target, image, null, transform, item.Surround,
+                        item.Effect, fx, opacity, canvasWidth, canvasHeight);
                     break;
                 }
 
@@ -207,15 +207,18 @@ namespace Clowd.VideoSDK.Composition
         // ------------------------------------------------------------------------------- media
 
         /// <summary>
-        /// A video frame or a still, placed by its mapping and wearing the item's
-        /// <paramref name="surround"/>. It is drawn from the <b>masked</b> silhouette but outside the
+        /// A video frame or a still, placed by its mapping, wearing the item's
+        /// <paramref name="effect"/> on its own pixels and its <paramref name="surround"/> outside
+        /// them. It is drawn from the <b>masked</b> silhouette but outside the
         /// mask itself: its layer opens before <see cref="ApplyClips"/>, so the clip shapes what
         /// casts the shadow while the shadow is free to fall beyond it. A surround is a
         /// decoration-only filter (see <see cref="SurroundMath"/>), so the picture is drawn
-        /// twice — once to cast, once to be seen.
+        /// twice — once to cast, once to be seen — and the effect runs in both passes, so a
+        /// removed background casts no shadow.
         /// </summary>
-        private static void DrawPicture(SKCanvas target, SKImage image, Transform transform,
-            Surround surround, ItemEffects fx, double opacity, int canvasWidth, int canvasHeight)
+        private static void DrawPicture(SKCanvas target, SKImage image, SKImage mask,
+            Transform transform, Surround surround, VideoEffect effect, ItemEffects fx,
+            double opacity, int canvasWidth, int canvasHeight)
         {
             // crop/aspect insets, dest rect and the px→canvas factors all live in the mapping —
             // shared with the cursor overlay, which maps captured positions through the same math.
@@ -249,19 +252,157 @@ namespace Clowd.VideoSDK.Composition
                     }
 
                     ApplyClips(target, transform, fx, map.Dest);
-                    using var paint = new SKPaint
-                    {
-                        IsAntialias = true,
-                        // the decoration pass carries the item's opacity on its layer instead, so
-                        // a translucent item's shadow fades once rather than twice
-                        Color = SKColors.White.WithAlpha(AlphaByte(pass == 0 ? 1 : opacity)),
-                    };
-                    target.DrawImage(image, map.Source, map.Dest, sampling, paint);
+                    // the decoration pass carries the item's opacity on its layer instead, so
+                    // a translucent item's shadow fades once rather than twice
+                    DrawEffected(target, image, mask, effect, map, sampling, pass == 0 ? 1 : opacity);
                 }
                 finally
                 {
                     target.RestoreToCount(save);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Blur strength mapping: <see cref="VideoEffect.Amount"/> 1.0 blurs at a sigma of 1/16 of
+        /// the item's reference extent (<see cref="SurroundMath.ReferenceExtent"/> — the dest
+        /// rect's shorter side), the same canvas-relative rule every surround dial uses, so the
+        /// blur reads identically at every compose size and preview==render by construction.
+        /// 1/16 at Amount 1.0 is a heavy blur (a 1080-tall item at sigma ~67 — silhouettes only);
+        /// the default 0.5 is a solid privacy blur that keeps the scene's shapes.
+        /// </summary>
+        private const double MaxBlurSigmaFraction = 1.0 / 16;
+
+        /// <summary>The blur filter for an effect over a dest rect, or null when the dial rounds
+        /// to no blur. Clamp tiling keeps edge pixels opaque instead of bleeding transparency in
+        /// from the picture's border (and confines the output to the picture's bounds).</summary>
+        private static SKImageFilter BlurFilter(VideoEffect effect, SKRect dest)
+        {
+            double amount = effect.Amount;
+            double sigma = (Double.IsNaN(amount) ? 0 : Math.Clamp(amount, 0, 1))
+                * MaxBlurSigmaFraction * SurroundMath.ReferenceExtent(dest);
+            return sigma > 0
+                ? SKImageFilter.CreateBlur((float)sigma, (float)sigma, SKShaderTileMode.Clamp)
+                : null;
+        }
+
+        /// <summary>
+        /// The item's own pixels wearing its <see cref="VideoEffect"/>: plain, blurred, or split
+        /// into a blurred background under the matte-sharp subject. A segmented kind with no mask
+        /// degrades to the plain draw — a missing or stale sidecar must never block playback or
+        /// render, and the plain picture is the least surprising stand-in. Runs once per
+        /// <see cref="DrawPicture"/> pass, inside its clips.
+        /// </summary>
+        private static void DrawEffected(SKCanvas target, SKImage image, SKImage mask,
+            VideoEffect effect, in PictureMapping map, in SKSamplingOptions sampling, double opacity)
+        {
+            var kind = effect?.Kind ?? VideoEffectKind.None;
+            if (VideoEffect.NeedsMatte(kind) && mask == null)
+                kind = VideoEffectKind.None;
+
+            switch (kind)
+            {
+                case VideoEffectKind.Blur:
+                {
+                    using var blur = BlurFilter(effect, map.Dest);
+                    using var paint = new SKPaint
+                    {
+                        IsAntialias = true,
+                        Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
+                        ImageFilter = blur,
+                    };
+                    target.DrawImage(image, map.Source, map.Dest, sampling, paint);
+                    break;
+                }
+
+                case VideoEffectKind.BgBlur:
+                {
+                    // background blurred, subject sharp on top. Both draws run at full alpha
+                    // inside one opacity layer, so a translucent item fades as one picture
+                    // rather than the subject blending against its own blurred background —
+                    // and the layer is skipped entirely at full opacity, the common case.
+                    int save = target.Save();
+                    try
+                    {
+                        if (opacity < 1)
+                        {
+                            using var group = new SKPaint
+                            {
+                                Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
+                            };
+                            target.SaveLayer(map.Dest, group);
+                        }
+
+                        using (var blur = BlurFilter(effect, map.Dest))
+                        using (var paint = new SKPaint { IsAntialias = true, ImageFilter = blur })
+                            target.DrawImage(image, map.Source, map.Dest, sampling, paint);
+                        DrawMasked(target, image, mask, map, sampling, 1);
+                    }
+                    finally
+                    {
+                        target.RestoreToCount(save);
+                    }
+                    break;
+                }
+
+                case VideoEffectKind.BgRemove:
+                    DrawMasked(target, image, mask, map, sampling, opacity);
+                    break;
+
+                default:
+                {
+                    using var paint = new SKPaint
+                    {
+                        IsAntialias = true,
+                        Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
+                    };
+                    target.DrawImage(image, map.Source, map.Dest, sampling, paint);
+                    break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// The frame multiplied by its person matte: the sharp picture inside a dest-bounded
+        /// layer, then the matte drawn over it with luma-as-alpha
+        /// (<see cref="SKColorFilter.CreateLumaColor"/>) in <see cref="SKBlendMode.DstIn"/> —
+        /// a plain color filter + blend, so GPU and raster backends produce the same pixels. The
+        /// matte decodes at analysis resolution, so its source rect is the frame's crop
+        /// re-expressed as the same fractions of the matte's own pixels — the mapping is shared,
+        /// the resolutions are not.
+        /// </summary>
+        private static void DrawMasked(SKCanvas target, SKImage image, SKImage mask,
+            in PictureMapping map, in SKSamplingOptions sampling, double opacity)
+        {
+            int save = target.Save();
+            try
+            {
+                // bounded to the dest rect (mapped through the CTM, so rotation is fine): DstIn
+                // must only multiply the item's own pixels, never what is already composed under
+                // them.
+                using (var layer = new SKPaint { Color = SKColors.White.WithAlpha(AlphaByte(opacity)) })
+                    target.SaveLayer(map.Dest, layer);
+
+                using (var paint = new SKPaint { IsAntialias = true })
+                    target.DrawImage(image, map.Source, map.Dest, sampling, paint);
+
+                var maskSource = new SKRect(
+                    (float)(map.Source.Left / image.Width * mask.Width),
+                    (float)(map.Source.Top / image.Height * mask.Height),
+                    (float)(map.Source.Right / image.Width * mask.Width),
+                    (float)(map.Source.Bottom / image.Height * mask.Height));
+                using var luma = SKColorFilter.CreateLumaColor();
+                using var maskPaint = new SKPaint
+                {
+                    IsAntialias = true,
+                    BlendMode = SKBlendMode.DstIn,
+                    ColorFilter = luma,
+                };
+                target.DrawImage(mask, maskSource, map.Dest, sampling, maskPaint);
+            }
+            finally
+            {
+                target.RestoreToCount(save);
             }
         }
 

@@ -58,6 +58,9 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotRampEntryEnabled.DefaultValue = false;
             dotRampExitEnabled.DefaultValue = false;
             dotCursorDebounce.DefaultValue = true;
+            dotDenoise.DefaultValue = false;
+            // the model's own starting amount, so the dot resets to what a fresh kind seeds
+            dotEffectAmount.DefaultValue = VideoEffect.DefaultAmount;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
             dotSpeedTarget.DefaultValue = SelectedItemViewModel.DefaultSpeedTargetOption;
             dotKeyFilter.DefaultValue = SelectedItemViewModel.DefaultKeystrokeFilterOption;

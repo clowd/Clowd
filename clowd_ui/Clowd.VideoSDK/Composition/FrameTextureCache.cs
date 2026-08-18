@@ -22,6 +22,10 @@ namespace Clowd.VideoSDK.Composition
         private readonly ISurfaceFactory _factory;
         private readonly Dictionary<(Guid SourceId, int StreamIndex), Entry> _entries
             = new Dictionary<(Guid, int), Entry>();
+        // person mattes ride beside their stream's frames under the same key: same upload path,
+        // same ownership, their own slot — a matte frame must never evict the picture it masks.
+        private readonly Dictionary<(Guid SourceId, int StreamIndex), Entry> _masks
+            = new Dictionary<(Guid, int), Entry>();
         private bool _disposed;
 
         private readonly struct Entry
@@ -42,7 +46,7 @@ namespace Clowd.VideoSDK.Composition
             _factory = factory;
         }
 
-        /// <summary>Number of streams currently cached.</summary>
+        /// <summary>Number of streams currently cached (frame entries; mattes not counted).</summary>
         public int Count => _entries.Count;
 
         /// <summary>
@@ -54,6 +58,16 @@ namespace Clowd.VideoSDK.Composition
         /// same stream (or <see cref="Dispose"/>).</returns>
         public SKImage Upload(Guid sourceId, int streamIndex, long ptsTicks,
             FrameBuffer buffer, int width, int height, int rowBytes)
+            => Upload(_entries, sourceId, streamIndex, ptsTicks, buffer, width, height, rowBytes);
+
+        /// <summary>Same contract as <see cref="Upload"/> for the stream's person-matte frame
+        /// (gray in luma, decoded to BGRA like every frame): its own slot, its own eviction.</summary>
+        public SKImage UploadMask(Guid sourceId, int streamIndex, long ptsTicks,
+            FrameBuffer buffer, int width, int height, int rowBytes)
+            => Upload(_masks, sourceId, streamIndex, ptsTicks, buffer, width, height, rowBytes);
+
+        private SKImage Upload(Dictionary<(Guid, int), Entry> entries, Guid sourceId, int streamIndex,
+            long ptsTicks, FrameBuffer buffer, int width, int height, int rowBytes)
         {
             ArgumentNullException.ThrowIfNull(buffer);
             try
@@ -83,9 +97,9 @@ namespace Clowd.VideoSDK.Composition
                     throw new InvalidOperationException($"Failed to upload frame ({width}x{height}, rowBytes {rowBytes}).");
 
                 var key = (sourceId, streamIndex);
-                if (_entries.TryGetValue(key, out var previous))
+                if (entries.TryGetValue(key, out var previous))
                     previous.Image.Dispose();
-                _entries[key] = new Entry(image, ptsTicks);
+                entries[key] = new Entry(image, ptsTicks);
                 return image;
             }
             finally
@@ -96,8 +110,16 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>Gets the latest cached frame for a stream, if any.</summary>
         public bool TryGet(Guid sourceId, int streamIndex, out SKImage image, out long ptsTicks)
+            => TryGet(_entries, sourceId, streamIndex, out image, out ptsTicks);
+
+        /// <summary>Gets the latest cached matte frame for a stream, if any.</summary>
+        public bool TryGetMask(Guid sourceId, int streamIndex, out SKImage image, out long ptsTicks)
+            => TryGet(_masks, sourceId, streamIndex, out image, out ptsTicks);
+
+        private static bool TryGet(Dictionary<(Guid, int), Entry> entries, Guid sourceId,
+            int streamIndex, out SKImage image, out long ptsTicks)
         {
-            if (_entries.TryGetValue((sourceId, streamIndex), out var entry))
+            if (entries.TryGetValue((sourceId, streamIndex), out var entry))
             {
                 image = entry.Image;
                 ptsTicks = entry.PtsTicks;
@@ -109,8 +131,8 @@ namespace Clowd.VideoSDK.Composition
             return false;
         }
 
-        /// <summary>Removes and disposes the cached frame for a stream (e.g. when its item
-        /// leaves the timeline).</summary>
+        /// <summary>Removes and disposes the cached frame (and any matte) for a stream (e.g.
+        /// when its item leaves the timeline).</summary>
         public void Evict(Guid sourceId, int streamIndex)
         {
             var key = (sourceId, streamIndex);
@@ -118,6 +140,12 @@ namespace Clowd.VideoSDK.Composition
             {
                 entry.Image.Dispose();
                 _entries.Remove(key);
+            }
+
+            if (_masks.TryGetValue(key, out var mask))
+            {
+                mask.Image.Dispose();
+                _masks.Remove(key);
             }
         }
 
@@ -129,6 +157,9 @@ namespace Clowd.VideoSDK.Composition
             foreach (var entry in _entries.Values)
                 entry.Image.Dispose();
             _entries.Clear();
+            foreach (var entry in _masks.Values)
+                entry.Image.Dispose();
+            _masks.Clear();
         }
     }
 }

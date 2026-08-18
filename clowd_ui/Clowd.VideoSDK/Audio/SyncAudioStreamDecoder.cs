@@ -49,6 +49,11 @@ namespace Clowd.VideoSDK.Audio
 
         private float[] _buffer = new float[8192 * Channels];
 
+        /// <summary>The stream's own channel count as declared by the container — decoded output
+        /// is always converted to stereo, so this is how a consumer that cares (the denoise
+        /// generator picks mono or stereo processing) learns the source layout.</summary>
+        public int SourceChannelCount { get; }
+
         public SyncAudioStreamDecoder(string path, int streamIndex, int outputSampleRate)
         {
             ArgumentNullException.ThrowIfNull(path);
@@ -80,6 +85,8 @@ namespace Clowd.VideoSDK.Audio
 
                 _timeBase = st->time_base;
                 bool tbValid = _timeBase.num > 0 && _timeBase.den > 0;
+
+                SourceChannelCount = st->codecpar->ch_layout.nb_channels;
 
                 _startTimeTicks = tbValid && st->start_time != ffmpeg.AV_NOPTS_VALUE
                     ? TimeBase.StreamTimeToTicks(st->start_time, _timeBase.num, _timeBase.den)

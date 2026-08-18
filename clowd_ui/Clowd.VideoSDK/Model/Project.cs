@@ -155,6 +155,10 @@ public sealed class Project
         {
             if (!trackById.TryAdd(track.Id, track))
                 errors.Add($"Duplicate track id {track.Id}.");
+
+            // negated comparison so NaN fails the check rather than sailing through.
+            if (!(track.DenoiseStrength >= 0 && track.DenoiseStrength <= 1))
+                errors.Add($"Track {track.Id} has a denoise strength {track.DenoiseStrength} outside 0..1.");
         }
 
         var itemIds = new HashSet<Guid>();
@@ -245,6 +249,18 @@ public sealed class Project
                     errors.Add($"Item {item.Id} has a surround size {surround.Size} outside 0..{Surround.MaxSize}.");
                 if (!(surround.Distance >= 0 && surround.Distance <= Surround.MaxDistance))
                     errors.Add($"Item {item.Id} has a surround distance {surround.Distance} outside 0..{Surround.MaxDistance}.");
+            }
+
+            // an effect follows the surround's rules exactly: optional on every item, ignored by
+            // the contents that draw no picture, and "no effect" is a null effect, never a stored
+            // kind of None.
+            if (item.Effect is { } effect)
+            {
+                if (effect.Kind == VideoEffectKind.None)
+                    errors.Add($"Item {item.Id} carries an effect of kind None (no effect is a null effect).");
+                // negated comparison so NaN fails the check rather than sailing through.
+                if (!(effect.Amount >= 0 && effect.Amount <= 1))
+                    errors.Add($"Item {item.Id} has an effect amount {effect.Amount} outside 0..1.");
             }
 
             if (item.Content is SpeedContent or ZoomContent)

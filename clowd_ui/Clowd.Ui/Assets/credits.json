@@ -123,7 +123,7 @@
     },
     {
       "id": "capture",
-      "title": "Screen Capture Engine (Rust / wgpu)",
+      "title": "Capture & AI Engines (Rust)",
       "items": [
         {
           "name": "anyhow",
@@ -172,6 +172,12 @@
           "version": "0.25.0",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/servo/core-foundation-rs"
+        },
+        {
+          "name": "DPDFNet",
+          "version": "",
+          "license": "Apache-2.0",
+          "url": "https://huggingface.co/Ceva-IP/DPDFNet"
         },
         {
           "name": "etagere",
@@ -252,10 +258,28 @@
           "url": "https://github.com/zibo-chen/rust-paddle-ocr"
         },
         {
+          "name": "ONNX Runtime",
+          "version": "",
+          "license": "MIT",
+          "url": "https://github.com/microsoft/onnxruntime"
+        },
+        {
+          "name": "ort",
+          "version": "2.0.0-rc.13",
+          "license": "MIT OR Apache-2.0",
+          "url": "https://github.com/pykeio/ort"
+        },
+        {
           "name": "pollster",
           "version": "1.0.1",
           "license": "Apache-2.0/MIT",
           "url": "https://github.com/zesterer/pollster"
+        },
+        {
+          "name": "realfft",
+          "version": "3.5.0",
+          "license": "MIT",
+          "url": "https://github.com/HEnquist/realfft"
         },
         {
           "name": "resvg",
@@ -268,6 +292,12 @@
           "version": "0.17.2",
           "license": "MIT",
           "url": "https://github.com/PolyMeilex/rfd"
+        },
+        {
+          "name": "RobustVideoMatting",
+          "version": "1.0.0",
+          "license": "GPL-3.0",
+          "url": "https://github.com/PeterL1n/RobustVideoMatting"
         },
         {
           "name": "sentry",

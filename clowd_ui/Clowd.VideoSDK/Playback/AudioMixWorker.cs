@@ -61,6 +61,7 @@ namespace Clowd.VideoSDK.Playback
         private readonly int _maxBufferedFloats;
         private readonly float[] _chunk;
         private readonly SeekableAudioSource _source;
+        private readonly DenoisedAudioSource _denoised;
         private readonly FaultIsolatingSource _readSource;
 
         // request slots (any thread); long.MinValue / null / 0 = empty. The initial pending seek
@@ -113,7 +114,7 @@ namespace Clowd.VideoSDK.Playback
         private bool _disposed;
 
         public AudioMixWorker(Project project, AudioRingBuffer ring, NAudioSink sink, int sampleRate,
-            TimeWarp warp = null)
+            TimeWarp warp = null, string sidecarCacheDir = null)
         {
             ArgumentNullException.ThrowIfNull(project);
             ArgumentNullException.ThrowIfNull(ring);
@@ -129,6 +130,7 @@ namespace Clowd.VideoSDK.Playback
 
             _project = NormalizeRate(project);
             _source = new SeekableAudioSource(_project);
+            _denoised = new DenoisedAudioSource(_source, _project, sidecarCacheDir);
             _readSource = new FaultIsolatingSource(this);
             _mixer = new AudioMixer(_project, _readSource);
             AdoptWarp(warp);
@@ -252,6 +254,7 @@ namespace Clowd.VideoSDK.Playback
                 _ring.Clear(); // mix thread IS the producer — legal here and nowhere else
                 _sink.ResetTiming(_speed);
                 _source.Reset(); // the timeline moved: every stream repositions on its next read
+                _denoised.Reset();
                 _mixer = new AudioMixer(_project, _readSource);
                 long streamTicks = _warped ? _warp.ToOutput(seek) : seek;
                 _nextFrame = AudioTime.SamplesFloor(streamTicks, _rate);
@@ -580,6 +583,7 @@ namespace Clowd.VideoSDK.Playback
             }
 
             _project = project;
+            _denoised.UpdateProject(project);
             _mixer = mixer;
             if (update.Warp != null && !ReferenceEquals(update.Warp, _warp))
                 AdoptWarp(update.Warp);
@@ -718,7 +722,7 @@ namespace Clowd.VideoSDK.Playback
                 {
                     try
                     {
-                        return _owner._source.ReadSamples(sourceId, streamIndex, sourcePosFrames,
+                        return _owner._denoised.ReadSamples(sourceId, streamIndex, sourcePosFrames,
                             dst, frames, out framesRead);
                     }
                     catch (Exception ex)
@@ -743,6 +747,7 @@ namespace Clowd.VideoSDK.Playback
 
             _running = false;
             _thread?.Join(3000);
+            _denoised.Dispose();
             _source.Dispose();
         }
     }

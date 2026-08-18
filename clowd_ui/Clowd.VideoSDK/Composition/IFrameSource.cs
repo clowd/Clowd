@@ -6,14 +6,21 @@ namespace Clowd.VideoSDK.Composition
     /// <summary>
     /// A decoded source frame ready to draw: the image (owned by the delivering
     /// <see cref="FrameTextureCache"/> — draw immediately, never retain) and its presentation
-    /// timestamp in 100ns ticks of normalized source time.
+    /// timestamp in 100ns ticks of normalized source time, plus the stream's person matte where
+    /// one is decoding alongside.
     /// </summary>
     public readonly struct FrameRef
     {
         public FrameRef(SKImage image, long ptsTicks)
+            : this(image, ptsTicks, null)
+        {
+        }
+
+        public FrameRef(SKImage image, long ptsTicks, SKImage mask)
         {
             Image = image;
             PtsTicks = ptsTicks;
+            Mask = mask;
         }
 
         /// <summary>The frame picture. Owned by the frame source's cache: valid only until the
@@ -23,6 +30,11 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>Presentation time of the frame in 100ns ticks (source time, start_time
         /// normalized away).</summary>
         public long PtsTicks { get; }
+
+        /// <summary>The person matte covering this frame (alpha in luma, decoded from the matte
+        /// sidecar at analysis resolution — see <c>Ai.AiSidecars</c>), or null when the stream has
+        /// none. Same ownership rules as <see cref="Image"/>: the cache's, never retained.</summary>
+        public SKImage Mask { get; }
     }
 
     /// <summary>

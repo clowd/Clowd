@@ -62,5 +62,15 @@ cp "$ROOT/target/release/clowd_capture_wgpu$EXE" "$OUT/"
 # Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver
 # looks for it.
 cp "$ROOT/target/release/clowd_scroll_driver$EXE" "$OUT/"
+# The AI effects binary, beside Clowd.Ui where TractnniLoader looks for it.
+# (clowd_ocr has historically been missing from this dev script — CI packages
+# it; not fixed here.) Note it also needs an ONNX Runtime dylib beside it (or
+# ORT_DYLIB_PATH set) to actually run inference: CI downloads the official
+# release archive into the package, this script does not.
+cp "$ROOT/target/release/clowd_tractnni$EXE" "$OUT/"
+# GPL-3.0 license text + notice must travel with every distributed copy of
+# the AI effects binary (GPL sections 4/6).
+cp "$ROOT/clowd_tractnni/LICENSE" "$OUT/clowd_tractnni.LICENSE.txt"
+cp "$ROOT/clowd_tractnni/NOTICE.txt" "$OUT/clowd_tractnni.NOTICE.txt"
 
 echo "Build complete: $OUT"

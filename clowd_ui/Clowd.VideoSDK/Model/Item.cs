@@ -36,10 +36,16 @@ public sealed class Item
 
     /// <summary>What is drawn AROUND the item's silhouette (shadow / glow / outline), or null for a
     /// bare item. Read by the picture draws and the themed cursor glyph only. Deliberately not
-    /// called an effect: an effect will mean something applied to the item's own pixels (a blur, a
-    /// colour grade), which is a different thing on a different side of the silhouette — see
+    /// called an effect: an effect is applied to the item's own pixels (<see cref="Effect"/>),
+    /// which is a different thing on a different side of the silhouette — see
     /// <see cref="Clowd.VideoSDK.Model.Surround"/>.</summary>
     public Surround Surround { get; set; }
+
+    /// <summary>What is applied to the item's OWN pixels (blur / background blur / background
+    /// removal), or null for an untouched item — the slot the <see cref="Surround"/> remarks
+    /// reserved. Read by the picture draws only; see
+    /// <see cref="Clowd.VideoSDK.Model.VideoEffect"/>.</summary>
+    public VideoEffect Effect { get; set; }
 
     /// <summary>Transition played over the first part of the item, or null for a hard start.</summary>
     public Transition Entry { get; set; }

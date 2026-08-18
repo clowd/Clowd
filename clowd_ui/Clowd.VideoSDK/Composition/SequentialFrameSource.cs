@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Clowd.VideoSDK.Ai;
 using Clowd.VideoSDK.Model;
 
 namespace Clowd.VideoSDK.Composition
@@ -35,6 +36,8 @@ namespace Clowd.VideoSDK.Composition
         private readonly FrameTextureCache _cache;
         private readonly FrameBufferPool _pool;
         private readonly bool _ownsPool;
+        private readonly string _sidecarCacheDir;
+        private readonly HashSet<(Guid SourceId, int StreamIndex)> _matteStreams;
         private readonly Dictionary<(Guid SourceId, int StreamIndex), StreamState> _streams
             = new Dictionary<(Guid, int), StreamState>();
         private int _repositions;
@@ -52,19 +55,29 @@ namespace Clowd.VideoSDK.Composition
         {
             public SyncStreamDecoder Decoder;
             public SequentialFrameCursor<DecodedFrame> Cursor;
+            public SyncStreamDecoder MaskDecoder;
+            public SequentialFrameCursor<DecodedFrame> MaskCursor;
             public long LastRequestTicks = long.MinValue;
 
             public void Dispose()
             {
                 Cursor?.Dispose();
                 Decoder?.Dispose();
+                MaskCursor?.Dispose();
+                MaskDecoder?.Dispose();
             }
         }
 
         /// <param name="project">Resolves <c>SourceId</c> to file paths. Not mutated.</param>
         /// <param name="cache">The composer's texture cache; delivered frames live in it.</param>
         /// <param name="pool">Staging buffer pool; a private pool is created (and owned) when null.</param>
-        public SequentialFrameSource(Project project, FrameTextureCache cache, FrameBufferPool pool = null)
+        /// <param name="sidecarCacheDir">Directory holding the project's AI sidecars (see
+        /// <see cref="AiSidecars"/>): streams the project wants a person matte for decode their
+        /// valid matte sidecar in step and deliver it as <see cref="FrameRef.Mask"/>. Null (or a
+        /// missing/stale sidecar) delivers maskless frames — the effect degrades in the
+        /// composer.</param>
+        public SequentialFrameSource(Project project, FrameTextureCache cache, FrameBufferPool pool = null,
+            string sidecarCacheDir = null)
         {
             ArgumentNullException.ThrowIfNull(project);
             ArgumentNullException.ThrowIfNull(cache);
@@ -72,6 +85,8 @@ namespace Clowd.VideoSDK.Composition
             _cache = cache;
             _ownsPool = pool == null;
             _pool = pool ?? new FrameBufferPool();
+            _sidecarCacheDir = sidecarCacheDir;
+            _matteStreams = MatteGenerator.CollectMatteStreams(project);
         }
 
         /// <summary>Container seeks performed so far because a stream was read out of source order
@@ -96,9 +111,12 @@ namespace Clowd.VideoSDK.Composition
             if (sourceTimeTicks < state.LastRequestTicks)
             {
                 // the timeline reads this stream out of source order: replay it from the keyframe
-                // at or before the wanted time rather than failing the render.
+                // at or before the wanted time rather than failing the render. The matte replays
+                // in step — its timeline is the stream's timeline.
                 state.Decoder.Seek(sourceTimeTicks);
                 state.Cursor.Rewind();
+                state.MaskDecoder?.Seek(sourceTimeTicks);
+                state.MaskCursor?.Rewind();
                 _repositions++;
             }
 
@@ -120,7 +138,24 @@ namespace Clowd.VideoSDK.Composition
                 return false; // delivered frame was evicted externally
             }
 
-            frame = new FrameRef(image, ptsTicks);
+            // the matte advances by the SAME requested instant, so the pairing is pure
+            // latest-PTS-at-or-before per stream — resolution- and rate-independent.
+            SkiaSharp.SKImage mask = null;
+            if (state.MaskCursor != null
+                && state.MaskCursor.TryAdvance(sourceTimeTicks, out long maskPts, out var decodedMask))
+            {
+                if (decodedMask != null)
+                {
+                    mask = _cache.UploadMask(sourceId, streamIndex, maskPts,
+                        decodedMask.Buffer, decodedMask.Width, decodedMask.Height, decodedMask.RowBytes);
+                }
+                else
+                {
+                    _cache.TryGetMask(sourceId, streamIndex, out mask, out _);
+                }
+            }
+
+            frame = new FrameRef(image, ptsTicks, mask);
             return true;
         }
 
@@ -144,8 +179,33 @@ namespace Clowd.VideoSDK.Composition
 
             var state = new StreamState();
             state.Decoder = new SyncStreamDecoder(source.Path, streamIndex, _pool);
-            var decoder = state.Decoder;
-            state.Cursor = new SequentialFrameCursor<DecodedFrame>(
+            state.Cursor = CreateCursor(state.Decoder);
+
+            // the stream's person matte, when the project wants one and a valid sidecar exists —
+            // opened beside the stream so both cursors advance in step. Anything wrong with the
+            // sidecar simply means maskless frames; the render never fails on an optimization.
+            var mattePath = AiSidecars.MattePath(_sidecarCacheDir, sourceId, streamIndex);
+            if (mattePath != null && _matteStreams.Contains((sourceId, streamIndex))
+                && AiSidecars.IsValid(mattePath, source.Path))
+            {
+                try
+                {
+                    state.MaskDecoder = new SyncStreamDecoder(mattePath, 0, _pool);
+                    state.MaskCursor = CreateCursor(state.MaskDecoder);
+                }
+                catch
+                {
+                    state.MaskDecoder?.Dispose();
+                    state.MaskDecoder = null;
+                    state.MaskCursor = null;
+                }
+            }
+
+            return state;
+        }
+
+        private static SequentialFrameCursor<DecodedFrame> CreateCursor(SyncStreamDecoder decoder)
+            => new SequentialFrameCursor<DecodedFrame>(
                 (out long pts, out DecodedFrame f) =>
                 {
                     if (!decoder.DecodeNext(out pts, out var buffer, out int w, out int h, out int rowBytes))
@@ -158,8 +218,6 @@ namespace Clowd.VideoSDK.Composition
                     return true;
                 },
                 f => f.Buffer.Return());
-            return state;
-        }
 
         public void Dispose()
         {

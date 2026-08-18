@@ -46,6 +46,14 @@ namespace Clowd.VideoSDK.Playback
         /// (WASAPI on Windows). Tests inject <see cref="Audio.SilentAudioOutput"/> here so
         /// playback runs on real timing without touching a device.</summary>
         public Func<Audio.IAudioOutput> CreateAudioOutput { get; set; }
+
+        /// <summary>Directory holding the project's AI sidecar files (the one with
+        /// <c>videoedit.json</c> — see <see cref="Ai.AiSidecars"/>): where the audio mix looks
+        /// for denoise sidecars when a track's <see cref="Model.Track.Denoise"/> is on, and where
+        /// <see cref="CompositionPlayer"/> looks for matte sidecars when an item's
+        /// <see cref="Model.VideoEffect"/> needs one. Null (the dev harness) plays every stream
+        /// raw and the segmented effects degrade to plain draws.</summary>
+        public string SidecarCacheDir { get; set; }
     }
 
     public sealed class VideoStreamInfo

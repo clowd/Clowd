@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using Clowd.VideoSDK;
+using Clowd.VideoSDK.Ai;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Render;
 
@@ -66,6 +67,7 @@ namespace Clowd.VideoRender
 
                 if (!FFmpegLoader.TryInitialize(FindFFmpegDirectory))
                     throw new InvalidOperationException(FFmpegLoader.FailureReason);
+                TractnniLoader.Configure(FindTractnniBinary);
 
                 var job = LoadJob(argsPath, outputOverride);
                 output = job.OutputPath;
@@ -87,6 +89,10 @@ namespace Clowd.VideoRender
                         PreferGpu = !String.Equals(
                             Environment.GetEnvironmentVariable("CLOWD_RENDER_BACKEND"), "cpu",
                             StringComparison.OrdinalIgnoreCase),
+                        // the job file sits beside the project's videoedit.json, which is where
+                        // the AI sidecars live (AiSidecars) — matte/denoise consumption and any
+                        // pre-render generation both key off this directory.
+                        SidecarCacheDir = Path.GetDirectoryName(Path.GetFullPath(argsPath)),
                         DiagnosticLog = message => Console.Error.WriteLine("Clowd.VideoRender: " + message),
                     },
                     new InlineProgress(percent => emitter.Emit(percent)),
@@ -282,6 +288,19 @@ namespace Clowd.VideoRender
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Where the <c>clowd_tractnni</c> inference binary ships when <c>CLOWD_TRACTNNI_PATH</c>
+        /// is unset (the loader consults the env var itself): beside this exe, the release
+        /// layout. The probe lives here rather than in the SDK because the SDK cannot know the
+        /// app's layout — the same seam as <see cref="FindFFmpegDirectory"/>.
+        /// </summary>
+        private static string FindTractnniBinary()
+        {
+            string name = OperatingSystem.IsWindows() ? "clowd_tractnni.exe" : "clowd_tractnni";
+            var candidate = Path.Combine(AppContext.BaseDirectory, name);
+            return File.Exists(candidate) ? candidate : null;
         }
 
         private static bool HasFFmpeg(string directory)

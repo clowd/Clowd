@@ -50,6 +50,11 @@ namespace Clowd
         {
             SetupExceptionHandling();
 
+            // the SDK's AI generators resolve the inference binary through this delegate on every
+            // run — installed before Startup so the --video-edit/--video-spike harnesses (which
+            // return before the tray lifetime is set up) get it too.
+            Clowd.VideoSDK.Ai.TractnniLoader.Configure(TractnniBinaryLocator.Resolve);
+
             if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
             {
                 // tray-resident lifetime: the tray Exit menu item is the only shutdown path (§6).

@@ -72,6 +72,7 @@ namespace Clowd.UI.VideoEditor
         private CompositionPlayer _player;
         private EditorSession _editor;
         private EditorAutosave _autosave;
+        private AiAnalysisManager _analysis; // generates the AI sidecars the edit asks for
         private TimelinePreviewProvider _preview; // filmstrips + waveforms for the timeline rows
         private bool _scrubbing;
         private bool _wasPlayingBeforeScrub;
@@ -515,6 +516,15 @@ namespace Clowd.UI.VideoEditor
             Inspector.Session = _editor;
             timeline.Session = _editor;
 
+            // AI sidecar generation (denoise wavs, person mattes) follows the edit from here on;
+            // the inspector's status rows read it, and a finished sidecar refreshes the preview
+            // (Analysis_SidecarCompleted). The dev harness has no session directory, so the
+            // manager reports Unavailable there rather than generating into nowhere.
+            _analysis = new AiAnalysisManager(_editor, SidecarCacheDir);
+            _analysis.SidecarCompleted += Analysis_SidecarCompleted;
+            _analysis.JobFailed += Analysis_JobFailed;
+            Inspector.Analysis = _analysis;
+
             // Filmstrips and waveforms decode on their own contexts, behind playback. Waveforms are
             // cached beside videoedit.json; the dev harness has no session directory and analyses
             // in memory (_editDocPath is null there).
@@ -581,8 +591,14 @@ namespace Clowd.UI.VideoEditor
             try
             {
                 // preview decodes at display resolution, not at output resolution (proxy
-                // behaviour); the composer scales the rest of the way.
-                await _player.OpenAsync(snapshot, new VideoOpenOptions { MaxPresentHeight = 1080 });
+                // behaviour); the composer scales the rest of the way. The sidecar directory is
+                // where the denoise/matte files land (beside videoedit.json) — null in dev mode,
+                // which plays every stream raw.
+                await _player.OpenAsync(snapshot, new VideoOpenOptions
+                {
+                    MaxPresentHeight = 1080,
+                    SidecarCacheDir = SidecarCacheDir,
+                });
             }
             catch (Exception ex)
             {
@@ -600,6 +616,11 @@ namespace Clowd.UI.VideoEditor
             UpdatePositionReadout(TimeSpan.Zero);
             UpdatePlayPauseButton();
         }
+
+        /// <summary>Where the AI sidecars live: beside <c>videoedit.json</c>, like the waveform
+        /// cache. Null in dev mode (no session directory), which disables them.</summary>
+        private string SidecarCacheDir =>
+            _editDocPath != null ? Path.GetDirectoryName(_editDocPath) : null;
 
         /// <summary>The edited (output) timeline length — the one duration the timeline, the
         /// readout and the render all measure against.</summary>
@@ -715,6 +736,32 @@ namespace Clowd.UI.VideoEditor
             // tick's seam check re-syncs anyway, and seeking on every change would stutter.
             if (e.Kind != ProjectChangeKind.Preview && _player.State != PlayerState.Playing)
                 _ = _player.SeekAsync(TimeSpan.FromTicks(positionTicks), SeekMode.Exact);
+        }
+
+        /// <summary>A sidecar just finished generating: push a fresh snapshot through the normal
+        /// structural-update path so the player adopts the new file — the model is unchanged, so
+        /// this reaches the player directly rather than minting a fake session mutation (which
+        /// would pollute undo). The same re-entry <see cref="Player_StateChanged"/> uses for a
+        /// deferred update.</summary>
+        private void Analysis_SidecarCompleted(object sender, EventArgs e)
+        {
+            if (!_closing)
+                Editor_ProjectChanged(this, new ProjectChangedEventArgs(ProjectChangeKind.Structural, this));
+        }
+
+        /// <summary>A generation run threw. The status row only has room for "Analysis failed", so
+        /// the exception message — which for a child-process failure names the exit code and
+        /// carries its stderr tail — gets a dialog. Raised once per run: the Failed state is
+        /// sticky, so this cannot loop.</summary>
+        private void Analysis_JobFailed(object sender, AiJobFailedEventArgs e)
+        {
+            if (_closing)
+                return;
+
+            var what = e.Key.Kind == AiSidecarKind.Denoise ? "Audio denoise" : "Background matting";
+            _ = NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error,
+                $"{what} analysis failed.\n\n{e.Detail}",
+                "AI analysis failed");
         }
 
         private void ShowEmptyEditStatus()
@@ -1505,6 +1552,11 @@ namespace Clowd.UI.VideoEditor
             // an in-flight render is owned by VideoRenderManager and survives the window; only
             // detach the progress tracking.
             UntrackRender();
+
+            // sidecar generation belongs to this window's edit: cancel whatever is running.
+            Inspector.Analysis = null;
+            _analysis?.Dispose();
+            _analysis = null;
 
             // stop composing before the player goes away: a draw operation already queued would
             // otherwise reach a disposed frame source on the render thread.
