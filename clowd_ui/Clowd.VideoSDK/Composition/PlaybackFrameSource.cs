@@ -33,6 +33,8 @@ namespace Clowd.VideoSDK.Composition
         private readonly object _sync = new object();
         private volatile Dictionary<(Guid, int), PooledFrameSink> _sinks
             = new Dictionary<(Guid, int), PooledFrameSink>();
+        private volatile Dictionary<(Guid, int), PooledFrameSink> _maskSinks
+            = new Dictionary<(Guid, int), PooledFrameSink>();
         private volatile Dictionary<(Guid, int), SkipRangeSchedule> _cuts
             = new Dictionary<(Guid, int), SkipRangeSchedule>();
         private FrameTextureCache _cache; // composing thread only
@@ -56,18 +58,39 @@ namespace Clowd.VideoSDK.Composition
             sink.FrameCompleted += OnFrameCompleted;
         }
 
+        /// <summary>Registers the sink feeding a stream's person-matte frames (the sidecar
+        /// pipeline — see <c>CompositionPlayer</c>), keyed by the stream it masks. Same
+        /// copy-on-write discipline as <see cref="RegisterStream"/>.</summary>
+        internal void RegisterMaskStream((Guid, int) key, PooledFrameSink sink)
+        {
+            lock (_sync)
+            {
+                if (_disposed)
+                    return;
+                var next = new Dictionary<(Guid, int), PooledFrameSink>(_maskSinks) { [key] = sink };
+                _maskSinks = next;
+            }
+
+            sink.FrameCompleted += OnFrameCompleted;
+        }
+
         /// <summary>Detaches every stream (pipeline teardown/reopen). Does not dispose the sinks —
         /// the player's pipelines own them.</summary>
         internal void Clear()
         {
             Dictionary<(Guid, int), PooledFrameSink> old;
+            Dictionary<(Guid, int), PooledFrameSink> oldMasks;
             lock (_sync)
             {
                 old = _sinks;
+                oldMasks = _maskSinks;
                 _sinks = new Dictionary<(Guid, int), PooledFrameSink>();
+                _maskSinks = new Dictionary<(Guid, int), PooledFrameSink>();
             }
 
             foreach (var sink in old.Values)
+                sink.FrameCompleted -= OnFrameCompleted;
+            foreach (var sink in oldMasks.Values)
                 sink.FrameCompleted -= OnFrameCompleted;
         }
 
@@ -92,6 +115,7 @@ namespace Clowd.VideoSDK.Composition
 
             _cache = cache;
             var sinks = _sinks;
+            var maskSinks = _maskSinks;
             var cuts = _cuts;
             foreach (var (key, sink) in sinks)
             {
@@ -109,6 +133,23 @@ namespace Clowd.VideoSDK.Composition
                 cache.Upload(key.Item1, key.Item2, frame.Pts.Ticks,
                     frame.Buffer, frame.Width, frame.Height, frame.RowBytes);
             }
+
+            foreach (var (key, sink) in maskSinks)
+            {
+                if (!sink.TryAcquireLatest(out var frame))
+                    continue;
+
+                // the matte shares its stream's PTS timeline, so its stream's cut schedule
+                // applies verbatim — a held frame keeps its held matte.
+                if (cuts.TryGetValue(key, out var schedule) && schedule.TryGetSkipEnd(frame.Pts, out _))
+                {
+                    frame.Return();
+                    continue;
+                }
+
+                cache.UploadMask(key.Item1, key.Item2, frame.Pts.Ticks,
+                    frame.Buffer, frame.Width, frame.Height, frame.RowBytes);
+            }
         }
 
         /// <inheritdoc/>
@@ -122,7 +163,11 @@ namespace Clowd.VideoSDK.Composition
             if (!cache.TryGet(sourceId, streamIndex, out var image, out long ptsTicks))
                 return false;
 
-            frame = new FrameRef(image, ptsTicks);
+            // hold-last for the matte too: its pipeline paces against the same clock as the
+            // frame's, so the newest uploaded matte is the one covering the frame — the same
+            // reasoning the class doc applies to the frames themselves.
+            cache.TryGetMask(sourceId, streamIndex, out var mask, out _);
+            frame = new FrameRef(image, ptsTicks, mask);
             return true;
         }
 

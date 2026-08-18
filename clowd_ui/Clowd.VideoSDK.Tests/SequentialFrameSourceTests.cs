@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using Clowd.VideoSDK.Ai;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
@@ -218,6 +219,132 @@ namespace Clowd.VideoSDK.Tests
             Assert.InRange(GrayOf(frame.Image), 2 * GrayStep - 12, 2 * GrayStep + 12);
 
             Assert.Throws<ArgumentException>(() => source.TryGetFrame(Guid.NewGuid(), 0, 0, out _));
+        }
+
+        /// <summary>A matte sidecar written on the same PTS grid as its source, at a different
+        /// resolution, with frame n solid gray n*GrayStep — distinguishable mattes, so the
+        /// pairing (latest-PTS-at-or-before per requested instant) is directly observable.</summary>
+        private string EncodeMatteSidecar(string cacheDir, Guid sourceId, string sourcePath, int size)
+        {
+            string mattePath = AiSidecars.MattePath(cacheDir, sourceId, 0);
+            using (var writer = new Mp4Writer(mattePath, new Mp4WriterOptions
+            {
+                Width = size,
+                Height = size,
+                FpsNum = Fps,
+                FpsDen = 1,
+            }))
+            {
+                var bgra = new byte[size * size * 4];
+                var pin = GCHandle.Alloc(bgra, GCHandleType.Pinned);
+                try
+                {
+                    for (int n = 0; n < Frames; n++)
+                    {
+                        byte v = (byte)(n * GrayStep);
+                        for (int i = 0; i < bgra.Length; i += 4)
+                        {
+                            bgra[i] = v;
+                            bgra[i + 1] = v;
+                            bgra[i + 2] = v;
+                            bgra[i + 3] = 0xFF;
+                        }
+                        writer.SubmitVideoFrame(pin.AddrOfPinnedObject(), size * 4, size, size, n);
+                    }
+                }
+                finally
+                {
+                    pin.Free();
+                }
+                writer.Finish();
+            }
+
+            Assert.True(AiSidecars.TryWriteCompanion(mattePath,
+                AiSidecars.DescribeSource(sourcePath, size, size)));
+            return mattePath;
+        }
+
+        /// <summary>Adds the segmented-effect item that makes the stream want a matte.</summary>
+        private static void AddSegmentedItem(Project project, Guid sourceId)
+        {
+            var track = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Order = 0 };
+            project.Tracks.Add(track);
+            project.Items.Add(new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = track.Id,
+                TimelineStartTicks = 0,
+                DurationTicks = FrameTicks(Frames),
+                Content = new MediaContent { SourceId = sourceId, StreamIndex = 0 },
+                Effect = new VideoEffect { Kind = VideoEffectKind.BgRemove },
+            });
+        }
+
+        [Fact]
+        public void Attaches_masks_from_a_valid_matte_sidecar_paired_by_pts()
+        {
+            RequireFFmpeg();
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-seqsrc-matte-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(cacheDir);
+            try
+            {
+                string path = EncodeFixture();
+                var project = ProjectFor(path, out var sourceId);
+                AddSegmentedItem(project, sourceId);
+                EncodeMatteSidecar(cacheDir, sourceId, path, size: 32); // half the frame size
+
+                using var factory = new CpuSurfaceFactory();
+                using var cache = new FrameTextureCache(factory);
+                using var source = new SequentialFrameSource(project, cache, null, cacheDir);
+
+                // masks pair by PTS at the frames' own instants, at their own resolution
+                Assert.True(source.TryGetFrame(sourceId, 0, FrameTicks(5), out var frame));
+                Assert.NotNull(frame.Mask);
+                Assert.Equal(32, frame.Mask.Width);
+                Assert.InRange(GrayOf(frame.Mask), 5 * GrayStep - 12, 5 * GrayStep + 12);
+
+                Assert.True(source.TryGetFrame(sourceId, 0, FrameTicks(6), out frame));
+                Assert.InRange(GrayOf(frame.Mask), 6 * GrayStep - 12, 6 * GrayStep + 12);
+
+                // a backwards request repositions the matte in step with the frames
+                Assert.True(source.TryGetFrame(sourceId, 0, FrameTicks(2), out frame));
+                Assert.InRange(GrayOf(frame.Mask), 2 * GrayStep - 12, 2 * GrayStep + 12);
+                Assert.InRange(GrayOf(frame.Image), 2 * GrayStep - 12, 2 * GrayStep + 12);
+            }
+            finally
+            {
+                try { Directory.Delete(cacheDir, recursive: true); }
+                catch { /* best effort */ }
+            }
+        }
+
+        [Fact]
+        public void A_sidecar_without_a_valid_companion_delivers_maskless_frames()
+        {
+            RequireFFmpeg();
+            string cacheDir = Path.Combine(Path.GetTempPath(), $"clowd-seqsrc-matte-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(cacheDir);
+            try
+            {
+                string path = EncodeFixture();
+                var project = ProjectFor(path, out var sourceId);
+                AddSegmentedItem(project, sourceId);
+                string mattePath = EncodeMatteSidecar(cacheDir, sourceId, path, size: 32);
+                File.Delete(AiSidecars.CompanionPath(mattePath)); // now stale by the validity rule
+
+                using var factory = new CpuSurfaceFactory();
+                using var cache = new FrameTextureCache(factory);
+                using var source = new SequentialFrameSource(project, cache, null, cacheDir);
+
+                Assert.True(source.TryGetFrame(sourceId, 0, FrameTicks(3), out var frame));
+                Assert.NotNull(frame.Image);
+                Assert.Null(frame.Mask);
+            }
+            finally
+            {
+                try { Directory.Delete(cacheDir, recursive: true); }
+                catch { /* best effort */ }
+            }
         }
 
         [Fact]

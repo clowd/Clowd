@@ -34,6 +34,16 @@ public sealed class Track
     /// <summary>Audio: excluded from the mix. Meaningless for video (use <see cref="Hidden"/>).</summary>
     public bool Muted { get; set; }
 
+    /// <summary>Audio: play the AI-denoised sidecar of the row's streams instead of the raw
+    /// recording (see <c>Ai.DenoiseGenerator</c>). A missing or stale sidecar degrades to the raw
+    /// audio rather than silencing the row. Meaningless for video.</summary>
+    public bool Denoise { get; set; }
+
+    /// <summary>Dry/wet mix for <see cref="Denoise"/>, validated to 0..1: 1 is the fully denoised
+    /// sidecar, anything less blends the raw signal back in per sample. Read only while
+    /// <see cref="Denoise"/> is on.</summary>
+    public double DenoiseStrength { get; set; } = 1.0;
+
     /// <summary>UI hint: the editor refuses to start edits on a locked track. Not enforced by
     /// <see cref="TimelineOps"/> — a link-group op started from an unlocked member still applies
     /// to the whole group.</summary>

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Clowd.VideoSDK.Ai;
+using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Model;
 
@@ -369,13 +371,15 @@ namespace Clowd.VideoSDK.Playback
             int mixRate = MixRate(project);
             var set = new PipelineSet
             {
-                Signature = StreamSignature(project, map, audioStreams, mixRate),
+                Signature = StreamSignature(project, map, audioStreams, mixRate, _options.SidecarCacheDir),
                 MixRate = mixRate,
             };
             if (map.VideoStreams.Count == 0 && audioStreams.Count == 0)
                 return set; // media-less project (solids/text): transport still works off the clock
 
             FFmpegLoader.EnsureInitialized();
+
+            var matteStreams = MatteGenerator.CollectMatteStreams(project);
 
             // group the needed video streams by source file (audio never rides the demuxers —
             // the mix worker's per-stream decoders own their files)
@@ -433,6 +437,9 @@ namespace Clowd.VideoSDK.Playback
                         _frameSource.RegisterStream(key, sink);
                         if (map.PrimaryVideo == key)
                             set.Primary = pipe;
+
+                        if (matteStreams.Contains(key))
+                            BuildMattePipe(source, key, files, allVideo);
                     }
                 }
 
@@ -441,7 +448,8 @@ namespace Clowd.VideoSDK.Playback
                     set.AudioRing = new AudioRingBuffer(mixRate); // ~500ms float stereo
                     set.AudioSink = new NAudioSink(mixRate, 2, set.AudioRing, _options.CreateAudioOutput?.Invoke());
                     set.AudioSink.Volume = _volume;
-                    set.MixWorker = new AudioMixWorker(project, set.AudioRing, set.AudioSink, mixRate, _warp);
+                    set.MixWorker = new AudioMixWorker(project, set.AudioRing, set.AudioSink, mixRate, _warp,
+                        _options.SidecarCacheDir);
                     if (_playbackRate != 1.0)
                         set.MixWorker.SetSpeed(_playbackRate); // a rebuild keeps the chosen speed
                     Interlocked.Increment(ref _decoderOpens); // the audio pipeline, as one
@@ -469,6 +477,55 @@ namespace Clowd.VideoSDK.Playback
             set.AllVideo = allVideo.ToArray();
             set.Primary ??= allVideo.Count > 0 ? allVideo[0] : null;
             return set;
+        }
+
+        /// <summary>
+        /// Opens the person-matte pipeline for one video stream, when a valid matte sidecar
+        /// exists (see <see cref="AiSidecars"/>). The sidecar is its own container, so it gets its
+        /// own <see cref="FilePipe"/>; the pipe is keyed by the <b>parent</b> stream — the matte
+        /// shares its PTS timeline by contract, so the parent's timeline mapping paces, seeks and
+        /// seam-hops both identically — and its sink registers as the stream's mask feed
+        /// (<see cref="PlaybackFrameSource.RegisterMaskStream"/>). A sidecar that is missing,
+        /// stale or fails to open simply means no mask: the effect degrades in the composer,
+        /// never here.
+        /// </summary>
+        private void BuildMattePipe(Source source, (Guid SourceId, int StreamIndex) key,
+            List<FilePipe> files, List<VideoPipe> allVideo)
+        {
+            var mattePath = AiSidecars.MattePath(_options.SidecarCacheDir, key.SourceId, key.StreamIndex);
+            if (mattePath == null || !AiSidecars.IsValid(mattePath, source.Path))
+                return;
+
+            var file = new FilePipe { Demuxer = new Demuxer() };
+            try
+            {
+                file.Demuxer.Open(mattePath);
+            }
+            catch
+            {
+                file.Demuxer.Dispose();
+                return; // a corrupt sidecar is a missing matte, not a failed open
+            }
+
+            files.Add(file);
+            var queue = new PacketQueue(32);
+            file.Queues.Add(queue);
+            file.Demuxer.AttachQueue(0, queue);
+
+            var sink = new PooledFrameSink();
+            var keyCopy = key;
+            var worker = new VideoDecodeWorker(
+                file.Demuxer, 0, queue, _options, _clock,
+                () => sink,
+                () => _state == PlayerState.Playing,
+                OnImmediatePresented,
+                srcPts => MapVideoPtsToClock(keyCopy, srcPts));
+            Interlocked.Increment(ref _decoderOpens);
+
+            var pipe = new VideoPipe { Key = key, Worker = worker, Sink = sink };
+            file.Video.Add(pipe);
+            allVideo.Add(pipe);
+            _frameSource.RegisterMaskStream(key, sink);
         }
 
         // ------------------------------------------------------------------------- live editing
@@ -508,7 +565,7 @@ namespace Clowd.VideoSDK.Playback
 
                         var map = ProjectTimelineMap.Build(project);
                         var set = _pipelines;
-                        if (set != null && StreamSignature(project, map, CollectAudioStreams(project), MixRate(project)) == set.Signature)
+                        if (set != null && StreamSignature(project, map, CollectAudioStreams(project), MixRate(project), _options.SidecarCacheDir) == set.Signature)
                         {
                             ApplyMappingSwap(project, map, set);
                             return Task.CompletedTask;
@@ -601,7 +658,7 @@ namespace Clowd.VideoSDK.Playback
 
                         var map = ProjectTimelineMap.Build(project);
                         var set = _pipelines;
-                        if (set != null && StreamSignature(project, map, CollectAudioStreams(project), MixRate(project)) == set.Signature)
+                        if (set != null && StreamSignature(project, map, CollectAudioStreams(project), MixRate(project), _options.SidecarCacheDir) == set.Signature)
                             ApplyMappingSwap(project, map, set);
                         else
                             ReopenCore(project, map); // contains its own failures (Failed state)
@@ -1169,10 +1226,18 @@ namespace Clowd.VideoSDK.Playback
         }
 
         /// <summary>Identity of the decode-pipeline set: which streams of which files feed it
-        /// (one line per video stream and per referenced audio item stream), plus the mix rate.
-        /// Edits that keep this equal never rebuild pipelines.</summary>
+        /// (one line per video stream and per referenced audio item stream — a video stream
+        /// tagged when the project wants its person matte, an audio stream tagged when its
+        /// track's denoise sidecar feeds the mix; either toggle changes what is decoded, so it
+        /// must rebuild, while the blur/strength dials are per-pixel/per-sample math over the
+        /// same streams and deliberately are not part of the identity), plus the mix rate.
+        /// The matte tag carries the sidecar's on-disk readiness (<c>:mt1</c> valid,
+        /// <c>:mt0</c> missing/stale): a sidecar that finishes generating mid-session flips the
+        /// tag, so the completion push rebuilds and the matte pipe opens — otherwise the preview
+        /// would stay unmatted until the next structural edit. Edits that keep this equal never
+        /// rebuild pipelines.</summary>
         private static string StreamSignature(Project project, ProjectTimelineMap map,
-            List<(Guid SourceId, int StreamIndex)> audioStreams, int mixRate)
+            List<(Guid SourceId, int StreamIndex)> audioStreams, int mixRate, string sidecarCacheDir)
         {
             var keys = new List<(Guid SourceId, int StreamIndex)>(map.VideoStreams.Keys);
             keys.Sort((a, b) =>
@@ -1181,13 +1246,30 @@ namespace Clowd.VideoSDK.Playback
                 return bySource != 0 ? bySource : a.StreamIndex.CompareTo(b.StreamIndex);
             });
 
+            var mattes = MatteGenerator.CollectMatteStreams(project);
+            var denoised = DenoisedAudioSource.CollectDenoisedStreams(project);
             var sb = new StringBuilder();
             foreach (var key in keys)
+            {
+                var sourcePath = FindSource(project, key.SourceId)?.Path;
                 sb.Append("v:").Append(key.SourceId).Append(':').Append(key.StreamIndex)
-                  .Append(':').Append(FindSource(project, key.SourceId)?.Path).Append('\n');
+                  .Append(':').Append(sourcePath);
+                if (mattes.Contains(key))
+                {
+                    var mattePath = AiSidecars.MattePath(sidecarCacheDir, key.SourceId, key.StreamIndex);
+                    sb.Append(AiSidecars.IsValid(mattePath, sourcePath) ? ":mt1" : ":mt0");
+                }
+                sb.Append('\n');
+            }
             foreach (var key in audioStreams)
+            {
                 sb.Append("a:").Append(key.SourceId).Append(':').Append(key.StreamIndex)
-                  .Append(':').Append(FindSource(project, key.SourceId)?.Path).Append('\n');
+                  .Append(':').Append(FindSource(project, key.SourceId)?.Path);
+                if (denoised.ContainsKey(key))
+                    sb.Append(":dn");
+                sb.Append('\n');
+            }
+
             if (audioStreams.Count > 0)
                 sb.Append("rate:").Append(mixRate);
             return sb.ToString();

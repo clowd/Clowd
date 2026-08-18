@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.ExceptionServices;
 using System.Threading;
+using Clowd.VideoSDK.Ai;
 using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Media;
@@ -39,6 +41,16 @@ namespace Clowd.VideoSDK.Render
         /// <summary>Passes <see cref="Mp4WriterOptions.LegacyContainerTiming"/> through — v1
         /// compat renders must mux byte-compatibly with vid-render.</summary>
         public bool LegacyContainerTiming { get; init; }
+
+        /// <summary>Directory holding the project's AI sidecar files (the one with
+        /// <c>videoedit.json</c> — see <see cref="Clowd.VideoSDK.Ai.AiSidecars"/>): where the
+        /// audio mix reads denoise sidecars for tracks with <see cref="Model.Track.Denoise"/>
+        /// on and the frame source reads matte sidecars for items with a segmented
+        /// <see cref="Model.VideoEffect"/>. Sidecars that are needed but missing/stale are
+        /// generated here before the render loop when a <c>clowd_tractnni</c> binary resolves
+        /// (see <see cref="Clowd.VideoSDK.Ai.TractnniLoader"/>). Null renders every stream raw
+        /// and the segmented effects degrade to plain draws.</summary>
+        public string SidecarCacheDir { get; init; }
     }
 
     public enum RenderOutcome
@@ -143,6 +155,21 @@ namespace Clowd.VideoSDK.Render
 
             long frameCount = schedule?.Count
                 ?? TimeBase.TicksToFrameIndex(outputDurationTicks - 1, output.FpsNum, output.FpsDen) + 1;
+
+            // AI sidecars first: the mix worker and the frame source read them at construction /
+            // first use, and generation is real work that belongs inside the progress range.
+            double progressBase;
+            try
+            {
+                progressBase = GenerateSidecars(project, options, progress, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // nothing was written yet — no partial output to delete
+                return new RenderResult { Outcome = RenderOutcome.Cancelled, OutputPath = outputPath };
+            }
+            double renderShare = 100.0 - progressBase;
+
             bool hasAudio = AudioMixer.HasAudioItems(project);
             // The audio stream runs to the end of the last audio item, not to the video's end:
             // where the source audio track is shorter than the video (real recordings routinely
@@ -158,6 +185,7 @@ namespace Clowd.VideoSDK.Render
             var surfaces = new SKSurface[InFlight];
             var staging = new FrameBuffer[InFlight];
             SequentialAudioSource audioSource = null;
+            DenoisedAudioSource denoisedSource = null;
             Mp4Writer writer = null;
 
             bool cancelled = false;
@@ -181,7 +209,8 @@ namespace Clowd.VideoSDK.Render
                     composer.Send(() =>
                     {
                         cache = new FrameTextureCache(composer.Factory);
-                        frameSource = new SequentialFrameSource(project, cache, pool);
+                        frameSource = new SequentialFrameSource(project, cache, pool,
+                            options.SidecarCacheDir);
                         for (int i = 0; i < InFlight; i++)
                             surfaces[i] = composer.Factory.CreateSurface(output.WidthPx, output.HeightPx);
                     });
@@ -195,7 +224,14 @@ namespace Clowd.VideoSDK.Render
                     if (hasAudio)
                     {
                         audioSource = new SequentialAudioSource(project);
-                        audioWarp = new WarpAudioResampler(new AudioMixer(project, audioSource),
+                        // rows with the AI-denoise flag read their sidecar wav instead of the
+                        // raw stream — same decorator the preview mixes through, so the render
+                        // is what the preview played
+                        IAudioSource mixSource = audioSource;
+                        if (DenoisedAudioSource.HasDenoise(project))
+                            mixSource = denoisedSource = new DenoisedAudioSource(
+                                audioSource, project, options.SidecarCacheDir);
+                        audioWarp = new WarpAudioResampler(new AudioMixer(project, mixSource),
                             warp, output.SampleRate);
                         // one video frame's worth of audio is the largest per-iteration chunk
                         long perFrame = AudioTime.SamplesCeil(
@@ -221,7 +257,7 @@ namespace Clowd.VideoSDK.Render
                     // completed compose+readback jobs, in submission order (single composer thread)
                     var results = new BlockingCollection<(long Frame, ExceptionDispatchInfo Error)>();
                     long submitted = 0, audioPos = 0;
-                    progress?.Report(0);
+                    progress?.Report(progressBase);
 
                     while (encoded < frameCount)
                     {
@@ -290,7 +326,7 @@ namespace Clowd.VideoSDK.Render
                         writer.SubmitVideoFrame(staging[done.Frame % InFlight].Address, rowBytes,
                             output.WidthPx, output.HeightPx, pts);
                         encoded++;
-                        progress?.Report(Math.Min(99.0, encoded * 100.0 / frameCount));
+                        progress?.Report(Math.Min(99.0, progressBase + encoded * renderShare / frameCount));
                     }
 
                     if (!cancelled)
@@ -329,6 +365,7 @@ namespace Clowd.VideoSDK.Render
                     foreach (var stage in staging)
                         stage?.Return();
                     pool.Dispose();
+                    denoisedSource?.Dispose();
                     audioSource?.Dispose();
                     // Every path that reaches Dispose without Finish() (cancellation, any error)
                     // deletes the partial output below — abandon the writer so Dispose skips the
@@ -356,6 +393,116 @@ namespace Clowd.VideoSDK.Render
                 SurfaceBackend = backend,
                 VideoFrames = encoded,
             };
+        }
+
+        /// <summary>Progress share reserved for sidecar generation when any generation runs —
+        /// enough range that a minutes-long generation visibly moves, without dwarfing the
+        /// render's own reporting.</summary>
+        private const double SidecarProgressShare = 8.0;
+
+        /// <summary>
+        /// Brings the AI sidecars the render consumes up to date: every needed-but-missing/stale
+        /// matte (items with a segmented <see cref="VideoEffect"/>) and denoise (tracks with
+        /// <see cref="Track.Denoise"/>) sidecar is generated synchronously when a
+        /// <c>clowd_tractnni</c> binary resolves. Without a binary — or a cache directory — the
+        /// render proceeds and the effects degrade exactly as the preview does: plain Blur still
+        /// applies, the segmented kinds draw plain, denoise plays raw. A stream too long for the
+        /// sidecar wav format (denoise's <see cref="NotSupportedException"/>) degrades the same
+        /// way rather than failing the render. Returns the progress consumed (0 when nothing
+        /// ran); generation failures and cancellation propagate.
+        /// </summary>
+        private static double GenerateSidecars(Project project, RenderJobOptions options,
+            IProgress<double> progress, CancellationToken cancellationToken)
+        {
+            var dir = options.SidecarCacheDir;
+            if (string.IsNullOrEmpty(dir))
+                return 0;
+
+            var jobs = new List<(Source Source, int StreamIndex, bool Matte)>();
+            foreach (var key in MatteGenerator.CollectMatteStreams(project))
+            {
+                var source = FindSource(project, key.SourceId);
+                if (source != null
+                    && !AiSidecars.IsValid(AiSidecars.MattePath(dir, key.SourceId, key.StreamIndex), source.Path))
+                    jobs.Add((source, key.StreamIndex, true));
+            }
+
+            foreach (var (key, strength) in DenoisedAudioSource.CollectDenoisedStreams(project))
+            {
+                if (!(strength > 0))
+                    continue;
+                var source = FindSource(project, key.SourceId);
+                if (source != null
+                    && !AiSidecars.IsValid(AiSidecars.DenoisePath(dir, key.SourceId, key.StreamIndex), source.Path))
+                    jobs.Add((source, key.StreamIndex, false));
+            }
+
+            if (jobs.Count == 0)
+                return 0;
+
+            if (TractnniLoader.TryGetPath() == null)
+            {
+                options.DiagnosticLog?.Invoke(
+                    $"RenderJob: {jobs.Count} AI sidecar(s) needed but no clowd_tractnni binary resolves — rendering without them.");
+                return 0;
+            }
+
+            for (int i = 0; i < jobs.Count; i++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var (source, streamIndex, matte) = jobs[i];
+                options.DiagnosticLog?.Invoke(
+                    $"RenderJob: generating {(matte ? "matte" : "denoise")} sidecar for {source.Id}:{streamIndex}");
+                var sub = progress == null ? null : new ScaledProgress(progress,
+                    i * SidecarProgressShare / jobs.Count, SidecarProgressShare / jobs.Count);
+                if (matte)
+                {
+                    MatteGenerator.Generate(source, streamIndex, dir, sub, cancellationToken);
+                }
+                else
+                {
+                    try
+                    {
+                        DenoiseGenerator.Generate(source, streamIndex, dir, sub, cancellationToken);
+                    }
+                    catch (NotSupportedException ex)
+                    {
+                        options.DiagnosticLog?.Invoke(
+                            $"RenderJob: denoise sidecar for {source.Id}:{streamIndex} skipped — {ex.Message} Rendering with raw audio.");
+                    }
+                }
+            }
+
+            return SidecarProgressShare;
+        }
+
+        /// <summary>One generation's 0..1 progress mapped onto its slice of the job's 0..100.</summary>
+        private sealed class ScaledProgress : IProgress<double>
+        {
+            private readonly IProgress<double> _inner;
+            private readonly double _base;
+            private readonly double _span;
+
+            public ScaledProgress(IProgress<double> inner, double @base, double span)
+            {
+                _inner = inner;
+                _base = @base;
+                _span = span;
+            }
+
+            public void Report(double value) =>
+                _inner.Report(_base + Math.Clamp(value, 0, 1) * _span);
+        }
+
+        private static Source FindSource(Project project, Guid sourceId)
+        {
+            foreach (var source in project.Sources ?? new List<Source>())
+            {
+                if (source.Id == sourceId)
+                    return source;
+            }
+
+            return null;
         }
 
         /// <summary>Mixes and submits audio in encoder-friendly chunks until <paramref name="target"/>

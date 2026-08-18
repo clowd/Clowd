@@ -6,6 +6,7 @@ members = [
     "clowd_rust_core",
     "clowd_scroll_driver",
     "clowd_shell_ext",
+    "clowd_tractnni",
 ]
 # clowd_server is a standalone workers-rs crate (own [workspace], wasm target).
 exclude = ["clowd_server"]
@@ -35,6 +36,13 @@ winit = "0.30"
 wgpu = { version = "30.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+# clowd_tractnni's inference runtime. load-dynamic rather than linking: the ONNX
+# Runtime dylib ships beside the binary (CI downloads the official release per
+# target) and a machine where it is missing degrades to a named exit code
+# instead of a binary that cannot start.
+ort = { version = "2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray"] }
+# clowd_tractnni's STFT/ISTFT for the 48 kHz denoiser.
+realfft = "3.5"
 pollster = "1.0"
 bytemuck = "1"
 usvg = { version = "0.47", default-features = false }
