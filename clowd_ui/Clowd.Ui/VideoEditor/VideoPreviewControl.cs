@@ -332,9 +332,13 @@ namespace Clowd.UI.VideoEditor
         {
             var full = new Rect(finalSize);
             _surface.Arrange(full);
-            PosterImage.Arrange(full);
 
             var videoRect = ComputeVideoRect(finalSize);
+
+            // the poster is the recording's own first frame, so it goes exactly where the composed
+            // picture will — including the letterbox gap, or it would jump on the first frame.
+            PosterImage.Arrange(videoRect);
+
             if (videoRect != VideoRect)
             {
                 // the surface's own bounds do not change when only the letterbox does (a Fit
@@ -351,6 +355,11 @@ namespace Clowd.UI.VideoEditor
 
             return finalSize;
         }
+
+        /// <summary>Gap left between the picture and every edge of the preview area, so the checker
+        /// behind it always shows on all four sides — that band is what tells the user the whole
+        /// frame is on screen rather than cropped by the window.</summary>
+        private const double LetterboxPadding = 12;
 
         /// <summary>Stretch.Uniform of the video frame into the control bounds, centred — capped at
         /// 100% when <see cref="FitToWindow"/> is off. Also publishes <see cref="ZoomScale"/>: the
@@ -369,9 +378,15 @@ namespace Clowd.UI.VideoEditor
             if (renderScaling <= 0)
                 renderScaling = 1.0;
 
+            // the fit is computed against the padded box, but the result is still centred in the
+            // full bounds — a preview area too small to hold the gap keeps the picture rather than
+            // collapsing it to nothing.
+            var fitWidth = Math.Max(1, finalSize.Width - (LetterboxPadding * 2));
+            var fitHeight = Math.Max(1, finalSize.Height - (LetterboxPadding * 2));
+
             var scale = Math.Min(
-                finalSize.Width / _videoPixelSize.Width,
-                finalSize.Height / _videoPixelSize.Height);
+                fitWidth / _videoPixelSize.Width,
+                fitHeight / _videoPixelSize.Height);
 
             if (!FitToWindow)
                 scale = Math.Min(scale, 1.0 / renderScaling);
