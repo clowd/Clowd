@@ -325,9 +325,6 @@ impl<'a> PrimaryPanelData<'a> {
         if let Some(d) = phase_between(warmup.t_window_create.get(), warmup.t_window_create_start.get()) {
             out.push(format_args!("  window create:   {}", DisplayMs(d)));
         }
-        if let Some(d) = warmup.t_ready.get() {
-            out.push(format_args!("  ready:           {}", DisplayMs(d)));
-        }
         out.push_empty();
 
         // ── Capture section: fresh per cycle, anchored at the show

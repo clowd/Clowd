@@ -100,9 +100,6 @@ pub struct WarmupTimings {
     pub workers: Vec<WarmupWorkerTimings>,
     pub t_window_create_start: AtomicDuration,
     pub t_window_create: AtomicDuration,
-    /// When warm-up completed (persistent mode: the `ready` event; one-shot
-    /// mode: never set — window creation is the last warm-up phase there).
-    pub t_ready: AtomicDuration,
 }
 
 impl WarmupTimings {
@@ -117,7 +114,6 @@ impl WarmupTimings {
             workers,
             t_window_create_start: AtomicDuration::new(),
             t_window_create: AtomicDuration::new(),
-            t_ready: AtomicDuration::new(),
         }
     }
 
@@ -136,10 +132,6 @@ impl WarmupTimings {
             .set_once(self.t_start.elapsed());
     }
 
-    pub fn mark_ready(&self) {
-        self.t_ready.set_once(self.t_start.elapsed());
-    }
-
     /// Total warm-up time: the latest recorded phase.
     pub fn total(&self) -> Duration {
         let mut total = Duration::ZERO;
@@ -147,7 +139,6 @@ impl WarmupTimings {
             self.t_initialize.get(),
             self.t_window_create_start.get(),
             self.t_window_create.get(),
-            self.t_ready.get(),
         ]
         .into_iter()
         .flatten()

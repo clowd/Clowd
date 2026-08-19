@@ -85,12 +85,11 @@ pub(crate) async fn request_adapter_device(
             required_features,
             required_limits,
             // MemoryUsage keeps gpu-allocator's retained-forever memblocks at
-            // 8/4 MB instead of Performance's 128/64 MB — which measured as
-            // the bulk of the persistent host's idle footprint, per display.
-            // Deliberately the default for one-shot mode too: the measured
-            // latency difference is negligible (heap creation is lazy and
-            // sub-ms) and the large snapshot texture takes the allocator's
-            // dedicated path either way, so the modes stay consistent.
+            // 8/4 MB instead of Performance's 128/64 MB. The measured latency
+            // difference is negligible (heap creation is lazy and sub-ms) and
+            // the large snapshot texture takes the allocator's dedicated path
+            // either way — so for a process that exits after one capture the
+            // smaller blocks cost nothing.
             memory_hints: match memory_hints {
                 MemoryHintsMode::LowerMemoryUsage => wgpu::MemoryHints::MemoryUsage,
                 MemoryHintsMode::MaxPerformance => wgpu::MemoryHints::Performance,

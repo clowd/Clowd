@@ -2,10 +2,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use winit::event_loop::EventLoopProxy;
-
 use crate::app::{App, CycleSetup};
-use crate::host::AppEvent;
 use crate::image_extract;
 use crate::render::protocol::{next_cycle_gen, BlurredDesktopImage, CycleParams, RenderMsg, WorkerInput};
 use crate::render::worker::{self, RenderWorkerParams, WorkerSetup};
@@ -20,54 +17,6 @@ type PeekImagesLatch = Arc<Latch<Vec<Arc<WindowPeekImage>>>>;
 
 pub struct CaptureSession {
     app: App,
-}
-
-/// The warm half of [`CaptureSession::new`]: monitors, the wgpu instance
-/// and render workers through Stage A — everything slow, nothing
-/// per-capture. No screenshot/walker/cursor jobs run here; the persistent
-/// host spawns those when a `show` command arrives (`App::handle_show`).
-pub struct WarmSession {
-    app: App,
-}
-
-impl WarmSession {
-    /// `proxy` lets each worker's wgpu device-lost callback signal the
-    /// main thread (→ `EXIT_GPU_LOST` restart); a lost device would
-    /// otherwise sit undetected until the next `show` failed.
-    pub fn new(proxy: EventLoopProxy<AppEvent>, memory_hints: MemoryHintsMode) -> anyhow::Result<Self> {
-        let t_start = Instant::now();
-
-        let monitors = SystemInterop::all_monitors();
-        if monitors.is_empty() {
-            anyhow::bail!("no monitors detected; nothing to render to");
-        }
-
-        let instance = Arc::new(create_wgpu_instance());
-        let warmup = Arc::new(WarmupTimings::new(t_start, monitors.len()));
-        warmup.mark_initialize();
-
-        let worker_failed = Arc::new(AtomicUsize::new(0));
-        let worker_parked = Arc::new(AtomicUsize::new(0));
-        let worker_setups = spawn_render_workers(
-            &monitors,
-            &instance,
-            &warmup,
-            memory_hints,
-            &worker_failed,
-            &worker_parked,
-            Some(&proxy),
-        );
-
-        let mut app = App::new(warmup, instance, monitors, worker_setups, worker_failed);
-        app.enable_persistent(worker_parked);
-        Ok(Self {
-            app,
-        })
-    }
-
-    pub fn into_app(self) -> App {
-        self.app
-    }
 }
 
 impl CaptureSession {
@@ -88,11 +37,7 @@ impl CaptureSession {
         // ── Warm state: workers spun up once, reused for every cycle ─
 
         let worker_failed = Arc::new(AtomicUsize::new(0));
-        // Only observed by the persistent host; a fresh counter satisfies
-        // the worker spawn signature in one-shot mode. No device-lost
-        // proxy either — one-shot keeps wgpu's default loss behaviour.
-        let worker_parked = Arc::new(AtomicUsize::new(0));
-        let worker_setups = spawn_render_workers(&monitors, &instance, &warmup, memory_hints, &worker_failed, &worker_parked, None);
+        let worker_setups = spawn_render_workers(&monitors, &instance, &warmup, memory_hints, &worker_failed);
 
         // ── Per-cycle state: screenshot + walker jobs, fresh latches ─
 
@@ -201,8 +146,6 @@ fn spawn_render_workers(
     warmup: &Arc<WarmupTimings>,
     memory_hints: MemoryHintsMode,
     failed_count: &Arc<AtomicUsize>,
-    parked_count: &Arc<AtomicUsize>,
-    gpu_lost_proxy: Option<&EventLoopProxy<AppEvent>>,
 ) -> Vec<WorkerSetup> {
     monitors
         .iter()
@@ -215,8 +158,6 @@ fn spawn_render_workers(
                 warmup: warmup.clone(),
                 memory_hints,
                 failed_count: failed_count.clone(),
-                parked_count: parked_count.clone(),
-                gpu_lost_proxy: gpu_lost_proxy.cloned(),
             })
         })
         .collect()

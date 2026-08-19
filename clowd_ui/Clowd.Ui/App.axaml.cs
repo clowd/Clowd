@@ -135,10 +135,6 @@ namespace Clowd
                 // periodic update checks, and (opt-in) downloading + applying them while idle.
                 UpdateService.Default.Start();
 
-                // keep a warmed-up capture process resident so the capture hotkey is instant
-                // (no-op when the setting is off or the platform will not have it).
-                CaptureProcessHost.Current.Start();
-
                 // start receiving command line arguments forwarded from secondary instances
                 _processor.Ready();
 
@@ -460,11 +456,6 @@ namespace Clowd
             try { UpdateService.Default.Stop(); }
             catch { }
 
-            // ask the warm capture host to exit rather than leaving it to stdin EOF, but never let
-            // a wedged child hold up our own exit — it dies with our stdin either way.
-            try { await CaptureProcessHost.Current.StopAsync().WaitAsync(TimeSpan.FromSeconds(3)); }
-            catch (Exception ex) { Debug.WriteLine("Error stopping the capture host during exit: " + ex.Message); }
-
             try
             {
                 if (SettingsRoot.Current != null)
@@ -501,11 +492,6 @@ namespace Clowd
             ShutdownGlobalHotkeys();
 
             try { UpdateService.Default.Stop(); }
-            catch { }
-
-            // fire-and-forget (cannot await here without holding up the OS): the child exits on
-            // stdin EOF regardless, so this only races to make that exit graceful.
-            try { _ = CaptureProcessHost.Current.StopAsync(); }
             catch { }
 
             try

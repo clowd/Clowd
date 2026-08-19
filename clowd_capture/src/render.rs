@@ -84,8 +84,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         warmup,
         memory_hints,
         failed_count,
-        parked_count,
-        gpu_lost_proxy,
     } = params;
 
     // Armed for the worker's whole life: any exit that isn't a clean
@@ -114,25 +112,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         }
     };
     let adapter_name = bundle.adapter_name.clone();
-
-    // Persistent mode: a device lost while parked would otherwise go
-    // unnoticed until the next `show` failed on a dead device — signal
-    // the main thread, which emits `display_changed` and exits with
-    // EXIT_GPU_LOST so the shell respawns a fresh host. Complements (does
-    // not replace) the uncaptured-error handler installed at device
-    // creation.
-    if let Some(proxy) = gpu_lost_proxy {
-        bundle
-            .device
-            .set_device_lost_callback(move |reason, message| {
-                // Destroyed = we tore the device down ourselves (shutdown);
-                // only an unexpected loss should restart the host.
-                if matches!(reason, wgpu::DeviceLostReason::Unknown) {
-                    error!("render worker {monitor_index}: GPU device lost: {message}");
-                    let _ = proxy.send_event(crate::host::AppEvent::GpuLost);
-                }
-            });
-    }
 
     let mut ui_renderer = UiRenderer::new(
         &bundle.device,
@@ -227,9 +206,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         });
 
     // ── Cycle loop: park → BeginCycle → render until EndCycle ───────
-
-    // Fully warm: everything from here on is per-cycle work.
-    parked_count.fetch_add(1, Ordering::Release);
 
     'cycles: loop {
         let cycle = match pending_cycle.take() {
