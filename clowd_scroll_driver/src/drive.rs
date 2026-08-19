@@ -1,8 +1,7 @@
 //! The driver loop and its conversation with the shell.
 //!
 //! One NDJSON object per line, the shape described in CAPTURE_PROTOCOL.md
-//! (`clowd_capture/src/host/protocol.rs`) and under the same rule: **stdout carries only
-//! protocol lines**. Every log record goes to stderr and the session's
+//! §2.2, under the rule: **stdout carries only protocol lines**. Every log record goes to stderr and the session's
 //! `scroll.log`, so the shell can treat any `{…}` line as an event.
 //!
 //! ```jsonc

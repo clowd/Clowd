@@ -48,7 +48,7 @@ flags that differ (`CaptureArguments.Build`).
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
 | `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation. `lower-memory-usage` keeps the allocator's retained heap blocks small — the right trade for a process that exits after one capture. |
-| `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as the cycle ends (§2.5). Process-level and passed on both spawn paths: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
+| `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as the cycle ends (§2.5). Process-level: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
 
 ### 1.2 Session-directory file protocol
 

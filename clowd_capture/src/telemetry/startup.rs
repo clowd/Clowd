@@ -91,9 +91,8 @@ impl WarmupWorkerTimings {
     }
 }
 
-/// One-time warm-up timings, anchored at process start. Recorded once —
-/// in persistent mode this happens minutes or hours before the first
-/// capture, so nothing per-cycle may anchor here (see [`CaptureTimings`]).
+/// One-time warm-up timings, anchored at process start. Recorded once, so
+/// nothing per-cycle may anchor here (see [`CaptureTimings`]).
 pub struct WarmupTimings {
     pub t_start: Instant,
     pub t_initialize: AtomicDuration,
@@ -197,10 +196,8 @@ impl CaptureWorkerTimings {
     }
 }
 
-/// Timings for a single capture cycle, anchored at the moment the cycle's
-/// per-capture jobs are spawned — the `show` command in persistent mode,
-/// just before the screenshot job in one-shot mode. Allocated fresh per
-/// cycle (which is what keeps `set_once` correct across cycles) and
+/// Timings for a single capture cycle, anchored where its per-capture jobs
+/// are spawned, just before the screenshot job. Allocated per cycle and
 /// distributed to the workers via `CycleParams`.
 pub struct CaptureTimings {
     pub t_start: Instant,

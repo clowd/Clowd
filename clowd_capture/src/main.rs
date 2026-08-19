@@ -71,9 +71,8 @@ fn main() -> anyhow::Result<()> {
 fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     system::SystemInterop::init();
 
-    // Before any window exists, so no cycle can end without knowing who to
-    // hand foreground rights back to. Applies to both modes: the persistent
-    // host serves many cycles for the same shell.
+    // Before any window exists, so the cycle cannot end without knowing who to
+    // hand foreground rights back to.
     system::SystemInterop::set_shell_pid(args.shell_pid);
 
     // The shell preflights this before spawning us and owns the whole permission
@@ -85,6 +84,16 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
         error!("Screen Recording permission has not been granted; refusing to capture");
         std::process::exit(system::EXIT_NO_SCREEN_PERMISSION);
     }
+
+    // All the slow work — monitors, wgpu instance, render workers, the desktop
+    // screenshot — happens before the event loop exists, so the overlay windows
+    // can be created against state that is already warm.
+    let memory_hints = args.memory_hints;
+    let settings = Arc::new(args.into_settings());
+    if let Some(dir) = &settings.session_dir {
+        info!("session mode: payload will be written to {:?}", dir);
+    }
+    let session = capture::session::CaptureSession::new(settings, memory_hints)?;
 
     // Accessory keeps us out of the dock and stops the overlay stealing activation
     // before it is shown; focus is taken explicitly once every window is ready.
@@ -102,15 +111,10 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
             .build()?
     };
     #[cfg(not(target_os = "macos"))]
-    let event_loop = winit::event_loop::EventLoop::builder().build()?;
+    let event_loop = winit::event_loop::EventLoop::new()?;
 
-    let memory_hints = args.memory_hints;
-    let settings = Arc::new(args.into_settings());
-    if let Some(dir) = &settings.session_dir {
-        info!("session mode: payload will be written to {:?}", dir);
-    }
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    let mut app = capture::session::CaptureSession::new(settings, memory_hints)?.into_app();
+    let mut app = session.into_app();
     event_loop.run_app(&mut app)?;
     Ok(())
 }
