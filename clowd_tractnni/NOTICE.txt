@@ -17,8 +17,10 @@ It embeds the following model weights:
     https://huggingface.co/Ceva-IP/DPDFNet
     (obtained via the k2-fsa/sherpa-onnx "speech-enhancement-models" release)
 
-It dynamically loads ONNX Runtime (MIT, https://github.com/microsoft/onnxruntime),
-which is distributed beside it but not embedded in it.
+It statically links ONNX Runtime (MIT, https://github.com/microsoft/onnxruntime)
+via the ort crate (Apache-2.0/MIT, https://github.com/pykeio/ort); both licenses
+are GPL-compatible. On Windows the DirectML execution-provider helper library
+(DirectML.dll) is distributed beside it but not embedded in it.
 
 Complete corresponding source code for clowd_tractnni is available at:
 https://github.com/clowd/Clowd (the clowd_tractnni/ directory)

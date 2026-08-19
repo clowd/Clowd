@@ -321,7 +321,7 @@ struct DpdfModel {
 impl DpdfModel {
     fn new(channels: usize) -> anyhow::Result<Self> {
         let t = Instant::now();
-        let session = Session::builder()?
+        let session = crate::ep_session_builder()?
             .commit_from_memory(DPDF_MODEL)
             .context("creating the DPDFNet session")?;
         let state0 = initial_state(&session)?;
@@ -570,18 +570,13 @@ mod tests {
     /// Opt-in parity check against ORT-generated reference tensors: the
     /// metadata-parsed initial state must match the captured one, and 100
     /// frames through the real model must reproduce the reference enhanced
-    /// spectra. Set CLOWD_TRACTNNI_REF_DIR (and optionally
-    /// CLOWD_TRACTNNI_ORT_DYLIB).
+    /// spectra. Set CLOWD_TRACTNNI_REF_DIR.
     #[test]
     fn env_dpdf_reference_parity() {
         let Ok(dir) = std::env::var("CLOWD_TRACTNNI_REF_DIR") else {
             eprintln!("SKIP {}: CLOWD_TRACTNNI_REF_DIR not set", module_path!());
             return;
         };
-        if !crate::ort_env::init_for_tests() {
-            eprintln!("SKIP {}: no ONNX Runtime dylib available", module_path!());
-            return;
-        }
         let dir = std::path::Path::new(&dir);
         let spec_in = read_f32(&dir.join("dpdf_spec_in.bin"));
         let spec_ref = read_f32(&dir.join("dpdf_spec_out.bin"));
@@ -667,10 +662,6 @@ mod tests {
             eprintln!("SKIP {}: CLOWD_TRACTNNI_REF_DIR not set", module_path!());
             return;
         };
-        if !crate::ort_env::init_for_tests() {
-            eprintln!("SKIP {}: no ONNX Runtime dylib available", module_path!());
-            return;
-        }
         let spec_in = read_f32(&std::path::Path::new(&dir).join("dpdf_spec_in.bin"));
         let signal = ola_reconstruct(&spec_in);
         let len = signal.len();

@@ -36,11 +36,26 @@ winit = "0.30"
 wgpu = { version = "30.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# clowd_tractnni's inference runtime. load-dynamic rather than linking: the ONNX
-# Runtime dylib ships beside the binary (CI downloads the official release per
-# target) and a machine where it is missing degrades to a named exit code
-# instead of a binary that cannot start.
-ort = { version = "2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray"] }
+# clowd_tractnni's inference runtime. Default features: ort-sys downloads
+# pyke's prebuilt, attested ONNX Runtime binaries per target and links the
+# runtime statically; execution-provider features (directml/coreml) are
+# enabled per target in clowd_tractnni's own manifest, since no one binary
+# build carries every EP. copy-dylibs stages the EP helper dylib
+# (DirectML.dll) beside the built exe; CI packages it from there.
+# NOTE: pyke's libs are compiled /MD — clowd_tractnni's build.rs swaps that
+# one binary off this workspace's `+crt-static` at link time (see there).
+# Default features minus `tracing`: with `tracing` on and no subscriber
+# installed, ONNX Runtime's own log lines (EP registration failures, nodes
+# falling back to the CPU) vanish silently — without it they go to stderr,
+# which the spawner already pumps into its diagnostic ring.
+ort = { version = "2.0.0-rc.13", default-features = false, features = [
+    "std",
+    "ndarray",
+    "download-binaries",
+    "tls-native",
+    "copy-dylibs",
+    "api-27",
+] }
 # clowd_tractnni's STFT/ISTFT for the 48 kHz denoiser.
 realfft = "3.5"
 pollster = "1.0"

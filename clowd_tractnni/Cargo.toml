@@ -18,13 +18,15 @@ license = "GPL-3.0-only"
 #
 # Split out of the app for three reasons:
 # - the GPL boundary above;
-# - ONNX Runtime is a large native library loaded dynamically (load-dynamic);
-#   a machine where the dylib is missing or refuses to load costs a named exit
-#   code (exit::INFERENCE_UNAVAILABLE) instead of a broken app, and a crash in
-#   native inference kills a per-job child, not the editor;
+# - ONNX Runtime is a large native library; a crash in native inference kills
+#   a per-job child, not the editor;
 # - the embedded model weights (~15 MB RobustVideoMatting fp32 + ~10.6 MB
 #   DPDFNet2 48 kHz, ~25.6 MB together) stay out of every process that never
 #   runs an AI effect. Cancelling a job is killing a process.
+#
+# Only Windows (x64 + arm64) and Apple Silicon build this crate: upstream
+# ONNX Runtime dropped macOS x86_64, and ort has no prebuilt binaries for it.
+# CI skips it on the osx-x64 leg and the app greys the AI features out there.
 
 [dependencies]
 clowd_rust_core.workspace = true
@@ -32,9 +34,22 @@ anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true
 simplelog.workspace = true
-# ONNX Runtime bindings, load-dynamic: the dylib is resolved at startup (see
-# src/ort_env.rs) rather than linked, so the crate builds without any ORT SDK
-# present and the shipped runtime is the official Microsoft release archive.
+# ONNX Runtime bindings: ort-sys downloads pyke's prebuilt runtime for the
+# cargo TARGET at build time and links it statically, so the shipped binary
+# needs no runtime dylib beside it. Execution providers are per-target
+# features below — pyke publishes one binary build per EP set, so the set
+# has to match what exists for each target (see ort-sys's dist.tsv). The
+# libs are compiled /MD; build.rs swaps this binary onto the dynamic CRT.
 ort.workspace = true
 # STFT/ISTFT for the DPDFNet denoiser (src/denoise.rs).
 realfft.workspace = true
+
+# DirectML: GPU inference on any DX12 hardware with no user-installed
+# runtime (DirectML.dll ships in the package). Deliberately NOT CUDA — the
+# CUDA EP needs the user's own CUDA 13 + cuDNN 9 install, which end users
+# will never have, so it could only ever fall back.
+[target.'cfg(windows)'.dependencies]
+ort = { workspace = true, features = ["directml"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+ort = { workspace = true, features = ["coreml"] }
