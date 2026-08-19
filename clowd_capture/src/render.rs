@@ -48,9 +48,9 @@ pub const MSAA_SAMPLES: u32 = 1;
 /// Centralised because there is more than one way back to parking
 /// (`EndCycle`, and a cycle cancelled after the visible latch) and both the
 /// COMPLETENESS and the ORDER of the release matter. A path that skips a
-/// step keeps tens of MB of VRAM per monitor alive for the entire idle gap
-/// in persistent mode — precisely what the 1×1 parked surface exists to
-/// avoid. Route any future park path through here.
+/// step keeps tens of MB of VRAM per monitor alive until the process exits —
+/// precisely what the 1×1 parked surface exists to avoid. Route any future
+/// park path through here.
 ///
 /// Order is deliberate:
 /// 1. `UiRenderer::end_cycle` FIRST. The renderer outlives the cycle loop,
@@ -130,13 +130,33 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
     // ── Handoff: wait for the window + surface from the main thread ─
     // A BeginCycle can legitimately arrive first (the screenshot job races
-    // window creation) — stash it for the cycle loop below.
+    // window creation), and in one-shot mode it usually does. Upload its
+    // snapshot here rather than stashing it untouched: the upload needs only
+    // the device, so doing it now runs it *against* the main thread's window
+    // creation instead of after it. The snapshot rides along with the cycle so
+    // the two can never be paired up wrongly.
 
-    let mut pending_cycle: Option<Arc<CycleParams>> = None;
+    let mut pending_cycle: Option<(Arc<CycleParams>, Option<Arc<gpu::desktop::DesktopSnapshot>>)> = None;
     let handoff = loop {
         match input_rx.recv() {
             Ok(WorkerInput::Handoff(h)) => break h,
-            Ok(WorkerInput::BeginCycle(p)) => pending_cycle = Some(p),
+            Ok(WorkerInput::BeginCycle(p)) => {
+                let stamp = |field: fn(&crate::telemetry::startup::CaptureWorkerTimings) -> &crate::telemetry::startup::AtomicDuration| {
+                    if let Some(t) = p.timings.workers.get(monitor_index) {
+                        field(t).set_once(p.timings.t_start.elapsed());
+                    }
+                };
+                stamp(|t| &t.upload_start);
+                let snapshot = gpu::desktop::upload_snapshot(
+                    &bundle.device,
+                    &bundle.queue,
+                    &p.snapshot,
+                    &bundle.desktop_bgl,
+                    &bundle.desktop_sampler,
+                );
+                stamp(|t| &t.upload);
+                pending_cycle = Some((p, snapshot));
+            }
             Ok(WorkerInput::Shutdown) => {
                 fail_guard.disarm();
                 return;
@@ -164,7 +184,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         .unwrap_or(caps.formats[0]);
     assert_eq!(actual_format, SURFACE_FORMAT, "surface format mismatch on monitor {monitor_index}");
 
-    // ── Assemble persistent GPU state, configure the surface once ────
+    // ── Assemble long-lived GPU state, configure the surface ────────
     // Pipelines/layouts/sampler live for the worker's lifetime; only the
     // desktop snapshot (and blur/peek textures) are per capture cycle.
 
@@ -182,16 +202,24 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         view_formats: vec![],
         desired_maximum_frame_latency: 1,
     };
-    // A hidden (parked) window must not pin full-screen backbuffers — on a
-    // 4K monitor that is tens of MB of VRAM per display doing nothing. The
-    // surface sits at 1×1 between cycles and is configured to monitor size
-    // for the duration of each cycle.
+    // Configure at monitor size right away, while the main thread is still
+    // finishing its own window setup — this is the one swapchain create the
+    // first cycle needs, and doing it here keeps it off the critical path
+    // between the screenshot landing and frame 0.
+    surface.configure(&gpu.device, &config);
+    // Read only at the top of a 'cycles iteration, where it is exact: the
+    // surface is parked iff the previous iteration went through `park_worker`,
+    // which every path back to the top does. Set only by those park sites.
+    let mut surface_parked = false;
+
+    // A parked window must not pin full-screen backbuffers — on a 4K monitor
+    // that is tens of MB of VRAM per display doing nothing. `park_worker`
+    // shrinks to this at the end of a cycle; the next cycle configures back up.
     let parked_config = wgpu::SurfaceConfiguration {
         width: 1,
         height: 1,
         ..config.clone()
     };
-    surface.configure(&gpu.device, &parked_config);
 
     let mut perf = PerfTracker::new_with_refresh(refresh_hz);
     let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
@@ -208,12 +236,14 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // ── Cycle loop: park → BeginCycle → render until EndCycle ───────
 
     'cycles: loop {
-        let cycle = match pending_cycle.take() {
-            Some(p) => p,
+        // `preloaded_snapshot` is `Some` only for a cycle that arrived during
+        // the handoff wait and was uploaded there.
+        let (cycle, preloaded_snapshot) = match pending_cycle.take() {
+            Some(pair) => pair,
             None => loop {
                 // Parked between cycles: a blocking recv keeps idle CPU at ~0.
                 match input_rx.recv() {
-                    Ok(WorkerInput::BeginCycle(p)) => break p,
+                    Ok(WorkerInput::BeginCycle(p)) => break (p, None),
                     Ok(WorkerInput::Handoff(_)) => {
                         warn!("render worker {monitor_index}: unexpected handoff ignored");
                     }
@@ -240,13 +270,21 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         // checks below.
         if cycle.cancelled.load(Ordering::Acquire) {
             info!("render worker {monitor_index}: discarding BeginCycle for an already-finished cycle");
-            // Already parked (no surface to shrink, no snapshot uploaded
-            // yet this iteration), so no full `park_worker` — but still
-            // assert the invariant that a parked worker's UiRenderer holds
-            // nothing snapshot-derived. It is a no-op today because the
-            // previous park cleared it; keeping it unconditional means the
-            // invariant does not depend on which path got us here.
-            ui_renderer.end_cycle();
+            // Release the snapshot the handoff wait may have uploaded for this
+            // cycle; `gpu.snapshot` was never assigned, so this Arc is the only
+            // reference and no bind group can be holding it (frame 0 never ran).
+            drop(preloaded_snapshot);
+            if !surface_parked {
+                // First cycle: the surface really is at monitor size, so take
+                // the full park rather than assuming there is nothing to shrink.
+                park_worker(&surface, &mut gpu, &parked_config, &mut ui_renderer);
+                surface_parked = true;
+            } else {
+                // Already parked — but still assert the invariant that a parked
+                // worker's UiRenderer holds nothing snapshot-derived, so it does
+                // not depend on which path got us here.
+                ui_renderer.end_cycle();
+            }
             continue 'cycles;
         }
 
@@ -267,14 +305,22 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             }
         };
 
+        // The first cycle inherits the monitor-sized surface configured after
+        // the handoff; every later one starts from a 1×1 parked surface. No
+        // reset needed here — every path back to the top of 'cycles parks.
         mark(|t| &t.configure_start);
-        surface.configure(&gpu.device, &config);
+        if surface_parked {
+            surface.configure(&gpu.device, &config);
+        }
         mark(|t| &t.configure);
 
         // ── Stage B: upload this cycle's desktop snapshot ───────────
+        // Done during the handoff wait when the BeginCycle beat the window —
+        // the common case in one-shot. `set_once` keeps the marks stamped there.
 
         mark(|t| &t.upload_start);
-        gpu.snapshot = gpu::desktop::upload_snapshot(&gpu.device, &gpu.queue, &cycle.snapshot, &gpu.desktop_bgl, &gpu.desktop_sampler);
+        gpu.snapshot = preloaded_snapshot
+            .or_else(|| gpu::desktop::upload_snapshot(&gpu.device, &gpu.queue, &cycle.snapshot, &gpu.desktop_bgl, &gpu.desktop_sampler));
         mark(|t| &t.upload);
 
         // ── Stage C: per-cycle uniforms + bind group, draw frame 0 ──
@@ -410,6 +456,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         // park instead of rendering the dead cycle.
         if cycle.cancelled.load(Ordering::Acquire) {
             park_worker(&surface, &mut gpu, &parked_config, &mut ui_renderer);
+            surface_parked = true;
             continue 'cycles;
         }
 
@@ -590,6 +637,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         // snapshot, which would keep the texture resident
                         // for the whole parked gap.
                         park_worker(&surface, &mut gpu, &parked_config, &mut ui_renderer);
+                        surface_parked = true;
                         continue 'cycles;
                     }
                     Ok(RenderMsg::Shutdown) | Err(mpsc::TryRecvError::Disconnected) => {

@@ -39,14 +39,15 @@ impl TipsMode {
 }
 
 /// GPU allocator sizing strategy, mirrored from the shell's capture
-/// settings. `LowerMemoryUsage` (default) keeps gpu-allocator's retained
-/// heap blocks small — the right trade for a process that exits after one
-/// capture; `MaxPerformance` restores wgpu's large-block default.
+/// settings. `MaxPerformance` (default) is wgpu's large-block allocator —
+/// what one-shot capture ran on before the warm host existed;
+/// `LowerMemoryUsage` keeps gpu-allocator's retained heap blocks small at
+/// some cost in latency.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum MemoryHintsMode {
     #[default]
-    LowerMemoryUsage,
     MaxPerformance,
+    LowerMemoryUsage,
 }
 
 /// What the capturer should have selected when it opens. `Region` is the
@@ -189,10 +190,10 @@ pub struct CliArgs {
     #[arg(long)]
     pub video: bool,
 
-    /// GPU allocator strategy. `lower-memory-usage` (the default) keeps the
-    /// allocator's retained heap blocks small; `max-performance` restores
-    /// wgpu's large-block allocator. Read once at GPU device creation.
-    #[arg(long, value_enum, default_value_t = MemoryHintsMode::LowerMemoryUsage)]
+    /// GPU allocator strategy. `max-performance` (the default) is wgpu's
+    /// large-block allocator; `lower-memory-usage` keeps the retained heap
+    /// blocks small. Read once at GPU device creation.
+    #[arg(long, value_enum, default_value_t = MemoryHintsMode::MaxPerformance)]
     pub memory_hints: MemoryHintsMode,
 
     /// Hide the UPLOAD button (both the capture strip's and the OCR

@@ -84,12 +84,12 @@ pub(crate) async fn request_adapter_device(
             label: Some("clowd_capture_wgpu device"),
             required_features,
             required_limits,
-            // MemoryUsage keeps gpu-allocator's retained-forever memblocks at
-            // 8/4 MB instead of Performance's 128/64 MB. The measured latency
-            // difference is negligible (heap creation is lazy and sub-ms) and
-            // the large snapshot texture takes the allocator's dedicated path
-            // either way — so for a process that exits after one capture the
-            // smaller blocks cost nothing.
+            // Performance (wgpu's large-block default) is what one-shot capture
+            // ran on before the warm host existed. MemoryUsage was introduced to
+            // keep an idle resident host's footprint down — a cost a process that
+            // exits after one capture never pays — so the default goes back to
+            // trading memory for latency. The setting stays for anyone who wants
+            // the smaller blocks.
             memory_hints: match memory_hints {
                 MemoryHintsMode::LowerMemoryUsage => wgpu::MemoryHints::MemoryUsage,
                 MemoryHintsMode::MaxPerformance => wgpu::MemoryHints::Performance,

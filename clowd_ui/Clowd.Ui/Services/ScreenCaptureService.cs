@@ -433,10 +433,10 @@ namespace Clowd.UI
             if (!settings.OcrEnabled)
                 args.Add("--no-ocr");
 
-            if (settings.MemoryHints == CapturerMemoryHints.MaxPerformance)
+            if (settings.MemoryHints == CapturerMemoryHints.LowerMemoryUsage)
             {
                 args.Add("--memory-hints");
-                args.Add("max-performance");
+                args.Add("lower-memory-usage");
             }
 
             // the overlay was launched specifically to pick a recording region: a confirmed
