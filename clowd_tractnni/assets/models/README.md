@@ -36,6 +36,6 @@ these exact exports; a re-export with different shapes or metadata fails the in-
 roundtrip tests, so run `cargo test -p clowd_tractnni` (with `CLOWD_TRACTNNI_REF_DIR` if parity
 reference data is available) after swapping either file.
 
-ONNX Runtime itself (MIT) is **not** embedded: it is loaded dynamically at runtime from beside
-the executable (CI downloads the official `microsoft/onnxruntime` release archives into the
-package — see `.github/workflows/ci.yml`), from `ORT_DYLIB_PATH`, or from `--ort-dylib`.
+ONNX Runtime itself (MIT) is statically linked into the executable by the `ort` crate, which
+downloads pyke's prebuilt, attested runtime binaries per target at build time (see
+`clowd_tractnni/Cargo.toml` for the per-target execution-provider feature sets).

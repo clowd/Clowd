@@ -64,7 +64,7 @@ struct RvmSession {
 impl RvmSession {
     fn new() -> anyhow::Result<Self> {
         let t = Instant::now();
-        let session = Session::builder()?
+        let session = crate::ep_session_builder()?
             .commit_from_memory(RVM_MODEL)
             .context("creating the RVM session")?;
         log::info!("RVM session ready in {:?}", t.elapsed());
@@ -226,18 +226,14 @@ mod tests {
     /// Opt-in parity check against ORT-generated reference tensors: three
     /// 1080p frames through the real model must reproduce the reference
     /// alpha to well under one 8-bit step on average. Set
-    /// CLOWD_TRACTNNI_REF_DIR (and optionally CLOWD_TRACTNNI_ORT_DYLIB) and
-    /// run with --release — debug inference is minutes per frame.
+    /// CLOWD_TRACTNNI_REF_DIR and run with --release — debug inference is
+    /// minutes per frame.
     #[test]
     fn env_rvm_reference_parity() {
         let Ok(dir) = std::env::var("CLOWD_TRACTNNI_REF_DIR") else {
             eprintln!("SKIP {}: CLOWD_TRACTNNI_REF_DIR not set", module_path!());
             return;
         };
-        if !crate::ort_env::init_for_tests() {
-            eprintln!("SKIP {}: no ONNX Runtime dylib available", module_path!());
-            return;
-        }
         let dir = std::path::Path::new(&dir);
         let src = read_f32(&dir.join("rvm_src.bin"));
         let fgr_ref = read_f32(&dir.join("rvm_fgr.bin"));

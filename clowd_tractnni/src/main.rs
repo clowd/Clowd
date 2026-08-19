@@ -17,10 +17,11 @@
 //! Everything human-readable goes to stderr, which the spawner pumps into a
 //! bounded diagnostic ring.
 //!
-//! Inference runs on ONNX Runtime, loaded *dynamically* (see [`ort_env`]): CI
-//! ships the official runtime beside this executable, and a machine where no
-//! runtime loads exits with [`clowd_rust_core::exit::INFERENCE_UNAVAILABLE`]
-//! so the spawner can fall back to raw passthrough instead of filing a crash.
+//! Inference runs on ONNX Runtime, statically linked by the `ort` crate
+//! (pyke's prebuilt binaries, per target). Hardware execution providers are
+//! registered per platform in [`register_execution_providers`]; a provider
+//! that fails to register (no NVIDIA driver, say) falls back down the list
+//! and ultimately to the CPU, so inference always works somewhere.
 //!
 //! There is no Sentry client here, by design — the same reasoning as
 //! `clowd_ocr`: a process spawned per job would report release-health
@@ -32,7 +33,6 @@
 
 mod denoise;
 mod matte;
-mod ort_env;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -43,12 +43,6 @@ use clap::{Parser, Subcommand};
 #[derive(Parser, Debug)]
 #[command(about = "Runs AI video/audio effect models over raw frames/samples piped through stdin/stdout")]
 struct CliArgs {
-    /// Explicit ONNX Runtime dylib to load. When absent the runtime is
-    /// resolved from ORT_DYLIB_PATH, then from a file beside this executable
-    /// (which is how shipped installs find the copy CI put there).
-    #[arg(long, global = true)]
-    ort_dylib: Option<PathBuf>,
-
     /// Optional log-file mirror. Terminal logging always goes to stderr,
     /// which the spawner pumps into its diagnostics; this puts the same
     /// lines (per-job timings, the resolved runtime path) somewhere a
@@ -109,13 +103,6 @@ fn main() -> anyhow::Result<()> {
     // `error!` into Sentry, and we have no Sentry client to bridge into.
     let _ = simplelog::CombinedLogger::init(loggers);
 
-    // The one exit code with a meaning of its own: no runtime, no inference.
-    // The spawner treats it as "feature unavailable here", not as a crash.
-    if let Err(err) = ort_env::init(args.ort_dylib.as_deref()) {
-        log::error!("{err:#}");
-        std::process::exit(clowd_rust_core::exit::INFERENCE_UNAVAILABLE);
-    }
-
     let result = match args.command {
         Command::Matte {
             width,
@@ -132,6 +119,52 @@ fn main() -> anyhow::Result<()> {
         log::error!("{err:#}");
     }
     result
+}
+
+/// Builds a session builder with the platform's hardware execution provider
+/// registered: DirectML on Windows (any DX12 GPU; DirectML.dll ships beside
+/// this exe — chosen over CUDA, which would need a user-installed CUDA
+/// toolkit no end user has), CoreML on macOS. A provider that fails to
+/// register is skipped and the CPU takes over, so this can never make
+/// inference unavailable, only faster.
+///
+/// Registration is explicit per provider rather than through ort's own
+/// fallback (`with_execution_providers`): that path logs failures through the
+/// `tracing` feature this build turns off, which made "why is this running on
+/// the CPU?" undiagnosable. Here every provider's outcome lands on stderr,
+/// which the spawner pumps into its diagnostic ring.
+pub fn ep_session_builder() -> anyhow::Result<ort::session::builder::SessionBuilder> {
+    use ort::ep::ExecutionProvider;
+
+    let mut builder = ort::session::Session::builder()?;
+    // DirectML requires both of these (the DML allocator cannot serve the
+    // memory-pattern planner, and parallel execution is CPU-only); they only
+    // cost anything when every hardware provider fails, in which case CPU
+    // inference is the least of the user's problems.
+    // map_err rather than `?`: a builder-option error carries the builder
+    // itself, which anyhow cannot hold (not Send/Sync).
+    #[cfg(windows)]
+    {
+        builder = builder
+            .with_memory_pattern(false)
+            .map_err(|e| anyhow::anyhow!("disabling memory pattern: {e}"))?
+            .with_parallel_execution(false)
+            .map_err(|e| anyhow::anyhow!("selecting sequential execution: {e}"))?;
+    }
+
+    let eps: Vec<Box<dyn ExecutionProvider>> = vec![
+        #[cfg(windows)]
+        Box::new(ort::ep::DirectML::default()),
+        #[cfg(target_os = "macos")]
+        Box::new(ort::ep::CoreML::default()),
+    ];
+    for ep in &eps {
+        match ep.register(&mut builder) {
+            Ok(()) => log::info!("execution provider registered: {}", ep.name()),
+            Err(e) => log::warn!("execution provider {} unavailable (trying the next one): {e}", ep.name()),
+        }
+    }
+    Ok(builder)
 }
 
 /// Outcome of trying to fill a fixed-size buffer from a stream.

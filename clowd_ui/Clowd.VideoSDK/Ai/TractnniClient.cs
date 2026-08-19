@@ -23,8 +23,9 @@ namespace Clowd.VideoSDK.Ai
     /// </summary>
     public sealed class TractnniClient : IDisposable
     {
-        /// <summary>The binary's named exit code for "no usable ONNX Runtime dylib": the feature
-        /// is unavailable on this machine, not broken.</summary>
+        /// <summary>The binary's named exit code for "inference is unavailable on this machine":
+        /// the feature is unavailable, not broken. Current binaries link the ONNX Runtime
+        /// statically and no longer emit it, but the mapping stays for older shipped ones.</summary>
         public const int ExitInferenceUnavailable = 7;
 
         /// <summary>Rust's abort-on-panic exit code.</summary>

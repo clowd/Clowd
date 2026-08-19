@@ -37,12 +37,9 @@ namespace Clowd.UI
 
             // (c) walk up to a directory containing Cargo.toml (the cargo workspace root) and
             // probe target/debug and target/release. Keep walking if a Cargo.toml has no
-            // built binary (a crate manifest may sit below the workspace root that owns target/).
-            // Unlike the other Rust helpers, this binary is useless without an ONNX Runtime
-            // dylib it can resolve (its own probe is beside-the-exe), so a candidate with the
-            // dylib as a sibling beats a candidate without one — a stale `cargo build` (debug)
-            // exe must not shadow the release exe the dylib was staged next to.
-            string first = null;
+            // built binary (a crate manifest may sit below the workspace root that owns
+            // target/). The ONNX Runtime is statically linked into the binary, so any built
+            // exe is usable as-is.
             var dir = new DirectoryInfo(Path.GetFullPath(baseDirectory));
             while (dir != null)
             {
@@ -51,25 +48,15 @@ namespace Clowd.UI
                     foreach (var profile in new[] { "debug", "release" })
                     {
                         var candidate = Path.Combine(dir.FullName, "target", profile, BinaryFileName);
-                        if (!File.Exists(candidate))
-                            continue;
-                        if (HasOrtDylib(candidate))
+                        if (File.Exists(candidate))
                             return candidate;
-                        first ??= candidate;
                     }
                 }
 
                 dir = dir.Parent;
             }
 
-            return first;
+            return null;
         }
-
-        private static string OrtDylibFileName =>
-            OperatingSystem.IsWindows() ? "onnxruntime.dll" : "libonnxruntime.dylib";
-
-        private static bool HasOrtDylib(string binaryPath) =>
-            Environment.GetEnvironmentVariable("ORT_DYLIB_PATH") is { Length: > 0 }
-            || File.Exists(Path.Combine(Path.GetDirectoryName(binaryPath)!, OrtDylibFileName));
     }
 }

@@ -3,7 +3,8 @@ name: CI
 # Test + package on every commit; clowd_server has its own workflow (deploy-server.yml).
 # Each package is the published Clowd.Ui app with the Rust binaries beside it and
 # obs-express in a subdirectory, the layout ScreenCaptureService/ObsBinaryLocator expects.
-# Every package also carries clowd_tractnni (AI effects) with the ONNX Runtime dylib it loads.
+# Every package except osx-x64 (which upstream ONNX Runtime no longer supports) also
+# carries the clowd_tractnni AI effects binary with its execution-provider dylibs.
 
 on:
   push:
@@ -104,39 +105,35 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ort-asset is the official microsoft/onnxruntime release archive
-          # shipped beside clowd_tractnni (which loads it dynamically).
-          # osx-x64 is pinned to 1.23.2 — the last onnxruntime release that
-          # still published an x86_64 macOS archive.
+          # ai: whether the clowd_tractnni AI effects binary builds for this
+          # target. false only on osx-x64: upstream ONNX Runtime dropped
+          # macOS x86_64, so ort has no binaries for it — the app greys the
+          # AI features out there instead.
           - rid: win-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             obs-asset: obs-express-windows-x64.zip
-            ort-version: 1.29.0
-            ort-asset: onnxruntime-win-x64-1.29.0.zip
+            ai: true
             exe: .exe
             msix-arch: x64
           - rid: win-arm64
             os: windows-latest
             target: aarch64-pc-windows-msvc
             obs-asset: obs-express-windows-arm64.zip
-            ort-version: 1.29.0
-            ort-asset: onnxruntime-win-arm64-1.29.0.zip
+            ai: true
             exe: .exe
             msix-arch: arm64
           - rid: osx-x64
             os: macos-15
             target: x86_64-apple-darwin
             obs-asset: obs-express-macos-x64.zip
-            ort-version: 1.23.2
-            ort-asset: onnxruntime-osx-x86_64-1.23.2.tgz
+            ai: false
             exe: ""
           - rid: osx-arm64
             os: macos-15
             target: aarch64-apple-darwin
             obs-asset: obs-express-macos-arm64.zip
-            ort-version: 1.29.0
-            ort-asset: onnxruntime-osx-arm64-1.29.0.tgz
+            ai: true
             exe: ""
     runs-on: ${{ matrix.os }}
     # Lifted to the job so the Sentry step can test the token in an `if:`, where secrets are unavailable but env is; no SENTRY_ORG because an org token carries the slug itself.
@@ -194,9 +191,13 @@ jobs:
       - name: Build rust binaries
         shell: bash
         run: |
-          PKGS="-p clowd_capture_wgpu -p clowd_ocr -p clowd_scroll_driver -p clowd_tractnni"
+          PKGS="-p clowd_capture_wgpu -p clowd_ocr -p clowd_scroll_driver"
           if [ "${{ runner.os }}" = "Windows" ]; then
             PKGS="$PKGS -p clowd_shell_ext"
+          fi
+          # The ort crate's build downloads pyke's prebuilt ONNX Runtime for the target and links it statically (see the matrix `ai` flag).
+          if [ "${{ matrix.ai }}" = "true" ]; then
+            PKGS="$PKGS -p clowd_tractnni"
           fi
           cargo build --release --target ${{ matrix.target }} $PKGS
 
@@ -223,7 +224,10 @@ jobs:
           sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
           sentry-cli debug-files upload "$OCR_DIF" "$OUT/clowd_ocr${{ matrix.exe }}"
           sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/clowd_scroll_driver${{ matrix.exe }}"
-          sentry-cli debug-files upload "$TRACT_DIF" "$OUT/clowd_tractnni${{ matrix.exe }}"
+          # absent on the one leg that does not build the AI effects binary
+          if [ "${{ matrix.ai }}" = "true" ]; then
+            sentry-cli debug-files upload "$TRACT_DIF" "$OUT/clowd_tractnni${{ matrix.exe }}"
+          fi
           if [ "${{ runner.os }}" = "Windows" ]; then
             sentry-cli debug-files upload "$OUT/clowd_shell_ext.pdb" "$OUT/clowd_shell_ext.dll"
           fi
@@ -243,6 +247,7 @@ jobs:
 
       # Beside Clowd.Ui, which is where TractnniLoader looks for it.
       - name: Copy AI effects binary into package
+        if: matrix.ai
         run: cp "target/${{ matrix.target }}/release/clowd_tractnni${{ matrix.exe }}" publish/
         shell: bash
 
@@ -250,36 +255,39 @@ jobs:
       # GPL sections 4/6 require the license text and source offer to travel
       # with every distributed copy.
       - name: Copy AI effects license into package
+        if: matrix.ai
         run: |
           cp clowd_tractnni/LICENSE publish/clowd_tractnni.LICENSE.txt
           cp clowd_tractnni/NOTICE.txt publish/clowd_tractnni.NOTICE.txt
         shell: bash
 
-      # clowd_tractnni loads the ONNX Runtime dynamically from beside itself;
-      # ship the official microsoft/onnxruntime release dylib next to it.
-      - name: Download ONNX Runtime
-        run: curl -fsSL -o ort-archive "https://github.com/microsoft/onnxruntime/releases/download/v${{ matrix.ort-version }}/${{ matrix.ort-asset }}"
+      # The runtime itself is statically linked, but the DirectML EP needs
+      # its helper dylib beside the exe (both Windows arches). The macOS
+      # CoreML EP is fully static — nothing to ship.
+      - name: Copy execution-provider dylibs into package (Windows)
+        if: matrix.ai && runner.os == 'Windows'
+        run: cp "target/${{ matrix.target }}/release/DirectML.dll" publish/
         shell: bash
 
-      - name: Extract ONNX Runtime into package (Windows)
-        if: runner.os == 'Windows'
+      # clowd_tractnni is the workspace's one /MD binary (its build.rs swaps
+      # it off `+crt-static` to match pyke's ONNX Runtime libs), so it
+      # imports msvcp140/vcruntime140 at runtime. Those are not OS
+      # components; ship them app-local from the runner's own VS redist,
+      # matching the package's architecture. Every other binary in the
+      # package stays crt-static and needs none of this.
+      - name: Copy VC++ CRT into package (Windows)
+        if: matrix.ai && runner.os == 'Windows'
         run: |
-          unzip -q ort-archive -d ort-dist
-          cp ort-dist/*/lib/onnxruntime.dll publish/
-          # copied only when the archive carries it (its presence varies by
-          # release) — clowd_tractnni only dlopens the main dll, which pulls
-          # this one in itself when it exists
-          cp ort-dist/*/lib/onnxruntime_providers_shared.dll publish/ 2>/dev/null || true
-        shell: bash
-
-      - name: Extract ONNX Runtime into package (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          mkdir ort-dist && tar -xzf ort-archive -C ort-dist
-          # Dereference the versioned-name symlink: clowd_tractnni probes for
-          # exactly libonnxruntime.dylib beside itself, and one real file
-          # survives packaging/signing better than a symlink pair.
-          cp -L ort-dist/*/lib/libonnxruntime.dylib publish/
+          CRT_DIR=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
+            -path "*/VC/Redist/MSVC/*/${{ matrix.msix-arch }}/Microsoft.VC*.CRT" 2>/dev/null | sort | tail -1)
+          if [ -z "$CRT_DIR" ]; then echo "VC redist dir not found" >&2; exit 1; fi
+          for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
+            if [ -f "$CRT_DIR/$f" ]; then cp "$CRT_DIR/$f" publish/; fi
+          done
+          # the two every-arch dlls must have made it; fail loudly here rather
+          # than with a cryptic loader error on user machines
+          test -f publish/msvcp140.dll
+          test -f publish/vcruntime140.dll
         shell: bash
 
       # The version in the filename means a changed extension arrives under a fresh name that a lock on the old copy cannot block.
