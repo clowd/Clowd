@@ -265,15 +265,7 @@ pub struct SystemInterop;
 /// `system::EXIT_*` spelling keeps working. They are defined there because
 /// the scrolling-capture driver exits with the same meanings and the shell
 /// reads both processes' codes through one table.
-pub use clowd_rust_core::exit::{
-    CAPTURE_FAILED as EXIT_CAPTURE_FAILED, DISPLAY_CHANGED as EXIT_DISPLAY_CHANGED, NO_SCREEN_PERMISSION as EXIT_NO_SCREEN_PERMISSION,
-};
-
-/// Exit code for "a render worker's wgpu device was lost while warm" (driver
-/// reset/update, GPU removed). Same contract as [`EXIT_DISPLAY_CHANGED`] —
-/// clean, respawn me — but distinct so the two causes can be told apart in
-/// logs. Keep in sync with `CaptureProcessHost.cs`'s `ExitCodeGpuLost`.
-pub const EXIT_GPU_LOST: i32 = 6;
+pub use clowd_rust_core::exit::{CAPTURE_FAILED as EXIT_CAPTURE_FAILED, NO_SCREEN_PERMISSION as EXIT_NO_SCREEN_PERMISSION};
 
 #[cfg(windows)]
 impl SystemInterop {

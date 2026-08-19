@@ -1,41 +1,33 @@
 # clowd_capture protocol
 
-The contract between the Clowd.Ui shell and the Rust capture processes. The
-capture overlay `clowd_capture_wgpu` has two modes, which share all capture
-behavior and the on-disk session format:
+The contract between the Clowd.Ui shell and the Rust capture processes.
 
-- **One-shot**: the shell spawns one process per capture with CLI flags; the
-  process shows the overlay, writes its result into `--session-dir`, and exits.
-  Completion signal = process exit.
-- **Persistent** (`--persistent`): the shell keeps one warmed-up process
-  resident and drives captures over an NDJSON stdin/stdout protocol.
-  Completion signal = the `finished` event. The session directory format is
-  identical — large payloads never ride the pipe.
+The capture overlay `clowd_capture_wgpu` runs **one-shot**: the shell spawns one
+process per capture with CLI flags; the process shows the overlay, writes its
+result into `--session-dir`, and exits. Completion signal = process exit.
 
-A **separate binary**, `clowd_scroll_driver` (§3), carries out the second half
+A **separate binary**, `clowd_scroll_driver` (§2), carries out the second half
 of a scrolling capture the overlay already set up. It is not a capture overlay
 at all — no window, no event loop, no GPU — and shares the session format with
 the capturer and nothing else. It is documented here because it speaks to the
 same shell across the same boundary.
 
-A second separate binary, `clowd_ocr` (§4), does text recognition. It is the
+A second separate binary, `clowd_ocr` (§3), does text recognition. It is the
 odd one out: the shell never spawns it and never speaks to it — the *overlay*
 does, per OCR press. It is documented here because it is the third process in
 the same family and shares `clowd_rust_core` with the other two.
 
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
-files), `src/host/protocol.rs` + `src/host/stdin.rs` (wire protocol),
-`clowd_scroll_driver/src/drive.rs` (scrolling-capture driver),
+files), `clowd_scroll_driver/src/drive.rs` (scrolling-capture driver),
 `src/ocr/client.rs` + `clowd_ocr/src/main.rs` (recognizer), and
 `clowd_rust_core` for what the binaries must agree on — the `session.json`
 shape (`session.rs`), the recognition contract (`ocr.rs`), the coordinate space
 (`geometry.rs`) and the exit codes (`exit.rs`). C# counterparts:
-`ScreenCaptureService.cs` (one-shot + session dispatch),
-`CaptureProcessHost.cs` (persistent host), `Scroll/ScrollDriver.cs`
+`ScreenCaptureService.cs` (spawn + session dispatch), `Scroll/ScrollDriver.cs`
 + `Scroll/ScrollDriverProtocol.cs` (driver). There is no C# counterpart for
-§4 by design.
+§3 by design.
 
-## 1. One-shot mode
+## 1. The capture overlay
 
 ### 1.1 CLI
 
@@ -55,10 +47,8 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
-| `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation (process-level, applies in both modes). `lower-memory-usage` keeps the allocator's retained heap blocks small so an idle persistent host holds minimal memory; a running host must be relaunched for a change to take effect. |
-| `--persistent` | flag | off | Persistent host mode (§2). The per-capture flags above (except `--memory-hints`) are ignored; settings arrive per `show`. |
-| `--log-dir` | path | none | Persistent mode only: directory for `capture-host.log`. |
-| `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as each cycle ends (§3.5). Process-level and passed on both spawn paths: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
+| `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation. `lower-memory-usage` keeps the allocator's retained heap blocks small — the right trade for a process that exits after one capture. |
+| `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as the cycle ends (§2.5). Process-level and passed on both spawn paths: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
 
 ### 1.2 Session-directory file protocol
 
@@ -87,12 +77,12 @@ File contents:
 | `session.json` | Session metadata (§1.3). |
 | `ocr.txt` | The text recognized in the selection, UTF-8 without BOM, lines separated by `\n`. Present only with the `ocr-upload` marker; the shell reads it, uploads it as a text paste, and deletes the directory. |
 | `action.txt` | Routing marker read by `CaptureSessionDispatcher` (missing = edit). |
-| `capture.log` | Mirror of the capturer's log (one-shot mode only), read by the shell after a non-zero exit. |
-| `scroll.log` | Same, for the `clowd_scroll_driver` pass (§3). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
+| `capture.log` | Mirror of the capturer's log, read by the shell after a non-zero exit — and the only diagnostics that survive a native fault, which never reaches a Rust error path. |
+| `scroll.log` | Same, for the `clowd_scroll_driver` pass (§2). A separate name because the driver runs in a directory the overlay already wrote `capture.log` into, and truncating that would erase the diagnostics for the half of the capture that came first. |
 
 **Write ordering** (`session_output.rs`) — the last file to appear is the
-completion signal, so readers must wait for process exit (one-shot) or the
-`finished` event (persistent) and then key off these files:
+completion signal, so readers must wait for process exit and then key off
+these files:
 
 1. EDIT/UPLOAD: the three PNGs are written first (in parallel), then
    `action.txt` is written (upload) or removed (edit), then **`session.json`
@@ -148,7 +138,7 @@ Rects serialize as `{ "X": …, "Y": …, "Width": …, "Height": … }`
 ### 1.4 Exit codes
 
 Constants in `src/system/mod.rs`; keep in sync with
-`ScreenCaptureService.cs` / `CaptureProcessHost.cs`.
+`ScreenCaptureService.cs`.
 
 | Code | Meaning |
 |---|---|
@@ -159,155 +149,10 @@ Constants in `src/system/mod.rs`; keep in sync with
 Any other non-zero exit is a crash; the shell reports it with the stderr and
 `capture.log` tails.
 
-## 2. Persistent mode
-
-### 2.1 Spawn
-
-```
-clowd_capture_wgpu --persistent --log-dir <dir>
-```
-
-with stdin/stdout/stderr redirected (and `CreateNoWindow` on Windows). The
-process warms up everything slow — adapter enumeration, per-monitor devices,
-pipelines, hidden overlay windows, configured surfaces — then parks. Each
-capture only costs the fast work (screenshot, texture upload, show), reported
-via `shown.elapsed_ms`.
-
-Logging: stderr plus `<log-dir>/capture-host.log` (truncated on start; the
-previous run is kept as `capture-host.log.1`). No per-session `capture.log`
-is written in this mode. `stdout` carries **nothing but protocol lines**.
-
-### 2.2 Framing
-
-One JSON object per line ("NDJSON"), UTF-8, `\n`-terminated, flushed per
-line. Parent writes `HostCommand`s to the child's stdin; child writes
-`HostEvent`s to its stdout.
-
-- **Chatter rule** (parent side): a stdout line whose trimmed form starts
-  with `{` and ends with `}` is an event; anything else is chatter and goes
-  to a bounded log ring. Unknown `type` values are logged, not fatal.
-- **Child side**: blank stdin lines are skipped, a leading UTF-8 BOM is
-  stripped, and unparseable commands are warned about and ignored — garbage
-  never kills a warm host.
-- Payloads stay small: screenshots and session JSON travel on disk in the
-  per-capture `session_dir` exactly as in one-shot mode (§1.2).
-
-### 2.3 Commands (parent → child)
-
-`#[serde(tag = "type", rename_all = "snake_case")]` — see
-`HostCommand` in `src/host/protocol.rs`.
-
-| Command | Fields | Semantics |
-|---|---|---|
-| `show` | see below | Start a capture cycle. Ignored (with a warning, no event) while a cycle is already active. |
-| `cancel` | — | End the active cycle as if the user pressed Escape (`finished` with `action: "cancelled"`). No-op when idle. |
-| `ping` | — | Liveness probe; answered with `pong`. |
-| `shutdown` | — | Cancel any active cycle and exit cleanly (exit code 0). |
-
-`show` fields mirror the CLI one-to-one and every default matches the CLI
-default, so `{"type":"show"}` produces the same overlay a bare one-shot
-launch would. Note the polarity: `peek`/`cursor`/`upload`/`scroll_capture`/
-`ocr` are positive here where the CLI has the corresponding `--no-*` flag.
-
-| Field | Type | Default | CLI counterpart |
-|---|---|---|---|
-| `session_dir` | string (path) | none | `--session-dir` |
-| `accent_color` | string, `#RRGGBB` / `#RRGGBBAA` | `#2F7CAE` | `--accent-color` |
-| `tips_mode` | `hints` \| `tips` \| `off` | `hints` | `--tips-mode` |
-| `peek` | bool | `true` | `--no-peek` (inverted) |
-| `peek_threshold` | number 0.0–1.0 | `0.80` | `--peek-threshold` |
-| `cursor` | bool | `true` | `--no-cursor` (inverted) |
-| `capture_mode` | `region` \| `screen` \| `window` | `region` | `--capture-mode` |
-| `video` | bool | `false` | `--video` |
-| `upload` | bool | `true` | `--no-upload` (inverted) |
-| `scroll_capture` | bool | `true` | `--no-scroll-capture` (inverted) |
-| `ocr` | bool | `true` | `--no-ocr` (inverted) |
-
-Examples:
-
-```json
-{"type":"show","session_dir":"C:\\ProgramData\\Clowd\\Sessions\\42","accent_color":"#2F7CAE","tips_mode":"hints","peek":true,"peek_threshold":0.8,"cursor":true,"capture_mode":"region","video":false,"upload":true,"scroll_capture":true,"ocr":true}
-{"type":"cancel"}
-{"type":"ping"}
-{"type":"shutdown"}
-```
-
-### 2.4 Events (child → parent)
-
-| Event | Fields | Semantics |
-|---|---|---|
-| `ready` | `warmup_ms` (u64), `monitors` (count) | Emitted once, when every render worker has parked (device, pipelines, surface ready). A `show` will now be fast. `warmup_ms` is measured from process start. |
-| `shown` | `elapsed_ms` (u64) | The overlay windows are on screen. Exactly one per accepted `show`; `elapsed_ms` is measured from the `show` command. |
-| `finished` | `action` | The capture cycle ended and any session payload is already on disk (§1.2). Exactly one per accepted `show`. `action` ∈ `edit` \| `upload` \| `select_color` \| `video` \| `scroll` \| `copy` \| `save` \| `ocr_copy` \| `ocr_search` \| `ocr_upload` \| `cancelled`. |
-| `pong` | — | Answer to `ping`. |
-| `display_changed` | — | The monitor topology changed (or a GPU device was lost) under the warm state; the process exits right after with code 5 or 6. Informational — the parent keys its respawn policy off the exit code. |
-| `fatal_error` | `message` (string) | Something unrecoverable happened to the active cycle (e.g. the desktop screenshot never arrived within its 30 s deadline). The cycle is cancelled; a `finished` (`action: "cancelled"`) always follows, so a waiting parent is never left hanging. |
-
-Examples:
-
-```json
-{"type":"ready","warmup_ms":850,"monitors":2}
-{"type":"shown","elapsed_ms":38}
-{"type":"finished","action":"edit"}
-{"type":"pong"}
-{"type":"display_changed"}
-{"type":"fatal_error","message":"timed out waiting for the desktop screenshot"}
-```
-
-### 2.5 Lifecycle
-
-Child states, driven by commands:
-
-```
-spawn --warm-up--> ready ----show----> busy (overlay on screen)
-        |            ^                   |
-        |            +----finished-------+   (user action / cancel / fatal_error)
-        |
-        +--> exit 3  (no screen permission)
-ready/busy --shutdown / stdin EOF--> exit 0
-ready/busy --topology change-------> display_changed, exit 5
-ready/busy --GPU device lost-------> display_changed, exit 6
-```
-
-- Per accepted `show`, the child emits exactly one `shown` and then exactly
-  one `finished`. `show` while busy is ignored; `cancel` while idle is a
-  no-op.
-- On `show` the child re-verifies the monitor topology first; a mismatch
-  emits `display_changed` and exits 5 **before** showing anything (the
-  parent cold-spawns that capture and respawns the host).
-- Between cycles the child sits in a `Wait` event loop at ~0% CPU.
-
-**Stdin EOF = child exits.** The parent holds the stdin pipe open for its
-whole life, so EOF means the parent is gone (cleanly or not): the child
-cancels any active cycle, hides its windows, and exits 0. A crashed or
-force-killed Clowd.Ui can therefore never orphan a capture host.
-
-### 2.6 Exit codes and respawn expectations
-
-| Code | Meaning | Parent behavior (`CaptureProcessHost`) |
-|---|---|---|
-| 0 | `shutdown`, stdin EOF, or event-loop unwind | Nothing when the parent asked for it (`StopAsync`); an exit 0 the parent did *not* request is an unexpected death and follows the backoff row below. |
-| 3 | Screen-recording permission revoked | Give up — only an app restart can pick the permission up; captures use the cold path. |
-| 5 | `EXIT_DISPLAY_CHANGED` — monitor topology changed under the warm state | Respawn immediately, no backoff, no failure penalty. |
-| 6 | `EXIT_GPU_LOST` — a worker's wgpu device was lost (driver reset/update) | Same as 5; distinct only for logs. |
-| 4 / other | Screenshot failed / crash | Respawn with backoff 1/2/5/10/30 s; after 5 consecutive deaths without a `ready` in between, give up and report once (Sentry `capture.host-crash`). Any `ready` resets the streak. |
-
-Parent-side timing contract:
-
-- `AllowSetForegroundWindow(child pid)` is called per `show`, from the
-  hotkey context (the grant is consumed by a single use).
-- `shown` is awaited with a **5 s ack timeout**; a miss kills the child and
-  the capture falls back to a cold one-shot spawn with the same session dir.
-- `finished` is awaited with **no timeout** (the user may sit in the overlay
-  indefinitely); the wait is faulted only by child death. Death after
-  `shown` is reported as a capture crash — never retried from cold.
-- While the child is idle the parent pings every 60 s; two consecutive
-  missed pongs mean a wedged child, which is killed (and respawned).
-
-## 3. Scrolling-capture driver (`clowd_scroll_driver`)
+## 2. Scrolling-capture driver (`clowd_scroll_driver`)
 
 The driver is the second half of a scrolling capture. The first half is an
-ordinary one-shot cycle: the user selects a region, presses SCROLL, clicks the
+ordinary capture cycle: the user selects a region, presses SCROLL, clicks the
 point to scroll at, and the overlay exits leaving the `scroll X,Y,W,H PX,PY
 HWND` marker of §1.2. `CaptureSessionDispatcher` turns that marker into
 `CaptureAction.Scroll`, `ScrollCapturePage` puts its border window up around
@@ -331,7 +176,7 @@ synthetic events from a process it does not trust. TCC records both against
 spawns anything, so the usual path to a missing grant is a dialog with a button
 to the right Settings pane rather than a driver refusal.
 
-### 3.1 Spawn
+### 2.1 Spawn
 
 ```
 clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N [--no-rewind]
@@ -343,7 +188,7 @@ clowd_scroll_driver --session-dir <dir> --region X,Y,W,H --point PX,PY --hwnd N 
 | `--region X,Y,W,H` | yes | The rect to photograph, in the marker's platform capture space (§1.2) — physical virtual-desktop px on Windows, CG points on macOS — and the same numbers. Rejected if W or H is 0. **Not** the unit the captured frames are in: `kCGWindowImageBestResolution` returns a Retina region at 2×, so the composite is in pixels while the region is in points. |
 | `--point PX,PY` | yes | Where the cursor is parked and the wheel is aimed, same space. Re-clamped into `--region`; a point outside it is a caller bug and is logged. |
 | `--no-rewind` | no | Start capturing from wherever the document is sitting instead of winding it back to the top first. Negative because rewinding is the default — the shell passes this only when the user turns "Scroll to top first" off, which is the deliberate "capture from here" intent. |
-| `--hwnd N` | no (default 0) | Decimal window handle from the marker: **the window the user's selection snapped to**, not whatever is topmost at the scroll point. An `HWND` on Windows, a `CGWindowID` on macOS — one flag name for both, because it is the same field of the same marker. Re-validated at drive time (still a window, still covering the point); `0` or a stale handle falls back to whatever is topmost at the point. Whichever wins is then raised over the scroll point and *verified* there before the first frame — see §3.5. |
+| `--hwnd N` | no (default 0) | Decimal window handle from the marker: **the window the user's selection snapped to**, not whatever is topmost at the scroll point. An `HWND` on Windows, a `CGWindowID` on macOS — one flag name for both, because it is the same field of the same marker. Re-validated at drive time (still a window, still covering the point); `0` or a stale handle falls back to whatever is topmost at the point. Whichever wins is then raised over the scroll point and *verified* there before the first frame — see §2.5. |
 
 The shell must redirect **all three** stdio streams. Stdin in particular: the
 driver reads a closed stdin as "the shell is gone" and cancels, which is what
@@ -353,17 +198,16 @@ after spawn — without it `SetForegroundWindow` in the driver is refused and th
 run relies on Win10+ scroll-inactive-windows routing alone. macOS has no
 equivalent grant to pass on.
 
-### 3.2 Events (driver → shell)
+### 2.2 Events (driver → shell)
 
 One JSON object per line on stdout, and **only** protocol lines: the terminal
-logger is routed to stderr for exactly that reason, so the shell
-may treat any line starting `{` and ending `}` as an event (the same rule as
-§2.2).
+logger is routed to stderr for exactly that reason, so the shell may treat any
+line starting `{` and ending `}` as an event.
 
 | Event | Fields | Semantics |
 |---|---|---|
 | `ready` | — | The target is resolved and focused; scrolling is about to start. |
-| `status` | `frames` (u32), `height_px` (u32), `state`, `resume_in_s` (u64, optional) | Progress. Emitted at each phase change of every step, so up to three per step. `state` ∈ `rewinding` \| `paused` \| `resuming` \| `scrolling` \| `settling` \| `stitching`. `rewinding` appears only before the first frame and only when the rewind is enabled; its `frames` and `height_px` are both 0. `paused` means the user has the mouse (§3.5) — nothing advances until they put it down. `resuming` carries `resume_in_s`, the whole seconds left before the run takes the cursor back, and is the only state on which that field is present. |
+| `status` | `frames` (u32), `height_px` (u32), `state`, `resume_in_s` (u64, optional) | Progress. Emitted at each phase change of every step, so up to three per step. `state` ∈ `rewinding` \| `paused` \| `resuming` \| `scrolling` \| `settling` \| `stitching`. `rewinding` appears only before the first frame and only when the rewind is enabled; its `frames` and `height_px` are both 0. `paused` means the user has the mouse (§2.5) — nothing advances until they put it down. `resuming` carries `resume_in_s`, the whole seconds left before the run takes the cursor back, and is the only state on which that field is present. |
 | `done` | `result`, `frames` (u32), `height_px` (u32) | The run ended. Unless `result` is `failed`, `session.json` is already on disk. |
 | `fatal_error` | `message` (string) | Setup or output failed and there is no session. The shell deletes the directory and reports it. |
 
@@ -379,12 +223,12 @@ may treat any line starting `{` and ending `}` as an event (the same rule as
 | Result | Meaning | Session written |
 |---|---|---|
 | `complete` | Two consecutive steps produced no new content: the document ended. | yes |
-| `stopped` | Esc, a `stop` command, the target window closing/moving, the stitcher giving up, or a pause the user never came back from (§3.5). The partial capture is kept. | yes |
+| `stopped` | Esc, a `stop` command, the target window closing/moving, the stitcher giving up, or a pause the user never came back from (§2.5). The partial capture is kept. | yes |
 | `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock — the clock excludes time spent paused. | yes |
 | `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated Windows target whose UIPI eats `SendInput`, or a surface that ignores a synthetic wheel. Reported whatever else ended the run, and a single-screen session is still written. | yes |
 | `failed` | Defined for completeness; the driver has no failure it can recognise *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
 
-### 3.3 Commands (shell → driver)
+### 2.3 Commands (shell → driver)
 
 | Command | Effect |
 |---|---|
@@ -398,7 +242,7 @@ down a capture that is going fine. Stdin EOF is treated as `cancel`; stdin
 that is unusable rather than closed (no console, not redirected) is tolerated
 and the run continues without a command channel.
 
-### 3.4 Output and exit
+### 2.4 Output and exit
 
 On any result but `failed` the driver writes, in this order: `desktop.png`
 (the stitched composite), `cropped.png` (a byte copy of it — `cropped.png` is
@@ -414,7 +258,7 @@ The process **exits 0 for every outcome the shell can act on**, `fatal_error`
 included — the shell reads the event, not the code. A non-zero exit therefore
 means a crash, and the shell reports it with the stderr tail attached.
 
-### 3.5 The target window and the user's mouse
+### 2.5 The target window and the user's mouse
 
 Both halves of the run depend on the same fact: **whatever window is at the
 scroll point gets the wheel and gets photographed.** Wheel input is routed by
@@ -446,7 +290,7 @@ arrive along a chain, and every link is required:
 
 | Link | Where | Why |
 |---|---|---|
-| Shell → capturer | `ScreenCaptureService`, both the warm-host and cold-spawn paths | The overlay needs focus the instant it appears (Esc, shortcuts). |
+| Shell → capturer | `ScreenCaptureService`, on each spawn | The overlay needs focus the instant it appears (Esc, shortcuts). |
 | Capturer → shell | `hide_overlay_for_action`, which every action dispatch and `finish_cycle` go through **before** the overlay hides. Addressed with `--shell-pid` (§1.1) | The shell has no visible window at this moment, so once ours goes away it holds nothing to pass on. |
 | Shell → driver | `ScrollDriver.RunAsync`, right after `Process.Start` | A freshly spawned process is refused `SetForegroundWindow` outright. |
 
@@ -474,7 +318,7 @@ excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
 as `stopped` with everything captured so far.
 
-## 4. Text recognizer (`clowd_ocr`)
+## 3. Text recognizer (`clowd_ocr`)
 
 The only protocol here that the shell is not a party to. When the user presses
 OCR, the overlay extracts the selected region's pixels — compositing a
@@ -502,7 +346,7 @@ It ships beside `clowd_capture_wgpu` on **every** platform, which is where
 development). It needs no window, no event loop, no GPU, and — because it is
 handed pixels rather than taking them — no screen-recording permission.
 
-### 4.1 Spawn
+### 3.1 Spawn
 
 ```
 clowd_ocr --out <path> [--log-file <path>]
@@ -510,22 +354,22 @@ clowd_ocr --out <path> [--log-file <path>]
 
 | Flag | Required | Meaning |
 |---|---|---|
-| `--out` | yes | Where to write the response (§4.3). The capturer puts this in the capture's session directory as `ocr.json` when there is one, and in the temp directory otherwise — OCR has no `--session-dir` requirement, since COPY and SEARCH need no shell round-trip. It reads the file only after the process exits 0, and deletes it either way. |
+| `--out` | yes | Where to write the response (§3.3). The capturer puts this in the capture's session directory as `ocr.json` when there is one, and in the temp directory otherwise — OCR has no `--session-dir` requirement, since COPY and SEARCH need no shell round-trip. It reads the file only after the process exits 0, and deletes it either way. |
 | `--log-file` | no | Mirrors the log (det/rec timings, the tier choice) to a file. The capturer passes `<session-dir>/ocr.log` when it has a session; that file is deliberately *not* cleaned up, because it is the artefact a "why was OCR slow" report is diagnosed from. |
 
 Stdio, all three of which the capturer sets deliberately:
 
 | Stream | Setting | Why |
 |---|---|---|
-| stdin | pipe | Carries the request (§4.2). |
-| stdout | **null** | MNN prints device capabilities to stdout on session creation, so stdout cannot carry a protocol here — hence the `--out` file. It must never be *inherited*: the overlay's own stdout is the NDJSON host channel of §2, and MNN's chatter reaching `Clowd.Ui`'s line parser would corrupt it. A pipe would work but one nobody drains can eventually block the child; null cannot. |
-| stderr | inherited | Log chatter, by the same convention §2.2 and §3.2 follow. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
+| stdin | pipe | Carries the request (§3.2). |
+| stdout | **null** | MNN prints device capabilities to stdout on session creation, so stdout cannot carry a protocol here — hence the `--out` file. A pipe would work but one nobody drains can eventually block the child; null cannot. |
+| stderr | inherited | Log chatter, by the same convention §2.2 follows. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
 
 On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a
 GUI-subsystem process with no console, so a console-wanting child would flash a
 brand new window on top of a fullscreen capture.
 
-### 4.2 Request (capturer → recognizer, stdin)
+### 3.2 Request (capturer → recognizer, stdin)
 
 One `RequestHeader` as a single JSON line, then the raw BGRA pixels —
 `width * height * 4` bytes, tightly packed — through to EOF. Closing stdin is
@@ -544,7 +388,7 @@ The pixels never touch the disk. They are a picture of the user's screen, and a
 temp file holding one outlives a killed process. A 3440x1440 selection is
 19.8 MB, uploaded in 1 MB chunks so the cancel flag is polled throughout.
 
-### 4.3 Response (`--out` file)
+### 3.3 Response (`--out` file)
 
 The JSON `OcrResponse` — `Result<OcrOutcome, OcrError>`, so `{"Ok":…}` or
 `{"Err":…}`. Rects use the same explicit `{x,y,width,height}` shape as
@@ -560,7 +404,7 @@ and the process still exits 0. That is what lets the capturer tell "the engine
 does not work on this machine" apart from "the child died", which is all a
 non-zero exit can mean.
 
-### 4.4 Exit codes and failure handling
+### 3.4 Exit codes and failure handling
 
 | Code | Meaning to the capturer |
 |---|---|
