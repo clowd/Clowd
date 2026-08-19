@@ -912,10 +912,9 @@ namespace Clowd.UI
             // issue; the specifics ride along in Data.
             var crash = new InvalidOperationException(message);
             crash.Data["exit_code"] = exitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
-            crash.Data["chatter"] = Tail(GetLog());
-            var hostLog = TryReadHostLog();
-            if (hostLog != null)
-                crash.Data["host_log"] = Tail(hostLog);
+            // Full chatter and log file as the process-log.txt attachment: this fires only after
+            // every respawn has failed, so it is the one report that has to carry why.
+            SentryConfig.AttachProcessLog(crash, ("chatter", GetLog()), ("capture-host.log", TryReadHostLog()));
             SentryConfig.CaptureHandled(crash, "capture.host-crash");
         }
 
@@ -1073,26 +1072,6 @@ namespace Clowd.UI
                 Debug.WriteLine("[CaptureHost] failed to read the capture host log: " + ex.Message);
                 return null;
             }
-        }
-
-        /// <summary>The last few lines of a log — the failure is always at the end, after the
-        /// routine startup lines.</summary>
-        private static string Tail(string text)
-        {
-            if (String.IsNullOrWhiteSpace(text))
-                return "No diagnostic output was captured.";
-
-            var lines = new List<string>();
-            foreach (var raw in text.Replace("\r\n", "\n").Split('\n'))
-            {
-                var line = raw.TrimEnd();
-                if (line.Length > 0)
-                    lines.Add(line);
-            }
-
-            const int maxLines = 15;
-            var start = Math.Max(0, lines.Count - maxLines);
-            return String.Join("\n", lines.GetRange(start, lines.Count - start));
         }
 
         private void AppendLog(string line)

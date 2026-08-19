@@ -152,6 +152,69 @@ namespace Clowd
             return null;
         }
 
+        /// <summary>Cap on the assembled log. A per-session capture log is a few KB, but the warm
+        /// host's rolling log has no such bound — and a multi-megabyte attachment helps nobody.
+        /// Trimmed from the front: the failure is always at the end.</summary>
+        private const int MaxProcessLogChars = 256 * 1024;
+
+        /// <summary>
+        /// Stows a child process's output on <paramref name="ex"/> under <see cref="ProcessLogKey"/>,
+        /// so <see cref="CaptureHandled"/> uploads it as the <c>process-log.txt</c> attachment no
+        /// matter how many layers up the exception is finally reported.
+        /// </summary>
+        /// <param name="ex">The exception about to be reported.</param>
+        /// <param name="sections">
+        /// Labelled log sources in the order they should appear — put the most diagnostic last,
+        /// since both the size cap above and Sentry's inline <c>process_log_tail</c> keep the end.
+        /// Null and blank sections are skipped, so a caller can pass an optional log file without
+        /// checking for it first.
+        /// </param>
+        /// <remarks>
+        /// Prefer this to parking a log in <see cref="Exception.Data"/> directly: <c>Data</c> is
+        /// serialized inline into the event body, so anything stored there has to be cut down to a
+        /// few lines to fit — which is how a crash report arrives carrying nothing that explains the
+        /// crash. Small scalars (an exit code, a frame count) are still fine in <c>Data</c>.
+        /// </remarks>
+        public static void AttachProcessLog(Exception ex, params (string Label, string Content)[] sections)
+        {
+            if (ex is null || sections is null)
+                return;
+
+            try
+            {
+                // first writer wins, matching TakeProcessLog's "nearest log to the failure" search:
+                // an inner frame knows more about what died than the layer re-reporting it.
+                if (ex.Data.Contains(ProcessLogKey))
+                    return;
+
+                var builder = new StringBuilder();
+                foreach (var (label, content) in sections)
+                {
+                    if (String.IsNullOrWhiteSpace(content))
+                        continue;
+
+                    if (builder.Length > 0)
+                        builder.Append('\n');
+                    builder.Append("===== ").Append(label).Append(" =====\n")
+                           .Append(content.TrimEnd()).Append('\n');
+                }
+
+                if (builder.Length == 0)
+                    return;
+
+                var log = builder.ToString();
+                if (log.Length > MaxProcessLogChars)
+                    log = "[earlier output trimmed]\n" + log.Substring(log.Length - MaxProcessLogChars);
+
+                ex.Data[ProcessLogKey] = log;
+            }
+            catch
+            {
+                // Exception.Data may be read-only or reject writes for exotic exception types;
+                // losing the log must never lose the event itself.
+            }
+        }
+
         /// <summary>
         /// <see cref="CaptureHandled"/> for a call site whose failure mode includes "the network
         /// didn't work": transient faults (see <see cref="IsTransientNetworkFailure"/>) are dropped,
