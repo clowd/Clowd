@@ -12,8 +12,7 @@ use clap::Parser;
 
 use crate::ui::components::panel::model::PanelFeatures;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum TipsMode {
     #[default]
     Hints,
@@ -43,8 +42,7 @@ impl TipsMode {
 /// settings. `LowerMemoryUsage` (default) keeps gpu-allocator's retained
 /// heap blocks small — the right trade for a process that exits after one
 /// capture; `MaxPerformance` restores wgpu's large-block default.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum MemoryHintsMode {
     #[default]
     LowerMemoryUsage,
@@ -56,8 +54,7 @@ pub enum MemoryHintsMode {
 /// active monitor / foreground window and show the action panel so the
 /// user can confirm or adjust (mirrors pressing `F` / `W` at startup).
 /// Chosen by the shell from which capture hotkey fired.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum CaptureMode {
     #[default]
     Region,

@@ -596,8 +596,8 @@ impl App {
         // global, and a warm (parked) process must not blank the user's
         // cursor.
         set_hardware_cursor_visible(false);
-        // Resolved already in one-shot mode; usually still pending in
-        // persistent mode (picked up in about_to_wait).
+        // Always resolved by now: `CaptureSession::new` blocks on the
+        // screenshot job before arming the cycle.
         let desktop_buffer = setup.screenshot_latch.try_get();
         for h in self.windows.values() {
             h.reassert_geometry();
@@ -686,11 +686,10 @@ impl App {
     /// the process serves exactly one capture.
     fn finish_cycle(&mut self, event_loop: &ActiveEventLoop, action: CycleAction) {
         log::info!("capture cycle finished: {:?}", action);
-        // Every exit path the capturer has — a shutdown command, the parent
-        // dying, a display-topology respawn — comes through here with a live
-        // cycle, so this is also the last hide before the process itself
-        // goes away. Hence the foreground handback rather than a bare hide,
-        // even though the action dispatches have usually done it already.
+        // Every exit path that has a live cycle comes through here, so this is
+        // also the last hide before the process itself goes away. Hence the
+        // foreground handback rather than a bare hide, even though the action
+        // dispatches have usually done it already.
         hide_overlay_for_action(&self.windows);
         // Idempotent (guarded by a static in window.rs) even when cursors
         // were already restored via update_cursor_visibility.
@@ -1757,6 +1756,9 @@ impl ApplicationHandler for App {
 
         if windows.is_empty() {
             error!("no windows created; exiting");
+            // `start_cycle` hid the cursor before the event loop ran, and this is
+            // the one exit that never reaches `finish_cycle` to put it back.
+            set_hardware_cursor_visible(true);
             event_loop.exit();
             return;
         }

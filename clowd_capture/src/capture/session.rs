@@ -87,8 +87,6 @@ impl CaptureSession {
         // Bounded: an unbounded wait turned any wedged CG capture call into a
         // process that idles forever with nothing on screen and no way to close it
         // from the shell. 30s is far beyond a slow multi-display capture.
-        // (Persistent mode replaces this with a non-blocking per-cycle
-        // deadline — see `App::try_pick_up_screenshot`.)
         screenshot_latch
             .wait_timeout(Duration::from_secs(30))
             .ok_or_else(|| anyhow!("timed out waiting for the desktop screenshot"))?;
