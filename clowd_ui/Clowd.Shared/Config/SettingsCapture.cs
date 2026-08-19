@@ -15,8 +15,8 @@ namespace Clowd.Config
     /// <summary>Mirrors the capturer's --memory-hints flag (clowd_capture_wgpu, see CAPTURE_PROTOCOL.md).</summary>
     public enum CapturerMemoryHints
     {
-        LowerMemoryUsage,
         MaxPerformance,
+        LowerMemoryUsage,
     }
 
     public class SettingsCapture : SimpleNotifyObject
@@ -108,15 +108,16 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// The capture tool's GPU allocator strategy (<c>--memory-hints</c>). LowerMemoryUsage is
-        /// the right trade for nearly everyone: the capture process lives for one capture, so the
-        /// larger memory blocks Performance retains rarely pay for themselves before it exits.
+        /// The capture tool's GPU allocator strategy (<c>--memory-hints</c>). MaxPerformance is
+        /// wgpu's large-block default and what capture ran on before the warm capture host
+        /// existed; LowerMemoryUsage was introduced to keep that resident host's idle footprint
+        /// down, which a process that exits after one capture never pays.
         /// </summary>
         [Category("Performance")]
         [DisplayName("GPU memory usage")]
-        [Description("How the capture tool budgets GPU memory. Lower memory usage is recommended; " +
-                     "Max performance uses larger GPU memory blocks, which can cost more memory " +
-                     "than it saves in time.")]
+        [Description("How the capture tool budgets GPU memory. Max performance is recommended; " +
+                     "Lower memory usage retains smaller GPU memory blocks, which can make the " +
+                     "capture overlay slower to open.")]
         public CapturerMemoryHints MemoryHints
         {
             get => _memoryHints;
@@ -213,7 +214,7 @@ namespace Clowd.Config
 
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private bool _screenshotWithCursor = true;
-        private CapturerMemoryHints _memoryHints = CapturerMemoryHints.LowerMemoryUsage;
+        private CapturerMemoryHints _memoryHints = CapturerMemoryHints.MaxPerformance;
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
