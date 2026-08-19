@@ -53,24 +53,48 @@ dotnet publish "$ROOT/clowd_ui/Clowd.Ui/Clowd.Ui.csproj" \
     -o "$OUT"
 
 echo "==> Building the Rust binaries (release)"
+# clowd_tractnni only builds where ONNX Runtime still exists: upstream
+# dropped macOS x86_64, so Intel macs skip it (the app greys the AI
+# features out there) — matches ci.yml's `ai: false` on the osx-x64 leg.
+CARGO_EXCLUDE=()
+if [ "$RID" = "osx-x64" ]; then
+    CARGO_EXCLUDE=(--workspace --exclude clowd_tractnni)
+fi
 # stamps the Sentry release name so the capturer and the scrolling capture driver
 # report against the same release as the shell (clowd_rust_core/src/telemetry.rs)
-CLOWD_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml"
+CLOWD_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" "${CARGO_EXCLUDE[@]}"
 
 echo "==> Copying capture binaries into publish output"
 cp "$ROOT/target/release/clowd_capture_wgpu$EXE" "$OUT/"
 # Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver
 # looks for it.
 cp "$ROOT/target/release/clowd_scroll_driver$EXE" "$OUT/"
-# The AI effects binary, beside Clowd.Ui where TractnniLoader looks for it.
-# (clowd_ocr has historically been missing from this dev script — CI packages
-# it; not fixed here.) Note it also needs an ONNX Runtime dylib beside it (or
-# ORT_DYLIB_PATH set) to actually run inference: CI downloads the official
-# release archive into the package, this script does not.
-cp "$ROOT/target/release/clowd_tractnni$EXE" "$OUT/"
-# GPL-3.0 license text + notice must travel with every distributed copy of
-# the AI effects binary (GPL sections 4/6).
-cp "$ROOT/clowd_tractnni/LICENSE" "$OUT/clowd_tractnni.LICENSE.txt"
-cp "$ROOT/clowd_tractnni/NOTICE.txt" "$OUT/clowd_tractnni.NOTICE.txt"
+if [ "$RID" != "osx-x64" ]; then
+    # The AI effects binary, beside Clowd.Ui where TractnniLoader looks for it.
+    # (clowd_ocr has historically been missing from this dev script — CI packages
+    # it; not fixed here.) ONNX Runtime is statically linked by the ort crate;
+    # on Windows the hardware execution providers still need dylibs beside the
+    # exe (ort's copy-dylibs staged them into target/release during the build).
+    cp "$ROOT/target/release/clowd_tractnni$EXE" "$OUT/"
+    if [[ "$RID" == win-* ]]; then
+        cp "$ROOT/target/release/DirectML.dll" "$OUT/"
+        # clowd_tractnni is /MD (see its build.rs) and imports
+        # msvcp140/vcruntime140 — app-local like CI ships them. Best
+        # effort here: a dev machine runs fine on its system-wide redist.
+        CRT_DIR=$(find "/c/Program Files/Microsoft Visual Studio" -type d \
+            -path "*/VC/Redist/MSVC/*/x64/Microsoft.VC*.CRT" 2>/dev/null | sort | tail -1)
+        if [ -n "$CRT_DIR" ]; then
+            for f in msvcp140.dll msvcp140_1.dll vcruntime140.dll vcruntime140_1.dll; do
+                if [ -f "$CRT_DIR/$f" ]; then cp "$CRT_DIR/$f" "$OUT/"; fi
+            done
+        else
+            echo "warning: VC redist not found; clowd_tractnni needs msvcp140/vcruntime140 at runtime" >&2
+        fi
+    fi
+    # GPL-3.0 license text + notice must travel with every distributed copy of
+    # the AI effects binary (GPL sections 4/6).
+    cp "$ROOT/clowd_tractnni/LICENSE" "$OUT/clowd_tractnni.LICENSE.txt"
+    cp "$ROOT/clowd_tractnni/NOTICE.txt" "$OUT/clowd_tractnni.NOTICE.txt"
+fi
 
 echo "Build complete: $OUT"

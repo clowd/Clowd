@@ -47,7 +47,8 @@ declare -A LICENSE_OVERRIDES=(
 
 # Shipped components no dependency manifest can enumerate: the model weights
 # clowd_tractnni embeds (see clowd_tractnni/assets/models/README.md) and the
-# ONNX Runtime dylib it loads dynamically. Merged into the Rust section.
+# ONNX Runtime the ort crate links statically into it. Merged into the Rust
+# section.
 # Fields are name|version|license|url; version may be empty.
 EXTRA_ENTRIES=(
     "RobustVideoMatting|1.0.0|GPL-3.0|https://github.com/PeterL1n/RobustVideoMatting"

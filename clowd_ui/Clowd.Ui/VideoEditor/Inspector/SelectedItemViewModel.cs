@@ -1445,6 +1445,34 @@ namespace Clowd.UI.VideoEditor.Inspector
         public string DenoiseStatusDetail =>
             _showAudio && _denoise ? AnalysisStatusDetail(AiSidecarKind.Denoise) : null;
 
+        /// <summary>Whether the AUDIO status row's progress ring is on show — only while the
+        /// sidecar job is actually pending (queued or running); the failure and unavailable
+        /// notes have no progress to draw.</summary>
+        public bool DenoiseAnalyzing =>
+            _showAudio && _denoise && AnalysisRunning(AiSidecarKind.Denoise);
+
+        /// <summary>The pending job's progress, 0–100 (the arc converter's scale).</summary>
+        public double DenoiseProgress => AnalysisProgress(AiSidecarKind.Denoise);
+
+        /// <summary>The right-aligned percentage beside the ring ("63%"), null unless a job is
+        /// pending — kept out of <see cref="DenoiseStatusText"/> so the ring sits at the row's
+        /// right edge instead of chasing the text's width.</summary>
+        public string DenoisePercentText =>
+            DenoiseAnalyzing ? $"{(int)DenoiseProgress}%" : null;
+
+        /// <summary>Whether the AI-backed features (denoise, background matting) exist on this
+        /// machine at all. False only on Intel Macs: upstream ONNX Runtime dropped macOS x86_64,
+        /// so <c>clowd_tractnni</c> is only built for Apple Silicon — the toggles grey out with
+        /// <see cref="AiEffectsDisabledTip"/> instead of queueing work that can never run.</summary>
+        public bool AiEffectsSupported => SupportsAiEffects;
+
+        /// <summary>The greyed-out toggles' tooltip; null (no tooltip) where they work.</summary>
+        public string AiEffectsDisabledTip => SupportsAiEffects ? null : "Only available on Apple Silicon";
+
+        private static readonly bool SupportsAiEffects =
+            !OperatingSystem.IsMacOS() || System.Runtime.InteropServices.RuntimeInformation.OSArchitecture
+                == System.Runtime.InteropServices.Architecture.Arm64;
+
         /// <summary>True when the selected item still moves with the rest of its recording.</summary>
         public bool IsLinked => _isLinked;
 
@@ -1967,31 +1995,47 @@ namespace Clowd.UI.VideoEditor.Inspector
         public string EffectStatusDetail =>
             _showEffect && VideoEffect.NeedsMatte(_effectKind) ? AnalysisStatusDetail(AiSidecarKind.Matte) : null;
 
+        /// <summary>See <see cref="DenoiseAnalyzing"/>, its AUDIO twin.</summary>
+        public bool EffectAnalyzing =>
+            _showEffect && VideoEffect.NeedsMatte(_effectKind) && AnalysisRunning(AiSidecarKind.Matte);
+
+        /// <summary>The pending job's progress, 0–100 (the arc converter's scale).</summary>
+        public double EffectProgress => AnalysisProgress(AiSidecarKind.Matte);
+
+        /// <summary>See <see cref="DenoisePercentText"/>, its AUDIO twin.</summary>
+        public string EffectPercentText =>
+            EffectAnalyzing ? $"{(int)EffectProgress}%" : null;
+
         /// <summary>The selected stream's job as the status rows word it, or null for "no note"
         /// — no manager attached (tests, no session yet), no job (the sidecar is fine), or a
         /// non-media selection.</summary>
         private string AnalysisStatusText(AiSidecarKind kind, string verb)
         {
-            if (SelectedItem?.Content is not MediaContent media)
-                return null;
-
-            var status = _analysis?.GetStatus(kind, media.SourceId, media.StreamIndex);
-            return status?.State switch
+            // no percentage here — that lives in the *PercentText properties, right-aligned
+            // beside the ring, so the ring cannot jump with the text's width
+            return AnalysisStatus(kind)?.State switch
             {
-                AiAnalysisState.Queued => verb + "…",
-                AiAnalysisState.Running => $"{verb}… {(int)(status.Progress * 100)}%",
+                AiAnalysisState.Queued or AiAnalysisState.Running => verb + "…",
                 AiAnalysisState.Unavailable => "AI engine unavailable",
                 AiAnalysisState.Failed => "Analysis failed",
                 _ => null,
             };
         }
 
-        private string AnalysisStatusDetail(AiSidecarKind kind)
+        private string AnalysisStatusDetail(AiSidecarKind kind) => AnalysisStatus(kind)?.Detail;
+
+        private bool AnalysisRunning(AiSidecarKind kind) =>
+            AnalysisStatus(kind)?.State is AiAnalysisState.Queued or AiAnalysisState.Running;
+
+        private double AnalysisProgress(AiSidecarKind kind) =>
+            Math.Clamp((AnalysisStatus(kind)?.Progress ?? 0) * 100, 0, 100);
+
+        private AiAnalysisStatus AnalysisStatus(AiSidecarKind kind)
         {
             if (SelectedItem?.Content is not MediaContent media)
                 return null;
 
-            return _analysis?.GetStatus(kind, media.SourceId, media.StreamIndex)?.Detail;
+            return _analysis?.GetStatus(kind, media.SourceId, media.StreamIndex);
         }
 
         private void Analysis_Changed(object sender, EventArgs e) => RaiseAnalysisStatus();
@@ -2003,9 +2047,15 @@ namespace Clowd.UI.VideoEditor.Inspector
             OnPropertyChanged(nameof(ShowEffectStatus));
             OnPropertyChanged(nameof(EffectStatusText));
             OnPropertyChanged(nameof(EffectStatusDetail));
+            OnPropertyChanged(nameof(EffectAnalyzing));
+            OnPropertyChanged(nameof(EffectProgress));
+            OnPropertyChanged(nameof(EffectPercentText));
             OnPropertyChanged(nameof(ShowDenoiseStatus));
             OnPropertyChanged(nameof(DenoiseStatusText));
             OnPropertyChanged(nameof(DenoiseStatusDetail));
+            OnPropertyChanged(nameof(DenoiseAnalyzing));
+            OnPropertyChanged(nameof(DenoiseProgress));
+            OnPropertyChanged(nameof(DenoisePercentText));
         }
 
         // ---------------------------------------------------------------------------- surround

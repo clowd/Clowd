@@ -1,4 +1,5 @@
 # /IGNORE silences two unactionable link warnings (LNK4099: the prebuilt MNN in ocr-rs ships no pdbs; LNK4104: rustc cannot mark the COM exports PRIVATE), and crt-static matches MNN's own CRT while dropping the VC++ redist dependency.
+# One exception: clowd_tractnni's build.rs swaps that binary back onto the dynamic CRT at link time (pyke's prebuilt ONNX Runtime libs are /MD), and CI ships msvcp140/vcruntime140 app-local beside it.
 [target.'cfg(windows)']
 rustflags = ["-Clink-arg=/IGNORE:4099", "-Clink-arg=/IGNORE:4104", "-Ctarget-feature=+crt-static"]
 

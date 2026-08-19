@@ -45,33 +45,21 @@ namespace Clowd.VideoSDK.Tests
             return null;
         }
 
-        /// <summary>The repo's own build of the inference binary, plus a resolvable ONNX Runtime
-        /// (env, or the dll dropped beside the exe per BUILDING.md) — without a runtime the
-        /// binary exits 7 and the generation test would fail for a reason that is not a bug.</summary>
+        /// <summary>The repo's own build of the inference binary. The ONNX Runtime is statically
+        /// linked into it, so any built exe runs inference as-is.</summary>
         private static string FindUsableTractnni()
         {
             string exeName = OperatingSystem.IsWindows() ? "clowd_tractnni.exe" : "clowd_tractnni";
-            string exe = null;
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
                 var candidate = Path.Combine(dir.FullName, "target", "release", exeName);
                 if (File.Exists(candidate))
-                {
-                    exe = candidate;
-                    break;
-                }
+                    return candidate;
                 dir = dir.Parent;
             }
 
-            if (exe == null)
-                return null;
-
-            string dylibName = OperatingSystem.IsWindows() ? "onnxruntime.dll" : "libonnxruntime.dylib";
-            var env = Environment.GetEnvironmentVariable("ORT_DYLIB_PATH");
-            bool ortResolvable = (!String.IsNullOrEmpty(env) && File.Exists(env))
-                || File.Exists(Path.Combine(Path.GetDirectoryName(exe), dylibName));
-            return ortResolvable ? exe : null;
+            return null;
         }
 
         // ------------------------------------------------------------------------------ fixture

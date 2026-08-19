@@ -8,6 +8,10 @@
     xmlns:ve="clr-namespace:Clowd.UI.VideoEditor">
 
     <UserControl.Resources>
+        <!--  the render button's determinate progress arc (see ToolButton.axaml), reused by the
+              analysis status rows' little ring: 0-100 in, a 16x16 stroked arc out  -->
+        <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
+
         <!--  Shape-picker icons. All four share a 100x100 box so Stretch="Uniform" renders them at
               matching sizes; the squircle is traced from the same MaskGeometry the compositor
               clips with, so the icon is the shape you get.  -->
@@ -998,15 +1002,23 @@
 
                     <!--  AI denoise, a property of the row like the mute it sits under: the mix
                           plays the generated sidecar instead of the raw stream (and degrades to
-                          raw until the analysis below finishes)  -->
-                    <DockPanel Classes="row">
+                          raw until the analysis below finishes). Greyed out on Intel Macs (the
+                          inference binary is Apple Silicon only) — the tooltip rides the row,
+                          which stays hittable while the disabled checkbox is not.  -->
+                    <DockPanel
+                        Classes="row"
+                        Background="Transparent"
+                        ToolTip.Tip="{Binding AiEffectsDisabledTip}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <!--  bool default is assigned in code-behind for the same reason the
                                   enum ones are: a XAML DefaultValue is a string  -->
                             <controls:ResetDefaultButton x:Name="dotDenoise" CurrentValue="{Binding Denoise, Mode=TwoWay}" />
                         </Panel>
                         <TextBlock Classes="label" Text="Denoise" />
-                        <CheckBox IsChecked="{Binding Denoise, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                        <CheckBox
+                            IsChecked="{Binding Denoise, Mode=TwoWay}"
+                            IsEnabled="{Binding AiEffectsSupported}"
+                            Theme="{StaticResource InspectorCheckBox}" />
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowDenoiseStrength}">
@@ -1023,7 +1035,39 @@
                             Value="{Binding DenoiseStrength, Mode=TwoWay}" />
                     </DockPanel>
 
+                    <!--  the dot slot indents the note to the option rows' own label column; the
+                          percentage and the little arc ring (the render button's, at row scale)
+                          dock to the row's right edge — where every other row's editor ends — so
+                          the ring holds still while the numbers tick  -->
                     <DockPanel Classes="row" IsVisible="{Binding ShowDenoiseStatus}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <Grid
+                            Width="16"
+                            Height="16"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding DenoiseAnalyzing}">
+                            <Ellipse
+                                Width="14"
+                                Height="14"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Stroke="#44FFFFFF"
+                                StrokeThickness="2" />
+                            <Path
+                                Data="{Binding DenoiseProgress, Converter={StaticResource progressToArc}}"
+                                Stretch="None"
+                                Stroke="#CCCCCC"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2" />
+                        </Grid>
+                        <TextBlock
+                            Margin="0,0,8,0"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            Foreground="#CCCCCC"
+                            IsVisible="{Binding DenoiseAnalyzing}"
+                            Text="{Binding DenoisePercentText}" />
                         <TextBlock Classes="label" Text="{Binding DenoiseStatusText}" ToolTip.Tip="{Binding DenoiseStatusDetail}" />
                     </DockPanel>
                 </StackPanel>
@@ -1569,24 +1613,37 @@
                             Tag="{StaticResource IconEffectBlur}"
                             Theme="{StaticResource MaskShapeTile}"
                             ToolTip.Tip="Blur the whole picture" />
-                        <RadioButton
+                        <!--  the AI-backed pair greys out on Intel Macs (the inference binary is
+                              Apple Silicon only); each tile's wrapping panel stays hittable so
+                              the why-tooltip still shows over the disabled tile  -->
+                        <Panel
                             Grid.Row="1"
                             Grid.Column="0"
-                            Content="Bg Blur"
-                            GroupName="ItemEffect"
-                            IsChecked="{Binding EffectBgBlur, Mode=TwoWay}"
-                            Tag="{StaticResource IconEffectBgBlur}"
-                            Theme="{StaticResource MaskShapeTile}"
-                            ToolTip.Tip="Blur everything behind the person" />
-                        <RadioButton
+                            Background="Transparent"
+                            ToolTip.Tip="{Binding AiEffectsDisabledTip}">
+                            <RadioButton
+                                Content="Bg Blur"
+                                GroupName="ItemEffect"
+                                IsChecked="{Binding EffectBgBlur, Mode=TwoWay}"
+                                IsEnabled="{Binding AiEffectsSupported}"
+                                Tag="{StaticResource IconEffectBgBlur}"
+                                Theme="{StaticResource MaskShapeTile}"
+                                ToolTip.Tip="Blur everything behind the person" />
+                        </Panel>
+                        <Panel
                             Grid.Row="1"
                             Grid.Column="1"
-                            Content="Bg Remove"
-                            GroupName="ItemEffect"
-                            IsChecked="{Binding EffectBgRemove, Mode=TwoWay}"
-                            Tag="{StaticResource IconEffectBgRemove}"
-                            Theme="{StaticResource MaskShapeTile}"
-                            ToolTip.Tip="Remove everything behind the person" />
+                            Background="Transparent"
+                            ToolTip.Tip="{Binding AiEffectsDisabledTip}">
+                            <RadioButton
+                                Content="Bg Remove"
+                                GroupName="ItemEffect"
+                                IsChecked="{Binding EffectBgRemove, Mode=TwoWay}"
+                                IsEnabled="{Binding AiEffectsSupported}"
+                                Tag="{StaticResource IconEffectBgRemove}"
+                                Theme="{StaticResource MaskShapeTile}"
+                                ToolTip.Tip="Remove everything behind the person" />
+                        </Panel>
                     </Grid>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowEffectAmount}">
@@ -1605,7 +1662,37 @@
                             Value="{Binding EffectAmount, Mode=TwoWay}" />
                     </DockPanel>
 
+                    <!--  the AUDIO status row's EFFECT twin: dot-slot indent, note filling left,
+                          percentage + progress arc held at the row's right edge  -->
                     <DockPanel Classes="row" IsVisible="{Binding ShowEffectStatus}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <Grid
+                            Width="16"
+                            Height="16"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding EffectAnalyzing}">
+                            <Ellipse
+                                Width="14"
+                                Height="14"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Stroke="#44FFFFFF"
+                                StrokeThickness="2" />
+                            <Path
+                                Data="{Binding EffectProgress, Converter={StaticResource progressToArc}}"
+                                Stretch="None"
+                                Stroke="#CCCCCC"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2" />
+                        </Grid>
+                        <TextBlock
+                            Margin="0,0,8,0"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            Foreground="#CCCCCC"
+                            IsVisible="{Binding EffectAnalyzing}"
+                            Text="{Binding EffectPercentText}" />
                         <TextBlock Classes="label" Text="{Binding EffectStatusText}" ToolTip.Tip="{Binding EffectStatusDetail}" />
                     </DockPanel>
                 </StackPanel>
