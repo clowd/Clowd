@@ -102,7 +102,10 @@ fn bit_to_alpha(data: &[u8], pixel: usize, invert: bool) -> u8 {
 }
 
 fn bitmap_has_alpha(data: &[u8]) -> bool {
-    data.chunks_exact(4).any(|px| px[3] != 0)
+    data.as_chunks::<4>()
+        .0
+        .iter()
+        .any(|px| px[3] != 0)
 }
 
 unsafe fn extract_cursor_image(ii: &ICONINFO) -> Option<CursorImage> {
