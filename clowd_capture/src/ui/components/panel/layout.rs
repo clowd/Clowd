@@ -217,39 +217,43 @@ pub fn compute_layout(
     // selection); we use `PanelOrientation` for clarity. The variable
     // names `ind_left` / `ind_top` are kept the same as the C++ so a
     // side-by-side diff is trivial.
-    let orientation;
-    let ind_left;
-    let ind_top;
-
-    if bottom_space >= short_edge_px {
+    let (orientation, ind_left, ind_top) = if bottom_space >= short_edge_px {
         // Below the selection, horizontal row.
-        orientation = PanelOrientation::Horizontal;
-        ind_left = sel.left() + sel.width() / 2 - long_edge_px / 2;
-        ind_top = monitor_bounds
-            .bottom()
-            .min(sel.bottom() + max_distance + short_edge_px)
-            - short_edge_px;
+        (
+            PanelOrientation::Horizontal,
+            sel.left() + sel.width() / 2 - long_edge_px / 2,
+            monitor_bounds
+                .bottom()
+                .min(sel.bottom() + max_distance + short_edge_px)
+                - short_edge_px,
+        )
     } else if right_space >= short_edge_px {
         // Right of the selection, vertical column.
-        orientation = PanelOrientation::Vertical;
-        ind_left = monitor_bounds
-            .right()
-            .min(sel.right() + max_distance + short_edge_px)
-            - short_edge_px;
-        ind_top = sel.bottom() - long_edge_px;
+        (
+            PanelOrientation::Vertical,
+            monitor_bounds
+                .right()
+                .min(sel.right() + max_distance + short_edge_px)
+                - short_edge_px,
+            sel.bottom() - long_edge_px,
+        )
     } else if left_space >= short_edge_px {
         // Left of the selection, vertical column.
-        orientation = PanelOrientation::Vertical;
-        ind_left = (sel.left() - max_distance - short_edge_px).max(0);
-        ind_top = sel.bottom() - long_edge_px;
+        (
+            PanelOrientation::Vertical,
+            (sel.left() - max_distance - short_edge_px).max(0),
+            sel.bottom() - long_edge_px,
+        )
     } else {
         // Inside the selection (fallback), horizontal row pulled up from
         // the bottom of the selection by 2 × max_distance. Matches the
         // "inside capture rect" branch at DxScreenCapture.cpp:156-161.
-        orientation = PanelOrientation::Horizontal;
-        ind_left = sel.left() + sel.width() / 2 - long_edge_px / 2;
-        ind_top = sel.bottom() - short_edge_px - (max_distance * 2);
-    }
+        (
+            PanelOrientation::Horizontal,
+            sel.left() + sel.width() / 2 - long_edge_px / 2,
+            sel.bottom() - short_edge_px - (max_distance * 2),
+        )
+    };
 
     let horizontal_size = match orientation {
         PanelOrientation::Horizontal => long_edge_px,
