@@ -61,8 +61,10 @@ pub fn extract_selection_rgba(selection: ScreenRect, buffer: &CapturedDesktop) -
         let src_row = &buffer.bgra[src_start..src_start + dst_stride];
         let dst_row = &mut rgba[row * dst_stride..(row + 1) * dst_stride];
         for (d, s) in dst_row
-            .chunks_exact_mut(4)
-            .zip(src_row.chunks_exact(4))
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(src_row.as_chunks::<4>().0.iter())
         {
             d[0] = s[2];
             d[1] = s[1];
@@ -184,8 +186,10 @@ pub fn extract_selection_rgba_with_peek(
         };
         let dst_row = &mut rgba[dst_start..dst_start + span];
         for (d, s) in dst_row
-            .chunks_exact_mut(4)
-            .zip(src_row.chunks_exact(4))
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(src_row.as_chunks::<4>().0.iter())
         {
             d[0] = s[2];
             d[1] = s[1];
@@ -239,7 +243,7 @@ pub fn extract_selection_bgra_with_peek(
         // Peek alpha can be garbage (DWM thumbnail readback); the desktop
         // pixels around it are opaque, so force the composite opaque too —
         // mirrors the RGBA sibling's `d[3] = 255`.
-        for px in dst_row.chunks_exact_mut(4) {
+        for px in dst_row.as_chunks_mut::<4>().0.iter_mut() {
             px[3] = 255;
         }
     }
