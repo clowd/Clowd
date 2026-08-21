@@ -696,7 +696,12 @@ fn profile(frame: &Frame, c0: usize, c1: usize) -> Vec<f32> {
     (0..frame.height as usize)
         .map(|y| {
             let row = &frame.bgra[y * stride + c0 * 4..y * stride + c1 * 4];
-            let sum: i32 = row.chunks_exact(4).map(luma).sum();
+            let sum: i32 = row
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|px| luma(px))
+                .sum();
             sum as f32 / (c1 - c0) as f32
         })
         .collect()
@@ -711,8 +716,10 @@ fn row_mad(a: &Frame, ya: usize, b: &Frame, yb: usize, c0: usize, c1: usize, cli
     let ra = &a.bgra[ya * sa + c0 * 4..ya * sa + c1 * 4];
     let rb = &b.bgra[yb * sb + c0 * 4..yb * sb + c1 * 4];
     let sum: u32 = ra
-        .chunks_exact(4)
-        .zip(rb.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(rb.as_chunks::<4>().0.iter())
         .map(|(pa, pb)| (luma(pa) - luma(pb)).abs().min(clip) as u32)
         .sum();
     sum as f32 / (c1 - c0) as f32
@@ -722,7 +729,7 @@ fn row_mad(a: &Frame, ya: usize, b: &Frame, yb: usize, c0: usize, c1: usize, cli
 /// order `GetDIBits` produces; PNG encoding is the first and only consumer
 /// that cares.
 fn bgra_to_rgba(mut buf: Vec<u8>) -> Vec<u8> {
-    for px in buf.chunks_exact_mut(4) {
+    for px in buf.as_chunks_mut::<4>().0.iter_mut() {
         px.swap(0, 2);
     }
     buf
@@ -983,8 +990,10 @@ mod tests {
         let expected = expected_composite(&page, BOTTOM);
         let matching = composite
             .rgba
-            .chunks_exact(4)
-            .zip(expected.chunks_exact(4))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(expected.as_chunks::<4>().0.iter())
             .filter(|(a, b)| a == b)
             .count();
         let total = (composite.height * W) as usize;
@@ -1441,7 +1450,12 @@ mod tests {
         // the reference stays where it is.
         let mut rng = Rng::new(0x9e37_79b9);
         let mut garbage = blank(0);
-        for px in garbage.bgra.chunks_exact_mut(4) {
+        for px in garbage
+            .bgra
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+        {
             let v = rng.below(256) as u8;
             px[..3].copy_from_slice(&[v, v, v]);
         }
@@ -1524,7 +1538,7 @@ mod tests {
         let mut rng = Rng::new(0x0dd_ba11);
         let mut garbage = || {
             let mut f = blank(0);
-            for px in f.bgra.chunks_exact_mut(4) {
+            for px in f.bgra.as_chunks_mut::<4>().0.iter_mut() {
                 let v = rng.below(256) as u8;
                 px[..3].copy_from_slice(&[v, v, v]);
             }
