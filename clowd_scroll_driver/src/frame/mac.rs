@@ -75,7 +75,11 @@ pub fn capture_region(rect: ScreenRect) -> Result<Frame> {
         // that wobbled between frames would make the settle comparison see
         // movement in a still page — and land a semi-transparent PNG in the
         // editor.
-        for pixel in bgra[dst_start..dst_start + stride].chunks_exact_mut(4) {
+        for pixel in bgra[dst_start..dst_start + stride]
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+        {
             pixel[3] = 0xFF;
         }
     }

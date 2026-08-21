@@ -271,8 +271,10 @@ pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
     // latency-critical path before det even starts.
     let mut rgb = vec![0u8; req.width as usize * req.height as usize * 3];
     for (dst, px) in rgb
-        .chunks_exact_mut(3)
-        .zip(req.bgra.chunks_exact(4))
+        .as_chunks_mut::<3>()
+        .0
+        .iter_mut()
+        .zip(req.bgra.as_chunks::<4>().0.iter())
     {
         dst[0] = px[2];
         dst[1] = px[1];
@@ -709,7 +711,7 @@ mod tests {
             .to_rgba8();
         let (w, h) = img.dimensions();
         let mut bgra = img.into_raw();
-        for px in bgra.chunks_exact_mut(4) {
+        for px in bgra.as_chunks_mut::<4>().0.iter_mut() {
             px.swap(0, 2);
         }
         let req = request(bgra, w, h);
@@ -742,7 +744,7 @@ mod tests {
         let (w, h) = img.dimensions();
         // The request wants BGRA; image gives RGBA — swap R and B.
         let mut bgra = img.into_raw();
-        for px in bgra.chunks_exact_mut(4) {
+        for px in bgra.as_chunks_mut::<4>().0.iter_mut() {
             px.swap(0, 2);
         }
         let outcome = recognize(&request(bgra, w, h)).expect("test image must recognize");
