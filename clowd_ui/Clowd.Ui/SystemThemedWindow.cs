@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Clowd.UI.Helpers;
 
 namespace Clowd.UI
 {
@@ -44,6 +45,11 @@ namespace Clowd.UI
 
             ActualThemeVariantChanged += (_, _) => UpdateBackgroundForTransparency();
             UpdateBackgroundForTransparency();
+
+            // macOS Cmd+W (issue #73). Registered on the base so every shell window gets it;
+            // the recording/scroll overlays are deliberately not shell windows and keep their
+            // own (Escape-driven) cancel semantics.
+            MacWindowShortcuts.AddCloseShortcut(this);
         }
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

@@ -75,6 +75,9 @@ namespace Clowd.UI.Dialogs
             };
 
             UpdatePreview();
+
+            // Cmd+W is the macOS close gesture — cancels, same as Escape (issue #73)
+            MacWindowShortcuts.AddCloseShortcut(this, () => Close(false));
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
