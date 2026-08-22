@@ -5,3 +5,13 @@
 tools/gen-credits.sh                     text eol=lf
 .github/workflows/update-credits.yml     text eol=lf
 clowd_ui/Clowd.Ui/Assets/credits.json    text eol=lf
+
+# Binary assets: never line-ending-converted or diffed as text, whatever core.autocrlf
+# says. (A text-mode sweep once rewrote clowd-default.icns's LFs as CRLFs and broke it.)
+*.icns  binary
+*.ico   binary
+*.cur   binary
+*.png   binary
+*.gif   binary
+*.ttf   binary
+*.onnx  binary
