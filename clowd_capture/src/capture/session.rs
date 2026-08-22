@@ -17,29 +17,55 @@ type PeekImagesLatch = Arc<Latch<Vec<Arc<WindowPeekImage>>>>;
 
 pub struct CaptureSession {
     app: App,
+    timings: Arc<StartupTimings>,
 }
 
 impl CaptureSession {
-    pub fn new(settings: Arc<CapturerSettings>, memory_hints: MemoryHintsMode) -> anyhow::Result<Self> {
-        let t_start = Instant::now();
-
+    /// `t_start` is taken by `main` at process entry, not here: everything
+    /// before this call (clap, the logger, sentry, the permission check) is
+    /// startup latency too, and anchoring at the first line of this function
+    /// would silently subtract it.
+    pub fn new(settings: Arc<CapturerSettings>, memory_hints: MemoryHintsMode, t_start: Instant) -> anyhow::Result<Self> {
         let monitors = SystemInterop::all_monitors();
         if monitors.is_empty() {
             anyhow::bail!("no monitors detected; nothing to render to");
         }
+        // Sampled before the timings exist — the worker count sizes them, and
+        // enumerating the monitors is what produces that count.
+        let monitors_enumerated = t_start.elapsed();
+        let timings = Arc::new(StartupTimings::new(t_start, monitors.len()));
+        timings.mark_monitors_enumerated(monitors_enumerated);
 
+        // Everything the desktop capture needs, gathered before anything else:
+        // the capture is the longest pole in startup and the main thread blocks
+        // on it below, so it is spawned FIRST and the wgpu instance and the
+        // render workers are built beside it instead of in front of it. Only the
+        // cursor and the monitor list are genuine prerequisites; the worker
+        // channels it also wants arrive later over `worker_channels_latch`.
         let initial_mouse = SystemInterop::get_mouse_position(&monitors);
         let initial_mouse_f = ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
+        let captured_cursor = SystemInterop::capture_cursor(&monitors);
+        let ready_count = Arc::new(AtomicUsize::new(0));
+        let visible_latch = Arc::new(VisibleLatch::new());
+
+        let (screenshot_latch, worker_channels_latch) = spawn_screenshot_job(ScreenshotJobParams {
+            monitors: monitors.clone(),
+            cursor: captured_cursor,
+            peek_enabled: settings.obscured_window_peek_enabled,
+            accent_color: settings.accent_color,
+            initial_mouse: initial_mouse_f,
+            ready_count: ready_count.clone(),
+            visible_latch: visible_latch.clone(),
+            timings: timings.clone(),
+        });
+
         let instance = Arc::new(create_wgpu_instance());
-        let timings = Arc::new(StartupTimings::new(t_start, monitors.len()));
+        timings.mark_instance_created();
         timings.mark_initialize();
 
         let worker_failed = Arc::new(AtomicUsize::new(0));
         let worker_setups = spawn_render_workers(&monitors, &instance, &timings, memory_hints, &worker_failed);
-
-        let ready_count = Arc::new(AtomicUsize::new(0));
-        let visible_latch = Arc::new(VisibleLatch::new());
-        let captured_cursor = SystemInterop::capture_cursor(&monitors);
+        timings.mark_workers_spawned();
 
         let input_txs: Vec<_> = worker_setups
             .iter()
@@ -49,19 +75,14 @@ impl CaptureSession {
             .iter()
             .map(|s| s.render_msg_tx.clone())
             .collect();
-
-        let screenshot_latch = spawn_screenshot_job(ScreenshotJobParams {
-            monitors: monitors.clone(),
-            cursor: captured_cursor,
+        // Releases the screenshot thread's second stage. It may already be
+        // parked here waiting, or it may still be compositing displays — either
+        // way this hand-off is what lets the capture start before the workers do.
+        worker_channels_latch.set(WorkerChannels {
             input_txs,
             render_msg_txs: render_msg_txs.clone(),
-            peek_enabled: settings.obscured_window_peek_enabled,
-            accent_color: settings.accent_color,
-            initial_mouse: initial_mouse_f,
-            ready_count: ready_count.clone(),
-            visible_latch: visible_latch.clone(),
-            timings: timings.clone(),
         });
+
         let (walker_latch, peek_images_latch) = spawn_walker_job(
             monitors.clone(),
             render_msg_txs,
@@ -70,13 +91,22 @@ impl CaptureSession {
             timings.clone(),
         );
 
-        // Bounded: an unbounded wait turned any wedged CG capture call into a
-        // process that idles forever with nothing on screen and no way to close it
-        // from the shell. 30s is far beyond a slow multi-display capture.
-        let desktop_buffer = screenshot_latch
-            .wait_timeout(Duration::from_secs(30))
-            .ok_or_else(|| anyhow!("timed out waiting for the desktop screenshot"))?;
-
+        // Deliberately NOT waited on here. The main thread used to block on this
+        // latch (~50 ms — the single largest delta on the startup critical path),
+        // serializing the event loop, every window/surface creation and every
+        // surface configure behind the capture. `App` now takes the latch itself
+        // and picks the buffer up inside the event loop
+        // (`app.rs::try_pick_up_screenshot`), so all of that setup runs BESIDE
+        // the capture instead of after it. What still waits for the bitmap waits
+        // in the right place: the macOS frozen-desktop backdrop is installed —
+        // and the windows ordered front — only once the buffer lands, and the
+        // workers cannot reach frame 0 earlier anyway (`BeginCycle` carries the
+        // snapshot and is broadcast by the capture thread).
+        //
+        // The old 30 s bound survives as `App`'s screenshot deadline, enforced in
+        // the pickup: a wedged CG capture call must still end as a clean non-zero
+        // exit (`App::fatal_result`), never a process idling forever with nothing
+        // on screen and no way to close it from the shell.
         let app = App::new(
             settings,
             timings.clone(),
@@ -84,7 +114,7 @@ impl CaptureSession {
             monitors,
             initial_mouse_f,
             worker_setups,
-            desktop_buffer,
+            screenshot_latch,
             walker_latch,
             peek_images_latch,
             ready_count,
@@ -94,7 +124,14 @@ impl CaptureSession {
 
         Ok(Self {
             app,
+            timings,
         })
+    }
+
+    /// Shared with `main` so the stages that happen after the session is
+    /// built — the event loop, entering `run_app` — land on the same clock.
+    pub fn timings(&self) -> &Arc<StartupTimings> {
+        &self.timings
     }
 
     pub fn into_app(self) -> App {
@@ -153,8 +190,6 @@ fn spawn_render_workers(
 struct ScreenshotJobParams {
     pub monitors: Vec<MonitorInfo>,
     pub cursor: Option<CapturedCursor>,
-    pub input_txs: Vec<mpsc::Sender<WorkerInput>>,
-    pub render_msg_txs: Vec<mpsc::Sender<RenderMsg>>,
     pub peek_enabled: bool,
     pub accent_color: [f32; 4],
     pub initial_mouse: ScreenPointF,
@@ -165,15 +200,35 @@ struct ScreenshotJobParams {
     pub timings: Arc<StartupTimings>,
 }
 
-/// Capture the desktop bitmap on a background thread, then broadcast
-/// `BeginCycle` (snapshot + per-cycle params) to every render worker and,
-/// when peek is enabled, follow up with the blurred-desktop image.
-fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc<CapturedDesktop>>> {
+/// The half of the screenshot job's inputs that cannot exist until the render
+/// workers have been spawned. Handed over out-of-band so the capture itself
+/// does not have to wait for them.
+#[derive(Clone)]
+struct WorkerChannels {
+    input_txs: Vec<mpsc::Sender<WorkerInput>>,
+    render_msg_txs: Vec<mpsc::Sender<RenderMsg>>,
+}
+
+/// Both waits inside the screenshot thread are bounded on the same principle as
+/// the main thread's: a background thread must never be the reason a capture that
+/// has already gone wrong cannot be observed to have gone wrong. Neither bound is
+/// ever expected to elapse — the channels are handed over microseconds later, and
+/// the visible latch is signalled by the show gate or by `finish_cycle` on cancel.
+const SCREENSHOT_STAGE_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Capture the desktop bitmap on a background thread and publish it through the
+/// returned latch; then, once `worker_channels_latch` delivers the render
+/// workers' senders, broadcast `BeginCycle` (snapshot + per-cycle params) to
+/// every worker and, when peek is enabled, follow up with the blurred desktop.
+///
+/// The two stages are split so the capture can be kicked off before the workers
+/// exist — it is the longest single step in startup and the main thread blocks
+/// on its first stage, so it starts as early as the cursor and monitor list
+/// allow. See the ordering note in `CaptureSession::new`.
+fn spawn_screenshot_job(params: ScreenshotJobParams) -> (Arc<Latch<Arc<CapturedDesktop>>>, Arc<Latch<WorkerChannels>>) {
     let ScreenshotJobParams {
         monitors,
         cursor,
-        input_txs,
-        render_msg_txs,
         peek_enabled,
         accent_color,
         initial_mouse,
@@ -183,7 +238,9 @@ fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc<CapturedDe
     } = params;
 
     let screenshot_latch = Arc::new(Latch::new());
+    let worker_channels_latch: Arc<Latch<WorkerChannels>> = Arc::new(Latch::new());
     let latch = screenshot_latch.clone();
+    let channels_latch = worker_channels_latch.clone();
     std::thread::Builder::new()
         .name("screenshot".into())
         .spawn(move || {
@@ -197,17 +254,38 @@ fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc<CapturedDe
                 .background
                 .screenshot
                 .set_once(timings.t_start.elapsed());
+
+            let Some(channels) = channels_latch.wait_timeout(SCREENSHOT_STAGE_TIMEOUT) else {
+                error!("screenshot: worker channels never arrived; no cycle broadcast");
+                return;
+            };
             let cycle = Arc::new(CycleParams {
                 snapshot: captured.clone(),
                 accent_color,
                 initial_mouse,
                 ready_count,
-                visible_latch,
+                visible_latch: visible_latch.clone(),
             });
-            for tx in &input_txs {
+            for tx in &channels.input_txs {
                 let _ = tx.send(WorkerInput::BeginCycle(cycle.clone()));
             }
+
             if peek_enabled {
+                // Gated on the overlay actually being on screen. `stack_blur` runs
+                // under `ThreadingPolicy::Adaptive`, i.e. `(w*h/65536).clamp(1, cores)`
+                // threads — every core on any real desktop — and nothing reads
+                // `BlurredDesktop` until the user hovers a peek-eligible window, which
+                // cannot happen before the overlay is visible. Ungated it competed with
+                // window creation, the snapshot upload and frame 0 for exactly those
+                // cores, on the one path where they are the critical path.
+                //
+                // Bounded rather than an unconditional wait: on the exit paths that
+                // never signal (every window failing to create) this thread would
+                // otherwise stay parked holding the sender clones, and a worker whose
+                // handoff failed only exits on channel disconnect.
+                if !visible_latch.wait_timeout(SCREENSHOT_STAGE_TIMEOUT) {
+                    warn!("screenshot: overlay never became visible; blurring anyway");
+                }
                 // stack_blur radius 4 visually approximates the old sigma-2.0 gaussian.
                 let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 4);
                 let blurred = Arc::new(BlurredDesktopImage {
@@ -215,14 +293,14 @@ fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc<CapturedDe
                     width: w,
                     height: h,
                 });
-                for tx in &render_msg_txs {
+                for tx in &channels.render_msg_txs {
                     let _ = tx.send(RenderMsg::BlurredDesktop(blurred.clone()));
                 }
                 info!("screenshot: desktop blur complete");
             }
         })
         .expect("spawn screenshot thread");
-    screenshot_latch
+    (screenshot_latch, worker_channels_latch)
 }
 
 /// Snapshot the window z-order on a background thread and, when peek is

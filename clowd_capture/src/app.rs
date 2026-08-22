@@ -60,13 +60,32 @@ pub struct App {
     /// (`ready + failed >= expected`) can never deadlock on a dead worker.
     worker_failed: Arc<AtomicUsize>,
     cycle: Option<CaptureCycle>,
+    /// A startup failure detected inside the event loop — today only the
+    /// screenshot deadline expiring. `run_app` has no error channel of its
+    /// own, so the failure is parked here and `fatal_result` hands it back
+    /// to `main` after the loop exits, preserving the non-zero exit code
+    /// (and the sentry capture) the old blocking-wait `?` produced.
+    fatal: Option<anyhow::Error>,
 }
 
 /// All state for the single capture this process serves. Built in
 /// [`App::new`] and dropped by [`App::finish_cycle`] on the way out.
 pub struct CaptureCycle {
     settings: Arc<CapturerSettings>,
+    /// `None` until the desktop capture lands — `App` is constructed with the
+    /// screenshot still in flight, and `try_pick_up_screenshot` fills this in
+    /// from `screenshot_latch`. Every consumer already tolerates `None` (the
+    /// action dispatches fail with "no buffer", `broadcast_ui_state` takes an
+    /// `Option`), and none of them can fire before the overlay is visible,
+    /// which the show gate holds back until the buffer has long arrived.
     desktop_buffer: Option<Arc<CapturedDesktop>>,
+    /// Source of `desktop_buffer`, set by the screenshot thread.
+    screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
+    /// When to give up on `screenshot_latch`. Carries the old blocking
+    /// wait's 30 s bound through the event loop: a wedged CG capture call
+    /// must end as a clean failing exit, not a process idling forever with
+    /// hidden windows and no way to close it from the shell.
+    screenshot_deadline: Instant,
     walker: Option<Arc<WindowWalker>>,
     walker_latch: Arc<Latch<Arc<WindowWalker>>>,
     peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
@@ -121,7 +140,25 @@ struct PendingShow {
     ready_count: Arc<AtomicUsize>,
     expected: usize,
     visible_latch: Arc<VisibleLatch>,
+    /// When the gate started waiting, for [`SHOW_GATE_TIMEOUT`].
+    since: Instant,
 }
+
+/// How long the show gate waits for every worker before giving up and
+/// showing whatever is ready.
+///
+/// Load-bearing since the overlay windows are ordered front *before* frame 0
+/// (the macOS `SurfaceError::Occluded` workaround): from window creation
+/// onwards the user is looking at a frozen still of their desktop. A worker
+/// that wedges without panicking — the `nextDrawable` stall of
+/// gfx-rs/wgpu#8309, or a hung shader compile — bumps neither `ready_count`
+/// nor `ReadyGuard`, so an unbounded gate would leave that frozen still on
+/// screen forever with the live desktop unreachable and no way to dismiss it.
+/// Before the early order-front the same hang merely showed nothing.
+///
+/// Generous on purpose: a cold shader compile on a slow discrete GPU is
+/// legitimately hundreds of ms, and firing early costs a monitor its overlay.
+const SHOW_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// How a capture cycle ended. Logged only; the action the shell dispatches
 /// on is written separately by `session_output::SessionAction`.
@@ -171,6 +208,46 @@ fn broadcast_mouse_state(windows: &WindowSet, input: &InteractionState) {
 fn hide_overlay_for_action(windows: &WindowSet) {
     SystemInterop::hand_foreground_to_shell();
     windows.hide_all();
+}
+
+/// Put an overlay window on screen without activating it or making it key,
+/// before its worker has drawn anything into it.
+///
+/// macOS only, and a correctness fix rather than a latency one: wgpu-hal's
+/// Metal backend refuses `acquire_texture` with `SurfaceError::Occluded`
+/// whenever the hosting NSWindow lacks `NSWindowOcclusionStateVisible` (its
+/// workaround for gfx-rs/wgpu#8309, where a presented drawable on an occluded
+/// window wedges `nextDrawable` for a second). Windows are created hidden, so
+/// an unordered window means frame 0 acquires nothing, `draw_once` returns
+/// before it ever reaches `queue.present`, and the worker bumps `ready_count`
+/// anyway — the show gate then raises an overlay that was never painted, and
+/// the first pixels wait on the render loop's next iteration.
+///
+/// Nothing flashes: the caller has already installed (or filled — see
+/// `try_pick_up_screenshot`) the frozen-desktop CALayer, and the render
+/// subview stacked above it sits at opacity 0 until `WindowHandle::show`
+/// fades it in. AppKit refreshes `occlusionState` from the window server
+/// rather than synchronously here, so on its own this is only a head start,
+/// not a guarantee: measured warm runs reach the frame-0 acquire ~0.2 ms
+/// after this call, long before AppKit has caught up, and the acquire still
+/// fails `Occluded`. The worker closes that remaining gap itself —
+/// `render.rs::present_first_frame` waits the transition out with a bounded
+/// retry. Both halves are needed: without this order-front the occlusion
+/// state never flips at all and the retry only burns its budget.
+#[cfg(target_os = "macos")]
+fn order_window_front_early(window: &Window) {
+    use objc2_app_kit::NSView;
+    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    let Ok(handle) = window.window_handle() else { return };
+    let RawWindowHandle::AppKit(h) = handle.as_raw() else { return };
+
+    unsafe {
+        let ns_view: &NSView = &*(h.ns_view.as_ptr() as *const NSView);
+        if let Some(ns_window) = ns_view.window() {
+            ns_window.orderFrontRegardless();
+        }
+    }
 }
 
 fn update_cursor_visibility(windows: &WindowSet, input: &InteractionState) {
@@ -441,7 +518,7 @@ impl App {
         monitors: Vec<MonitorInfo>,
         initial_mouse: ScreenPointF,
         worker_setups: Vec<WorkerSetup>,
-        desktop_buffer: Arc<CapturedDesktop>,
+        screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
         walker_latch: Arc<Latch<Arc<WindowWalker>>>,
         peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
         ready_count: Arc<AtomicUsize>,
@@ -491,27 +568,15 @@ impl App {
         // capture: `finish_cycle` (and `resumed`'s no-windows bail-out)
         // undoes it.
         set_hardware_cursor_visible(false);
-        let desktop_buffer = Some(desktop_buffer);
-
-        // Warm the OCR backend off-thread so the first OCR press of the
-        // process doesn't pay the MNN model parse + session setup mid-scan
-        // (a one-time cost, cached for the process lifetime). Once per
-        // process, and only when the OCR button exists at all.
-        if settings.panel_features.ocr {
-            static OCR_WARM: std::sync::Once = std::sync::Once::new();
-            OCR_WARM.call_once(|| {
-                if let Err(e) = std::thread::Builder::new()
-                    .name("ocr-warm".into())
-                    .spawn(ocr::warm)
-                {
-                    log::warn!("failed to spawn the OCR warm-up thread: {e}");
-                }
-            });
-        }
 
         let cycle = CaptureCycle {
             settings,
-            desktop_buffer,
+            desktop_buffer: None,
+            screenshot_latch,
+            // Anchored here rather than at the first pickup poll so a stall
+            // anywhere between construction and the event loop counts
+            // against the same budget the old blocking wait enforced.
+            screenshot_deadline: Instant::now() + Duration::from_secs(30),
             walker: None,
             walker_latch,
             peek_images_latch,
@@ -524,6 +589,7 @@ impl App {
                 ready_count,
                 expected,
                 visible_latch,
+                since: Instant::now(),
             }),
             pending_preselect,
             video_dispatched: false,
@@ -574,6 +640,16 @@ impl App {
             worker_setups: Some(worker_setups),
             worker_failed,
             cycle: Some(cycle),
+            fatal: None,
+        }
+    }
+
+    /// Hand back a failure detected inside the event loop (see the `fatal`
+    /// field). Called by `main` after `run_app` returns.
+    pub fn fatal_result(&mut self) -> anyhow::Result<()> {
+        match self.fatal.take() {
+            Some(e) => Err(e),
+            None => Ok(()),
         }
     }
 
@@ -661,6 +737,54 @@ impl App {
                 cycle.walker = Some(w);
             }
         }
+    }
+
+    /// Non-blocking pickup of the desktop screenshot, polled at the top of
+    /// `resumed` (so a capture that beats the event loop still takes the
+    /// install-at-creation path) and on every `about_to_wait` pass. The main
+    /// thread used to block on this latch in `CaptureSession::new` — ~50 ms,
+    /// the single largest delta on the startup critical path — serializing
+    /// the event loop and every window/surface creation behind the capture.
+    ///
+    /// On arrival this is also where the macOS windows first go on screen:
+    /// `resumed` skips the early order-front while the buffer is pending
+    /// (an ordered window with an empty backdrop layer is an opaque black
+    /// rectangle), so the backdrop fill and the order-front happen together
+    /// here, and the show-gate clock is re-anchored to that moment — the
+    /// frozen still it guards against stranding cannot be on screen earlier.
+    ///
+    /// Past the deadline (the old blocking wait's 30 s bound) the cycle is
+    /// torn down and the error parked for `fatal_result`: a wedged CG
+    /// capture call must end as a clean failing exit, not a process idling
+    /// forever with hidden windows and no way to close it from the shell.
+    fn try_pick_up_screenshot(&mut self, event_loop: &ActiveEventLoop) {
+        {
+            let Some(cycle) = self.cycle.as_mut() else {
+                return;
+            };
+            if cycle.desktop_buffer.is_some() {
+                return;
+            }
+            if let Some(buf) = cycle.screenshot_latch.try_get() {
+                self.startup.mark_screenshot_latch_released();
+                #[cfg(target_os = "macos")]
+                for h in self.windows.values() {
+                    h.install_backdrop(&buf);
+                    order_window_front_early(h.winit_window());
+                }
+                if let Some(pending) = cycle.pending_show.as_mut() {
+                    pending.since = Instant::now();
+                }
+                cycle.desktop_buffer = Some(buf);
+                return;
+            }
+            if Instant::now() < cycle.screenshot_deadline {
+                return;
+            }
+        }
+        error!("timed out waiting for the desktop screenshot; tearing the cycle down");
+        self.fatal = Some(anyhow!("timed out waiting for the desktop screenshot"));
+        self.finish_cycle(event_loop, CycleAction::Cancelled);
     }
 
     /// Non-blocking pickup of the OCR worker's result, plus the OCR phase
@@ -1547,6 +1671,12 @@ impl ApplicationHandler for App {
         };
 
         self.try_pick_up_walker();
+        // The screenshot usually loses this race (the capture is ~90 ms, the
+        // event loop reaches here at ~60), and then the windows are built
+        // backdropless and hidden and try_pick_up_screenshot finishes the
+        // job. When it HAS landed, this pickup routes us through the
+        // original install-at-creation path below.
+        self.try_pick_up_screenshot(event_loop);
 
         let mut windows = WindowSet::new();
         self.startup.mark_window_create_start();
@@ -1591,6 +1721,10 @@ impl ApplicationHandler for App {
             #[cfg(windows)]
             {
                 attrs = attrs.with_no_redirection_bitmap(true);
+                // The overlay never accepts a drop, but winit registers every window
+                // it creates as an OLE drop target — an OleInitialize plus a
+                // RegisterDragDrop per monitor, on the startup path.
+                attrs = attrs.with_drag_and_drop(false);
                 // WS_EX_TOPMOST from creation: without it the overlay loses the z-order
                 // battle against a fullscreen foreground app (e.g. Discord) on that
                 // monitor — only the focused window is ever raised, and SW_SHOWNOACTIVATE
@@ -1624,6 +1758,19 @@ impl ApplicationHandler for App {
                 .surface_bind
                 .set_once(self.startup.t_start.elapsed());
 
+            // Earliest point the window can go on screen without flashing —
+            // `WindowHandle::new` has applied the window tweaks and installed the
+            // frozen-desktop layer — and the last point before the worker it just
+            // handed the surface to reaches frame 0. See `order_window_front_early`.
+            // Only once the screenshot has landed: with the buffer still pending
+            // the backdrop layer is empty and an ordered window is an opaque
+            // black rectangle, so `try_pick_up_screenshot` fills the layer and
+            // orders front in one motion when the capture arrives.
+            #[cfg(target_os = "macos")]
+            if desktop_buffer.is_some() {
+                order_window_front_early(handle.winit_window());
+            }
+
             windows.insert(handle);
         }
 
@@ -1655,15 +1802,36 @@ impl ApplicationHandler for App {
 
         // Try to pick up the walker if it wasn't ready during resumed().
         self.try_pick_up_walker();
+        // And the screenshot — this is the pass that normally lands it,
+        // installing the backdrops and ordering the windows front.
+        self.try_pick_up_screenshot(event_loop);
         self.try_advance_ocr();
 
+        let mut bench_done = false;
         if let Some(cycle) = self.cycle.as_mut() {
+            // The gate is only evaluated once the screenshot has landed:
+            // before that nothing is on screen (the windows are hidden and
+            // backdropless), so "timed out, show anyway" would raise a black
+            // overlay over nothing — a wedged capture belongs to
+            // `try_pick_up_screenshot`'s own deadline, and the workers
+            // cannot be ready anyway (frame 0 needs the snapshot).
+            if cycle.desktop_buffer.is_none() {
+                return;
+            }
             if let Some(ref pending) = cycle.pending_show {
                 // Failed workers count toward the gate so a dead worker can
                 // never hold the overlay hostage.
                 let ready = pending.ready_count.load(Ordering::Acquire);
                 let failed = self.worker_failed.load(Ordering::Acquire);
-                if ready + failed >= pending.expected {
+                let timed_out = pending.since.elapsed() >= SHOW_GATE_TIMEOUT;
+                if timed_out && ready + failed < pending.expected {
+                    warn!(
+                        "show gate timed out after {:?}: {ready} ready + {failed} failed of {} workers; \
+                         showing anyway — a wedged worker must not strand the frozen desktop on screen",
+                        SHOW_GATE_TIMEOUT, pending.expected
+                    );
+                }
+                if ready + failed >= pending.expected || timed_out {
                     self.startup.mark_show_start();
                     self.windows.show_all();
                     self.startup.mark_shown();
@@ -1675,8 +1843,49 @@ impl ApplicationHandler for App {
                     cycle.pending_show = None;
                     broadcast_mouse_state(&self.windows, &cycle.input);
                     broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
+                    // The one place the whole startup timeline is complete and
+                    // nothing the user does can still perturb it. Emitted
+                    // unconditionally: without a log record these marks only
+                    // ever existed inside the debug panel.
+                    info!("{}", self.startup.report());
+
+                    // Warm the OCR backend off-thread so the first OCR press of
+                    // the process doesn't pay the MNN model parse + session setup
+                    // mid-scan (a one-time cost, cached for the process lifetime).
+                    // Once per process, and only when the OCR button exists at
+                    // all. Deliberately behind the show gate: warming spawns a
+                    // child process, and its deadline is the user's first OCR
+                    // keypress — hundreds of ms away at the very best — so none of
+                    // that belongs on the path to the first frame.
+                    // `bench_startup` suppresses it entirely: the process exits
+                    // a few statements below, so the spawn would only orphan a
+                    // `clowd_ocr` child (its kill-on-drop guard and temp-file
+                    // cleanup are destructors, which a process exit never runs).
+                    // That orphan would then burn cores through the NEXT launch
+                    // and perturb exactly what the benchmark is measuring.
+                    if cycle.settings.panel_features.ocr && !cycle.settings.bench_startup {
+                        static OCR_WARM: std::sync::Once = std::sync::Once::new();
+                        OCR_WARM.call_once(|| {
+                            if let Err(e) = std::thread::Builder::new()
+                                .name("ocr-warm".into())
+                                .spawn(ocr::warm)
+                            {
+                                log::warn!("failed to spawn the OCR warm-up thread: {e}");
+                            }
+                        });
+                    }
+
+                    bench_done = cycle.settings.bench_startup;
                 }
             }
+        }
+
+        // `--bench-startup`: the run's only purpose was the record above, so
+        // end the cycle the same way a cancel does — windows hidden, cursor
+        // restored, no payload written.
+        if bench_done {
+            self.finish_cycle(event_loop, CycleAction::Cancelled);
+            return;
         }
 
         // Pre-select the active screen / foreground window when launched with

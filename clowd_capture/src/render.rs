@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::{mpsc, Arc};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::gpu::desktop::{create_placeholder_cursor_view, WindowUniforms, WINDOW_UNIFORMS_SIZE};
@@ -9,7 +10,10 @@ use crate::gpu::{self, SURFACE_FORMAT};
 use crate::interaction::OcrState;
 use crate::sync::ReadyGuard;
 use crate::telemetry::perf::{PerfSample, PerfTracker};
+use crate::telemetry::startup::{AtomicDuration, StartupTimings, WorkerTimings};
 use crate::ui::gpu::gpu_timing::GpuTimings;
+use crate::ui::gpu::renderer::{UiPipelines, UiText};
+use crate::ui::gpu::text::TextStack;
 use crate::ui::gpu::UiRenderer;
 use crate::ui::shared::UiMonitor;
 use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
@@ -33,6 +37,185 @@ use worker::RenderWorkerParams;
 /// (rects, textured quads, glyph quads) so MSAA adds cost without
 /// visual benefit.
 pub const MSAA_SAMPLES: u32 = 1;
+
+// ── Deferred (post-first-frame) GPU build ───────────────────────────
+
+/// Everything a render worker needs that FRAME 0 DOES NOT.
+///
+/// Frame 0 draws one triangle with the desktop pipeline: `UiRenderer::draw`
+/// is a no-op there (no `UiSharedState` exists until after the visible
+/// latch, so `prepare` stages nothing) and the peek quad needs a hovered
+/// window, which needs a visible overlay. So the whole UI stack — three
+/// pipelines, glyphon's atlas + text renderer, ~2.4 MB of embedded fonts
+/// into fontdb, 11 usvg parses — plus the peek pipeline used to sit on the
+/// critical path buying nothing: ~185 ms cold on macOS, 15-60 ms on every
+/// Windows launch.
+///
+/// It is built on a side thread started the moment the device exists, so it
+/// overlaps the screenshot wait, the window handoff and frame 0 itself, and
+/// is joined once frame 0 has been presented and this worker has reported
+/// ready — i.e. off the show gate — but before the visible latch releases
+/// and real UI state starts arriving.
+struct DeferredStack {
+    peek: gpu::PeekGpu,
+    ui: UiRenderer,
+}
+
+/// Start the deferred build. Call immediately after Stage A; join after
+/// frame 0.
+///
+/// `Device`/`Queue` are refcounted handles, so the builder gets its own
+/// clones and the worker thread keeps using the originals meanwhile.
+#[allow(clippy::too_many_arguments)]
+fn spawn_deferred_stack(
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    this_monitor: UiMonitor,
+    monitor_index: usize,
+    monitor_name: String,
+    adapter_name: String,
+    startup: Arc<StartupTimings>,
+) -> thread::JoinHandle<DeferredStack> {
+    thread::Builder::new()
+        .name(format!("ui-build-{monitor_index}"))
+        .spawn(move || {
+            let mark = |field: fn(&WorkerTimings) -> &AtomicDuration| {
+                if let Some(t) = startup.background.workers.get(monitor_index) {
+                    field(t).set_once(startup.t_start.elapsed());
+                }
+            };
+
+            // Three concurrent jobs, longest first on this thread: the
+            // glyph/SVG job is the heavy one (font parse + atlas + ~30
+            // shaped buffers + 11 SVG trees), so it runs here while the
+            // pipeline compiles and the peek compile occupy their own
+            // threads. `scope` lets all of them borrow the one device.
+            let (peek, pipelines, text) = thread::scope(|s| {
+                let peek = s.spawn(|| gpu::create_peek_gpu(&device));
+                let pipelines = s.spawn(|| UiPipelines::build_parallel(&device, SURFACE_FORMAT));
+                let text_stack = TextStack::new(&device, &queue, SURFACE_FORMAT);
+                mark(|t| &t.prep_fonts);
+                let text = UiText::new(text_stack);
+                (
+                    peek.join().expect("peek pipeline thread"),
+                    pipelines.join().expect("ui pipeline thread"),
+                    text,
+                )
+            });
+            // Both marks now measure DEFERRED work running beside the
+            // critical path, not work on it — they no longer sit between
+            // `prep_pipelines` and `render_prep` in wall-clock order, and
+            // because the two jobs run concurrently `prep_fonts` can land
+            // before `prep_ui_pipelines`.
+            mark(|t| &t.prep_ui_pipelines);
+
+            DeferredStack {
+                peek,
+                ui: UiRenderer::from_parts(pipelines, text, this_monitor, monitor_index, monitor_name, adapter_name, startup),
+            }
+        })
+        .expect("spawn ui builder")
+}
+
+// ── Frame 0 ─────────────────────────────────────────────────────────
+
+/// Present frame 0: the desktop triangle and nothing else.
+///
+/// Deliberately not routed through [`draw_once`]. At this point the UI
+/// stack and the peek pipeline are still compiling on the deferred thread,
+/// so there is no `WindowGpu` to hand it — which is the point: the type
+/// system, not a comment, is what stops frame 0 referencing a pipeline that
+/// does not exist yet. Nothing is lost, because `draw_once`'s extra work is
+/// all inert on frame 0 (`peek_bind_group` is `None`, `UiRenderer::prepare`
+/// bails on the absent state, and there is no perf history to sample).
+///
+/// Returns whether the frame actually reached `queue.present()` — a
+/// lost/outdated/timed-out surface returns early — so the caller's
+/// `first_present` mark means "pixels handed to the compositor", not
+/// "a draw was attempted".
+fn present_first_frame(
+    surface: &wgpu::Surface<'static>,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    pipeline: &wgpu::RenderPipeline,
+    config: &wgpu::SurfaceConfiguration,
+    snapshot_state: Option<&SnapshotState>,
+) -> bool {
+    // macOS: the early order-front (`app.rs::order_window_front_early`) is
+    // asynchronous — `orderFrontRegardless` returns before AppKit has heard
+    // back from the window server, and wgpu-hal's Metal backend refuses
+    // `acquire_texture` with `Occluded` until the NSWindow's occlusionState
+    // gains `NSWindowOcclusionStateVisible` (its gfx-rs/wgpu#8309 guard). On
+    // a warm run this worker reaches the acquire within a millisecond or
+    // two of the order-front — and can even beat it, since the main thread
+    // only orders front once its screenshot pickup poll fires — so the
+    // FIRST attempt reliably fails; treating that as
+    // terminal (as `draw_once` correctly does mid-loop) silently turned
+    // frame 0 into a 0.01 ms no-op on every warm launch, and the show gate
+    // then faded in a surface nothing had ever painted. So frame 0 — and
+    // only frame 0 — waits the transition out. Bounded well under the 5 s
+    // `SHOW_GATE_TIMEOUT`: a window that genuinely never becomes visible
+    // (covered, wedged WindowServer) falls back to the old skip-and-continue
+    // path with the render loop picking up the first paint. The common case
+    // where the surface is already acquirable — every non-macOS platform,
+    // and any macOS run slow enough that AppKit caught up — breaks out of
+    // the loop on the first attempt and never sleeps.
+    let occluded_deadline = Instant::now() + Duration::from_millis(500);
+    let frame = loop {
+        match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => break f,
+            wgpu::CurrentSurfaceTexture::Occluded
+                if cfg!(target_os = "macos") && Instant::now() < occluded_deadline =>
+            {
+                thread::sleep(Duration::from_millis(1));
+            }
+            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return false,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
+                surface.configure(device, config);
+                return false;
+            }
+            wgpu::CurrentSurfaceTexture::Validation => return false,
+        }
+    };
+
+    let view = frame
+        .texture
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("frame 0 encoder"),
+    });
+    {
+        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("frame 0 pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                resolve_target: None,
+                depth_slice: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: 0.05,
+                        g: 0.05,
+                        b: 0.08,
+                        a: 1.0,
+                    }),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        rpass.set_pipeline(pipeline);
+        if let Some(state) = snapshot_state {
+            rpass.set_bind_group(0, &state.bind_group, &[]);
+            rpass.draw(0..3, 0..1);
+        }
+    }
+    queue.submit(std::iter::once(encoder.finish()));
+    queue.present(frame);
+    true
+}
 
 // ── Messages ────────────────────────────────────────────────────────
 
@@ -80,10 +263,13 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     };
     let adapter_name = bundle.adapter_name.clone();
 
-    let mut ui_renderer = UiRenderer::new(
-        &bundle.device,
-        &bundle.queue,
-        SURFACE_FORMAT,
+    // Started here, before the handoff wait, and joined only after frame 0
+    // has been presented: that is the whole overlap this buys — the UI
+    // stack and the peek pipeline compile *beside* the screenshot wait,
+    // window creation and frame 0 instead of in front of them.
+    let deferred = spawn_deferred_stack(
+        bundle.device.clone(),
+        bundle.queue.clone(),
         this_monitor,
         monitor_index,
         monitor_name,
@@ -108,7 +294,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         match input_rx.recv() {
             Ok(WorkerInput::Handoff(h)) => break h,
             Ok(WorkerInput::BeginCycle(p)) => {
-                let stamp = |field: fn(&crate::telemetry::startup::WorkerTimings) -> &crate::telemetry::startup::AtomicDuration| {
+                let stamp = |field: fn(&WorkerTimings) -> &AtomicDuration| {
                     if let Some(t) = startup.background.workers.get(monitor_index) {
                         field(t).set_once(startup.t_start.elapsed());
                     }
@@ -151,10 +337,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         .unwrap_or(caps.formats[0]);
     assert_eq!(actual_format, SURFACE_FORMAT, "surface format mismatch on monitor {monitor_index}");
 
-    // ── Assemble long-lived GPU state, configure the surface ────────
-    // Pipelines/layouts/sampler live for the worker's lifetime.
-
-    let mut gpu = gpu::finalise_window_gpu(bundle);
+    // ── Configure the surface ───────────────────────────────────────
+    // Still working straight off the Stage-A bundle: `WindowGpu` cannot be
+    // assembled until the deferred build lands its peek pipeline, and
+    // nothing before frame 0 needs it.
 
     let config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -172,18 +358,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // finishing its own window setup — this is the one swapchain create we
     // need, and doing it here keeps it off the critical path between the
     // screenshot landing and frame 0.
-    surface.configure(&gpu.device, &config);
-    let mut perf = PerfTracker::new_with_refresh(refresh_hz);
-    let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
-
-    let peek_ubo = gpu
-        .device
-        .create_buffer(&wgpu::BufferDescriptor {
-            label: Some("peek uniforms"),
-            size: PEEK_UNIFORMS_SIZE,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+    surface.configure(&bundle.device, &config);
 
     // `preloaded_snapshot` is `Some` only for a cycle that arrived during
     // the handoff wait and was uploaded there. Otherwise wait for it: the
@@ -213,16 +388,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         },
     };
 
-    // Frame 0 must not composite the previous cycle's UI (action
-    // panel, tips, hovered-window title): this cycle's fresh
-    // UiSharedState is only broadcast after the show gate, which is
-    // after frame 0 is drawn.
-    ui_renderer.begin_cycle();
-
     // `.get()` so a worker-count mismatch (impossible today — the monitor
     // list sizes both) degrades to missing debug rows instead of panicking
     // the render worker.
-    let mark = |field: fn(&crate::telemetry::startup::WorkerTimings) -> &crate::telemetry::startup::AtomicDuration| {
+    let mark = |field: fn(&WorkerTimings) -> &AtomicDuration| {
         if let Some(t) = startup.background.workers.get(monitor_index) {
             field(t).set_once(startup.t_start.elapsed());
         }
@@ -233,15 +402,22 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // which is the common case. `set_once` keeps the marks stamped there.
 
     mark(|t| &t.upload_start);
-    gpu.snapshot = preloaded_snapshot
-        .or_else(|| gpu::desktop::upload_snapshot(&gpu.device, &gpu.queue, &cycle.snapshot, &gpu.desktop_bgl, &gpu.desktop_sampler));
+    let snapshot = preloaded_snapshot.or_else(|| {
+        gpu::desktop::upload_snapshot(
+            &bundle.device,
+            &bundle.queue,
+            &cycle.snapshot,
+            &bundle.desktop_bgl,
+            &bundle.desktop_sampler,
+        )
+    });
     mark(|t| &t.upload);
 
     // ── Stage C: per-cycle uniforms + bind group, draw frame 0 ──
     // Accent colour and initial mouse come from CycleParams, not from
     // settings baked in at worker spawn.
 
-    let mut snapshot_state: Option<SnapshotState> = gpu.snapshot.as_ref().map(|snap| {
+    let mut snapshot_state: Option<SnapshotState> = snapshot.as_ref().map(|snap| {
         let mf = monitor_bounds.to_f32();
         let vd_x = snap.vdesktop_origin[0];
         let vd_y = snap.vdesktop_origin[1];
@@ -268,7 +444,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             ocr_params: [0.0, 0.0, 0.0, 0.0],
         };
 
-        let ubo = gpu
+        let ubo = bundle
             .device
             .create_buffer(&wgpu::BufferDescriptor {
                 label: Some("window uniforms"),
@@ -276,16 +452,17 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
                 mapped_at_creation: false,
             });
-        gpu.queue
+        bundle
+            .queue
             .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
 
-        let placeholder_cursor = create_placeholder_cursor_view(&gpu.device, &gpu.queue);
+        let placeholder_cursor = create_placeholder_cursor_view(&bundle.device, &bundle.queue);
         let (cursor_color_view, cursor_mask_view) = match &snap.cursor {
             Some(ct) => (&ct.color_view, &ct.mask_view),
             None => (&placeholder_cursor, &placeholder_cursor),
         };
 
-        let bind_group = gpu
+        let bind_group = bundle
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("window snapshot bind group"),
@@ -323,27 +500,78 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     });
 
     mark(|t| &t.first_render_start);
-    draw_once(
+    let presented = present_first_frame(
         &surface,
-        &gpu,
+        &bundle.device,
+        &bundle.queue,
+        &bundle.desktop_pipeline,
         &config,
         snapshot_state.as_ref(),
-        None,
-        &mut ui_renderer,
-        &perf,
-        None,
-        &mut None,
     );
-    let _ = gpu.device.poll(wgpu::PollType::Wait {
+    // Marks pixels actually handed to the compositor rather than merely a
+    // draw attempt — unlike `first_render` below, which also waits out the
+    // device poll.
+    if presented {
+        mark(|t| &t.first_present);
+    }
+    let _ = bundle.device.poll(wgpu::PollType::Wait {
         submission_index: None,
         timeout: Some(Duration::from_secs(5)),
     });
 
     mark(|t| &t.first_render);
 
+    // Reported ready BEFORE joining the deferred build: the show gate must
+    // never wait on work whose output the user cannot see yet.
+    //
+    // Disarmed first so this worker contributes to the gate EXACTLY ONCE.
+    // The gate opens on `ready + failed >= expected`, and everything below
+    // this point is fallible (the deferred join can carry a panic). Leaving
+    // the guard armed across the bump would let one worker count on both
+    // sides and open the gate while a sibling is still creating its device —
+    // inverting the guard's purpose from "a dead worker cannot hold the
+    // overlay hostage" into "a dying worker shows the overlay early".
+    fail_guard.disarm();
     cycle
         .ready_count
         .fetch_add(1, Ordering::Release);
+
+    // ── Collect the deferred build, assemble the render-loop state ──
+    // The join has to finish before the visible latch releases, because the
+    // first UiSharedState broadcast follows it immediately.
+
+    // Degraded rather than `.expect`: readiness is already published, so
+    // unwinding here would run `ReadyGuard::drop` and double-count. A
+    // panicked builder means this monitor gets no overlay; the others are
+    // unaffected and the gate has already been satisfied on our behalf.
+    let DeferredStack {
+        peek,
+        ui: mut ui_renderer,
+    } = match deferred.join() {
+        Ok(stack) => stack,
+        Err(_) => {
+            error!("render worker {monitor_index}: UI builder thread panicked; this monitor has no overlay");
+            return;
+        }
+    };
+    let gpu = gpu::finalise_window_gpu(bundle, peek, snapshot);
+
+    // No previous cycle's UI may composite into the first visible frames:
+    // this cycle's UiSharedState is only broadcast after the show gate.
+    // Also re-anchors the UI animation clock, here rather than at build
+    // time so the border trail starts from when the overlay appears.
+    ui_renderer.begin_cycle();
+
+    let mut perf = PerfTracker::new_with_refresh(refresh_hz);
+    let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
+    let peek_ubo = gpu
+        .device
+        .create_buffer(&wgpu::BufferDescriptor {
+            label: Some("peek uniforms"),
+            size: PEEK_UNIFORMS_SIZE,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
 
     cycle.visible_latch.wait();
 

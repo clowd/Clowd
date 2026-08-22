@@ -115,6 +115,11 @@ pub struct CapturerSettings {
     /// user has left switched on — see [`PanelFeatures`]. Everything on
     /// by default, so a standalone run shows the full strip.
     pub panel_features: PanelFeatures,
+    /// Benchmark mode: tear the cycle down as soon as the overlay's first
+    /// frame is on screen, having logged the startup breakdown. No payload
+    /// is written and no window is left up — the run exists only to produce
+    /// that one log record.
+    pub bench_startup: bool,
 }
 
 impl Default for CapturerSettings {
@@ -134,6 +139,7 @@ impl Default for CapturerSettings {
             capture_mode: CaptureMode::default(),
             video_mode: false,
             panel_features: PanelFeatures::ALL,
+            bench_startup: false,
         }
     }
 }
@@ -221,6 +227,18 @@ pub struct CliArgs {
     /// where there is no shell and nothing to hand back.
     #[arg(long, value_name = "PID")]
     pub shell_pid: Option<u32>,
+
+    /// Exit immediately after the overlay's first frame is on screen, after
+    /// logging the startup timing breakdown. For benchmarking startup latency.
+    #[arg(long)]
+    pub bench_startup: bool,
+
+    /// Collect per-pass GPU timings for the debug panel. Off by default: it
+    /// requests `Features::TIMESTAMP_QUERY` at device creation and builds a
+    /// query set plus four buffers per worker before the first frame, none
+    /// of which frame 0 consumes. Read once, before the render workers start.
+    #[arg(long)]
+    pub gpu_timing: bool,
 }
 
 impl CliArgs {
@@ -239,6 +257,7 @@ impl CliArgs {
                 scroll_capture: !self.no_scroll_capture,
                 ocr: !self.no_ocr,
             },
+            bench_startup: self.bench_startup,
         }
     }
 }
@@ -285,6 +304,7 @@ mod tests {
         assert_eq!(from_cli.capture_mode, default.capture_mode);
         assert_eq!(from_cli.video_mode, default.video_mode);
         assert_eq!(from_cli.panel_features, default.panel_features);
+        assert_eq!(from_cli.bench_startup, default.bench_startup);
     }
 
     /// The optional-button flags are opt-OUT: a bare command line shows
