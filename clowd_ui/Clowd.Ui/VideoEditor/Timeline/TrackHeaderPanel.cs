@@ -24,6 +24,14 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// delete button. Rebuilt wholesale on Structural project changes — under ten rows, so there
     /// is nothing to diff.
     ///
+    /// <para>A screen row and the cursor/keyboard rows glued above it are built as one combined
+    /// track: one bordered block, no separator between its rows, and one grip spanning all of
+    /// them — the grip is the screen row's, because that is the row the session moves (its
+    /// overlays travel with it, see <see cref="TimelineReorder.UnitRange"/>). The kind icon is
+    /// the block's too — one video icon centered down the block, next to the grip; the overlay
+    /// rows do not repeat theirs, their items on the surface already carry it. Each row inside
+    /// keeps its own buttons.</para>
+    ///
     /// <para>The badge is a label, not a button: unlinking is a rare, consequential edit, so it
     /// lives in the inspector ("Unlink from recording") where it can carry an explanation, rather
     /// than being one stray click away in every row.</para>
@@ -70,11 +78,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         private readonly List<(Guid TrackId, Control Badge)> _linkBadges =
             new List<(Guid, Control)>();
 
-        /// <summary>The laid-out rows of the current build, and their visuals, in display order —
-        /// index i of both is row i. The reorder drag works in this space (top to bottom, which for
-        /// video rows is the reverse of the model's layer order).</summary>
+        /// <summary>The laid-out rows of the current build, and the combined-track visual each
+        /// belongs to, in display order — index i of both is row i (the rows of one unit share one
+        /// visual, so lifting any of them lifts the whole block). The reorder drag works in this
+        /// space (top to bottom, which for video rows is the reverse of the model's layer order).</summary>
         private IReadOnlyList<TimelineRow> _rows = Array.Empty<TimelineRow>();
-        private readonly List<Border> _rowBorders = new List<Border>();
+        private readonly List<Border> _rowUnits = new List<Border>();
         private readonly RowReorderDrag _drag;
 
         public TrackHeaderPanel()
@@ -100,7 +109,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             _drag.Cancel();
 
             _stack.Children.Clear();
-            _rowBorders.Clear();
+            _rowUnits.Clear();
             _linkBadges.Clear();
             _rows = Array.Empty<TimelineRow>();
 
@@ -114,16 +123,30 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             _rows = TimelineRowLayout.Build(project);
 
-            for (var i = 0; i < _rows.Count; i++)
+            // top down, one combined track at a time: a unit is entered at its first row (an
+            // overlay, or the screen row itself when it has none) and skipped past as a whole
+            for (var i = 0; i < _rows.Count;)
             {
-                var row = _rows[i];
-                var track = project.Tracks.FirstOrDefault(t => t.Id == row.TrackId);
-                if (track == null)
-                    continue;
+                var (unitStart, unitEnd) = TimelineReorder.UnitRange(_rows, i);
 
-                var border = BuildRow(palette, project, track, row, i);
-                _rowBorders.Add(border);
-                _stack.Children.Add(border);
+                // the gutter between two blocks (TimelineRowLayout.BlockGap): the same bare strip
+                // the surface leaves, so the two columns break in one line
+                if (i > 0 && _rows[i - 1].Bottom < _rows[i].Top)
+                {
+                    _stack.Children.Add(new Border
+                    {
+                        Height = _rows[i].Top - _rows[i - 1].Bottom,
+                        BorderThickness = new Thickness(0, 0, 1, 0),
+                        BorderBrush = palette.RowSeparatorPen.Brush,
+                        Child = new BlockGapStrip(palette),
+                    });
+                }
+
+                var unit = BuildUnit(palette, project, unitStart, unitEnd);
+                for (var k = unitStart; k <= unitEnd; k++)
+                    _rowUnits.Add(unit);
+                _stack.Children.Add(unit);
+                i = unitEnd + 1;
             }
         }
 
@@ -140,32 +163,87 @@ namespace Clowd.UI.VideoEditor.Timeline
                 badge.IsVisible = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null);
         }
 
-        private Border BuildRow(TimelinePalette palette, Project project, Track track, TimelineRow row, int rowIndex)
+        /// <summary>One combined-track block: the rows <paramref name="unitStart"/> to
+        /// <paramref name="unitEnd"/> (a lone row, or a screen row under its glued overlays)
+        /// stacked inside one border, with the unit's single grip in a column of its own down the
+        /// left so it spans every row. The block's height is the rows' total, so the column stays
+        /// pixel-aligned with the surface; the bottom border is drawn inside the last row, exactly
+        /// as the surface draws its separator inside the row.</summary>
+        private Border BuildUnit(TimelinePalette palette, Project project, int unitStart, int unitEnd)
+        {
+            // the rule under the block, as the surface draws it: between two units of one block
+            // only — none under the last unit of a block (the gutter or the end of the rows
+            // follows), so the block is not framed below and open above
+            var lastInBlock = unitEnd + 1 == _rows.Count || _rows[unitEnd + 1].Top > _rows[unitEnd].Bottom;
+            var borderBottom = lastInBlock ? 0 : 1;
+
+            // the grip is the screen row's (the last row of the unit — what the session moves);
+            // its cell is reserved on every unit, and the dots (and the drag) are only there when
+            // the row has somewhere to go — a locked row is one the context menu's Move Up/Down
+            // refuse too, a lone row of its kind cannot reorder against anything, and the speed
+            // row is pinned by meaning (see TimelineReorder.CanDrag).
+            var screen = _rows[unitEnd];
+            var screenTrack = project.Tracks.FirstOrDefault(t => t.Id == screen.TrackId);
+            var draggable = screenTrack is { Locked: false } && TimelineReorder.CanDrag(_rows, unitEnd);
+            // a grip spanning a taller block gets more dots, not bigger ones — six more per
+            // overlay row (the dot pitch against the row heights): four over a lone row, ten over
+            // a screen row and one overlay, sixteen over both. The ordinary four would float in
+            // the middle of a block three rows tall.
+            var dotRows = RowReorderDrag.DefaultGripDotRows + 6 * (unitEnd - unitStart);
+            var grip = _drag.BuildGrip(unitEnd, draggable, palette.GripBrush, palette.GripHoverBrush,
+                new Thickness(GripMarginX, 2, GripMarginX, 2), dotRows);
+
+            var cells = new StackPanel();
+            double height = 0;
+            for (var i = unitStart; i <= unitEnd; i++)
+            {
+                var row = _rows[i];
+                var track = project.Tracks.FirstOrDefault(t => t.Id == row.TrackId);
+                var cell = new Border
+                {
+                    // the last row gives up the pixel the border takes, as every row did alone
+                    Height = row.Height - (i == unitEnd ? borderBottom : 0),
+                    Child = track == null ? null : BuildRowContent(palette, project, track, row),
+                };
+                cells.Children.Add(cell);
+                height += row.Height;
+            }
+
+            // ------- kind icon: the screen row's (the block's only left-side label), centered
+            // down the whole block like the grip
+            var icon = TimelineIcons.NewIcon(KindIconGeometry(screen.Kind), 13, palette.LabelBrush);
+            icon.VerticalAlignment = VerticalAlignment.Center;
+            icon.Margin = new Thickness(0, 0, 6, 0);
+            Grid.SetColumn(icon, 1);
+
+            var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*") };
+            Grid.SetColumn(cells, 2);
+            grid.Children.Add(grip);
+            grid.Children.Add(icon);
+            grid.Children.Add(cells);
+
+            return new Border
+            {
+                Height = height,
+                Padding = new Thickness(2, 0, 2, 0),
+                BorderThickness = new Thickness(0, 0, 1, borderBottom),
+                BorderBrush = palette.RowSeparatorPen.Brush,
+                Child = grid,
+            };
+        }
+
+        /// <summary>One row's content, grip and kind icon excluded (they are the block's): the
+        /// button cluster on the right.</summary>
+        private DockPanel BuildRowContent(TimelinePalette palette, Project project, Track track, TimelineRow row)
         {
             var trackId = track.Id;
             var isAudio = row.Kind == TimelineRowKind.Audio;
+            var isInputOverlay = TimelineRowLayout.IsInputOverlay(row.Kind);
             var buttonSize = Math.Min(20, row.Height - 4);
 
-            // no fill child: the row is grip + kind icon on the left, the button cluster on the
-            // right, and empty space between (the track name labels said nothing the kind icon
-            // does not).
+            // no fill child: the row is the button cluster on the right and empty space (the
+            // track name labels said nothing the block's kind icon does not).
             var dock = new DockPanel { LastChildFill = false };
-
-            // ------- drag grip, leftmost. Its cell is reserved on every row; the dots (and the
-            // drag) are only there when the row has somewhere to go — a locked row is one the
-            // context menu's Move Up/Down refuse too, and a lone row of its kind cannot reorder
-            // against anything. The speed row is a block of one by construction (see
-            // TimelineReorder.GroupRange), but it is pinned by meaning, so say so here too.
-            // …and the cursor/keyboard rows are pinned to their screen row the same way (blocks of
-            // one as well — the session refuses to reorder them at all).
-            var group = TimelineReorder.GroupRange(_rows, rowIndex);
-            var isInputOverlay = TimelineRowLayout.IsInputOverlay(row.Kind);
-            var draggable = !track.Locked && group.End > group.Start &&
-                            row.Kind != TimelineRowKind.Speed && !isInputOverlay;
-            var grip = _drag.BuildGrip(rowIndex, draggable, palette.GripBrush, palette.GripHoverBrush,
-                new Thickness(GripMarginX, 2, GripMarginX, 2));
-            DockPanel.SetDock(grip, Dock.Left);
-            dock.Children.Add(grip);
 
             // ------- the right-side cluster, docked right so the FIRST added is the RIGHTMOST.
             // Reading order on screen is link badge → duplicate → enable (eye/speaker) → delete.
@@ -241,21 +319,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             dock.Children.Add(badge);
             _linkBadges.Add((trackId, badge));
 
-            // ------- kind icon (the row's only left-side label — see LastChildFill above)
-            var icon = TimelineIcons.NewIcon(KindIconGeometry(row.Kind), 13, palette.LabelBrush);
-            icon.VerticalAlignment = VerticalAlignment.Center;
-            icon.Margin = new Thickness(0, 0, 6, 0);
-            DockPanel.SetDock(icon, Dock.Left);
-            dock.Children.Add(icon);
-
-            return new Border
-            {
-                Height = row.Height,
-                Padding = new Thickness(2, 0, 2, 0),
-                BorderThickness = new Thickness(0, 0, 1, 1),
-                BorderBrush = palette.RowSeparatorPen.Brush,
-                Child = dock,
-            };
+            return dock;
         }
 
         // --------------------------------------------------- reorder drag (RowReorderDrag host)
@@ -271,7 +335,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Keeps the indicator off the boundaries between a screen row and the
         /// cursor/keyboard rows pinned above it — the layout would put a row dropped there
         /// somewhere else entirely, and an indicator that lies is worse than one that will not
-        /// follow the pointer.</summary>
+        /// follow the pointer. (The dragged unit's own run included: a pointer over it asks for
+        /// the unit's top edge, which is the drag coming home.)</summary>
         int IRowReorderDragHost.CoerceSlot(int row, int slot) =>
             TimelineReorder.CoerceDropIndex(_rows, row, slot);
 
@@ -279,10 +344,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// a mid-gesture Preview and be rolled back with it.</summary>
         bool IRowReorderDragHost.CanBeginDrag => _session is { IsGestureActive: false };
 
+        /// <summary>Dims the whole combined track the row belongs to — the screen row's overlays
+        /// travel with it, so they lift with it.</summary>
         void IRowReorderDragHost.SetRowLifted(int row, bool lifted)
         {
-            if (row < _rowBorders.Count)
-                _rowBorders[row].Opacity = lifted ? 0.45 : 1;
+            if (row < _rowUnits.Count)
+                _rowUnits[row].Opacity = lifted ? 0.45 : 1;
         }
 
         void IRowReorderDragHost.Drop(int fromRow, int dropSlot)
@@ -304,6 +371,22 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Keyboard => TimelineIcons.KeyboardGeometry,
             _ => TimelineIcons.Find("IconVideoClip"),
         };
+    }
+
+    /// <summary>The header column's share of a block gutter: the same ground and criss-cross the
+    /// surface paints in its strip (<see cref="TimelinePalette.DrawBlockGap"/>), so the gutter
+    /// runs across both columns as one.</summary>
+    internal sealed class BlockGapStrip : Control
+    {
+        private readonly TimelinePalette _palette;
+
+        public BlockGapStrip(TimelinePalette palette)
+        {
+            _palette = palette;
+        }
+
+        public override void Render(DrawingContext context) =>
+            _palette.DrawBlockGap(context, new Rect(Bounds.Size));
     }
 
     /// <summary>Icon geometry access for the timeline's code-drawn/code-built visuals: resource
@@ -401,6 +484,23 @@ namespace Clowd.UI.VideoEditor.Timeline
             "M11,11 L13,11 L13,13 L11,13 Z M14,11 L16,11 L16,13 L14,13 Z " +
             "M17,11 L19,11 L19,13 L17,13 Z " +
             "M8,14.5 L16,14.5 L16,16.5 L8,16.5 Z");
+
+        /// <summary>The four-point star cluster that marks an AI-backed feature (50x50 box;
+        /// Icons8 "Sparkles", Material Filled #dQ0TcR10zyYB) — a big star with a small one off its
+        /// shoulder. Filled rather than outlined: at badge size a hollow star reads as noise.
+        /// VectorIcons has no sparkle glyph.</summary>
+        public static readonly Geometry AiSparkleGeometry = StreamGeometry.Parse(
+            "M22.462 11.035l2.88 7.097c1.204 2.968 3.558 5.322 6.526 6.526l7.097 2.88" +
+            "c1.312.533 1.312 2.391 0 2.923l-7.097 2.88c-2.968 1.204-5.322 3.558-6.526 6.526" +
+            "l-2.88 7.097c-.533 1.312-2.391 1.312-2.923 0l-2.88-7.097" +
+            "c-1.204-2.968-3.558-5.322-6.526-6.526l-7.097-2.88c-1.312-.533-1.312-2.391 0-2.923" +
+            "l7.097-2.88c2.968-1.204 5.322-3.558 6.526-6.526l2.88-7.097" +
+            "C20.071 9.723 21.929 9.723 22.462 11.035z" +
+            "M39.945 2.701l.842 2.428c.664 1.915 2.169 3.42 4.084 4.084l2.428.842" +
+            "c.896.311.896 1.578 0 1.889l-2.428.842c-1.915.664-3.42 2.169-4.084 4.084l-.842 2.428" +
+            "c-.311.896-1.578.896-1.889 0l-.842-2.428c-.664-1.915-2.169-3.42-4.084-4.084l-2.428-.842" +
+            "c-.896-.311-.896-1.578 0-1.889l2.428-.842c1.915-.664 3.42-2.169 4.084-4.084l.842-2.428" +
+            "C38.366 1.805 39.634 1.805 39.945 2.701z");
 
         /// <summary>A simple chain-link glyph (24x24 box); VectorIcons has no link icon.</summary>
         public static readonly Geometry LinkGeometry = StreamGeometry.Parse(

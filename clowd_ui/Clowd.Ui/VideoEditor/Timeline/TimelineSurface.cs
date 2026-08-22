@@ -33,6 +33,14 @@ namespace Clowd.UI.VideoEditor.Timeline
         private const double OffscreenSlackPx = 50; // keep rects for items just off screen so a scrolled-out edge still hit-tests honestly
         private const double EdgeFadeWidth = 24;    // fade-to-row-background over a viewport-cut item end (see FadeEdgeScrollViewer)
         private const double JumpGlyphSize = 10;    // the chevron inside the fade that jumps to the cut-off end
+        private const double AiChipSize = 15;       // the AI badge's chip (the star inside it is smaller still)
+        private const double AiStarSize = 10;
+
+        /// <summary>The AI badge's tip. One line covering every AI-backed feature an item can
+        /// carry (the speech enhancer, background blur/removal): naming the specific one would
+        /// have to be rewritten every time the set grows, and the properties panel is one click
+        /// away with the real answer.</summary>
+        private const string AiFeaturesTip = "This track has AI features enabled";
 
         /// <summary>Caps the cached waveform geometry per item; past this a bucket covers more
         /// than a pixel, which only happens when a single item spans thousands of on-screen pixels
@@ -68,6 +76,16 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>The clickable edge-jump chevrons drawn this frame — rebuilt on every render,
         /// so a press/hover reads exactly what is on screen.</summary>
         private readonly List<EdgeJump> _edgeJumps = new List<EdgeJump>();
+
+        /// <summary>Where this render put an AI badge, in surface coordinates — the surface is
+        /// code-drawn, so a glyph can only carry a tooltip by hit-testing the rect the draw
+        /// recorded (the same trick <see cref="_edgeJumps"/> plays for the chevrons).</summary>
+        private readonly List<Rect> _aiBadges = new List<Rect>();
+
+        /// <summary>Whether the tip is currently shown for an AI badge. The surface's Tip is set
+        /// only while the pointer is on one — left standing it would pop up over any part of the
+        /// timeline the pointer rested on.</summary>
+        private bool _aiTipShown;
         private (Guid ItemId, bool Left)? _hoverJump;
 
         private DispatcherTimer _previewThrottle;
@@ -331,6 +349,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (_session.IsGestureActive)
                 return;
 
+            // a tip standing over the clip the drag is about to move would follow nothing.
+            ShowAiTip(false);
+
             _gesture = _session.BeginGesture(label, this);
             _dragMode = mode;
             _dragItemId = itemId;
@@ -404,6 +425,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         protected override void OnPointerExited(PointerEventArgs e)
         {
             base.OnPointerExited(e);
+
+            ShowAiTip(false);
 
             if (_hoverItemId != Guid.Empty || _hoverJump != null)
             {
@@ -599,6 +622,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _hoverJump = jumpKey;
                 InvalidateVisual();
             }
+
+            ShowAiTip(_aiBadges.Any(r => r.Contains(pos)));
 
             var hit = HitTestAt(pos);
             var hover = hit.Kind is TimelineHitKind.ItemBody or TimelineHitKind.ItemStart or TimelineHitKind.ItemEnd
@@ -811,6 +836,13 @@ namespace Clowd.UI.VideoEditor.Timeline
             return item == null ? null : FindTrack(item.TrackId);
         }
 
+        /// <summary>Whether the item is drawn or mixed through a model: the track's speech
+        /// enhancer (audio, where the toggle is track-wide) or an effect that consumes the person
+        /// matte. The plain blur is a pixel filter with nothing behind it and does not count.</summary>
+        private static bool HasAiFeature(Track track, Item item) =>
+            (track.Kind == TrackKind.Audio && track.Denoise) ||
+            VideoEffect.NeedsMatte(item.Effect?.Kind ?? VideoEffectKind.None);
+
         // --------------------------------------------------------------------------- rendering
 
         public override void Render(DrawingContext context)
@@ -819,17 +851,38 @@ namespace Clowd.UI.VideoEditor.Timeline
             context.FillRectangle(palette.SurfaceBackground, new Rect(Bounds.Size));
 
             _edgeJumps.Clear();
+            _aiBadges.Clear();
             var project = _session?.Project;
             if (project == null)
                 return;
 
+            // a screen row and the overlays glued above it read as one combined track: one band
+            // of background, one separator under the whole block (the header panel draws them the
+            // same way)
+            var band = 0;
             for (var i = 0; i < _rows.Count; i++)
             {
                 var row = _rows[i];
-                context.FillRectangle(i % 2 == 0 ? palette.RowBackground : palette.RowBackgroundAlt,
+                var (_, unitEnd) = TimelineReorder.UnitRange(_rows, i);
+                context.FillRectangle(band % 2 == 0 ? palette.RowBackground : palette.RowBackgroundAlt,
                     new Rect(0, row.Top, Bounds.Width, row.Height));
-                context.DrawLine(palette.RowSeparatorPen,
-                    new Point(0, row.Bottom - 0.5), new Point(Bounds.Width, row.Bottom - 0.5));
+
+                // the gutter between two blocks: bare surface, where the drag cannot go
+                if (i > 0 && _rows[i - 1].Bottom < row.Top)
+                    palette.DrawBlockGap(context,
+                        new Rect(0, _rows[i - 1].Bottom, Bounds.Width, row.Top - _rows[i - 1].Bottom));
+
+                if (i != unitEnd)
+                    continue;
+
+                // the rule sits between two rows of one block: none under the block's last row
+                // (the gutter, or the end of the rows, already separates it — a rule there and
+                // none above the block's first row read as an unbalanced frame)
+                var lastInBlock = i + 1 == _rows.Count || _rows[i + 1].Top > row.Bottom;
+                if (!lastInBlock)
+                    context.DrawLine(palette.RowSeparatorPen,
+                        new Point(0, row.Bottom - 0.5), new Point(Bounds.Width, row.Bottom - 0.5));
+                band++;
             }
 
             var selection = _session.SelectedItemIds;
@@ -911,33 +964,42 @@ namespace Clowd.UI.VideoEditor.Timeline
             RenderTransitions(context, palette, item, body);
             RenderEdgeFades(context, palette, item, body, evenRow);
 
+            Geometry glyph = null;
+            string label = null;
             switch (item.Content)
             {
                 case TextContent text:
-                    RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconToolText"), text.Text);
+                    (glyph, label) = (TimelineIcons.Find("IconToolText"), text.Text);
                     break;
                 case ImageContent image:
-                    RenderGlyphLabel(context, palette, body, TimelineIcons.Find("IconImage"),
+                    (glyph, label) = (TimelineIcons.Find("IconImage"),
                         System.IO.Path.GetFileName(image.Path));
                     break;
                 case SpeedContent speed:
-                    RenderGlyphLabel(context, palette, body, TimelineIcons.SpeedometerGeometry,
+                    (glyph, label) = (TimelineIcons.SpeedometerGeometry,
                         speed.Factor.ToString("0.##", CultureInfo.InvariantCulture) + "×");
                     break;
                 case ZoomContent zoom:
-                    RenderGlyphLabel(context, palette, body, TimelineIcons.MagnifierGeometry,
+                    (glyph, label) = (TimelineIcons.MagnifierGeometry,
                         Math.Round(zoom.Zoom * 100).ToString("0", CultureInfo.InvariantCulture) + "%");
                     break;
                 // the input overlays name themselves and nothing else: their content is the
                 // recording's captured input, which has no one number to put on the card (the
                 // style and the timings live in the properties panel).
                 case CursorContent:
-                    RenderGlyphLabel(context, palette, body, TimelineIcons.CursorArrowGeometry, "Cursor");
+                    (glyph, label) = (TimelineIcons.CursorArrowGeometry, "Cursor");
                     break;
                 case KeyboardContent:
-                    RenderGlyphLabel(context, palette, body, TimelineIcons.KeyboardGeometry, "Keys");
+                    (glyph, label) = (TimelineIcons.KeyboardGeometry, "Keys");
                     break;
             }
+
+            // the AI badge leads the card label — it takes the slot a text card's glyph would
+            // have, and pushes the kind glyph and its text along when the card has both (an image
+            // with the background removed is the case that carries the pair).
+            var ai = HasAiFeature(track, item) && body.Width > AiChipSize * 2;
+            if (ai || glyph != null || label != null)
+                RenderGlyphLabel(context, palette, body, ai, glyph, label);
 
             var dimmed = row.Kind == TimelineRowKind.Audio ? track.Muted : track.Hidden;
             if (dimmed)
@@ -1057,6 +1119,28 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (amount >= 0.5)
                 _edgeJumps.Add(new EdgeJump(item.Id, left,
                     new Rect(left ? 0 : Bounds.Width - EdgeFadeWidth, body.Y, EdgeFadeWidth, body.Height)));
+        }
+
+        /// <summary>Opens/closes the AI badge's tip. Driven by hand rather than by a standing
+        /// <c>ToolTip.Tip</c>: the badges are drawn regions of one control, so the tooltip service
+        /// has nothing of its own to hover — and a Tip left on the surface would show up wherever
+        /// the pointer rested on it.</summary>
+        private void ShowAiTip(bool show)
+        {
+            if (show == _aiTipShown)
+                return;
+
+            _aiTipShown = show;
+            if (show)
+            {
+                ToolTip.SetTip(this, AiFeaturesTip);
+                ToolTip.SetIsOpen(this, true);
+            }
+            else
+            {
+                ToolTip.SetIsOpen(this, false);
+                ToolTip.SetTip(this, null);
+            }
         }
 
         private EdgeJump? HitJump(Point pos)
@@ -1233,18 +1317,42 @@ namespace Clowd.UI.VideoEditor.Timeline
         private static readonly char[] NewlineChars = { '\r', '\n' };
 
         private void RenderGlyphLabel(DrawingContext context, TimelinePalette palette, Rect body,
-            Geometry glyph, string label)
+            bool ai, Geometry glyph, string label)
         {
+            // inset past the trim handles (they draw inside the body on hover/selection) so the
+            // glyph and text never sit under a handle — and never shift when one appears. When the
+            // item's start scrolls out of view the label glides to a pin past the edge fade
+            // (still-solid body), at the same rate the fade eases in — no jump the frame the edge
+            // crosses the viewport.
+            var cutLeft = EdgeCutAmount(-body.X);
+            var naturalX = body.X + TrimHandleWidth + 3;
+            var startX = naturalX + (EdgeFadeWidth + 3 - naturalX) * cutLeft;
+
+            // the star rides a pale chip: blue-on-blue would be invisible over a recording row,
+            // whose fill IS the accent. Drawn OUTSIDE the body clip the rest of the label lives
+            // in — on the short (26px) card rows the chip clears the body by less than the
+            // shadow's reach, and a shadow cut off square at the card edge reads as a seam. Hence
+            // the explicit fits-inside test: a pinned label on a mostly-scrolled-past card can sit
+            // past the body's right edge, and nothing else would keep the chip in the card.
+            if (ai && startX + AiChipSize <= body.Right)
+            {
+                var chip = new Rect(startX, body.Center.Y - AiChipSize / 2, AiChipSize, AiChipSize);
+                context.DrawRectangle(palette.AiBadgeChipFill, null,
+                    new RoundedRect(chip, 4), palette.AiBadgeShadow);
+                DrawGlyph(context, TimelineIcons.AiSparkleGeometry, palette.AiBadgeBrush,
+                    new Point(chip.X + (AiChipSize - AiStarSize) / 2, chip.Y + (AiChipSize - AiStarSize) / 2),
+                    AiStarSize);
+
+                // inflated: a 15px square is a small thing to land a pointer on, and the tip is
+                // the only place the badge says what it means.
+                _aiBadges.Add(chip.Inflate(3).Intersect(body));
+                startX += AiChipSize + 5;
+            }
+
             using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
             {
-                // inset past the trim handles (they draw inside the body on hover/selection) so
-                // the glyph and text never sit under a handle — and never shift when one appears.
-                // When the item's start scrolls out of view the label glides to a pin past the
-                // edge fade (still-solid body), at the same rate the fade eases in — no jump the
-                // frame the edge crosses the viewport.
-                var cutLeft = EdgeCutAmount(-body.X);
-                var naturalX = body.X + TrimHandleWidth + 3;
-                var x = naturalX + (EdgeFadeWidth + 3 - naturalX) * cutLeft;
+                var x = startX;
+
                 if (glyph != null)
                 {
                     DrawGlyph(context, glyph, palette.ItemLabelBrush,

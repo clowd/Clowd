@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -110,7 +111,17 @@ namespace Clowd.UI.Controls
         /// <summary>The drag grip: two columns of four dots (a 6x13 box), the arrangement every
         /// reorderable list uses. Drawn at its natural size — a grip that scaled with the row
         /// would read as a different control on short rows.</summary>
-        public static readonly Geometry DragGripGeometry = BuildDragGrip();
+        public static readonly Geometry DragGripGeometry = BuildDragGrip(DefaultGripDotRows);
+
+        /// <summary>Dot rows in the ordinary grip.</summary>
+        public const int DefaultGripDotRows = 4;
+
+        /// <summary>Taller grips — a host that spans one grip over several rows asks for more
+        /// dots rather than a scaled glyph, so the dots stay the size the other grips have.</summary>
+        private static readonly Dictionary<int, Geometry> GripGeometries = new Dictionary<int, Geometry>
+        {
+            [DefaultGripDotRows] = DragGripGeometry,
+        };
 
         private readonly Control _owner;
         private readonly Visual _coordinateSpace;
@@ -149,8 +160,11 @@ namespace Clowd.UI.Controls
         /// <summary>The grip cell: a transparent <see cref="Border"/> (a null background would not
         /// hit-test, leaving only the dots themselves grabbable) around the dot pattern, carrying
         /// the grab cursor and the press that opens a drag. <paramref name="draggable"/> false
-        /// builds the same cell empty and inert, purely to keep the column aligned.</summary>
-        public Control BuildGrip(int rowIndex, bool draggable, IBrush restBrush, IBrush hoverBrush, Thickness margin)
+        /// builds the same cell empty and inert, purely to keep the column aligned.
+        /// <paramref name="dotRows"/> is the height of the dot pattern, for a grip that spans more
+        /// than one row (two columns always).</summary>
+        public Control BuildGrip(int rowIndex, bool draggable, IBrush restBrush, IBrush hoverBrush, Thickness margin,
+            int dotRows = DefaultGripDotRows)
         {
             var grip = new Border
             {
@@ -166,9 +180,12 @@ namespace Clowd.UI.Controls
                 return grip;
             }
 
+            if (!GripGeometries.TryGetValue(dotRows, out var geometry))
+                GripGeometries[dotRows] = geometry = BuildDragGrip(dotRows);
+
             var dots = new Path
             {
-                Data = DragGripGeometry,
+                Data = geometry,
                 Fill = restBrush,
                 Stretch = Stretch.None,
                 Opacity = GripRestOpacity,
@@ -339,7 +356,7 @@ namespace Clowd.UI.Controls
             _indicator.IsVisible = true;
         }
 
-        private static Geometry BuildDragGrip()
+        private static Geometry BuildDragGrip(int dotRows)
         {
             const double diameter = 2.5;
             const double pitch = 3.5;
@@ -347,7 +364,7 @@ namespace Clowd.UI.Controls
             var dots = new GeometryGroup();
             for (var column = 0; column < 2; column++)
             {
-                for (var row = 0; row < 4; row++)
+                for (var row = 0; row < dotRows; row++)
                     dots.Children.Add(new EllipseGeometry(
                         new Rect(column * pitch, row * pitch, diameter, diameter)));
             }

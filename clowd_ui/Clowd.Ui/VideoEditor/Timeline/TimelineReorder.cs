@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Clowd.UI.Controls;
 
 namespace Clowd.UI.VideoEditor.Timeline
@@ -17,6 +18,11 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// <see cref="TimelineRow.LayerIndex"/> instead of flipping positions. Drop positions are
     /// <i>insertion slots</i>, so they run from the first row of a block to one past its
     /// last.</para>
+    ///
+    /// <para>A screen row and the cursor/keyboard rows glued above it are one <i>unit</i>: the
+    /// header draws them as one combined track with one grip, the drag lifts all of them, and the
+    /// session moves them together (<c>EditorSession.MoveTrackToIndex</c> counts the drop among
+    /// the rows outside the unit). <see cref="UnitRange"/> says which rows that is.</para>
     /// </summary>
     internal static class TimelineReorder
     {
@@ -26,12 +32,14 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// out contiguously in that order. A row cannot cross between blocks — its kind is a
         /// property of the track, not of where it sits — and the speed row is a block of one,
         /// which is what denies it a grip. So is each cursor/keyboard row: it is pinned to its
-        /// screen row and the session refuses to reorder it at all. Inclusive at both ends.</summary>
+        /// screen row and the session refuses to reorder it on its own (it travels with that row
+        /// instead). Inclusive at both ends.</summary>
         public static (int Start, int End) GroupRange(IReadOnlyList<TimelineRow> rows, int rowIndex)
         {
             RequireRow(rows, rowIndex);
 
-            // pinned rows are blocks of one — they never move, so there is nothing to range over.
+            // pinned rows are blocks of one — they never move on their own, so there is nothing
+            // to range over.
             if (TimelineRowLayout.IsInputOverlay(rows[rowIndex].Kind))
                 return (rowIndex, rowIndex);
 
@@ -48,6 +56,58 @@ namespace Clowd.UI.VideoEditor.Timeline
             return (start, end);
         }
 
+        /// <summary>
+        /// The rows that move as one with the row at <paramref name="rowIndex"/>: a screen row
+        /// together with the cursor/keyboard rows <see cref="TimelineRowLayout.Build"/> glued
+        /// directly above it (<see cref="TimelineRow.PinnedTo"/>), asked from any of them — so the
+        /// end is always the screen row, the rows above it its overlays. A row with no overlays,
+        /// and an overlay whose screen row is gone, is a unit of one. Inclusive at both ends.
+        /// </summary>
+        public static (int Start, int End) UnitRange(IReadOnlyList<TimelineRow> rows, int rowIndex)
+        {
+            RequireRow(rows, rowIndex);
+
+            var end = rowIndex;
+            if (rows[rowIndex].PinnedTo is Guid screenId)
+            {
+                end = -1;
+                for (var i = rowIndex + 1; i < rows.Count; i++)
+                {
+                    if (rows[i].TrackId == screenId)
+                    {
+                        end = i;
+                        break;
+                    }
+                }
+
+                if (end < 0)
+                    return (rowIndex, rowIndex); // glued to a row that is not below it: on its own
+            }
+
+            var start = end;
+            while (start > 0 && rows[start - 1].PinnedTo == rows[end].TrackId)
+                start--;
+
+            // the row asked about must be inside the run it claims — a glued row separated from
+            // its screen row by something else (a layout this code never produces) is on its own
+            return start <= rowIndex ? (start, end) : (rowIndex, rowIndex);
+        }
+
+        /// <summary>Whether the row at <paramref name="rowIndex"/> has anywhere to go: it is
+        /// not pinned (the speed row, a cursor/keyboard row), and its block holds a row outside
+        /// its own unit to change places with. The header panel builds the grip on this.</summary>
+        public static bool CanDrag(IReadOnlyList<TimelineRow> rows, int rowIndex)
+        {
+            RequireRow(rows, rowIndex);
+
+            if (rows[rowIndex].Kind == TimelineRowKind.Speed || TimelineRowLayout.IsInputOverlay(rows[rowIndex].Kind))
+                return false;
+
+            var (start, end) = GroupRange(rows, rowIndex);
+            var (unitStart, unitEnd) = UnitRange(rows, rowIndex);
+            return end - start > unitEnd - unitStart;
+        }
+
         /// <summary>The insertion slot a drop at <paramref name="y"/> is asking for: the boundary
         /// nearest the pointer, clamped to the dragged row's own block and then to one the model
         /// will honor (see <see cref="LegalSlot"/>). A pointer above the block (or off the top of
@@ -55,7 +115,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         public static int DropIndexAt(IReadOnlyList<TimelineRow> rows, int rowIndex, double y)
         {
             var (start, end) = GroupRange(rows, rowIndex);
-            return LegalSlot(rows, rowIndex, start,
+            return LegalSlot(rows, start,
                 RowReorderMath.DropSlot(start, end, y, i => (rows[i].Top, rows[i].Height)));
         }
 
@@ -63,18 +123,13 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// The nearest slot at or above <paramref name="slot"/> that a drop may actually land on.
         /// Cursor/keyboard rows are drawn glued to the top of their screen row, so no row may come
         /// to rest between them and it: a boundary directly below an overlay row is pushed up past
-        /// the whole overlay run. And the screen row itself may not rise above its own overlays —
-        /// <c>EditorSession</c> refuses that move outright — so when the dragged row is the one
-        /// under the run, its own top edge is as high as the indicator may go (a no-op drop).
+        /// the whole overlay run. That includes the dragged row's own run — a pointer anywhere over
+        /// the unit being dragged asks for the top of that unit, which is where it already is.
         /// </summary>
-        private static int LegalSlot(IReadOnlyList<TimelineRow> rows, int rowIndex, int start, int slot)
+        private static int LegalSlot(IReadOnlyList<TimelineRow> rows, int start, int slot)
         {
-            var floor = rowIndex > 0 && TimelineRowLayout.IsInputOverlay(rows[rowIndex - 1].Kind)
-                ? rowIndex
-                : start;
-
-            slot = Math.Max(slot, floor);
-            while (slot > floor && TimelineRowLayout.IsInputOverlay(rows[slot - 1].Kind))
+            slot = Math.Max(slot, start);
+            while (slot > start && TimelineRowLayout.IsInputOverlay(rows[slot - 1].Kind))
                 slot--;
 
             return slot;
@@ -86,7 +141,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         public static int CoerceDropIndex(IReadOnlyList<TimelineRow> rows, int rowIndex, int dropIndex)
         {
             var (start, end) = GroupRange(rows, rowIndex);
-            return LegalSlot(rows, rowIndex, start, Math.Clamp(dropIndex, start, end + 1));
+            return LegalSlot(rows, start, Math.Clamp(dropIndex, start, end + 1));
         }
 
         /// <summary>Where the drop indicator sits for <paramref name="dropIndex"/> — the top edge
@@ -101,13 +156,13 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>
         /// The drop as the index <see cref="Clowd.VideoSDK.Editing.EditorSession.MoveTrackToIndex"/>
         /// counts in, or null when the row would land back where it started (a click, or a drag
-        /// that came home).
+        /// that came home — anywhere over the dragged unit itself).
         ///
-        /// <para>Two conversions happen here. The row is lifted out before it is put back, so a
-        /// drop below its own slot lands one place higher than the boundary the indicator sat on;
-        /// and video-block rows are drawn highest layer first, so a drop must be translated back
-        /// into the model's ascending space — audio rows are listed in model order and need only
-        /// the lift correction. The speed row is always null — it is pinned, and so is every
+        /// <para>Two conversions happen here. The unit is lifted out before it is put back, so a
+        /// drop below its own slot lands higher than the boundary the indicator sat on by the rows
+        /// lifted; and video-block rows are drawn highest layer first, so a drop must be translated
+        /// back into the model's ascending space — audio rows are listed in model order and need
+        /// only the lift correction. The speed row is always null — it is pinned, and so is every
         /// cursor/keyboard row.</para>
         ///
         /// <para>The video translation counts in <see cref="TimelineRow.LayerIndex"/> rather than
@@ -115,16 +170,17 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// of the model: the input-overlay rows are drawn glued above their screen row wherever
         /// their real <c>Order</c> sits (see <see cref="TimelineRowLayout.Build"/>), and a flip
         /// through a displaced overlay row would land the drop a layer away from the boundary the
-        /// indicator promised. The dragged row instead comes to rest directly beneath the display
+        /// indicator promised. The dragged unit instead comes to rest directly beneath the display
         /// row above the slot — never an overlay, <see cref="LegalSlot"/> pushes every slot out
-        /// of a glued run — by taking that row's layer index once the dragged row is lifted out
-        /// from under it. Non-overlay rows are displayed in strict descending layer order, so
-        /// resting directly beneath that row in the model is exactly the promised display slot.</para>
+        /// of a glued run — by taking that row's layer index once the unit's rows beneath it are
+        /// lifted out, which is exactly the index the session counts in (the list without the
+        /// unit). Non-overlay rows are displayed in strict descending layer order, so resting
+        /// directly beneath that row in the model is exactly the promised display slot.</para>
         /// </summary>
         public static int? TargetLayerIndex(IReadOnlyList<TimelineRow> rows, int rowIndex, int dropIndex)
         {
             var (start, end) = GroupRange(rows, rowIndex);
-            var insert = LegalSlot(rows, rowIndex, start, Math.Clamp(dropIndex, start, end + 1));
+            var insert = LegalSlot(rows, start, Math.Clamp(dropIndex, start, end + 1));
 
             var target = RowReorderMath.TargetRow(rowIndex, insert);
             if (target == rowIndex)
@@ -133,40 +189,38 @@ namespace Clowd.UI.VideoEditor.Timeline
             var block = BlockOf(rows, rowIndex);
             // the pinned rows: the speed row and the input overlays. Their block of one already
             // collapses every drop into the no-op above; this says so where it is read.
-            if (block == RowBlock.Speed || TimelineRowLayout.IsInputOverlay(rows[rowIndex].Kind))
+            if (block == TimelineRowBlock.Speed || TimelineRowLayout.IsInputOverlay(rows[rowIndex].Kind))
                 return null;
 
-            if (block == RowBlock.Audio)
+            if (block == TimelineRowBlock.Audio)
                 return target - start;
 
-            // the block's top slot has no row above it: the frontmost layer.
+            // a drop anywhere over the dragged unit — the slots from its top to just under it —
+            // is the unit coming home
+            var (unitStart, unitEnd) = UnitRange(rows, rowIndex);
+            if (insert >= unitStart && insert <= unitEnd + 1)
+                return null;
+
+            var unit = rows.Skip(unitStart).Take(unitEnd - unitStart + 1).ToList();
+
+            // the block's top slot has no row above it: the frontmost layer, which in the list
+            // without the unit is one past its last row.
             if (insert == start)
-                return end - start;
+                return end - start + 1 - unit.Count;
 
-            var above = rows[insert - 1]; // never the dragged row itself: target != rowIndex
-            return above.LayerIndex > rows[rowIndex].LayerIndex
-                ? above.LayerIndex - 1 // lifting the dragged row out shifts the rows above it down
-                : above.LayerIndex;    // inserting at its index pushes it up, leaving us beneath it
+            var above = rows[insert - 1]; // never the dragged unit: the slot is outside its run
+            // lifting the unit out shifts every row above its members down by one apiece
+            return above.LayerIndex - unit.Count(r => r.LayerIndex < above.LayerIndex);
         }
 
-        private enum RowBlock
-        {
-            Speed,
-            VideoZoom,
-            Audio,
-        }
-
-        /// <summary>Which block a row belongs to. Cursor/keyboard rows count as video-block rows
-        /// even though they cannot move: they sit inside that block, they take up a layer index in
-        /// the session's space, and a block that ended at them would strand the rows either side
-        /// of an overlay in ranges of their own.</summary>
-        private static RowBlock BlockOf(IReadOnlyList<TimelineRow> rows, int rowIndex) =>
-            rows[rowIndex].Kind switch
-            {
-                TimelineRowKind.Speed => RowBlock.Speed,
-                TimelineRowKind.Audio => RowBlock.Audio,
-                _ => RowBlock.VideoZoom,
-            };
+        /// <summary>Which block a row belongs to — the layout's own classification, so the
+        /// blocks a drag is confined to are exactly the ones the layout gaps apart.
+        /// Cursor/keyboard rows count as video-block rows even though they cannot move on their
+        /// own: they sit inside that block, they take up a layer index in the session's space,
+        /// and a block that ended at them would strand the rows either side of an overlay in
+        /// ranges of their own.</summary>
+        private static TimelineRowBlock BlockOf(IReadOnlyList<TimelineRow> rows, int rowIndex) =>
+            TimelineRowLayout.BlockOf(rows[rowIndex].Kind);
 
         private static void RequireRow(IReadOnlyList<TimelineRow> rows, int rowIndex)
         {

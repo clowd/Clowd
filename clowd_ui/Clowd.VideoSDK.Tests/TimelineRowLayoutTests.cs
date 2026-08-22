@@ -121,8 +121,9 @@ namespace Clowd.VideoSDK.Tests
             }, rows.Select(r => r.Kind).ToArray());
 
             Assert.Equal(new[] { 56d, 26d, 26d, 56d, 56d, 36d }, rows.Select(r => r.Height).ToArray());
-            Assert.Equal(new[] { 0d, 56d, 82d, 108d, 164d, 220d }, rows.Select(r => r.Top).ToArray());
-            Assert.Equal(256d, TimelineRowLayout.TotalHeight(rows));
+            // the audio block starts a BlockGap (8) below the last video row
+            Assert.Equal(new[] { 0d, 56d, 82d, 108d, 164d, 228d }, rows.Select(r => r.Top).ToArray());
+            Assert.Equal(264d, TimelineRowLayout.TotalHeight(rows));
         }
 
         /// <summary>The video rows are exactly <c>Project.Normalize</c>'s order reversed, ties
@@ -171,13 +172,13 @@ namespace Clowd.VideoSDK.Tests
             var project = BuildProject(out _, out _, out _, out _, out _, out _);
             var rows = TimelineRowLayout.Build(project);
 
-            // row tops are 0, 56, 82, 108, 164, 220 (see the stacking test above)
+            // row tops are 0, 56, 82, 108, 164, 228 (see the stacking test above)
             Assert.Equal(0, TimelineRowLayout.RowIndexAtY(rows, 0));
             Assert.Equal(0, TimelineRowLayout.RowIndexAtY(rows, 55.9));
             Assert.Equal(1, TimelineRowLayout.RowIndexAtY(rows, 56));      // rows own their top edge
             Assert.Equal(3, TimelineRowLayout.RowIndexAtY(rows, 112));
             Assert.Equal(4, TimelineRowLayout.RowIndexAtY(rows, 164 + 35));
-            Assert.Equal(5, TimelineRowLayout.RowIndexAtY(rows, 255.9));
+            Assert.Equal(5, TimelineRowLayout.RowIndexAtY(rows, 263.9));
         }
 
         [Fact]
@@ -187,7 +188,9 @@ namespace Clowd.VideoSDK.Tests
             var rows = TimelineRowLayout.Build(project);
 
             Assert.Equal(-1, TimelineRowLayout.RowIndexAtY(rows, -1));
-            Assert.Equal(-1, TimelineRowLayout.RowIndexAtY(rows, 256));
+            Assert.Equal(-1, TimelineRowLayout.RowIndexAtY(rows, 264));
+            Assert.Equal(-1, TimelineRowLayout.RowIndexAtY(rows, 220));   // the gutter before the audio block
+            Assert.Equal(-1, TimelineRowLayout.RowIndexAtY(rows, 227.9));
             Assert.Equal(-1, TimelineRowLayout.RowIndexAtY(rows, 10_000));
             Assert.Equal(-1, TimelineRowLayout.RowIndexAtY(null, 10));
         }
