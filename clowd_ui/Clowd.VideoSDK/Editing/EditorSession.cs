@@ -865,6 +865,10 @@ namespace Clowd.VideoSDK.Editing
         /// in, which is worth arranging. The pinned speed row is excluded from the index space
         /// and never moves. Returns false — changing nothing — for an unknown id, an index
         /// outside its group, or a move that lands where the row already is.</para>
+        ///
+        /// <para>A screen row brings the cursor/keyboard rows pinned above it along, so for it
+        /// <paramref name="index"/> counts among the video rows <i>outside</i> that unit — see
+        /// <see cref="PlanReorder"/>.</para>
         /// </summary>
         public bool MoveTrackToIndex(Guid trackId, int index, object origin = null) =>
             Mutate("Reorder Row", ProjectChangeKind.Structural, null, origin,
@@ -873,7 +877,8 @@ namespace Clowd.VideoSDK.Editing
 
         /// <summary>
         /// The shared body of both moves: lifts the row out of its kind's list, puts it back at
-        /// <paramref name="targetOf"/>(current index) and renumbers.
+        /// <paramref name="targetOf"/>(current index) and renumbers. See <see cref="PlanReorder"/>
+        /// for the index space and the overlay unit.
         ///
         /// <para>Because <see cref="Track.Order"/> is neither required to be unique nor contiguous,
         /// this renumbers every row rather than swapping two values: a swap between rows that
@@ -883,10 +888,46 @@ namespace Clowd.VideoSDK.Editing
         /// </summary>
         private static bool Reorder(Project project, Guid trackId, Func<int, int> targetOf, bool audioMoves)
         {
-            // cursor/keyboard rows are pinned directly above their recording's screen row — they
-            // never reorder themselves (other video rows may still step around them).
-            if (IsInputOverlayTrack(project, trackId))
+            if (PlanReorder(project, trackId, targetOf, audioMoves) is not { } plan)
                 return false;
+
+            var order = 0;
+            foreach (var track in plan.Video)
+                track.Order = order++;
+            // audio keeps its relative order and stays above every video Order, which is what
+            // puts those rows at the bottom of the timeline.
+            foreach (var track in plan.Audio)
+                track.Order = order++;
+            foreach (var track in plan.Speed)
+                track.Order = order++;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Works out the arrangement a move would leave — the three lists in their eventual
+        /// ascending <see cref="Track.Order"/> — or null when the move is refused: an unknown id,
+        /// a pinned row, an index outside the group, or a move that lands where the row already
+        /// is. Pure, so <see cref="CanMoveTrackLayer"/> can ask without a speculative mutation.
+        ///
+        /// <para>A screen row travels with the cursor/keyboard rows pinned above it: the three are
+        /// lifted out as one <i>unit</i> (screen first, then its overlays in their current order,
+        /// which also repairs a pair that some other edit left out of order) and put back together,
+        /// so the pin — the overlays composite over their screen frame, never beneath it — holds
+        /// across every move without refusing any. <paramref name="targetOf"/> therefore counts,
+        /// and is given the current index, in the list <b>without the unit</b>: the position the
+        /// unit is inserted at among the rows that stay put. For a row with no overlays that is
+        /// exactly the familiar lift-out-and-insert index; for <see cref="MoveTrackToIndex"/> it is
+        /// what <c>TimelineReorder.TargetLayerIndex</c> sends.</para>
+        /// </summary>
+        private static (List<Track> Video, List<Track> Audio, List<Track> Speed)? PlanReorder(
+            Project project, Guid trackId, Func<int, int> targetOf, bool audioMoves)
+        {
+            // cursor/keyboard rows are pinned directly above their recording's screen row — they
+            // never reorder themselves; they move when it moves (other video rows may still step
+            // around them).
+            if (IsInputOverlayTrack(project, trackId))
+                return null;
 
             // the speed row is pinned: it never moves, nothing moves past it, and it sits outside
             // the layer-index space entirely (its Order is renumbered above everything below).
@@ -902,67 +943,58 @@ namespace Clowd.VideoSDK.Editing
             if (index < 0)
             {
                 if (!audioMoves)
-                    return false;
+                    return null;
 
                 group = audio;
                 index = audio.FindIndex(t => t.Id == trackId);
                 if (index < 0)
-                    return false;
+                    return null;
             }
 
-            var target = targetOf(index);
-            if (target < 0 || target >= group.Count || target == index)
-                return false;
-
             var moved = group[index];
-            group.RemoveAt(index);
-            group.Insert(target, moved);
+            var unit = new List<Track> { moved };
+            if (group == video)
+                unit.AddRange(OverlayTracksOf(project, video, moved));
 
-            // the pin is two-sided: the overlay rows never move themselves (above), and no move
-            // may land the screen row above its own cursor/keyboard rows — they composite over
-            // it by contract, and buried beneath the opaque screen frame the cursor would simply
-            // vanish (the default overlay stands down while a cursor item is active).
-            if (group == video && OverlayPinViolated(project, video))
-                return false;
+            var rest = group.Where(t => !unit.Contains(t)).ToList();
+            var indexInRest = group.Take(index).Count(t => !unit.Contains(t));
 
-            var order = 0;
-            foreach (var track in video)
-                track.Order = order++;
-            // audio keeps its relative order and stays above every video Order, which is what
-            // puts those rows at the bottom of the timeline.
-            foreach (var track in audio)
-                track.Order = order++;
-            foreach (var track in speed)
-                track.Order = order++;
+            var target = targetOf(indexInRest);
+            if (target < 0 || target > rest.Count || target == indexInRest)
+                return null;
 
-            return true;
+            rest.InsertRange(target, unit);
+
+            if (group == video)
+            {
+                video = rest;
+                // the unit keeps the moved row beneath its own overlays by construction, and no
+                // row may land inside another unit — so this guard cannot fire on a project the
+                // session built; it stands for one that arrived with the pin already broken.
+                if (OverlayPinViolated(project, video))
+                    return null;
+            }
+            else
+            {
+                audio = rest;
+            }
+
+            return (video, audio, speed);
         }
+
+        /// <summary>The cursor/keyboard rows pinned above <paramref name="screen"/>, in their
+        /// current ascending order — the rows that travel with it when it moves.</summary>
+        private static IEnumerable<Track> OverlayTracksOf(Project project, List<Track> video, Track screen) =>
+            video.Where(t => t != screen && IsInputOverlayTrack(project, t.Id) &&
+                             FindOverlayScreenTrack(project, t)?.Id == screen.Id);
 
         /// <summary>Whether <see cref="MoveTrackLayer"/> would do anything — the enablement the
         /// timeline's context menu needs, without a speculative mutation. Always false for the
-        /// pinned speed row, and for a step that would raise a screen row above its own
-        /// cursor/keyboard rows (the same refusal <see cref="Reorder"/> applies).</summary>
-        public bool CanMoveTrackLayer(Guid trackId, bool towardsFront)
-        {
-            if (IsInputOverlayTrack(Project, trackId))
-                return false;
-
-            var video = Project.Tracks.Where(t => t.Kind != TrackKind.Audio && !IsSpeedTrack(Project, t))
-                                      .OrderBy(t => t.Order).ThenBy(t => t.Id).ToList();
-
-            var index = video.FindIndex(t => t.Id == trackId);
-            if (index < 0)
-                return false;
-
-            var target = towardsFront ? index + 1 : index - 1;
-            if (target < 0 || target >= video.Count)
-                return false;
-
-            var moved = video[index];
-            video.RemoveAt(index);
-            video.Insert(target, moved);
-            return !OverlayPinViolated(Project, video);
-        }
+        /// pinned speed row and for a cursor/keyboard row; a screen row steps with its overlays,
+        /// so it is movable whenever any other row stands in the way (the same plan
+        /// <see cref="Reorder"/> applies).</summary>
+        public bool CanMoveTrackLayer(Guid trackId, bool towardsFront) =>
+            PlanReorder(Project, trackId, index => towardsFront ? index + 1 : index - 1, audioMoves: false) != null;
 
         /// <summary>
         /// Whether the tentative video arrangement (list index = eventual paint order) buries a

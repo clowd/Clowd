@@ -158,7 +158,8 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The stack a recording with both overlays draws: webcam, cursor, keys, screen,
         /// then the audio row — in the canonical model order, where the display is the exact
-        /// reverse and the video-block layer indexes run 3 down to 0.</summary>
+        /// reverse and the video-block layer indexes run 3 down to 0. The overlays are glued to
+        /// the screen row (row 3), as <see cref="TimelineRowLayout.Build"/> would glue them.</summary>
         private static IReadOnlyList<TimelineRow> Stack()
         {
             var kinds = new[]
@@ -166,19 +167,74 @@ namespace Clowd.VideoSDK.Tests
                 TimelineRowKind.Video, TimelineRowKind.Cursor, TimelineRowKind.Keyboard,
                 TimelineRowKind.Video, TimelineRowKind.Audio,
             };
+            var screenId = Guid.NewGuid();
             var videoLayer = kinds.Count(k => k != TimelineRowKind.Audio);
             var audioLayer = 0;
             var rows = new List<TimelineRow>();
             double top = 0;
-            foreach (var kind in kinds)
+            for (var i = 0; i < kinds.Length; i++)
             {
+                var kind = kinds[i];
                 var height = TimelineRowLayout.HeightOf(kind);
                 var layer = kind == TimelineRowKind.Audio ? audioLayer++ : --videoLayer;
-                rows.Add(new TimelineRow(Guid.NewGuid(), kind, top, height, layer));
+                var id = i == 3 ? screenId : Guid.NewGuid();
+                var pinnedTo = TimelineRowLayout.IsInputOverlay(kind) ? screenId : (Guid?)null;
+                rows.Add(new TimelineRow(id, kind, top, height, layer, pinnedTo));
                 top += height;
             }
 
             return rows;
+        }
+
+        [Fact]
+        public void Build_glues_the_overlay_rows_to_their_screen_row()
+        {
+            var session = OverlaySession(out var screen, out var webcam);
+            var rows = TimelineRowLayout.Build(session.Project);
+
+            Assert.Null(rows.Single(r => r.TrackId == webcam.Id).PinnedTo);
+            Assert.Null(rows.Single(r => r.TrackId == screen.Id).PinnedTo);
+            Assert.All(rows.Where(r => TimelineRowLayout.IsInputOverlay(r.Kind)),
+                r => Assert.Equal(screen.Id, r.PinnedTo));
+        }
+
+        /// <summary>The unit is the screen row and the overlays glued above it, asked from any of
+        /// them; every other row is a unit of one.</summary>
+        [Fact]
+        public void UnitRange_spans_the_screen_row_and_its_glued_overlays()
+        {
+            var rows = Stack();
+
+            Assert.Equal((0, 0), TimelineReorder.UnitRange(rows, 0));
+            Assert.Equal((1, 3), TimelineReorder.UnitRange(rows, 1));
+            Assert.Equal((1, 3), TimelineReorder.UnitRange(rows, 2));
+            Assert.Equal((1, 3), TimelineReorder.UnitRange(rows, 3));
+            Assert.Equal((4, 4), TimelineReorder.UnitRange(rows, 4));
+
+            // an orphaned overlay (its screen row gone) is glued to nothing
+            var orphan = new TimelineRow(Guid.NewGuid(), TimelineRowKind.Cursor, 0, 26, 0);
+            var screen = new TimelineRow(Guid.NewGuid(), TimelineRowKind.Video, 26, 56, 1);
+            Assert.Equal((0, 0), TimelineReorder.UnitRange(new[] { orphan, screen }, 0));
+            Assert.Equal((1, 1), TimelineReorder.UnitRange(new[] { orphan, screen }, 1));
+        }
+
+        /// <summary>The grip: the screen row has one (its unit can change places with the webcam
+        /// row), the overlays never do, and a screen row whose block holds nothing but its own
+        /// unit has nowhere to go.</summary>
+        [Fact]
+        public void CanDrag_needs_a_row_outside_the_unit_to_change_places_with()
+        {
+            var rows = Stack();
+
+            Assert.True(TimelineReorder.CanDrag(rows, 0));
+            Assert.False(TimelineReorder.CanDrag(rows, 1));
+            Assert.False(TimelineReorder.CanDrag(rows, 2));
+            Assert.True(TimelineReorder.CanDrag(rows, 3));
+            Assert.False(TimelineReorder.CanDrag(rows, 4)); // the only audio row
+
+            // cursor, keys, screen and nothing else in the video block
+            var alone = rows.Skip(1).Select(r => r with { Top = r.Top - rows[1].Top }).ToList();
+            Assert.False(TimelineReorder.CanDrag(alone, 2));
         }
 
         [Fact]
@@ -238,18 +294,34 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
-        /// <summary>The other half of the pin: the screen row cannot be dragged above its own
-        /// overlays — the session refuses that move outright, so the drag never offers it.</summary>
+        /// <summary>The other half of the pin: the screen row is dragged <i>with</i> its overlays.
+        /// Its only other place is above the webcam row; any pointer over the unit itself is the
+        /// drag coming home (the indicator sits at the top of the unit, not between its rows), and
+        /// the drop it sends counts among the rows outside the unit — one webcam row, so the
+        /// unit's places are 0 and 1.</summary>
         [Fact]
-        public void The_screen_row_cannot_be_dragged_above_its_overlays()
+        public void The_screen_row_is_dragged_together_with_its_overlays()
         {
             var rows = Stack();
 
-            for (var slot = 0; slot <= 4; slot++)
+            // slot 0 is above the webcam: the unit goes in front of it — index 1 of [webcam]
+            Assert.Equal(1, TimelineReorder.TargetLayerIndex(rows, 3, 0));
+
+            // every other slot — the unit's own top edge, inside its run, or just under it —
+            // is home
+            for (var slot = 1; slot <= 4; slot++)
                 Assert.Null(TimelineReorder.TargetLayerIndex(rows, 3, slot));
 
+            // …and inside the run the indicator is pushed to the top of the unit
+            Assert.Equal(1, TimelineReorder.CoerceDropIndex(rows, 3, 2));
+            Assert.Equal(1, TimelineReorder.CoerceDropIndex(rows, 3, 3));
+            Assert.Equal(4, TimelineReorder.CoerceDropIndex(rows, 3, 4));
+
             for (var y = -20d; y <= TimelineRowLayout.TotalHeight(rows) + 20; y += 1)
-                Assert.True(TimelineReorder.DropIndexAt(rows, 3, y) >= 3);
+            {
+                var slot = TimelineReorder.DropIndexAt(rows, 3, y);
+                Assert.True(slot is 0 or 1 or 4, $"y={y} asked for slot {slot}");
+            }
         }
 
         // --------------------------------------------------------- agreement with EditorSession

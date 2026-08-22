@@ -22,6 +22,14 @@ namespace Clowd.UI.VideoEditor.Timeline
         Keyboard,
     }
 
+    /// <summary>The three reorder blocks the rows stack in; see <see cref="TimelineRowLayout.BlockOf"/>.</summary>
+    internal enum TimelineRowBlock
+    {
+        Speed,
+        Video,
+        Audio,
+    }
+
     /// <summary>One laid-out row: which track it draws, how tall it is, where its top edge sits
     /// in the surface's vertical (scrolled) coordinate space, and where its track stands in the
     /// model. <paramref name="LayerIndex"/> counts in the index space
@@ -30,9 +38,12 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// within the audio group for audio rows; -1 for the pinned speed row, which sits outside
     /// that space. The reorder math needs it because the displayed video block is <i>not</i>
     /// always the exact reverse of the model order (the input-overlay rows are drawn glued to
-    /// their screen row wherever their <c>Order</c> really sits).</summary>
+    /// their screen row wherever their <c>Order</c> really sits). <paramref name="PinnedTo"/> is
+    /// the screen row a cursor/keyboard row is glued above — the row it is laid out with, travels
+    /// with when that row is reordered, and is drawn as one combined track with; null for every
+    /// other row, and for an overlay whose screen row is gone.</summary>
     internal sealed record TimelineRow(Guid TrackId, TimelineRowKind Kind, double Top, double Height,
-        int LayerIndex = -1)
+        int LayerIndex = -1, Guid? PinnedTo = null)
     {
         /// <summary>Exclusive bottom edge.</summary>
         public double Bottom => Top + Height;
@@ -68,6 +79,13 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// tall row would push the picture rows apart.</summary>
         public const double InputOverlayRowHeight = 26;
 
+        /// <summary>The gutter between the three reorder blocks — the speed row, the video block
+        /// and the audio block (see <see cref="BlockOf"/>). A row can only ever be dragged within
+        /// its own block, and nothing says so as plainly as the blocks not touching: the surface
+        /// and the header leave this strip in the bare surface colour between them, so the
+        /// three read as three sections rather than one list with invisible walls.</summary>
+        public const double BlockGap = 8;
+
         public static double HeightOf(TimelineRowKind kind) => kind switch
         {
             TimelineRowKind.Audio => AudioRowHeight,
@@ -80,8 +98,21 @@ namespace Clowd.UI.VideoEditor.Timeline
             _ => VideoRowHeight,
         };
 
+        /// <summary>Which of the three reorder blocks a row kind lays out in: the pinned speed
+        /// row, the video block (everything that composites, the zoom and input-overlay rows
+        /// included), or the audio block. <see cref="Build"/> stacks the blocks in that order with
+        /// a <see cref="BlockGap"/> between them, and <c>TimelineReorder</c> never lets a drag
+        /// cross from one into another.</summary>
+        public static TimelineRowBlock BlockOf(TimelineRowKind kind) => kind switch
+        {
+            TimelineRowKind.Speed => TimelineRowBlock.Speed,
+            TimelineRowKind.Audio => TimelineRowBlock.Audio,
+            _ => TimelineRowBlock.Video,
+        };
+
         /// <summary>Whether the row is one of the recording's input-capture overlays — the rows
-        /// that are pinned above their screen row, refuse a reorder and cannot be unlinked.</summary>
+        /// that are pinned above their screen row (and travel with it when it is reordered),
+        /// refuse a reorder of their own and cannot be unlinked.</summary>
         public static bool IsInputOverlay(TimelineRowKind kind) =>
             kind is TimelineRowKind.Cursor or TimelineRowKind.Keyboard;
 
@@ -121,7 +152,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>
         /// Builds the rows top to bottom in three blocks: the speed row (if any) pinned first, then
         /// the video block — video and zoom tracks interleaved, <b>highest layer first</b> — then
-        /// the audio tracks below them.
+        /// the audio tracks below them, with a <see cref="BlockGap"/> wherever one block ends
+        /// and the next begins.
         ///
         /// <para>The video-block rows are the exact reverse of the order <c>FrameComposer</c>
         /// paints in (which is ascending <see cref="Track.Order"/> then <see cref="Track.Id"/>,
@@ -168,7 +200,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 .Where(x => x.Kind == TimelineRowKind.Speed)
                 .OrderByDescending(x => x.Track.Order)
                 .ThenByDescending(x => x.Track.Id)
-                .Concat(PinInputOverlays(project, videoBlock, byTrack))
+                .Concat(PinInputOverlays(project, videoBlock, byTrack, out var screenOf))
                 .Concat(classified
                     .Where(x => x.Track.Kind == TrackKind.Audio)
                     .OrderBy(x => x.Track.Order)
@@ -192,9 +224,13 @@ namespace Clowd.UI.VideoEditor.Timeline
             double top = 0;
             foreach (var (track, kind) in ordered)
             {
+                if (rows.Count > 0 && BlockOf(rows[^1].Kind) != BlockOf(kind))
+                    top += BlockGap;
+
                 var height = HeightOf(kind);
                 var layer = layerOf.TryGetValue(track.Id, out var index) ? index : -1;
-                rows.Add(new TimelineRow(track.Id, kind, top, height, layer));
+                var pinnedTo = screenOf.TryGetValue(track.Id, out var screenId) ? screenId : (Guid?)null;
+                rows.Add(new TimelineRow(track.Id, kind, top, height, layer, pinnedTo));
                 top += height;
             }
 
@@ -206,13 +242,16 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// screen row (cursor above keyboard above screen), leaving every other row where the
         /// descending layer order put it. An overlay whose screen row is gone — the row draws
         /// nothing then — keeps its natural place rather than disappearing from the list.
+        /// <paramref name="screenOf"/> comes back as the glue: overlay track id to the screen track
+        /// it was laid out with.
         /// </summary>
         private static List<(Track Track, TimelineRowKind Kind)> PinInputOverlays(
             Project project,
             List<(Track Track, TimelineRowKind Kind)> videoBlock,
-            Dictionary<Guid, IEnumerable<Item>> byTrack)
+            Dictionary<Guid, IEnumerable<Item>> byTrack,
+            out Dictionary<Guid, Guid> screenOf)
         {
-            var screenOf = new Dictionary<Guid, Guid>();
+            screenOf = new Dictionary<Guid, Guid>();
             foreach (var row in videoBlock)
             {
                 if (!IsInputOverlay(row.Kind))
@@ -234,16 +273,17 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (screenOf.Count == 0)
                 return videoBlock;
 
+            var glue = screenOf; // an out parameter cannot be read inside the lambda below
             var pinned = new List<(Track Track, TimelineRowKind Kind)>(videoBlock.Count);
             foreach (var row in videoBlock)
             {
-                if (screenOf.ContainsKey(row.Track.Id))
+                if (glue.ContainsKey(row.Track.Id))
                     continue; // laid out with its screen row instead
 
                 // cursor sits above keyboard sits above the screen row — the reverse of the
                 // compositing order, exactly as the rest of the video block is drawn.
                 foreach (var overlay in videoBlock
-                    .Where(x => screenOf.TryGetValue(x.Track.Id, out var id) && id == row.Track.Id)
+                    .Where(x => glue.TryGetValue(x.Track.Id, out var id) && id == row.Track.Id)
                     .OrderBy(x => x.Kind == TimelineRowKind.Cursor ? 0 : 1)
                     .ThenByDescending(x => x.Track.Order)
                     .ThenByDescending(x => x.Track.Id))
@@ -300,7 +340,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>Index of the row containing <paramref name="y"/> (rows own their top edge and
-        /// not their bottom one), or -1 above the first row / below the last.</summary>
+        /// not their bottom one), or -1 above the first row, below the last, or in the
+        /// <see cref="BlockGap"/> between two blocks.</summary>
         public static int RowIndexAtY(IReadOnlyList<TimelineRow> rows, double y)
         {
             if (rows == null)
