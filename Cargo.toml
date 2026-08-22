@@ -1,12 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
+    "clowd_ai",
     "clowd_capture",
-    "clowd_ocr",
     "clowd_rust_core",
     "clowd_scroll_driver",
     "clowd_shell_ext",
-    "clowd_tractnni",
 ]
 # clowd_server is a standalone workers-rs crate (own [workspace], wasm target).
 exclude = ["clowd_server"]
@@ -36,13 +35,13 @@ winit = "0.30"
 wgpu = { version = "30.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-# clowd_tractnni's inference runtime. Default features: ort-sys downloads
+# clowd_ai's inference runtime. Default features: ort-sys downloads
 # pyke's prebuilt, attested ONNX Runtime binaries per target and links the
 # runtime statically; execution-provider features (directml/coreml) are
-# enabled per target in clowd_tractnni's own manifest, since no one binary
+# enabled per target in clowd_ai's own manifest, since no one binary
 # build carries every EP. copy-dylibs stages the EP helper dylib
 # (DirectML.dll) beside the built exe; CI packages it from there.
-# NOTE: pyke's libs are compiled /MD — clowd_tractnni's build.rs swaps that
+# NOTE: pyke's libs are compiled /MD — clowd_ai's build.rs swaps that
 # one binary off this workspace's `+crt-static` at link time (see there).
 # Default features minus `tracing`: with `tracing` on and no subscriber
 # installed, ONNX Runtime's own log lines (EP registration failures, nodes
@@ -56,7 +55,7 @@ ort = { version = "2.0.0-rc.13", default-features = false, features = [
     "copy-dylibs",
     "api-27",
 ] }
-# clowd_tractnni's STFT/ISTFT for the 48 kHz denoiser.
+# clowd_ai's STFT/ISTFT for the 48 kHz denoiser.
 realfft = "3.5"
 pollster = "1.0"
 bytemuck = "1"
@@ -92,7 +91,7 @@ sentry = { version = "0.48", default-features = false, features = [
 
 [profile.release]
 opt-level = 3
-# Thin rather than fat: fat LTO's single-threaded link was ~70% of CI wall clock, and these binaries gain little from it (libblur runtime-dispatches its SIMD, wgpu work lands on the GPU, MNN is prebuilt C++).
+# Thin rather than fat: fat LTO's single-threaded link was ~70% of CI wall clock, and these binaries gain little from it (libblur runtime-dispatches its SIMD, wgpu work lands on the GPU, ONNX Runtime is prebuilt C++).
 lto = "thin"
 # Line tables only, in a companion .pdb/.dSYM that CI uploads to Sentry — enough for readable stack traces, and the only split mode Windows-MSVC supports.
 debug = 1

@@ -14,15 +14,15 @@ namespace Clowd.VideoSDK.Tests
     /// <summary>
     /// <see cref="MatteGenerator"/>: the model rules (which streams want a matte, the analysis
     /// resolution) run everywhere; the end-to-end generation runs against the real
-    /// <c>clowd_tractnni</c> binary — encode a small fixture, generate its matte sidecar, and
+    /// <c>clowd_ai</c> binary — encode a small fixture, generate its matte sidecar, and
     /// assert the mp4 + companion honour the sidecar contract (analysis-sized gray-in-luma
     /// frames on the source's PTS grid, valid companion). Skips when FFmpeg, the binary
-    /// (build <c>cargo build -p clowd_tractnni --release</c>) or an ONNX Runtime dylib (see
+    /// (build <c>cargo build -p clowd_ai --release</c>) or an ONNX Runtime dylib (see
     /// BUILDING.md) is absent — the same gating as <see cref="DenoiseGeneratorTests"/>.
     /// Shares that suite's collection: both configure the process-wide
-    /// <see cref="TractnniLoader"/>, so they must never run in parallel.
+    /// <see cref="AiLoader"/>, so they must never run in parallel.
     /// </summary>
-    [Collection("TractnniLoader")]
+    [Collection("AiLoader")]
     public class MatteGeneratorTests : IDisposable
     {
         private const int W = 64, H = 64, Fps = 16, Frames = 16;
@@ -48,9 +48,9 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The repo's own build of the inference binary. The ONNX Runtime is statically
         /// linked into it, so any built exe runs inference as-is.</summary>
-        private static string FindUsableTractnni()
+        private static string FindUsableAi()
         {
-            string exeName = OperatingSystem.IsWindows() ? "clowd_tractnni.exe" : "clowd_tractnni";
+            string exeName = OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
@@ -76,7 +76,7 @@ namespace Clowd.VideoSDK.Tests
 
         public void Dispose()
         {
-            TractnniLoader.Configure(null);
+            AiLoader.Configure(null);
             foreach (var f in _tempFiles)
             {
                 try { File.Delete(f); }
@@ -152,10 +152,10 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.False(MatteGenerator.Generate(source, 0, null));
 
-            TractnniLoader.Configure(() => null);
-            var hadEnv = Environment.GetEnvironmentVariable(TractnniLoader.EnvVarName);
+            AiLoader.Configure(() => null);
+            var hadEnv = Environment.GetEnvironmentVariable(AiLoader.EnvVarName);
             Assert.SkipWhen(!String.IsNullOrEmpty(hadEnv),
-                $"{TractnniLoader.EnvVarName} is set in this environment; the no-binary path cannot be observed.");
+                $"{AiLoader.EnvVarName} is set in this environment; the no-binary path cannot be observed.");
             Assert.False(MatteGenerator.Generate(source, 0, _cacheDir));
         }
 
@@ -217,11 +217,11 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(FFmpegAvailable,
                 $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
-            var exe = FindUsableTractnni();
+            var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_tractnni.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_tractnni --release, see BUILDING.md).");
+                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
 
-            TractnniLoader.Configure(() => exe);
+            AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeVideoFixture());
             var progress = new List<double>();
 
@@ -259,11 +259,11 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(FFmpegAvailable,
                 $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
-            var exe = FindUsableTractnni();
+            var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_tractnni.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_tractnni --release, see BUILDING.md).");
+                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
 
-            TractnniLoader.Configure(() => exe);
+            AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeVideoFixture());
             using var cts = new CancellationTokenSource();
             cts.Cancel();

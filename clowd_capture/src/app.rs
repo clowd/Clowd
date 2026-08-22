@@ -910,9 +910,10 @@ impl App {
                         });
                     }
                     Err(OcrError::Unavailable) => {
-                        // The recognizer could not be spawned, or its MNN
-                        // engine failed to init — either cause is already
-                        // logged at error level (ocr::client / clowd_ocr).
+                        // The recognizer could not be spawned (clowd_ai does
+                        // not ship on Intel macOS), or its ONNX Runtime failed
+                        // to init — either cause is already logged at error
+                        // level (ocr::client / clowd_ai).
                         log::warn!("OCR is unavailable on this machine");
                         cycle.input.ocr = OcrState::Idle;
                         cycle.input.ocr_notice = Some(OcrNotice {
@@ -1850,8 +1851,8 @@ impl ApplicationHandler for App {
                     info!("{}", self.startup.report());
 
                     // Warm the OCR backend off-thread so the first OCR press of
-                    // the process doesn't pay the MNN model parse + session setup
-                    // mid-scan (a one-time cost, cached for the process lifetime).
+                    // the process doesn't pay for the clowd_ai executable and its
+                    // embedded models coming off disk cold mid-scan.
                     // Once per process, and only when the OCR button exists at
                     // all. Deliberately behind the show gate: warming spawns a
                     // child process, and its deadline is the user's first OCR
@@ -1859,7 +1860,7 @@ impl ApplicationHandler for App {
                     // that belongs on the path to the first frame.
                     // `bench_startup` suppresses it entirely: the process exits
                     // a few statements below, so the spawn would only orphan a
-                    // `clowd_ocr` child (its kill-on-drop guard and temp-file
+                    // `clowd_ai` child (its kill-on-drop guard and temp-file
                     // cleanup are destructors, which a process exit never runs).
                     // That orphan would then burn cores through the NEXT launch
                     // and perturb exactly what the benchmark is measuring.
