@@ -568,6 +568,11 @@ namespace Clowd.UI.VideoEditor
                 }
             }
 
+            // the window may have been closed while the project was being loaded, and closing an
+            // empty project deletes its directory — nothing below may write into it after that.
+            if (_closing)
+                return;
+
             _autosave = _editDocPath != null ? new EditorAutosave(_editDocPath) : null;
             _editor = new EditorSession(project, _autosave, ScheduleSave);
 
