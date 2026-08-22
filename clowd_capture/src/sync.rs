@@ -78,6 +78,20 @@ impl VisibleLatch {
             .wait_while(guard, |signalled| !*signalled)
             .unwrap();
     }
+
+    /// Like [`wait`](Self::wait), but gives up after `timeout`; returns whether
+    /// the latch was actually signalled. For background work that only wants to
+    /// stay off the critical path — the signal comes from the show gate (or from
+    /// `finish_cycle` on a cancel), and the exit paths that reach neither (window
+    /// creation failing on every monitor) would otherwise park the waiter forever.
+    pub fn wait_timeout(&self, timeout: std::time::Duration) -> bool {
+        let guard = self.inner.lock().unwrap();
+        let (guard, _) = self
+            .cv
+            .wait_timeout_while(guard, timeout, |signalled| !*signalled)
+            .unwrap();
+        *guard
+    }
 }
 
 /// RAII guard that increments `ready_count` on drop unless disarmed.

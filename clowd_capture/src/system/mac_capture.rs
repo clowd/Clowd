@@ -1,17 +1,52 @@
+use std::sync::Mutex;
+
 use anyhow::Result;
 use core_graphics::access::ScreenCaptureAccess;
 use core_graphics::display::CGDisplay;
 use core_graphics::geometry::{CGPoint, CGRect, CGSize};
+use core_graphics::image::CGImage;
 use core_graphics::window::{
     self, kCGWindowImageBestResolution, kCGWindowImageBoundsIgnoreFraming, kCGWindowListOptionIncludingWindow, CGWindowID,
 };
 
 use crate::system::MonitorInfo;
+use clowd_rust_core::geometry::ScreenRect;
 
 pub struct DesktopBitmap {
     pub bgra: Vec<u8>,
     pub width: u32,
     pub height: u32,
+}
+
+/// A `CGImage` parked for the main thread. `CGImage` is a bare CF pointer, so
+/// Rust considers it neither `Send` nor `Sync` and it cannot ride along inside
+/// `CapturedDesktop`, which is `Arc`'d from the screenshot thread to the main
+/// thread and to every render worker. The objects themselves are immutable and
+/// refcounted atomically, which is precisely the case `unsafe impl Send` is for.
+struct DisplayImage(CGImage);
+unsafe impl Send for DisplayImage {}
+
+/// Per-display images from the most recent [`capture_bitmap`], keyed by the
+/// monitor rect they cover. `capture_bitmap` composites each display into the
+/// virtual-desktop buffer and would otherwise drop these; the overlay window
+/// for that display wants exactly this image as its backing-layer contents, and
+/// reconstructing it from the composite costs a row-by-row crop plus a
+/// `CGBitmapContextCreateImage` — both on the main thread, per monitor, while
+/// the user is waiting for the first frame.
+static DISPLAY_IMAGES: Mutex<Vec<(ScreenRect, DisplayImage)>> = Mutex::new(Vec::new());
+
+/// Claim the untouched capture of the display covering `bounds`, if there was
+/// one. Taking rather than borrowing means the backing store (tens of MB for a
+/// 4K display) is released as soon as the layer that wants it has retained it.
+///
+/// Ordering is guaranteed by the screenshot latch: nothing has a
+/// `CapturedDesktop` to ask about until `capture_bitmap` has returned.
+pub fn take_display_image(bounds: ScreenRect) -> Option<CGImage> {
+    let mut images = DISPLAY_IMAGES.lock().ok()?;
+    let idx = images
+        .iter()
+        .position(|(b, _)| *b == bounds)?;
+    Some(images.swap_remove(idx).1 .0)
 }
 
 /// Whether the process may capture the screen. Reported to `main()` so the
@@ -43,6 +78,7 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
     // case a display connected/disconnected between enumeration and capture.
     let count = monitors.len().min(display_ids.len());
     let mut captured = 0;
+    let mut display_images: Vec<(ScreenRect, DisplayImage)> = Vec::with_capacity(count);
     for i in 0..count {
         let monitor = &monitors[i];
         let display = CGDisplay::new(display_ids[i]);
@@ -84,6 +120,19 @@ pub fn capture_bitmap(monitors: &[MonitorInfo]) -> Result<DesktopBitmap> {
             }
         }
         captured += 1;
+
+        // Park the image for `render::window`'s backing layer instead of
+        // letting it drop. Only an exact 1:1 match is parked: when the
+        // captured image is a different size than the monitor rect the
+        // composite path above takes a top-left sub-rect of it, and a layer
+        // handed the whole image would resize it instead — different pixels.
+        if img_w == monitor.bounds.width() as usize && img_h == monitor.bounds.height() as usize {
+            display_images.push((monitor.bounds, DisplayImage(image)));
+        }
+    }
+
+    if let Ok(mut stash) = DISPLAY_IMAGES.lock() {
+        *stash = display_images;
     }
 
     // A per-display null is tolerable (the region stays black), but zero captures

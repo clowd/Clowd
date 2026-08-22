@@ -326,12 +326,15 @@ impl<'a> PrimaryPanelData<'a> {
             if let Some(d) = phase_between(w.prep_pipelines.get(), w.prep_device.get()) {
                 out.push(format_args!("        pipes:     {}", DisplayMs(d)));
             }
-            if let Some(d) = phase_between(w.prep_ui_pipelines.get(), w.prep_pipelines.get()) {
-                out.push(format_args!("        ui_pipe:   {}", DisplayMs(d)));
-            }
-            if let Some(d) = phase_between(w.prep_fonts.get(), w.prep_ui_pipelines.get()) {
-                out.push(format_args!("        fonts:     {}", DisplayMs(d)));
-            }
+            // `prep_ui_pipelines`/`prep_fonts` moved off the critical path onto
+            // the deferred builder thread, so they are no longer phases BETWEEN
+            // neighbouring critical-path marks: the two jobs run concurrently
+            // (fonts can land first), and the whole build routinely outlives
+            // frame 0. Shown as absolute offsets at the end of the worker's
+            // block — a delta against `prep_pipelines` would report the deferred
+            // build as critical-path time and print a child larger than the
+            // `worker{i}` total that deliberately excludes it. Mirrors
+            // `WorkerTimings::stages`.
             if let Some(d) = phase_between(w.upload.get(), w.upload_start.get()) {
                 out.push(format_args!("      upload:      {}", DisplayMs(d)));
             }
@@ -343,6 +346,14 @@ impl<'a> PrimaryPanelData<'a> {
             }
             if let Some(d) = phase_between(w.first_render.get(), w.first_render_start.get()) {
                 out.push(format_args!("      first render: {}", DisplayMs(d)));
+            }
+            // Absolute offsets from process start, not deltas — see the note
+            // above the critical-path rows.
+            if let Some(d) = w.prep_fonts.get() {
+                out.push(format_args!("      deferred_fonts@ {}", DisplayMs(d)));
+            }
+            if let Some(d) = w.prep_ui_pipelines.get() {
+                out.push(format_args!("      deferred_ready@ {}", DisplayMs(d)));
             }
         }
 

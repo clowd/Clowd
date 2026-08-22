@@ -88,43 +88,101 @@ pub struct UiRenderer {
     start_time: Instant,
 }
 
+/// The three UI render pipelines, built as one unit so the caller cannot
+/// end up holding a half-built stack.
+///
+/// Nothing here is on the pre-first-frame path — frame 0 draws only the
+/// desktop triangle — so these are compiled by the deferred builder
+/// (`render::spawn_deferred_stack`) rather than by Stage A.
+pub struct UiPipelines {
+    rect: RectPipeline,
+    icon: IconPipeline,
+    lift: LiftPipeline,
+}
+
+impl UiPipelines {
+    /// Compile the three pipelines concurrently on one shared device.
+    ///
+    /// `create_render_pipeline` takes no device-wide lock in wgpu 30
+    /// (wgpu-core's `Device::create_render_pipeline` locks nothing; the
+    /// DX12 backend holds its shader cache only across the map probe, with
+    /// `compile()` outside it; the Metal backend takes none), so the real
+    /// serialisation point is the platform shader compiler, not this
+    /// process. On macOS that means MTLCompilerService's XPC concurrency
+    /// (~3-4 in flight) — which is why fanning three compiles out is worth
+    /// three threads and fanning out further would not be.
+    pub fn build_parallel(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+        std::thread::scope(|s| {
+            let rect = s.spawn(|| RectPipeline::new(device, surface_format));
+            let icon = s.spawn(|| IconPipeline::new(device, surface_format));
+            // The third compile rides the calling thread: spawning for it
+            // would only add a join.
+            let lift = LiftPipeline::new(device, surface_format);
+            Self {
+                rect: rect.join().expect("ui rect pipeline thread"),
+                icon: icon.join().expect("ui icon pipeline thread"),
+                lift,
+            }
+        })
+    }
+}
+
+/// The glyphon stack plus every component whose construction needs it —
+/// they all allocate their `CachedBuffer`s out of the font system, and the
+/// panel additionally parses its 11 icon SVGs. Kept together because the
+/// `&mut TextStack` borrow makes them inherently sequential, so they are
+/// one job for the deferred builder to schedule.
+pub struct UiText {
+    text: TextStack,
+    area: AreaRenderer,
+    hints: HintsRenderer,
+    tips: TipsRenderer,
+    panel: PanelRenderer,
+}
+
+impl UiText {
+    pub fn new(mut text: TextStack) -> Self {
+        let area = AreaRenderer::new(&mut text);
+        let hints = HintsRenderer::new(&mut text);
+        let tips = TipsRenderer::new(&mut text);
+        let panel = PanelRenderer::new(&mut text);
+        Self {
+            text,
+            area,
+            hints,
+            tips,
+            panel,
+        }
+    }
+}
+
 impl UiRenderer {
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        surface_format: wgpu::TextureFormat,
+    /// Assemble the renderer from parts the deferred builder produced.
+    ///
+    /// There is no constructor that builds those parts inline: owning a
+    /// `UiRenderer` is the proof that every pipeline it can draw with has
+    /// been compiled, which is what keeps frame 0 — drawn before this type
+    /// exists at all — from being able to reference one.
+    pub fn from_parts(
+        pipelines: UiPipelines,
+        text: UiText,
         this_monitor: UiMonitor,
         monitor_index: usize,
         monitor_name: String,
         adapter_name: String,
         startup: Arc<StartupTimings>,
     ) -> Self {
-        let rect = RectPipeline::new(device, surface_format);
-        let icon = IconPipeline::new(device, surface_format);
-        let lift = LiftPipeline::new(device, surface_format);
-        startup.background.workers[monitor_index]
-            .prep_ui_pipelines
-            .set_once(startup.t_start.elapsed());
-        let mut text = TextStack::new(device, queue, surface_format);
-        startup.background.workers[monitor_index]
-            .prep_fonts
-            .set_once(startup.t_start.elapsed());
-        let area = AreaRenderer::new(&mut text);
-        let hints = HintsRenderer::new(&mut text);
-        let tips = TipsRenderer::new(&mut text);
-        let panel = PanelRenderer::new(&mut text);
         let debug = DebugRenderer::new(monitor_index);
         Self {
-            rect,
-            icon,
-            lift,
+            rect: pipelines.rect,
+            icon: pipelines.icon,
+            lift: pipelines.lift,
             ocr_bubbles: OcrBubblesRenderer::new(),
-            text,
-            area,
-            hints,
-            tips,
-            panel,
+            text: text.text,
+            area: text.area,
+            hints: text.hints,
+            tips: text.tips,
+            panel: text.panel,
             debug,
             last_frame_time: None,
             state: None,
