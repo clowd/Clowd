@@ -35,21 +35,41 @@ pub struct DeviceBundle {
     pub desktop_pipeline: wgpu::RenderPipeline,
     pub desktop_bgl: wgpu::BindGroupLayout,
     pub desktop_sampler: wgpu::Sampler,
-    pub peek_pipeline: wgpu::RenderPipeline,
-    pub peek_bgl: wgpu::BindGroupLayout,
 }
 
-/// GPU state used during the render loop. Built from `DeviceBundle` once
-/// the surface is available. `snapshot` (the whole-desktop texture) is
-/// filled from the screenshot job before the first frame is drawn.
+/// The peek half of the render state: the pipeline that draws the
+/// un-obscured window contents inside the selection, plus its layout.
+///
+/// Deliberately NOT part of Stage A. Frame 0 cannot draw a peek quad —
+/// peeking needs a hovered window, which needs the overlay to already be
+/// visible — so compiling `peek.wgsl` before the first present is pure
+/// pre-visible tax. It is built alongside the UI stack on the deferred
+/// thread (`render::spawn_deferred_stack`) and only then folded into
+/// `WindowGpu`, which is why `WindowGpu` can keep plain non-optional
+/// fields: it does not exist until the peek pipeline does.
+pub struct PeekGpu {
+    pub pipeline: wgpu::RenderPipeline,
+    pub bgl: wgpu::BindGroupLayout,
+}
+
+pub fn create_peek_gpu(device: &wgpu::Device) -> PeekGpu {
+    let bgl = pipeline::create_peek_bind_group_layout(device);
+    let pipeline = pipeline::create_peek_pipeline(device, &bgl);
+    PeekGpu {
+        pipeline,
+        bgl,
+    }
+}
+
+/// GPU state used during the render loop. Assembled from `DeviceBundle`,
+/// `PeekGpu` and the uploaded desktop snapshot *after* frame 0 has been
+/// presented — the loop is the first thing that can need any of the three.
 pub struct WindowGpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub pipeline: wgpu::RenderPipeline,
     pub peek_pipeline: wgpu::RenderPipeline,
     pub peek_bgl: wgpu::BindGroupLayout,
-    pub desktop_bgl: wgpu::BindGroupLayout,
-    pub desktop_sampler: wgpu::Sampler,
     #[allow(dead_code)]
     pub surface_format: wgpu::TextureFormat,
     #[allow(dead_code)]
@@ -74,11 +94,12 @@ pub fn stage_a_create_device(
         let (adapter, device, queue, adapter_name) =
             device::request_adapter_device(&instance, adapter_hint, memory_hints, t_start, timings).await?;
 
+        // Exactly what frame 0 draws and nothing more: one triangle
+        // sampling the desktop snapshot. Every other pipeline in the
+        // process (peek, the UI stack) is compiled off this path.
         let desktop_bgl = pipeline::create_desktop_bind_group_layout(&device);
         let desktop_sampler = pipeline::create_desktop_sampler(&device);
         let desktop_pipeline = pipeline::create_desktop_pipeline(&device, &desktop_bgl);
-        let peek_bgl = pipeline::create_peek_bind_group_layout(&device);
-        let peek_pipeline = pipeline::create_peek_pipeline(&device, &peek_bgl);
 
         timings
             .prep_pipelines
@@ -93,8 +114,6 @@ pub fn stage_a_create_device(
             desktop_pipeline,
             desktop_bgl,
             desktop_sampler,
-            peek_pipeline,
-            peek_bgl,
         })
     })
 }
@@ -105,17 +124,15 @@ pub fn stage_a_create_device(
 
 // ── Assemble final WindowGpu ────────────────────────────────────────
 
-pub fn finalise_window_gpu(bundle: DeviceBundle) -> WindowGpu {
+pub fn finalise_window_gpu(bundle: DeviceBundle, peek: PeekGpu, snapshot: Option<Arc<desktop::DesktopSnapshot>>) -> WindowGpu {
     WindowGpu {
         device: bundle.device,
         queue: bundle.queue,
         pipeline: bundle.desktop_pipeline,
-        peek_pipeline: bundle.peek_pipeline,
-        peek_bgl: bundle.peek_bgl,
-        desktop_bgl: bundle.desktop_bgl,
-        desktop_sampler: bundle.desktop_sampler,
+        peek_pipeline: peek.pipeline,
+        peek_bgl: peek.bgl,
         surface_format: SURFACE_FORMAT,
         adapter_name: bundle.adapter_name,
-        snapshot: None,
+        snapshot,
     }
 }

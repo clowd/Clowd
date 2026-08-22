@@ -22,21 +22,50 @@
 //!      `copy_buffer_to_buffer` onto the encoder, then issues the
 //!      `map_async` for the slot (called after `queue.submit`).
 
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use wgpu::RenderPassTimestampWrites;
 
-/// Master switch. When `false`:
+/// Master switch, off by default. When `false`:
 ///   * `GpuTimings::new` returns `None` (so nothing is constructed, no
 ///     `QuerySet`, no resolve buffer, no readback buffers, no per-frame
 ///     `resolve_query_set` / `copy_buffer_to_buffer` in the encoder,
 ///     and no `map_async` or `device.poll(Poll)` path).
-///   * `gpu.rs` skips requesting `Features::TIMESTAMP_QUERY` on the
-///     device — some backends instrument the queue differently when
+///   * `gpu/device.rs` skips requesting `Features::TIMESTAMP_QUERY` on
+///     the device — some backends instrument the queue differently when
 ///     the feature is enabled even if unused.
-pub const GPU_TIMING_ENABLED: bool = true;
+///
+/// This used to be a `const true`, which meant every start-up paid for a
+/// query set plus four buffers before frame 0 — and frame 0 passes
+/// `gpu_timing: None` anyway, so nothing consumed them until the debug
+/// panel was opened. Default-off costs a relaxed atomic load on the two
+/// call sites; the debug panel's GPU row degrades to `n/a` (the exact
+/// path taken when the adapter lacks `TIMESTAMP_QUERY`) until it is
+/// switched on.
+static GPU_TIMING: AtomicBool = AtomicBool::new(false);
+
+/// Must be called before the render workers reach
+/// `request_adapter_device`: `Features::TIMESTAMP_QUERY` is a *device
+/// creation* parameter, so flipping this afterwards leaves
+/// `GpuTimings::new` unable to build anything (it checks
+/// `device.features()`, not this flag alone). Relaxed ordering is enough
+/// — the worker threads are spawned after this runs, and thread spawn is
+/// itself the synchronisation edge.
+// Called from `main::run` with `--gpu-timing`, before the session spawns any
+// render worker.
+pub fn set_gpu_timing_enabled(enabled: bool) {
+    GPU_TIMING.store(enabled, Ordering::Relaxed);
+}
+
+/// Reads the master switch. Named in the old `const`'s shouty case so the
+/// two call sites still read as a compile-time-ish switch rather than a
+/// query into mutable state.
+#[allow(non_snake_case)]
+pub fn GPU_TIMING_ENABLED() -> bool {
+    GPU_TIMING.load(Ordering::Relaxed)
+}
 
 const SLOTS_PER_FRAME: u32 = 2;
 /// Number of frames we're willing to have in flight before skipping a
@@ -75,7 +104,7 @@ pub struct GpuTimings {
 
 impl GpuTimings {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Option<Self> {
-        if !GPU_TIMING_ENABLED {
+        if !GPU_TIMING_ENABLED() {
             return None;
         }
         if !device

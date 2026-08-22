@@ -106,7 +106,24 @@ pub fn upload_snapshot(
         },
         size,
     );
-    queue.submit(std::iter::empty());
+    // No `queue.submit(std::iter::empty())` here on purpose. It used to
+    // force the pending ~33 MB staging copy into a real submission right
+    // away, and that submission was the *only* thing giving
+    // `configure_surface`'s `maintain(wait_indefinitely)`
+    // (wgpu-core-30.0.0 `device/resource.rs`, "Wait for all work to
+    // finish before configuring the surface") anything to wait on — with
+    // nothing in flight the dx12 fence wait early-returns on
+    // `GetCompletedValue() >= value` (wgpu-hal-30.0.0
+    // `dx12/device.rs::wait`). Frame 0's own submit flushes the write
+    // regardless, so dropping the forced submit costs nothing in
+    // correctness.
+    //
+    // TRADEOFF, and it is a real one: the upload no longer starts early
+    // enough to overlap window creation, so the copy is serialised into
+    // frame 0 instead of hidden behind it. Whether that is a net win
+    // depends on how long window creation actually takes on the machine.
+    // A/B it against the `upload` -> `first_render` per-worker deltas in
+    // the start-up report before assuming either way.
 
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 

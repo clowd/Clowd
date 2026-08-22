@@ -19,7 +19,8 @@ namespace Clowd.UI
     /// <c>clowd_scroll_driver</c>.
     /// Probe order: the <c>CLOWD_CAPTURE_PATH</c> environment variable, then alongside the Clowd.Ui
     /// executable (release layout), then walking up from the app base directory to a cargo workspace
-    /// root and probing <c>target/debug</c> followed by <c>target/release</c> (debug-time layout).
+    /// root and taking the more recently built of <c>target/debug</c> and <c>target/release</c>
+    /// (debug-time layout).
     /// </summary>
     public static class CaptureBinaryLocator
     {
@@ -72,19 +73,30 @@ namespace Clowd.UI
                 return Path.GetFullPath(local);
 
             // (c) walk up to a directory containing Cargo.toml (the cargo workspace root) and
-            // probe target/debug, then target/release. Keep walking if a Cargo.toml has no
+            // probe target/debug and target/release. Keep walking if a Cargo.toml has neither
             // built binary (a crate manifest may sit below the workspace root that owns target/).
             var dir = new DirectoryInfo(Path.GetFullPath(baseDirectory));
             while (dir != null)
             {
                 if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
                 {
+                    // When both profiles are built, the freshest one is the one being worked on.
+                    // Preferring debug unconditionally (the old behaviour) made a just-built
+                    // --release binary unreachable for anyone with a stale target/debug lying
+                    // around, which is everybody who has ever run a plain `cargo build`.
                     var debug = Path.Combine(dir.FullName, "target", "debug", BinaryFileName);
-                    if (File.Exists(debug))
-                        return debug;
-
                     var release = Path.Combine(dir.FullName, "target", "release", BinaryFileName);
-                    if (File.Exists(release))
+                    var debugBuilt = LastWriteUtcOrNull(debug);
+                    var releaseBuilt = LastWriteUtcOrNull(release);
+
+                    // Strictly-greater, so an exact tie keeps the old debug-wins behaviour. Ties are
+                    // not theoretical: coarse filesystem timestamp granularity makes two builds a
+                    // moment apart compare equal.
+                    if (debugBuilt.HasValue && releaseBuilt.HasValue)
+                        return releaseBuilt.Value > debugBuilt.Value ? release : debug;
+                    if (debugBuilt.HasValue)
+                        return debug;
+                    if (releaseBuilt.HasValue)
                         return release;
                 }
 
@@ -92,6 +104,31 @@ namespace Clowd.UI
             }
 
             return null;
+        }
+
+        /// <summary>Last-write time of <paramref name="path"/> in UTC, or null when it is absent or
+        /// cannot be stat'd. Doubles as the existence check so that a `cargo build`/`cargo clean`
+        /// running while Clowd is open — the normal state of affairs during development — makes a
+        /// candidate merely unselectable rather than throwing out of binary resolution entirely.
+        /// UTC throughout: comparing a local-time stamp against a UTC one picks the wrong profile
+        /// for most of the world, and by exactly an hour twice a year for the rest.</summary>
+        private static DateTime? LastWriteUtcOrNull(string path)
+        {
+            try
+            {
+                // One FileInfo, not File.Exists + File.GetLastWriteTimeUtc: FileInfo caches a single
+                // stat, so the existence answer and the timestamp describe the same instant.
+                var info = new FileInfo(path);
+                return info.Exists ? info.LastWriteTimeUtc : (DateTime?)null;
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
         }
     }
 

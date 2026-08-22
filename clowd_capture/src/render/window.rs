@@ -28,6 +28,14 @@ pub struct WindowHandle {
     shown: Cell<bool>,
     #[cfg(target_os = "macos")]
     render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
+    /// The frozen-desktop layer's host view, stacked *below*
+    /// `render_subview`. Created unconditionally (even when the screenshot
+    /// has not landed yet) so a deferred [`Self::install_backdrop`] is just
+    /// a `setContents` on an existing layer — re-inserting a view under the
+    /// render subview after the fact would need positioned-subview
+    /// bookkeeping for no benefit.
+    #[cfg(target_os = "macos")]
+    backdrop_view: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
 }
 
 impl WindowHandle {
@@ -46,13 +54,17 @@ impl WindowHandle {
         #[cfg(not(windows))]
         window.set_cursor_visible(false);
 
+        // `None` when the desktop capture is still in flight: the backdrop
+        // layer is created empty and `install_backdrop` fills it once the
+        // screenshot lands (app.rs::try_pick_up_screenshot). The window must
+        // not be ordered front until then.
         #[cfg(target_os = "macos")]
         let screenshot_image = screenshot.and_then(|s| crop_screenshot_to_cgimage(s, setup.monitor_bounds));
         #[cfg(not(target_os = "macos"))]
         let screenshot_image: Option<()> = None;
 
         #[cfg(target_os = "macos")]
-        let (surface, render_subview) = create_surface(instance, window.clone(), screenshot_image)?;
+        let (surface, render_subview, backdrop_view) = create_surface(instance, window.clone(), screenshot_image)?;
         #[cfg(not(target_os = "macos"))]
         let surface = create_surface(instance, window.clone(), screenshot_image)?;
 
@@ -72,11 +84,42 @@ impl WindowHandle {
             shown: Cell::new(false),
             #[cfg(target_os = "macos")]
             render_subview,
+            #[cfg(target_os = "macos")]
+            backdrop_view,
         })
     }
 
     pub fn window_id(&self) -> WindowId {
         self.window.id()
+    }
+
+    /// The underlying winit window, for the macOS early order-front — which
+    /// lives in app.rs (`order_window_front_early`) beside the show-gate
+    /// logic whose correctness it is entangled with.
+    #[cfg(target_os = "macos")]
+    pub fn winit_window(&self) -> &Window {
+        &self.window
+    }
+
+    /// Deferred half of the frozen-desktop backdrop: fill the (empty) layer
+    /// created by `create_surface` with the cropped screenshot. Used when
+    /// `WindowHandle::new` ran before the desktop capture finished; the
+    /// caller orders the window front immediately afterwards — never
+    /// before, or the user sees an opaque black fullscreen window for the
+    /// remainder of the capture.
+    #[cfg(target_os = "macos")]
+    pub fn install_backdrop(&self, screenshot: &CapturedDesktop) {
+        let Some(ref bg_view) = self.backdrop_view else { return };
+        let Some(image) = crop_screenshot_to_cgimage(screenshot, self.monitor_bounds) else {
+            return;
+        };
+        if let Some(layer) = bg_view.layer() {
+            unsafe {
+                let cg_ptr: *const std::ffi::c_void = *(&image as *const _ as *const *const std::ffi::c_void);
+                layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
+                layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
+            }
+        }
     }
 
     pub fn monitor_bounds(&self) -> ScreenRect {
@@ -414,12 +457,23 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
 
 // ── Platform: surface creation (private) ───────────────────────────
 
+/// What the macOS surface build hands back: the wgpu surface plus the two
+/// layer-backed views `WindowHandle` keeps driving afterwards — the render
+/// subview (faded in by `show`) and the backdrop view below it (filled by
+/// `install_backdrop` when the screenshot post-dates window creation).
+#[cfg(target_os = "macos")]
+type SurfaceParts = (
+    wgpu::Surface<'static>,
+    Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
+    Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
+);
+
 #[cfg(target_os = "macos")]
 fn create_surface(
     instance: &wgpu::Instance,
     window: Arc<Window>,
     screenshot_image: Option<core_graphics::image::CGImage>,
-) -> Result<(wgpu::Surface<'static>, Option<objc2::rc::Retained<objc2_app_kit::NSView>>)> {
+) -> Result<SurfaceParts> {
     use objc2::{MainThreadMarker, MainThreadOnly};
     use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
     use std::ptr::NonNull;
@@ -435,10 +489,16 @@ fn create_surface(
     let content_view: &NSView = unsafe { &*(h.ns_view.as_ptr() as *const NSView) };
     let frame = content_view.frame();
 
+    // Always built, even with no image yet: subview order is fixed here
+    // (backdrop below, render subview above), so a screenshot that arrives
+    // after window creation only has to `setContents` on the existing layer
+    // — see `WindowHandle::install_backdrop`. An empty layer is transparent
+    // and the window stays hidden until the backdrop is filled, so nothing
+    // black ever flashes.
+    let bg_view = NSView::initWithFrame(NSView::alloc(mtm), frame);
+    bg_view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+    bg_view.setWantsLayer(true);
     if let Some(ref cg_image) = screenshot_image {
-        let bg_view = NSView::initWithFrame(NSView::alloc(mtm), frame);
-        bg_view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
-        bg_view.setWantsLayer(true);
         if let Some(layer) = bg_view.layer() {
             unsafe {
                 let cg_ptr: *const std::ffi::c_void = *(cg_image as *const _ as *const *const std::ffi::c_void);
@@ -446,8 +506,8 @@ fn create_surface(
                 layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
             }
         }
-        content_view.addSubview(&bg_view);
     }
+    content_view.addSubview(&bg_view);
 
     let subview = NSView::initWithFrame(NSView::alloc(mtm), frame);
     subview.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
@@ -468,7 +528,7 @@ fn create_surface(
         })?
     };
 
-    Ok((surface, Some(subview)))
+    Ok((surface, Some(subview), Some(bg_view)))
 }
 
 #[cfg(not(target_os = "macos"))]
@@ -482,6 +542,16 @@ fn create_surface(instance: &wgpu::Instance, window: Arc<Window>, _screenshot_im
 fn crop_screenshot_to_cgimage(screenshot: &CapturedDesktop, monitor_bounds: ScreenRect) -> Option<core_graphics::image::CGImage> {
     use core_graphics::color_space::CGColorSpace;
     use core_graphics::context::CGContext;
+
+    // CoreGraphics already produced a CGImage for this display while capturing;
+    // `mac_capture` parks it instead of dropping it, so the common case is a
+    // pointer move. The crop below is the fallback, and it is not cheap: it
+    // copies the monitor's pixels out of the composite row by row and then
+    // `CGBitmapContextCreateImage` copies them again — on the main thread, once
+    // per monitor, in the middle of window creation.
+    if let Some(image) = crate::system::mac_capture::take_display_image(monitor_bounds) {
+        return Some(image);
+    }
 
     let vd = screenshot.bounds;
     let crop_x = (monitor_bounds.min_x() - vd.min_x()) as usize;
