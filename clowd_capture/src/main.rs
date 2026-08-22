@@ -23,10 +23,19 @@ extern crate log;
 extern crate anyhow;
 
 use std::sync::Arc;
+use std::time::Instant;
 
 use clap::Parser;
 
+use telemetry::startup::Prologue;
+
 fn main() -> anyhow::Result<()> {
+    // The very first statement of the process: every offset in the startup
+    // report is measured from here, so clap, the logger, sentry and the
+    // permission check are inside the measurement instead of hidden in front
+    // of it. Anything moved above this line becomes invisible to the
+    // benchmark.
+    let t_start = Instant::now();
     let args = settings::CliArgs::parse();
 
     // Terminal output plus a mirror into the session dir: when the shell spawns us
@@ -54,26 +63,36 @@ fn main() -> anyhow::Result<()> {
     }
     clowd_rust_core::telemetry::install_logger(simplelog::CombinedLogger::new(loggers));
 
+    // Stashed rather than marked: `StartupTimings` is sized by the monitor
+    // count and cannot exist until the session enumerates them, which is
+    // several stages from here.
+    let mut prologue = Prologue {
+        logging_ready: t_start.elapsed(),
+        ..Prologue::default()
+    };
+
     // held for the rest of main: dropping the guard flushes anything still queued
     let _sentry = clowd_rust_core::telemetry::init("clowd_capture");
+    prologue.sentry_ready = t_start.elapsed();
 
     // run() bails out with `?` in several places, and an Err return is not a panic —
     // the hook would never see it. Report it here, then hand it back to the runtime
     // so the exit code and stderr output are unchanged (the shell reads both:
     // ScreenCaptureService.LaunchAsync).
-    let result = run(args);
+    let result = run(args, t_start, prologue);
     if let Err(err) = &result {
         clowd_rust_core::telemetry::capture_error(err);
     }
     result
 }
 
-fn run(args: settings::CliArgs) -> anyhow::Result<()> {
+fn run(args: settings::CliArgs, t_start: Instant, mut prologue: Prologue) -> anyhow::Result<()> {
     system::SystemInterop::init();
 
     // Before any window exists, so the cycle cannot end without knowing who to
     // hand foreground rights back to.
     system::SystemInterop::set_shell_pid(args.shell_pid);
+    prologue.system_init = t_start.elapsed();
 
     // The shell preflights this before spawning us and owns the whole permission
     // conversation with the user (Settings → General → Permissions), so all we do
@@ -84,16 +103,24 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
         error!("Screen Recording permission has not been granted; refusing to capture");
         std::process::exit(system::EXIT_NO_SCREEN_PERMISSION);
     }
+    prologue.permission_checked = t_start.elapsed();
 
     // All the slow work — monitors, wgpu instance, render workers, the desktop
     // screenshot — happens before the event loop exists, so the overlay windows
     // can be created against state that is already warm.
     let memory_hints = args.memory_hints;
+    // Read before the workers exist: `Features::TIMESTAMP_QUERY` is a device
+    // creation parameter, so this must be set before the first
+    // `request_adapter_device`. Not on `CapturerSettings` — nothing after
+    // device creation consults it.
+    ui::gpu::gpu_timing::set_gpu_timing_enabled(args.gpu_timing);
     let settings = Arc::new(args.into_settings());
     if let Some(dir) = &settings.session_dir {
         info!("session mode: payload will be written to {:?}", dir);
     }
-    let session = capture::session::CaptureSession::new(settings, memory_hints)?;
+    let session = capture::session::CaptureSession::new(settings, memory_hints, t_start)?;
+    let timings = session.timings().clone();
+    timings.apply_prologue(prologue);
 
     // Accessory keeps us out of the dock and stops the overlay stealing activation
     // before it is shown; focus is taken explicitly once every window is ready.
@@ -113,8 +140,15 @@ fn run(args: settings::CliArgs) -> anyhow::Result<()> {
     #[cfg(not(target_os = "macos"))]
     let event_loop = winit::event_loop::EventLoop::new()?;
 
+    timings.mark_event_loop_built();
+
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let mut app = session.into_app();
+    timings.mark_run_app_entered();
     event_loop.run_app(&mut app)?;
-    Ok(())
+    // A failure detected inside the event loop (the screenshot deadline)
+    // exits the loop cleanly and parks its error here — surface it so the
+    // shell still sees a non-zero exit, as it did when the wait was a
+    // blocking `?` in CaptureSession::new.
+    app.fatal_result()
 }
