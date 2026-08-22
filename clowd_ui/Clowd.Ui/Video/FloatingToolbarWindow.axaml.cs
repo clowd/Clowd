@@ -261,10 +261,14 @@ namespace Clowd.UI
         }
 
         /// <summary>Port of FloatingButtonWindow_LayoutUpdated: all math in physical px on the
-        /// monitor containing the region's center, clamped to its FULL bounds (not the working
-        /// area — original behavior). Skipped once the user has dragged or rotated the strip.
-        /// The short/long-edge formulation is orientation-independent, so a single pass both
-        /// picks the orientation and computes the final position.</summary>
+        /// monitor containing the region's center. Skipped once the user has dragged or rotated
+        /// the strip. The short/long-edge formulation is orientation-independent, so a single
+        /// pass both picks the orientation and computes the final position.
+        /// Unlike the WPF original this measures and clamps against the monitor's WORKING area
+        /// rather than its full bounds, so the strip is never dealt a slot underneath the macOS
+        /// dock / menu bar or the Windows taskbar, which are painted over it (issue #72). The
+        /// selection itself still comes from the full bounds — the capture region legitimately
+        /// covers the reserved strips, and clipping it would shift the centering.</summary>
         private void PositionNearRegion()
         {
             if (_region == null || !IsVisible || _manuallyPositioned)
@@ -285,6 +289,15 @@ namespace Clowd.UI
             var b = screen.Bounds;
             var screenBounds = new ScreenRect(b.X, b.Y, b.Width, b.Height);
 
+            // the placeable area: the monitor minus whatever the shell reserves (dock, menu bar,
+            // taskbar). Avalonia reports this in the same space as Bounds, so no conversion.
+            var w = screen.WorkingArea;
+            var workArea = w.Width > 0 && w.Height > 0
+                ? new ScreenRect(w.X, w.Y, w.Width, w.Height).Intersect(screenBounds)
+                : screenBounds;
+            if (workArea.IsEmpty())
+                workArea = screenBounds;
+
             var selection = _region.Intersect(screenBounds);
             if (selection.IsEmpty())
                 selection = _region;
@@ -292,9 +305,9 @@ namespace Clowd.UI
             var minDistance = (int)Math.Ceiling(2 * scaling);
             var maxDistance = (int)Math.Ceiling(15 * scaling);
 
-            var bottomSpace = Math.Max(screenBounds.Bottom - selection.Bottom, 0) - minDistance;
-            var rightSpace = Math.Max(screenBounds.Right - selection.Right, 0) - minDistance;
-            var leftSpace = Math.Max(selection.Left - screenBounds.Left, 0) - minDistance;
+            var bottomSpace = Math.Max(workArea.Bottom - selection.Bottom, 0) - minDistance;
+            var rightSpace = Math.Max(workArea.Right - selection.Right, 0) - minDistance;
+            var leftSpace = Math.Max(selection.Left - workArea.Left, 0) - minDistance;
 
             var shortEdge = Math.Min(panelWidth, panelHeight);
             var longEdge = Math.Max(panelWidth, panelHeight);
@@ -305,33 +318,45 @@ namespace Clowd.UI
             {
                 MainPanel.Orientation = Orientation.Horizontal;
                 indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
-                indTop = Math.Min(screenBounds.Bottom, selection.Bottom + maxDistance + shortEdge) - shortEdge;
+                indTop = Math.Min(workArea.Bottom, selection.Bottom + maxDistance + shortEdge) - shortEdge;
             }
             else if (rightSpace >= shortEdge)
             {
                 MainPanel.Orientation = Orientation.Vertical;
-                indLeft = Math.Min(screenBounds.Right, selection.Right + maxDistance + shortEdge) - shortEdge;
+                indLeft = Math.Min(workArea.Right, selection.Right + maxDistance + shortEdge) - shortEdge;
                 indTop = selection.Bottom - longEdge;
             }
             else if (leftSpace >= shortEdge)
             {
                 MainPanel.Orientation = Orientation.Vertical;
-                indLeft = Math.Max(selection.Left - maxDistance - shortEdge, 0);
+                indLeft = Math.Max(selection.Left - maxDistance - shortEdge, workArea.Left);
                 indTop = selection.Bottom - longEdge;
             }
             else // inside capture rect
             {
                 MainPanel.Orientation = Orientation.Horizontal;
                 indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
-                indTop = selection.Bottom - shortEdge - maxDistance * 2;
+                // keep the gap measured from the placeable bottom edge, so a full-height
+                // selection lands above the dock/taskbar rather than flush against it.
+                indTop = Math.Min(selection.Bottom, workArea.Bottom) - shortEdge - maxDistance * 2;
             }
 
             var horizontalSize = MainPanel.Orientation == Orientation.Horizontal ? longEdge : shortEdge;
+            var verticalSize = MainPanel.Orientation == Orientation.Horizontal ? shortEdge : longEdge;
 
-            if (indLeft < screenBounds.Left)
-                indLeft = screenBounds.Left;
-            else if (indLeft + horizontalSize > screenBounds.Right)
-                indLeft = screenBounds.Right - horizontalSize;
+            if (indLeft < workArea.Left)
+                indLeft = workArea.Left;
+            else if (indLeft + horizontalSize > workArea.Right)
+                indLeft = workArea.Right - horizontalSize;
+
+            // the vertical clamp the WPF original never had: the two branches that anchor to the
+            // selection's bottom edge (vertical placement, and the fallback inside the capture
+            // rect) can otherwise run the strip off the bottom of the placeable area — which is
+            // exactly where a full-height selection puts it on a machine with a bottom dock.
+            if (indTop < workArea.Top)
+                indTop = workArea.Top;
+            else if (indTop + verticalSize > workArea.Bottom)
+                indTop = workArea.Bottom - verticalSize;
 
             Position = new PixelPoint(indLeft, indTop);
         }
