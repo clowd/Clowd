@@ -4,9 +4,7 @@ use std::time::{Duration, Instant};
 /// Nanosecond-resolution duration stored in an `AtomicU64`. Zero means
 /// "not yet recorded". `set_once` uses compare-exchange so only the
 /// first writer wins — safe for repeated `resumed()` calls on Wayland
-/// and for concurrent workers. Per-cycle metrics rely on their whole
-/// containing struct ([`CaptureTimings`]) being allocated fresh each
-/// cycle rather than on any reset.
+/// and for concurrent workers.
 pub struct AtomicDuration(AtomicU64);
 
 impl AtomicDuration {
@@ -37,12 +35,8 @@ impl std::fmt::Debug for AtomicDuration {
     }
 }
 
-// ── Warm-up (once per process) ──────────────────────────────────────
-
-/// Per-render-worker warm-up breakdown: Stage A (adapter, device,
-/// pipelines, fonts) on the worker thread plus window/surface creation
-/// on the main thread. All offsets from [`WarmupTimings::t_start`].
-pub struct WarmupWorkerTimings {
+/// Per-render-worker timing breakdown recorded during stages A/B/C.
+pub struct WorkerTimings {
     pub prep_start: AtomicDuration,
     pub render_prep: AtomicDuration,
     pub prep_adapter: AtomicDuration,
@@ -50,13 +44,17 @@ pub struct WarmupWorkerTimings {
     pub prep_pipelines: AtomicDuration,
     pub prep_ui_pipelines: AtomicDuration,
     pub prep_fonts: AtomicDuration,
+    pub upload_start: AtomicDuration,
+    pub upload: AtomicDuration,
     pub surface_start: AtomicDuration,
     pub surface_bind: AtomicDuration,
     /// When the worker received its window + surface handoff.
     pub handoff: AtomicDuration,
+    pub first_render_start: AtomicDuration,
+    pub first_render: AtomicDuration,
 }
 
-impl WarmupWorkerTimings {
+impl WorkerTimings {
     pub fn new() -> Self {
         Self {
             prep_start: AtomicDuration::new(),
@@ -66,53 +64,109 @@ impl WarmupWorkerTimings {
             prep_pipelines: AtomicDuration::new(),
             prep_ui_pipelines: AtomicDuration::new(),
             prep_fonts: AtomicDuration::new(),
+            upload_start: AtomicDuration::new(),
+            upload: AtomicDuration::new(),
             surface_start: AtomicDuration::new(),
             surface_bind: AtomicDuration::new(),
             handoff: AtomicDuration::new(),
+            first_render_start: AtomicDuration::new(),
+            first_render: AtomicDuration::new(),
         }
     }
-
-    fn gate(&self) -> Option<Duration> {
-        [
-            self.prep_start.get(),
-            self.render_prep.get(),
-            self.prep_adapter.get(),
-            self.prep_device.get(),
-            self.prep_pipelines.get(),
-            self.prep_ui_pipelines.get(),
-            self.prep_fonts.get(),
-            self.surface_start.get(),
-            self.surface_bind.get(),
-            self.handoff.get(),
-        ]
-        .into_iter()
-        .flatten()
-        .max()
-    }
 }
 
-/// One-time warm-up timings, anchored at process start. Recorded once, so
-/// nothing per-cycle may anchor here (see [`CaptureTimings`]).
-pub struct WarmupTimings {
-    pub t_start: Instant,
-    pub t_initialize: AtomicDuration,
-    pub workers: Vec<WarmupWorkerTimings>,
-    pub t_window_create_start: AtomicDuration,
-    pub t_window_create: AtomicDuration,
+/// Parallel-phase timings. All durations are offsets from `t_start` so
+/// they're directly comparable across threads. The group's gate time
+/// is `max(all set children)`.
+pub struct BackgroundGroup {
+    pub screenshot_start: AtomicDuration,
+    pub screenshot: AtomicDuration,
+    pub walker_start: AtomicDuration,
+    pub walker: AtomicDuration,
+    pub workers: Vec<WorkerTimings>,
 }
 
-impl WarmupTimings {
-    pub fn new(t_start: Instant, worker_count: usize) -> Self {
+impl BackgroundGroup {
+    pub fn new(worker_count: usize) -> Self {
         let mut workers = Vec::with_capacity(worker_count);
         for _ in 0..worker_count {
-            workers.push(WarmupWorkerTimings::new());
+            workers.push(WorkerTimings::new());
         }
+        Self {
+            screenshot_start: AtomicDuration::new(),
+            screenshot: AtomicDuration::new(),
+            walker_start: AtomicDuration::new(),
+            walker: AtomicDuration::new(),
+            workers,
+        }
+    }
+
+    /// Gate time: the latest-finishing child in the parallel group.
+    pub fn gate(&self) -> Option<Duration> {
+        let mut max = Duration::ZERO;
+        let mut any = false;
+        for d in [self.screenshot.get(), self.walker.get()]
+            .into_iter()
+            .flatten()
+        {
+            max = max.max(d);
+            any = true;
+        }
+        for w in &self.workers {
+            for d in [
+                w.prep_start.get(),
+                w.render_prep.get(),
+                w.prep_adapter.get(),
+                w.prep_device.get(),
+                w.prep_pipelines.get(),
+                w.prep_ui_pipelines.get(),
+                w.prep_fonts.get(),
+                w.upload_start.get(),
+                w.upload.get(),
+                w.surface_start.get(),
+                w.surface_bind.get(),
+                w.handoff.get(),
+                w.first_render_start.get(),
+                w.first_render.get(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                max = max.max(d);
+                any = true;
+            }
+        }
+        if any {
+            Some(max)
+        } else {
+            None
+        }
+    }
+}
+
+/// Every phase of the one-shot capture, anchored at process start so all
+/// offsets are directly comparable across threads.
+pub struct StartupTimings {
+    pub t_start: Instant,
+    pub t_initialize: AtomicDuration,
+    pub background: BackgroundGroup,
+    pub t_window_create_start: AtomicDuration,
+    pub t_window_create: AtomicDuration,
+    pub t_show_start: AtomicDuration,
+    /// When every window became visible.
+    pub t_shown: AtomicDuration,
+}
+
+impl StartupTimings {
+    pub fn new(t_start: Instant, worker_count: usize) -> Self {
         Self {
             t_start,
             t_initialize: AtomicDuration::new(),
-            workers,
+            background: BackgroundGroup::new(worker_count),
             t_window_create_start: AtomicDuration::new(),
             t_window_create: AtomicDuration::new(),
+            t_show_start: AtomicDuration::new(),
+            t_shown: AtomicDuration::new(),
         }
     }
 
@@ -131,104 +185,6 @@ impl WarmupTimings {
             .set_once(self.t_start.elapsed());
     }
 
-    /// Total warm-up time: the latest recorded phase.
-    pub fn total(&self) -> Duration {
-        let mut total = Duration::ZERO;
-        for d in [
-            self.t_initialize.get(),
-            self.t_window_create_start.get(),
-            self.t_window_create.get(),
-        ]
-        .into_iter()
-        .flatten()
-        {
-            total = total.max(d);
-        }
-        for w in &self.workers {
-            if let Some(d) = w.gate() {
-                total = total.max(d);
-            }
-        }
-        total
-    }
-}
-
-// ── Per capture cycle ───────────────────────────────────────────────
-
-/// Per-render-worker timings for one capture cycle: the swapchain
-/// un-park, the snapshot upload (Stage B) and frame 0 (Stage C).
-/// Offsets from [`CaptureTimings::t_start`].
-pub struct CaptureWorkerTimings {
-    /// Reconfiguring the parked (1×1) surface back to monitor size — a
-    /// swapchain recreation, paid once per cycle on the show path.
-    pub configure_start: AtomicDuration,
-    pub configure: AtomicDuration,
-    pub upload_start: AtomicDuration,
-    pub upload: AtomicDuration,
-    pub first_render_start: AtomicDuration,
-    pub first_render: AtomicDuration,
-}
-
-impl CaptureWorkerTimings {
-    pub fn new() -> Self {
-        Self {
-            configure_start: AtomicDuration::new(),
-            configure: AtomicDuration::new(),
-            upload_start: AtomicDuration::new(),
-            upload: AtomicDuration::new(),
-            first_render_start: AtomicDuration::new(),
-            first_render: AtomicDuration::new(),
-        }
-    }
-
-    fn gate(&self) -> Option<Duration> {
-        [
-            self.configure_start.get(),
-            self.configure.get(),
-            self.upload_start.get(),
-            self.upload.get(),
-            self.first_render_start.get(),
-            self.first_render.get(),
-        ]
-        .into_iter()
-        .flatten()
-        .max()
-    }
-}
-
-/// Timings for a single capture cycle, anchored where its per-capture jobs
-/// are spawned, just before the screenshot job. Allocated per cycle and
-/// distributed to the workers via `CycleParams`.
-pub struct CaptureTimings {
-    pub t_start: Instant,
-    pub screenshot_start: AtomicDuration,
-    pub screenshot: AtomicDuration,
-    pub walker_start: AtomicDuration,
-    pub walker: AtomicDuration,
-    pub workers: Vec<CaptureWorkerTimings>,
-    pub t_show_start: AtomicDuration,
-    /// When every window of this cycle became visible.
-    pub t_shown: AtomicDuration,
-}
-
-impl CaptureTimings {
-    pub fn new(worker_count: usize) -> Self {
-        let mut workers = Vec::with_capacity(worker_count);
-        for _ in 0..worker_count {
-            workers.push(CaptureWorkerTimings::new());
-        }
-        Self {
-            t_start: Instant::now(),
-            screenshot_start: AtomicDuration::new(),
-            screenshot: AtomicDuration::new(),
-            walker_start: AtomicDuration::new(),
-            walker: AtomicDuration::new(),
-            workers,
-            t_show_start: AtomicDuration::new(),
-            t_shown: AtomicDuration::new(),
-        }
-    }
-
     pub fn mark_show_start(&self) {
         self.t_show_start
             .set_once(self.t_start.elapsed());
@@ -238,14 +194,14 @@ impl CaptureTimings {
         self.t_shown.set_once(self.t_start.elapsed());
     }
 
-    /// Total capture time so far: the latest recorded phase.
+    /// Total startup time: the latest recorded phase.
     pub fn total(&self) -> Duration {
         let mut total = Duration::ZERO;
         for d in [
-            self.screenshot_start.get(),
-            self.screenshot.get(),
-            self.walker_start.get(),
-            self.walker.get(),
+            self.t_initialize.get(),
+            self.background.gate(),
+            self.t_window_create_start.get(),
+            self.t_window_create.get(),
             self.t_show_start.get(),
             self.t_shown.get(),
         ]
@@ -253,11 +209,6 @@ impl CaptureTimings {
         .flatten()
         {
             total = total.max(d);
-        }
-        for w in &self.workers {
-            if let Some(d) = w.gate() {
-                total = total.max(d);
-            }
         }
         total
     }

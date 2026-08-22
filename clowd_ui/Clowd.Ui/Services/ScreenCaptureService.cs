@@ -433,12 +433,6 @@ namespace Clowd.UI
             if (!settings.OcrEnabled)
                 args.Add("--no-ocr");
 
-            if (settings.MemoryHints == CapturerMemoryHints.LowerMemoryUsage)
-            {
-                args.Add("--memory-hints");
-                args.Add("lower-memory-usage");
-            }
-
             // the overlay was launched specifically to pick a recording region: a confirmed
             // selection immediately dispatches the video action (DESIGN §3.1).
             if (video)

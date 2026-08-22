@@ -39,10 +39,9 @@ impl TipsMode {
 }
 
 /// GPU allocator sizing strategy, mirrored from the shell's capture
-/// settings. `MaxPerformance` (default) is wgpu's large-block allocator —
-/// what one-shot capture ran on before the warm host existed;
-/// `LowerMemoryUsage` keeps gpu-allocator's retained heap blocks small at
-/// some cost in latency.
+/// settings. `MaxPerformance` (default) is wgpu's large-block allocator,
+/// trading memory for start-up latency; `LowerMemoryUsage` keeps
+/// gpu-allocator's retained heap blocks small at some cost in latency.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum MemoryHintsMode {
     #[default]
@@ -211,15 +210,15 @@ pub struct CliArgs {
     pub no_ocr: bool,
 
     /// The shell's process id, so the overlay can hand its foreground
-    /// rights back with `AllowSetForegroundWindow` as each cycle ends —
+    /// rights back with `AllowSetForegroundWindow` as the cycle ends —
     /// the shell needs them to raise whatever it opens next, and cannot
     /// grant what it no longer holds (CAPTURE_PROTOCOL.md §2.5).
     ///
-    /// Process-level rather than a `CapturerSettings` knob: it is the same
-    /// for every cycle a process serves, and the shell that spawned us is
-    /// also the shell that outlives us — the capturer dies with it, so the
-    /// two can never disagree about who to hand rights to. Omitted in
-    /// standalone runs, where there is no shell and nothing to hand back.
+    /// Process-level rather than a `CapturerSettings` knob: the shell that
+    /// spawned us is also the shell that outlives us — the capturer dies
+    /// with it, so the two can never disagree about who to hand rights to
+    /// (see `SystemInterop::set_shell_pid`). Omitted in standalone runs,
+    /// where there is no shell and nothing to hand back.
     #[arg(long, value_name = "PID")]
     pub shell_pid: Option<u32>,
 }
@@ -244,7 +243,7 @@ impl CliArgs {
     }
 }
 
-pub(crate) fn parse_hex_color(s: &str) -> Result<[f32; 4], String> {
+fn parse_hex_color(s: &str) -> Result<[f32; 4], String> {
     let hex = s.trim_start_matches('#');
     if !matches!(hex.len(), 6 | 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(format!("'{s}' is not a #RRGGBB or #RRGGBBAA colour"));

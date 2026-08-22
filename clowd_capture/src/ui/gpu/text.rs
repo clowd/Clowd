@@ -28,7 +28,7 @@ pub struct TextStack {
     /// UNDER the panel/hint rects while the main text draw runs above them
     /// (`UiRenderer::draw`), and one glyphon renderer issues one draw.
     /// Lazily created on the first OCR reveal — this overlay is
-    /// startup-latency-sensitive (see the warmup marks around
+    /// startup-latency-sensitive (see the startup marks around
     /// `TextStack::new`) and non-OCR sessions never pay for it. Cheap when
     /// it does happen: the pipeline is shared via glyphon's `Cache`, so
     /// this is essentially a vertex-buffer allocation.

@@ -47,7 +47,7 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
-| `--memory-hints` | `lower-memory-usage` \| `max-performance` | `lower-memory-usage` | GPU allocator strategy, read once at device creation. `lower-memory-usage` keeps the allocator's retained heap blocks small — the right trade for a process that exits after one capture. |
+| `--memory-hints` | `max-performance` \| `lower-memory-usage` | `max-performance` | GPU allocator strategy, read once at device creation. `max-performance` is wgpu's large-block allocator, trading memory for start-up latency — the right trade for a process that exits after one capture. `lower-memory-usage` keeps the retained heap blocks small. The shell never passes this; it exists for standalone runs and experiments. |
 | `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as the cycle ends (§2.5). Process-level: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
 
 ### 1.2 Session-directory file protocol
@@ -337,8 +337,8 @@ Two things follow from that split, both improvements rather than costs:
 cancelling (BACK) is killing a process rather than polling a flag between
 inference batches, so a superseded request can no longer hold the engine while
 the next one queues behind it; and the ~18 MB of embedded models plus the
-static MNN left the overlay, which is respawned on display-change and GPU-loss
-and therefore pays for its own size in start-up latency.
+static MNN left the overlay, which is spawned fresh for every capture and
+therefore pays for its own size in start-up latency.
 
 It ships beside `clowd_capture_wgpu` on **every** platform, which is where
 `src/ocr/client.rs` looks for it (sibling of `current_exe()`; the

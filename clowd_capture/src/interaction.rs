@@ -114,9 +114,8 @@ pub enum OcrState {
     Idle,
     /// Recognition in flight; the scanning sweep plays over `region`.
     /// `req` is a per-cycle monotonic id — a late result whose id no longer
-    /// matches is discarded. The cycle_gen tag cannot stand in for it:
-    /// BACK leaves the same cycle alive, so a stale result would arrive
-    /// under a still-current generation.
+    /// matches is discarded. BACK leaves the same cycle alive, so nothing
+    /// coarser than this id can tell a stale result from a current one.
     Scanning {
         anchor: Instant,
         req: u64,

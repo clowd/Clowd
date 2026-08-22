@@ -1,15 +1,15 @@
-use std::sync::atomic::{AtomicBool, AtomicUsize};
+use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
-use crate::app::{App, CycleSetup};
+use crate::app::App;
 use crate::image_extract;
-use crate::render::protocol::{next_cycle_gen, BlurredDesktopImage, CycleParams, RenderMsg, WorkerInput};
+use crate::render::protocol::{BlurredDesktopImage, CycleParams, RenderMsg, WorkerInput};
 use crate::render::worker::{self, RenderWorkerParams, WorkerSetup};
 use crate::settings::{CapturerSettings, MemoryHintsMode};
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedCursor, CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
-use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
+use crate::telemetry::startup::StartupTimings;
 use clowd_rust_core::geometry::ScreenPointF;
 
 type WalkerLatch = Arc<Latch<Arc<WindowWalker>>>;
@@ -31,25 +31,14 @@ impl CaptureSession {
         let initial_mouse = SystemInterop::get_mouse_position(&monitors);
         let initial_mouse_f = ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
         let instance = Arc::new(create_wgpu_instance());
-        let warmup = Arc::new(WarmupTimings::new(t_start, monitors.len()));
-        warmup.mark_initialize();
-
-        // ── Warm state: workers spun up once, reused for every cycle ─
+        let timings = Arc::new(StartupTimings::new(t_start, monitors.len()));
+        timings.mark_initialize();
 
         let worker_failed = Arc::new(AtomicUsize::new(0));
-        let worker_setups = spawn_render_workers(&monitors, &instance, &warmup, memory_hints, &worker_failed);
+        let worker_setups = spawn_render_workers(&monitors, &instance, &timings, memory_hints, &worker_failed);
 
-        // ── Per-cycle state: screenshot + walker jobs, fresh latches ─
-
-        // Anchored here — where the per-cycle jobs are spawned — NOT at
-        // `start_cycle`, which one-shot mode only reaches after blocking on
-        // the screenshot below; anchoring there would put the screenshot
-        // and walker durations before the cycle's own t=0.
-        let timings = Arc::new(CaptureTimings::new(monitors.len()));
         let ready_count = Arc::new(AtomicUsize::new(0));
         let visible_latch = Arc::new(VisibleLatch::new());
-        let cycle_gen = next_cycle_gen();
-        let cancelled = Arc::new(AtomicBool::new(false));
         let captured_cursor = SystemInterop::capture_cursor(&monitors);
 
         let input_txs: Vec<_> = worker_setups
@@ -71,14 +60,11 @@ impl CaptureSession {
             initial_mouse: initial_mouse_f,
             ready_count: ready_count.clone(),
             visible_latch: visible_latch.clone(),
-            cycle_gen,
-            cancelled: cancelled.clone(),
             timings: timings.clone(),
         });
         let (walker_latch, peek_images_latch) = spawn_walker_job(
             monitors.clone(),
             render_msg_txs,
-            cycle_gen,
             settings.obscured_window_peek_enabled,
             settings.obscured_window_detection_threshold,
             timings.clone(),
@@ -87,23 +73,24 @@ impl CaptureSession {
         // Bounded: an unbounded wait turned any wedged CG capture call into a
         // process that idles forever with nothing on screen and no way to close it
         // from the shell. 30s is far beyond a slow multi-display capture.
-        screenshot_latch
+        let desktop_buffer = screenshot_latch
             .wait_timeout(Duration::from_secs(30))
             .ok_or_else(|| anyhow!("timed out waiting for the desktop screenshot"))?;
 
-        let mut app = App::new(warmup, instance, monitors, worker_setups, worker_failed);
-        app.start_cycle(CycleSetup {
+        let app = App::new(
             settings,
-            initial_mouse: initial_mouse_f,
-            screenshot_latch,
+            timings.clone(),
+            instance,
+            monitors,
+            initial_mouse_f,
+            worker_setups,
+            desktop_buffer,
             walker_latch,
             peek_images_latch,
             ready_count,
             visible_latch,
-            cycle_gen,
-            cancelled,
-            timings,
-        });
+            worker_failed,
+        );
 
         Ok(Self {
             app,
@@ -141,7 +128,7 @@ fn create_wgpu_instance() -> wgpu::Instance {
 fn spawn_render_workers(
     monitors: &[MonitorInfo],
     instance: &Arc<wgpu::Instance>,
-    warmup: &Arc<WarmupTimings>,
+    startup: &Arc<StartupTimings>,
     memory_hints: MemoryHintsMode,
     failed_count: &Arc<AtomicUsize>,
 ) -> Vec<WorkerSetup> {
@@ -153,7 +140,7 @@ fn spawn_render_workers(
                 monitor: m.clone(),
                 monitor_index: i,
                 instance: instance.clone(),
-                warmup: warmup.clone(),
+                startup: startup.clone(),
                 memory_hints,
                 failed_count: failed_count.clone(),
             })
@@ -161,10 +148,9 @@ fn spawn_render_workers(
         .collect()
 }
 
-/// Inputs for one cycle's screenshot job. Everything here is per-cycle
-/// (fresh `ready_count`/`visible_latch`, current accent/mouse) except the
-/// channel senders, which are the retained worker channels.
-pub(crate) struct ScreenshotJobParams {
+/// Inputs for the screenshot job, grouped into a struct to keep the
+/// spawner's argument list manageable.
+struct ScreenshotJobParams {
     pub monitors: Vec<MonitorInfo>,
     pub cursor: Option<CapturedCursor>,
     pub input_txs: Vec<mpsc::Sender<WorkerInput>>,
@@ -174,22 +160,15 @@ pub(crate) struct ScreenshotJobParams {
     pub initial_mouse: ScreenPointF,
     pub ready_count: Arc<AtomicUsize>,
     pub visible_latch: Arc<VisibleLatch>,
-    /// This cycle's generation — stamped on `BeginCycle`'s `CycleParams`
-    /// and on the `BlurredDesktop` message so workers can discard output
-    /// that outlived its cycle.
-    pub cycle_gen: u64,
-    /// Shared cancel flag for this cycle (see `CycleParams::cancelled`).
-    pub cancelled: Arc<AtomicBool>,
     /// This cycle's debug timings; the screenshot offsets are recorded here
     /// and the `Arc` rides to every worker on `CycleParams`.
-    pub timings: Arc<CaptureTimings>,
+    pub timings: Arc<StartupTimings>,
 }
 
 /// Capture the desktop bitmap on a background thread, then broadcast
 /// `BeginCycle` (snapshot + per-cycle params) to every render worker and,
-/// when peek is enabled, follow up with the blurred-desktop image. Callable
-/// once per capture cycle.
-pub(crate) fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc<CapturedDesktop>>> {
+/// when peek is enabled, follow up with the blurred-desktop image.
+fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc<CapturedDesktop>>> {
     let ScreenshotJobParams {
         monitors,
         cursor,
@@ -200,8 +179,6 @@ pub(crate) fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc
         initial_mouse,
         ready_count,
         visible_latch,
-        cycle_gen,
-        cancelled,
         timings,
     } = params;
 
@@ -211,11 +188,13 @@ pub(crate) fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc
         .name("screenshot".into())
         .spawn(move || {
             timings
+                .background
                 .screenshot_start
                 .set_once(timings.t_start.elapsed());
             let captured = Arc::new(SystemInterop::capture_desktop_bitmap(monitors, cursor));
             latch.set(captured.clone());
             timings
+                .background
                 .screenshot
                 .set_once(timings.t_start.elapsed());
             let cycle = Arc::new(CycleParams {
@@ -224,9 +203,6 @@ pub(crate) fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc
                 initial_mouse,
                 ready_count,
                 visible_latch,
-                cycle_gen,
-                cancelled,
-                timings: timings.clone(),
             });
             for tx in &input_txs {
                 let _ = tx.send(WorkerInput::BeginCycle(cycle.clone()));
@@ -240,10 +216,7 @@ pub(crate) fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc
                     height: h,
                 });
                 for tx in &render_msg_txs {
-                    let _ = tx.send(RenderMsg::BlurredDesktop {
-                        cycle_gen,
-                        image: blurred.clone(),
-                    });
+                    let _ = tx.send(RenderMsg::BlurredDesktop(blurred.clone()));
                 }
                 info!("screenshot: desktop blur complete");
             }
@@ -253,15 +226,13 @@ pub(crate) fn spawn_screenshot_job(params: ScreenshotJobParams) -> Arc<Latch<Arc
 }
 
 /// Snapshot the window z-order on a background thread and, when peek is
-/// enabled, capture obstructed-window images. Callable once per capture
-/// cycle.
-pub(crate) fn spawn_walker_job(
+/// enabled, capture obstructed-window images.
+fn spawn_walker_job(
     monitors: Vec<MonitorInfo>,
     render_msg_txs: Vec<mpsc::Sender<RenderMsg>>,
-    cycle_gen: u64,
     peek_enabled: bool,
     visibility_threshold: f32,
-    timings: Arc<CaptureTimings>,
+    timings: Arc<StartupTimings>,
 ) -> (WalkerLatch, PeekImagesLatch) {
     let walker_latch = Arc::new(Latch::new());
     let peek_images_latch = Arc::new(Latch::new());
@@ -273,12 +244,14 @@ pub(crate) fn spawn_walker_job(
         .name("walker".into())
         .spawn(move || {
             timings
+                .background
                 .walker_start
                 .set_once(timings.t_start.elapsed());
             let walker = SystemInterop::snapshot_windows(&monitors, visibility_threshold);
             let obstructed = if peek_enabled { walker.obstructed_windows() } else { Vec::new() };
             latch.set(Arc::new(walker));
             timings
+                .background
                 .walker
                 .set_once(timings.t_start.elapsed());
 
@@ -286,7 +259,7 @@ pub(crate) fn spawn_walker_job(
                 return;
             }
 
-            capture_peek_images(&obstructed, cycle_gen, &peek_txs, &peek_latch);
+            capture_peek_images(&obstructed, &peek_txs, &peek_latch);
         })
         .expect("spawn walker thread");
 
@@ -296,7 +269,6 @@ pub(crate) fn spawn_walker_job(
 #[cfg(windows)]
 fn capture_peek_images(
     obstructed: &[crate::system::ObstructedWindow],
-    cycle_gen: u64,
     peek_txs: &[std::sync::mpsc::Sender<RenderMsg>],
     peek_latch: &Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
 ) {
@@ -322,10 +294,7 @@ fn capture_peek_images(
                         obstruction_rects: ow.obstruction_rects.clone(),
                     });
                     for tx in peek_txs {
-                        let _ = tx.send(RenderMsg::PeekImage {
-                            cycle_gen,
-                            image: peek.clone(),
-                        });
+                        let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
                     }
                     Some(peek)
                 })
@@ -343,7 +312,6 @@ fn capture_peek_images(
 #[cfg(target_os = "macos")]
 fn capture_peek_images(
     obstructed: &[crate::system::ObstructedWindow],
-    cycle_gen: u64,
     peek_txs: &[std::sync::mpsc::Sender<RenderMsg>],
     peek_latch: &Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
 ) {
@@ -365,10 +333,7 @@ fn capture_peek_images(
                         obstruction_rects: ow.obstruction_rects.clone(),
                     });
                     for tx in peek_txs {
-                        let _ = tx.send(RenderMsg::PeekImage {
-                            cycle_gen,
-                            image: peek.clone(),
-                        });
+                        let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
                     }
                     Some(peek)
                 })

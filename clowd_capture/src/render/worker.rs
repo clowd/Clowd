@@ -5,14 +5,14 @@ use std::thread::{self, JoinHandle};
 use crate::render::protocol::{RenderMsg, WorkerInput};
 use crate::settings::MemoryHintsMode;
 use crate::system::MonitorInfo;
-use crate::telemetry::startup::WarmupTimings;
+use crate::telemetry::startup::StartupTimings;
 use clowd_rust_core::geometry::ScreenRect;
 
 pub struct RenderWorkerParams {
     pub monitor: MonitorInfo,
     pub monitor_index: usize,
     pub instance: Arc<wgpu::Instance>,
-    pub warmup: Arc<WarmupTimings>,
+    pub startup: Arc<StartupTimings>,
     /// GPU allocator strategy for this worker's device (`--memory-hints`).
     pub memory_hints: MemoryHintsMode,
     /// Incremented (once, via `ReadyGuard`) when this worker dies without a

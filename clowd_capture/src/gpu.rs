@@ -4,7 +4,7 @@ use std::time::Instant;
 use anyhow::Result;
 
 use crate::settings::MemoryHintsMode;
-use crate::telemetry::startup::WarmupWorkerTimings;
+use crate::telemetry::startup::WorkerTimings;
 
 pub mod desktop;
 pub mod device;
@@ -40,9 +40,8 @@ pub struct DeviceBundle {
 }
 
 /// GPU state used during the render loop. Built from `DeviceBundle` once
-/// the surface is available. Pipelines, bind-group layouts and the sampler
-/// persist across capture cycles; `snapshot` (the whole-desktop texture) is
-/// set at the start of each cycle and dropped at its end.
+/// the surface is available. `snapshot` (the whole-desktop texture) is
+/// filled from the screenshot job before the first frame is drawn.
 pub struct WindowGpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -65,7 +64,7 @@ pub fn stage_a_create_device(
     adapter_hint: Option<(u32, u32)>,
     memory_hints: MemoryHintsMode,
     t_start: Instant,
-    timings: &WarmupWorkerTimings,
+    timings: &WorkerTimings,
 ) -> Result<DeviceBundle> {
     timings
         .prep_start

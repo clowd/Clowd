@@ -4,14 +4,14 @@ use std::time::Instant;
 use anyhow::Result;
 
 use crate::settings::MemoryHintsMode;
-use crate::telemetry::startup::WarmupWorkerTimings;
+use crate::telemetry::startup::WorkerTimings;
 
 pub(crate) async fn request_adapter_device(
     instance: &Arc<wgpu::Instance>,
     adapter_hint: Option<(u32, u32)>,
     memory_hints: MemoryHintsMode,
     t_start: Instant,
-    timings: &WarmupWorkerTimings,
+    timings: &WorkerTimings,
 ) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue, String)> {
     #[cfg(windows)]
     let backends = wgpu::Backends::DX12;
@@ -84,11 +84,9 @@ pub(crate) async fn request_adapter_device(
             label: Some("clowd_capture_wgpu device"),
             required_features,
             required_limits,
-            // Performance (wgpu's large-block default) is what one-shot capture
-            // ran on before the warm host existed. MemoryUsage was introduced to
-            // keep an idle resident host's footprint down — a cost a process that
-            // exits after one capture never pays — so the default goes back to
-            // trading memory for latency. The setting stays for anyone who wants
+            // Performance (wgpu's large-block default) trades memory for
+            // start-up latency, which is the right trade for a process that
+            // exits after one capture. The setting stays for anyone who wants
             // the smaller blocks.
             memory_hints: match memory_hints {
                 MemoryHintsMode::LowerMemoryUsage => wgpu::MemoryHints::MemoryUsage,

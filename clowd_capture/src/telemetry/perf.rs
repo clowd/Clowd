@@ -225,17 +225,6 @@ impl PerfTracker {
         }
     }
 
-    /// Reset every per-cycle statistic — session aggregates, the sample
-    /// window and the stats cache — while keeping the ring buffer's
-    /// allocation. Called at `BeginCycle` so a warm worker's session
-    /// clock, frame counts and dropped-frame guard start fresh each
-    /// capture instead of accumulating (idle included) across cycles.
-    pub fn begin_session(&mut self) {
-        self.samples.clear();
-        self.session = SessionStats::new();
-        *self.cached_stats.borrow_mut() = None;
-    }
-
     pub fn record(&mut self, sample: PerfSample) {
         if self.samples.len() == self.window_size {
             self.samples.pop_front();

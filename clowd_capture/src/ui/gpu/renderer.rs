@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::telemetry::perf::PerfTracker;
-use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
+use crate::telemetry::startup::StartupTimings;
 use crate::ui::gpu::area::AreaRenderer;
 use crate::ui::gpu::debug::DebugRenderer;
 use crate::ui::gpu::hints::HintsRenderer;
@@ -50,15 +50,11 @@ pub struct UiRenderer {
     state: Option<Arc<UiSharedState>>,
     this_monitor: UiMonitor,
     /// Stable per-render-thread context for the debug panel — values that
-    /// never change after startup (monitor name, adapter, warm-up
+    /// never change after startup (monitor name, adapter, startup
     /// timings). `perf` is the only live source; see `render()`.
     monitor_name: String,
     adapter_name: String,
-    warmup: Arc<WarmupTimings>,
-    /// The active cycle's timings, installed by [`begin_cycle`](Self::begin_cycle)
-    /// (fresh `Arc` per cycle). The debug panel reads its capture section
-    /// from here; `None` only before this worker's first cycle.
-    capture: Option<Arc<CaptureTimings>>,
+    startup: Arc<StartupTimings>,
     /// Set by `prepare()`, consumed by `draw()`. `false` when there's
     /// nothing to render (no state yet), so `draw()` becomes a no-op.
     has_prepared: bool,
@@ -102,18 +98,18 @@ impl UiRenderer {
         monitor_index: usize,
         monitor_name: String,
         adapter_name: String,
-        warmup: Arc<WarmupTimings>,
+        startup: Arc<StartupTimings>,
     ) -> Self {
         let rect = RectPipeline::new(device, surface_format);
         let icon = IconPipeline::new(device, surface_format);
         let lift = LiftPipeline::new(device, surface_format);
-        warmup.workers[monitor_index]
+        startup.background.workers[monitor_index]
             .prep_ui_pipelines
-            .set_once(warmup.t_start.elapsed());
+            .set_once(startup.t_start.elapsed());
         let mut text = TextStack::new(device, queue, surface_format);
-        warmup.workers[monitor_index]
+        startup.background.workers[monitor_index]
             .prep_fonts
-            .set_once(warmup.t_start.elapsed());
+            .set_once(startup.t_start.elapsed());
         let area = AreaRenderer::new(&mut text);
         let hints = HintsRenderer::new(&mut text);
         let tips = TipsRenderer::new(&mut text);
@@ -135,8 +131,7 @@ impl UiRenderer {
             this_monitor,
             monitor_name,
             adapter_name,
-            warmup,
-            capture: None,
+            startup,
             has_prepared: false,
             any_text: false,
             any_bubble_text: false,
@@ -152,62 +147,16 @@ impl UiRenderer {
         self.state = Some(state);
     }
 
-    /// Reset per-cycle leftovers at `BeginCycle`, before frame 0 is drawn.
-    /// `state` is warm (it survives the worker's parked gap between
-    /// cycles); without this, frame 0 of the next cycle composites the
-    /// previous cycle's UI over the new screenshot — the fresh
-    /// `UiSharedState` is only broadcast after the show gate. With no
+    /// Reset leftovers at `BeginCycle`, before frame 0 is drawn. With no
     /// state, `prepare` stages nothing and frame 0 is the clean initial
-    /// overlay. Installs the cycle's fresh timings and re-anchors the
-    /// animation clock — an `f32` seconds value that has been running
-    /// since warm-up loses enough precision after hours of idling to
-    /// visibly quantize the border-trail animation.
-    pub fn begin_cycle(&mut self, timings: Arc<CaptureTimings>) {
+    /// overlay. Also re-anchors the animation clock.
+    pub fn begin_cycle(&mut self) {
         self.state = None;
         self.last_frame_time = None;
-        // The bubble layouts are the previous cycle's data (shaped glyph
-        // buffers keyed to a dead outcome) — clear on both sides of the
-        // parked gap, same bracket discipline as `end_cycle`.
+        // The shaped bubble glyph buffers belong to a dead outcome.
         self.ocr_bubbles.clear();
         self.bubble_static_prepared = false;
-        self.capture = Some(timings);
         self.start_time = Instant::now();
-    }
-
-    /// Release everything this renderer holds that belongs to the cycle
-    /// just finished, before the worker parks.
-    ///
-    /// Called from every `render.rs` path that returns a worker to the
-    /// parked state (see `render::park_worker`). `UiRenderer` is built once
-    /// per worker, OUTSIDE the cycle loop, so anything it caches outlives
-    /// the cycle. (The lift pass used to hold
-    /// the big-ticket item here — a bind group pinning a TextureView of the
-    /// whole-virtual-desktop snapshot, ~33 MB per 4K monitor. It samples no
-    /// texture any more, so the remaining releases are RAM-hygiene, not
-    /// VRAM-critical.)
-    ///
-    /// Audited and deliberately NOT dropped here: the icon pipeline's bind
-    /// group (its atlas texture is owned by `PanelRenderer` and stays warm
-    /// across cycles by design, so dropping the bind group frees nothing),
-    /// the glyphon font atlas (`trim`ed per frame, not per-cycle data), and
-    /// the rect/icon/lift instance buffers (tens of KB, grow-never-shrink
-    /// on purpose).
-    pub fn end_cycle(&mut self) {
-        // Shaped bubble buffers can hold a page of recognized text; like
-        // `state` below, release them at park rather than letting them sit
-        // out the idle gap.
-        self.ocr_bubbles.clear();
-        self.bubble_static_prepared = false;
-        self.bubble_reuse_active = false;
-        // Not GPU memory, but it is this cycle's data and it would sit in
-        // RAM for the whole idle gap otherwise — `OcrOutcome::full_text`
-        // alone can be a page of recognized text. `begin_cycle` clears it
-        // too; doing it here just releases it hours earlier.
-        self.state = None;
-        // Nothing staged in this frame's buffers may be drawn again: the
-        // next `draw` must be preceded by a fresh `prepare` (which sets
-        // this back).
-        self.has_prepared = false;
     }
 
     /// Stage all per-frame work: component visibility decisions,
@@ -284,8 +233,7 @@ impl UiRenderer {
             &self.monitor_name,
             &self.adapter_name,
             perf,
-            &self.warmup,
-            self.capture.as_deref(),
+            &self.startup,
             &mut rect_instances,
         );
 

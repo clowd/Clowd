@@ -7,7 +7,7 @@ edition = "2021"
 # and spawns this binary per request. Split out because an abort or segfault in the static
 # C++ MNN underneath would otherwise kill the overlay mid-capture; here it is an exit code.
 # It also keeps ~18 MB of models out of the capturer (whose size is startup latency, as it
-# is respawned on display-change and GPU-loss) and makes cancellation a process kill.
+# is spawned fresh for every capture) and makes cancellation a process kill.
 
 [dependencies]
 clowd_rust_core.workspace = true
