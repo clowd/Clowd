@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Clowd.UI.Helpers;
 using Clowd.VideoSDK.Editing;
 
 namespace Clowd.UI.VideoEditor
@@ -36,6 +37,9 @@ namespace Clowd.UI.VideoEditor
             CancelButton.Click += (_, _) => Close(null);
 
             Opened += (_, _) => WidthBox.Focus();
+
+            // Cmd+W is the macOS close gesture — cancels, same as the Cancel button (issue #73)
+            MacWindowShortcuts.AddCloseShortcut(this, () => Close(null));
         }
 
         /// <summary>Prompts for a size, starting from the one passed in. Null means the user
