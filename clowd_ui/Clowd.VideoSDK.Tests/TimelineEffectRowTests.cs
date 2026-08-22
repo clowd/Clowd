@@ -103,8 +103,9 @@ namespace Clowd.VideoSDK.Tests
                 TimelineRowKind.Video, TimelineRowKind.Audio,
             }, rows.Select(r => r.Kind).ToArray());
             Assert.Equal(new[] { 26d, 56d, 26d, 56d, 36d }, rows.Select(r => r.Height).ToArray());
-            Assert.Equal(new[] { 0d, 26d, 82d, 108d, 164d }, rows.Select(r => r.Top).ToArray());
-            Assert.Equal(200d, TimelineRowLayout.TotalHeight(rows));
+            // a BlockGap (8) after the speed row and another before the audio row
+            Assert.Equal(new[] { 0d, 34d, 90d, 116d, 180d }, rows.Select(r => r.Top).ToArray());
+            Assert.Equal(216d, TimelineRowLayout.TotalHeight(rows));
         }
 
         /// <summary>The session keeps the speed row's Order above everything, but the pin is a

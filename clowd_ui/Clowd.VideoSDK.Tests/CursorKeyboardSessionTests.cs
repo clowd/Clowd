@@ -516,25 +516,64 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(json, session.Project.ToJson());
         }
 
+        /// <summary>The screen row never rises above its overlay rows — not because the move is
+        /// refused, but because they come along: the three move as one unit, and a raise of the
+        /// screen row steps the whole unit over the row above it.</summary>
         [Fact]
-        public void The_screen_row_never_rises_above_its_overlay_rows()
+        public void The_screen_row_moves_with_its_overlay_rows()
         {
             var session = NewSession(out var screenTrack, out var webcamTrack, out _);
             var cursor = session.AddCursorTrack();
-            var json = session.Project.ToJson();
 
-            // screen=0, cursor=1, webcam=2: every raise of the screen row would cross the
-            // cursor row and bury it beneath the opaque screen frame.
+            // screen=0, cursor=1, webcam=2: raising the screen row lifts screen+cursor over the
+            // webcam — webcam=0, screen=1, cursor=2 — never the screen over its own cursor row.
+            Assert.True(session.CanMoveTrackLayer(screenTrack.Id, towardsFront: true));
+            Assert.True(session.MoveTrackLayer(screenTrack.Id, towardsFront: true));
+            Assert.Equal(0, OrderOf(session, webcamTrack.Id));
+            Assert.Equal(1, OrderOf(session, screenTrack.Id));
+            Assert.Equal(2, TrackOf(session, cursor).Order);
+            Assert.Empty(session.Project.Validate());
+
+            // …and the unit is now the frontmost thing: nothing left to rise over
             Assert.False(session.CanMoveTrackLayer(screenTrack.Id, towardsFront: true));
             Assert.False(session.MoveTrackLayer(screenTrack.Id, towardsFront: true));
-            Assert.False(session.MoveTrackToIndex(screenTrack.Id, 1));
-            Assert.False(session.MoveTrackToIndex(screenTrack.Id, 2));
-            Assert.Equal(json, session.Project.ToJson());
 
-            // with the webcam stepped down between them (screen=0, webcam=1, cursor=2) the
-            // screen may still step over the webcam — the pin binds it only to its overlays.
+            // back down together
+            Assert.True(session.CanMoveTrackLayer(screenTrack.Id, towardsFront: false));
+            Assert.True(session.MoveTrackLayer(screenTrack.Id, towardsFront: false));
+            Assert.Equal(0, OrderOf(session, screenTrack.Id));
+            Assert.Equal(1, TrackOf(session, cursor).Order);
+            Assert.Equal(2, OrderOf(session, webcamTrack.Id));
+            Assert.False(session.CanMoveTrackLayer(screenTrack.Id, towardsFront: false));
+
+            // MoveTrackToIndex counts among the rows outside the unit: one other row, so the
+            // unit has exactly two places — 0 (behind the webcam) and 1 (in front of it).
+            var json = session.Project.ToJson();
+            Assert.False(session.MoveTrackToIndex(screenTrack.Id, 0)); // already there
+            Assert.False(session.MoveTrackToIndex(screenTrack.Id, 2)); // past the last place
+            Assert.Equal(json, session.Project.ToJson());
+            Assert.True(session.MoveTrackToIndex(screenTrack.Id, 1));
+            Assert.Equal(0, OrderOf(session, webcamTrack.Id));
+            Assert.Equal(1, OrderOf(session, screenTrack.Id));
+            Assert.Equal(2, TrackOf(session, cursor).Order);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        /// <summary>A row another edit left between the screen row and its overlays (the session
+        /// permits the webcam to step down into the run) is stepped out again when the unit
+        /// moves: the unit is lifted whole, so the pair comes back together.</summary>
+        [Fact]
+        public void Moving_the_screen_row_regroups_a_run_another_row_stepped_into()
+        {
+            var session = NewSession(out var screenTrack, out var webcamTrack, out _);
+            var cursor = session.AddCursorTrack();
+
+            // screen=0, webcam=1, cursor=2
             Assert.True(session.MoveTrackLayer(webcamTrack.Id, towardsFront: false));
-            Assert.True(session.CanMoveTrackLayer(screenTrack.Id, towardsFront: true));
+            Assert.Equal(1, OrderOf(session, webcamTrack.Id));
+
+            // the unit [screen, cursor] lifts out (webcam is the only row outside it) and goes
+            // in front: webcam=0, screen=1, cursor=2
             Assert.True(session.MoveTrackLayer(screenTrack.Id, towardsFront: true));
             Assert.Equal(0, OrderOf(session, webcamTrack.Id));
             Assert.Equal(1, OrderOf(session, screenTrack.Id));

@@ -61,7 +61,47 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public IBrush RowBackgroundAlt { get; private init; }
 
+        /// <summary>The rule between two rows of one block (and between two combined tracks):
+        /// the bare surface colour, one pixel of the same ground the block gutters show — a dark
+        /// seam rather than a light line, so rows read as tiles laid on the surface. (The theme
+        /// border, a few levels off the row fills, all but vanished.)</summary>
         public Pen RowSeparatorPen { get; private init; }
+
+        /// <summary>The gutter between the speed, video and audio blocks
+        /// (<see cref="TimelineRowLayout.BlockGap"/>) — the bare surface, in both columns, so the
+        /// blocks read as separate sections.</summary>
+        public IBrush BlockGapBrush { get; private init; }
+
+        /// <summary>The faint criss-cross drawn over the gutter (see <see cref="DrawBlockGap"/>):
+        /// a texture saying "not a row, nothing lands here", kept well under the row chrome so it
+        /// never competes with it.</summary>
+        public Pen BlockGapHatchPen { get; private init; }
+
+        /// <summary>Pitch of the gutter's hatch lines, along the strip.</summary>
+        private const double BlockGapHatchPitch = 8;
+
+        /// <summary>Paints a block gutter: the bare surface with the faint criss-cross over it.
+        /// Shared by the surface and the header's spacer so the strip runs across both columns as
+        /// one texture; the hatch is clipped to the rect and its phase is taken from the rect's
+        /// own origin, so the two columns line up only if they hand in the same y — which they
+        /// do, both being laid out from the same <see cref="TimelineRowLayout"/> rows.</summary>
+        public void DrawBlockGap(DrawingContext context, Rect rect)
+        {
+            context.FillRectangle(BlockGapBrush, rect);
+            if (rect.Width <= 0 || rect.Height <= 0)
+                return;
+
+            using (context.PushClip(rect))
+            {
+                // 45° diagonals both ways: each line spans the strip's height horizontally too
+                var h = rect.Height;
+                for (var x = rect.Left - h; x < rect.Right; x += BlockGapHatchPitch)
+                {
+                    context.DrawLine(BlockGapHatchPen, new Point(x, rect.Bottom), new Point(x + h, rect.Top));
+                    context.DrawLine(BlockGapHatchPen, new Point(x, rect.Top), new Point(x + h, rect.Bottom));
+                }
+            }
+        }
 
         public IBrush RulerBackground { get; private init; }
 
@@ -81,6 +121,20 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// recording" mark stands out from the neutral button cluster around it (and from the
         /// accent, which selection owns).</summary>
         public IBrush LinkBadgeBrush { get; private init; }
+
+        /// <summary>The star cluster marking an item whose AI-backed features are on — the accent,
+        /// so it carries the same blue as the window's Render button. Only legible because it is
+        /// drawn on <see cref="AiBadgeChipFill"/>: the video rows' own fill IS the accent.</summary>
+        public IBrush AiBadgeBrush { get; private init; }
+
+        /// <summary>The pale chip the AI star sits on. Blue-on-blue is invisible over a recording
+        /// row, so the badge carries its own ground rather than changing colour per row kind.</summary>
+        public IBrush AiBadgeChipFill { get; private init; }
+
+        /// <summary>The chip's drop shadow — what separates a pale chip from a pale frame of the
+        /// filmstrip under it. Kept tight (1px down, 3px blur) so it reads as lift rather than as
+        /// a smudge at badge size.</summary>
+        public BoxShadows AiBadgeShadow { get; private init; }
 
         /// <summary>Muted chrome text: the track headers' names. (The corner buttons use
         /// <see cref="RulerLabelBrush"/> — at this weight they read as disabled.)</summary>
@@ -218,6 +272,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             var text3 = GetThemeColor(variant, "SemiColorText3", dark ? Color.FromRgb(140, 140, 140) : Color.FromRgb(130, 133, 138));
             var border = GetThemeColor(variant, "SemiColorBorder", dark ? Color.FromRgb(60, 60, 64) : Color.FromRgb(200, 202, 206));
 
+            // the gutter's hatch: a whisper of the light text over the bare surface
+            var hatch = dark ? Color.FromArgb(14, 255, 255, 255) : Color.FromArgb(11, 0, 0, 0);
+
             // Per-kind hues. Audio/text/image/speed/zoom are fixed rather than accent-derived:
             // they have to stay apart from the accent (which the recording rows use) whatever the
             // accent is.
@@ -248,7 +305,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 SurfaceBackground = new SolidColorBrush(surfaceColor),
                 RowBackground = new SolidColorBrush(fill1),
                 RowBackgroundAlt = new SolidColorBrush(fill0),
-                RowSeparatorPen = new Pen(new SolidColorBrush(border, 0.7), 1),
+                RowSeparatorPen = new Pen(new SolidColorBrush(surfaceColor), 1),
+                BlockGapBrush = new SolidColorBrush(surfaceColor),
+                BlockGapHatchPen = new Pen(new SolidColorBrush(hatch), 1),
                 RulerBackground = new SolidColorBrush(fill0),
 
                 RulerTickPen = new Pen(new SolidColorBrush(text1), 1.5),
@@ -256,6 +315,14 @@ namespace Clowd.UI.VideoEditor.Timeline
                 RulerLabelBrush = new SolidColorBrush(text1),
                 LabelBrush = new SolidColorBrush(text3),
                 LinkBadgeBrush = new SolidColorBrush(dark ? Color.FromRgb(255, 159, 67) : Color.FromRgb(224, 113, 22)),
+                AiBadgeBrush = new SolidColorBrush(accent),
+                AiBadgeChipFill = new SolidColorBrush(dark ? Color.FromRgb(238, 240, 245) : Colors.White, 0.92),
+                AiBadgeShadow = new BoxShadows(new BoxShadow
+                {
+                    OffsetY = 1,
+                    Blur = 3,
+                    Color = Color.FromArgb(dark ? (byte)150 : (byte)110, 0, 0, 0),
+                }),
                 GripBrush = new SolidColorBrush(dark ? Color.FromRgb(215, 215, 218) : Color.FromRgb(70, 72, 78)),
                 GripHoverBrush = new SolidColorBrush(dark ? Colors.White : Color.FromRgb(20, 22, 26)),
 
