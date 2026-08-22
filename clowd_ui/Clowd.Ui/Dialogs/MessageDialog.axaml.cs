@@ -66,6 +66,9 @@ namespace Clowd.UI.Dialogs
             }
 
             Opened += (_, _) => TrueButton.Focus();
+
+            // Cmd+W is the macOS close gesture — same "not true" resolution as Escape (issue #73)
+            MacWindowShortcuts.AddCloseShortcut(this, () => CloseWithResult(false));
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
