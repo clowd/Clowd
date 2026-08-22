@@ -91,18 +91,14 @@ impl WarmupWorkerTimings {
     }
 }
 
-/// One-time warm-up timings, anchored at process start. Recorded once —
-/// in persistent mode this happens minutes or hours before the first
-/// capture, so nothing per-cycle may anchor here (see [`CaptureTimings`]).
+/// One-time warm-up timings, anchored at process start. Recorded once, so
+/// nothing per-cycle may anchor here (see [`CaptureTimings`]).
 pub struct WarmupTimings {
     pub t_start: Instant,
     pub t_initialize: AtomicDuration,
     pub workers: Vec<WarmupWorkerTimings>,
     pub t_window_create_start: AtomicDuration,
     pub t_window_create: AtomicDuration,
-    /// When warm-up completed (persistent mode: the `ready` event; one-shot
-    /// mode: never set — window creation is the last warm-up phase there).
-    pub t_ready: AtomicDuration,
 }
 
 impl WarmupTimings {
@@ -117,7 +113,6 @@ impl WarmupTimings {
             workers,
             t_window_create_start: AtomicDuration::new(),
             t_window_create: AtomicDuration::new(),
-            t_ready: AtomicDuration::new(),
         }
     }
 
@@ -136,10 +131,6 @@ impl WarmupTimings {
             .set_once(self.t_start.elapsed());
     }
 
-    pub fn mark_ready(&self) {
-        self.t_ready.set_once(self.t_start.elapsed());
-    }
-
     /// Total warm-up time: the latest recorded phase.
     pub fn total(&self) -> Duration {
         let mut total = Duration::ZERO;
@@ -147,7 +138,6 @@ impl WarmupTimings {
             self.t_initialize.get(),
             self.t_window_create_start.get(),
             self.t_window_create.get(),
-            self.t_ready.get(),
         ]
         .into_iter()
         .flatten()
@@ -206,10 +196,8 @@ impl CaptureWorkerTimings {
     }
 }
 
-/// Timings for a single capture cycle, anchored at the moment the cycle's
-/// per-capture jobs are spawned — the `show` command in persistent mode,
-/// just before the screenshot job in one-shot mode. Allocated fresh per
-/// cycle (which is what keeps `set_once` correct across cycles) and
+/// Timings for a single capture cycle, anchored where its per-capture jobs
+/// are spawned, just before the screenshot job. Allocated per cycle and
 /// distributed to the workers via `CycleParams`.
 pub struct CaptureTimings {
     pub t_start: Instant,
