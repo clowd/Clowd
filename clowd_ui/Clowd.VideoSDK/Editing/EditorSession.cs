@@ -1448,6 +1448,12 @@ namespace Clowd.VideoSDK.Editing
         /// when there is more than one, so the file's rows move as one; video items default to
         /// half canvas width, centered. One undo entry restores all of it. Returns the live items
         /// (empty when the probe had no usable streams or the import was rolled back).
+        ///
+        /// The <b>first</b> file into a project that has never held any (a blank project, started
+        /// from the Video button rather than opened onto a recording) defines it instead: the
+        /// output canvas, frame rate and sample rate are taken from the media, and its video lands
+        /// at 1:1 rather than as a half-canvas overlay. An untouched blank canvas is a placeholder,
+        /// not a choice — and it is still resizable afterwards like any other.
         /// </summary>
         public IReadOnlyList<Item> ImportMedia(string path, MediaProbeResult probe, long startTicks,
             object origin = null)
@@ -1463,6 +1469,10 @@ namespace Clowd.VideoSDK.Editing
             var created = new List<Item>();
             var committed = Mutate("Import Media", ProjectChangeKind.Structural, null, origin, p =>
             {
+                // nothing has ever been in this project: this file defines its output (see the
+                // remarks). Read before the source below joins the list.
+                var defines = p.Sources.Count == 0;
+
                 var source = new Source { Id = Guid.NewGuid(), Path = path, Streams = streams };
                 p.Sources.Add(source);
 
@@ -1483,8 +1493,12 @@ namespace Clowd.VideoSDK.Editing
                     // successive video streams stack upward, the whole file above what was there.
                     var track = InsertVideoTrackOnTop(p,
                         videoStreams.Count == 1 ? baseName : $"{baseName} {i + 1}");
+
+                    // the file that defines the project fills the canvas it just set; anything
+                    // imported over existing material is an overlay.
+                    var fills = defines && i == 0 && AdoptOutput(p, videoStreams[i], probe);
                     created.Add(NewImportItem(track, source, videoStreams[i], probe, startTicks,
-                        linkGroup, new Transform { Scale = 0.5 }));
+                        linkGroup, fills ? null : new Transform { Scale = 0.5 }));
                 }
 
                 for (var i = 0; i < audioStreams.Count; i++)
@@ -2039,6 +2053,31 @@ namespace Clowd.VideoSDK.Editing
                     DurationTicks = a.DurationTicks,
                 });
             return streams;
+        }
+
+        /// <summary>Points the output canvas, frame rate and sample rate at the media that is
+        /// defining the project (see <see cref="ImportMedia"/>). False — leaving the canvas alone —
+        /// when the stream declares no usable size, which is the one case where the placeholder is
+        /// still the better answer.</summary>
+        private static bool AdoptOutput(Project project, SourceStream video, MediaProbeResult probe)
+        {
+            if (video.Width <= 0 || video.Height <= 0)
+                return false;
+
+            project.Output.WidthPx = ClampOutputDimension(video.Width);
+            project.Output.HeightPx = ClampOutputDimension(video.Height);
+
+            if (video.AvgFrameRateNum > 0 && video.AvgFrameRateDen > 0)
+            {
+                project.Output.FpsNum = video.AvgFrameRateNum;
+                project.Output.FpsDen = video.AvgFrameRateDen;
+            }
+
+            var rate = probe.AudioStreams?.Count > 0 ? probe.AudioStreams.Max(a => a.SampleRate) : 0;
+            if (rate > 0)
+                project.Output.SampleRate = rate;
+
+            return true;
         }
 
         private static Item NewImportItem(Track track, Source source, SourceStream stream,
