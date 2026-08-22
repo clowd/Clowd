@@ -25,11 +25,9 @@
 //! * **stdout** — nothing. MNN prints device capabilities to stdout on
 //!   session creation, so stdout is unusable as a protocol channel here;
 //!   that is why the response is a file rather than the NDJSON line the
-//!   overlay's own host protocol uses. The capturer spawns the child with
-//!   stdout redirected to null for the same reason — its *own* stdout is the
-//!   host protocol channel `Clowd.Ui` parses (see
-//!   `clowd_capture/src/host/protocol.rs`), and inheriting it would let MNN's
-//!   chatter corrupt that.
+//!   the scrolling-capture driver uses. The capturer spawns the child with
+//!   stdout redirected to null so MNN's device-capability chatter cannot be
+//!   mistaken for output of its own.
 //!
 //! The two binaries always ship from the same build, so this format carries
 //! no version negotiation.

@@ -5,25 +5,19 @@ use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, ControlFlow};
+use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 #[cfg(windows)]
 use winit::platform::windows::WindowAttributesExtWindows;
 use winit::window::{CursorIcon, Window, WindowId};
 
-use crate::capture::session::{spawn_screenshot_job, spawn_walker_job, ScreenshotJobParams};
 use crate::capture_output::{copy_text_to_clipboard, copy_to_clipboard_with_peek, ActionResult};
-use crate::host::{
-    self,
-    protocol::{HostCommand, HostEvent, ShowParams},
-    AppEvent,
-};
 use crate::image_extract::{extract_selection_bgra, extract_selection_bgra_with_peek};
 use crate::interaction::{
     InteractionController, InteractionEffects, InteractionState, MouseVelocityTracker, OcrNotice, OcrNoticeKind, OcrState,
 };
 use crate::ocr::{self, OcrError, OcrOutcome, OcrRequest};
-use crate::render::protocol::{next_cycle_gen, PeekCommand, RenderMsg, WorkerInput};
+use crate::render::protocol::{PeekCommand, RenderMsg, WorkerInput};
 use crate::render::window::{set_hardware_cursor_visible, WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
@@ -32,7 +26,7 @@ use crate::session_output::{
 };
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
-use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker, EXIT_DISPLAY_CHANGED, EXIT_GPU_LOST};
+use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
 use crate::ui::command::Command;
 use crate::ui::components::panel;
@@ -45,11 +39,6 @@ use clowd_rust_core::geometry::{
 const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
 const MOMENTUM_GAP: Duration = Duration::from_millis(50);
-/// How long to coalesce OS display-change notifications before restarting
-/// the persistent host: one topology change fans out into several messages
-/// (Windows sends one per top-level window; macOS one callback per
-/// display), and restarting on the first would race the rest.
-const DISPLAY_CHANGE_DEBOUNCE: Duration = Duration::from_millis(500);
 
 /// State that survives across capture cycles ("warm" state): the wgpu
 /// instance, monitors, windows and the render-worker channels. Everything
@@ -84,27 +73,7 @@ pub struct App {
     /// window-creation failures here), so the show gate
     /// (`ready + failed >= expected`) can never deadlock on a dead worker.
     worker_failed: Arc<AtomicUsize>,
-    /// Whether the process should keep running after a cycle finishes.
-    /// False in one-shot mode; `--persistent` host mode flips it (via
-    /// [`enable_persistent`](Self::enable_persistent)) so `finish_cycle`
-    /// parks instead of exiting.
-    persistent: bool,
-    /// Persistent-host bookkeeping; `Some` iff `persistent`.
-    host: Option<HostState>,
     cycle: Option<CaptureCycle>,
-}
-
-/// Warm-state bookkeeping that only exists in `--persistent` mode.
-struct HostState {
-    /// Incremented by each render worker when it first parks (see
-    /// `render_worker_main`); `ready` is emitted once `parked + failed`
-    /// covers every worker.
-    parked_count: Arc<AtomicUsize>,
-    ready_emitted: bool,
-    /// Debounce deadline armed by [`AppEvent::DisplayChange`]; when it
-    /// expires (`check_display_change`) the host emits `display_changed`
-    /// and exits with `EXIT_DISPLAY_CHANGED` for the shell to respawn.
-    display_change_deadline: Option<Instant>,
 }
 
 struct WorkerChannels {
@@ -128,18 +97,13 @@ pub struct CaptureCycle {
     /// receives this cycle's `BeginCycle` after the cycle already ended
     /// discards it instead of wedging on the dead `visible_latch`.
     cancelled: Arc<AtomicBool>,
-    /// This cycle's t=0 (`timings.t_start`): when its per-capture jobs were
-    /// spawned. The persistent host reports the show-to-visible time as
-    /// `shown.elapsed_ms` from here.
-    started: Instant,
     /// This cycle's debug timings — allocated fresh per cycle (which is
     /// what keeps the `set_once` fields correct across cycles) and shared
     /// with the screenshot/walker jobs and every render worker.
     timings: Arc<CaptureTimings>,
     desktop_buffer: Option<Arc<CapturedDesktop>>,
-    /// This cycle's screenshot job result. One-shot mode resolves it
-    /// before `start_cycle`; the persistent host picks it up
-    /// non-blockingly in `about_to_wait`, bounded by
+    /// This cycle's screenshot job result, resolved before `start_cycle`.
+    /// `try_pick_up_screenshot` is the backstop, bounded by
     /// `screenshot_deadline`.
     screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
     /// Non-blocking replacement for one-shot mode's 30s screenshot wait:
@@ -202,9 +166,9 @@ struct PendingShow {
     visible_latch: Arc<VisibleLatch>,
 }
 
-/// How a capture cycle ended. Logged always; the persistent host also
-/// reports it to the parent process as the `finished` event's `action`
-/// (serialized snake_case: `select_color` etc.).
+/// How a capture cycle ended. Logged, and written into the session
+/// directory as the action the shell dispatches on (serialized snake_case:
+/// `select_color` etc.).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CycleAction {
@@ -229,8 +193,7 @@ pub enum CycleAction {
 pub struct CycleSetup {
     pub settings: Arc<CapturerSettings>,
     pub initial_mouse: ScreenPointF,
-    /// The in-flight screenshot job. Already resolved in one-shot mode;
-    /// still pending when the persistent host arms a cycle.
+    /// The screenshot job, already resolved by the time a cycle is armed.
     pub screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
     pub walker_latch: Arc<Latch<Arc<WindowWalker>>>,
     pub peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
@@ -534,19 +497,6 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
     }
 }
 
-/// Whether the warm-up monitor topology still matches a fresh enumeration.
-/// Order-insensitive (enumeration order is not contractual): the counts
-/// must agree and every warm monitor needs an exact counterpart in bounds,
-/// scale, primary flag and driving adapter.
-fn topology_matches(warm: &[MonitorInfo], fresh: &[MonitorInfo]) -> bool {
-    warm.len() == fresh.len()
-        && warm.iter().all(|w| {
-            fresh.iter().any(|f| {
-                f.bounds == w.bounds && f.scale_factor == w.scale_factor && f.is_primary == w.is_primary && f.adapter_id == w.adapter_id
-            })
-        })
-}
-
 impl App {
     pub fn new(
         warmup: Arc<WarmupTimings>,
@@ -599,23 +549,8 @@ impl App {
             instance,
             worker_setups: Some(worker_setups),
             worker_failed,
-            persistent: false,
-            host: None,
             cycle: None,
         }
-    }
-
-    /// Switch this app into persistent-host mode: cycles park instead of
-    /// exiting, and protocol events are emitted on stdout. `parked_count`
-    /// is the counter the render workers bump when they first park, used
-    /// to detect warm-up completion (`ready`).
-    pub fn enable_persistent(&mut self, parked_count: Arc<AtomicUsize>) {
-        self.persistent = true;
-        self.host = Some(HostState {
-            parked_count,
-            ready_emitted: false,
-            display_change_deadline: None,
-        });
     }
 
     /// Window creation for monitor `i` failed, so its worker will never
@@ -661,8 +596,8 @@ impl App {
         // global, and a warm (parked) process must not blank the user's
         // cursor.
         set_hardware_cursor_visible(false);
-        // Resolved already in one-shot mode; usually still pending in
-        // persistent mode (picked up in about_to_wait).
+        // Always resolved by now: `CaptureSession::new` blocks on the
+        // screenshot job before arming the cycle.
         let desktop_buffer = setup.screenshot_latch.try_get();
         for h in self.windows.values() {
             h.reassert_geometry();
@@ -690,7 +625,6 @@ impl App {
             settings: setup.settings,
             cycle_gen: setup.cycle_gen,
             cancelled: setup.cancelled,
-            started: setup.timings.t_start,
             timings: setup.timings,
             desktop_buffer,
             screenshot_latch: setup.screenshot_latch,
@@ -748,16 +682,14 @@ impl App {
     }
 
     /// Tear down the current capture cycle: hide every window, restore the
-    /// hardware cursor, return the workers to their parked state and drop
-    /// the per-cycle state. Exits the event loop unless `persistent`,
-    /// where it instead reports `finished` and parks the event loop.
+    /// hardware cursor, drop the per-cycle state and exit the event loop —
+    /// the process serves exactly one capture.
     fn finish_cycle(&mut self, event_loop: &ActiveEventLoop, action: CycleAction) {
         log::info!("capture cycle finished: {:?}", action);
-        // Every exit path the capturer has — a shutdown command, the parent
-        // dying, a display-topology respawn — comes through here with a live
-        // cycle, so this is also the last hide before the process itself
-        // goes away. Hence the foreground handback rather than a bare hide,
-        // even though the action dispatches have usually done it already.
+        // Every exit path that has a live cycle comes through here, so this is
+        // also the last hide before the process itself goes away. Hence the
+        // foreground handback rather than a bare hide, even though the action
+        // dispatches have usually done it already.
         hide_overlay_for_action(&self.windows);
         // Idempotent (guarded by a static in window.rs) even when cursors
         // were already restored via update_cursor_visibility.
@@ -792,23 +724,13 @@ impl App {
         for h in self.windows.values() {
             h.set_background_image(None);
         }
-        if self.persistent {
-            host::emit(&HostEvent::Finished {
-                action,
-            });
-            // Nothing animates between cycles — sleep until the next
-            // command (or other event) arrives.
-            event_loop.set_control_flow(ControlFlow::Wait);
-        } else {
-            event_loop.exit();
-        }
+        event_loop.exit();
     }
 
-    /// Non-blocking pickup of this cycle's desktop screenshot, with the
-    /// 30s bound one-shot mode applies before `start_cycle`. Persistent
-    /// mode arms the cycle before the screenshot exists, so it lands here:
-    /// no-op once picked up (and always in one-shot mode, where the latch
-    /// resolved before the cycle started).
+    /// Non-blocking pickup of this cycle's desktop screenshot, bounded by
+    /// `screenshot_deadline`. A no-op in practice — the latch is resolved
+    /// before `start_cycle` arms the cycle — but the deadline stays as the
+    /// backstop for a screenshot job that never lands.
     fn try_pick_up_screenshot(&mut self, event_loop: &ActiveEventLoop) {
         let Some(cycle) = self.cycle.as_mut() else {
             return;
@@ -823,235 +745,8 @@ impl App {
             cycle.desktop_buffer = Some(buf);
         } else if Instant::now() >= cycle.screenshot_deadline {
             error!("timed out waiting for the desktop screenshot; cancelling the capture cycle");
-            if self.persistent {
-                host::emit(&HostEvent::FatalError {
-                    message: "timed out waiting for the desktop screenshot".into(),
-                });
-            }
             self.finish_cycle(event_loop, CycleAction::Cancelled);
         }
-    }
-
-    /// Dispatch one parsed stdin command (persistent mode only — the
-    /// stdin reader is the sole producer of these).
-    fn handle_host_command(&mut self, event_loop: &ActiveEventLoop, cmd: HostCommand) {
-        match cmd {
-            HostCommand::Show(params) => self.handle_show(event_loop, params),
-            HostCommand::Cancel => {
-                // Acts like Escape.
-                if self.cycle.is_some() {
-                    self.finish_cycle(event_loop, CycleAction::Cancelled);
-                } else {
-                    info!("cancel command ignored: no capture cycle active");
-                }
-            }
-            HostCommand::Ping => host::emit(&HostEvent::Pong),
-            HostCommand::Shutdown => {
-                info!("shutdown command received; exiting");
-                if self.cycle.is_some() {
-                    self.finish_cycle(event_loop, CycleAction::Cancelled);
-                }
-                // Graceful: unwinds the event loop, drops the workers'
-                // channels and joins their threads on the way out.
-                event_loop.exit();
-            }
-        }
-    }
-
-    /// An OS display-topology notification arrived (`host::display`).
-    /// One change produces a burst of messages, so arm/extend a
-    /// coalescing deadline instead of restarting immediately;
-    /// [`check_display_change`](Self::check_display_change) acts once it
-    /// expires.
-    fn handle_display_change(&mut self, event_loop: &ActiveEventLoop) {
-        // One-shot mode installs no observers, but guard anyway — its
-        // display-change behaviour must stay untouched.
-        let Some(hs) = self.host.as_mut() else {
-            return;
-        };
-        if hs.display_change_deadline.is_none() {
-            info!("display topology change reported; restarting after a {DISPLAY_CHANGE_DEBOUNCE:?} debounce");
-        }
-        let deadline = Instant::now() + DISPLAY_CHANGE_DEBOUNCE;
-        hs.display_change_deadline = Some(deadline);
-        if self.cycle.is_none() {
-            // Idle: the loop is parked in Wait — make sure it wakes to
-            // act on the deadline. A running cycle Polls and gets there
-            // on its own.
-            event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-        }
-    }
-
-    /// Act on an expired display-change debounce (armed by
-    /// [`handle_display_change`](Self::handle_display_change)); called
-    /// every `about_to_wait` pass.
-    fn check_display_change(&mut self, event_loop: &ActiveEventLoop) {
-        let Some(deadline) = self
-            .host
-            .as_ref()
-            .and_then(|hs| hs.display_change_deadline)
-        else {
-            return;
-        };
-        if Instant::now() < deadline {
-            // Still coalescing: keep the idle loop ticking toward the
-            // deadline (re-asserted here because earlier control-flow
-            // writes in about_to_wait may have parked the loop).
-            if self.cycle.is_none() {
-                event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
-            }
-            return;
-        }
-        // Debounce expired — but fullscreen-exclusive transitions, RDP and
-        // mode-setting screensavers broadcast display-change notifications
-        // whose *final* topology is unchanged. Re-verify before killing a
-        // healthy warm host (off the hot path, so the enumeration cost is
-        // irrelevant); handle_show applies the same guard.
-        let fresh = SystemInterop::all_monitors();
-        if topology_matches(&self.monitors, &fresh) {
-            info!("display-change debounce expired but the topology still matches; staying warm");
-            if let Some(hs) = self.host.as_mut() {
-                hs.display_change_deadline = None;
-                // Idle again: replace the (now past) WaitUntil so the loop
-                // doesn't spin on an expired deadline. During warm-up the
-                // ready gate's own WaitUntil tick must survive.
-                if self.cycle.is_none() && hs.ready_emitted {
-                    event_loop.set_control_flow(ControlFlow::Wait);
-                }
-            }
-            return;
-        }
-        self.restart_for_topology_change(event_loop, EXIT_DISPLAY_CHANGED, "the display topology changed");
-    }
-
-    /// A render worker's wgpu device died (driver reset/update). That
-    /// worker can never serve another cycle, so restart the whole host.
-    /// No debounce — a single lost device is already fatal to the warm
-    /// state.
-    fn handle_gpu_lost(&mut self, event_loop: &ActiveEventLoop) {
-        // Never signalled in one-shot mode (no callback registered), but
-        // guard anyway — its device-loss behaviour must stay untouched.
-        if self.host.is_none() {
-            return;
-        }
-        self.restart_for_topology_change(event_loop, EXIT_GPU_LOST, "a render worker's GPU device was lost");
-    }
-
-    /// Common exit path for "the warm state no longer matches the world":
-    /// finish any active cycle as cancelled (hides windows, restores the
-    /// cursor, reports `finished` to the parent), emit `display_changed`
-    /// and exit with `code` (`EXIT_DISPLAY_CHANGED` / `EXIT_GPU_LOST`).
-    /// The shell respawns us immediately — no backoff — and cold-spawns
-    /// any capture requested before the fresh host is ready.
-    fn restart_for_topology_change(&mut self, event_loop: &ActiveEventLoop, code: i32, why: &str) -> ! {
-        warn!("{why}; exiting for respawn (exit code {code})");
-        if self.cycle.is_some() {
-            self.finish_cycle(event_loop, CycleAction::Cancelled);
-        }
-        host::emit(&HostEvent::DisplayChanged);
-        std::process::exit(code);
-    }
-
-    /// Persistent-mode `show`: run the per-capture fast path — everything
-    /// `CaptureSession::new` does *after* its warm-up — and arm a cycle.
-    /// The screenshot is not waited for here (see
-    /// [`try_pick_up_screenshot`](Self::try_pick_up_screenshot)).
-    fn handle_show(&mut self, event_loop: &ActiveEventLoop, params: ShowParams) {
-        if self.cycle.is_some() {
-            warn!("show command ignored: a capture cycle is already active");
-            return;
-        }
-
-        // Belt-and-braces topology verify: the OS notifications can lag
-        // (or be missed outright), and an overlay laid out for monitors
-        // that no longer exist must never reach the screen. Exiting
-        // *before* any window shows makes the parent cold-spawn this
-        // capture and respawn the host against the new topology.
-        let fresh = SystemInterop::all_monitors();
-        if !topology_matches(&self.monitors, &fresh) {
-            warn!(
-                "monitor topology changed since warm-up ({} monitors -> {})",
-                self.monitors.len(),
-                fresh.len()
-            );
-            self.restart_for_topology_change(event_loop, EXIT_DISPLAY_CHANGED, "the show-time topology check failed");
-        } else if let Some(hs) = self.host.as_mut() {
-            // A pending debounced notification whose enumeration still
-            // matches was a no-op change (or a change-and-revert): drop
-            // it rather than tearing down a healthy host mid-capture.
-            if hs.display_change_deadline.take().is_some() {
-                info!("show-time topology check passed; dropping the pending display-change restart");
-            }
-        }
-
-        let settings = Arc::new(params.into_settings());
-        if let Some(dir) = &settings.session_dir {
-            info!("show: session payload will be written to {:?}", dir);
-        }
-
-        let initial_mouse = SystemInterop::get_mouse_position(&self.monitors);
-        let initial_mouse_f = ScreenPointF::new(initial_mouse.x as f32, initial_mouse.y as f32);
-        let captured_cursor = SystemInterop::capture_cursor(&self.monitors);
-
-        // Fresh gate + latch per cycle — nothing ever needs re-arming. The
-        // cycle's debug timings anchor here (the `show` command), so the
-        // idle gap since warm-up never leaks into a per-cycle metric.
-        let timings = Arc::new(CaptureTimings::new(self.monitors.len()));
-        let ready_count = Arc::new(AtomicUsize::new(0));
-        let visible_latch = Arc::new(VisibleLatch::new());
-        let cycle_gen = next_cycle_gen();
-        let cancelled = Arc::new(AtomicBool::new(false));
-        let input_txs: Vec<_> = self
-            .workers
-            .iter()
-            .flatten()
-            .map(|w| w.input_tx.clone())
-            .collect();
-        let render_msg_txs: Vec<_> = self
-            .workers
-            .iter()
-            .flatten()
-            .map(|w| w.render_msg_tx.clone())
-            .collect();
-
-        let screenshot_latch = spawn_screenshot_job(ScreenshotJobParams {
-            monitors: self.monitors.clone(),
-            cursor: captured_cursor,
-            input_txs,
-            render_msg_txs: render_msg_txs.clone(),
-            peek_enabled: settings.obscured_window_peek_enabled,
-            accent_color: settings.accent_color,
-            initial_mouse: initial_mouse_f,
-            ready_count: ready_count.clone(),
-            visible_latch: visible_latch.clone(),
-            cycle_gen,
-            cancelled: cancelled.clone(),
-            timings: timings.clone(),
-        });
-        let (walker_latch, peek_images_latch) = spawn_walker_job(
-            self.monitors.clone(),
-            render_msg_txs,
-            cycle_gen,
-            settings.obscured_window_peek_enabled,
-            settings.obscured_window_detection_threshold,
-            timings.clone(),
-        );
-
-        self.start_cycle(CycleSetup {
-            settings,
-            initial_mouse: initial_mouse_f,
-            screenshot_latch,
-            walker_latch,
-            peek_images_latch,
-            ready_count,
-            visible_latch,
-            cycle_gen,
-            cancelled,
-            timings,
-        });
-
-        // A cycle renders/polls continuously; finish_cycle restores Wait.
-        event_loop.set_control_flow(ControlFlow::Poll);
     }
 
     fn ensure_peek_images(&mut self) {
@@ -1969,27 +1664,7 @@ impl App {
     }
 }
 
-impl ApplicationHandler<AppEvent> for App {
-    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: AppEvent) {
-        match event {
-            AppEvent::Command(cmd) => self.handle_host_command(event_loop, cmd),
-            AppEvent::ParentGone => {
-                warn!("parent process is gone (stdin EOF); exiting");
-                // Hide the overlay / restore the cursor before dying so the
-                // user isn't left staring at a frozen screenshot.
-                if self.cycle.is_some() {
-                    self.finish_cycle(event_loop, CycleAction::Cancelled);
-                }
-                // Prompt exit rather than unwinding the event loop: with
-                // the parent dead nobody reads our events, and orphaned
-                // overlay processes must never linger.
-                std::process::exit(0);
-            }
-            AppEvent::DisplayChange => self.handle_display_change(event_loop),
-            AppEvent::GpuLost => self.handle_gpu_lost(event_loop),
-        }
-    }
-
+impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if !self.windows.is_empty() {
             return;
@@ -2081,6 +1756,9 @@ impl ApplicationHandler<AppEvent> for App {
 
         if windows.is_empty() {
             error!("no windows created; exiting");
+            // `start_cycle` hid the cursor before the event loop ran, and this is
+            // the one exit that never reaches `finish_cycle` to put it back.
+            set_hardware_cursor_visible(true);
             event_loop.exit();
             return;
         }
@@ -2100,41 +1778,6 @@ impl ApplicationHandler<AppEvent> for App {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // Persistent warm-up gate: emit `ready` once every worker has
-        // parked (or failed — a dead worker must not hold `ready` hostage
-        // any more than it may hold the show gate).
-        if let Some(hs) = self.host.as_mut() {
-            if !hs.ready_emitted {
-                let parked = hs.parked_count.load(Ordering::Acquire);
-                let failed = self.worker_failed.load(Ordering::Acquire);
-                if parked + failed >= self.workers.len() {
-                    hs.ready_emitted = true;
-                    self.warmup.mark_ready();
-                    let warmup_ms = self.warmup.t_start.elapsed().as_millis() as u64;
-                    info!(
-                        "persistent host ready: warmed up in {warmup_ms} ms ({} monitors)",
-                        self.monitors.len()
-                    );
-                    host::emit(&HostEvent::Ready {
-                        warmup_ms,
-                        monitors: self.monitors.len(),
-                    });
-                    // Leave the warm-up WaitUntil ticking behind — idle is
-                    // a pure Wait until a command arrives (unless a `show`
-                    // beat us here and already wants Poll).
-                    if self.cycle.is_none() {
-                        event_loop.set_control_flow(ControlFlow::Wait);
-                    }
-                } else if self.cycle.is_none() {
-                    // Workers have no way to wake the loop, so tick until
-                    // they're all parked; after `ready` the loop settles
-                    // into ControlFlow::Wait until a command arrives. (An
-                    // early `show` sets Poll — don't override it.)
-                    event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(25)));
-                }
-            }
-        }
-
         if let Some(ref m) = self.pinch_monitor {
             let delta = m.drain();
             if delta != 0.0
@@ -2148,7 +1791,7 @@ impl ApplicationHandler<AppEvent> for App {
         }
 
         // Try to pick up the walker if it wasn't ready during resumed(),
-        // and (persistent mode) this cycle's screenshot.
+        // and this cycle's screenshot.
         self.try_pick_up_walker();
         self.try_pick_up_screenshot(event_loop);
         self.try_advance_ocr();
@@ -2171,13 +1814,6 @@ impl ApplicationHandler<AppEvent> for App {
                     cycle.pending_show = None;
                     broadcast_mouse_state(&self.windows, &cycle.input);
                     broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
-                    if self.persistent {
-                        let elapsed_ms = cycle.started.elapsed().as_millis() as u64;
-                        info!("overlay shown {elapsed_ms} ms after the show command");
-                        host::emit(&HostEvent::Shown {
-                            elapsed_ms,
-                        });
-                    }
                 }
             }
         }
@@ -2185,11 +1821,6 @@ impl ApplicationHandler<AppEvent> for App {
         // Pre-select the active screen / foreground window when launched with
         // `--capture-mode screen|window` (no-op in free-region mode).
         self.try_preselect(event_loop);
-
-        // Last so its WaitUntil (idle debounce in progress) survives the
-        // control-flow writes above; exits the process once the display-
-        // change debounce expires.
-        self.check_display_change(event_loop);
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {

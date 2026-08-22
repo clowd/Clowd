@@ -32,7 +32,7 @@
 //! - [`stitch`] — frame registration and the composite.
 //! - [`output`] — `desktop.png` / `cropped.png` / `session.json`.
 //!
-//! The protocol is documented in `clowd_capture/CAPTURE_PROTOCOL.md` §3.
+//! The protocol is documented in `clowd_capture/CAPTURE_PROTOCOL.md` §2.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
