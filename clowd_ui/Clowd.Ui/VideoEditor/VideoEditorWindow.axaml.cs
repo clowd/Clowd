@@ -758,7 +758,7 @@ namespace Clowd.UI.VideoEditor
             if (_closing)
                 return;
 
-            var what = e.Key.Kind == AiSidecarKind.Denoise ? "Audio denoise" : "Background matting";
+            var what = e.Key.Kind == AiSidecarKind.Denoise ? "Speech enhancer" : "Background matting";
             _ = NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error,
                 $"{what} analysis failed.\n\n{e.Detail}",
                 "AI analysis failed");

@@ -1014,7 +1014,7 @@
                                   enum ones are: a XAML DefaultValue is a string  -->
                             <controls:ResetDefaultButton x:Name="dotDenoise" CurrentValue="{Binding Denoise, Mode=TwoWay}" />
                         </Panel>
-                        <TextBlock Classes="label" Text="Denoise" />
+                        <TextBlock Classes="label" Text="Speech Enhancer" />
                         <CheckBox
                             IsChecked="{Binding Denoise, Mode=TwoWay}"
                             IsEnabled="{Binding AiEffectsSupported}"
