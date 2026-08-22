@@ -1462,7 +1462,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>Whether the AI-backed features (denoise, background matting) exist on this
         /// machine at all. False only on Intel Macs: upstream ONNX Runtime dropped macOS x86_64,
-        /// so <c>clowd_tractnni</c> is only built for Apple Silicon — the toggles grey out with
+        /// so <c>clowd_ai</c> is only built for Apple Silicon — the toggles grey out with
         /// <see cref="AiEffectsDisabledTip"/> instead of queueing work that can never run.</summary>
         public bool AiEffectsSupported => SupportsAiEffects;
 

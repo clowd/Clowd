@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
@@ -470,7 +471,12 @@ namespace Clowd.UI
             if (!settings.ScrollingCaptureEnabled)
                 args.Add("--no-scroll-capture");
 
-            if (!settings.OcrEnabled)
+            // OCR runs in the clowd_ai binary, which only exists where ONNX Runtime has a
+            // build: not on Intel Macs (the same gate as SelectedItemViewModel.AiEffectsSupported),
+            // so the overlay must not offer a button whose spawn can only ever fail.
+            bool ocrAvailable = !OperatingSystem.IsMacOS()
+                || RuntimeInformation.OSArchitecture == Architecture.Arm64;
+            if (!settings.OcrEnabled || !ocrAvailable)
                 args.Add("--no-ocr");
 
             // the overlay was launched specifically to pick a recording region: a confirmed

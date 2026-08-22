@@ -46,13 +46,14 @@ declare -A LICENSE_OVERRIDES=(
 )
 
 # Shipped components no dependency manifest can enumerate: the model weights
-# clowd_tractnni embeds (see clowd_tractnni/assets/models/README.md) and the
+# clowd_ai embeds (see clowd_ai/assets/models/README.md) and the
 # ONNX Runtime the ort crate links statically into it. Merged into the Rust
 # section.
 # Fields are name|version|license|url; version may be empty.
 EXTRA_ENTRIES=(
     "RobustVideoMatting|1.0.0|GPL-3.0|https://github.com/PeterL1n/RobustVideoMatting"
     "DPDFNet||Apache-2.0|https://huggingface.co/Ceva-IP/DPDFNet"
+    "PaddleOCR PP-OCRv6 models||Apache-2.0|https://github.com/PaddlePaddle/PaddleOCR"
     "ONNX Runtime||MIT|https://github.com/microsoft/onnxruntime"
 )
 

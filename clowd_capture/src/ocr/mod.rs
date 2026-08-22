@@ -1,15 +1,16 @@
 //! On-device text recognition — the capturer's side of it.
 //!
-//! The recognition itself does not happen here. It happens in the `clowd_ocr`
-//! binary that ships beside this one, which the [`client`] spawns per request;
-//! this module is the seam. (Windows.Media.Ocr was the original Windows
-//! backend and proved too inaccurate — it garbled small and dark-mode text
-//! that PaddleOCR reads character-perfectly — so what runs there now is
-//! PP-OCRv6 on MNN, on every platform, with the models embedded in that
-//! binary. No OS engine, language pack or download is involved.)
+//! The recognition itself does not happen here. It happens in the `clowd_ai`
+//! binary that ships beside this one (its `ocr` subcommand), which the
+//! [`client`] spawns per request; this module is the seam. (Windows.Media.Ocr
+//! was the original Windows backend and proved too inaccurate — it garbled
+//! small and dark-mode text that PaddleOCR reads character-perfectly — so
+//! what runs there now is PP-OCRv6 on ONNX Runtime, on every platform that
+//! has an ONNX Runtime build (not Intel macOS), with the models embedded in
+//! that binary. No OS engine, language pack or download is involved.)
 //!
-//! Out-of-process because the engine is a static C++ library: a Rust panic in
-//! it would unwind harmlessly, but an `abort`, a segfault or a refused
+//! Out-of-process because the engine is a large native library: a Rust panic
+//! in it would unwind harmlessly, but an `abort`, a segfault or a refused
 //! allocation on a degenerate selection kills its process — which in-process
 //! meant the overlay, mid-capture, with the user's selection already framed.
 //! The request/response contract is `clowd_rust_core::ocr`.
