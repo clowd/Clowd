@@ -21,11 +21,3 @@ pub const NO_SCREEN_PERMISSION: i32 = 3;
 /// Also what the scrolling-capture driver exits with on a platform where
 /// it is not implemented.
 pub const CAPTURE_FAILED: i32 = 4;
-
-/// "The monitor topology changed while running as a persistent host". Not a
-/// failure: the warm state (per-monitor workers, hidden windows, configured
-/// surfaces) was built for a topology that no longer exists, and a fresh
-/// start is cheaper and safer than in-process re-init. The shell respawns
-/// immediately with no backoff penalty — matches `CaptureProcessHost.cs`'s
-/// `ExitCodeDisplayChanged`.
-pub const DISPLAY_CHANGED: i32 = 5;

@@ -52,8 +52,7 @@ namespace Clowd.Shared.Tests
             original.General.LastSavePath = @"C:\Users\test\Pictures";
             original.General.ConfirmClose = false;
             original.Capture.ScreenshotWithCursor = false;
-            original.Capture.KeepCaptureReady = false;
-            original.Capture.MemoryHints = CapturerMemoryHints.MaxPerformance; // enum by name
+            original.Capture.MemoryHints = CapturerMemoryHints.LowerMemoryUsage; // enum by name (non-default)
             original.Capture.TipsMode = CapturerTipsMode.Off; // enum by name
             original.Capture.ObscuredWindowDetectionThreshold = 0.55; // invariant double
             original.Editor.StartupPadding = 42;
@@ -92,8 +91,7 @@ namespace Clowd.Shared.Tests
             Assert.Equal(@"C:\Users\test\Pictures", loaded.General.LastSavePath);
             Assert.False(loaded.General.ConfirmClose);
             Assert.False(loaded.Capture.ScreenshotWithCursor);
-            Assert.False(loaded.Capture.KeepCaptureReady);
-            Assert.Equal(CapturerMemoryHints.MaxPerformance, loaded.Capture.MemoryHints);
+            Assert.Equal(CapturerMemoryHints.LowerMemoryUsage, loaded.Capture.MemoryHints);
             Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
             Assert.Equal(0.55, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.Equal(42, loaded.Editor.StartupPadding);

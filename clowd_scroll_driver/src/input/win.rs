@@ -152,7 +152,7 @@ fn validated_marker(hwnd: i64, point: ScreenPoint) -> Option<HWND> {
 /// that holds the foreground itself. Those rights come from
 /// `AllowSetForegroundWindow`: the shell grants them to the driver at spawn,
 /// and the chain that keeps the shell entitled to hand them on is documented
-/// in `CAPTURE_PROTOCOL.md` §3.5.
+/// in `CAPTURE_PROTOCOL.md` §2.5.
 ///
 /// There is deliberately no third rung. `AttachThreadInput` would defeat the
 /// lock by borrowing the foreground thread's input queue, and a driver

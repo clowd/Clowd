@@ -12,8 +12,7 @@ use clap::Parser;
 
 use crate::ui::components::panel::model::PanelFeatures;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum TipsMode {
     #[default]
     Hints,
@@ -40,17 +39,15 @@ impl TipsMode {
 }
 
 /// GPU allocator sizing strategy, mirrored from the shell's capture
-/// settings. `LowerMemoryUsage` (default) keeps gpu-allocator's retained
-/// heap blocks small — the right trade for a host that idles in the
-/// background; `MaxPerformance` restores wgpu's large-block default.
-/// Process-level: read once at device creation, so the persistent host
-/// must be relaunched for a change to take effect.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// settings. `MaxPerformance` (default) is wgpu's large-block allocator —
+/// what one-shot capture ran on before the warm host existed;
+/// `LowerMemoryUsage` keeps gpu-allocator's retained heap blocks small at
+/// some cost in latency.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum MemoryHintsMode {
     #[default]
-    LowerMemoryUsage,
     MaxPerformance,
+    LowerMemoryUsage,
 }
 
 /// What the capturer should have selected when it opens. `Region` is the
@@ -58,8 +55,7 @@ pub enum MemoryHintsMode {
 /// active monitor / foreground window and show the action panel so the
 /// user can confirm or adjust (mirrors pressing `F` / `W` at startup).
 /// Chosen by the shell from which capture hotkey fired.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
 pub enum CaptureMode {
     #[default]
     Region,
@@ -147,7 +143,7 @@ impl Default for CapturerSettings {
 /// defaults mirror `CapturerSettings::default()` exactly.
 ///
 /// The second half of a scrolling capture has its own binary and its own
-/// command line — see `clowd_scroll_driver` and CAPTURE_PROTOCOL.md §3.
+/// command line — see `clowd_scroll_driver` and CAPTURE_PROTOCOL.md §2.
 /// Nothing about it belongs here: the overlay's part ends when it writes
 /// the `scroll` action marker.
 #[derive(Debug, Parser)]
@@ -194,28 +190,11 @@ pub struct CliArgs {
     #[arg(long)]
     pub video: bool,
 
-    /// GPU allocator strategy. `lower-memory-usage` (the default) keeps the
-    /// allocator's retained heap blocks small so an idle background host
-    /// holds minimal memory; `max-performance` restores wgpu's large-block
-    /// allocator. Read once at GPU device creation — applies to one-shot
-    /// and persistent mode alike, but a running persistent host must be
-    /// relaunched for a change to take effect.
-    #[arg(long, value_enum, default_value_t = MemoryHintsMode::LowerMemoryUsage)]
+    /// GPU allocator strategy. `max-performance` (the default) is wgpu's
+    /// large-block allocator; `lower-memory-usage` keeps the retained heap
+    /// blocks small. Read once at GPU device creation.
+    #[arg(long, value_enum, default_value_t = MemoryHintsMode::MaxPerformance)]
     pub memory_hints: MemoryHintsMode,
-
-    /// Run as a persistent capture host: warm up (workers, hidden windows),
-    /// then stay resident reading NDJSON commands on stdin and emitting
-    /// events on stdout (see `host::protocol`). The per-capture flags above
-    /// are ignored — every capture's settings ride in with its `show`
-    /// command.
-    #[arg(long)]
-    pub persistent: bool,
-
-    /// Directory for the persistent host's log file (`capture-host.log`,
-    /// truncated on start; the previous run is kept as `.1`). Only used
-    /// with `--persistent` — one-shot mode logs into `--session-dir`.
-    #[arg(long, value_name = "PATH")]
-    pub log_dir: Option<PathBuf>,
 
     /// Hide the UPLOAD button (both the capture strip's and the OCR
     /// strip's — a user who turned uploading off did not mean "except
@@ -234,7 +213,7 @@ pub struct CliArgs {
     /// The shell's process id, so the overlay can hand its foreground
     /// rights back with `AllowSetForegroundWindow` as each cycle ends —
     /// the shell needs them to raise whatever it opens next, and cannot
-    /// grant what it no longer holds (CAPTURE_PROTOCOL.md §3.5).
+    /// grant what it no longer holds (CAPTURE_PROTOCOL.md §2.5).
     ///
     /// Process-level rather than a `CapturerSettings` knob: it is the same
     /// for every cycle a process serves, and the shell that spawned us is
