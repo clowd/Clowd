@@ -50,7 +50,7 @@ namespace Clowd.UI.VideoEditor
     /// it, and this window reacts to <see cref="EditorSession.ProjectChanged"/> by handing the
     /// player a fresh snapshot.
     /// </summary>
-    public partial class VideoEditorWindow : SystemThemedWindow
+    public partial class VideoEditorWindow : SystemThemedWindow, IMediaKeyTarget
     {
         public const string ArgName = "--video-edit";
 
@@ -244,6 +244,12 @@ namespace Clowd.UI.VideoEditor
             AddCommandKeyBinding(CommandRedo);
             KeyBindings.Add(new KeyBinding { Command = CommandRedo, Gesture = new KeyGesture(Key.Z, KeyModifiers.Control | KeyModifiers.Shift) });
             AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
+
+            // media keys (opt-in, Settings ▸ Recording ▸ Composition) drive the transport only
+            // while this window has focus — the hook behind them is global, so it is held no
+            // longer than that. See MediaKeyTransport.
+            Activated += (_, _) => MediaKeyTransport.SetTarget(this);
+            Deactivated += (_, _) => MediaKeyTransport.ReleaseTarget(this);
 
             timeline.ScrubStarted += Timeline_ScrubStarted;
             timeline.Scrubbed += Timeline_Scrubbed;
@@ -825,6 +831,10 @@ namespace Clowd.UI.VideoEditor
             else
                 _player.Play(); // rewinds automatically from Ended
         }
+
+        void IMediaKeyTarget.MediaPlayPause() => TogglePlayPause();
+
+        void IMediaKeyTarget.MediaStepFrame(int direction) => StepFrame(direction);
 
         private void StepFrame(int direction)
         {
@@ -1576,6 +1586,9 @@ namespace Clowd.UI.VideoEditor
         protected override void OnClosed(EventArgs e)
         {
             base.OnClosed(e);
+
+            // a window closed while focused gets no Deactivated
+            MediaKeyTransport.ReleaseTarget(this);
 
             // the dev harness bypasses the tray lifetime entirely; closing the window is exit.
             // (A dev render in flight dies with the process — it is a dev tool.)
