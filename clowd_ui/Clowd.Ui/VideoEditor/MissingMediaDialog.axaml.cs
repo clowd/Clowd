@@ -58,6 +58,10 @@ namespace Clowd.UI.VideoEditor
                 _unresolved.Add(source.Id);
                 RowsPanel.Children.Add(BuildRow(source));
             }
+
+            // Cmd+W is the macOS close gesture — leaves everything unresolved, same as Escape
+            // and the Close button (issue #73)
+            MacWindowShortcuts.AddCloseShortcut(this);
         }
 
         /// <summary>Shows the dialog for whatever <see cref="EditorSession.GetMissingSources"/>
