@@ -321,6 +321,14 @@ namespace Clowd
             editor.Click += (s, e) => EditorWindow.ShowSession(null);
             menu.Add(editor);
 
+            // the video editor only ships on Windows, so the entry is only offered there.
+            if (OperatingSystem.IsWindows())
+            {
+                var videoEditor = new NativeMenuItem("Video Editor");
+                videoEditor.Click += (s, e) => Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
+                menu.Add(videoEditor);
+            }
+
             menu.Add(new NativeMenuItemSeparator());
 
             // every supported action that has a global hotkey is also reachable from this menu — the

@@ -904,7 +904,14 @@ namespace Clowd.UI
     {
         public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
         {
-            var key = (value as string)?.ToLowerInvariant() switch
+            // a video project carries no ContentKind (it has no payload file of its own, only the
+            // composition in its directory) but it is video work, and the generic-file tile reads
+            // as "we do not know what this is".
+            var kind = value is SessionInfo session
+                ? (session.IsVideoProject ? "video" : session.ContentKind)
+                : value as string;
+
+            var key = kind?.ToLowerInvariant() switch
             {
                 "video" => "IconVideo",
                 "image" => "IconPhoto",
