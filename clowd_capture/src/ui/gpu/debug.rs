@@ -32,7 +32,7 @@ const SPARK_BUDGET_HEADROOM: f32 = 2.0;
 /// frame times with vs without the graph's overhead.
 const SPARKLINE_ENABLED: bool = true;
 
-// Bar / legend / drop-marker colours. Exposed as constants so the
+// Bar / legend / drop-marker colors. Exposed as constants so the
 // legend swatches are guaranteed to match the bar fills.
 const COLOR_CPU: [f32; 4] = [0.40, 0.60, 0.95, 0.85];
 const COLOR_GPU: [f32; 4] = [0.95, 0.80, 0.30, 0.85];
@@ -352,7 +352,7 @@ impl DebugRenderer {
 
         // Pick a full-scale height reference. When the monitor's refresh
         // rate is unknown, use the 95th-percentile-ish top of the recent
-        // samples so the bars still self-normalise instead of all being
+        // samples so the bars still self-normalize instead of all being
         // zero-height.
         let full_scale_ms = match target_period {
             Some(p) => p.as_secs_f64() * 1000.0 * SPARK_BUDGET_HEADROOM as f64,
@@ -397,12 +397,12 @@ impl DebugRenderer {
         }
 
         // Legend: cpu / gpu. Matches what the bars actually use. Drops
-        // don't get their own colour — a dropped frame shows up naturally
+        // don't get their own color — a dropped frame shows up naturally
         // as a ~2× tall bar.
         self.emit_legend(ts, g_left, g_bottom + label_font_px * 0.8, label_font_px, rects);
     }
 
-    /// Emit the sparkline colour legend: 3 swatches + text labels,
+    /// Emit the sparkline color legend: 3 swatches + text labels,
     /// one row below the graph.
     fn emit_legend(&mut self, ts: &mut TextStack, x_start: f32, y: f32, font_px: f32, rects: &mut Vec<RectInstance>) {
         let swatch = font_px; // square, tracking text height
@@ -444,7 +444,7 @@ impl DebugRenderer {
 /// scaled against `full_scale_ms` (= 2 × refresh period). A 60 Hz
 /// frame fills half the graph; a dropped frame ~doubles in duration
 /// and fills the whole graph — so drops are self-evident from the
-/// bar's height without needing a coloured marker.
+/// bar's height without needing a colored marker.
 ///
 /// Inside that height, `cpu` (blue) and `gpu` (yellow) stack at the
 /// bottom at their absolute ms scale. Whatever's left up to the total

@@ -347,7 +347,7 @@ namespace Clowd.VideoSDK.Thumbs
 
         /// <summary>
         /// Retires a strip's viewport: nothing of the stream is drawn any more (its items scrolled
-        /// off screen or were deleted). Any in-flight refinement is cancelled — it would be
+        /// off screen or were deleted). Any in-flight refinement is canceled — it would be
         /// decoding slots nobody can see, on the one thread every visible strip shares — and the
         /// strip's thumbnails become the cache's <i>first</i> eviction candidates instead of
         /// squatting at their last viewport's priority. A later <see cref="SetViewport"/> revives

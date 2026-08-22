@@ -165,9 +165,9 @@ public sealed class CursorContent : ItemContent
     /// <summary>One of <see cref="Styles"/>.</summary>
     public string Style { get; set; } = "vision";
 
-    /// <summary>Which of the style's colourways to draw (<c>CursorAssets.Variants</c>), or null
+    /// <summary>Which of the style's colorways to draw (<c>CursorAssets.Variants</c>), or null
     /// for its default — which is the only sensible value for the styles that ship just one, and
-    /// is why no project written before colourways existed needs migrating. A value the style does
+    /// is why no project written before colorways existed needs migrating. A value the style does
     /// not offer falls back to its default rather than drawing nothing.</summary>
     public string Variant { get; set; }
 
@@ -177,7 +177,7 @@ public sealed class CursorContent : ItemContent
 
     /// <summary>Debounces the capture's Hidden/visible flicker: Windows hides the cursor while
     /// the user types and flashes it back on every pause, so with this on (the default, and the
-    /// only behaviour before the setting existed) a hidden cursor stays hidden until it actually
+    /// only behavior before the setting existed) a hidden cursor stays hidden until it actually
     /// moves (more than a few pixels — jitter does not count) or clicks again. Off draws exactly
     /// what CURSORINFO reported frame by frame.</summary>
     public bool Debounce { get; set; } = true;
@@ -189,7 +189,7 @@ public sealed class CursorContent : ItemContent
     public uint ClickColor { get; set; } = 0xFFFF0000;
 
     /// <summary>The <c>ring</c> highlight's inner fill opacity, validated to 0..1: the outline is
-    /// drawn in <see cref="ClickColor"/> as-is and the disc inside it in the same colour at this
+    /// drawn in <see cref="ClickColor"/> as-is and the disc inside it in the same color at this
     /// opacity. Ignored by every other animation.</summary>
     public const double DefaultFillOpacity = 0.15;
 
@@ -197,7 +197,7 @@ public sealed class CursorContent : ItemContent
 
     /// <summary>The range every highlight multiplier below is validated to, and what the editor's
     /// spinners offer. One range for all three: they are all "a bit more / a bit less of the
-    /// stock behaviour", and a quarter to quadruple is as far as any of them stays useful.</summary>
+    /// stock behavior", and a quarter to quadruple is as far as any of them stays useful.</summary>
     public const double MinHighlightFactor = 0.25;
 
     public const double MaxHighlightFactor = 4.0;
@@ -249,12 +249,12 @@ public enum KeystrokeFilter
 /// <summary>A keystroke overlay driven by the recording's input-capture data
 /// (<see cref="Source.InputCapturePath"/>). Same hard-sync rules as <see cref="CursorContent"/>;
 /// unlike it, placement <b>is</b> the item's <see cref="Item.Transform"/> — X/Y anchor the
-/// block's bottom centre and Scale is the wrap width as a fraction of the canvas, with rows
+/// block's bottom center and Scale is the wrap width as a fraction of the canvas, with rows
 /// stacking upward from the anchor.</summary>
 public sealed class KeyboardContent : ItemContent
 {
     /// <summary>The typing pill's default fill: black at 55%. The translucency is <b>in</b> the
-    /// stored alpha, so a user who picks a colour picks its opacity with it.</summary>
+    /// stored alpha, so a user who picks a color picks its opacity with it.</summary>
     public const uint DefaultBackgroundColor = 0x8C000000;
 
     public const uint DefaultTextColor = 0xFFFFFFFF;
@@ -281,7 +281,7 @@ public sealed class KeyboardContent : ItemContent
     /// <summary>Which keystrokes the overlay shows (see <see cref="KeystrokeFilter"/>).</summary>
     public KeystrokeFilter Filter { get; set; } = KeystrokeFilter.None;
 
-    /// <summary>Typed text colour, packed ARGB. Styles the plain-typing pill's text only — the
+    /// <summary>Typed text color, packed ARGB. Styles the plain-typing pill's text only — the
     /// special keys draw as keycaps with their own fixed livery.</summary>
     public uint TextColor { get; set; } = DefaultTextColor;
 

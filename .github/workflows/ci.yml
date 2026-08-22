@@ -106,7 +106,7 @@ jobs:
         include:
           # ai: whether the clowd_ai inference binary builds for this
           # target. false only on osx-x64: upstream ONNX Runtime dropped
-          # macOS x86_64, so ort has no binaries for it — the app greys the
+          # macOS x86_64, so ort has no binaries for it — the app grays the
           # AI effects out there and the overlay reports OCR as unavailable.
           - rid: win-x64
             os: windows-latest
@@ -207,7 +207,7 @@ jobs:
         run: |
           npm install -g @sentry/cli
           OUT="target/${{ matrix.target }}/release"
-          # Name the artefacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
+          # Name the artifacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
           if [ "${{ runner.os }}" = "Windows" ]; then
             DIF="$OUT/clowd_capture_wgpu.pdb"
             SCROLL_DIF="$OUT/clowd_scroll_driver.pdb"

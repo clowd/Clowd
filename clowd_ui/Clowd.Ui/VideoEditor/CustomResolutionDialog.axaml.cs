@@ -39,7 +39,7 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>Prompts for a size, starting from the one passed in. Null means the user
-        /// cancelled (or closed the window), and nothing should change.</summary>
+        /// canceled (or closed the window), and nothing should change.</summary>
         public static async Task<(int WidthPx, int HeightPx)?> ShowAsync(Window owner, int widthPx, int heightPx)
         {
 #pragma warning disable CS0618 // the private constructor is the intended one

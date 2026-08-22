@@ -9,20 +9,20 @@ namespace Clowd.VideoSDK.Model;
 /// <c>Width → Scale</c>, <c>Shape/CornerRadius → Mask</c>.
 ///
 /// <list type="bullet">
-/// <item><see cref="X"/>/<see cref="Y"/> — item <b>centre</b>, 0-1 of canvas width/height.</item>
+/// <item><see cref="X"/>/<see cref="Y"/> — item <b>center</b>, 0-1 of canvas width/height.</item>
 /// <item><see cref="Scale"/> — item width as a fraction of canvas width; the height follows the
 /// content's own aspect ratio (a webcam item never needs to know the canvas aspect).</item>
 /// </list>
 ///
-/// The defaults (centred, full width) draw a same-aspect video full-frame, so a plain screen
+/// The defaults (centered, full width) draw a same-aspect video full-frame, so a plain screen
 /// recording needs no transform at all.
 /// </summary>
 public sealed class Transform
 {
-    /// <summary>Item centre X, 0-1 of the canvas width.</summary>
+    /// <summary>Item center X, 0-1 of the canvas width.</summary>
     public double X { get; set; } = 0.5;
 
-    /// <summary>Item centre Y, 0-1 of the canvas height.</summary>
+    /// <summary>Item center Y, 0-1 of the canvas height.</summary>
     public double Y { get; set; } = 0.5;
 
     /// <summary>Item width as a fraction of the canvas width; height follows the content's
@@ -41,7 +41,7 @@ public sealed class Transform
     /// </summary>
     public double? ScaleY { get; set; }
 
-    /// <summary>Clockwise rotation about the item centre, in degrees.</summary>
+    /// <summary>Clockwise rotation about the item center, in degrees.</summary>
     public double Rotation { get; set; }
 
     /// <summary>0 = transparent, 1 = opaque. Multiplies with transition opacity.</summary>
@@ -51,7 +51,7 @@ public sealed class Transform
     /// Target aspect ratio (width/height), or null — the default — for the content's own. Applied
     /// AFTER <see cref="Crop"/>: <see cref="AspectStretch"/> false trims the cropped picture
     /// symmetrically to this ratio, true distorts it into the ratio — either way the drawn box
-    /// always honours the ratio, and cropping only changes what is shown inside it. The crop
+    /// always honors the ratio, and cropping only changes what is shown inside it. The crop
     /// stores only what the user cut, never what the ratio implied.
     /// </summary>
     public double? Aspect { get; set; }

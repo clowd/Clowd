@@ -180,7 +180,7 @@ namespace Clowd.UI
                                           || String.Equals(session.ContentKind, "image", StringComparison.OrdinalIgnoreCase)),
                 RecentFilter.Recording => IsRecording(session),
                 // anything with a link, plus everything the upload path started even if it has no
-                // link (yet, or ever — a failed or cancelled upload still belongs here).
+                // link (yet, or ever — a failed or canceled upload still belongs here).
                 RecentFilter.Upload => session.ActiveUpload != null
                                        || session.AllUploads.Length > 0
                                        || IsUploadEntry(session),
@@ -441,7 +441,7 @@ namespace Clowd.UI
                         {
                             new KeyFrame { Cue = new Cue(0d), Setters = { new Setter(OpacityProperty, 0d) } },
                             // a tint, not a flash: the wash reads as the selection warming up rather
-                            // than the row changing colour.
+                            // than the row changing color.
                             new KeyFrame { Cue = new Cue(0.5d), Setters = { new Setter(OpacityProperty, 0.2d) } },
                             new KeyFrame { Cue = new Cue(1d), Setters = { new Setter(OpacityProperty, 0d) } },
                         },
@@ -572,7 +572,7 @@ namespace Clowd.UI
 
         private async System.Threading.Tasks.Task DeleteWithConfirmation(SessionInfo session)
         {
-            // a conversion or a render owns the (incomplete) entry it is writing into: cancelling is
+            // a conversion or a render owns the (incomplete) entry it is writing into: canceling is
             // what removes the row, so there is nothing to confirm and nothing finished to lose.
             var conversion = session.ActiveGifConversion;
             if (conversion != null)

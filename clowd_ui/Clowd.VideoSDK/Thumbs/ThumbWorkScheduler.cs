@@ -28,7 +28,7 @@ namespace Clowd.VideoSDK.Thumbs
     /// A queued (or running) unit of work. <see cref="Cancel"/> (and <see cref="Dispose"/>, which
     /// is the same thing) unqueues the item if it has not started; whether it also stops work that
     /// is <i>already running</i> depends on how it was enqueued — items given their own token
-    /// (<see cref="ThumbWorkScheduler.Enqueue(int, Action{CancellationToken})"/>) are cancelled
+    /// (<see cref="ThumbWorkScheduler.Enqueue(int, Action{CancellationToken})"/>) are canceled
     /// outright, items sharing a caller's token stop when that caller cancels it.
     /// </summary>
     internal sealed class ThumbWorkHandle : IDisposable
@@ -44,7 +44,7 @@ namespace Clowd.VideoSDK.Thumbs
 
         private bool _started;
         private bool _finished;
-        private bool _cancelled;
+        private bool _canceled;
         private Exception _error;
 
         internal ThumbWorkHandle(Action<CancellationToken> work, CancellationToken token,
@@ -66,12 +66,12 @@ namespace Clowd.VideoSDK.Thumbs
         }
 
         /// <summary>True when the item never ran because it was unqueued first.</summary>
-        public bool IsCancelled
+        public bool IsCanceled
         {
             get
             {
                 lock (_gate)
-                    return _cancelled;
+                    return _canceled;
             }
         }
 
@@ -94,7 +94,7 @@ namespace Clowd.VideoSDK.Thumbs
             {
                 if (!_started && !_finished)
                 {
-                    _cancelled = true;
+                    _canceled = true;
                     _finished = true;
                     Monitor.PulseAll(_gate);
                 }
@@ -170,7 +170,7 @@ namespace Clowd.VideoSDK.Thumbs
     /// <para>
     /// One thread, no reentrancy: a work delegate runs to completion before the next item starts,
     /// and it runs on a thread nobody else owns — it may block on decoding for as long as it needs.
-    /// It must, however, honour the cancellation token it is handed, or a closing editor waits on
+    /// It must, however, honor the cancellation token it is handed, or a closing editor waits on
     /// it. Exceptions are captured on the handle and dropped; the thread never dies.
     /// </para>
     ///

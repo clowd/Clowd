@@ -24,7 +24,7 @@ namespace Clowd.VideoSDK.Tests
                 Cursor = new SequentialFrameCursor<string>(Pull, f => Discarded.Add(f));
             }
 
-            /// <summary>Queues another run of the stream, labelled with <paramref name="prefix"/> —
+            /// <summary>Queues another run of the stream, labeled with <paramref name="prefix"/> —
             /// what the puller yields after its owner repositioned it.</summary>
             public void Refill(string prefix, params long[] ptsList)
             {

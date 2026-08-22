@@ -56,7 +56,7 @@ namespace Clowd.VideoSDK.Render
     public enum RenderOutcome
     {
         Completed,
-        Cancelled,
+        Canceled,
     }
 
     /// <summary>What a render produced. On cancellation the partial output file has been
@@ -67,7 +67,7 @@ namespace Clowd.VideoSDK.Render
 
         public string OutputPath { get; init; }
 
-        /// <summary>Size of the finished file in bytes (0 when cancelled).</summary>
+        /// <summary>Size of the finished file in bytes (0 when canceled).</summary>
         public long OutputBytes { get; init; }
 
         /// <summary>The surface backend the frames were composed on ("CPU", "Direct3D 12",
@@ -99,7 +99,7 @@ namespace Clowd.VideoSDK.Render
     ///
     /// <para>
     /// Cancellation is polled between frames: the partial output is deleted and a
-    /// <see cref="RenderOutcome.Cancelled"/> result returned (vid-render removed partial output
+    /// <see cref="RenderOutcome.Canceled"/> result returned (vid-render removed partial output
     /// on quit; errors also delete the partial file before propagating).
     /// </para>
     /// </summary>
@@ -166,7 +166,7 @@ namespace Clowd.VideoSDK.Render
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
                 // nothing was written yet — no partial output to delete
-                return new RenderResult { Outcome = RenderOutcome.Cancelled, OutputPath = outputPath };
+                return new RenderResult { Outcome = RenderOutcome.Canceled, OutputPath = outputPath };
             }
             double renderShare = 100.0 - progressBase;
 
@@ -188,7 +188,7 @@ namespace Clowd.VideoSDK.Render
             DenoisedAudioSource denoisedSource = null;
             Mp4Writer writer = null;
 
-            bool cancelled = false;
+            bool canceled = false;
             bool finished = false; // writer.Finish() completed — the output is a real mp4
             long encoded = 0, outputBytes = 0;
             string backend = null;
@@ -263,7 +263,7 @@ namespace Clowd.VideoSDK.Render
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
-                            cancelled = true;
+                            canceled = true;
                             break;
                         }
 
@@ -329,7 +329,7 @@ namespace Clowd.VideoSDK.Render
                         progress?.Report(Math.Min(99.0, progressBase + encoded * renderShare / frameCount));
                     }
 
-                    if (!cancelled)
+                    if (!canceled)
                     {
                         if (audioWarp != null && audioPos < totalAudioFrames)
                             MixUpTo(audioWarp, writer, mixBuffer, audioPos, totalAudioFrames);
@@ -382,12 +382,12 @@ namespace Clowd.VideoSDK.Render
                 throw;
             }
 
-            if (cancelled)
+            if (canceled)
                 TryDelete(outputPath);
 
             return new RenderResult
             {
-                Outcome = cancelled ? RenderOutcome.Cancelled : RenderOutcome.Completed,
+                Outcome = canceled ? RenderOutcome.Canceled : RenderOutcome.Completed,
                 OutputPath = outputPath,
                 OutputBytes = outputBytes,
                 SurfaceBackend = backend,

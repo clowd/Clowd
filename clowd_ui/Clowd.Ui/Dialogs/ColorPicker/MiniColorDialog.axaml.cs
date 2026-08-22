@@ -32,7 +32,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             set => SetValue(RealtimeProperty, value);
         }
 
-        public event EventHandler Cancelled;
+        public event EventHandler Canceled;
 
         public Action<Color> ColorSelectFn { get; set; }
 
@@ -42,7 +42,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private bool _suppressUpdate;
 
-        // The colour in effect before this popup was opened, so Escape can undo the live
+        // The color in effect before this popup was opened, so Escape can undo the live
         // (Realtime) writes that every slider/canvas move has already pushed to the caller.
         private Color? _originalColor;
 
@@ -52,11 +52,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
         // lifetime of this control only — deliberately not a persisted setting.
         private ColorTextFormat _textFormat = ColorTextFormat.Hex;
 
-        // set once the current colour has been handed to the caller, so dismissing the popup does
-        // not record a colour twice (or record one that was cancelled)
+        // set once the current color has been handed to the caller, so dismissing the popup does
+        // not record a color twice (or record one that was canceled)
         private bool _committed;
 
-        // colour to put back if an eyedropper drag ends without a pick
+        // color to put back if an eyedropper drag ends without a pick
         private HslRgbColor _eyedropperRestore;
 
         // the four component slots, in display order. Slot 0 doubles as the full-width hex box.
@@ -107,7 +107,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 Accept();
             };
             // sampling failed or the drag was abandoned — put back what the live preview replaced
-            btnEyedropper.Cancelled += () =>
+            btnEyedropper.Canceled += () =>
             {
                 if (_eyedropperRestore != null)
                     CurrentColor = _eyedropperRestore;
@@ -134,8 +134,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
         }
 
         /// <summary>
-        /// Prepares the picker for a fresh open: seeds the colour without notifying the caller,
-        /// then wires up the callback. Also records the starting colour so <see cref="Cancel"/>
+        /// Prepares the picker for a fresh open: seeds the color without notifying the caller,
+        /// then wires up the callback. Also records the starting color so <see cref="Cancel"/>
         /// can restore it.
         /// </summary>
         public void Reset(Color initial, Action<Color> selectFn)
@@ -147,30 +147,30 @@ namespace Clowd.UI.Dialogs.ColorPicker
             ColorSelectFn = selectFn;
         }
 
-        /// <summary>Keeps the current colour and closes.</summary>
+        /// <summary>Keeps the current color and closes.</summary>
         public void Accept()
         {
             var fn = ColorSelectFn;
             var color = CurrentColor?.ToColor();
 
             Commit(color);
-            Cancelled?.Invoke(this, EventArgs.Empty);
+            Canceled?.Invoke(this, EventArgs.Empty);
 
             if (fn != null && color.HasValue)
                 fn(color.Value);
         }
 
-        /// <summary>Closes, restoring the colour that was in effect when the picker opened.</summary>
+        /// <summary>Closes, restoring the color that was in effect when the picker opened.</summary>
         public void Cancel()
         {
             var fn = ColorSelectFn;
             var original = _originalColor;
 
             _committed = true; // nothing was chosen, so nothing goes into the recent list
-            Cancelled?.Invoke(this, EventArgs.Empty);
+            Canceled?.Invoke(this, EventArgs.Empty);
 
-            // In Realtime mode the caller has already been given every intermediate colour, so
-            // cancelling means putting the original back.
+            // In Realtime mode the caller has already been given every intermediate color, so
+            // canceling means putting the original back.
             if (Realtime && fn != null && original.HasValue)
                 fn(original.Value);
         }
@@ -197,14 +197,14 @@ namespace Clowd.UI.Dialogs.ColorPicker
             _keyRoot = null;
             RecentColorHistory.Changed -= OnRecentColorsChanged;
 
-            // Light dismiss (a click outside the popup) keeps the live colour without going
+            // Light dismiss (a click outside the popup) keeps the live color without going
             // through Accept, so this is the only place that outcome can be recorded.
             Commit(CurrentColor?.ToColor());
 
             base.OnDetachedFromVisualTree(e);
         }
 
-        /// <summary>Records a chosen colour in the shared recent list, once per open.</summary>
+        /// <summary>Records a chosen color in the shared recent list, once per open.</summary>
         private void Commit(Color? color)
         {
             if (_committed)
@@ -218,7 +218,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private void RootKeyDown(object sender, KeyEventArgs e)
         {
-            // tunnelled, so these win over the hex TextBox as well
+            // tunneled, so these win over the hex TextBox as well
             if (e.Key == Key.Enter)
             {
                 e.Handled = true;
@@ -402,7 +402,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             }
         }
 
-        /// <summary>Applies a colour sampled off the screen. The sample is always fully opaque:
+        /// <summary>Applies a color sampled off the screen. The sample is always fully opaque:
         /// what you picked off the screen is what you saw, and a partially transparent brush would
         /// not reproduce it.</summary>
         private void ApplyEyedropperSample(Color sampled)
@@ -449,7 +449,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             UpdateComponentValues();
         }
 
-        /// <summary>Writes the current colour into the component boxes, leaving whichever box has
+        /// <summary>Writes the current color into the component boxes, leaving whichever box has
         /// focus alone so it does not fight the user's typing.</summary>
         private void UpdateComponentValues(bool skipFocused = true)
         {
@@ -558,7 +558,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             pnlRecent.IsVisible = pnlRecent.Children.Count > 0;
 
             // sync the new items' selection ring directly rather than via Update(), which in
-            // Realtime mode would re-broadcast the current colour just for opening the popup
+            // Realtime mode would re-broadcast the current color just for opening the popup
             if (CurrentColor != null)
             {
                 var rgb = CurrentColor.ToColor();
@@ -573,9 +573,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
             var original = _originalColor;
 
             // the full dialog owns the outcome from here — including what lands in the recent
-            // list — so closing this popup must not record the in-progress colour
+            // list — so closing this popup must not record the in-progress color
             _committed = true;
-            Cancelled?.Invoke(this, EventArgs.Empty);
+            Canceled?.Invoke(this, EventArgs.Empty);
 
             // Clone: ColorDialog keeps the instance it is handed as its live CurrentColor, so
             // sharing ours would let its edits mutate (and, in Realtime, re-broadcast) this one.
@@ -588,7 +588,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (result == true)
                 fn(clr.CurrentColor.ToColor());
             else if (Realtime && original.HasValue)
-                fn(original.Value); // cancelled — undo the live edits made before popping out
+                fn(original.Value); // canceled — undo the live edits made before popping out
         }
     }
 }

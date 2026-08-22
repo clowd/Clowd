@@ -93,7 +93,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>Silence covering the request — what a provider returns for a stream it cannot
-        /// (or will not) analyse. Draws as a flat line, never as a missing row.</summary>
+        /// (or will not) analyze. Draws as a flat line, never as a missing row.</summary>
         public static AudioPeaks Silent(in AudioPeaksRequest request)
         {
             var perBucket = Math.Max(1, request.TicksPerBucket);
@@ -110,12 +110,12 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public int BucketCount => MinMax.Count / 2;
 
-        /// <summary>True when the whole span has been analysed; a false value means the waveform is
+        /// <summary>True when the whole span has been analyzed; a false value means the waveform is
         /// still being built and <see cref="ITimelinePreviewProvider.PreviewReady"/> will fire
         /// again.</summary>
         public bool IsComplete { get; }
 
-        /// <summary>Reads one bucket. Returns false (and silence) outside the analysed range, so
+        /// <summary>Reads one bucket. Returns false (and silence) outside the analyzed range, so
         /// callers can walk a pixel range without bounds-checking every step.</summary>
         public bool TryGetBucket(int index, out float min, out float max)
         {

@@ -12,7 +12,7 @@ namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="DenoiseGenerator"/> against the real <c>clowd_ai</c> binary: encode a sine
-    /// fixture, generate its denoise sidecar, and assert the wav + companion honour the sidecar
+    /// fixture, generate its denoise sidecar, and assert the wav + companion honor the sidecar
     /// contract (float32 48 kHz, source-matched length, valid companion). This is the one place
     /// the dual-pipe pump (<see cref="AiClient"/>) runs for real — the design exists to
     /// avoid a stdin/stdout pipe deadlock, which only a real child process can exercise. Skips
@@ -290,7 +290,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void A_cancelled_generation_throws_and_leaves_no_sidecar_behind()
+        public void A_canceled_generation_throws_and_leaves_no_sidecar_behind()
         {
             Assert.SkipUnless(FFmpegAvailable,
                 $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");

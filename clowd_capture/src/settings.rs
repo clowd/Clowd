@@ -74,7 +74,7 @@ impl CaptureMode {
 /// via `Arc` — we never mutate it after construction.
 #[derive(Debug, Clone)]
 pub struct CapturerSettings {
-    /// RGBA (each channel in [0, 1]) accent colour used for crosshair
+    /// RGBA (each channel in [0, 1]) accent color used for crosshair
     /// arms, selection borders, and UI highlights. Written into the
     /// per-window uniform buffer once, at render-thread startup.
     pub accent_color: [f32; 4],
@@ -171,7 +171,7 @@ pub struct CliArgs {
     #[arg(long, value_name = "PATH")]
     pub session_dir: Option<PathBuf>,
 
-    /// Accent colour for the crosshair, selection borders, and UI
+    /// Accent color for the crosshair, selection borders, and UI
     /// highlights, as hex `#RRGGBB` or `#RRGGBBAA` (leading `#` optional).
     #[arg(long, value_name = "HEX", default_value = "#2F7CAE", value_parser = parse_hex_color)]
     pub accent_color: [f32; 4],
@@ -283,7 +283,7 @@ impl CliArgs {
 fn parse_hex_color(s: &str) -> Result<[f32; 4], String> {
     let hex = s.trim_start_matches('#');
     if !matches!(hex.len(), 6 | 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(format!("'{s}' is not a #RRGGBB or #RRGGBBAA colour"));
+        return Err(format!("'{s}' is not a #RRGGBB or #RRGGBBAA color"));
     }
     let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap() as f32 / 255.0;
     let alpha = if hex.len() == 8 { channel(6) } else { 1.0 };

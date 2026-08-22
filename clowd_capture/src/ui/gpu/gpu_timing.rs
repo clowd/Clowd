@@ -52,7 +52,7 @@ static GPU_TIMING: AtomicBool = AtomicBool::new(false);
 /// `GpuTimings::new` unable to build anything (it checks
 /// `device.features()`, not this flag alone). Relaxed ordering is enough
 /// — the worker threads are spawned after this runs, and thread spawn is
-/// itself the synchronisation edge.
+/// itself the synchronization edge.
 // Called from `main::run` with `--gpu-timing`, before the session spawns any
 // render worker.
 pub fn set_gpu_timing_enabled(enabled: bool) {

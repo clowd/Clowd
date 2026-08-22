@@ -467,7 +467,7 @@ namespace Clowd.VideoSDK.Tests
         // --------------------------------------------------------------------------------- wrap
 
         /// <summary>Wrap arithmetic without a font: a character is 10 wide, a keycap 30, a plus 8,
-        /// any two neighbours sit 5 apart, and a run of words pays 5 of pill padding at each end
+        /// any two neighbors sit 5 apart, and a run of words pays 5 of pill padding at each end
         /// of the line it starts or finishes.</summary>
         private sealed class FakeMetrics : IKeyAtomMetrics
         {
@@ -705,7 +705,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var p = KeyboardProject(out _);
 
-            // a small centred solid to witness the zoom, beneath a zoom row covering everything.
+            // a small centered solid to witness the zoom, beneath a zoom row covering everything.
             // Focus (0,0) makes the zoom a pure 2x scale from the origin: the solid's [24,40)
             // square moves to [48,80), and a zoomed keyboard block (bottom y≈57) would land
             // entirely below the canvas.
@@ -777,7 +777,7 @@ namespace Clowd.VideoSDK.Tests
 
         private const int BigW = 480, BigH = 260;
 
-        /// <summary>A big canvas carrying one keyboard item, with the pill in an opaque colour so
+        /// <summary>A big canvas carrying one keyboard item, with the pill in an opaque color so
         /// its extent is measurable. <paramref name="white"/> lays a white sheet underneath —
         /// what the keycap's black seat needs to be visible at all.</summary>
         private static Project BigKeyboardProject(string capture, out Item item,
@@ -830,7 +830,7 @@ namespace Clowd.VideoSDK.Tests
         /// from padding rather than from the font's own ascent/descent.
         /// </summary>
         [Fact]
-        public void Pill_text_is_vertically_centred_in_its_pill()
+        public void Pill_text_is_vertically_centered_in_its_pill()
         {
             var capture = WriteCapture("{\"type\":\"event\",\"t\":0,\"kind\":\"kd\",\"vk\":72,\"ch\":\"H\"}");
             var p = BigKeyboardProject(capture, out _, out var content);
@@ -845,13 +845,13 @@ namespace Clowd.VideoSDK.Tests
             double above = ink.Value.Top - pill.Value.Top;
             double below = pill.Value.Bottom - ink.Value.Bottom;
             Assert.True(Math.Abs(above - below) <= 0.15 * content.FontSize,
-                $"text is not centred: {above}px above, {below}px below");
+                $"text is not centered: {above}px above, {below}px below");
         }
 
-        /// <summary>The pill and its text take their colours from the item — alpha included, so a
+        /// <summary>The pill and its text take their colors from the item — alpha included, so a
         /// translucent fill is just a fill whose alpha the user chose.</summary>
         [Fact]
-        public void Pill_and_text_take_the_items_colours()
+        public void Pill_and_text_take_the_items_colors()
         {
             var capture = WriteCapture("{\"type\":\"event\",\"t\":0,\"kind\":\"kd\",\"vk\":72,\"ch\":\"H\"}");
             var p = BigKeyboardProject(capture, out _, out var content);
@@ -883,7 +883,7 @@ namespace Clowd.VideoSDK.Tests
             var face = Bounds(px, BigW, BigH, (b, g, r) => b == 0x3D && g == 0x3D && r == 0x3D);
             Assert.NotNull(face);
 
-            // down the middle of the cap: the grey face, then the black seat peeking out under it,
+            // down the middle of the cap: the gray face, then the black seat peeking out under it,
             // then the white sheet again. (Edges are anti-aliased, so only the solid runs count.)
             int x = (face.Value.Left + face.Value.Right) / 2;
             int lastFace = -1, blackRows = 0;
@@ -905,7 +905,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>Counts the horizontal runs of pixels matching <paramref name="match"/> along
-        /// row <paramref name="y"/> — how many separate rects of a colour a line drew.</summary>
+        /// row <paramref name="y"/> — how many separate rects of a color a line drew.</summary>
         private static int RunsAcross(byte[] bgra, int y, Func<byte, byte, byte, bool> match)
         {
             int runs = 0;
@@ -996,7 +996,7 @@ namespace Clowd.VideoSDK.Tests
             var face = Bounds(px, BigW, BigH, (b, g, r) => b is > 0x30 and < 0x4A && g == b && r == b);
             Assert.NotNull(face);
 
-            // three faces means three runs of grey across the top of the caps — sampled above the
+            // three faces means three runs of gray across the top of the caps — sampled above the
             // legends and icons, which are white and would otherwise break each face in two
             int y = face.Value.Top + 3;
             int runs = 0;
@@ -1004,10 +1004,10 @@ namespace Clowd.VideoSDK.Tests
             for (int x = 0; x < BigW; x++)
             {
                 int i = (y * BigW + x) * 4;
-                bool grey = px[i] is > 0x20 and < 0x4A && px[i] == px[i + 1] && px[i + 1] == px[i + 2];
-                if (grey && !inside)
+                bool gray = px[i] is > 0x20 and < 0x4A && px[i] == px[i + 1] && px[i + 1] == px[i + 2];
+                if (gray && !inside)
                     runs++;
-                inside = grey;
+                inside = gray;
             }
 
             Assert.Equal(3, runs);

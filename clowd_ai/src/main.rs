@@ -15,9 +15,9 @@
 //!   interleaved 48 kHz PCM and answers with the same number of
 //!   DPDFNet-denoised samples.
 //!
-//! One job, one process, then gone — cancelling a job is killing us, and a
+//! One job, one process, then gone — canceling a job is killing us, and a
 //! crash in native inference costs a per-job child rather than the editor or
-//! the overlay mid-capture. The process boundary is also the licence boundary:
+//! the overlay mid-capture. The process boundary is also the license boundary:
 //! the embedded RobustVideoMatting weights make this one binary GPL-3.0 in an
 //! MIT repo (see Cargo.toml).
 //!

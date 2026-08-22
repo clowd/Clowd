@@ -6,7 +6,7 @@
          label would be the wrong size for the bar) with the caption below it. The whole control is
          one click target, caption included. -->
     <ControlTheme x:Key="{x:Type controls:CaptionedCheckBox}" TargetType="controls:CaptionedCheckBox">
-        <!-- The control fills the bar's 30px row (so the whole height is clickable) and centres the
+        <!-- The control fills the bar's 30px row (so the whole height is clickable) and centers the
              box+caption stack inside it; a fixed Height shorter than the stack clipped it. -->
         <Setter Property="VerticalAlignment" Value="Stretch" />
         <Setter Property="Cursor" Value="Hand" />

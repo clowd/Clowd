@@ -19,7 +19,7 @@ namespace Clowd.UI.Helpers
         /// the default is a plain <see cref="Window.Close()"/>, matching the titlebar close button.
         /// </summary>
         /// <remarks>
-        /// Tunnelling rather than a <see cref="Window.KeyBindings"/> entry: the gesture must fire
+        /// Tunneling rather than a <see cref="Window.KeyBindings"/> entry: the gesture must fire
         /// from a focused TextBox too, and the editor's own tunnel handler bails out early on
         /// TextBox input.
         /// </remarks>

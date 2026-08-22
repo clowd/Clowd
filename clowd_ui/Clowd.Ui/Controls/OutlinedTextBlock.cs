@@ -14,7 +14,7 @@ namespace Clowd.UI.Controls
     /// gaps on the cardinal edges the way an offset-copy fake outline leaves them). All strokes
     /// are drawn behind all fills, so only the outer half of the stroke is visible — the inner
     /// half is painted over by the fill — giving a clean <see cref="StrokeThickness"/>/2 outline
-    /// that never eats into the letter body or a neighbouring glyph.
+    /// that never eats into the letter body or a neighboring glyph.
     /// </summary>
     public class OutlinedTextBlock : Control
     {
@@ -122,7 +122,7 @@ namespace Clowd.UI.Controls
                 {
                     // NB: FormattedText.BuildGeometry returns null when the foreground brush is
                     // null, so a non-null brush is mandatory here even though the returned geometry
-                    // is re-coloured by Fill/Stroke at draw time.
+                    // is re-colored by Fill/Stroke at draw time.
                     var ft = new FormattedText(ch.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, size,
                                                Brushes.Black);
                     var g = ft.BuildGeometry(new Point(x + margin, margin));
@@ -159,7 +159,7 @@ namespace Clowd.UI.Controls
                           ? new Pen(stroke, StrokeThickness) { LineJoin = PenLineJoin.Round, LineCap = PenLineCap.Round }
                           : null;
 
-            // All strokes first, then all fills, so a neighbour's outline can never paint over
+            // All strokes first, then all fills, so a neighbor's outline can never paint over
             // this glyph's white body.
             if (pen != null)
                 foreach (var g in _glyphs)

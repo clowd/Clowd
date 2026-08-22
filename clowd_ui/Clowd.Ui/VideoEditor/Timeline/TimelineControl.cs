@@ -512,7 +512,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         {
             var palette = TimelinePalette.ForVariant(ActualThemeVariant);
             _corner.Background = palette.RulerBackground;
-            // full-weight text colour, not LabelBrush: at the muted label weight these read as
+            // full-weight text color, not LabelBrush: at the muted label weight these read as
             // disabled buttons rather than as controls.
             _snap.Foreground = palette.RulerLabelBrush;
             _split.Foreground = palette.RulerLabelBrush;

@@ -129,7 +129,7 @@ pub enum OcrState {
     /// could be reused by a later outcome on a render worker that stalled
     /// through every intermediate state, an id cannot.
     /// `dpi_scale` is the scale of the monitor containing the region's
-    /// centre — ONE value for all lift geometry, so a line crossing a
+    /// center — ONE value for all lift geometry, so a line crossing a
     /// mixed-DPI seam moves by the same physical amount on both halves
     /// instead of tearing at the seam.
     Lifted {
@@ -142,7 +142,7 @@ pub enum OcrState {
     /// BACK/Escape pressed. The text does NOT animate out — every bubble
     /// and crop vanishes on the first frame of this phase (see
     /// `anim::RETRACT_DURATION_SECS`) — so all this phase does is fade the
-    /// region's dim/desaturation back to colour, which is why it carries
+    /// region's dim/desaturation back to color, which is why it carries
     /// no outcome: there is nothing left to draw that needs one. The app
     /// thread flips to `Idle` once `anchor.elapsed()` passes the fade
     /// duration.
@@ -302,7 +302,7 @@ pub(crate) struct InteractionState {
     /// already captured and frozen — this mode only collects a point, so
     /// the panel hides, the cursor becomes a crosshair, and clicks are
     /// routed to the picker instead of the panel/drag machinery. Escape
-    /// leaves the mode without cancelling the cycle.
+    /// leaves the mode without canceling the cycle.
     pub scroll_pick_mode: bool,
     /// Where the OCR lift-and-act mode is in its lifecycle — see
     /// [`OcrState`]. Mirrored verbatim onto `UiSharedState` so the lifted
@@ -608,7 +608,7 @@ mod tests {
         assert!(lifted.shows_ocr_panel());
         assert!(!lifted.hides_panel());
 
-        // Retracting is still modal (the colour fade is playing, the
+        // Retracting is still modal (the color fade is playing, the
         // selection stays frozen) but hands the Normal buttons back at once.
         let retracting = OcrState::Retracting {
             anchor: Instant::now(),

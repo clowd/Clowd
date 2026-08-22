@@ -196,7 +196,7 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>Source time for a media item at output time <paramref name="timeTicks"/> —
-        /// exact for realtime so speed-1 projects keep integer-perfect maths.</summary>
+        /// exact for realtime so speed-1 projects keep integer-perfect math.</summary>
         private static long SourceTimeTicks(MediaContent media, Item item, long timeTicks)
         {
             long elapsed = timeTicks - item.TimelineStartTicks;
@@ -768,7 +768,7 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>
         /// Widths for the wrap and the drawing alike: typed words measure in the row font, keycaps
-        /// in their own geometry, and neighbours are spaced by what sits between them — a typed
+        /// in their own geometry, and neighbors are spaced by what sits between them — a typed
         /// space inside a pill, a wider gap wherever a keycap breaks the row into separate
         /// segments.
         ///
@@ -818,7 +818,7 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>
         /// A keyboard-track item: the capture's keystroke runs stacked as rows, the active run at
         /// the anchored bottom (<see cref="Transform.X"/>/<see cref="Transform.Y"/> = the block
-        /// bottom centre), finished runs pushed up. Typing draws as text in a pill coloured by
+        /// bottom center), finished runs pushed up. Typing draws as text in a pill colored by
         /// <see cref="KeyboardContent.BackgroundColor"/>/<see cref="KeyboardContent.TextColor"/>;
         /// every special key and every chord member draws as a <see cref="Keycap"/> instead,
         /// <b>outside</b> any pill — a row is one pill per run of typed words with the caps free
@@ -939,7 +939,7 @@ namespace Clowd.VideoSDK.Composition
         ///
         /// Positions come from the very arithmetic <see cref="KeyboardLayout.LineWidth"/> measured
         /// the line with, so the segments cannot drift out of the rect the wrap sized. Everything
-        /// centres on the row's midline by the font's real metrics.
+        /// centers on the row's midline by the font's real metrics.
         /// </summary>
         private static void DrawKeyboardLine(SKCanvas target, IReadOnlyList<KeyAtom> atoms,
             IKeyAtomMetrics atomMetrics, SKFont font, Keycap caps, KeyboardMetrics metrics,
@@ -991,7 +991,7 @@ namespace Clowd.VideoSDK.Composition
                     continue;
                 }
 
-                // a chord's "+" belongs to the keycaps' fixed livery, not to the typing colours
+                // a chord's "+" belongs to the keycaps' fixed livery, not to the typing colors
                 paint.Color = atom.Kind == KeyAtomKind.Plus ? Keycap.Fade(SKColors.White, alpha) : ink;
                 target.DrawText(atom.Text, pen[i], baseline, SKTextAlign.Left, font, paint);
             }
@@ -1003,7 +1003,7 @@ namespace Clowd.VideoSDK.Composition
             ItemEffects fx, double opacity, int canvasWidth, int canvasHeight)
         {
             // A solid has no intrinsic picture; its natural size is the canvas itself, so the
-            // default transform (centred, Scale 1) fills the whole frame.
+            // default transform (centered, Scale 1) fills the whole frame.
             double destW = transform.Scale * canvasWidth;
             double destH = (transform.ScaleY ?? transform.Scale) * canvasHeight;
 
@@ -1171,7 +1171,7 @@ namespace Clowd.VideoSDK.Composition
 
         // ---------------------------------------------------------------------------- geometry
 
-        /// <summary>Places a dest rect of the given size: centred at the normalized
+        /// <summary>Places a dest rect of the given size: centered at the normalized
         /// <see cref="Transform.X"/>/<see cref="Transform.Y"/>, shifted by the transition's
         /// slide offset (fractions of the item's own extent).</summary>
         internal static SKRect PlaceRect(Transform transform, ItemEffects fx,
@@ -1184,7 +1184,7 @@ namespace Clowd.VideoSDK.Composition
                 (float)(cx + destW / 2), (float)(cy + destH / 2));
         }
 
-        /// <summary>Rotation about the item centre, then the mask clip, then the wipe clip —
+        /// <summary>Rotation about the item center, then the mask clip, then the wipe clip —
         /// all in the rotated space, so mask and wipe travel with the picture. Caller must
         /// Save/Restore around this.</summary>
         private static void ApplyClips(SKCanvas target, Transform transform, ItemEffects fx, SKRect rect)

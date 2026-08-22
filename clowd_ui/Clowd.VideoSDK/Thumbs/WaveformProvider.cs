@@ -75,7 +75,7 @@ namespace Clowd.VideoSDK.Thumbs
         /// <summary>
         /// The peaks known for one stream of one file, starting the analysis on first ask.
         /// </summary>
-        /// <param name="sourcePath">The media file — analysed through its own format context, so
+        /// <param name="sourcePath">The media file — analyzed through its own format context, so
         /// this never contends with playback.</param>
         /// <param name="streamIndex">The audio stream's index in that file.</param>
         /// <param name="cacheDir">Where the stream's <c>.cwf</c> file lives (the directory holding
@@ -135,7 +135,7 @@ namespace Clowd.VideoSDK.Thumbs
 
                 entry.Snapshot = buffer.Snapshot;
                 if (!complete)
-                    return; // cancelled: keep the partial peaks, never cache them
+                    return; // canceled: keep the partial peaks, never cache them
 
                 RaiseChanged();
                 WaveformCache.TrySave(entry.CacheDir, entry.SourcePath, entry.StreamIndex, entry.Snapshot,
@@ -196,7 +196,7 @@ namespace Clowd.VideoSDK.Thumbs
                 entries = new List<Entry>(_entries.Values);
             }
 
-            // the token stops a pass mid-decode; cancelling the handles drops the queued ones. The
+            // the token stops a pass mid-decode; canceling the handles drops the queued ones. The
             // source itself is deliberately NOT disposed — a pass still inside a decode chunk reads
             // the token afterwards, and outliving one CancellationTokenSource costs nothing.
             _cts.Cancel();
@@ -236,7 +236,7 @@ namespace Clowd.VideoSDK.Thumbs
         }
 
         /// <summary>Keys streams by path the way the file system compares them on this platform —
-        /// the same file reached through two spellings must not be analysed twice on Windows, and
+        /// the same file reached through two spellings must not be analyzed twice on Windows, and
         /// must not be conflated on Linux.</summary>
         private sealed class StreamKeyComparer : IEqualityComparer<(string Path, int Stream)>
         {

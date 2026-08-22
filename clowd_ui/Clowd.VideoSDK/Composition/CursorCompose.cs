@@ -15,7 +15,7 @@ namespace Clowd.VideoSDK.Composition
     internal static class CursorCompose
     {
         /// <summary>Base size of a themed glyph in source (physical) pixels at monitor scale 1 —
-        /// the standardised 100% cursor size, deliberately larger than the 32px a Windows cursor
+        /// the standardized 100% cursor size, deliberately larger than the 32px a Windows cursor
         /// is authored at (a recorded cursor reads better a touch oversized). Multiplied by
         /// <c>CursorContent.Size</c> and the header's monitor scale, so 100% lands at 40x40 on a
         /// screen row shown at its recorded logical size whatever the recording's DPI was.</summary>
@@ -47,16 +47,16 @@ namespace Clowd.VideoSDK.Composition
             _ => null,
         };
 
-        /// <summary>The glyph for a (style, kind) pair in the style's default colourway; see the
+        /// <summary>The glyph for a (style, kind) pair in the style's default colorway; see the
         /// three-argument overload.</summary>
         internal static CursorGlyph ResolveGlyph(string style, CursorKind kind)
             => ResolveGlyph(style, null, kind);
 
         /// <summary>
-        /// The glyph to draw for a (style, colourway, kind) triple: the style's artwork for the
-        /// kind, else the style's arrow (unmodelled/custom kinds and the documented per-style
-        /// gaps), else the default style's equivalent for an unknown style name. An unrecognised
-        /// colourway is not a miss — it resolves to the style's default. Null only for
+        /// The glyph to draw for a (style, colorway, kind) triple: the style's artwork for the
+        /// kind, else the style's arrow (unmodeled/custom kinds and the documented per-style
+        /// gaps), else the default style's equivalent for an unknown style name. An unrecognized
+        /// colorway is not a miss — it resolves to the style's default. Null only for
         /// <see cref="CursorKind.Hidden"/> — nothing is drawn then.
         /// </summary>
         internal static CursorGlyph ResolveGlyph(string style, string variant, CursorKind kind)
@@ -209,7 +209,7 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>The glyph's own ink in the caller's (already translated and scaled) space:
         /// each layer's halo-stroke immediately followed by that layer's fill, in document order.
-        /// The halo is a centred stroke, so a layer's own fill has to land on top of it (see
+        /// The halo is a centered stroke, so a layer's own fill has to land on top of it (see
         /// <see cref="CursorGlyphPath.Stroke"/>); doing it per layer rather than in two global
         /// passes is what lets a badge sit on a base shape — the badge's halo separates the two,
         /// which is exactly what a single pass of every halo first would paint over.</summary>
@@ -362,7 +362,7 @@ namespace Clowd.VideoSDK.Composition
         // ------------------------------------------------------------------------ press warp
 
         /// <summary>The SkSL pinch: every pixel inside the circle samples the source from a bit
-        /// further out along its own ray, hardest at the centre and exactly identity at the rim —
+        /// further out along its own ray, hardest at the center and exactly identity at the rim —
         /// which is what stretches the surrounding pixels toward the pointer with no visible
         /// seam. <c>src</c> is the screen frame in canvas coordinates.</summary>
         private const string PressWarpSksl = @"

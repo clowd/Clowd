@@ -354,9 +354,9 @@ namespace Clowd.VideoSDK.Tests
         // ------------------------------------------------------------------------ keyboard block
 
         /// <summary>
-        /// A keyboard overlay is the one content the transform anchors by its <b>bottom</b> centre:
+        /// A keyboard overlay is the one content the transform anchors by its <b>bottom</b> center:
         /// the rows stack upward from it (<c>FrameComposer.DrawKeyboard</c>), so the gizmo's rect
-        /// hangs above the anchor rather than being centred on it. Ground truth is composed pixels
+        /// hangs above the anchor rather than being centered on it. Ground truth is composed pixels
         /// — the pills darken a white background, and their bounding box is the block the gizmo
         /// must land on, three nominal rows tall.
         /// </summary>
@@ -372,7 +372,7 @@ namespace Clowd.VideoSDK.Tests
 
                 Assert.True(ItemPlacement.TryResolve(project, item, CanvasW, CanvasH, out var placed));
                 Assert.Equal(400, placed.W, 3);                 // Scale 0.5 of the canvas width
-                Assert.Equal(0.85 * CanvasH, placed.Bottom, 3); // …anchored by its bottom, not its centre
+                Assert.Equal(0.85 * CanvasH, placed.Bottom, 3); // …anchored by its bottom, not its center
                 Assert.Equal(placed.H / placed.W, placed.Aspect, 6);
                 Assert.Equal(CanvasW, placed.ScaleDenominatorPx, 6);
                 Assert.Equal(placed.H, placed.ScaleDenominatorYPx, 6);
@@ -535,7 +535,7 @@ namespace Clowd.VideoSDK.Tests
             project.Normalize();
             Assert.Empty(project.Validate());
 
-            // dead centre of the overlay (0.8, 0.8 of the canvas)
+            // dead center of the overlay (0.8, 0.8 of the canvas)
             Assert.Equal(overlay.Id, ItemPlacement.HitTest(project, 0, 640, 360, CanvasW, CanvasH)?.Id);
             // top-left corner: only the background is there
             Assert.Equal(background.Id, ItemPlacement.HitTest(project, 0, 20, 20, CanvasW, CanvasH)?.Id);
@@ -551,7 +551,7 @@ namespace Clowd.VideoSDK.Tests
         public void Hit_test_ignores_items_that_do_not_cover_the_playhead()
         {
             var project = MediaProject(1920, 1080, out var item);
-            item.Transform = new ModelTransform { Scale = 0.5 }; // 400x225 centred on an 800x450 canvas
+            item.Transform = new ModelTransform { Scale = 0.5 }; // 400x225 centered on an 800x450 canvas
 
             Assert.NotNull(ItemPlacement.HitTest(project, 0, 400, 225, 800, 450));
             Assert.Null(ItemPlacement.HitTest(project, item.TimelineEndTicks, 400, 225, 800, 450));
@@ -561,7 +561,7 @@ namespace Clowd.VideoSDK.Tests
         // ----------------------------------------------------------------------------- gizmo math
 
         [Fact]
-        public void Move_translates_the_pointer_delta_into_normalized_centre_and_clamps()
+        public void Move_translates_the_pointer_delta_into_normalized_center_and_clamps()
         {
             var (x, y) = GizmoMath.Move(0.5, 0.5, 80, -45, 800, 450);
             Assert.Equal(0.6, x, 6);
@@ -590,7 +590,7 @@ namespace Clowd.VideoSDK.Tests
                 minScale: 0.01, maxScale: 4);
 
             Assert.Equal(0.5, scale, 6);          // 400px of an 800px canvas
-            Assert.Equal(0.25, x, 6);             // centre 200px right of the anchor
+            Assert.Equal(0.25, x, 6);             // center 200px right of the anchor
             Assert.Equal(100 / 450.0, y, 6);      // …and 100px below it (400 * 0.5 / 2)
 
             // the anchor really is stationary: rebuild the rect from the result
@@ -613,7 +613,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(1.0, scale, 6); // 400px of height / 0.5 aspect = 800px of width
         }
 
-        /// <summary>A clamped scale still anchors: the centre is computed from the width the clamp
+        /// <summary>A clamped scale still anchors: the center is computed from the width the clamp
         /// actually allowed, so the fixed corner does not creep while the pointer keeps going.</summary>
         [Fact]
         public void Resize_anchors_the_clamped_size()
@@ -657,7 +657,7 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Equal(400, rect.W, 6);  // 0.5 of the canvas width
             Assert.Equal(100, rect.H, 6);  // 0.25 of the canvas height, NOT 400 (aspect 1.0)
-            Assert.Equal(200, rect.X, 6);  // still centred
+            Assert.Equal(200, rect.X, 6);  // still centered
             Assert.Equal(150, rect.Y, 6);
         }
 
@@ -706,11 +706,11 @@ namespace Clowd.VideoSDK.Tests
                 canvasOrigin: 100, canvasExtent: 800, minScale: 0.01, maxScale: 4);
 
             Assert.Equal(0.5, scale, 6);
-            Assert.Equal(0.25, center, 6); // centre 200px right of an anchor at the canvas origin
+            Assert.Equal(0.25, center, 6); // center 200px right of an anchor at the canvas origin
         }
 
         /// <summary>…and a clamped edge drag still anchors, for the same reason the corner one
-        /// does: the centre is computed from the size the clamp allowed, not the pointer.</summary>
+        /// does: the center is computed from the size the clamp allowed, not the pointer.</summary>
         [Fact]
         public void ResizeAxis_anchors_the_clamped_size()
         {
@@ -725,7 +725,7 @@ namespace Clowd.VideoSDK.Tests
         // ---------------------------------------------------------------------------- rotation
 
         /// <summary>Clockwise rotation, matching the composer's <c>RotateDegrees</c> sense (+90°
-        /// sends the point right of the centre to below it), and unrotating by the negated angle
+        /// sends the point right of the center to below it), and unrotating by the negated angle
         /// round-trips.</summary>
         [Fact]
         public void RotateAbout_matches_the_composer_and_round_trips()
@@ -739,15 +739,15 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(50, by, 6);
         }
 
-        /// <summary>The click hit-test unrotates the point about the item centre, so a rotated item
+        /// <summary>The click hit-test unrotates the point about the item center, so a rotated item
         /// owns the pixels it actually covers — not its unrotated rect. A 90°-rotated wide overlay
-        /// covers points above/below its centre that the unrotated rect misses, and no longer
+        /// covers points above/below its center that the unrotated rect misses, and no longer
         /// covers the left/right ends of that rect.</summary>
         [Fact]
         public void Hit_test_follows_a_rotated_item()
         {
             var project = MediaProject(1920, 1080, out var item);
-            // 400x225 centred on an 800x450 canvas: unrotated rect (200,112.5)-(600,337.5)
+            // 400x225 centered on an 800x450 canvas: unrotated rect (200,112.5)-(600,337.5)
             item.Transform = new ModelTransform { Scale = 0.5, Rotation = 90 };
 
             // rotated 90° the item is 225 wide and 400 tall about (400,225): x 287.5..512.5, y 25..425
@@ -755,14 +755,14 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(ItemPlacement.HitTest(project, 0, 210, 225, 800, 450));     // inside the unrotated rect, but empty now
         }
 
-        /// <summary>The centre a rotated resize writes puts the anchor's drawn position exactly
+        /// <summary>The center a rotated resize writes puts the anchor's drawn position exactly
         /// back where it was: composing the result and rotating the anchored corner about the new
-        /// centre lands on the original visual anchor.</summary>
+        /// center lands on the original visual anchor.</summary>
         [Fact]
         public void AnchoredCenter_pins_the_drawn_anchor_of_a_rotated_resize()
         {
             const double rotation = 30;
-            // item: 400x200 centred at (400,225) on an 800x450 canvas at origin (0,0).
+            // item: 400x200 centered at (400,225) on an 800x450 canvas at origin (0,0).
             // anchor = unrotated top-left corner (200,125); its drawn position:
             var (avx, avy) = GizmoMath.RotateAbout(200, 125, 400, 225, rotation);
 
@@ -771,7 +771,7 @@ namespace Clowd.VideoSDK.Tests
             var (x, y) = GizmoMath.AnchoredCenter(avx, avy, -w / 2, -h / 2, rotation,
                 0, 0, 800, 450);
 
-            // rebuild the drawn anchor from the result: centre + rotated centre-to-anchor vector
+            // rebuild the drawn anchor from the result: center + rotated center-to-anchor vector
             double cx = x * 800, cy = y * 450;
             var (rx, ry) = GizmoMath.RotateAbout(cx - w / 2, cy - h / 2, cx, cy, rotation);
             Assert.Equal(avx, rx, 6);
@@ -841,7 +841,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>A white full-frame background with a keyboard overlay row over it, at the
-        /// transform <c>EditorSession.AddKeyboardTrack</c> creates (bottom centre at 0.85, half the
+        /// transform <c>EditorSession.AddKeyboardTrack</c> creates (bottom center at 0.85, half the
         /// canvas wide). The runs linger long enough that all three are visible at the one second
         /// <see cref="Compose"/> draws.</summary>
         private static Project KeyboardProject(string capturePath, out Item item, out Item background)

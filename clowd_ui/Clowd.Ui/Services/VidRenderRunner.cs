@@ -12,12 +12,12 @@ namespace Clowd.UI.Services
     internal enum VidRenderOutcome
     {
         Success,
-        Cancelled,
+        Canceled,
         Error,
     }
 
     /// <summary>The terminal state of a vid-render run: exactly one of the tool's <c>done</c>,
-    /// <c>cancelled</c> or <c>error</c> messages (or a synthesized error when the process died
+    /// <c>canceled</c> or <c>error</c> messages (or a synthesized error when the process died
     /// without sending one). <see cref="Message"/> is user-facing; <see cref="Diagnostics"/> is the
     /// captured stderr / unrecognized-stdout tail, for the crash report only.</summary>
     internal sealed record VidRenderResult(VidRenderOutcome Outcome, string OutputPath, long Bytes, string Message, string Diagnostics)
@@ -25,8 +25,8 @@ namespace Clowd.UI.Services
         public static VidRenderResult Success(string outputPath, long bytes) =>
             new(VidRenderOutcome.Success, outputPath, bytes, null, null);
 
-        public static VidRenderResult Cancelled() =>
-            new(VidRenderOutcome.Cancelled, null, 0, null, null);
+        public static VidRenderResult Canceled() =>
+            new(VidRenderOutcome.Canceled, null, 0, null, null);
 
         public static VidRenderResult Error(string message) =>
             new(VidRenderOutcome.Error, null, 0, message, null);
@@ -35,7 +35,7 @@ namespace Clowd.UI.Services
     /// <summary>
     /// Hosts one vid-render job and speaks its protocol, which is the vid2gif one verbatim:
     /// line-delimited plain text on stdout (<c>progress &lt;0-100&gt;</c> repeatedly, then exactly one
-    /// of <c>done &lt;path&gt; &lt;bytes&gt;</c> / <c>cancelled</c> / <c>error &lt;message&gt;</c>),
+    /// of <c>done &lt;path&gt; &lt;bytes&gt;</c> / <c>canceled</c> / <c>error &lt;message&gt;</c>),
     /// free-form FFmpeg chatter on stderr, and <c>quit</c> on stdin to cancel. The whole job is
     /// described by a render-args JSON file (a serialized <see cref="Clowd.VideoSDK.Model.Project"/> plus
     /// sibling output/crf properties, written by <see cref="Clowd.VideoSDK.Editing.ProjectFileWriter"/>,
@@ -180,7 +180,7 @@ namespace Clowd.UI.Services
 
         /// <summary>Asks the render to stop (stdin <c>quit</c>) and waits for the process to go
         /// away, killing it if it will not. The run itself still resolves through
-        /// <see cref="RunAsync"/>, normally with <see cref="VidRenderOutcome.Cancelled"/>.</summary>
+        /// <see cref="RunAsync"/>, normally with <see cref="VidRenderOutcome.Canceled"/>.</summary>
         public async Task CancelAsync()
         {
             _cancelRequested = true;
@@ -215,7 +215,7 @@ namespace Clowd.UI.Services
             catch (Exception ex)
             {
                 // the process was disposed out from under us — it is gone, which is what we wanted.
-                Debug.WriteLine("Waiting for the cancelled video render to exit failed: " + ex.Message);
+                Debug.WriteLine("Waiting for the canceled video render to exit failed: " + ex.Message);
             }
         }
 
@@ -344,7 +344,7 @@ namespace Clowd.UI.Services
                 // no terminal message: either we killed a wedged process (the user asked for that,
                 // so honor the cancel) or it died on its own, which is a failure however it exited.
                 result = _cancelRequested
-                    ? VidRenderResult.Cancelled()
+                    ? VidRenderResult.Canceled()
                     : VidRenderResult.Error($"The video render process exited unexpectedly (exit code {exitCode}).");
             }
 
@@ -389,9 +389,9 @@ namespace Clowd.UI.Services
                 return;
             }
 
-            if (String.Equals(trimmed, "cancelled", StringComparison.Ordinal))
+            if (String.Equals(trimmed, "canceled", StringComparison.Ordinal))
             {
-                _terminal = VidRenderResult.Cancelled();
+                _terminal = VidRenderResult.Canceled();
                 return;
             }
 

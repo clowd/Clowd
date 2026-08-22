@@ -69,7 +69,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>The ruler's notches and timestamps. Stronger than <see cref="LabelBrush"/> on
         /// purpose: the time strip is the timeline's scale, read at a glance while dragging
-        /// something else, so it carries full-weight text colour rather than the muted chrome the
+        /// something else, so it carries full-weight text color rather than the muted chrome the
         /// track headers use.</summary>
         public Pen RulerTickPen { get; private init; }
 
@@ -140,7 +140,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private IBrush _edgeFadeRightOdd;
 
         /// <summary>Gradient to the row background laid over an item's end where the viewport cuts
-        /// it off. Per row parity because the row fills alternate — and built from the row colour
+        /// it off. Per row parity because the row fills alternate — and built from the row color
         /// composited over the surface, since the Semi fills are translucent overlays and a
         /// gradient of the raw overlay would never fully dissolve the item.</summary>
         public IBrush ItemEdgeFade(bool evenRow, bool leftEdge) => leftEdge
@@ -291,7 +291,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 SnapGuidePen = new Pen(new SolidColorBrush(accent), 1, new DashStyle(new double[] { 3, 3 }, 0)),
                 DropIndicatorBrush = new SolidColorBrush(accent),
 
-                // fully opaque, and an even whole-pixel width so the snapped centre puts both
+                // fully opaque, and an even whole-pixel width so the snapped center puts both
                 // halves of the stroke on real pixels (1.5 could only ever be antialiased).
                 PlayheadPen = new Pen(new SolidColorBrush(playheadColor), 2),
                 HoverPlayheadBrush = new SolidColorBrush(hoverPlayheadColor),
@@ -300,9 +300,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>
-        /// A Semi colour token as a plain <see cref="Color"/>. Semi expresses its neutral tokens as
+        /// A Semi color token as a plain <see cref="Color"/>. Semi expresses its neutral tokens as
         /// <i>translucent overlays</i> — <c>SemiColorFill0</c> in the dark theme is White at
-        /// <c>Opacity 0.12</c>, not a dark grey — so the brush's <see cref="IBrush.Opacity"/> is
+        /// <c>Opacity 0.12</c>, not a dark gray — so the brush's <see cref="IBrush.Opacity"/> is
         /// folded into the returned alpha. Reading <c>brush.Color</c> alone hands back opaque white
         /// and paints the ruler, the corner cell and the track headers a flat white slab inside the
         /// (hard-coded dark) editor chrome.
@@ -321,7 +321,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             return fallback;
         }
 
-        /// <summary>Alpha-composites a translucent overlay onto an opaque backing colour.</summary>
+        /// <summary>Alpha-composites a translucent overlay onto an opaque backing color.</summary>
         private static Color CompositeOver(Color over, Color under)
         {
             var a = over.A / 255.0;
@@ -331,7 +331,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 (byte)Math.Round(over.B * a + under.B * (1 - a)));
         }
 
-        /// <summary>A horizontal gradient from an opaque colour to the same colour fully
+        /// <summary>A horizontal gradient from an opaque color to the same color fully
         /// transparent — relative to whatever rect it fills.</summary>
         private static IBrush EdgeFadeBrush(Color color, bool fromLeft)
         {

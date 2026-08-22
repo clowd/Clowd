@@ -40,7 +40,7 @@ namespace Clowd.UI
         private const int MaxLogLines = 500;
         private const int MaxLogChars = 128 * 1024;
 
-        // how long a cancelled driver gets to notice and unwind before it is killed. It polls
+        // how long a canceled driver gets to notice and unwind before it is killed. It polls
         // the flag at the top of each step and once more after settling, so the worst case is
         // one settle cycle (800 ms) plus the write itself.
         private static readonly TimeSpan CancelGrace = TimeSpan.FromSeconds(2);

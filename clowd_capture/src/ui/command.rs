@@ -22,14 +22,14 @@ pub enum Command {
     /// click inside it hands the region + point off to the scrolling
     /// capture driver.
     ScrollCapture,
-    /// Run OCR over the current selection and lift the recognised lines
+    /// Run OCR over the current selection and lift the recognized lines
     /// off the desktop.
     Ocr,
-    /// Copy the recognised text to the clipboard.
+    /// Copy the recognized text to the clipboard.
     OcrCopy,
-    /// Open a web search for the recognised text.
+    /// Open a web search for the recognized text.
     OcrSearch,
-    /// Upload the recognised text as a paste.
+    /// Upload the recognized text as a paste.
     OcrUpload,
     /// Leave OCR mode and return to the capture panel, keeping the
     /// selection.
@@ -38,7 +38,7 @@ pub enum Command {
     Copy,
     /// Save the selection to a file.
     Save,
-    /// Report the pixel colour under the cursor to the shell (H in
+    /// Report the pixel color under the cursor to the shell (H in
     /// crosshair mode, before a selection exists).
     SelectColor,
     /// Reset the current selection (return to draw mode).

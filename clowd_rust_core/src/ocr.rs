@@ -26,7 +26,7 @@
 //!   the capturer reports [`OcrError::Failed`] without reading it.
 //! * **stdout** — nothing. The response is a file rather than the NDJSON
 //!   line the scrolling-capture driver uses: it doubles as the session's
-//!   `ocr.json` artefact, and a native runtime that printed to stdout (the
+//!   `ocr.json` artifact, and a native runtime that printed to stdout (the
 //!   original MNN engine did) could never corrupt it. The capturer spawns
 //!   the child with stdout redirected to null for the same reason.
 //!
@@ -53,7 +53,7 @@ struct RectRepr<T> {
     height: T,
 }
 
-/// `#[serde(with = ...)]` bridges for the two rect flavours the contract
+/// `#[serde(with = ...)]` bridges for the two rect flavors the contract
 /// carries. The domain types keep their `ScreenRect`/`ScreenRectF` fields, so
 /// nothing downstream of recognition has to know the wire shape exists.
 macro_rules! rect_serde {
@@ -84,7 +84,7 @@ rect_serde!(rect_i32, ScreenRect, i32);
 
 /// Response file name used when the request's output directory is a capture
 /// session directory. Sits beside `capture.log` and `scroll.log` as one more
-/// per-capture artefact.
+/// per-capture artifact.
 pub const RESULT_FILE_NAME: &str = "ocr.json";
 
 /// One recognized line of text.

@@ -69,7 +69,7 @@ The shell pre-creates the session directory and passes it via
 | OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
 | OCR-COPY / OCR-SEARCH | none — handled inside the capturer (clipboard / browser launch) | — |
-| Cancelled (Escape / close) | none | — |
+| Canceled (Escape / close) | none | — |
 
 File contents:
 
@@ -99,7 +99,7 @@ these files:
    is the entire payload, and the shell uploads it as a text paste.
 4. SELECT-COLOR / SCROLL: `action.txt` only.
 5. Neither `session.json` nor `action.txt` present = the capture was
-   cancelled; the shell deletes the pre-created directory.
+   canceled; the shell deletes the pre-created directory.
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
 pixels (virtual-desktop, possibly negative origin) on Windows, CG points on
@@ -231,7 +231,7 @@ line starting `{` and ending `}` as an event.
 | `stopped` | Esc, a `stop` command, the target window closing/moving, the stitcher giving up, or a pause the user never came back from (§2.5). The partial capture is kept. | yes |
 | `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock — the clock excludes time spent paused. | yes |
 | `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated Windows target whose UIPI eats `SendInput`, or a surface that ignores a synthetic wheel. Reported whatever else ended the run, and a single-screen session is still written. | yes |
-| `failed` | Defined for completeness; the driver has no failure it can recognise *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
+| `failed` | Defined for completeness; the driver has no failure it can recognize *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
 
 ### 2.3 Commands (shell → driver)
 
@@ -255,7 +255,7 @@ what `SessionInfo.UploadSourcePath` shares from Recents, so it must not be a
 downscaled preview), then **`session.json` strictly last**, per §1.2's
 ordering invariant. `CroppedRect` is `0,0,W,H` and `OriginalBounds` is the
 empty rect: a 20,000 px composite has no meaningful place on the virtual
-desktop, and empty bounds make the editor centre its window instead of trying
+desktop, and empty bounds make the editor center its window instead of trying
 to open one taller than every monitor stacked. `Name` is `"Screenshot"` like
 every other session; the shell renames it to "Scrolling Capture".
 
@@ -318,7 +318,7 @@ discarded and retaken without an extra wheel burst. After 1 s of stillness
 the state switches to `resuming` and ticks `resume_in_s` down each second, so
 the cursor is never taken back without warning — any movement drops straight
 back to `paused`. `stop`, `cancel`, Esc and
-the target window going away are all honoured while paused. Paused time is
+the target window going away are all honored while paused. Paused time is
 excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
 as `stopped` with everything captured so far.
@@ -337,12 +337,12 @@ would unwind harmlessly, but an `abort`, a segfault or a refused allocation on
 a degenerate selection kills the process it is running in — which in-process
 meant the overlay, mid-capture, with the user's selection already framed.
 Out-of-process the same failure is an exit code the capturer turns into an
-"OCR failed" pill. It is also the licence boundary: `clowd_ai` embeds GPL-3.0
+"OCR failed" pill. It is also the license boundary: `clowd_ai` embeds GPL-3.0
 matting weights and is GPL-3.0 itself, which the process boundary keeps out of
 the MIT overlay.
 
 Two things follow from that split, both improvements rather than costs:
-cancelling (BACK) is killing a process rather than polling a flag between
+canceling (BACK) is killing a process rather than polling a flag between
 inference batches, so a superseded request can no longer hold the engine while
 the next one queues behind it; and the tens of MB of embedded models plus the
 static runtime left the overlay, which is spawned fresh for every capture and
@@ -365,14 +365,14 @@ clowd_ai ocr --out <path> [--log-file <path>]
 | Flag | Required | Meaning |
 |---|---|---|
 | `--out` | yes | Where to write the response (§3.3). The capturer puts this in the capture's session directory as `ocr.json` when there is one, and in the temp directory otherwise — OCR has no `--session-dir` requirement, since COPY and SEARCH need no shell round-trip. It reads the file only after the process exits 0, and deletes it either way. |
-| `--log-file` | no | Mirrors the log (det/rec timings, the tier choice) to a file. The capturer passes `<session-dir>/ocr.log` when it has a session; that file is deliberately *not* cleaned up, because it is the artefact a "why was OCR slow" report is diagnosed from. |
+| `--log-file` | no | Mirrors the log (det/rec timings, the tier choice) to a file. The capturer passes `<session-dir>/ocr.log` when it has a session; that file is deliberately *not* cleaned up, because it is the artifact a "why was OCR slow" report is diagnosed from. |
 
 Stdio, all three of which the capturer sets deliberately:
 
 | Stream | Setting | Why |
 |---|---|---|
 | stdin | pipe | Carries the request (§3.2). |
-| stdout | **null** | The `ocr` subcommand writes nothing to stdout — the answer is the `--out` file, which doubles as the session's `ocr.json` artefact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is the NDJSON protocol of §1, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
+| stdout | **null** | The `ocr` subcommand writes nothing to stdout — the answer is the `--out` file, which doubles as the session's `ocr.json` artifact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is the NDJSON protocol of §1, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
 | stderr | inherited | Log chatter, by the same convention §2.2 follows. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
 
 On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a

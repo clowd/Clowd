@@ -170,7 +170,7 @@ namespace Clowd.UI.VideoEditor
         // ====================================================================
 
         /// <summary>Picks the file's new home, reprobes it and relinks the source. Returns the file
-        /// name it was relinked to, or null when the user cancelled or the file could not be
+        /// name it was relinked to, or null when the user canceled or the file could not be
         /// read.</summary>
         private async Task<string> LocateAsync(Guid sourceId, string oldPath, string fileName)
         {

@@ -142,9 +142,9 @@ public static class RecordingProject
 
     /// <summary>
     /// Normalizes a webcam overlay rectangle given in <b>screen-frame pixels</b> into the model's
-    /// canvas-relative geometry: centre over the frame size, width as a fraction of the frame
+    /// canvas-relative geometry: center over the frame size, width as a fraction of the frame
     /// width. The rect's height is redundant under the model — the item's height follows the
-    /// camera's own aspect ratio — and is taken only for the centre.
+    /// camera's own aspect ratio — and is taken only for the center.
     /// </summary>
     public static Transform WebcamTransform(int rectX, int rectY, int rectW, int rectH,
         int frameWidth, int frameHeight, Mask mask)

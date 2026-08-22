@@ -34,11 +34,11 @@ namespace Clowd.VideoRender
     /// progress &lt;0-100&gt;       monotonically increasing integer percent
     /// done &lt;path&gt; &lt;bytes&gt;    render finished successfully (exit code 0)
     /// error &lt;message&gt;        render failed, single line (exit code 1)
-    /// cancelled              stdin cancellation honored (exit code 0)
+    /// canceled              stdin cancellation honored (exit code 0)
     /// </code>
     ///
     /// <para>Stdin: a <c>quit</c> line cancels — the render stops within one frame, the partial
-    /// output is removed and the terminal message is <c>cancelled</c>. Errors also remove the
+    /// output is removed and the terminal message is <c>canceled</c>. Errors also remove the
     /// partial output. Diagnostics (backend selection, mask notes) go to stderr, which is outside
     /// the protocol.</para>
     /// </summary>
@@ -98,10 +98,10 @@ namespace Clowd.VideoRender
                     new InlineProgress(percent => emitter.Emit(percent)),
                     cancel.Token);
 
-                if (result.Outcome == RenderOutcome.Cancelled)
+                if (result.Outcome == RenderOutcome.Canceled)
                 {
                     // RenderJob already deleted the partial file.
-                    Console.WriteLine("cancelled");
+                    Console.WriteLine("canceled");
                     return ExitSuccess;
                 }
 
@@ -113,7 +113,7 @@ namespace Clowd.VideoRender
             catch (OperationCanceledException) when (cancel.IsCancellationRequested)
             {
                 TryDelete(output);
-                Console.WriteLine("cancelled");
+                Console.WriteLine("canceled");
                 return ExitSuccess;
             }
             catch (Exception ex)

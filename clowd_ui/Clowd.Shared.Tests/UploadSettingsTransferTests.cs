@@ -197,7 +197,7 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
-        public void ParseUploadTypes_KeepsTheNamesItRecognises()
+        public void ParseUploadTypes_KeepsTheNamesItRecognizes()
         {
             var parsed = UploadSettingsTransfer.ParseUploadTypes("Image, SomethingNewer, Text");
 

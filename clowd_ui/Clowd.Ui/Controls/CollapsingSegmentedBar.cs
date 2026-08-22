@@ -16,7 +16,7 @@ namespace Clowd.UI.Controls
     /// <summary>
     /// A strip of mutually exclusive segments — one ToggleButton per option, each tagged with the
     /// value it stands for — that collapses into a single dropdown when the space it is given cannot
-    /// hold them side by side. The dropdown is labelled with the option currently selected and its
+    /// hold them side by side. The dropdown is labeled with the option currently selected and its
     /// menu offers the same choices, so a caller declares its segments once and the collapsed
     /// presentation follows.
     /// </summary>

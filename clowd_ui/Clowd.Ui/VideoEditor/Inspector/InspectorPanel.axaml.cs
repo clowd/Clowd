@@ -21,7 +21,7 @@ namespace Clowd.UI.VideoEditor.Inspector
     /// The enum drop-downs are filled here rather than in XAML: the project builds with compiled
     /// bindings off and no x:DataType, so an <c>{x:Static}</c>-free code-behind assignment is the
     /// simplest thing that keeps the values and the bound property the same type. The font button
-    /// and colour well are also driven from here — one previews its own typeface and the other
+    /// and color well are also driven from here — one previews its own typeface and the other
     /// needs a string→brush conversion, and both open pickers, which is imperative territory
     /// either way.
     /// </summary>
@@ -77,7 +77,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 () => _vm.SurroundColorHex, hex => _vm.SurroundColorHex = hex);
             cursorClickColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
                 () => _vm.CursorClickColorHex, hex => _vm.CursorClickColorHex = hex);
-            miniColor.Cancelled += (_, _) => colorPopup.IsOpen = false;
+            miniColor.Canceled += (_, _) => colorPopup.IsOpen = false;
 
             DataContextChanged += (_, _) => AttachViewModel(DataContext as SelectedItemViewModel);
         }
@@ -208,7 +208,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 vm.FontFamily = dialog.SelectedFont.TextFontFamilyName;
         }
 
-        /// <summary>Every colour row opens the one mini picker in place; the row supplies which
+        /// <summary>Every color row opens the one mini picker in place; the row supplies which
         /// value it reads and writes.</summary>
         private void OpenColorPicker(PointerPressedEventArgs e, Func<string> read, Action<string> write)
         {

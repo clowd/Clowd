@@ -107,7 +107,7 @@ impl UiPipelines {
     /// (wgpu-core's `Device::create_render_pipeline` locks nothing; the
     /// DX12 backend holds its shader cache only across the map probe, with
     /// `compile()` outside it; the Metal backend takes none), so the real
-    /// serialisation point is the platform shader compiler, not this
+    /// serialization point is the platform shader compiler, not this
     /// process. On macOS that means MTLCompilerService's XPC concurrency
     /// (~3-4 in flight) — which is why fanning three compiles out is worth
     /// three threads and fanning out further would not be.

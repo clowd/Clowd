@@ -695,7 +695,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             menu.Items.Clear();
 
             // Both cuts act on THIS clip alone — not its recording, not the rows beside it. The
-            // pointer picked one clip out; cutting its neighbours too would be an edit nobody
+            // pointer picked one clip out; cutting its neighbors too would be an edit nobody
             // asked for. The toolbar's "Split every track at playhead" is the other gesture.
             // Splitting is only meaningful strictly inside the span: on an edge it would make a
             // zero-length half, which TimelineOps refuses anyway.
@@ -984,7 +984,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 {
                     context.FillRectangle(fill, new Rect(handleX, body.Y, TrimHandleWidth, body.Height));
 
-                    // 9px handle, split 3 / 1 / 1 / 1 / 3: two 1px lines with a 1px gap, centred.
+                    // 9px handle, split 3 / 1 / 1 / 1 / 3: two 1px lines with a 1px gap, centered.
                     var x0 = Math.Round(handleX);
                     context.FillRectangle(line, new Rect(x0 + 3, lineY, 1, lineHeight));
                     context.FillRectangle(line, new Rect(x0 + 5, lineY, 1, lineHeight));

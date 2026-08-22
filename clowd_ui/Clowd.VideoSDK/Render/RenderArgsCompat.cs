@@ -13,7 +13,7 @@ namespace Clowd.VideoSDK.Render
     /// <summary>
     /// Reads the <b>version 1</b> render-args file the old Rust <c>vid-render</c> tool took as its
     /// single argument (keep-segment list in source milliseconds, an optional webcam overlay with a
-    /// pixel rect and a greyscale mask PNG, an x264 crf) and turns it into a v2
+    /// pixel rect and a grayscale mask PNG, an x264 crf) and turns it into a v2
     /// <see cref="Project"/>, so <c>Clowd.VideoRender</c> is a drop-in replacement for the binary
     /// the UI spawns today.
     ///
@@ -28,11 +28,11 @@ namespace Clowd.VideoSDK.Render
     /// that came from a single recording.</item>
     /// <item>webcam rect → <see cref="Transform"/>: the rect is in screen-frame pixels, and the
     /// model's geometry is normalized against the canvas (which <i>is</i> the screen frame), so
-    /// <c>X/Y</c> is the rect centre over the frame size and <c>Scale</c> is <c>rect.w / frameW</c>.
+    /// <c>X/Y</c> is the rect center over the frame size and <c>Scale</c> is <c>rect.w / frameW</c>.
     /// The rect's height is redundant under the model — height follows the camera's own aspect
-    /// ratio, which is precisely how the v1 <c>WebcamOverlay</c> (normalized centre + width only)
+    /// ratio, which is precisely how the v1 <c>WebcamOverlay</c> (normalized center + width only)
     /// defined it before the UI expanded it into pixels.</item>
-    /// <item>mask PNG → <see cref="Mask"/>: v1 carries a rasterized greyscale PNG rather than the
+    /// <item>mask PNG → <see cref="Mask"/>: v1 carries a rasterized grayscale PNG rather than the
     /// shape that produced it, so the shape and corner radius are recovered from the image (see
     /// <see cref="InferMask"/>).</item>
     /// </list>
@@ -268,7 +268,7 @@ namespace Clowd.VideoSDK.Render
                     "the v1 args do not describe a renderable project: " + String.Join(" ", problems));
 
             // VFR: render exactly the kept source frames on their own (rebased) timestamps, the
-            // frame-for-frame behaviour of vid-render's trim/setpts/concat graph.
+            // frame-for-frame behavior of vid-render's trim/setpts/concat graph.
             IReadOnlyList<long> schedule = null;
             if (screenFramePtsTicks != null)
             {
@@ -333,7 +333,7 @@ namespace Clowd.VideoSDK.Render
         }
 
         /// <summary>
-        /// Recovers <see cref="Mask"/> from the greyscale overlay mask v1 shipped as a PNG (black =
+        /// Recovers <see cref="Mask"/> from the grayscale overlay mask v1 shipped as a PNG (black =
         /// hidden, white = shown, antialiased edge). The model stores the shape, not a bitmap, and
         /// v1 stores only the bitmap — so the shape is measured back out of the image, from the one
         /// number that separates the two shapes it can be: the fraction of the rectangle the white
@@ -382,8 +382,8 @@ namespace Clowd.VideoSDK.Render
             };
         }
 
-        /// <summary>Counts pixels at or above mid grey. The mask is greyscale by construction
-        /// (R=G=B, opaque), so any colour channel is its luminance — green sits at byte 1 of both
+        /// <summary>Counts pixels at or above mid gray. The mask is grayscale by construction
+        /// (R=G=B, opaque), so any color channel is its luminance — green sits at byte 1 of both
         /// RGBA and BGRA, which is why the fast path reads that one.</summary>
         private static long CountWhitePixels(SKBitmap bitmap)
         {

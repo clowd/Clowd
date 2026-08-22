@@ -120,7 +120,7 @@ namespace Clowd.VideoSDK.Composition
 
         public int HotY { get; }
 
-        /// <summary>The colour/alpha pixels, PNG-encoded (straight alpha).</summary>
+        /// <summary>The color/alpha pixels, PNG-encoded (straight alpha).</summary>
         public byte[] Bmp { get; }
 
         /// <summary>The XOR plane, PNG-encoded, or null when the cursor carries none.</summary>
@@ -398,7 +398,7 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>The index into <see cref="Frames"/> of the latest frame at or before
         /// <paramref name="timeMs"/>, or -1. The index form of <see cref="FrameAt"/> for callers
-        /// that walk neighbours.</summary>
+        /// that walk neighbors.</summary>
         public int LatestAtOrBefore(double timeMs)
         {
             var lo = 0;
