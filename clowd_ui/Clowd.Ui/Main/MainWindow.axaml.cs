@@ -29,6 +29,15 @@ namespace Clowd.UI
             SettingsRoot.Current.Hotkeys.PropertyChanged += OnHotkeyPropertyChanged;
             NavList.SelectionChanged += OnNavSelectionChanged;
             NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
+
+            // the video editor only ships on Windows; elsewhere the image button takes the row
+            // rather than sitting beside a button that can only report itself unavailable.
+            if (!OperatingSystem.IsWindows())
+            {
+                NewVideoButton.IsVisible = false;
+                Grid.SetColumnSpan(NewImageButton, 3);
+            }
+
             RestoreWindowBounds();
         }
 
@@ -70,9 +79,14 @@ namespace Clowd.UI
                 $"{Position.X},{Position.Y},{Width},{Height}");
         }
 
-        private void NewEditor_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        private void NewImage_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
         {
             EditorWindow.ShowSession(null);
+        }
+
+        private void NewVideo_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)
+        {
+            Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
         }
 
         private void NewCapture_Click(object sender, Avalonia.Interactivity.RoutedEventArgs e)

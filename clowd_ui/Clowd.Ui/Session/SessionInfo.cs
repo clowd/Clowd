@@ -222,6 +222,25 @@ namespace Clowd
 
         [JsonIgnore] public bool IsVideo => String.Equals(ContentKind, "video", StringComparison.OrdinalIgnoreCase);
 
+        // set on sessions that are a video *project* rather than a recording: the composition in
+        // this directory's videoedit.json is the whole content, and there is no source mp4 behind
+        // it (the user started a blank video editor and imported media into it). It stays true
+        // after the project has been rendered — the render is an output, in its own entry, and the
+        // project is still the thing this session owns.
+        public bool IsVideoProject
+        {
+            get => Get<bool>();
+            set
+            {
+                if (Set(value))
+                {
+                    OnPropertyChanged(nameof(CanEditVideo));
+                    OnPropertyChanged(nameof(ShowEditVideo));
+                    OnPropertyChanged(nameof(EditVideoTooltip));
+                }
+            }
+        }
+
         // a recording (and a converted GIF) carries a poster frame in PreviewImgPath, but putting
         // that single still on the clipboard is never what the user meant by copying a video, so
         // video entries offer no Copy at all.
@@ -328,12 +347,20 @@ namespace Clowd
         // open still gets the button, disabled, so the user is told why instead of hunting for a
         // control that silently is not there.
         [JsonIgnore]
-        public bool ShowEditVideo => IsVideo && String.IsNullOrEmpty(SourceVideoPath)
-                                     && !String.IsNullOrEmpty(VideoPath) && OperatingSystem.IsWindows();
+        public bool ShowEditVideo => OperatingSystem.IsWindows()
+                                     && (IsVideoProject
+                                         || (IsVideo && String.IsNullOrEmpty(SourceVideoPath)
+                                             && !String.IsNullOrEmpty(VideoPath)));
 
         // …and whether that button does anything: a single-track capture has nothing to compose.
         [JsonIgnore]
         public bool CanEditVideo => ShowEditVideo && !SingleTrack;
+
+        /// <summary>What a render of this session keys its output entry to: the recording for a
+        /// capture, the session file itself for a project that has no recording behind it. Only
+        /// ever compared, never opened.</summary>
+        [JsonIgnore]
+        public string RenderSourceKey => String.IsNullOrEmpty(VideoPath) ? FilePath : VideoPath;
 
         [JsonIgnore]
         public string EditVideoTooltip => CanEditVideo

@@ -138,6 +138,70 @@ namespace Clowd.UI.VideoEditor
                        freshEdit: true);
         }
 
+        /// <summary>The canvas a project with nothing in it yet composes onto. Provisional: the
+        /// first media imported into an empty project adopts its own size and rate (see
+        /// <c>EditorSession.ImportMedia</c>), so these values only ever survive a project the user
+        /// puts nothing but text and shapes into.</summary>
+        public const int BlankWidthPx = 1920;
+        public const int BlankHeightPx = 1080;
+        public const int BlankFpsNum = 30;
+
+        /// <summary>
+        /// The project for a <b>blank</b> video edit — one with no recording behind it, started from
+        /// the Video button rather than opened onto a capture. The saved v2 document when the
+        /// session already has one (this is how such a project is reopened), otherwise an empty
+        /// project on the default canvas: no sources, no tracks, no items, which the session treats
+        /// as a legal (and undoable) state and the window shows as "import something".
+        ///
+        /// There is no v1 to migrate and no recording to reconcile paths against — every source in
+        /// one of these projects was imported by path and keeps it.
+        /// </summary>
+        public static Project LoadOrCreateBlank(string editJsonPath)
+        {
+            var saved = TryLoadBlank(editJsonPath);
+            if (saved != null)
+                return saved;
+
+            return new Project
+            {
+                Output = new OutputSettings
+                {
+                    WidthPx = BlankWidthPx,
+                    HeightPx = BlankHeightPx,
+                    FpsNum = BlankFpsNum,
+                    FpsDen = 1,
+                    SampleRate = RecordingProject.FallbackSampleRate,
+                },
+            };
+        }
+
+        /// <summary>The saved project of a blank edit, or null when there is nothing loadable —
+        /// best-effort on the same terms as <see cref="TryLoadProject"/>: a broken edit file costs
+        /// the edit, never the ability to open the editor.</summary>
+        private static Project TryLoadBlank(string path)
+        {
+            try
+            {
+                if (String.IsNullOrEmpty(path) || !File.Exists(path))
+                    return null;
+
+                var bytes = File.ReadAllBytes(path);
+                var version = JsonSerializer.Deserialize(bytes, VideoEditJsonContext.Default.VideoEditVersionDto);
+                if (version?.Version != Project.CurrentVersion)
+                    return null;
+
+                var project = Project.FromJson(Encoding.UTF8.GetString(bytes));
+                project?.Normalize();
+                return project;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to load videoedit.json: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "videoeditor.load-project");
+                return null;
+            }
+        }
+
         /// <summary>
         /// The document a <b>fresh</b> edit starts from: the whole recording, with the webcam row
         /// showing. v1 defaulted the overlay off because the single-bar editor had nowhere to put a

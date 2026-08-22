@@ -36,7 +36,8 @@ namespace Clowd.UI.VideoEditor
     /// The video editor window: in-process preview of a recording composed by the SDK
     /// (<c>CompositionPlayer</c> + <c>FrameComposer</c>, so the preview is the render), a
     /// multi-track edit owned by an <see cref="EditorSession"/> over the v2 <c>Project</c> loaded
-    /// by <see cref="VideoEditPersistence.LoadOrCreate"/>, persisted through
+    /// by <see cref="VideoEditPersistence.LoadOrCreate"/> (or, for a blank project started from
+    /// the Video button, <see cref="VideoEditPersistence.LoadOrCreateBlank"/>), persisted through
     /// <see cref="EditorAutosave"/> as <c>videoedit.json</c> beside the session, and a Render
     /// button handing a snapshot of the edit to <see cref="VideoRenderManager"/>. Opened through
     /// <see cref="ShowSession"/> from the Recents page, or via the hidden dev arg
@@ -61,11 +62,12 @@ namespace Clowd.UI.VideoEditor
         /// to grab an edge of, and trimmable from there.</summary>
         private const long AddedItemDurationTicks = 5 * TimeSpan.TicksPerSecond;
 
-        private const string EmptyEditMessage =
-            "This edit keeps nothing of the recording. Undo, or add material back, to preview it.";
+        /// <summary>The name a blank video project carries in Recents, to tell it apart from the
+        /// "Screen Capture Session" rows a recording makes.</summary>
+        public const string BlankProjectName = "Video Project";
 
         private readonly SessionInfo _session; // null in --video-edit dev mode
-        private readonly string _videoPath;
+        private readonly string _videoPath; // null for a blank project (there is no recording)
         private readonly string _editDocPath; // null when persistence is disabled (dev mode)
         private readonly bool _exitOnClose; // dev mode bypasses the tray lifetime entirely
 
@@ -302,7 +304,9 @@ namespace Clowd.UI.VideoEditor
             // the properties panel opens itself on the first selection (see AutoShowSidebar)
             ApplySidebarVisible(false);
 
-            txtSessionName.Text = !String.IsNullOrEmpty(session?.Name) ? session.Name : Path.GetFileName(videoPath);
+            txtSessionName.Text = !String.IsNullOrEmpty(session?.Name) ? session.Name
+                : !String.IsNullOrEmpty(videoPath) ? Path.GetFileName(videoPath)
+                : BlankProjectName;
 
             RestoreWindowBounds();
 
@@ -329,7 +333,7 @@ namespace Clowd.UI.VideoEditor
             {
                 var source = SessionManager.Current.Sessions.FirstOrDefault(s =>
                     String.IsNullOrEmpty(s.EditSourceVideoPath) && s.CanEditVideo &&
-                    String.Equals(s.VideoPath, session.EditSourceVideoPath, StringComparison.OrdinalIgnoreCase));
+                    String.Equals(s.RenderSourceKey, session.EditSourceVideoPath, StringComparison.OrdinalIgnoreCase));
                 if (source != null)
                     session = source;
             }
@@ -344,8 +348,10 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            var videoPath = session.VideoPath;
-            if (String.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
+            // a project owns its composition and nothing else; a recording's edit is only as good
+            // as the file it was opened on.
+            var videoPath = session.IsVideoProject ? null : session.VideoPath;
+            if (!session.IsVideoProject && (String.IsNullOrEmpty(videoPath) || !File.Exists(videoPath)))
             {
                 _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
                     "The recording could not be found. It may have been moved or deleted.",
@@ -356,21 +362,22 @@ namespace Clowd.UI.VideoEditor
             if (!OperatingSystem.IsWindows() || !FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
             {
                 // no in-app playback available — hand the file to the OS player so the user still
-                // sees their recording, and say why the editor did not open.
-                try
+                // sees their recording, and say why the editor did not open. A project has no file
+                // to fall back to; it just cannot be opened here.
+                if (!String.IsNullOrEmpty(videoPath))
                 {
-                    Process.Start(new ProcessStartInfo(videoPath) { UseShellExecute = true });
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("Failed to shell-open video: " + ex.Message);
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo(videoPath) { UseShellExecute = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine("Failed to shell-open video: " + ex.Message);
+                    }
                 }
 
-                var reason = OperatingSystem.IsWindows()
-                    ? FFmpegLoader.FailureReason
-                    : "the editor is only available on Windows";
                 _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
-                    $"The built-in video editor is not available ({reason}). The recording has been opened in your default video player instead.",
+                    UnavailableMessage(playerFallback: !String.IsNullOrEmpty(videoPath)),
                     "Can't edit the video");
                 return;
             }
@@ -378,6 +385,53 @@ namespace Clowd.UI.VideoEditor
             var wnd = new VideoEditorWindow(session, videoPath, exitOnClose: false);
             wnd.Show();
             wnd.Activate();
+        }
+
+        /// <summary>
+        /// Opens a <b>blank</b> video project: a new session that owns nothing but the
+        /// <c>videoedit.json</c> in its own directory, on an empty canvas the user imports media
+        /// into. It is a Recents row like any other edit from the moment it exists, so it reopens
+        /// through <see cref="ShowSession"/> — and one the user closes without putting anything in
+        /// is discarded again (see <see cref="DiscardEmptyProject"/>).
+        /// </summary>
+        public static void ShowBlankProject()
+        {
+            if (!OperatingSystem.IsWindows() || !FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            {
+                _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                    UnavailableMessage(playerFallback: false), "Can't open the video editor");
+                return;
+            }
+
+            SessionInfo session;
+            try
+            {
+                session = SessionManager.Current.CreateNewSession();
+                session.Name = BlankProjectName;
+                session.IsVideoProject = true;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to create a video project: " + ex);
+                SentryConfig.CaptureHandled(ex, "videoeditor.new-project");
+                _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.Message,
+                    "Can't open the video editor");
+                return;
+            }
+
+            var wnd = new VideoEditorWindow(session, null, exitOnClose: false);
+            wnd.Show();
+            wnd.Activate();
+        }
+
+        /// <summary>Why the editor did not open, in the one wording both entry points use.</summary>
+        private static string UnavailableMessage(bool playerFallback)
+        {
+            var reason = OperatingSystem.IsWindows()
+                ? FFmpegLoader.FailureReason
+                : "the editor is only available on Windows";
+            return $"The built-in video editor is not available ({reason})."
+                   + (playerFallback ? " The recording has been opened in your default video player instead." : "");
         }
 
         /// <summary>Returns true (and takes over startup) when args request the hidden dev editor
@@ -452,47 +506,66 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            ShowStatus("Loading video…");
-
-            // probe first: the project (or the saved edit's reconciliation against the real file)
-            // is built from it.
-            MediaProbeResult probe;
-            try
-            {
-                probe = await Task.Run(() => MediaProbe.ProbeDetailed(_videoPath));
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("Video editor probe failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "videoeditor.open");
-                ShowStatus("Could not open the video: " + ex.Message);
-                return;
-            }
-
-            if (_closing)
-                return;
-
-            if (probe.VideoStreams == null || probe.VideoStreams.Count == 0)
-            {
-                ShowStatus("This file has no video track to edit.");
-                return;
-            }
-
             Project project;
-            try
+            if (IsProjectEdit)
             {
-                // the session's recorder report names the audio rows a fresh edit creates ("Microphone"
-                // rather than "Audio 2") and classifies the video streams (which is the webcam, which
-                // the cursor box); the probe still decides which rows there are.
-                project = VideoEditPersistence.LoadOrCreate(_editDocPath, _videoPath, probe,
-                    AudioTrackLabels.From(_session?.AudioTracks), RecordingTrackHints.From(_session));
+                // no recording to probe: the project is whatever this session saved last, or an
+                // empty one on the default canvas.
+                try
+                {
+                    project = VideoEditPersistence.LoadOrCreateBlank(_editDocPath);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Video project load failed: " + ex);
+                    SentryConfig.CaptureHandled(ex, "videoeditor.open");
+                    ShowStatus("Could not open this project: " + ex.Message);
+                    return;
+                }
             }
-            catch (Exception ex)
+            else
             {
-                Debug.WriteLine("Video editor load failed: " + ex);
-                SentryConfig.CaptureHandled(ex, "videoeditor.open");
-                ShowStatus("Could not open the video: " + ex.Message);
-                return;
+                ShowStatus("Loading video…");
+
+                // probe first: the project (or the saved edit's reconciliation against the real file)
+                // is built from it.
+                MediaProbeResult probe;
+                try
+                {
+                    probe = await Task.Run(() => MediaProbe.ProbeDetailed(_videoPath));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Video editor probe failed: " + ex);
+                    SentryConfig.CaptureHandled(ex, "videoeditor.open");
+                    ShowStatus("Could not open the video: " + ex.Message);
+                    return;
+                }
+
+                if (_closing)
+                    return;
+
+                if (probe.VideoStreams == null || probe.VideoStreams.Count == 0)
+                {
+                    ShowStatus("This file has no video track to edit.");
+                    return;
+                }
+
+                try
+                {
+                    // the session's recorder report names the audio rows a fresh edit creates ("Microphone"
+                    // rather than "Audio 2") and classifies the video streams (which is the webcam, which
+                    // the cursor box); the probe still decides which rows there are.
+                    project = VideoEditPersistence.LoadOrCreate(_editDocPath, _videoPath, probe,
+                        AudioTrackLabels.From(_session?.AudioTracks), RecordingTrackHints.From(_session));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Video editor load failed: " + ex);
+                    SentryConfig.CaptureHandled(ex, "videoeditor.open");
+                    ShowStatus("Could not open the video: " + ex.Message);
+                    return;
+                }
             }
 
             _autosave = _editDocPath != null ? new EditorAutosave(_editDocPath) : null;
@@ -555,8 +628,9 @@ namespace Clowd.UI.VideoEditor
 
             if (_editor.DurationTicks <= 0)
             {
-                // the saved edit keeps nothing — nothing to compose or play. The player opens
-                // lazily (Editor_ProjectChanged) if an undo or edit brings material back.
+                // a blank project, or a saved edit that keeps nothing — nothing to compose or
+                // play either way. The player opens lazily (Editor_ProjectChanged) once an import,
+                // an edit or an undo puts material on the timeline.
                 ShowEmptyEditStatus();
                 return;
             }
@@ -627,6 +701,12 @@ namespace Clowd.UI.VideoEditor
         /// cache. Null in dev mode (no session directory), which disables them.</summary>
         private string SidecarCacheDir =>
             _editDocPath != null ? Path.GetDirectoryName(_editDocPath) : null;
+
+        /// <summary>True when this window is editing a <b>project</b> — a composition of imported
+        /// media with no recording behind it — rather than an edit of one recording. It decides
+        /// what is loaded at open, where a render is written, and the wording of everything that
+        /// would otherwise talk about "the recording".</summary>
+        private bool IsProjectEdit => _videoPath == null;
 
         /// <summary>The edited (output) timeline length — the one duration the timeline, the
         /// readout and the render all measure against.</summary>
@@ -773,7 +853,9 @@ namespace Clowd.UI.VideoEditor
         private void ShowEmptyEditStatus()
         {
             _emptyEditShown = true;
-            ShowStatus(EmptyEditMessage);
+            ShowStatus(IsProjectEdit
+                ? "Nothing on the timeline yet — import media, or add a text card, to start this video."
+                : "This edit keeps nothing of the recording. Undo, or add material back, to preview it.");
         }
 
         private void Player_PositionChanged(object sender, EventArgs e)
@@ -1329,7 +1411,9 @@ namespace Clowd.UI.VideoEditor
             if (_editor.DurationTicks <= 0)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
-                    "This edit keeps nothing of the recording — undo, or add material back, and try again.",
+                    IsProjectEdit
+                        ? "There is nothing on the timeline to render — import media and try again."
+                        : "This edit keeps nothing of the recording — undo, or add material back, and try again.",
                     "Can't render the video");
                 return;
             }
@@ -1556,6 +1640,8 @@ namespace Clowd.UI.VideoEditor
             _editor?.FlushSave();
             _autosave?.Flush();
 
+            DiscardEmptyProject();
+
             SaveWindowState();
             TrySaveSettings();
 
@@ -1581,6 +1667,32 @@ namespace Clowd.UI.VideoEditor
 
             _player?.Dispose();
             _player = null;
+        }
+
+        /// <summary>A blank project the user closed without putting anything into it leaves no
+        /// Recents row behind — the same rule the image editor applies to a new session that was
+        /// never drawn on. A project holding any media or any item is kept, videoedit.json and
+        /// all.</summary>
+        private void DiscardEmptyProject()
+        {
+            if (!IsProjectEdit || _session == null)
+                return;
+
+            var project = _editor?.Project;
+            if (project != null && (project.Sources.Count > 0 || project.Items.Count > 0))
+                return;
+
+            try
+            {
+                SessionManager.Current.DeleteSession(_session);
+            }
+            catch (Exception ex)
+            {
+                // an undeletable session directory is not worth failing the close over; it just
+                // leaves an empty row behind.
+                Debug.WriteLine("Failed to discard empty video project: " + ex.Message);
+                SentryConfig.CaptureHandled(ex, "videoeditor.discard-project");
+            }
         }
 
         protected override void OnClosed(EventArgs e)

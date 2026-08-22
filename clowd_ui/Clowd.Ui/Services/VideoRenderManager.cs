@@ -126,9 +126,10 @@ namespace Clowd.UI.Services
 
         /// <summary>The edited entry already made (or being made) from <paramref name="source"/>,
         /// or null.</summary>
-        public static SessionInfo FindExisting(SessionInfo source) => FindExisting(source?.VideoPath);
+        public static SessionInfo FindExisting(SessionInfo source) => FindExisting(source?.RenderSourceKey);
 
-        /// <summary>Overload for callers that only have the recording path.</summary>
+        /// <summary>Overload for callers that only have the recording path (or, for a project with
+        /// no recording behind it, its <see cref="SessionInfo.RenderSourceKey"/>).</summary>
         public static SessionInfo FindExisting(string sourceVideoPath)
         {
             if (String.IsNullOrEmpty(sourceVideoPath))
@@ -220,13 +221,18 @@ namespace Clowd.UI.Services
             if (!String.IsNullOrEmpty(source.SourceVideoPath))
                 return null;
 
-            var videoPath = source.VideoPath;
-            if (String.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
+            // a project session composes imported media and has no recording of its own; a
+            // recording's edit is rendered from the file it was opened on, which must still be there.
+            if (!source.IsVideoProject)
             {
-                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
-                    "The recording this edit would be rendered from could not be found. It may have been moved or deleted.",
-                    "Can't render the video");
-                return null;
+                var videoPath = source.VideoPath;
+                if (String.IsNullOrEmpty(videoPath) || !File.Exists(videoPath))
+                {
+                    await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                        "The recording this edit would be rendered from could not be found. It may have been moved or deleted.",
+                        "Can't render the video");
+                    return null;
+                }
             }
 
             var durationTicks = project.GetDurationTicks();
@@ -272,7 +278,7 @@ namespace Clowd.UI.Services
             if (existing != null)
                 DeleteEntryAndOutput(existing);
 
-            var outputPath = GetOutputPath(videoPath);
+            var outputPath = GetOutputPath(source);
 
             SessionInfo session;
             try
@@ -323,7 +329,7 @@ namespace Clowd.UI.Services
             session.CreatedUtc = DateTime.UtcNow;
             session.ContentKind = "video";
             session.VideoPath = outputPath;
-            session.EditSourceVideoPath = source.VideoPath;
+            session.EditSourceVideoPath = source.RenderSourceKey;
             session.DurationMs = durationMs;
             session.PreviewImgPath = CopyPreview(source.PreviewImgPath, dir);
             return session;
@@ -367,6 +373,23 @@ namespace Clowd.UI.Services
 
         /// <summary>"<c>name</c>-edited.mp4" beside the source, uniquified with a counter when that
         /// is taken (an earlier render the user kept, or a file they made themselves).</summary>
+        /// <summary>Where <paramref name="source"/>'s render is written: beside the recording it
+        /// edits, or — for a project with no recording behind it — in the configured recording
+        /// folder, named like any other recording. The session directory is the last resort, for
+        /// when that folder cannot be written to at all.</summary>
+        private static string GetOutputPath(SessionInfo source)
+        {
+            if (!String.IsNullOrEmpty(source.VideoPath))
+                return GetOutputPath(source.VideoPath);
+
+            var configured = RecordingOutputPath.GetSavePath(SettingsRoot.Current?.Recording);
+            if (!String.IsNullOrEmpty(configured))
+                return configured;
+
+            var dir = Path.GetDirectoryName(source.FilePath);
+            return GetOutputPath(Path.Combine(dir, "project.mp4"));
+        }
+
         internal static string GetOutputPath(string sourceVideoPath)
         {
             var dir = Path.GetDirectoryName(sourceVideoPath);
