@@ -27,7 +27,7 @@ namespace Clowd.UI
     /// Hosts one run of the <c>clowd_scroll_driver</c> process and speaks its NDJSON protocol
     /// (CAPTURE_PROTOCOL.md): JSON commands in on stdin, JSON events out on stdout, log chatter on
     /// stderr. Only lines that start with '{' and end with '}' are protocol — the same rule the
-    /// recording and warm-host protocols use; everything else goes to the bounded log buffer a
+    /// recording protocol uses; everything else goes to the bounded log buffer a
     /// failure report attaches.
     /// <para>Exactly one run per instance: <see cref="RunAsync"/> resolves when the process has
     /// exited AND both pumps have drained, so the fields it reads are already final. Events are

@@ -1,6 +1,6 @@
 //! The driver's command line, spawned by `Clowd.Ui`
 //! (`Scroll/ScrollDriver.cs: BuildArguments`) and documented in
-//! CAPTURE_PROTOCOL.md §3.
+//! CAPTURE_PROTOCOL.md §2.
 //!
 //! Every argument is `Option`al to clap even though the driver needs all
 //! but one of them. A missing flag has to come back as a `fatal_error`

@@ -179,8 +179,8 @@ impl UiRenderer {
     ///
     /// Called from every `render.rs` path that returns a worker to the
     /// parked state (see `render::park_worker`). `UiRenderer` is built once
-    /// per worker, OUTSIDE the cycle loop, so anything it caches survives
-    /// the whole idle gap in persistent mode. (The lift pass used to hold
+    /// per worker, OUTSIDE the cycle loop, so anything it caches outlives
+    /// the cycle. (The lift pass used to hold
     /// the big-ticket item here — a bind group pinning a TextureView of the
     /// whole-virtual-desktop snapshot, ~33 MB per 4K monitor. It samples no
     /// texture any more, so the remaining releases are RAM-hygiene, not
