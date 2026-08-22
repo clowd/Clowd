@@ -254,19 +254,22 @@ namespace Clowd.UI
 
                         // The capturer reports its own panics, but it cannot report the ways it dies
                         // without running Rust code — a native fault in a GPU driver, an abort out of
-                        // an FFI frame, or a kill. Its exit code and stderr are all that survives
+                        // an FFI frame, or a kill. Its exit code and log are all that survives
                         // those, so report from this side. Keep the message free of the exit code so
                         // Sentry groups every capturer death into one issue; the specifics ride along
                         // in Data.
                         var crash = new InvalidOperationException("Capture process exited unexpectedly");
                         crash.Data["exit_code"] = process.ExitCode;
-                        crash.Data["stderr"] = SummarizeTail(stderr);
-                        if (captureLog != null)
-                            crash.Data["capture_log"] = SummarizeTail(captureLog);
+                        // Both logs in full, as the process-log.txt attachment. A death of that kind
+                        // writes nothing to stderr, and the session log is the only place the adapter
+                        // it selected is named — truncating either to fit inline in Data is what
+                        // leaves these reports unactionable.
+                        SentryConfig.AttachProcessLog(crash, ("stderr", stderr), ("capture.log", captureLog));
                         SentryConfig.CaptureHandled(crash, "capture.process-crash");
 
                         await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                            $"The screen capture tool exited unexpectedly (code {process.ExitCode}).\n\n{SummarizeTail(stderr)}",
+                            $"The screen capture tool exited unexpectedly (code {process.ExitCode})." +
+                            $"\n\n{SummarizeDiagnostics(stderr, captureLog)}",
                             "Screen capture failed");
                         return;
                     }
@@ -367,19 +370,16 @@ namespace Clowd.UI
         {
             Debug.WriteLine($"Capture host died mid-capture (code {crash.ExitCode}):\n{crash.Log}");
 
-            var chatter = SummarizeTail(crash.Log);
             var hostLog = CaptureProcessHost.TryReadHostLog();
             CaptureSessionDispatcher.DeleteSessionDir(sessionDir);
 
             var reported = new InvalidOperationException("Capture process exited unexpectedly");
             reported.Data["exit_code"] = crash.ExitCode?.ToString(CultureInfo.InvariantCulture) ?? "unknown";
-            reported.Data["stderr"] = chatter;
-            if (hostLog != null)
-                reported.Data["capture_log"] = SummarizeTail(hostLog);
+            SentryConfig.AttachProcessLog(reported, ("chatter", crash.Log), ("capture-host.log", hostLog));
             SentryConfig.CaptureHandled(reported, "capture.process-crash");
 
             await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error,
-                $"The screen capture tool exited unexpectedly.\n\n{chatter}",
+                $"The screen capture tool exited unexpectedly.\n\n{SummarizeDiagnostics(crash.Log, hostLog)}",
                 "Screen capture failed");
         }
 
@@ -402,6 +402,14 @@ namespace Clowd.UI
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         [System.Runtime.InteropServices.DefaultDllImportSearchPaths(System.Runtime.InteropServices.DllImportSearchPath.System32)]
         private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+        /// <summary>Picks what to put in front of the user: the capturer's stderr when it managed to
+        /// say something, and otherwise the log file it left behind. A process that dies without
+        /// running Rust code — a native fault in a GPU driver, a kill — writes nothing to stderr, and
+        /// "No diagnostic output was captured." is a dead end when the log file was there all
+        /// along.</summary>
+        private static string SummarizeDiagnostics(string stderr, string log)
+            => String.IsNullOrWhiteSpace(stderr) ? SummarizeTail(log) : SummarizeTail(stderr);
 
         /// <summary>Condenses the capturer's captured stderr (or log file) into the tail few
         /// lines for an error dialog — the failure (a shader error, a panic) is always at the
