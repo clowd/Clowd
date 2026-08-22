@@ -13,7 +13,9 @@ pub(crate) fn draw_once(
     config: &wgpu::SurfaceConfiguration,
     snapshot_state: Option<&SnapshotState>,
     peek_bind_group: Option<&wgpu::BindGroup>,
-    ui_renderer: &mut UiRenderer,
+    // `None` while the deferred UI build is still in flight (see
+    // `WindowGpu::peek`): the frame is then the desktop pass alone.
+    mut ui_renderer: Option<&mut UiRenderer>,
     perf: &PerfTracker,
     gpu_timing: Option<&GpuTimings>,
     out_sample: &mut Option<PerfSample>,
@@ -40,7 +42,9 @@ pub(crate) fn draw_once(
             label: Some("frame encoder"),
         });
 
-    ui_renderer.prepare(&gpu.device, &gpu.queue, (config.width, config.height), perf);
+    if let Some(ui) = ui_renderer.as_mut() {
+        ui.prepare(&gpu.device, &gpu.queue, (config.width, config.height), perf);
+    }
 
     let begin_frame = gpu_timing.and_then(|gt| gt.begin_frame());
     let (pass_ts, slot_id) = match &begin_frame {
@@ -75,12 +79,14 @@ pub(crate) fn draw_once(
             rpass.set_bind_group(0, &state.bind_group, &[]);
             rpass.draw(0..3, 0..1);
         }
-        if let Some(peek_bg) = peek_bind_group {
-            rpass.set_pipeline(&gpu.peek_pipeline);
+        if let (Some(peek_bg), Some(peek)) = (peek_bind_group, gpu.peek.as_ref()) {
+            rpass.set_pipeline(&peek.pipeline);
             rpass.set_bind_group(0, peek_bg, &[]);
             rpass.draw(0..6, 0..1);
         }
-        ui_renderer.draw(&mut rpass);
+        if let Some(ui) = ui_renderer.as_deref() {
+            ui.draw(&mut rpass);
+        }
     }
 
     if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
@@ -92,7 +98,9 @@ pub(crate) fn draw_once(
     if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
         gt.after_submit(id);
     }
-    ui_renderer.trim();
+    if let Some(ui) = ui_renderer.as_mut() {
+        ui.trim();
+    }
     let draw = t_draw_start.elapsed();
 
     let t_present_start = Instant::now();

@@ -15,7 +15,7 @@ use crate::ui::gpu::gpu_timing::GpuTimings;
 use crate::ui::gpu::renderer::{UiPipelines, UiText};
 use crate::ui::gpu::text::TextStack;
 use crate::ui::gpu::UiRenderer;
-use crate::ui::shared::UiMonitor;
+use crate::ui::shared::{UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 
 pub mod desktop;
@@ -52,17 +52,25 @@ pub const MSAA_SAMPLES: u32 = 1;
 /// Windows launch.
 ///
 /// It is built on a side thread started the moment the device exists, so it
-/// overlaps the screenshot wait, the window handoff and frame 0 itself, and
-/// is joined once frame 0 has been presented and this worker has reported
-/// ready — i.e. off the show gate — but before the visible latch releases
-/// and real UI state starts arriving.
+/// overlaps the screenshot wait, the window handoff and frame 0 itself. It is
+/// NEVER blocked on: the render loop starts without it — desktop pass,
+/// selection and the software cursor all live in the desktop pipeline — and
+/// polls the handle each iteration, folding the stack in the moment it
+/// lands. On a warm start that is before the overlay is even visible; on a
+/// cold one (driver shader cache empty, the embedded fonts and DLLs not yet
+/// paged in) the build can take a second or more, and an earlier revision
+/// that joined it right after the show gate produced exactly the symptom
+/// this split was meant to kill: overlay on screen, then frozen with no
+/// cursor until the compile finished. Until it lands the user sees the
+/// desktop, the cursor and the selection responding, with the panel, hints
+/// and peek arriving when ready.
 struct DeferredStack {
     peek: gpu::PeekGpu,
     ui: UiRenderer,
 }
 
-/// Start the deferred build. Call immediately after Stage A; join after
-/// frame 0.
+/// Start the deferred build. Call immediately after Stage A; poll it from
+/// the render loop (never block on it before the first visible frames).
 ///
 /// `Device`/`Queue` are refcounted handles, so the builder gets its own
 /// clones and the worker thread keeps using the originals meanwhile.
@@ -261,10 +269,11 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     };
     let adapter_name = bundle.adapter_name.clone();
 
-    // Started here, before the handoff wait, and joined only after frame 0
-    // has been presented: that is the whole overlap this buys — the UI
-    // stack and the peek pipeline compile *beside* the screenshot wait,
-    // window creation and frame 0 instead of in front of them.
+    // Started here, before the handoff wait, and collected by the render
+    // loop whenever it finishes: that is the whole overlap this buys — the
+    // UI stack and the peek pipeline compile *beside* the screenshot wait,
+    // window creation, frame 0 and the first visible frames instead of in
+    // front of any of them.
     let deferred = spawn_deferred_stack(
         bundle.device.clone(),
         bundle.queue.clone(),
@@ -534,31 +543,23 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         .ready_count
         .fetch_add(1, Ordering::Release);
 
-    // ── Collect the deferred build, assemble the render-loop state ──
-    // The join has to finish before the visible latch releases, because the
-    // first UiSharedState broadcast follows it immediately.
-
-    // Degraded rather than `.expect`: readiness is already published, so
-    // unwinding here would run `ReadyGuard::drop` and double-count. A
-    // panicked builder means this monitor gets no overlay; the others are
-    // unaffected and the gate has already been satisfied on our behalf.
-    let DeferredStack {
-        peek,
-        ui: mut ui_renderer,
-    } = match deferred.join() {
-        Ok(stack) => stack,
-        Err(_) => {
-            error!("render worker {monitor_index}: UI builder thread panicked; this monitor has no overlay");
-            return;
-        }
-    };
-    let gpu = gpu::finalise_window_gpu(bundle, peek, snapshot);
-
-    // No previous cycle's UI may composite into the first visible frames:
-    // this cycle's UiSharedState is only broadcast after the show gate.
-    // Also re-anchors the UI animation clock, here rather than at build
-    // time so the border trail starts from when the overlay appears.
-    ui_renderer.begin_cycle();
+    // ── Assemble the render-loop state ──────────────────────────
+    // Deliberately WITHOUT the deferred build. It is collected inside the
+    // loop (see `DeferredStack`): blocking on it here — between the show
+    // gate opening and the first loop iteration — is what made a cold start
+    // feel worse than the old blocking layout. The overlay was on screen
+    // (frame 0, hardware cursor hidden) while this thread sat in `join()`
+    // for however long a cold shader compile + font/SVG parse took, so
+    // nothing followed the mouse and nothing drew. Warm the build is long
+    // done by now and the first iteration picks it up immediately.
+    let mut gpu = gpu::finalise_window_gpu(bundle, snapshot);
+    let mut deferred: Option<thread::JoinHandle<DeferredStack>> = Some(deferred);
+    let mut ui_renderer: Option<UiRenderer> = None;
+    // The latest UiSharedState that arrived while the UI stack was still
+    // building. Only the newest matters — every broadcast is a full state
+    // (`set_state` replaces, it does not merge) — and it is applied the
+    // moment the stack lands so the first UI frame is already current.
+    let mut pending_ui_state: Option<Arc<UiSharedState>> = None;
 
     let mut perf = PerfTracker::new_with_refresh(refresh_hz);
     let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
@@ -596,6 +597,40 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let mut last_iter = Instant::now();
 
     loop {
+        // Fold the deferred build in the iteration it finishes. `is_finished`
+        // is a non-blocking flag read; the join that follows is then
+        // immediate. Degraded rather than `.expect` on a panicked builder:
+        // readiness is already published, so unwinding here would run
+        // `ReadyGuard::drop` and double-count — and the desktop-only loop is
+        // still a working (if chrome-less) overlay for this monitor.
+        if deferred
+            .as_ref()
+            .is_some_and(|h| h.is_finished())
+        {
+            match deferred.take().map(|h| h.join()) {
+                Some(Ok(DeferredStack {
+                    peek,
+                    mut ui,
+                })) => {
+                    // No previous cycle's UI may composite into the first UI
+                    // frames, and the animation clock (border trail) starts
+                    // from the moment the chrome appears rather than from
+                    // build time. The state that arrived meanwhile goes in
+                    // AFTER the reset, which would otherwise clear it.
+                    ui.begin_cycle();
+                    if let Some(state) = pending_ui_state.take() {
+                        ui.set_state(state);
+                    }
+                    gpu.peek = Some(peek);
+                    ui_renderer = Some(ui);
+                }
+                Some(Err(_)) => {
+                    error!("render worker {monitor_index}: UI builder thread panicked; this monitor keeps a desktop-only overlay (no panel, hints or peek)");
+                }
+                None => {}
+            }
+        }
+
         loop {
             match msg_rx.try_recv() {
                 Ok(RenderMsg::MouseState {
@@ -614,7 +649,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     cursor_overlay_visible = state.cursor_overlay_visible;
                     scroll_pick_mode = state.scroll_pick_mode;
                     ocr = state.ocr.clone();
-                    ui_renderer.set_state(state);
+                    match ui_renderer.as_mut() {
+                        Some(ui) => ui.set_state(state),
+                        None => pending_ui_state = Some(state),
+                    }
                 }
                 Ok(RenderMsg::BlurredDesktop(bd)) => {
                     let max_dim = gpu.device.limits().max_texture_dimension_2d;
@@ -757,6 +795,9 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
         // Build per-frame peek draw state if active + texture available.
         let peek_bind_group = active_peek.as_ref().and_then(|cmd| {
+            // No peek pipeline yet (deferred build still running): skip the
+            // quad this frame; it appears once the build lands.
+            let peek = gpu.peek.as_ref()?;
             let pt = peek_textures.get(&cmd.window_index)?;
             let snap = gpu.snapshot.as_ref()?;
             let (_, ref blurred_view) = *blurred_desktop.as_ref()?;
@@ -836,7 +877,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("peek bind group"),
-                    layout: &gpu.peek_bgl,
+                    layout: &peek.bgl,
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,
@@ -880,7 +921,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             &config,
             snapshot_state.as_ref(),
             peek_bind_group.as_ref(),
-            &mut ui_renderer,
+            ui_renderer.as_mut(),
             &perf,
             gpu_timing.as_ref(),
             &mut sample,

@@ -44,9 +44,9 @@ pub struct DeviceBundle {
 /// peeking needs a hovered window, which needs the overlay to already be
 /// visible — so compiling `peek.wgsl` before the first present is pure
 /// pre-visible tax. It is built alongside the UI stack on the deferred
-/// thread (`render::spawn_deferred_stack`) and only then folded into
-/// `WindowGpu`, which is why `WindowGpu` can keep plain non-optional
-/// fields: it does not exist until the peek pipeline does.
+/// thread (`render::spawn_deferred_stack`) and folded into `WindowGpu`
+/// (`WindowGpu::peek`) whenever that build lands — the render loop is
+/// already running by then and simply skips the peek quad until it has.
 pub struct PeekGpu {
     pub pipeline: wgpu::RenderPipeline,
     pub bgl: wgpu::BindGroupLayout,
@@ -61,15 +61,22 @@ pub fn create_peek_gpu(device: &wgpu::Device) -> PeekGpu {
     }
 }
 
-/// GPU state used during the render loop. Assembled from `DeviceBundle`,
-/// `PeekGpu` and the uploaded desktop snapshot *after* frame 0 has been
-/// presented — the loop is the first thing that can need any of the three.
+/// GPU state used during the render loop. Assembled from `DeviceBundle`
+/// and the uploaded desktop snapshot *after* frame 0 has been presented —
+/// the loop is the first thing that can need either.
+///
+/// `peek` starts out `None`: the peek pipeline is compiled on the deferred
+/// thread together with the UI stack, and on a cold start (empty driver
+/// shader cache, binary pages not yet resident) that build can outlive the
+/// show gate by a wide margin. The loop must not wait for it — a visible
+/// overlay whose worker is parked on a join is a frozen desktop with no
+/// cursor — so it runs desktop-only until the build lands and then fills
+/// this in.
 pub struct WindowGpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub pipeline: wgpu::RenderPipeline,
-    pub peek_pipeline: wgpu::RenderPipeline,
-    pub peek_bgl: wgpu::BindGroupLayout,
+    pub peek: Option<PeekGpu>,
     #[allow(dead_code)]
     pub surface_format: wgpu::TextureFormat,
     #[allow(dead_code)]
@@ -124,13 +131,12 @@ pub fn stage_a_create_device(
 
 // ── Assemble final WindowGpu ────────────────────────────────────────
 
-pub fn finalise_window_gpu(bundle: DeviceBundle, peek: PeekGpu, snapshot: Option<Arc<desktop::DesktopSnapshot>>) -> WindowGpu {
+pub fn finalise_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<desktop::DesktopSnapshot>>) -> WindowGpu {
     WindowGpu {
         device: bundle.device,
         queue: bundle.queue,
         pipeline: bundle.desktop_pipeline,
-        peek_pipeline: peek.pipeline,
-        peek_bgl: peek.bgl,
+        peek: None,
         surface_format: SURFACE_FORMAT,
         adapter_name: bundle.adapter_name,
         snapshot,
