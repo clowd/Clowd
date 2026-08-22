@@ -156,8 +156,8 @@ fn spawn(paths: &ResponsePaths) -> std::io::Result<Child> {
         .arg(&paths.response)
         .stdin(Stdio::piped())
         // NEVER inherit: MNN prints device capabilities to stdout on session
-        // creation, and our own stdout is the NDJSON host protocol Clowd.Ui
-        // parses line by line. A pipe would work too, but one nobody drains
+        // creation, and inheriting would let that chatter be mistaken for
+        // output of our own. A pipe would work too, but one nobody drains
         // can eventually block the child — null cannot.
         .stdout(Stdio::null())
         // Inherited on purpose: the child's log lines (det/rec timings, the

@@ -152,9 +152,9 @@ namespace Clowd
             return null;
         }
 
-        /// <summary>Cap on the assembled log. A per-session capture log is a few KB, but the warm
-        /// host's rolling log has no such bound — and a multi-megabyte attachment helps nobody.
-        /// Trimmed from the front: the failure is always at the end.</summary>
+        /// <summary>Cap on the assembled log. Both sections arrive unbounded — buffered stderr,
+        /// plus <see cref="ScreenCaptureService"/>'s whole-file read of the session log — and
+        /// nothing else trims them. Trimmed from the front: the failure is always at the end.</summary>
         private const int MaxProcessLogChars = 256 * 1024;
 
         /// <summary>

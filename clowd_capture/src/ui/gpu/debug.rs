@@ -13,7 +13,7 @@ use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPane
 use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
 use crate::telemetry::perf::{PerfSample, PerfTracker};
-use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
+use crate::telemetry::startup::StartupTimings;
 use crate::ui::gpu::rect::RectInstance;
 use crate::ui::gpu::text::{TextStack, FAMILY_MONO};
 use crate::ui::shared::{debug_monitor_visibility, debug_primary_visibility, UiMonitor, UiSharedState};
@@ -129,8 +129,7 @@ impl DebugRenderer {
         monitor_name: &str,
         adapter_name: &str,
         perf: &PerfTracker,
-        warmup: &WarmupTimings,
-        capture: Option<&CaptureTimings>,
+        startup: &StartupTimings,
         rects: &mut Vec<RectInstance>,
     ) {
         self.positions.clear();
@@ -151,9 +150,11 @@ impl DebugRenderer {
                 adapter: adapter_name,
                 dpi: (dpi * 96.0).round() as u32,
                 bounds: this_monitor.bounds,
-                // Show-command-to-first-frame for THIS display, this cycle.
-                time_to_first_render: capture
-                    .and_then(|c| c.workers.get(self.monitor_index))
+                // Process-start-to-first-frame for THIS display.
+                time_to_first_render: startup
+                    .background
+                    .workers
+                    .get(self.monitor_index)
                     .and_then(|w| w.first_render.get()),
                 perf,
                 target_period: perf.target_period(),
@@ -180,8 +181,7 @@ impl DebugRenderer {
         // --- Primary panel (cursor monitor only) ---
         if debug_primary_visibility(state, this_monitor) {
             let data = PrimaryPanelData {
-                warmup,
-                capture,
+                startup,
                 zoom: state.zoom,
                 cursor: state.virtual_cursor,
                 color_bgra: state.hovered_pixel_bgra,

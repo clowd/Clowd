@@ -12,13 +12,6 @@ namespace Clowd.Config
         Off,
     }
 
-    /// <summary>Mirrors the capturer's --memory-hints flag (clowd_capture_wgpu, see CAPTURE_PROTOCOL.md).</summary>
-    public enum CapturerMemoryHints
-    {
-        MaxPerformance,
-        LowerMemoryUsage,
-    }
-
     public class SettingsCapture : SimpleNotifyObject
     {
         /// <summary>
@@ -105,23 +98,6 @@ namespace Clowd.Config
         {
             get => _detectWindows;
             set => Set(ref _detectWindows, value);
-        }
-
-        /// <summary>
-        /// The capture tool's GPU allocator strategy (<c>--memory-hints</c>). MaxPerformance is
-        /// wgpu's large-block default and what capture ran on before the warm capture host
-        /// existed; LowerMemoryUsage was introduced to keep that resident host's idle footprint
-        /// down, which a process that exits after one capture never pays.
-        /// </summary>
-        [Category("Performance")]
-        [DisplayName("GPU memory usage")]
-        [Description("How the capture tool budgets GPU memory. Max performance is recommended; " +
-                     "Lower memory usage retains smaller GPU memory blocks, which can make the " +
-                     "capture overlay slower to open.")]
-        public CapturerMemoryHints MemoryHints
-        {
-            get => _memoryHints;
-            set => Set(ref _memoryHints, value);
         }
 
         [Category("Behavior")]
@@ -214,7 +190,6 @@ namespace Clowd.Config
 
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
         private bool _screenshotWithCursor = true;
-        private CapturerMemoryHints _memoryHints = CapturerMemoryHints.MaxPerformance;
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use winit::application::ApplicationHandler;
@@ -17,7 +17,7 @@ use crate::interaction::{
     InteractionController, InteractionEffects, InteractionState, MouseVelocityTracker, OcrNotice, OcrNoticeKind, OcrState,
 };
 use crate::ocr::{self, OcrError, OcrOutcome, OcrRequest};
-use crate::render::protocol::{PeekCommand, RenderMsg, WorkerInput};
+use crate::render::protocol::PeekCommand;
 use crate::render::window::{set_hardware_cursor_visible, WindowHandle, WindowSet};
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
@@ -27,7 +27,7 @@ use crate::session_output::{
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
-use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
+use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::panel;
 use crate::ui::shared::UiMonitor;
@@ -40,31 +40,17 @@ const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
 const MOMENTUM_GAP: Duration = Duration::from_millis(50);
 
-/// State that survives across capture cycles ("warm" state): the wgpu
-/// instance, monitors, windows and the render-worker channels. Everything
-/// specific to a single capture lives in [`CaptureCycle`].
+/// Process-wide state built once during startup: the wgpu instance,
+/// monitors and windows. Everything specific to the capture itself lives
+/// in [`CaptureCycle`].
 pub struct App {
-    /// Retained clones of the per-worker channel senders, usable across
-    /// cycles (the `WorkerSetup`s themselves are consumed by the window
-    /// handoff in `resumed()`). Declared before `windows`: fields drop in
-    /// declaration order, and dropping these senders first disconnects the
-    /// input channel so a parked worker wakes up before `WindowHandle::drop`
-    /// joins its thread.
-    ///
-    /// `None` marks a worker torn down after its window creation failed
-    /// (`resumed()`): its slot stays so the gate arithmetic
-    /// (`ready`/`parked` + `worker_failed` >= `workers.len()`) keeps
-    /// covering it, but nothing is ever queued to it again — a worker
-    /// stuck before its handoff never drains `render_msg_rx`, so retained
-    /// senders would grow its queue by a full blur + peek set per capture.
-    workers: Vec<Option<WorkerChannels>>,
     windows: WindowSet,
     monitors: Vec<MonitorInfo>,
     /// `monitors` mapped to the UI-state shape, built once — cloned into
     /// every `UiSharedState` instead of re-collected per mouse event.
     ui_monitors: Arc<[UiMonitor]>,
     vd_bounds: ScreenRect,
-    warmup: Arc<WarmupTimings>,
+    startup: Arc<StartupTimings>,
     pinch_monitor: Option<crate::system::PinchMonitor>,
     instance: Arc<wgpu::Instance>,
     /// Consumed in resumed() — each one gets a window + surface handoff.
@@ -76,40 +62,11 @@ pub struct App {
     cycle: Option<CaptureCycle>,
 }
 
-struct WorkerChannels {
-    /// Retained so cycles after the first can be started without the
-    /// consumed `WorkerSetup`s (the screenshot job broadcasts `BeginCycle`
-    /// over these) — and so dropping `App.workers` closes the channel,
-    /// waking any parked worker for shutdown.
-    input_tx: mpsc::Sender<WorkerInput>,
-    render_msg_tx: mpsc::Sender<RenderMsg>,
-}
-
-/// All one-shot state for a single capture. Created at cycle start
-/// ([`App::start_cycle`]) and dropped at cycle end ([`App::finish_cycle`]) —
-/// dropping it *is* the reset.
+/// All state for the single capture this process serves. Built in
+/// [`App::new`] and dropped by [`App::finish_cycle`] on the way out.
 pub struct CaptureCycle {
     settings: Arc<CapturerSettings>,
-    /// This cycle's generation (`next_cycle_gen`), stamped on the per-cycle
-    /// `RenderMsg`s so workers can discard messages from other cycles.
-    cycle_gen: u64,
-    /// Shared with `CycleParams`; set in `finish_cycle` so a worker that
-    /// receives this cycle's `BeginCycle` after the cycle already ended
-    /// discards it instead of wedging on the dead `visible_latch`.
-    cancelled: Arc<AtomicBool>,
-    /// This cycle's debug timings — allocated fresh per cycle (which is
-    /// what keeps the `set_once` fields correct across cycles) and shared
-    /// with the screenshot/walker jobs and every render worker.
-    timings: Arc<CaptureTimings>,
     desktop_buffer: Option<Arc<CapturedDesktop>>,
-    /// This cycle's screenshot job result, resolved before `start_cycle`.
-    /// `try_pick_up_screenshot` is the backstop, bounded by
-    /// `screenshot_deadline`.
-    screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
-    /// Non-blocking replacement for one-shot mode's 30s screenshot wait:
-    /// if the desktop bitmap hasn't arrived by this deadline the cycle is
-    /// cancelled with a `fatal_error` event.
-    screenshot_deadline: Instant,
     walker: Option<Arc<WindowWalker>>,
     walker_latch: Arc<Latch<Arc<WindowWalker>>>,
     peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
@@ -137,8 +94,8 @@ pub struct CaptureCycle {
     video_dispatched: bool,
     /// Monotonic per-cycle OCR request id. Bumped on every dispatch AND on
     /// every BACK/cancel, so a late result from a superseded request is
-    /// discarded on pickup — the cycle_gen tag cannot help here because BACK
-    /// leaves the same cycle alive.
+    /// discarded on pickup: BACK leaves the same cycle alive, so the result
+    /// cannot be told apart from a current one any other way.
     ocr_req: u64,
     /// The in-flight recognition job, if any.
     ocr_job: Option<OcrJob>,
@@ -166,11 +123,9 @@ struct PendingShow {
     visible_latch: Arc<VisibleLatch>,
 }
 
-/// How a capture cycle ended. Logged, and written into the session
-/// directory as the action the shell dispatches on (serialized snake_case:
-/// `select_color` etc.).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
+/// How a capture cycle ended. Logged only; the action the shell dispatches
+/// on is written separately by `session_output::SessionAction`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleAction {
     Edit,
     Upload,
@@ -189,29 +144,9 @@ pub enum CycleAction {
     Cancelled,
 }
 
-/// Everything [`App::start_cycle`] needs to arm a new capture cycle.
-pub struct CycleSetup {
-    pub settings: Arc<CapturerSettings>,
-    pub initial_mouse: ScreenPointF,
-    /// The screenshot job, already resolved by the time a cycle is armed.
-    pub screenshot_latch: Arc<Latch<Arc<CapturedDesktop>>>,
-    pub walker_latch: Arc<Latch<Arc<WindowWalker>>>,
-    pub peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
-    pub ready_count: Arc<AtomicUsize>,
-    pub visible_latch: Arc<VisibleLatch>,
-    /// See [`CaptureCycle::cycle_gen`].
-    pub cycle_gen: u64,
-    /// See [`CaptureCycle::cancelled`]; shared with this cycle's
-    /// `CycleParams`.
-    pub cancelled: Arc<AtomicBool>,
-    /// See [`CaptureCycle::timings`]. Must be the same instance the
-    /// screenshot/walker jobs were spawned with.
-    pub timings: Arc<CaptureTimings>,
-}
-
-// ── Free helpers over (warm, cycle) state ───────────────────────────
+// ── Free helpers over (app, cycle) state ────────────────────────────
 // Plain functions (not methods) so callers holding a `&mut CaptureCycle`
-// split off `self.cycle` can still use them alongside the warm fields.
+// split off `self.cycle` can still use them alongside the `App` fields.
 
 fn broadcast_mouse_state(windows: &WindowSet, input: &InteractionState) {
     for h in windows.values() {
@@ -498,11 +433,19 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
 }
 
 impl App {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        warmup: Arc<WarmupTimings>,
+        settings: Arc<CapturerSettings>,
+        startup: Arc<StartupTimings>,
         instance: Arc<wgpu::Instance>,
         monitors: Vec<MonitorInfo>,
+        initial_mouse: ScreenPointF,
         worker_setups: Vec<WorkerSetup>,
+        desktop_buffer: Arc<CapturedDesktop>,
+        walker_latch: Arc<Latch<Arc<WindowWalker>>>,
+        peek_images_latch: Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
+        ready_count: Arc<AtomicUsize>,
+        visible_latch: Arc<VisibleLatch>,
         worker_failed: Arc<AtomicUsize>,
     ) -> Self {
         let vd_bounds = {
@@ -528,88 +471,33 @@ impl App {
             })
             .collect();
 
-        let workers = worker_setups
-            .iter()
-            .map(|s| {
-                Some(WorkerChannels {
-                    input_tx: s.input_tx.clone(),
-                    render_msg_tx: s.render_msg_tx.clone(),
-                })
-            })
-            .collect();
+        let expected = worker_setups.len();
 
-        Self {
-            workers,
-            windows: WindowSet::new(),
-            monitors,
-            ui_monitors,
-            vd_bounds,
-            warmup,
-            pinch_monitor: None,
-            instance,
-            worker_setups: Some(worker_setups),
-            worker_failed,
-            cycle: None,
-        }
-    }
-
-    /// Window creation for monitor `i` failed, so its worker will never
-    /// receive a handoff: tell the thread to shut down (it disarms its
-    /// fail guard and exits its pre-handoff loop, dropping any stashed
-    /// `BeginCycle`) and drop our retained senders so no future cycle
-    /// queues messages it would never drain. The slot stays in `workers`
-    /// (as `None`) and the failure is counted, keeping the show/ready
-    /// gates (`ready`/`parked` + `failed` >= `workers.len()`) balanced.
-    fn teardown_failed_worker(&mut self, i: usize) {
-        self.worker_failed
-            .fetch_add(1, Ordering::Release);
-        if let Some(w) = self.workers[i].take() {
-            let _ = w.input_tx.send(WorkerInput::Shutdown);
-        }
-    }
-
-    /// Arm a new capture cycle: hide the hardware cursor, re-arm each
-    /// window's first-show path, install the per-cycle state. All slow
-    /// warm-up (adapters, devices, pipelines) has already happened; the
-    /// screenshot/walker jobs for this cycle are already in flight.
-    pub fn start_cycle(&mut self, setup: CycleSetup) {
-        let primary = self
-            .monitors
+        let primary = monitors
             .iter()
             .find(|m| m.is_primary)
-            .or_else(|| self.monitors.first())
+            .or_else(|| monitors.first())
             .expect("at least one monitor present");
         let anchor = ScreenPoint::new(primary.bounds.center_x(), primary.bounds.center_y());
 
-        // Every spawned worker, including torn-down (`None`) slots — those
-        // are covered by `worker_failed` in the show gate.
-        let expected = self.workers.len();
-        let tips_mode = setup.settings.tips_mode_at_startup;
-        let cursor_overlay_visible = setup.settings.cursor_visible_at_startup;
-        let pending_preselect = setup
-            .settings
+        let tips_mode = settings.tips_mode_at_startup;
+        let cursor_overlay_visible = settings.cursor_visible_at_startup;
+        let pending_preselect = settings
             .capture_mode
             .is_preselect()
-            .then_some(setup.settings.capture_mode);
+            .then_some(settings.capture_mode);
 
-        // Hidden per cycle, not at window creation: on macOS the hide is
-        // global, and a warm (parked) process must not blank the user's
-        // cursor.
+        // The macOS hide is display-global, so it is bracketed by the
+        // capture: `finish_cycle` (and `resumed`'s no-windows bail-out)
+        // undoes it.
         set_hardware_cursor_visible(false);
-        // Always resolved by now: `CaptureSession::new` blocks on the
-        // screenshot job before arming the cycle.
-        let desktop_buffer = setup.screenshot_latch.try_get();
-        for h in self.windows.values() {
-            h.reassert_geometry();
-            h.reset_shown();
-            h.set_background_image(desktop_buffer.as_deref());
-        }
+        let desktop_buffer = Some(desktop_buffer);
 
         // Warm the OCR backend off-thread so the first OCR press of the
         // process doesn't pay the MNN model parse + session setup mid-scan
         // (a one-time cost, cached for the process lifetime). Once per
         // process, and only when the OCR button exists at all.
-        if setup.settings.panel_features.ocr {
+        if settings.panel_features.ocr {
             static OCR_WARM: std::sync::Once = std::sync::Once::new();
             OCR_WARM.call_once(|| {
                 if let Err(e) = std::thread::Builder::new()
@@ -621,26 +509,21 @@ impl App {
             });
         }
 
-        self.cycle = Some(CaptureCycle {
-            settings: setup.settings,
-            cycle_gen: setup.cycle_gen,
-            cancelled: setup.cancelled,
-            timings: setup.timings,
+        let cycle = CaptureCycle {
+            settings,
             desktop_buffer,
-            screenshot_latch: setup.screenshot_latch,
-            screenshot_deadline: Instant::now() + Duration::from_secs(30),
             walker: None,
-            walker_latch: setup.walker_latch,
-            peek_images_latch: setup.peek_images_latch,
+            walker_latch,
+            peek_images_latch,
             peek_images: HashMap::new(),
             last_cursor: HashMap::new(),
             cached_hovered_title: None,
             cached_peek_command: None,
             locked_peek: None,
             pending_show: Some(PendingShow {
-                ready_count: setup.ready_count,
+                ready_count,
                 expected,
-                visible_latch: setup.visible_latch,
+                visible_latch,
             }),
             pending_preselect,
             video_dispatched: false,
@@ -649,7 +532,7 @@ impl App {
             ocr_ready: None,
             panel_swap: PanelSwapGuard::new(),
             input: InteractionState {
-                virtual_cursor: setup.initial_mouse,
+                virtual_cursor: initial_mouse,
                 zoom: 1.0,
                 anchored: false,
                 anchor_just_engaged: false,
@@ -678,7 +561,29 @@ impl App {
                 ocr: OcrState::Idle,
                 ocr_notice: None,
             },
-        });
+        };
+
+        Self {
+            windows: WindowSet::new(),
+            monitors,
+            ui_monitors,
+            vd_bounds,
+            startup,
+            pinch_monitor: None,
+            instance,
+            worker_setups: Some(worker_setups),
+            worker_failed,
+            cycle: Some(cycle),
+        }
+    }
+
+    /// Window creation for monitor `i` failed, so its worker will never
+    /// receive a handoff. Count it, keeping the show gate
+    /// (`ready + failed >= expected`) balanced; the thread exits on channel
+    /// disconnect once the screenshot job's sender clones drop.
+    fn teardown_failed_worker(&mut self, _i: usize) {
+        self.worker_failed
+            .fetch_add(1, Ordering::Release);
     }
 
     /// Tear down the current capture cycle: hide every window, restore the
@@ -695,58 +600,19 @@ impl App {
         // were already restored via update_cursor_visibility.
         set_hardware_cursor_visible(true);
         if let Some(cycle) = self.cycle.take() {
-            // A worker may not have consumed this cycle's BeginCycle yet
-            // (the screenshot job broadcasts it from its own thread — e.g.
-            // cancel/timeout before the capture landed), or may still be
-            // blocked in visible_latch.wait(). Mark the cycle cancelled
-            // *before* releasing the latch so no worker can wedge on the
-            // dead cycle; workers re-check the flag after the wait.
-            cycle
-                .cancelled
-                .store(true, Ordering::Release);
             // A recognition may still be running; flag it cancelled so the
             // worker skips setting a latch nobody will read. NEVER joined:
-            // this path also serves ParentGone and topology restarts, and a
-            // cold recognize can take hundreds of ms — blocking here would
-            // strand a visible overlay behind a dead cycle.
+            // this path also serves ParentGone, and a cold recognize can
+            // take hundreds of ms — blocking here would strand a visible
+            // overlay behind a dead cycle.
             if let Some((_, _, cancel)) = &cycle.ocr_job {
                 cancel.store(true, Ordering::Release);
             }
             if let Some(pending) = &cycle.pending_show {
                 pending.visible_latch.signal_all();
             }
-            for w in self.workers.iter().flatten() {
-                let _ = w.render_msg_tx.send(RenderMsg::EndCycle {
-                    cycle_gen: cycle.cycle_gen,
-                });
-            }
-        }
-        for h in self.windows.values() {
-            h.set_background_image(None);
         }
         event_loop.exit();
-    }
-
-    /// Non-blocking pickup of this cycle's desktop screenshot, bounded by
-    /// `screenshot_deadline`. A no-op in practice — the latch is resolved
-    /// before `start_cycle` arms the cycle — but the deadline stays as the
-    /// backstop for a screenshot job that never lands.
-    fn try_pick_up_screenshot(&mut self, event_loop: &ActiveEventLoop) {
-        let Some(cycle) = self.cycle.as_mut() else {
-            return;
-        };
-        if cycle.desktop_buffer.is_some() {
-            return;
-        }
-        if let Some(buf) = cycle.screenshot_latch.try_get() {
-            for h in self.windows.values() {
-                h.set_background_image(Some(&buf));
-            }
-            cycle.desktop_buffer = Some(buf);
-        } else if Instant::now() >= cycle.screenshot_deadline {
-            error!("timed out waiting for the desktop screenshot; cancelling the capture cycle");
-            self.finish_cycle(event_loop, CycleAction::Cancelled);
-        }
     }
 
     fn ensure_peek_images(&mut self) {
@@ -808,7 +674,7 @@ impl App {
         // Result pickup. A finished job is always consumed, but whether the
         // result is USED depends on its id still matching the current
         // Scanning phase: BACK bumps `ocr_req` while the same cycle stays
-        // alive, which the cycle_gen tag could never detect.
+        // alive.
         if let Some((job_req, latch, _)) = cycle.ocr_job.as_ref() {
             if let Some(result) = latch.try_get() {
                 let job_req = *job_req;
@@ -1683,7 +1549,14 @@ impl ApplicationHandler for App {
         self.try_pick_up_walker();
 
         let mut windows = WindowSet::new();
-        self.warmup.mark_window_create_start();
+        self.startup.mark_window_create_start();
+
+        // Cloned out of the borrow: both failure arms below call
+        // `teardown_failed_worker(&mut self)`.
+        let desktop_buffer = self
+            .cycle
+            .as_ref()
+            .and_then(|c| c.desktop_buffer.clone());
 
         for (i, setup) in worker_setups.into_iter().enumerate() {
             let m = &self.monitors[i];
@@ -1736,10 +1609,10 @@ impl ApplicationHandler for App {
                 }
             };
 
-            self.warmup.workers[i]
+            self.startup.background.workers[i]
                 .surface_start
-                .set_once(self.warmup.t_start.elapsed());
-            let handle = match WindowHandle::new(window, setup, &self.instance) {
+                .set_once(self.startup.t_start.elapsed());
+            let handle = match WindowHandle::new(window, setup, &self.instance, desktop_buffer.as_deref()) {
                 Ok(h) => h,
                 Err(e) => {
                     error!("failed to create window handle for monitor {i}: {e:?}");
@@ -1747,34 +1620,24 @@ impl ApplicationHandler for App {
                     continue;
                 }
             };
-            self.warmup.workers[i]
+            self.startup.background.workers[i]
                 .surface_bind
-                .set_once(self.warmup.t_start.elapsed());
+                .set_once(self.startup.t_start.elapsed());
 
             windows.insert(handle);
         }
 
         if windows.is_empty() {
             error!("no windows created; exiting");
-            // `start_cycle` hid the cursor before the event loop ran, and this is
+            // `App::new` hid the cursor before the event loop ran, and this is
             // the one exit that never reaches `finish_cycle` to put it back.
             set_hardware_cursor_visible(true);
             event_loop.exit();
             return;
         }
 
-        self.warmup.mark_window_create();
+        self.startup.mark_window_create();
         self.windows = windows;
-
-        // Freshly created windows start un-shown, but still need this
-        // cycle's per-window state (macOS background screenshot layer).
-        if let Some(cycle) = self.cycle.as_ref() {
-            if let Some(buf) = cycle.desktop_buffer.as_deref() {
-                for h in self.windows.values() {
-                    h.set_background_image(Some(buf));
-                }
-            }
-        }
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
@@ -1790,10 +1653,8 @@ impl ApplicationHandler for App {
             }
         }
 
-        // Try to pick up the walker if it wasn't ready during resumed(),
-        // and this cycle's screenshot.
+        // Try to pick up the walker if it wasn't ready during resumed().
         self.try_pick_up_walker();
-        self.try_pick_up_screenshot(event_loop);
         self.try_advance_ocr();
 
         if let Some(cycle) = self.cycle.as_mut() {
@@ -1803,9 +1664,9 @@ impl ApplicationHandler for App {
                 let ready = pending.ready_count.load(Ordering::Acquire);
                 let failed = self.worker_failed.load(Ordering::Acquire);
                 if ready + failed >= pending.expected {
-                    cycle.timings.mark_show_start();
+                    self.startup.mark_show_start();
                     self.windows.show_all();
-                    cycle.timings.mark_shown();
+                    self.startup.mark_shown();
                     if let Some(h) = self.windows.first() {
                         h.focus();
                     }
@@ -1830,28 +1691,7 @@ impl ApplicationHandler for App {
         };
         let handle_monitor_bounds = this_monitor_bounds;
 
-        // Geometry maintenance must run even with no cycle in flight: a warm
-        // host creates its windows on the primary monitor and moves them into
-        // place during warm-up, so the DPI change that move provokes arrives
-        // between cycles. Without this override winit resizes the window by
-        // new_scale/old_scale, permanently shrinking any overlay whose monitor
-        // has a different DPI than the primary.
-        #[cfg(windows)]
-        let mut event = event;
-        #[cfg(windows)]
-        if let WindowEvent::ScaleFactorChanged {
-            ref mut inner_size_writer,
-            ..
-        } = event
-        {
-            let _ = inner_size_writer.request_inner_size(winit::dpi::PhysicalSize::new(
-                handle_monitor_bounds.width() as u32,
-                handle_monitor_bounds.height() as u32,
-            ));
-            return;
-        }
-
-        // No active cycle (finishing / between cycles): nothing to do.
+        // The cycle is already finishing (the process is exiting).
         let Some(cycle) = self.cycle.as_mut() else {
             return;
         };
@@ -2376,6 +2216,19 @@ impl ApplicationHandler for App {
                 cycle.input.show_scroll_hint = false;
                 cycle.input.velocity_tracker.dismiss_hint();
                 self.apply_zoom_factor(1.0 + delta as f32);
+            }
+            // Without this override winit resizes the window by
+            // new_scale/old_scale, permanently shrinking any overlay whose
+            // monitor has a different DPI than the primary.
+            #[cfg(windows)]
+            WindowEvent::ScaleFactorChanged {
+                mut inner_size_writer,
+                ..
+            } => {
+                let _ = inner_size_writer.request_inner_size(winit::dpi::PhysicalSize::new(
+                    handle_monitor_bounds.width() as u32,
+                    handle_monitor_bounds.height() as u32,
+                ));
             }
             _ => {}
         }

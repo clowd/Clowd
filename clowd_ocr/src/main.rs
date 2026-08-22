@@ -17,9 +17,8 @@
 //!
 //! Nothing is written to stdout. MNN prints device capabilities there on
 //! session creation, so the result goes to the `--out` file instead; the
-//! capturer redirects our stdout to null because its *own* stdout is the
-//! NDJSON host protocol `Clowd.Ui` parses, and MNN's chatter reaching it
-//! would corrupt that.
+//! capturer redirects our stdout to null so that chatter cannot be mistaken
+//! for output of its own.
 //!
 //! There is no Sentry client here, by design. A process spawned per key press
 //! would report release-health sessions that measure key presses rather than

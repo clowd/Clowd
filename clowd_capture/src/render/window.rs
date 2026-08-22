@@ -19,24 +19,25 @@ pub struct WindowHandle {
     window: Arc<Window>,
     monitor_bounds: ScreenRect,
     tx: mpsc::Sender<RenderMsg>,
-    /// Retained so `drop` can wake a worker parked between cycles
-    /// (blocking on `input_rx.recv()`), where `RenderMsg::Shutdown` is
-    /// never seen and channel disconnection can be held off indefinitely
+    /// Retained so `drop` can wake a worker still blocked on
+    /// `input_rx.recv()` awaiting `BeginCycle`, where `RenderMsg::Shutdown`
+    /// is never seen and channel disconnection can be held off indefinitely
     /// by a screenshot/blur job's sender clones.
     input_tx: mpsc::Sender<WorkerInput>,
     thread: Option<JoinHandle<()>>,
     shown: Cell<bool>,
     #[cfg(target_os = "macos")]
     render_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-    /// macOS: layer-backed view behind the render view whose contents are
-    /// set to the frozen-desktop screenshot per capture cycle (see
-    /// [`set_background_image`](Self::set_background_image)).
-    #[cfg(target_os = "macos")]
-    background_subview: Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
 }
 
 impl WindowHandle {
-    pub fn new(window: Arc<Window>, setup: WorkerSetup, instance: &wgpu::Instance) -> Result<Self> {
+    pub fn new(
+        window: Arc<Window>,
+        setup: WorkerSetup,
+        instance: &wgpu::Instance,
+        #[cfg(target_os = "macos")] screenshot: Option<&CapturedDesktop>,
+        #[cfg(not(target_os = "macos"))] _screenshot: Option<&CapturedDesktop>,
+    ) -> Result<Self> {
         apply_capture_window_tweaks(&window);
 
         // Per-window winit cursor hide only; the *hardware* cursor hide is
@@ -46,9 +47,14 @@ impl WindowHandle {
         window.set_cursor_visible(false);
 
         #[cfg(target_os = "macos")]
-        let (surface, render_subview, background_subview) = create_surface(instance, window.clone())?;
+        let screenshot_image = screenshot.and_then(|s| crop_screenshot_to_cgimage(s, setup.monitor_bounds));
         #[cfg(not(target_os = "macos"))]
-        let surface = create_surface(instance, window.clone())?;
+        let screenshot_image: Option<()> = None;
+
+        #[cfg(target_os = "macos")]
+        let (surface, render_subview) = create_surface(instance, window.clone(), screenshot_image)?;
+        #[cfg(not(target_os = "macos"))]
+        let surface = create_surface(instance, window.clone(), screenshot_image)?;
 
         let _ = setup
             .input_tx
@@ -66,8 +72,6 @@ impl WindowHandle {
             shown: Cell::new(false),
             #[cfg(target_os = "macos")]
             render_subview,
-            #[cfg(target_os = "macos")]
-            background_subview,
         })
     }
 
@@ -81,8 +85,9 @@ impl WindowHandle {
 
     pub fn show(&self) {
         if !self.shown.get() {
-            // orderFront happens per show, not at window creation, so a
-            // process warming up never has windows on screen.
+            // Windows are created hidden and `show_all` only runs once
+            // every worker has presented frame 0, so the overlay is never
+            // raised over an unpainted surface.
             #[cfg(target_os = "macos")]
             show_window_without_focus(&self.window);
             #[cfg(target_os = "macos")]
@@ -125,71 +130,6 @@ impl WindowHandle {
         // macOS: winit's set_visible(false) orders the window out.
         self.window.set_visible(false);
     }
-
-    /// Re-arm the first-show path so the next `show()` replays the raise /
-    /// fade-in branch. Called at capture-cycle start; on macOS also resets
-    /// the render view to transparent so the fade-in starts from black.
-    pub fn reset_shown(&self) {
-        self.shown.set(false);
-        #[cfg(target_os = "macos")]
-        if let Some(ref subview) = self.render_subview {
-            if let Some(layer) = subview.layer() {
-                layer.setOpacity(0.0);
-            }
-        }
-    }
-
-    /// Re-pin the window to its monitor's exact physical bounds. A warm
-    /// (hidden) window can drift: Windows may defer a hidden window's
-    /// WM_DPICHANGED until it is shown, so a display-scale change while
-    /// parked would otherwise surface as a mis-sized overlay. Skips the
-    /// two SetWindowPos calls when the geometry already matches — the
-    /// common case for every capture after the first.
-    #[cfg(windows)]
-    pub fn reassert_geometry(&self) {
-        let b = self.monitor_bounds;
-        let want_pos = winit::dpi::PhysicalPosition::new(b.origin.x, b.origin.y);
-        let want_size = winit::dpi::PhysicalSize::new(b.width().max(1) as u32, b.height().max(1) as u32);
-        let pos_matches = self
-            .window
-            .outer_position()
-            .is_ok_and(|p| p.x == want_pos.x && p.y == want_pos.y);
-        if pos_matches && self.window.inner_size() == want_size {
-            return;
-        }
-        self.window.set_outer_position(want_pos);
-        let _ = self.window.request_inner_size(want_size);
-    }
-
-    #[cfg(not(windows))]
-    pub fn reassert_geometry(&self) {}
-
-    /// Set (or clear) the frozen-desktop image on the CALayer behind the
-    /// render view. Installed per capture cycle rather than baked in at
-    /// window creation so an idle (hidden) window holds no screenshot.
-    /// No-op on other platforms — the wgpu surface is opaque there.
-    #[cfg(target_os = "macos")]
-    pub fn set_background_image(&self, screenshot: Option<&CapturedDesktop>) {
-        let Some(ref bg_view) = self.background_subview else {
-            return;
-        };
-        let Some(layer) = bg_view.layer() else {
-            return;
-        };
-        match screenshot.and_then(|s| crop_screenshot_to_cgimage(s, self.monitor_bounds)) {
-            Some(cg_image) => unsafe {
-                let cg_ptr: *const std::ffi::c_void = *(&cg_image as *const _ as *const *const std::ffi::c_void);
-                layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
-                layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
-            },
-            None => unsafe {
-                layer.setContents(None);
-            },
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    pub fn set_background_image(&self, _screenshot: Option<&CapturedDesktop>) {}
 
     pub fn show_cursor(&self) {
         #[cfg(not(windows))]
@@ -252,8 +192,11 @@ impl WindowHandle {
 impl Drop for WindowHandle {
     fn drop(&mut self) {
         // Two wakeups, one per channel the worker may be blocked on:
-        // RenderMsg::Shutdown reaches a worker inside a cycle's render
-        // loop; WorkerInput::Shutdown reaches one parked between cycles.
+        // RenderMsg::Shutdown reaches a worker inside the render loop;
+        // WorkerInput::Shutdown reaches one still waiting on the handoff's
+        // `BeginCycle` (the screenshot job sets the latch before it
+        // broadcasts, so the window can be built first). Without the second,
+        // a screenshot job that dies in that window would wedge the join.
         let _ = self.tx.send(RenderMsg::Shutdown);
         let _ = self.input_tx.send(WorkerInput::Shutdown);
         if let Some(t) = self.thread.take() {
@@ -430,8 +373,8 @@ fn show_window_without_focus(window: &Window) {
 // ── Platform: hardware cursor (private) ────────────────────────────
 
 /// Show/hide the OS hardware cursor. Guarded by a static so repeated calls
-/// are idempotent — hidden at capture-cycle start (`App::start_cycle`),
-/// restored at cycle end (`App::finish_cycle`) and around dialogs.
+/// are idempotent — hidden in `App::new`, restored in `App::finish_cycle`
+/// and around dialogs.
 #[cfg(windows)]
 pub(crate) fn set_hardware_cursor_visible(visible: bool) {
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -449,9 +392,9 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
     }
 }
 
-/// See the Windows variant: idempotent global cursor show/hide, invoked per
-/// capture cycle (never at window creation — `CGDisplay::hide_cursor` is
-/// global and must not blank the user's cursor while warming up).
+/// See the Windows variant: idempotent global cursor show/hide. Never
+/// called from `WindowHandle::new` — `CGDisplay::hide_cursor` is global, so
+/// it is bracketed by the capture rather than by window creation.
 #[cfg(target_os = "macos")]
 pub(crate) fn set_hardware_cursor_visible(visible: bool) {
     use core_graphics::display::{CGDisplay, CGMainDisplayID};
@@ -472,14 +415,11 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
 // ── Platform: surface creation (private) ───────────────────────────
 
 #[cfg(target_os = "macos")]
-type MacSurfaceViews = (
-    wgpu::Surface<'static>,
-    Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-    Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-);
-
-#[cfg(target_os = "macos")]
-fn create_surface(instance: &wgpu::Instance, window: Arc<Window>) -> Result<MacSurfaceViews> {
+fn create_surface(
+    instance: &wgpu::Instance,
+    window: Arc<Window>,
+    screenshot_image: Option<core_graphics::image::CGImage>,
+) -> Result<(wgpu::Surface<'static>, Option<objc2::rc::Retained<objc2_app_kit::NSView>>)> {
     use objc2::{MainThreadMarker, MainThreadOnly};
     use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
     use std::ptr::NonNull;
@@ -495,12 +435,19 @@ fn create_surface(instance: &wgpu::Instance, window: Arc<Window>) -> Result<MacS
     let content_view: &NSView = unsafe { &*(h.ns_view.as_ptr() as *const NSView) };
     let frame = content_view.frame();
 
-    // Empty layer at creation; the frozen-desktop contents are installed
-    // per capture cycle via `WindowHandle::set_background_image`.
-    let bg_view = NSView::initWithFrame(NSView::alloc(mtm), frame);
-    bg_view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
-    bg_view.setWantsLayer(true);
-    content_view.addSubview(&bg_view);
+    if let Some(ref cg_image) = screenshot_image {
+        let bg_view = NSView::initWithFrame(NSView::alloc(mtm), frame);
+        bg_view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+        bg_view.setWantsLayer(true);
+        if let Some(layer) = bg_view.layer() {
+            unsafe {
+                let cg_ptr: *const std::ffi::c_void = *(cg_image as *const _ as *const *const std::ffi::c_void);
+                layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
+                layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
+            }
+        }
+        content_view.addSubview(&bg_view);
+    }
 
     let subview = NSView::initWithFrame(NSView::alloc(mtm), frame);
     subview.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
@@ -521,11 +468,11 @@ fn create_surface(instance: &wgpu::Instance, window: Arc<Window>) -> Result<MacS
         })?
     };
 
-    Ok((surface, Some(subview), Some(bg_view)))
+    Ok((surface, Some(subview)))
 }
 
 #[cfg(not(target_os = "macos"))]
-fn create_surface(instance: &wgpu::Instance, window: Arc<Window>) -> Result<wgpu::Surface<'static>> {
+fn create_surface(instance: &wgpu::Instance, window: Arc<Window>, _screenshot_image: Option<()>) -> Result<wgpu::Surface<'static>> {
     Ok(instance.create_surface(window)?)
 }
 

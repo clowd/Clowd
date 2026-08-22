@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use crate::telemetry::perf::PerfTracker;
 use crate::telemetry::perf::{PerfStats, Series};
-use crate::telemetry::startup::{CaptureTimings, WarmupTimings};
+use crate::telemetry::startup::StartupTimings;
 use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 pub const COLOR_WHITE: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
@@ -259,9 +259,7 @@ impl<'a> MonitorPanelData<'a> {
 
 /// Everything rendered in the top-right "Primary Debug" panel.
 pub struct PrimaryPanelData<'a> {
-    pub warmup: &'a WarmupTimings,
-    /// The active cycle's timings; `None` before the worker's first cycle.
-    pub capture: Option<&'a CaptureTimings>,
+    pub startup: &'a StartupTimings,
     pub zoom: f32,
     pub cursor: ScreenPointF,
     pub color_bgra: Option<[u8; 4]>,
@@ -278,84 +276,81 @@ impl<'a> PrimaryPanelData<'a> {
     pub fn write_lines(&self, out: &mut LineBuf) {
         out.reset();
 
-        // ── Warm-up section: recorded once, anchored at process start ─
-        let warmup = self.warmup;
-        out.push(format_args!("warmup: {} total", DisplayMs(warmup.total())));
+        let total = self.startup.total();
+        out.push(format_args!("startup: {} total", DisplayMs(total)));
 
-        let init_end = warmup.t_initialize.get();
+        let init_end = self.startup.t_initialize.get();
+
         if let Some(d) = phase_between(init_end, None) {
             out.push(format_args!("  initialize:      {}", DisplayMs(d)));
         }
 
-        let warm_start = init_end.unwrap_or(Duration::ZERO);
-        let multi = warmup.workers.len() > 1;
-        for (i, w) in warmup.workers.iter().enumerate() {
+        let bg = &self.startup.background;
+        let bg_start = init_end.unwrap_or(Duration::ZERO);
+        let bg_gate = bg.gate();
+        if let Some(d) = phase_between(bg_gate, Some(bg_start)) {
+            out.push(format_args!("  background:      {}", DisplayMs(d)));
+        }
+        if let Some(d) = phase_between(bg.screenshot.get(), bg.screenshot_start.get()) {
+            out.push(format_args!("    screenshot:    {}", DisplayMs(d)));
+        }
+        if let Some(d) = phase_between(bg.walker.get(), bg.walker_start.get()) {
+            out.push(format_args!("    walker:        {}", DisplayMs(d)));
+        }
+        let multi = bg.workers.len() > 1;
+        for (i, w) in bg.workers.iter().enumerate() {
             let suffix = if multi { format!("[{}]", i) } else { String::new() };
-            let worker_start = w.prep_start.get().unwrap_or(warm_start);
-            let worker_end = [w.render_prep.get(), w.surface_bind.get(), w.handoff.get()]
-                .into_iter()
-                .flatten()
-                .max();
+            let worker_start = w.prep_start.get().unwrap_or(bg_start);
+            let worker_end = [
+                w.render_prep.get(),
+                w.upload.get(),
+                w.surface_bind.get(),
+                w.handoff.get(),
+                w.first_render.get(),
+            ]
+            .into_iter()
+            .flatten()
+            .max();
             if let Some(d) = phase_between(worker_end, Some(worker_start)) {
-                out.push(format_args!("  worker{}:        {}", suffix, DisplayMs(d)));
+                out.push(format_args!("    worker{}:      {}", suffix, DisplayMs(d)));
             }
             if let Some(d) = phase_between(w.render_prep.get(), w.prep_start.get()) {
-                out.push(format_args!("    prep:          {}", DisplayMs(d)));
+                out.push(format_args!("      prep:        {}", DisplayMs(d)));
             }
             if let Some(d) = phase_between(w.prep_adapter.get(), w.prep_start.get()) {
-                out.push(format_args!("      adapter:     {}", DisplayMs(d)));
+                out.push(format_args!("        adapter:   {}", DisplayMs(d)));
             }
             if let Some(d) = phase_between(w.prep_device.get(), w.prep_adapter.get()) {
-                out.push(format_args!("      device:      {}", DisplayMs(d)));
+                out.push(format_args!("        device:    {}", DisplayMs(d)));
             }
             if let Some(d) = phase_between(w.prep_pipelines.get(), w.prep_device.get()) {
-                out.push(format_args!("      pipes:       {}", DisplayMs(d)));
+                out.push(format_args!("        pipes:     {}", DisplayMs(d)));
             }
             if let Some(d) = phase_between(w.prep_ui_pipelines.get(), w.prep_pipelines.get()) {
-                out.push(format_args!("      ui_pipe:     {}", DisplayMs(d)));
+                out.push(format_args!("        ui_pipe:   {}", DisplayMs(d)));
             }
             if let Some(d) = phase_between(w.prep_fonts.get(), w.prep_ui_pipelines.get()) {
-                out.push(format_args!("      fonts:       {}", DisplayMs(d)));
+                out.push(format_args!("        fonts:     {}", DisplayMs(d)));
+            }
+            if let Some(d) = phase_between(w.upload.get(), w.upload_start.get()) {
+                out.push(format_args!("      upload:      {}", DisplayMs(d)));
             }
             if let Some(d) = phase_between(w.surface_bind.get(), w.surface_start.get()) {
-                out.push(format_args!("    surface:       {}", DisplayMs(d)));
+                out.push(format_args!("      surface:     {}", DisplayMs(d)));
+            }
+            if let Some(d) = phase_between(w.handoff.get(), w.surface_bind.get()) {
+                out.push(format_args!("      handoff:     {}", DisplayMs(d)));
+            }
+            if let Some(d) = phase_between(w.first_render.get(), w.first_render_start.get()) {
+                out.push(format_args!("      first render: {}", DisplayMs(d)));
             }
         }
 
-        if let Some(d) = phase_between(warmup.t_window_create.get(), warmup.t_window_create_start.get()) {
-            out.push(format_args!("  window create:   {}", DisplayMs(d)));
+        if let Some(d) = phase_between(self.startup.t_window_create.get(), self.startup.t_window_create_start.get()) {
+            out.push(format_args!("  window create:  {}", DisplayMs(d)));
         }
-        out.push_empty();
-
-        // ── Capture section: fresh per cycle, anchored at the show
-        // command — the idle wait between cycles never appears here ─
-        match self.capture {
-            None => out.push(format_args!("capture: (idle)")),
-            Some(capture) => {
-                out.push(format_args!("capture: {} total", DisplayMs(capture.total())));
-                if let Some(d) = phase_between(capture.screenshot.get(), capture.screenshot_start.get()) {
-                    out.push(format_args!("  screenshot:      {}", DisplayMs(d)));
-                }
-                if let Some(d) = phase_between(capture.walker.get(), capture.walker_start.get()) {
-                    out.push(format_args!("  walker:          {}", DisplayMs(d)));
-                }
-                let multi = capture.workers.len() > 1;
-                for (i, w) in capture.workers.iter().enumerate() {
-                    let suffix = if multi { format!("[{}]", i) } else { String::new() };
-                    if let Some(d) = phase_between(w.configure.get(), w.configure_start.get()) {
-                        out.push(format_args!("  configure{}:     {}", suffix, DisplayMs(d)));
-                    }
-                    if let Some(d) = phase_between(w.upload.get(), w.upload_start.get()) {
-                        out.push(format_args!("  upload{}:        {}", suffix, DisplayMs(d)));
-                    }
-                    if let Some(d) = phase_between(w.first_render.get(), w.first_render_start.get()) {
-                        out.push(format_args!("  first render{}:  {}", suffix, DisplayMs(d)));
-                    }
-                }
-                if let Some(d) = phase_between(capture.t_shown.get(), capture.t_show_start.get()) {
-                    out.push(format_args!("  shown:           {}", DisplayMs(d)));
-                }
-            }
+        if let Some(d) = phase_between(self.startup.t_shown.get(), self.startup.t_show_start.get()) {
+            out.push(format_args!("  shown:          {}", DisplayMs(d)));
         }
         out.push_empty();
 

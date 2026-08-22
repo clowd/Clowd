@@ -215,9 +215,8 @@ impl OcrBubblesRenderer {
 
     /// Drop the cached layouts (glyphon Buffers hold shaped-glyph heap
     /// data — a page of recognized text is worth releasing promptly).
-    /// Called whenever the mode leaves Lifted and from
-    /// `UiRenderer::end_cycle`. Deliberately does NOT touch `warm_step`:
-    /// the caches the warmup filled outlive the cycle.
+    /// Called whenever the mode leaves Lifted. Deliberately does NOT touch
+    /// `warm_step`: the caches the warmup filled outlive it.
     pub fn clear(&mut self) {
         self.entries.clear();
         self.outcome_key = None;

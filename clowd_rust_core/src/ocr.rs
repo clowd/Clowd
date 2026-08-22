@@ -25,7 +25,7 @@
 //! * **stdout** — nothing. MNN prints device capabilities to stdout on
 //!   session creation, so stdout is unusable as a protocol channel here;
 //!   that is why the response is a file rather than the NDJSON line the
-//!   the scrolling-capture driver uses. The capturer spawns the child with
+//!   scrolling-capture driver uses. The capturer spawns the child with
 //!   stdout redirected to null so MNN's device-capability chatter cannot be
 //!   mistaken for output of its own.
 //!
