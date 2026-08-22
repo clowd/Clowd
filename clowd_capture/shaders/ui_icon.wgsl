@@ -1,4 +1,4 @@
-// Instanced textured-quad pipeline for CPU-rasterised icon atlas.
+// Instanced textured-quad pipeline for CPU-rasterized icon atlas.
 //
 // Each instance places one icon from the atlas at a screen-space rect.
 // Output is premultiplied alpha (tiny_skia produces premultiplied RGBA);

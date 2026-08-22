@@ -36,12 +36,12 @@ namespace Clowd.UI
 
         public CancellationToken CancelToken => _source.Token;
 
-        public bool IsCancelled { get; private set; }
+        public bool IsCanceled { get; private set; }
 
         // Set by UploadsManager.SetEarlyUrl for accelerated uploads: the shareable link surfaced
         // (copied to the clipboard, written to session.UploadUrl) before any bytes transferred, and
         // the session's UploadUrl from just before it was overwritten. If the upload then fails or is
-        // cancelled the server aborts the session and the link 410s, so these let the UI roll the dead
+        // canceled the server aborts the session and the link 410s, so these let the UI roll the dead
         // link back rather than leave it on the Recent page and blocking junk-row cleanup.
         internal string EarlyUrl { get; set; }
         internal string PreEarlyUploadUrl { get; set; }
@@ -60,7 +60,7 @@ namespace Clowd.UI
         /// <summary>Aborts the upload and removes its row from the page immediately.</summary>
         public void Cancel()
         {
-            IsCancelled = true;
+            IsCanceled = true;
             _source.Cancel();
             PageManager.Current.Uploads.DiscardUpload(this);
         }
@@ -69,7 +69,7 @@ namespace Clowd.UI
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (IsCancelled)
+                if (IsCanceled)
                     return;
                 Status = status;
             });
@@ -79,7 +79,7 @@ namespace Clowd.UI
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (IsCancelled)
+                if (IsCanceled)
                     return;
 
                 Progress = total > 0 ? Math.Min(100, completed / (double)total * 100d) : 0;
@@ -133,7 +133,7 @@ namespace Clowd.UI
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (upload.IsCancelled)
+                if (upload.IsCanceled)
                 {
                     Detach(upload);
                     return;
@@ -181,7 +181,7 @@ namespace Clowd.UI
 
             Dispatcher.UIThread.Post(() =>
             {
-                if (upload.IsCancelled)
+                if (upload.IsCanceled)
                     return;
 
                 upload.WasAccelerated = true;
@@ -202,7 +202,7 @@ namespace Clowd.UI
 
         public async Task FailUpload(ActiveUpload upload, Exception ex)
         {
-            if (upload.IsCancelled)
+            if (upload.IsCanceled)
             {
                 DiscardUpload(upload);
                 return;
@@ -317,14 +317,14 @@ namespace Clowd.UI
         }
 
         /// <summary>Deletes an upload-only session that never produced a completed upload, so a
-        /// cancelled/failed clipboard or file upload doesn't linger as a junk row.</summary>
+        /// canceled/failed clipboard or file upload doesn't linger as a junk row.</summary>
         private static void CleanupEmptyUploadOnly(SessionInfo session)
         {
             if (session == null || !session.IsUploadOnly)
                 return;
 
             // never delete a session that owns real content: a video recording is IsUploadOnly
-            // too, and a failed or cancelled upload must not silently drop the recording out of
+            // too, and a failed or canceled upload must not silently drop the recording out of
             // Recents. This cleanup exists only for the ephemeral
             // sessions UploadManager creates around a payload *copy* (clipboard/file/text).
             if (!String.IsNullOrEmpty(session.VideoPath) && File.Exists(session.VideoPath))

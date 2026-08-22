@@ -238,7 +238,7 @@ namespace Clowd.UI.VideoEditor
             // Modifier-carrying command gestures become Window.KeyBindings; bare gestures
             // (Space/Left/Right/Delete/Home/End) are routed by the tunnel KeyDown handler below.
             // Escape is handled there only to leave crop mode when no drag is in flight — the
-            // timeline surface and gizmo keep it for cancelling a drag in progress.
+            // timeline surface and gizmo keep it for canceling a drag in progress.
             AddCommandKeyBinding(CommandSplit);
             AddCommandKeyBinding(CommandUndo);
             AddCommandKeyBinding(CommandRedo);
@@ -294,7 +294,7 @@ namespace Clowd.UI.VideoEditor
             ddResolution.PropertyChanged += Resolution_PropertyChanged;
             ddFrameRate.PropertyChanged += FrameRate_PropertyChanged;
 
-            // the zoom readout is derived, not set: the preview owns the letterbox maths and
+            // the zoom readout is derived, not set: the preview owns the letterbox math and
             // reports what it landed on (a resize, a Fit toggle or a resolution change all move it).
             preview.ZoomChanged += (_, _) => UpdateZoomReadout();
             UpdateZoomReadout();
@@ -532,7 +532,7 @@ namespace Clowd.UI.VideoEditor
             Inspector.Analysis = _analysis;
 
             // Filmstrips and waveforms decode on their own contexts, behind playback. Waveforms are
-            // cached beside videoedit.json; the dev harness has no session directory and analyses
+            // cached beside videoedit.json; the dev harness has no session directory and analyzes
             // in memory (_editDocPath is null there).
             _preview = new TimelinePreviewProvider(_editor,
                 _editDocPath != null ? Path.GetDirectoryName(_editDocPath) : null);
@@ -597,7 +597,7 @@ namespace Clowd.UI.VideoEditor
             try
             {
                 // preview decodes at display resolution, not at output resolution (proxy
-                // behaviour); the composer scales the rest of the way. The sidecar directory is
+                // behavior); the composer scales the rest of the way. The sidecar directory is
                 // where the denoise/matte files land (beside videoedit.json) — null in dev mode,
                 // which plays every stream raw.
                 await _player.OpenAsync(snapshot, new VideoOpenOptions
@@ -1463,7 +1463,7 @@ namespace Clowd.UI.VideoEditor
                     case VidRenderOutcome.Success:
                         Toast.Show(this, "Video saved: " + Path.GetFileName(result.OutputPath ?? outputPath));
                         break;
-                    case VidRenderOutcome.Cancelled:
+                    case VidRenderOutcome.Canceled:
                         break;
                     default:
                         await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error,
@@ -1573,7 +1573,7 @@ namespace Clowd.UI.VideoEditor
             preview.AttachPlayer(null);
             preview.SetProject(null);
 
-            // detach the timeline first: cancelling the decode passes releases the bitmaps the
+            // detach the timeline first: canceling the decode passes releases the bitmaps the
             // rows draw from, so nothing may repaint after this point.
             timeline.PreviewProvider = null;
             _preview?.Dispose();

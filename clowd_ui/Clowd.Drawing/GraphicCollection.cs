@@ -471,7 +471,7 @@ namespace Clowd.Drawing
             // Snap the export rect outward to whole pixels BEFORE it becomes the render offset.
             // ContentBounds is a union of double-precision artwork rects, so any annotation sitting
             // at a fractional coordinate used to drag the whole scene — the screenshot underneath
-            // included — onto a sub-pixel offset. Images are blitted, not re-rasterised, so that
+            // included — onto a sub-pixel offset. Images are blitted, not re-rasterized, so that
             // offset makes the sampler resample every pixel (visibly soft) and leaves a partly
             // transparent edge row. An integral offset keeps pixel-aligned raster content aligned,
             // and snapping outward (floor origin / ceil extent) can never crop.

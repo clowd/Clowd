@@ -29,7 +29,7 @@ use sentry::integrations::log::{LogFilter, SentryLogger};
 /// application and only grant permission to submit events.
 const DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.sentry.io/4511796263387136";
 
-/// Set to any non-empty value to turn reporting off. The shell honours the same
+/// Set to any non-empty value to turn reporting off. The shell honors the same
 /// variable, and every process it spawns inherits its environment, so opting
 /// out once covers all of them.
 const OPT_OUT_VAR: &str = "CLOWD_DISABLE_TELEMETRY";
@@ -117,7 +117,7 @@ pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
     if !guard.is_enabled() {
         // can't warn!() through the bridge here — it would try to report the
         // failure to report
-        eprintln!("sentry client did not initialise; crash reporting is off");
+        eprintln!("sentry client did not initialize; crash reporting is off");
         return None;
     }
 

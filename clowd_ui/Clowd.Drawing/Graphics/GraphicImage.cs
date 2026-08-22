@@ -385,7 +385,7 @@ namespace Clowd.Drawing.Graphics
             {
                 // Keep raster content pixel aligned. A body drag arrives as a fractional
                 // logical-unit delta, and unlike a vector graphic an image is blitted rather than
-                // re-rasterised: land it on a fractional origin and the sampler resamples every
+                // re-rasterized: land it on a fractional origin and the sampler resamples every
                 // pixel, which reads as a blurry screenshot with a half-transparent edge row — on
                 // screen and in anything exported from the canvas.
                 //
@@ -395,7 +395,7 @@ namespace Clowd.Drawing.Graphics
                 // from the cursor without bound: at 150% DPI a 0.667-unit step rounds to 1 every
                 // event (the image outruns the pointer by half), and at zoom 2 a steady 0.5-unit
                 // step rounds to even — i.e. to zero — every event, freezing the image completely.
-                // Carrying the residual keeps the quantised position within half a unit of the
+                // Carrying the residual keeps the quantized position within half a unit of the
                 // intended one forever. Nudges (already integral) are unaffected either way.
                 var targetX = Left + deltaX + _moveRemainderX;
                 var targetY = Top + deltaY + _moveRemainderY;
@@ -678,7 +678,7 @@ namespace Clowd.Drawing.Graphics
 
         /// <summary>
         /// Draws one <see cref="ObscureMode.Blur"/> shape by blurring a copy of the source pixels
-        /// under it. Only the shape's neighbourhood is blurred — a whole-image gaussian would cost
+        /// under it. Only the shape's neighborhood is blurred — a whole-image gaussian would cost
         /// several passes over a 4K screenshot per cache rebuild — and the cut-out is padded by the
         /// blur reach so the rim the kernel darkens against the transparent outside lands beyond
         /// the geometry clip. Returns false when the source pixels cannot be read back.

@@ -16,7 +16,7 @@
 //!   variable across every process.
 //!
 //! Anything that only one binary needs stays in that binary. `app.manifest`
-//! lives in this crate's directory for the same reason its Rust neighbours
+//! lives in this crate's directory for the same reason its Rust neighbors
 //! do; each binary's `build.rs` embeds it.
 
 pub mod exit;

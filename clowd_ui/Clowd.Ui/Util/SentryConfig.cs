@@ -31,7 +31,7 @@ namespace Clowd
         /// application and only grant permission to submit events.</summary>
         private const string Dsn = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.sentry.io/4511796263387136";
 
-        /// <summary>Set to any non-empty value to turn reporting off. The capturer honours the same
+        /// <summary>Set to any non-empty value to turn reporting off. The capturer honors the same
         /// variable, so clearing it once in the environment covers both processes.</summary>
         public const string OptOutVariable = "CLOWD_DISABLE_TELEMETRY";
 
@@ -96,7 +96,7 @@ namespace Clowd
         /// </param>
         /// <remarks>
         /// Cancellation is dropped rather than reported: <see cref="OperationCanceledException"/>
-        /// is control flow here (shutdown, user-cancelled dialogs), not a fault, and reporting it
+        /// is control flow here (shutdown, user-canceled dialogs), not a fault, and reporting it
         /// would bury the real failures.
         /// </remarks>
         public static void CaptureHandled(Exception ex, string operation)
@@ -164,7 +164,7 @@ namespace Clowd
         /// </summary>
         /// <param name="ex">The exception about to be reported.</param>
         /// <param name="sections">
-        /// Labelled log sources in the order they should appear — put the most diagnostic last,
+        /// Labeled log sources in the order they should appear — put the most diagnostic last,
         /// since both the size cap above and Sentry's inline <c>process_log_tail</c> keep the end.
         /// Null and blank sections are skipped, so a caller can pass an optional log file without
         /// checking for it first.
@@ -252,7 +252,7 @@ namespace Clowd
         /// hundreds of times a day (CLOWD-5, CLOWD-6) — which buries the real defects.</para>
         ///
         /// <para>The line drawn is <b>did anything answer us</b>. Nothing did: the request died in
-        /// the transport, so no judgement was ever passed on it and none of it can be our fault.
+        /// the transport, so no judgment was ever passed on it and none of it can be our fault.
         /// Something did: the remote read our request and rejected it — which is exactly the shape
         /// of a bug in provider code (wrong endpoint, stale auth header, malformed multipart), so
         /// it keeps reporting unless <paramref name="alsoDropErrorStatuses"/> says otherwise.</para>
@@ -262,7 +262,7 @@ namespace Clowd
         /// code made, and the decision is ours to get wrong — an <c>AmazonS3Exception</c> around a
         /// dead socket must not be filtered just because a socket is somewhere underneath it.</para>
         ///
-        /// <para>Typed rather than message-matched: the OS messages are localised into the user's
+        /// <para>Typed rather than message-matched: the OS messages are localized into the user's
         /// system language, so "No such host is known" and "O nome solicitado é válido, mas..."
         /// are the same fault filed under two Sentry issues.</para>
         ///

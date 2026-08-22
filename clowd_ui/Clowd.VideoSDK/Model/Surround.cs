@@ -19,7 +19,7 @@ public enum SurroundKind
 /// already carries the system cursor's own shadow.
 ///
 /// <b>Not an effect</b>, deliberately: the name is reserved for what may later be applied to an
-/// item's own pixels (a blur, a colour grade). A surround is strictly outside the silhouette, an
+/// item's own pixels (a blur, a color grade). A surround is strictly outside the silhouette, an
 /// effect strictly inside it, and the two would want separate storage and separate UI anyway. Nor is
 /// it related to the <i>effect items</i> (<see cref="SpeedContent"/> / <see cref="ZoomContent"/>) on
 /// the pinned effect row, which re-time or zoom the whole output.
@@ -39,12 +39,12 @@ public sealed class Surround
 
     public const double MaxDistance = 0.5;
 
-    /// <summary>Black at 50% — a shadow is an absence of light, not a colour, so the well starts
+    /// <summary>Black at 50% — a shadow is an absence of light, not a color, so the well starts
     /// where a user would leave it.</summary>
     public const uint DefaultShadowColor = 0x80000000;
 
     /// <summary>White at 75%: a halo that lifts the item off whatever is behind it. Translucent
-    /// because a glow reads as light, and the alpha is <i>in</i> the colour (see
+    /// because a glow reads as light, and the alpha is <i>in</i> the color (see
     /// <see cref="KeyboardContent.DefaultBackgroundColor"/> for the same trade).</summary>
     public const uint DefaultGlowColor = 0xC0FFFFFF;
 
@@ -54,8 +54,8 @@ public sealed class Surround
     /// <see cref="SurroundKind.None"/> on a stored surround — that is a null surround.</summary>
     public SurroundKind Kind { get; set; } = SurroundKind.Shadow;
 
-    /// <summary>The decoration's colour, packed ARGB — alpha included, so how strongly the surround
-    /// reads is this colour's own alpha.</summary>
+    /// <summary>The decoration's color, packed ARGB — alpha included, so how strongly the surround
+    /// reads is this color's own alpha.</summary>
     public uint Color { get; set; } = DefaultShadowColor;
 
     /// <summary>How far the decoration spreads, as a fraction of the item's reference extent: the

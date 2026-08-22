@@ -299,7 +299,7 @@ namespace Clowd.UI.Services
                     }
 
                     key = _queue.Dequeue();
-                    // cancelled while queued (setting turned off): the entry is gone.
+                    // canceled while queued (setting turned off): the entry is gone.
                     if (!_entries.TryGetValue(key, out entry) || entry.State != AiAnalysisState.Queued)
                         continue;
 

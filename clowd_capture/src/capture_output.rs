@@ -11,8 +11,8 @@ use clowd_rust_core::geometry::ScreenRect;
 pub enum ActionResult {
     /// Operation completed successfully.
     Success,
-    /// User cancelled the operation (e.g. dismissed save dialog).
-    Cancelled,
+    /// User canceled the operation (e.g. dismissed save dialog).
+    Canceled,
     /// Operation failed with an error message.
     Failed(String),
 }
@@ -197,8 +197,8 @@ pub fn save_to_file_with_peek(
         .save_file();
 
     let Some(mut path) = path else {
-        log::info!("save: dialog cancelled");
-        return ActionResult::Cancelled;
+        log::info!("save: dialog canceled");
+        return ActionResult::Canceled;
     };
 
     let ext = path

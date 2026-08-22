@@ -5,7 +5,7 @@ edition = "2021"
 # The ONLY GPL crate in an otherwise MIT repository, and deliberately so: the
 # embedded RobustVideoMatting weights (assets/models/, see the README there)
 # are released under GPL-3.0, so the binary that embeds them is GPL-3.0 too.
-# That licence must not reach the rest of Clowd, which is the second reason —
+# That license must not reach the rest of Clowd, which is the second reason —
 # after fault isolation — that AI inference is its own process: the GPL ends
 # at this process boundary (mere aggregation; the app talks to it over pipes),
 # exactly like the GPL'd obs-express recording process the app already ships.
@@ -29,11 +29,11 @@ license = "GPL-3.0-only"
 #   DPDFNet2 48 kHz + ~35.5 MB PP-OCRv6 det/rec, all fp32) stay out of every
 #   process that never runs a model — the overlay in particular is spawned
 #   fresh for every capture and pays for its own size in start-up latency.
-#   Cancelling a job is killing a process.
+#   Canceling a job is killing a process.
 #
 # Only Windows (x64 + arm64) and Apple Silicon build this crate: upstream
 # ONNX Runtime dropped macOS x86_64, and ort has no prebuilt binaries for it.
-# CI skips it on the osx-x64 leg; the app greys the AI effects out there and
+# CI skips it on the osx-x64 leg; the app grays the AI effects out there and
 # the overlay reports OCR as unavailable.
 
 [dependencies]

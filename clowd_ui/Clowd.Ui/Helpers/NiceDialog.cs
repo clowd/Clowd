@@ -175,7 +175,7 @@ namespace Clowd.UI.Helpers
 
             var picked = await provider.SaveFilePickerAsync(options);
             if (picked == null)
-                return null; // cancelled
+                return null; // canceled
 
             var file = picked.TryGetLocalPath();
             if (String.IsNullOrEmpty(file))

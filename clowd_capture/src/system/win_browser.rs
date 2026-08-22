@@ -16,7 +16,7 @@ use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 /// Must be called from the winit thread: `ShellExecuteW` requires COM on
 /// the calling thread, and `SystemInterop::init` is what provides it
 /// (`CoInitializeEx(COINIT_APARTMENTTHREADED)`, once, at startup). Called
-/// from a worker thread that never initialised COM this fails rather than
+/// from a worker thread that never initialized COM this fails rather than
 /// crashes, but it fails every time.
 pub fn open_url(url: &str) -> bool {
     // ShellExecuteW's HINSTANCE return is not a handle despite the type:

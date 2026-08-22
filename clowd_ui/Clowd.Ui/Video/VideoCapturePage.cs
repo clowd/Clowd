@@ -341,7 +341,7 @@ namespace Clowd.UI
                 // than dropping the user on a Recents row whose thumbnail shows no webcam at all.
                 // An input-capture recording is the same situation (the screen frames were recorded
                 // with no cursor baked in; only the editor draws it back from the jsonl sidecar).
-                // Recordings with neither honour the setting.
+                // Recordings with neither honor the setting.
                 if (session != null && (session.HasWebcamTrack || !String.IsNullOrEmpty(session.InputCapturePath))
                     && session.CanEditVideo)
                     finishAction = RecordingFinishAction.VideoEditor;
@@ -424,7 +424,7 @@ namespace Clowd.UI
                 // pre-start: writes "quit" → cancel-before-start, exit 0 (§1.2). Awaited so the
                 // directory delete below cannot race the process's open file handles, without
                 // ever blocking the UI thread (the old sync Dispose froze the app for up to 5 s
-                // when cancelling during WAIT).
+                // when canceling during WAIT).
                 await ShutdownCapturersAsync();
 
                 DeleteDirectory(_sessionDir);
@@ -432,7 +432,7 @@ namespace Clowd.UI
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("Error cancelling recording session: " + ex);
+                Debug.WriteLine("Error canceling recording session: " + ex);
                 SentryConfig.CaptureHandled(ex, "video.cancel");
                 Close();
             }

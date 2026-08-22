@@ -11,14 +11,14 @@ pack means re-copying it.
 | `breezex`     | `ful1e5/BreezeX_Cursor` — `svg`                 |                                     |
 | `macos`       | `ful1e5/apple_cursor` — `svg`                   |                                     |
 | `fuchsia`     | `ful1e5/fuchsia-cursor` — `svg`                 |                                     |
-| `neon`        | the Neon pack — `blue`                          | one of its eight colour folders     |
+| `neon`        | the Neon pack — `blue`                          | one of its eight color folders     |
 
 Bibata is the only pack carried twice, because its two edge sets are two drawings rather than two
 palettes; the editor presents them as the `R` and `S` halves of one style. Its `-Right` mirrors are
 a separate set for a different hand and are not carried.
 
-Neon is the opposite case: it ships eight folders that differ only in colour, so one is stored and
-the other seven are colour maps in `CursorAssets`, keyed on the stored folder's own four colours.
+Neon is the opposite case: it ships eight folders that differ only in color, so one is stored and
+the other seven are color maps in `CursorAssets`, keyed on the stored folder's own four colors.
 Its two busy cursors animate in the file with SMIL rather than as frames, and the loader samples
 that loop — see `CursorPackLoader`.
 
@@ -46,7 +46,7 @@ that loop — see `CursorPackLoader`.
    copied untouched; its blur filters are left in place (the loader ignores them) so the sources
    stay byte-identical to the pack.
 
-Everything else the loader does — the placeholder colours, the outside strokes, the even-odd fills —
+Everything else the loader does — the placeholder colors, the outside strokes, the even-odd fills —
 happens at table build and is documented on `CursorPackLoader` itself.
 
 ## Re-syncing a pack

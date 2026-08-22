@@ -166,7 +166,7 @@ namespace Clowd.Drawing.Tests
             canvas.RestoreState(snapshot); // contract #23: no raise on restore-load
             Assert.Equal(0, raises);
 
-            // the armed tail belonged to the replaced document — it must have been cancelled
+            // the armed tail belonged to the replaced document — it must have been canceled
             canvas.FlushPendingState();
             Assert.Equal(0, raises);
         }

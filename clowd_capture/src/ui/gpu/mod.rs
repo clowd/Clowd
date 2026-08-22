@@ -2,7 +2,7 @@
 //!
 //! Submodules:
 //!   * [`rect`]   — instanced colored/bordered rect pipeline
-//!   * [`icon`]   — CPU-rasterised icon atlas + textured-quad pipeline
+//!   * [`icon`]   — CPU-rasterized icon atlas + textured-quad pipeline
 //!   * [`lift`]   — OCR scanning-sweep band
 //!   * [`ocr_bubbles`] — OCR re-rendered text bubbles
 //!   * [`text`]   — glyphon wrapper

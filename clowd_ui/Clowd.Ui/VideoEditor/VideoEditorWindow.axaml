@@ -33,7 +33,7 @@
         <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
 
         <!--  The playback-speed picker: a ToolButton is icon-only, and this one has to show which
-              speed is active, so it is a labelled button wearing the same transparent fill and
+              speed is active, so it is a labeled button wearing the same transparent fill and
               white hover veil as the transport buttons beside it.  -->
         <ControlTheme x:Key="SpeedButtonTheme" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
@@ -86,7 +86,7 @@
             </Style>
         </ControlTheme>
 
-        <!--  Render is the window's primary action, so it is a labelled accent button rather than
+        <!--  Render is the window's primary action, so it is a labeled accent button rather than
               another 30x30 icon. It stays a ToolButton to keep the progress ring the code-behind
               drives (btnRender.Progress / ShowProgress), drawn here in place of the icon.  -->
         <ControlTheme x:Key="RenderButtonTheme" TargetType="controls:ToolButton">
@@ -268,7 +268,7 @@
         <Grid x:Name="contentGrid" Grid.Row="1">
             <Grid.Styles>
                 <!--  The splitter is an invisible 8px grab zone straddling the sidebar's edge (its
-                      column is 2px wide; negative margins overlap the neighbours) drawing only the
+                      column is 2px wide; negative margins overlap the neighbors) drawing only the
                       2px edge line — resizing should feel like grabbing the panel edge, not a
                       separate handle. Hover/drag brighten the line.  -->
                 <Style Selector="GridSplitter#sidebarSplitter /template/ Rectangle#splitterLine">

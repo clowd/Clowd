@@ -213,7 +213,7 @@ struct WorkerChannels {
 /// the main thread's: a background thread must never be the reason a capture that
 /// has already gone wrong cannot be observed to have gone wrong. Neither bound is
 /// ever expected to elapse — the channels are handed over microseconds later, and
-/// the visible latch is signalled by the show gate or by `finish_cycle` on cancel.
+/// the visible latch is signaled by the show gate or by `finish_cycle` on cancel.
 const SCREENSHOT_STAGE_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// Capture the desktop bitmap on a background thread and publish it through the

@@ -265,7 +265,7 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The toolbar's Ctrl+K cuts straight down the timeline: every row covering the
         /// playhead, text rows included, whatever happens to be selected. A selected clip used to
-        /// narrow it to that one group, which made the button's behaviour depend on invisible
+        /// narrow it to that one group, which made the button's behavior depend on invisible
         /// state.</summary>
         [Fact]
         public void SplitAtPlayhead_cuts_every_row_regardless_of_the_selection()
@@ -927,7 +927,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void AddImage_defaults_to_half_width_centred()
+        public void AddImage_defaults_to_half_width_centered()
         {
             var session = NewSession(out _, out var webcam, out _, out _);
 

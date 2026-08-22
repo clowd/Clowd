@@ -66,7 +66,7 @@ namespace Clowd.VideoSDK.Audio
 
             // Speed ≠ 1 resample window: source frames [BufStart, BufStart + BufFrames) held for
             // interpolation. Kept per item so the underlying forward-only source is asked for each
-            // frame exactly once — the fractional cursor needs its left neighbour again on the
+            // frame exactly once — the fractional cursor needs its left neighbor again on the
             // next chunk, and re-requesting it would be a backwards read.
             public float[] Buf = Array.Empty<float>();
             public long BufStart;
@@ -242,7 +242,7 @@ namespace Clowd.VideoSDK.Audio
         /// <summary>
         /// The speed ≠ 1 run: output frame <c>o</c> samples source frame
         /// <c>SrcBase + (o - FirstSample) · Speed</c>, linearly interpolated between its two
-        /// neighbours — pitch rides with the speed, matching the preview's rate control
+        /// neighbors — pitch rides with the speed, matching the preview's rate control
         /// (<c>AudioMixWorker.MixResampledChunk</c>). The item's window buffer keeps every frame
         /// already read so the forward-only source is asked for each source frame exactly once;
         /// per-sample gain (volume × ramps) is evaluated in timeline time exactly like the
@@ -257,7 +257,7 @@ namespace Clowd.VideoSDK.Audio
 
             double p0 = active.SrcBase + (runStart - active.FirstSample) * active.Speed;
             long f0 = Math.Max(0, (long)Math.Floor(p0));
-            long needEnd = (long)Math.Floor(p0 + (runFrames - 1) * active.Speed) + 2; // right neighbour, exclusive
+            long needEnd = (long)Math.Floor(p0 + (runFrames - 1) * active.Speed) + 2; // right neighbor, exclusive
 
             // drop window frames the cursor has passed; a jump backwards (only possible on a
             // rebuilt preview mixer) restarts the window — the seekable source underneath copes.

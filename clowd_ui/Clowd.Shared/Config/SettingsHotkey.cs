@@ -5,7 +5,7 @@ namespace Clowd.Config
 {
     /// <summary>
     /// Persisted hotkey gestures — pure data. OS registration, live status and the
-    /// pause-while-editing behaviour are owned entirely by the UI layer (HotkeyManager in
+    /// pause-while-editing behavior are owned entirely by the UI layer (HotkeyManager in
     /// Clowd.Ui); this class never references any hotkey backend.
     /// </summary>
     public class SettingsHotkey : SimpleNotifyObject

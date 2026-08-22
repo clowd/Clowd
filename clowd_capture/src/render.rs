@@ -30,7 +30,7 @@ use peek::PeekTextureEntry;
 use protocol::{CycleParams, PeekCommand, RenderMsg, WorkerInput};
 use worker::RenderWorkerParams;
 
-/// Duration of the colour → grayscale fade after the window first becomes
+/// Duration of the color → grayscale fade after the window first becomes
 /// visible.
 /// MSAA sample count applied to every render pipeline in the frame.
 /// Set to 1 (no multisampling) — all UI geometry is axis-aligned
@@ -356,7 +356,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         height: (monitor_bounds.height() as u32).max(1),
         present_mode: wgpu::PresentMode::Fifo,
         alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-        // Auto reproduces wgpu's pre-30 behaviour for our non-HDR surface format.
+        // Auto reproduces wgpu's pre-30 behavior for our non-HDR surface format.
         color_space: wgpu::SurfaceColorSpace::Auto,
         view_formats: vec![],
         desired_maximum_frame_latency: 1,
@@ -421,7 +421,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     mark(|t| &t.upload);
 
     // ── Stage C: per-cycle uniforms + bind group, draw frame 0 ──
-    // Accent colour and initial mouse come from CycleParams, not from
+    // Accent color and initial mouse come from CycleParams, not from
     // settings baked in at worker spawn.
 
     let mut snapshot_state: Option<SnapshotState> = snapshot.as_ref().map(|snap| {
@@ -552,7 +552,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // for however long a cold shader compile + font/SVG parse took, so
     // nothing followed the mouse and nothing drew. Warm the build is long
     // done by now and the first iteration picks it up immediately.
-    let mut gpu = gpu::finalise_window_gpu(bundle, snapshot);
+    let mut gpu = gpu::finalize_window_gpu(bundle, snapshot);
     let mut deferred: Option<thread::JoinHandle<DeferredStack>> = Some(deferred);
     let mut ui_renderer: Option<UiRenderer> = None;
     // The latest UiSharedState that arrived while the UI stack was still

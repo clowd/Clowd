@@ -12,7 +12,7 @@ using Avalonia.Threading;
 namespace Clowd.Localization
 {
     /// <summary>
-    /// The single entry point for localised text.
+    /// The single entry point for localized text.
     /// <para>
     /// Static members (<see cref="T(string)"/>, <see cref="ApplyCulture"/>, …) are for code; the
     /// <see cref="Current"/> singleton exists only so XAML has an <see cref="INotifyPropertyChanged"/>
@@ -33,7 +33,7 @@ namespace Clowd.Localization
 
         /// <summary>
         /// The UI culture the OS gave the process, captured before anything overrides it — this is
-        /// what an empty <c>Language</c> setting means. Reading it here (a static initialiser that
+        /// what an empty <c>Language</c> setting means. Reading it here (a static initializer that
         /// runs on the first touch of <see cref="Loc"/>, which is <see cref="ApplyCulture"/> at
         /// startup) is what makes "follow the OS" recoverable after switching away and back.
         /// </summary>
@@ -163,7 +163,7 @@ namespace Clowd.Localization
         private static void NotifyCultureChanged(CultureInfo culture)
         {
             // a thread that has ever set its own CurrentUICulture (i.e. one that called
-            // ApplyCulture) stops honouring DefaultThreadCurrentUICulture, so the UI thread — the
+            // ApplyCulture) stops honoring DefaultThreadCurrentUICulture, so the UI thread — the
             // one about to re-resolve every string — is set explicitly rather than assumed.
             CultureInfo.CurrentUICulture = culture;
 
@@ -295,7 +295,7 @@ namespace Clowd.Localization
 
         /// <summary>Resolves a batch of keys in one go. This (with <see cref="ResolveByPrefix"/>) is
         /// the seam used to hand a whole string table to the out-of-process capture overlay, which
-        /// has no localisation machinery of its own.</summary>
+        /// has no localization machinery of its own.</summary>
         public static IReadOnlyDictionary<string, string> ResolveAll(IEnumerable<string> keys)
         {
             var result = new Dictionary<string, string>(StringComparer.Ordinal);

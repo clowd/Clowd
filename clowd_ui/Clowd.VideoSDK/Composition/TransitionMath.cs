@@ -129,7 +129,7 @@ namespace Clowd.VideoSDK.Composition
         /// already worked out — what the keystroke overlay needs, since its animated units are
         /// <b>rows</b>, not items: a row has no timeline span to derive progress from, but it
         /// animates with exactly the same kinds. Slides ramp opacity here as well as offsetting:
-        /// a row that slides out from behind its neighbour at full opacity reads as a glitch,
+        /// a row that slides out from behind its neighbor at full opacity reads as a glitch,
         /// where a whole picture sliding off the frame does not.
         /// </summary>
         public static ItemEffects EvaluateShown(TransitionKind entryKind, double entryShown,

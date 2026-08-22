@@ -245,7 +245,7 @@ The Worker reports into the same Sentry project as the desktop app, tagged `app=
 protocol directly instead of using the `sentry` crate — that crate timestamps events with
 `SystemTime::now()`, which panics on `wasm32-unknown-unknown`, and its transports are
 synchronous. `src/telemetry_core.rs` holds the pure half (DSN parsing, event/envelope
-construction, route normalisation) and is covered by `cargo test`.
+construction, route normalization) and is covered by `cargo test`.
 
 One incident produces one event: each failure is reported at the outermost layer that can see
 it, and nowhere else. An `Err` escaping the `fetch` handler covers everything reachable over
@@ -261,7 +261,7 @@ queue an async fetch the aborting isolate would never run. Panics still show up 
 `npm run tail`.
 
 Issues group on an explicit `[op, transaction]` fingerprint, where the transaction is a
-normalised route (`PUT /api/v1/uploads/{id}/chunks/{n}`) taken from a closed table — upload
+normalized route (`PUT /api/v1/uploads/{id}/chunks/{n}`) taken from a closed table — upload
 ids and paste keys never reach the grouping key. Request query strings, headers, and bodies
 are never attached; capability tokens live in those.
 

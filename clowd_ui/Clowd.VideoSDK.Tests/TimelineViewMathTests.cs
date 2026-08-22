@@ -153,7 +153,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void SnapToPixel_puts_even_strokes_and_fill_edges_on_the_pixel_boundary()
         {
-            // 100% scaling: a 2 px stroke centred at a whole coordinate covers two whole pixels.
+            // 100% scaling: a 2 px stroke centered at a whole coordinate covers two whole pixels.
             Assert.Equal(412, TimelineViewMath.SnapToPixel(411.6, 1, 2));
             Assert.Equal(412, TimelineViewMath.SnapToPixel(411.6, 1));
 
@@ -162,9 +162,9 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void SnapToPixel_straddles_the_pixel_centre_for_odd_strokes()
+        public void SnapToPixel_straddles_the_pixel_center_for_odd_strokes()
         {
-            // a 1 px hairline centred on a boundary would light two half pixels
+            // a 1 px hairline centered on a boundary would light two half pixels
             Assert.Equal(411.5, TimelineViewMath.SnapToPixel(411.6, 1, 1));
             Assert.Equal(411.5, TimelineViewMath.SnapToPixel(411.2, 1, 1));
         }

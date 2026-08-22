@@ -29,7 +29,7 @@
         <StreamGeometry x:Key="FitIconStretch">M 39.960938 5.9804688 A 2.0002 2.0002 0 0 0 39.740234 6 L 31 6 A 2.0002 2.0002 0 1 0 31 10 L 35.171875 10 L 10 35.171875 L 10 31 A 2.0002 2.0002 0 1 0 6 31 L 6 39.753906 A 2.0002 2.0002 0 0 0 8.2597656 42 L 17 42 A 2.0002 2.0002 0 1 0 17 38 L 12.828125 38 L 38 12.828125 L 38 17 A 2.0002 2.0002 0 1 0 42 17 L 42 8.2460938 A 2.0002 2.0002 0 0 0 39.960938 5.9804688 z M 8 6 A 2.0002 2.0002 0 0 0 7.6171875 6.0371094 A 2.0002 2.0002 0 0 0 7.2734375 6.1386719 C 7.2615997 6.1432867 7.2500467 6.1474949 7.2382812 6.1523438 A 2.0002 2.0002 0 0 0 6.9140625 6.3222656 C 6.9069283 6.3268963 6.8996655 6.3312065 6.8925781 6.3359375 A 2.0002 2.0002 0 0 0 6.5976562 6.5761719 C 6.5939662 6.5798106 6.589606 6.5822643 6.5859375 6.5859375 C 6.5842493 6.5876257 6.5837121 6.5901042 6.5820312 6.5917969 A 2.0002 2.0002 0 0 0 6.3339844 6.8945312 C 6.3322166 6.8971884 6.3298787 6.89968 6.328125 6.9023438 A 2.0002 2.0002 0 0 0 6.1601562 7.2226562 C 6.1543298 7.2364493 6.148081 7.2497775 6.1425781 7.2636719 A 2.0002 2.0002 0 0 0 6.0429688 7.5957031 C 6.0405497 7.6074921 6.0373611 7.6190367 6.0351562 7.6308594 A 2.0002 2.0002 0 0 0 6 8 L 6 17 A 2.0002 2.0002 0 1 0 10 17 L 10 12.828125 L 19.757812 22.585938 L 22.585938 19.757812 L 12.828125 10 L 17 10 A 2.0002 2.0002 0 1 0 17 6 L 8 6 z M 28.242188 25.414062 L 25.414062 28.242188 L 35.171875 38 L 31 38 A 2.0002 2.0002 0 1 0 31 42 L 40 42 A 2.0002 2.0002 0 0 0 40.382812 41.962891 A 2.0002 2.0002 0 0 0 40.726562 41.861328 C 40.7384 41.856713 40.749953 41.852505 40.761719 41.847656 A 2.0002 2.0002 0 0 0 41.085938 41.677734 A 2.0002 2.0002 0 0 0 41.107422 41.664062 A 2.0002 2.0002 0 0 0 41.402344 41.423828 A 2.0002 2.0002 0 0 0 41.417969 41.408203 A 2.0002 2.0002 0 0 0 41.666016 41.105469 A 2.0002 2.0002 0 0 0 41.669922 41.099609 C 41.670413 41.098865 41.671385 41.098401 41.671875 41.097656 A 2.0002 2.0002 0 0 0 41.839844 40.777344 C 41.84567 40.763551 41.851919 40.750222 41.857422 40.736328 A 2.0002 2.0002 0 0 0 41.957031 40.404297 C 41.95945 40.392508 41.962639 40.380963 41.964844 40.369141 A 2.0002 2.0002 0 0 0 42 40 L 42 31 A 2.0002 2.0002 0 0 0 39.970703 28.972656 A 2.0002 2.0002 0 0 0 38 31 L 38 35.171875 L 28.242188 25.414062 z</StreamGeometry>
 
         <!--  A shape-picker tile: icon beside its name in a rounded box that borrows the Semi
-              RadioButton's own brushes — grey ring unselected, a thicker accent ring selected. A
+              RadioButton's own brushes — gray ring unselected, a thicker accent ring selected. A
               fixed height shared with the aspect tiles keeps the two grids reading as one family.  -->
         <ControlTheme x:Key="MaskShapeTile" TargetType="RadioButton">
             <Setter Property="Cursor" Value="Hand" />
@@ -89,7 +89,7 @@
 
         <!--  An aspect tile: the same ring box, but the content is supplied per tile — a little
               rectangle drawn AT the ratio it applies with the ratio's name inside it (the icon is
-              the label, so it can be big and obvious). Content colouring lives in the panel styles
+              the label, so it can be big and obvious). Content coloring lives in the panel styles
               below (Rectangle.ratio / TextBlock.ratioText / Path.ratioGlyph), because a template
               style cannot reach into supplied content.  -->
         <ControlTheme x:Key="RatioTile" TargetType="RadioButton">
@@ -160,11 +160,11 @@
 
         <!--  The same ring box again, for the two pickers whose options come from a list rather
               than from hand-written radios (the cursor styles, the click highlights). Content is
-              the item template's, so the theme only owns the box; the ink colours live in the
+              the item template's, so the theme only owns the box; the ink colors live in the
               panel styles below, which is where a template style cannot reach.  -->
         <ControlTheme x:Key="PickerTile" TargetType="ListBoxItem">
             <Setter Property="Cursor" Value="Hand" />
-            <!--  the gutter between tiles, cancelled at the grid's outer edge by the ListBox's own
+            <!--  the gutter between tiles, canceled at the grid's outer edge by the ListBox's own
                   negative margin, so the tiles line up with the rows above and below  -->
             <Setter Property="Margin" Value="0,0,4,4" />
             <Setter Property="MinHeight" Value="40" />
@@ -176,9 +176,9 @@
                         BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
                         BorderThickness="1"
                         CornerRadius="4">
-                        <!--  stretched, not centred: the tile's content decides where it sits, so
+                        <!--  stretched, not centered: the tile's content decides where it sits, so
                               the style tiles can sit left like the shape tiles' do while the
-                              highlight tiles stay centred on their preview  -->
+                              highlight tiles stay centered on their preview  -->
                         <ContentPresenter
                             HorizontalAlignment="Stretch"
                             VerticalAlignment="Center"
@@ -202,7 +202,7 @@
 
         <!--  The panel's own checkbox. The themed one is drawn from the app's tokens, which are
               the light palette this fixed-dark sidebar deliberately does not use, so the box is
-              hand-coloured from the same values as the text boxes (and takes the accent the
+              hand-colored from the same values as the text boxes (and takes the accent the
               shape/ratio tiles take when it is on). Padding, not size: the box stays 16px while
               the press target reaches the row's full height.  -->
         <ControlTheme x:Key="InspectorCheckBox" TargetType="CheckBox">
@@ -255,7 +255,7 @@
     </UserControl.Resources>
 
     <!--  The editor window's chrome is a fixed dark palette (NOT Semi tokens), so this panel is
-          hand-coloured to match the sidebar it lives in — the same trade LayersPanel makes.  -->
+          hand-colored to match the sidebar it lives in — the same trade LayersPanel makes.  -->
     <UserControl.Styles>
         <Style Selector="TextBlock.section">
             <Setter Property="FontSize" Value="11" />
@@ -321,7 +321,7 @@
 
         <!--  the aspect tiles' inner visuals (see RatioTile). Ratio tiles are a FILLED block with
               the ratio's name knocked out of it: the text wears the sidebar's own background
-              colour, so it reads as cut from the block. The ratio-free tiles (Original / W:H /
+              color, so it reads as cut from the block. The ratio-free tiles (Original / W:H /
               Unlocked) draw no block — just their label or glyph.  -->
         <Style Selector="RadioButton.ratioTile Rectangle.ratio">
             <Setter Property="Fill" Value="#CCCCCC" />
@@ -356,7 +356,7 @@
 
         <!--  the list-driven tiles' inner visuals (see PickerTile). The label brightens with the
               selection exactly as the shape tiles' does; the style previews keep their artwork's
-              own colours — the point of them is that they are the real glyph — so only native's
+              own colors — the point of them is that they are the real glyph — so only native's
               outline follows the label.  -->
         <Style Selector="TextBlock.tileText">
             <Setter Property="FontSize" Value="11" />
@@ -936,7 +936,7 @@
                             Value="{Binding FontSize, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <!--  swatch + hex, one click target: opens the mini colour picker in place  -->
+                    <!--  swatch + hex, one click target: opens the mini color picker in place  -->
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left" />
                         <TextBlock Classes="label" Text="Color" />
@@ -1002,7 +1002,7 @@
 
                     <!--  AI denoise, a property of the row like the mute it sits under: the mix
                           plays the generated sidecar instead of the raw stream (and degrades to
-                          raw until the analysis below finishes). Greyed out on Intel Macs (the
+                          raw until the analysis below finishes). Grayed out on Intel Macs (the
                           inference binary is Apple Silicon only) — the tooltip rides the row,
                           which stays hittable while the disabled checkbox is not.  -->
                     <DockPanel
@@ -1234,7 +1234,7 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!--  the colourway row gets its own sub-header, like HIGHLIGHT below: which
+                    <!--  the colorway row gets its own sub-header, like HIGHLIGHT below: which
                           palette the pack draws in is its own subject, not one more style tile.
                           Header and tiles show and hide together — only for a themed style that
                           has more than one palette to choose between.  -->
@@ -1243,7 +1243,7 @@
                         <Rectangle Classes="sectionRule" />
                     </DockPanel>
 
-                    <!--  the same tiles as the style row, one per colourway of the picked style —
+                    <!--  the same tiles as the style row, one per colorway of the picked style —
                           absent rather than single-tiled for a style with only one. Each tile
                           draws the style's own arrow in the palette it names, which is the whole
                           of what the choice does.  -->
@@ -1293,7 +1293,7 @@
                         <Rectangle Classes="sectionRule" />
                     </DockPanel>
 
-                    <!--  the highlight tiles play the animation they name, on the row's own colour
+                    <!--  the highlight tiles play the animation they name, on the row's own color
                           and dials and off the compositor's own constants: the press lands, holds,
                           bursts, then a beat of nothing — which is what a click looks like in the
                           finished video.  -->
@@ -1338,9 +1338,9 @@
                         </ListBox.ItemTemplate>
                     </ListBox>
 
-                    <!--  the colour well and the dials, gone entirely under "none" — there
-                          is no highlight to colour, size or time then, and the tiles above
-                          already say so. Pressure hides the colour too (it warps the pixels
+                    <!--  the color well and the dials, gone entirely under "none" — there
+                          is no highlight to color, size or time then, and the tiles above
+                          already say so. Pressure hides the color too (it warps the pixels
                           beneath rather than drawing anything), and only the ring shows the FILL
                           dial.
                           The well shares the text card's picker (code-behind).  -->
@@ -1438,7 +1438,7 @@
                 </StackPanel>
 
                 <!--  keystroke overlay: how big the keys read, how long a run stays, when the next
-                      row starts, and the typing pill's own colours (the keycaps a special key
+                      row starts, and the typing pill's own colors (the keycaps a special key
                       draws keep their fixed livery). How a row arrives and leaves is the ANIMATION
                       section below; where the block sits and how wide it wraps is placement,
                       above.  -->
@@ -1502,7 +1502,7 @@
                             Value="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" />
                     </DockPanel>
 
-                    <!--  the two colour wells share the text card's picker (see the code-behind)  -->
+                    <!--  the two color wells share the text card's picker (see the code-behind)  -->
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding KeyboardTextColorHex, Mode=TwoWay}" DefaultValue="#FFFFFFFF" />
@@ -1613,7 +1613,7 @@
                             Tag="{StaticResource IconEffectBlur}"
                             Theme="{StaticResource MaskShapeTile}"
                             ToolTip.Tip="Blur the whole picture" />
-                        <!--  the AI-backed pair greys out on Intel Macs (the inference binary is
+                        <!--  the AI-backed pair grays out on Intel Macs (the inference binary is
                               Apple Silicon only); each tile's wrapping panel stays hittable so
                               the why-tooltip still shows over the disabled tile  -->
                         <Panel
@@ -1704,7 +1704,7 @@
                       fractions of the item's drawn extent, so the rows read as percentages and the
                       surround keeps its proportions at any canvas size. Deliberately NOT called an
                       effect: that name is being kept for what may later be applied to the item's own
-                      pixels (a blur, a colour grade) — inside the silhouette, not around it.  -->
+                      pixels (a blur, a color grade) — inside the silhouette, not around it.  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowSurround}">
                     <DockPanel>
                         <TextBlock Classes="section" Text="SURROUND" />
@@ -1772,7 +1772,7 @@
                             GroupName="ItemSurround"
                             IsChecked="{Binding SurroundGlow, Mode=TwoWay}"
                             Theme="{StaticResource PreviewTile}"
-                            ToolTip.Tip="Surround the item with a soft halo of colour">
+                            ToolTip.Tip="Surround the item with a soft halo of color">
                             <StackPanel
                                 Margin="6,0,4,0"
                                 HorizontalAlignment="Left"
@@ -1795,7 +1795,7 @@
                             GroupName="ItemSurround"
                             IsChecked="{Binding SurroundOutline, Mode=TwoWay}"
                             Theme="{StaticResource PreviewTile}"
-                            ToolTip.Tip="Trace the item's edge with a solid ring of colour">
+                            ToolTip.Tip="Trace the item's edge with a solid ring of color">
                             <StackPanel
                                 Margin="6,0,4,0"
                                 HorizontalAlignment="Left"
@@ -1820,7 +1820,7 @@
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding SurroundColorHex, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundColorHex}" />
                         </Panel>
-                        <TextBlock Classes="label" Text="Colour" />
+                        <TextBlock Classes="label" Text="Color" />
                         <Border
                             x:Name="surroundColorWell"
                             Width="120"
@@ -2036,7 +2036,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <!--  the in-place colour picker the Color row opens; light-dismiss like the image
+        <!--  the in-place color picker the Color row opens; light-dismiss like the image
               editor's, realtime so the preview tracks every slider move  -->
         <Popup
             x:Name="colorPopup"

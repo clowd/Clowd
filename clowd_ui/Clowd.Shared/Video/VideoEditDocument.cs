@@ -58,14 +58,14 @@ namespace Clowd.VideoSDK
             set => Set(ref _cornerRadius, Clamp(value, 0, 0.5));
         }
 
-        /// <summary>Overlay centre X, 0-1 of the screen frame width.</summary>
+        /// <summary>Overlay center X, 0-1 of the screen frame width.</summary>
         public double CenterX
         {
             get => _centerX;
             set => Set(ref _centerX, Clamp(value, 0, 1));
         }
 
-        /// <summary>Overlay centre Y, 0-1 of the screen frame height.</summary>
+        /// <summary>Overlay center Y, 0-1 of the screen frame height.</summary>
         public double CenterY
         {
             get => _centerY;
@@ -224,7 +224,7 @@ namespace Clowd.VideoSDK
 
         private static void AddSegment(List<CutRegion> segments, long startMs, long endMs)
         {
-            // a keep segment below the minimum is dropped rather than merged into a neighbour:
+            // a keep segment below the minimum is dropped rather than merged into a neighbor:
             // the cuts on either side of it simply become one cut, which is what the user meant.
             if (endMs - startMs >= MinSegmentMs)
                 segments.Add(new CutRegion(startMs, endMs));

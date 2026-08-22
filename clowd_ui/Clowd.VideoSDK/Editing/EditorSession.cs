@@ -1082,7 +1082,7 @@ namespace Clowd.VideoSDK.Editing
 
         // -------------------------------------------------------------------------- add / import
 
-        /// <summary>Adds a text card with the editor defaults — "Title", white, centred, sized
+        /// <summary>Adds a text card with the editor defaults — "Title", white, centered, sized
         /// against the canvas (8% of its height) — on the topmost video row with that span free
         /// (a fresh row when none is). Returns the live item, or null when the add was rolled
         /// back.</summary>
@@ -1110,7 +1110,7 @@ namespace Clowd.VideoSDK.Editing
             return committed ? created : null;
         }
 
-        /// <summary>Adds an image item at half canvas width, centred, on the topmost free video
+        /// <summary>Adds an image item at half canvas width, centered, on the topmost free video
         /// row (a fresh row when none is). Returns the live item, or null when rolled back.</summary>
         public Item AddImage(string path, long startTicks, long durationTicks, object origin = null)
         {
@@ -1361,7 +1361,7 @@ namespace Clowd.VideoSDK.Editing
                     Content = cursor
                         ? new CursorContent { SourceId = source.Id }
                         : new KeyboardContent { SourceId = source.Id },
-                    // keyboard blocks anchor bottom-centre at half canvas width; the cursor's
+                    // keyboard blocks anchor bottom-center at half canvas width; the cursor's
                     // position is data-driven and ignores the transform entirely.
                     Transform = cursor
                         ? new Transform()
@@ -1414,7 +1414,7 @@ namespace Clowd.VideoSDK.Editing
         /// rows stacked above the existing video rows, audio rows at the bottom — and one item per
         /// stream starting at <paramref name="startTicks"/>. The items share a fresh link group
         /// when there is more than one, so the file's rows move as one; video items default to
-        /// half canvas width, centred. One undo entry restores all of it. Returns the live items
+        /// half canvas width, centered. One undo entry restores all of it. Returns the live items
         /// (empty when the probe had no usable streams or the import was rolled back).
         /// </summary>
         public IReadOnlyList<Item> ImportMedia(string path, MediaProbeResult probe, long startTicks,
@@ -2057,7 +2057,7 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>One undo (or redo) step: the complete serialized state — and selection — from
-        /// before the labelled operation ran.</summary>
+        /// before the labeled operation ran.</summary>
         private sealed class UndoEntry
         {
             public string Label { get; init; }

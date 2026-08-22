@@ -110,7 +110,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>Red for the first project second, blue for the second — a decoded frame's
-        /// colour identifies the project instant it was composed at.</summary>
+        /// color identifies the project instant it was composed at.</summary>
         private static Project RedThenBlueProject()
         {
             var project = NewProject();
@@ -157,9 +157,9 @@ namespace Clowd.VideoSDK.Tests
             return path;
         }
 
-        /// <summary>Reads the centre pixel (BGRA) of the output frame covering
+        /// <summary>Reads the center pixel (BGRA) of the output frame covering
         /// <paramref name="frame"/>'s grid instant, through the SDK's own sequential source.</summary>
-        private static byte[] CentrePixelOfFrame(string path, int frame)
+        private static byte[] CenterPixelOfFrame(string path, int frame)
         {
             var project = NewProject();
             var sourceId = Guid.NewGuid();
@@ -218,8 +218,8 @@ namespace Clowd.VideoSDK.Tests
             Assert.InRange(probe.DurationTicks, Second - Second / 20, Second + Second / 20);
 
             // output 0.25s shows project 0.5s (red); output 0.75s shows project 1.5s (blue)
-            AssertRed(CentrePixelOfFrame(path, Fps / 4));
-            AssertBlue(CentrePixelOfFrame(path, Fps * 3 / 4));
+            AssertRed(CenterPixelOfFrame(path, Fps / 4));
+            AssertBlue(CenterPixelOfFrame(path, Fps * 3 / 4));
         }
 
         [Fact]
@@ -244,8 +244,8 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Equal(RenderOutcome.Completed, result.Outcome);
             Assert.Equal((long)Fps, result.VideoFrames);
-            AssertRed(CentrePixelOfFrame(path, Fps / 4));
-            AssertBlue(CentrePixelOfFrame(path, Fps * 3 / 4));
+            AssertRed(CenterPixelOfFrame(path, Fps / 4));
+            AssertBlue(CenterPixelOfFrame(path, Fps * 3 / 4));
         }
 
         [Fact]
@@ -308,8 +308,8 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Equal(RenderOutcome.Completed, result.Outcome);
             Assert.Equal(2L * Fps, result.VideoFrames);
-            AssertRed(CentrePixelOfFrame(path, Fps / 2));
-            AssertBlue(CentrePixelOfFrame(path, Fps * 3 / 2));
+            AssertRed(CenterPixelOfFrame(path, Fps / 2));
+            AssertBlue(CenterPixelOfFrame(path, Fps * 3 / 2));
         }
     }
 }

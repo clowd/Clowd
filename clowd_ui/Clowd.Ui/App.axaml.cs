@@ -165,7 +165,7 @@ namespace Clowd
                 else if (firstRun)
                 {
                     // first launch after an install: show the window regardless of StartMinimized,
-                    // on General so the auto-start / minimised options are the first thing seen.
+                    // on General so the auto-start / minimized options are the first thing seen.
                     PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
                 }
                 else

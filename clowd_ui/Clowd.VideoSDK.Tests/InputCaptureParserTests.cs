@@ -258,7 +258,7 @@ namespace Clowd.VideoSDK.Tests
                 """{"type":"frame","t":0,"x":1,"y":2,"c":"arrow","ci":1}""");
 
             Assert.False(capture.TryGetSprite(1, out _)); // the torn sprite is lost…
-            Assert.True(capture.TryGetSprite(2, out _));  // …its neighbours are not
+            Assert.True(capture.TryGetSprite(2, out _));  // …its neighbors are not
             Assert.Single(capture.Frames);                // and the frame still references id 1
             Assert.Equal(1, capture.Frames[0].SpriteId);  // — the lookup just misses
         }

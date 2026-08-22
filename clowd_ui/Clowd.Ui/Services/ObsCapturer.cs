@@ -325,7 +325,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
         /// <summary>Shuts the process down (best-effort quit → 5 s wait → kill) on the thread
         /// pool. The quit sits unread while OBS is still initializing, so the wait can consume
-        /// the full 5 s — synchronous disposal froze the UI thread for that long when cancelling
+        /// the full 5 s — synchronous disposal froze the UI thread for that long when canceling
         /// during WAIT. Idempotent; every caller gets the same task.</summary>
         public Task DisposeAsync()
         {
@@ -455,7 +455,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                 RaiseCriticalError("The recording process has exited unexpectedly.");
         }
 
-        /// <summary>Faults a lifecycle TCS whose task may never be awaited — cancelling during WAIT
+        /// <summary>Faults a lifecycle TCS whose task may never be awaited — canceling during WAIT
         /// leaves <c>_startTcs</c> untouched, and a caller whose <c>WaitAsync</c> already timed out
         /// has walked away from the original task. Reading <see cref="Task.Exception"/> marks it
         /// observed so it cannot resurface as an <c>UnobservedTaskException</c> at GC time.</summary>

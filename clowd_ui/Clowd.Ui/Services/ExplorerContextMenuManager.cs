@@ -13,7 +13,7 @@ namespace Clowd.UI
     /// This is the legacy (Windows 7 style) shell verb the WPF build used: a pair of per-user keys
     /// under <c>HKCU\Software\Classes</c>, one for all files and one for directories. No elevation,
     /// no COM server, no shell extension DLL — Explorer just runs the command line. Windows 11 still
-    /// honours these but files them under "Show more options" (Shift+F10) rather than the compact
+    /// honors these but files them under "Show more options" (Shift+F10) rather than the compact
     /// menu; appearing in the compact menu additionally requires package identity via a sparse MSIX
     /// package, which is deliberately not implemented here.
     ///

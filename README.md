@@ -97,7 +97,7 @@ videos, error dialogs, and other places you can't select text normally.
 
  - **Runs entirely on your machine.** The recognition models are built into Clowd, so there is no
    cloud service, no network round trip, no API key, and no language pack to install
- - **You see what it read.** The recognised lines lift off the frozen screenshot as text, so you
+ - **You see what it read.** The recognized lines lift off the frozen screenshot as text, so you
    can check the result before doing anything with it
  - Then `C` copies it, `S` searches the web for it, `U` uploads it as a text paste with the link on
    your clipboard, and `B` takes you back to the normal capture buttons

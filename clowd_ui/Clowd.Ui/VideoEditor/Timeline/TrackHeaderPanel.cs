@@ -417,7 +417,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         public static readonly Geometry JumpLeftGeometry = StreamGeometry.Parse(
             "M14,3 L8,8 L14,13 Z M8,3 L2,8 L8,13 Z");
 
-        /// <summary>A <see cref="GlyphIcon"/> drawing <paramref name="key"/>'s glyph centred in a
+        /// <summary>A <see cref="GlyphIcon"/> drawing <paramref name="key"/>'s glyph centered in a
         /// <paramref name="box"/> square — see that class for why a <see cref="Path"/> with
         /// <c>Stretch.Uniform</c> would hang wide glyphs (the old 26 x 14 camera icon) above the
         /// row's text.</summary>

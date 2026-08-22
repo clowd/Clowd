@@ -55,7 +55,7 @@ dotnet publish "$ROOT/clowd_ui/Clowd.Ui/Clowd.Ui.csproj" \
 
 echo "==> Building the Rust binaries (release)"
 # clowd_ai only builds where ONNX Runtime still exists: upstream
-# dropped macOS x86_64, so Intel macs skip it (the app greys the AI
+# dropped macOS x86_64, so Intel macs skip it (the app grays the AI
 # effects out there and OCR reports as unavailable) — matches ci.yml's
 # `ai: false` on the osx-x64 leg.
 CARGO_EXCLUDE=()

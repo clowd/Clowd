@@ -157,10 +157,10 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly IReadOnlyList<NamedOption> CursorStyleOptions =
             BuildOptions(CursorContent.Styles, CursorStyleLabels);
 
-        /// <summary>The colourway tiles for each style that has more than one, keyed by style —
+        /// <summary>The colorway tiles for each style that has more than one, keyed by style —
         /// built once off <see cref="CursorAssets.Variants"/>, so a pack that declares its own
-        /// colourways gets its own row of tiles without the picker knowing the pack exists. A style
-        /// with one colourway has no entry and shows no second row (see
+        /// colorways gets its own row of tiles without the picker knowing the pack exists. A style
+        /// with one colorway has no entry and shows no second row (see
         /// <see cref="CursorVariantsVisible"/>).</summary>
         private static readonly Dictionary<string, IReadOnlyList<NamedOption>> CursorVariantOptionsByStyle
             = BuildVariantOptions();
@@ -226,7 +226,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             KeystrokeFilterOptions[0];
 
         /// <summary>The one style that draws the recorded cursor sprites instead of a themed glyph —
-        /// the glyph-only rows (colourways, SURROUND) mean nothing while it is picked, so they leave
+        /// the glyph-only rows (colorways, SURROUND) mean nothing while it is picked, so they leave
         /// the panel entirely (see <see cref="CursorGlyphEnabled"/>); the size row stays, because the
         /// composer scales the sprite by it too.</summary>
         public const string NativeCursorStyle = "native";
@@ -237,10 +237,10 @@ namespace Clowd.UI.VideoEditor.Inspector
         public const string NoneCursorStyle = "none";
 
         /// <summary><see cref="CursorContent.ClickColor"/>'s own default, mirrored so the highlight
-        /// previews have a colour before any cursor row is selected.</summary>
+        /// previews have a color before any cursor row is selected.</summary>
         public const uint DefaultCursorClickColor = 0xFFFF0000;
 
-        /// <summary><see cref="DefaultCursorClickColor"/> as the colour well's hex — what its
+        /// <summary><see cref="DefaultCursorClickColor"/> as the color well's hex — what its
         /// reset dot writes back.</summary>
         public const string DefaultCursorClickColorHex = "#FFFF0000";
 
@@ -262,7 +262,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The glyph-size range the spinner offers. Narrower than the model's own
         /// validated 0.25–5: those are the bounds a project may hold, these are the ones worth
-        /// dialling.</summary>
+        /// dialing.</summary>
         public const double MinCursorSize = 0.5;
 
         public const double MaxCursorSize = 5.0;
@@ -284,7 +284,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         public const double DefaultKeyboardPauseBreakMs = 1000;
 
         /// <summary><see cref="KeyboardContent.DefaultTextColor"/> and
-        /// <see cref="KeyboardContent.DefaultBackgroundColor"/> as the hex the colour wells (and
+        /// <see cref="KeyboardContent.DefaultBackgroundColor"/> as the hex the color wells (and
         /// their reset dots, which are XAML strings) speak.</summary>
         public const string DefaultKeyboardTextColorHex = "#FFFFFFFF";
 
@@ -324,7 +324,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>How close a derived ratio must be to a preset to light its tile — covers the
         /// rounding a crop/scale round-trip through the model introduces without ever matching a
-        /// neighbouring preset (the closest pair, 4:3 and 3:2, differ by ~12%).</summary>
+        /// neighboring preset (the closest pair, 4:3 and 3:2, differ by ~12%).</summary>
         private const double AspectMatchTolerance = 0.01;
 
         /// <summary>The aspect-ratio tiles, in display order. Ratios are width/height.</summary>
@@ -466,7 +466,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private string _cursorStyle = "vision";
 
-        /// <summary>Null until the user picks one: the style's own default colourway.</summary>
+        /// <summary>Null until the user picks one: the style's own default colorway.</summary>
         private string _cursorVariant;
         private double _cursorSize = DefaultCursorSize;
         private bool _cursorDebounce = true;
@@ -636,7 +636,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         // --------------------------------------------------------------------------- transform
 
-        /// <summary>Item centre X, 0-1 of the canvas width (the panel shows it as a percentage).</summary>
+        /// <summary>Item center X, 0-1 of the canvas width (the panel shows it as a percentage).</summary>
         public double PositionX
         {
             get => _positionX;
@@ -1103,7 +1103,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// Reads the tile selection straight out of the model: an explicit height is Unlocked
         /// (free sizing, whatever ratio it happens to be at), a stored <see cref="Transform.Aspect"/>
         /// selects its preset — or Custom, which is <b>sticky</b> when its ratio equals a preset's
-        /// (the user's tile choice is honoured, not re-guessed) — and nothing means Original.
+        /// (the user's tile choice is honored, not re-guessed) — and nothing means Original.
         /// A hand-made crop never lights a tile: the crop is the user's, applied after the ratio.
         /// </summary>
         private void SyncAspect(Item item)
@@ -1214,7 +1214,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        /// <summary>Text colour as <c>#RRGGBB</c> or <c>#AARRGGBB</c>. A half-typed value is kept
+        /// <summary>Text color as <c>#RRGGBB</c> or <c>#AARRGGBB</c>. A half-typed value is kept
         /// in the box but not written to the model — the next re-read puts the model's value back.</summary>
         public string TextColorHex
         {
@@ -1247,7 +1247,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         // ------------------------------------------------------------------------------- audio
 
         /// <summary>Linear gain, 1 = unity. Per item: a segment quietened on purpose must stay
-        /// quieter than its neighbours.</summary>
+        /// quieter than its neighbors.</summary>
         public double Volume
         {
             get => _volume;
@@ -1462,11 +1462,11 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>Whether the AI-backed features (denoise, background matting) exist on this
         /// machine at all. False only on Intel Macs: upstream ONNX Runtime dropped macOS x86_64,
-        /// so <c>clowd_ai</c> is only built for Apple Silicon — the toggles grey out with
+        /// so <c>clowd_ai</c> is only built for Apple Silicon — the toggles gray out with
         /// <see cref="AiEffectsDisabledTip"/> instead of queueing work that can never run.</summary>
         public bool AiEffectsSupported => SupportsAiEffects;
 
-        /// <summary>The greyed-out toggles' tooltip; null (no tooltip) where they work.</summary>
+        /// <summary>The grayed-out toggles' tooltip; null (no tooltip) where they work.</summary>
         public string AiEffectsDisabledTip => SupportsAiEffects ? null : "Only available on Apple Silicon";
 
         private static readonly bool SupportsAiEffects =
@@ -1614,7 +1614,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 _cursorStyle = value.Value;
                 OnPropertyChanged(nameof(CursorStyle));
                 OnPropertyChanged(nameof(CursorGlyphEnabled));
-                // the colourway row belongs to the style above it: which tiles it offers, whether
+                // the colorway row belongs to the style above it: which tiles it offers, whether
                 // it is there at all, and which of them reads as picked all change with the style
                 OnPropertyChanged(nameof(CursorVariantOptions));
                 OnPropertyChanged(nameof(CursorVariantsVisible));
@@ -1625,22 +1625,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        /// <summary>The colourway tiles the picked style offers — empty for a style with only one,
+        /// <summary>The colorway tiles the picked style offers — empty for a style with only one,
         /// which is when the row is not shown at all.</summary>
         public IReadOnlyList<NamedOption> CursorVariantOptions =>
             CursorVariantOptionsByStyle.TryGetValue(_cursorStyle ?? "", out var options)
                 ? options
                 : Array.Empty<NamedOption>();
 
-        /// <summary>Whether the colourway row is on show: only for a themed style that has more
+        /// <summary>Whether the colorway row is on show: only for a themed style that has more
         /// than one palette to choose between.</summary>
         public bool CursorVariantsVisible => CursorGlyphEnabled && CursorVariantOptions.Count > 0;
 
         /// <summary>
-        /// Which of the style's colourways is drawn. The stored value is deliberately left alone
+        /// Which of the style's colorways is drawn. The stored value is deliberately left alone
         /// when the style changes — a project remembers "light" across a trip through another style
         /// — and the getter resolves whatever is stored against the style actually picked, so a
-        /// colourway that style does not offer reads as its default exactly as the compositor
+        /// colorway that style does not offer reads as its default exactly as the compositor
         /// draws it.
         /// </summary>
         public NamedOption CursorVariant
@@ -1665,8 +1665,8 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// them out of it.</summary>
         public string CursorCapturePath => _cursorCapturePath;
 
-        /// <summary>Whether the glyph-only rows (the colourway tiles, the whole SURROUND section)
-        /// mean anything — they are hidden, not merely greyed, when they do not: <c>native</c>
+        /// <summary>Whether the glyph-only rows (the colorway tiles, the whole SURROUND section)
+        /// mean anything — they are hidden, not merely grayed, when they do not: <c>native</c>
         /// draws the recorded sprite, which carries its own palette and the system cursor's own
         /// shadow, and <c>none</c> draws nothing at all, so a disabled control would only invite
         /// the question of what it would have done.</summary>
@@ -1722,8 +1722,8 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// same trade the glyph rows make under the native style.</summary>
         public bool CursorHighlightEnabled => _cursorClickAnimation != NoClickAnimation;
 
-        /// <summary>Whether the colour well means anything — every drawn highlight except
-        /// <c>pressure</c>, which colours nothing (it warps the pixels beneath).</summary>
+        /// <summary>Whether the color well means anything — every drawn highlight except
+        /// <c>pressure</c>, which colors nothing (it warps the pixels beneath).</summary>
         public bool CursorHighlightColorEnabled =>
             CursorHighlightEnabled && ClickHighlight.ModeOf(_cursorClickAnimation) != HighlightMode.Press;
 
@@ -1745,12 +1745,12 @@ namespace Clowd.UI.VideoEditor.Inspector
             OnPropertyChanged(nameof(CursorRingFillEnabled));
         }
 
-        /// <summary>The highlight colour (packed ARGB) the composer draws clicks in — the parsed
+        /// <summary>The highlight color (packed ARGB) the composer draws clicks in — the parsed
         /// twin of <see cref="CursorClickColorHex"/>, kept because the highlight preview tiles
-        /// bind a packed colour, not a hex string.</summary>
+        /// bind a packed color, not a hex string.</summary>
         public uint CursorClickColor => _cursorClickColor;
 
-        /// <summary>The highlight colour as <c>#RRGGBB</c> or <c>#AARRGGBB</c> — the colour well's
+        /// <summary>The highlight color as <c>#RRGGBB</c> or <c>#AARRGGBB</c> — the color well's
         /// face of <see cref="CursorClickColor"/>. Half-typed values stay in the box unwritten,
         /// exactly as <see cref="KeyboardTextColorHex"/> does.</summary>
         public string CursorClickColorHex
@@ -1770,7 +1770,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>The ring highlight's inner fill opacity, 0..1 — the outline stays at the
-        /// colour's own alpha, this dials only the disc inside it.</summary>
+        /// color's own alpha, this dials only the disc inside it.</summary>
         public double CursorFillOpacity
         {
             get => _cursorFillOpacity;
@@ -1856,7 +1856,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        /// <summary>Colour of the typed text in the pill, as <c>#RRGGBB</c> or <c>#AARRGGBB</c>.
+        /// <summary>Color of the typed text in the pill, as <c>#RRGGBB</c> or <c>#AARRGGBB</c>.
         /// Half-typed values stay in the box unwritten, exactly as <see cref="TextColorHex"/>
         /// does. The keycaps a special key draws keep their own fixed livery.</summary>
         public string KeyboardTextColorHex
@@ -1873,7 +1873,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>Fill of the typing pill, alpha included — how translucent the block reads is
-        /// this colour's own alpha.</summary>
+        /// this color's own alpha.</summary>
         public string KeyboardBackColorHex
         {
             get => _keyboardBackColorHex;
@@ -2064,7 +2064,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// Whether the SURROUND section is on show. Pictures (video and image items) always offer it;
         /// a cursor row offers it only while a themed glyph is drawn — under <c>native</c> the
         /// recorded box already carries the system cursor's own shadow and there is nothing here to
-        /// decorate. Everything else (text, colour, the keystroke block, the effect items) draws no
+        /// decorate. Everything else (text, color, the keystroke block, the effect items) draws no
         /// silhouette the compositor would put a surround around, so the section stays away.
         /// </summary>
         public bool ShowSurround => _surroundSubject == SurroundSubject.Picture
@@ -2097,7 +2097,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             set => SetSurroundKind(SurroundKind.Outline, value);
         }
 
-        /// <summary>The colour and size rows: every surround has both, and None has neither.</summary>
+        /// <summary>The color and size rows: every surround has both, and None has neither.</summary>
         public bool ShowSurroundColor => _surroundKind != SurroundKind.None;
 
         public bool ShowSurroundSize => _surroundKind != SurroundKind.None;
@@ -2115,7 +2115,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             _ => "Softness",
         };
 
-        /// <summary>The surround colour as <c>#RRGGBB</c> or <c>#AARRGGBB</c> — alpha included, which
+        /// <summary>The surround color as <c>#RRGGBB</c> or <c>#AARRGGBB</c> — alpha included, which
         /// is how strongly it reads. A half-typed value stays in the well unwritten, exactly
         /// as <see cref="TextColorHex"/> does.</summary>
         public string SurroundColorHex
@@ -2181,7 +2181,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// <summary>
         /// What each tile draws: the kind that tile stands for, at the numbers it would be drawn
         /// with — the <b>live</b> ones for the style currently picked, so the picked tile follows the
-        /// rows below it as they are dialled, and the style's own defaults for the other two (they
+        /// rows below it as they are dialed, and the style's own defaults for the other two (they
         /// have no configuration of their own until they are chosen). The None tile needs none of
         /// this: it draws the bare item.
         /// </summary>
@@ -2959,7 +2959,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// hands over whatever parsed.</summary>
         private static int MsToInt(double ms) => (int)Math.Round(Math.Max(0, ms));
 
-        /// <summary>Wraps the model's own value list in labelled singletons, in the model's order —
+        /// <summary>Wraps the model's own value list in labeled singletons, in the model's order —
         /// see <see cref="NamedOption"/>.</summary>
         private static IReadOnlyList<NamedOption> BuildOptions(
             IReadOnlyList<string> values, IReadOnlyDictionary<string, string> labels)
@@ -2997,7 +2997,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             _ => "Item",
         };
 
-        /// <summary>#RGB-family colour literal check — the model stores <c>#AARRGGBB</c> strings and
+        /// <summary>#RGB-family color literal check — the model stores <c>#AARRGGBB</c> strings and
         /// the renderer parses them, so anything else must not reach the model.</summary>
         private static bool IsHexColor(string value)
         {
@@ -3017,7 +3017,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             return true;
         }
 
-        /// <summary>The same literal, packed for the contents that store a colour as a number
+        /// <summary>The same literal, packed for the contents that store a color as a number
         /// rather than a string (<see cref="KeyboardContent"/>). A <c>#RRGGBB</c> without an alpha
         /// is opaque.</summary>
         private static bool TryParseArgb(string value, out uint argb)

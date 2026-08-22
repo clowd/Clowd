@@ -1,18 +1,18 @@
 // Per-window uniforms.
 //   uv_offset_scale.xy = where this monitor begins in the shared desktop
-//                        texture, in normalised UV space.
+//                        texture, in normalized UV space.
 //   uv_offset_scale.zw = the size of this monitor in the same UV space.
 //   params.x           = grayscale fade factor in [0, 1].
-//                        0 = original colour, 1 = darkened grayscale.
+//                        0 = original color, 1 = darkened grayscale.
 //   params.yz          = cursor position in window-local physical pixels.
 //                        Out-of-range values mean the cursor is on another
 //                        monitor; the integer-equality test below silently
 //                        misses and no line is drawn for that axis.
 //   params.w           = this monitor's DPI scale factor (1.0 = 100 %,
-//                        1.5 = 150 %, …). Used to size the coloured
+//                        1.5 = 150 %, …). Used to size the colored
 //                        crosshair arms so they stay the same physical
 //                        size on every display.
-//   accent_color    = RGBA colour used for both the inner thin cross,
+//   accent_color    = RGBA color used for both the inner thin cross,
 //                        the outer thick segments, AND the marching-ants
 //                        dashes on the selection border. Seeded once from
 //                        `CapturerSettings`; never updated per frame.
@@ -25,7 +25,7 @@
 //                        clock started; drives the marching-ants phase
 //                        on the selection border.
 //   selection_params.y = `captured` flag (0 = not captured, 1 = the
-//                        selection has been finalised). When set, the
+//                        selection has been finalized). When set, the
 //                        shader stops drawing the crosshair entirely
 //                        so the OS cursor takes over the visual role.
 //   selection_params.w = scroll-point pick flag (0 = normal, 1 = the user
@@ -68,7 +68,7 @@ struct Uniforms {
     //                same shared-anchor clock as the dim (CPU-side, the
     //                same quartic curve as the opening fade — see
     //                render/desktop.rs) so the selection interior joins
-    //                the monochrome page when OCR starts and colour
+    //                the monochrome page when OCR starts and color
     //                returns with the retract.
     ocr_params:       vec4<f32>,
 };
@@ -101,7 +101,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
 }
 
 // Gamma-2.0 approximation of the sRGB transfer. The texture and surface
-// are both non-sRGB (`Bgra8Unorm`), so wgpu does *no* colour-space
+// are both non-sRGB (`Bgra8Unorm`), so wgpu does *no* color-space
 // conversion on sample or store — values go in and out as raw byte / 255.
 // We only need linear light for the grayscale luma math, and the output
 // gets crushed to luma × 0.42 × fade anyway, so the ~0.01-in-8-bit error
@@ -126,7 +126,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let fade = clamp(u.params.x, 0.0, 1.0);
 
     // Sample the desktop texture once — needed both for the grayscale
-    // path and as the base colour that overlay elements (crosshair,
+    // path and as the base color that overlay elements (crosshair,
     // selection border) blend on top of during the fade-in.
     let color = textureSample(desktop_tex, desktop_samp, in.uv);
     var base = vec4<f32>(color.rgb, 1.0);
@@ -159,10 +159,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         }
     }
 
-    // Crosshair: only when not captured. Once the user has finalised
+    // Crosshair: only when not captured. Once the user has finalized
     // a selection, the OS cursor takes over and the rendered crosshair
-    // (both the coloured arms and the dashed b/w long lines) is
-    // suppressed entirely. Mirrors the C++ behaviour: `data.crosshair`
+    // (both the colored arms and the dashed b/w long lines) is
+    // suppressed entirely. Mirrors the C++ behavior: `data.crosshair`
     // is gated on the same captured/not-captured distinction at
     // DxScreenCapture.cpp:526.
     if (!captured) {
@@ -174,7 +174,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // physical pixel thickness on every display, regardless of
         // DPI scale, because the swapchain is sized in physical
         // pixels and `@builtin(position)` is the framebuffer pixel
-        // coordinate (centred on .5).
+        // coordinate (centered on .5).
         let mouse_x = i32(u.params.y);
         let mouse_y = i32(u.params.z);
         let scale = max(u.params.w, 1.0);
@@ -185,7 +185,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let on_v_line = dx == 0;
         let on_h_line = dy == 0;
 
-        // Coloured section geometry.
+        // Colored section geometry.
         //
         //     ┊     ▌         ┊
         //     ┊     ▌         ┊  <- outer thick segment (red, ~5 px at 100 %)
@@ -219,22 +219,22 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // capped at 9.
         let wide_half = clamp(i32(round(2.5 * scale)), 1, 4);
 
-        // Inner thin coloured cross (1 pixel wide, radius `chunk`).
-        let on_thin_colour = (on_v_line && ady <= chunk) || (on_h_line && adx <= chunk);
-        // Outer thick coloured segments: a wide slab on each arm,
+        // Inner thin colored cross (1 pixel wide, radius `chunk`).
+        let on_thin_color = (on_v_line && ady <= chunk) || (on_h_line && adx <= chunk);
+        // Outer thick colored segments: a wide slab on each arm,
         // lying between the inner thin cross and the long dashed
         // line. The `adx <= wide_half` / `ady <= wide_half` tests
         // naturally clip the slab if the cursor is well off this
         // monitor, since both axes have to be close to the cursor
         // for red to appear.
-        let on_thick_v_colour = adx <= wide_half && ady > chunk && ady <= chunk2;
-        let on_thick_h_colour = ady <= wide_half && adx > chunk && adx <= chunk2;
-        if (on_thin_colour) {
+        let on_thick_v_color = adx <= wide_half && ady > chunk && ady <= chunk2;
+        let on_thick_h_color = ady <= wide_half && adx > chunk && adx <= chunk2;
+        if (on_thin_color) {
             let lum = dot(base.rgb, vec3<f32>(0.299, 0.587, 0.114));
             let contrast = select(vec4<f32>(1.0, 1.0, 1.0, 1.0), vec4<f32>(0.0, 0.0, 0.0, 1.0), lum > 0.65);
             return mix(base, contrast, fade);
         }
-        if (on_thick_v_colour || on_thick_h_colour) {
+        if (on_thick_v_color || on_thick_h_color) {
             return mix(base, u.accent_color, fade);
         }
 
@@ -248,7 +248,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             // coordinates so the dashes feel screen-fixed rather
             // than swimming with the cursor. At the intersection
             // both axes are on the line; we arbitrarily pick the
-            // vertical line's phase — the pixel only gets one colour
+            // vertical line's phase — the pixel only gets one color
             // anyway.
             let dash_coord = select(px.x, px.y, on_v_line);
             let period = 12 * dpi_step;
@@ -404,7 +404,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // Fill area: the rect minus the `half`-px inner ring
         // reserved for the "inside half" of the straddling border.
         // Border cells win above; everything strictly interior to
-        // them gets the un-faded desktop colour.
+        // them gets the un-faded desktop color.
         let in_fill = px.x >= inner_left && px.x <= inner_right
                    && px.y >= inner_top  && px.y <= inner_bottom;
         if (in_fill) {
@@ -415,7 +415,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             // land on top of the lifted lines. The `<= 0` early-out keeps
             // the byte-exact passthrough the uncloak invariant depends on
             // (and is the non-OCR fast path: both params are 0 outside the
-            // mode, so this branch is behaviourally identical to before).
+            // mode, so this branch is behaviorally identical to before).
             let dim = clamp(u.ocr_params.x, 0.0, 1.0);
             let gray = clamp(u.ocr_params.z, 0.0, 1.0);
             if (dim <= 0.0 && gray <= 0.0) {
@@ -442,7 +442,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // bit-exactly — no sRGB math, no lerp rounding — so the rendered
     // window is pixel-identical to the original BitBlt bytes, which
     // themselves are pixel-identical to what DWM was displaying. This
-    // is what eliminates the "subtle colour shift" at window appearance.
+    // is what eliminates the "subtle color shift" at window appearance.
     if (fade == 0.0) {
         return base;
     }

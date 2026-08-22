@@ -1,4 +1,4 @@
-// OCR scanning-sweep pass: a soft gaussian highlight band travelling down
+// OCR scanning-sweep pass: a soft gaussian highlight band traveling down
 // the selection. (This shader used to also draw the pixel-crop fallback
 // lines sampled from the desktop snapshot; those went away when the text
 // bubbles gained system-font fallback and became the only presentation,
@@ -13,7 +13,7 @@
 struct Uniforms {
     viewport_px: vec2<f32>,
     // Seconds since the current OCR phase's anchor. Currently unread — the
-    // band centre travels per-instance (CPU-side, like all other
+    // band center travels per-instance (CPU-side, like all other
     // animation) — but kept in the block so a future shader-side effect
     // doesn't need a layout change.
     t: f32,
@@ -25,14 +25,14 @@ struct Uniforms {
 struct Instance {
     // min_x, min_y, max_x, max_y in window-local physical pixels.
     @location(0) dest_px: vec4<f32>,
-    // (alpha, band_centre, sweep σ, unused). Band centre is in quad-space
+    // (alpha, band_center, sweep σ, unused). Band center is in quad-space
     // v (0 = top, 1 = bottom); it travels top → bottom and deliberately
     // OVERSHOOTS both edges — see anim::sweep_band — so the looping wrap
     // happens with the band fully invisible. σ is supplied by the CPU
     // (anim::SWEEP_SIGMA) so the falloff and the overshoot can never
     // disagree.
     @location(1) params: vec4<f32>,
-    // Band colour (straight alpha 1.0; the fragment premultiplies).
+    // Band color (straight alpha 1.0; the fragment premultiplies).
     @location(2) tint: vec4<f32>,
 };
 

@@ -57,7 +57,7 @@ namespace Clowd.Drawing.Tests
         }
 
         // color channel + alpha of one overlay pixel. Only the first color byte is read, so this
-        // does not care whether the backend hands back BGRA or RGBA (the fixture is greyscale).
+        // does not care whether the backend hands back BGRA or RGBA (the fixture is grayscale).
         private static (byte Value, byte Alpha) ObscuredPixel(GraphicImage img, int x, int y)
         {
             var overlay = (Bitmap)ImgObscured.GetValue(img);
