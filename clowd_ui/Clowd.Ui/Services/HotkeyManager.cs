@@ -119,6 +119,11 @@ namespace Clowd.UI
             set => _host.IsPaused = value;
         }
 
+        /// <summary>The OS backend, for features that listen for a fixed key of their own rather
+        /// than a user-configurable gesture (the video editor's media keys). Registrations made
+        /// through it share this manager's <see cref="IsPaused"/> state and the same hook.</summary>
+        public IGlobalTriggerHost Host => _host;
+
         private readonly IGlobalTriggerHost _host;
         private readonly SettingsHotkey _settings;
         private readonly List<HotkeyEntry> _entries;
