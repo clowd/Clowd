@@ -11,15 +11,15 @@ namespace Clowd.UI.VideoEditor.Inspector
     /// One surround tile's picture: a small rounded chip — the same size and place in every tile, so
     /// the tiles differ only by what is drawn <i>around</i> it — on a lighter plate that stands in for
     /// the canvas behind the item. The decoration comes from the live <see cref="Surround"/> the tile
-    /// is handed, off <see cref="SurroundMath"/>'s own numbers, so dialling the rows below the grid
+    /// is handed, off <see cref="SurroundMath"/>'s own numbers, so dialing the rows below the grid
     /// moves the picked tile's picture with them.
     /// </summary>
     /// <remarks>
     /// <b>The plate is what makes this readable.</b> A shadow is black and a glow is white; against
     /// the sidebar's near-black chrome one of the two would always be invisible, so both are drawn
-    /// over a mid grey with a dark chip on top — every kind then contrasts with something. It also
+    /// over a mid gray with a dark chip on top — every kind then contrasts with something. It also
     /// bounds the picture: nothing may spread past the plate, so a big shadow cannot bleed into the
-    /// neighbouring tile.
+    /// neighboring tile.
     ///
     /// <b>It exaggerates, deliberately.</b> The dials are fractions of the item's drawn extent, and
     /// an item is hundreds of pixels where this is tens: proportionally correct, a default shadow
@@ -138,7 +138,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>A soft-edged rounded rect: nested inflations of the same shape, each at a
-        /// fraction of the colour's alpha, which accumulate into a ramp. A zero blur collapses to the
+        /// fraction of the color's alpha, which accumulate into a ramp. A zero blur collapses to the
         /// shape drawn <see cref="BlurSteps"/> times — a hard edge at full strength, which is exactly
         /// what a shadow with no softness is.</summary>
         private static void DrawSoft(DrawingContext context, Rect rect, double radius,

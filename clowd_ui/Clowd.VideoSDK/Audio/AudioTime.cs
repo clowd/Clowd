@@ -4,7 +4,7 @@ using Clowd.VideoSDK.Media;
 namespace Clowd.VideoSDK.Audio
 {
     /// <summary>
-    /// Tick ↔ sample-frame conversion for the audio path, integer math only (the audio analogue
+    /// Tick ↔ sample-frame conversion for the audio path, integer math only (the audio analog
     /// of <see cref="TimeBase"/>'s frame-index conversions). Sample frame <c>p</c> at rate
     /// <c>r</c> covers the instant span <c>[p/r, (p+1)/r)</c> seconds.
     ///

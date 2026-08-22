@@ -158,7 +158,7 @@ pub fn active_panel_set(captured: bool, scroll_pick_mode: bool, ocr: &OcrState) 
     // panel AT ALL — not the Normal set (its buttons would act on a frozen
     // selection mid-scan) and not the OCR set (COPY/SEARCH/UPLOAD would be
     // lit but dead, indistinguishable from broken buttons). The strip
-    // materialises with the reveal, when the actions become real.
+    // materializes with the reveal, when the actions become real.
     if ocr.hides_panel() {
         return None;
     }
@@ -174,7 +174,7 @@ pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
     // Deliberately ahead of `active_panel_set`, and deliberately not part
     // of it: the Q toggle is about *drawing*, not about which buttons are
     // live. The app-thread mirror keeps routing clicks while overlays are
-    // hidden (that is pre-existing behaviour), so folding this gate into
+    // hidden (that is pre-existing behavior), so folding this gate into
     // the shared function would silently change it.
     if !state.overlays_visible {
         return None;
@@ -382,7 +382,7 @@ mod tests {
     /// The panel's OCR lifecycle: HIDDEN while the sweep loops (nothing to
     /// act on — buttons that no-op read as broken), the OCR strip once the
     /// outcome is lifted. Both click routing and drawing flow through this
-    /// one function, so this test pins the behaviour for both.
+    /// one function, so this test pins the behavior for both.
     #[test]
     fn panel_hidden_while_scanning_shows_ocr_set_when_lifted() {
         let mut s = state();

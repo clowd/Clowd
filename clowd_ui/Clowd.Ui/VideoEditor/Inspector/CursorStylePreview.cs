@@ -11,9 +11,9 @@ using SkiaSharp;
 namespace Clowd.UI.VideoEditor.Inspector
 {
     /// <summary>
-    /// One cursor style's actual arrow, in one of its colourways, drawn from the same
+    /// One cursor style's actual arrow, in one of its colorways, drawn from the same
     /// <see cref="CursorAssets"/> layers the compositor paints — the style tiles show the glyph the
-    /// render will produce rather than a stand-in icon, and the colourway tiles below them differ
+    /// render will produce rather than a stand-in icon, and the colorway tiles below them differ
     /// only in the palette they pass. The <c>native</c> style has no artwork of its own (it draws the
     /// cursor sprites the recorder rasterized into <see cref="CapturePath"/>), so its tile shows one
     /// of those sprites: the very pixels the render will composite, rather than a picture of what a
@@ -23,7 +23,7 @@ namespace Clowd.UI.VideoEditor.Inspector
     /// </summary>
     /// <remarks>
     /// The layer painting order is <c>CursorCompose</c>'s: each layer's halo stroke, then that
-    /// layer's fill on top, because a halo is a <i>centred</i> stroke and would otherwise eat half
+    /// layer's fill on top, because a halo is a <i>centered</i> stroke and would otherwise eat half
     /// of its own layer's ink. The glyph is fitted by its ink bounds rather than its viewBox — the
     /// artwork families leave very different margins, and a picker wants the arrows to read at one
     /// size. The sprite is fitted the same way, by its own bounds.
@@ -34,13 +34,13 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly StyledProperty<string> StyleNameProperty =
             AvaloniaProperty.Register<CursorStylePreview, string>(nameof(StyleName));
 
-        /// <summary>The <c>CursorContent.Variant</c> colourway to draw it in, or null for the
-        /// style's default — which is all a style with one colourway ever has.</summary>
+        /// <summary>The <c>CursorContent.Variant</c> colorway to draw it in, or null for the
+        /// style's default — which is all a style with one colorway ever has.</summary>
         public static readonly StyledProperty<string> VariantNameProperty =
             AvaloniaProperty.Register<CursorStylePreview, string>(nameof(VariantName));
 
         /// <summary>The ink the <c>native</c> outline is drawn in; unused by the themed styles,
-        /// which carry their own colours.</summary>
+        /// which carry their own colors.</summary>
         public static readonly StyledProperty<IBrush> OutlineBrushProperty =
             AvaloniaProperty.Register<CursorStylePreview, IBrush>(nameof(OutlineBrush),
                 new SolidColorBrush(Color.FromRgb(0xCC, 0xCC, 0xCC)));
@@ -149,22 +149,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             if (radius <= 0)
                 return;
 
-            var centre = new Point(Bounds.Width / 2, Bounds.Height / 2);
+            var center = new Point(Bounds.Width / 2, Bounds.Height / 2);
             var pen = new Pen(OutlineBrush, thickness, lineCap: PenLineCap.Round);
-            context.DrawEllipse(null, pen, centre, radius, radius);
+            context.DrawEllipse(null, pen, center, radius, radius);
             double reach = radius / Math.Sqrt(2);
             context.DrawLine(pen,
-                new Point(centre.X - reach, centre.Y - reach),
-                new Point(centre.X + reach, centre.Y + reach));
+                new Point(center.X - reach, center.Y - reach),
+                new Point(center.X + reach, center.Y + reach));
         }
 
         /// <summary>
-        /// Draws a sprite out of the recording's own capture file, centred and scaled to fit without
+        /// Draws a sprite out of the recording's own capture file, centered and scaled to fit without
         /// distortion, and reports whether it drew anything. The pixels are the ones the composer
         /// paints for the <c>native</c> style, so the tile is a preview rather than a likeness — and
         /// nothing is drawn at all when the recording carries no sprites (no capture file, a v1
         /// file, a degraded capture), which leaves the outline fallback. A sprite carrying an XOR
-        /// mask shows its colour plane alone: the inversion the mask describes is only defined
+        /// mask shows its color plane alone: the inversion the mask describes is only defined
         /// against the pixels underneath the cursor, and a tile has none.
         /// </summary>
         private bool TryDrawRecordedSprite(DrawingContext context)
@@ -187,7 +187,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             return true;
         }
 
-        /// <summary>The union of the layers' ink, grown by half of the widest halo — a centred
+        /// <summary>The union of the layers' ink, grown by half of the widest halo — a centered
         /// stroke spills outside the path it outlines, and the tiles are tight.</summary>
         private static Rect InkBounds(Layer[] layers)
         {
@@ -219,7 +219,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         // The glyphs are immutable and process-wide (CursorAssets' own contract), so their parsed
-        // Avalonia geometry is too — parse each one once, however many tiles show it. Unsynchronised
+        // Avalonia geometry is too — parse each one once, however many tiles show it. Unsynchronized
         // deliberately: rendering is the UI thread's alone.
         private static readonly Dictionary<CursorGlyph, Layer[]> LayerCache =
             new Dictionary<CursorGlyph, Layer[]>();
@@ -263,11 +263,11 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         // Sprites are immutable and process-wide too (they live in InputCapture's own load cache),
         // so the same contract as LayerCache holds: decode each one once, however many tiles show
-        // it, and unsynchronised because rendering is the UI thread's alone.
+        // it, and unsynchronized because rendering is the UI thread's alone.
         private static readonly Dictionary<CursorSprite, Bitmap> SpriteCache =
             new Dictionary<CursorSprite, Bitmap>();
 
-        /// <summary>The sprite's colour plane as an Avalonia bitmap, decoded from the PNG bytes the
+        /// <summary>The sprite's color plane as an Avalonia bitmap, decoded from the PNG bytes the
         /// capture file carries and trimmed to its ink. The trim is what makes the tile read: a
         /// cursor bitmap is mostly transparent border (a small arrow parked in a 32-or-larger
         /// square), and fitting the untrimmed square would render the arrow at a fraction of the

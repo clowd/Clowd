@@ -6,10 +6,10 @@ using Avalonia.Media;
 namespace Clowd.UI.Controls
 {
     /// <summary>
-    /// A control drawing a geometry's glyph centred in its bounds. Not a <see cref="Avalonia.Controls.Shapes.Path"/>
+    /// A control drawing a geometry's glyph centered in its bounds. Not a <see cref="Avalonia.Controls.Shapes.Path"/>
     /// with <c>Stretch.Uniform</c>: that scales the geometry's ink bounds to fit but aligns the ink
     /// to the top-left of the element, so a glyph wider than tall (an eye, a camera) hangs above
-    /// the vertical centre of whatever it sits next to. Here the ink is centred on both axes,
+    /// the vertical center of whatever it sits next to. Here the ink is centered on both axes,
     /// whatever box it was drawn in.
     /// </summary>
     internal sealed class GlyphIcon : Control

@@ -216,7 +216,7 @@ namespace Clowd.UI.Controls
             var canvas = _canvas;
 
             // GlyphIcon, not Path + Stretch.Uniform — that leaves wide glyphs hanging above the
-            // vertical centre (see GlyphIcon)
+            // vertical center (see GlyphIcon)
             var icon = new GlyphIcon(FindIcon(GetIconKey(g)), Brushes.White)
             {
                 Width = 14,

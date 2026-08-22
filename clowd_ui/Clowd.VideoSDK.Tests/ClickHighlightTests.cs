@@ -16,7 +16,7 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("RING", HighlightMode.Ring)]
         [InlineData("pressure", HighlightMode.Press)]
         [InlineData("press", HighlightMode.Press)] // the pre-rename wire name stays an alias
-        public void ModeOf_recognises_every_wire_name_case_insensitively(string name, HighlightMode expected)
+        public void ModeOf_recognizes_every_wire_name_case_insensitively(string name, HighlightMode expected)
         {
             Assert.Equal(expected, ClickHighlight.ModeOf(name));
             Assert.True(ClickHighlight.TryParse(name, out var mode));

@@ -176,10 +176,10 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("native", vm.CursorStyle.Value);
         }
 
-        /// <summary>The colourway row is the style's own: it appears only for a style that offers
+        /// <summary>The colorway row is the style's own: it appears only for a style that offers
         /// more than one, and writing it fans out over the row exactly as the style does.</summary>
         [Fact]
-        public void CursorVariant_ShowsOnlyForAStyleWithColourwaysAndWritesTheWholeRow()
+        public void CursorVariant_ShowsOnlyForAStyleWithColorwaysAndWritesTheWholeRow()
         {
             var (session, vm) = NewInspector(out _);
             var cursor = session.AddCursorTrack();
@@ -197,7 +197,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.All(CursorItems(session), c => Assert.Equal("light", c.Variant));
             Assert.Equal("light", vm.CursorVariant.Value);
 
-            // native has no artwork at all, so it has no colourways and the row leaves the panel
+            // native has no artwork at all, so it has no colorways and the row leaves the panel
             vm.CursorStyle = SelectedItemViewModel.CursorStyleOptions
                 .First(o => o.Value == SelectedItemViewModel.NativeCursorStyle);
 
@@ -215,7 +215,7 @@ namespace Clowd.VideoSDK.Tests
         public void NativeStyle_HidesTheGlyphOnlyRows()
         {
             // the size row and the whole EFFECT section bind their IsVisible to this: under native
-            // they do not merely grey out, they leave the panel
+            // they do not merely gray out, they leave the panel
             var (session, vm) = NewInspector(out _);
             var cursor = session.AddCursorTrack();
             session.Select(cursor.Id);
@@ -369,7 +369,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void HighlightRows_ShowOnlyWhatTheModeUses()
         {
-            // colour: every drawn highlight except press (a warp colours nothing);
+            // color: every drawn highlight except press (a warp colors nothing);
             // hold size: only the bursts draw the held dot it scales; fill: the ring alone
             var (session, vm) = NewInspector(out _);
             var cursor = session.AddCursorTrack();

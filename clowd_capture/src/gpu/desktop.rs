@@ -131,7 +131,7 @@ pub fn upload_snapshot(
     // correctness.
     //
     // TRADEOFF, and it is a real one: the upload no longer starts early
-    // enough to overlap window creation, so the copy is serialised into
+    // enough to overlap window creation, so the copy is serialized into
     // frame 0 instead of hidden behind it. Whether that is a net win
     // depends on how long window creation actually takes on the machine.
     // A/B it against the `upload` -> `first_render` per-worker deltas in

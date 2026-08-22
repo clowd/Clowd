@@ -48,7 +48,7 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>
         /// The filter that paints the surround and nothing else, or null when there is nothing to
-        /// paint — no surround, a fully transparent colour, or dials at zero. A null return is the
+        /// paint — no surround, a fully transparent color, or dials at zero. A null return is the
         /// caller's signal to skip the decoration pass entirely (and with it a whole layer).
         /// </summary>
         public static SKImageFilter CreateDecoration(Surround surround, double extentPx)
@@ -83,7 +83,7 @@ namespace Clowd.VideoSDK.Composition
                 case SurroundKind.Outline:
                 {
                     // grow the silhouette, then tint what grew: SrcIn keeps the dilated alpha and
-                    // replaces every colour with the outline's, so the ring is solid whatever the
+                    // replaces every color with the outline's, so the ring is solid whatever the
                     // item's own pixels are.
                     float radius = (float)OutlinePx(surround, extentPx);
                     if (radius < MinOutlinePx)

@@ -61,7 +61,7 @@
         <Style Selector="Button.chip.isDefault Path.chipCheck">
             <Setter Property="IsVisible" Value="True" />
         </Style>
-        <!-- accelerate toggle: bare lightning bolt, grey when off,
+        <!-- accelerate toggle: bare lightning bolt, gray when off,
              orange when routing uploads through the accelerate server -->
         <Style Selector="ToggleButton.lightning">
             <Setter Property="MinWidth" Value="0" />
@@ -228,7 +228,7 @@
                                                       AutomationProperties.Name="Accelerate uploads">
                                             <!-- no explicit Width: Avalonia pins uniformly-stretched geometry to the
                                                  top-left of a fixed box, so a square box leaves this narrow glyph
-                                                 off-centre; height-only sizing measures at the true aspect ratio -->
+                                                 off-center; height-only sizing measures at the true aspect ratio -->
                                             <Path Height="14"
                                                   Stretch="Uniform"
                                                   Data="{StaticResource IconLightning}" />

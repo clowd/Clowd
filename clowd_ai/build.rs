@@ -4,7 +4,7 @@
 /// is a link argument, and only the crate producing the executable links one
 /// — so each binary's build script points at the single copy instead of
 /// keeping its own. What it buys us is per-monitor DPI awareness; a copy
-/// that silently drifted would make one binary read virtualised coordinates
+/// that silently drifted would make one binary read virtualized coordinates
 /// and photograph the wrong pixels.
 ///
 /// The ONNX Runtime itself needs nothing from this script: `ort-sys` (the
@@ -24,7 +24,7 @@ fn main() {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
         let manifest_path = std::path::Path::new(&manifest_dir).join(SHARED_MANIFEST);
         // Fail loudly rather than link an unmanifested exe: without the
-        // manifest the process is DPI-virtualised, which is a subtle
+        // manifest the process is DPI-virtualized, which is a subtle
         // wrong-pixels bug rather than an obvious one.
         assert!(
             manifest_path.is_file(),

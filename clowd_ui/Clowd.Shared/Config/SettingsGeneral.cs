@@ -102,7 +102,7 @@ namespace Clowd.Config
             set => Set(ref _registerAutoStart, value);
         }
 
-        [DisplayName("Start Clowd minimised")]
+        [DisplayName("Start Clowd minimized")]
         [Description("Starts Clowd in the notification area without opening this window.")]
         public bool StartMinimized
         {

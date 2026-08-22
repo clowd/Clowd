@@ -7,7 +7,7 @@
 //! is recognized is what the user can actually see. It spawns this process per
 //! request, writes a [`RequestHeader`] line and the raw BGRA down our stdin,
 //! and waits for us to exit. One request, one process, one answer, then gone:
-//! cancelling a request the user backed out of is the capturer killing us,
+//! canceling a request the user backed out of is the capturer killing us,
 //! which is both instant and cannot leave a superseded job holding the engine
 //! while the next request queues behind it. Nothing here polls for
 //! cancellation.
@@ -49,7 +49,7 @@
 //! # Output
 //!
 //! Nothing is written to stdout; the result goes to the `--out` file, which
-//! doubles as the session's `ocr.json` artefact. There is no Sentry client
+//! doubles as the session's `ocr.json` artifact. There is no Sentry client
 //! here (see `main.rs`): a panic leaves its message in the response file via
 //! [`install_panic_reporter`] for the capturer to report on our behalf.
 
@@ -134,7 +134,7 @@ const REC_TARGET_HEIGHT: u32 = 48;
 /// Hard ceiling on one crop's tensor width. Boxes this wide are not text
 /// lines that can be read (a 48px-tall line 8192px wide is 170 aspect), and
 /// the cap bounds the batch tensor a single absurd box would otherwise
-/// force on its seven neighbours. Crops beyond it are squashed to fit.
+/// force on its seven neighbors. Crops beyond it are squashed to fit.
 const REC_MAX_WIDTH: u32 = 8192;
 
 /// Measured per-crop cost model of the SMALL recognition model on the dev
@@ -403,7 +403,7 @@ impl DetBox {
 ///
 /// Two passes (cluster, then sort by the fixed row key) rather than one
 /// comparator with the tolerance inline: a per-pair tolerance is not
-/// transitive — three boxes each within tolerance of their neighbour but
+/// transitive — three boxes each within tolerance of their neighbor but
 /// not of the ends compare A<B, B<C by left yet A<C by top, an ordering
 /// cycle — and std's sort is allowed to PANIC when it detects a
 /// comparator that is not a total order. Row ids assigned once are a
@@ -435,7 +435,7 @@ fn reading_order(keys: &[(i32, i32, u32)]) -> Vec<usize> {
 
 /// Predicted milliseconds for the SMALL model to recognize boxes of the
 /// given (width, height) dimensions — the tier-choice input. Pure so the
-/// threshold behaviour is testable.
+/// threshold behavior is testable.
 fn predict_small_rec_ms(dims: impl Iterator<Item = (u32, u32)>) -> f32 {
     dims.map(|(w, h)| {
         let aspect = w as f32 / (h as f32).max(1.0);
@@ -445,7 +445,7 @@ fn predict_small_rec_ms(dims: impl Iterator<Item = (u32, u32)>) -> f32 {
 }
 
 /// Recognize every line of text in `req`. Blocking, and the only thing this
-/// process does; a request the user abandons is cancelled by the capturer
+/// process does; a request the user abandons is canceled by the capturer
 /// killing us mid-call (see the module docs).
 pub fn recognize(req: &OcrRequest) -> Result<OcrOutcome, OcrError> {
     let Some(det) = detector() else {
@@ -789,7 +789,7 @@ fn db_boxes(prob: &[f32], out_w: usize, out_h: usize, valid_w: usize, valid_h: u
             }
             // Unclip: inflate the text core back out to the glyph extent by
             // the DB offset distance (area × ratio / perimeter), never less
-            // than a pixel (pixel centres under-measure the blob by one).
+            // than a pixel (pixel centers under-measure the blob by one).
             let distance = (rect.width * rect.height * UNCLIP_RATIO / (2.0 * (rect.width + rect.height))).max(1.0);
             let inflated = RotatedRect {
                 width: rect.width + 2.0 * distance,
@@ -1067,7 +1067,7 @@ mod tests {
         install_panic_reporter();
 
         // The chained hook still prints to stderr, so the deliberate panic is
-        // noisy in the test output. That is the real behaviour.
+        // noisy in the test output. That is the real behavior.
         let panicked = std::panic::catch_unwind(|| panic!("deliberate test panic"));
         assert!(panicked.is_err(), "the closure must actually panic");
 
@@ -1159,13 +1159,13 @@ mod tests {
     }
 
     /// The historical failure mode this replaced: a chain of boxes each
-    /// within tolerance of its neighbour but not of the chain's ends is
+    /// within tolerance of its neighbor but not of the chain's ends is
     /// INTRANSITIVE under a pairwise comparator (A<B and B<C by left, but
     /// A<C by top — a cycle std's sort may panic on). The clustered order
     /// must simply produce a valid permutation, deterministically.
     #[test]
     fn reading_order_survives_tolerance_chains() {
-        // Tops 0, 8, 16 with height 20: each neighbour pair is "same row"
+        // Tops 0, 8, 16 with height 20: each neighbor pair is "same row"
         // (tolerance 10) but the ends are not; lefts descend so the pair
         // comparisons used to disagree with the top comparison.
         let keys = [(0, 30, 20), (8, 20, 20), (16, 10, 20)];

@@ -12,7 +12,7 @@ namespace Clowd.VideoSDK.Composition;
 ///
 /// Order of operations — the model's contract: <see cref="Transform.Crop"/> cuts the source
 /// FIRST, and the aspect ratio then reshapes whatever survived (fill trims it symmetrically to
-/// the ratio, stretch distorts it into the ratio). The drawn box therefore always honours the
+/// the ratio, stretch distorts it into the ratio). The drawn box therefore always honors the
 /// chosen ratio — cropping changes what is shown inside it, never its shape — and the crop fields
 /// store only what the user cut.
 /// </summary>
@@ -20,7 +20,7 @@ public static class AspectMath
 {
     /// <summary>
     /// The region of the raw source picture to display, as fractional insets: the user's crop,
-    /// plus — for a fill aspect — the centred trim that brings the cropped region to the target
+    /// plus — for a fill aspect — the centered trim that brings the cropped region to the target
     /// ratio. A stretch trims nothing extra (the whole cropped region is distorted into the
     /// ratio). Insets may sum to ≥ 1 — "cropped to nothing", which callers must treat as nothing
     /// to draw.
@@ -46,7 +46,7 @@ public static class AspectMath
             return (userL, userT, userR, userB);
         }
 
-        // fill: trim the CROPPED region, centred, to the target ratio — the trim is a fraction
+        // fill: trim the CROPPED region, centered, to the target ratio — the trim is a fraction
         // of that region, so it scales back to source fractions by what the crop left standing
         double content = (sourceWidth * croppedW) / (sourceHeight * croppedH);
         double target = transform.Aspect.Value;

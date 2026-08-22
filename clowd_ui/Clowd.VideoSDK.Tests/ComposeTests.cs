@@ -96,14 +96,14 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Solid_scaled_draws_centred_region_only()
+        public void Solid_scaled_draws_centered_region_only()
         {
             var p = NewProject();
             var item = AddItem(p, AddVideoTrack(p), new SolidContent { Color = "#FFFF0000" });
-            item.Transform.Scale = 0.5; // 32x32 centred on the 64x64 canvas
+            item.Transform.Scale = 0.5; // 32x32 centered on the 64x64 canvas
 
             var px = Render(p, 5 * Sec);
-            AssertColor(Px(px, W / 2, H / 2), 0, 0, 255); // centre red
+            AssertColor(Px(px, W / 2, H / 2), 0, 0, 255); // center red
             AssertColor(Px(px, 2, 2), 0, 0, 0);           // corners background
             AssertColor(Px(px, W - 3, H - 3), 0, 0, 0);
             AssertColor(Px(px, 20, 32), 0, 0, 255);       // inside the region (x in [16,48))
@@ -121,7 +121,7 @@ namespace Clowd.VideoSDK.Tests
             item.Transform.ScaleY = 0.25;  // …but a quarter of its height: rows 24..40 of 64
 
             var px = Render(p, 5 * Sec);
-            AssertColor(Px(px, 2, H / 2), 0, 0, 255);   // left edge, vertically centred: red
+            AssertColor(Px(px, 2, H / 2), 0, 0, 255);   // left edge, vertically centered: red
             AssertColor(Px(px, W - 3, H / 2), 0, 0, 255);
             AssertColor(Px(px, W / 2, 2), 0, 0, 0);     // top and bottom fall outside the band
             AssertColor(Px(px, W / 2, H - 3), 0, 0, 0);
@@ -233,7 +233,7 @@ namespace Clowd.VideoSDK.Tests
                 Marshal.Copy(native, px, 0, px.Length);
                 byte At(int x, int y) => px[y * Wd * 4 + x * 4 + 1]; // green of BGRA
 
-                Assert.Equal(255, At(Wd / 2, Ht / 2)); // centre
+                Assert.Equal(255, At(Wd / 2, Ht / 2)); // center
                 Assert.Equal(255, At(2, Ht / 2));      // left edge midpoint: inside the ellipse,
                                                        // far outside a min(w,h)/2 circle
                 Assert.Equal(255, At(Wd - 3, Ht / 2)); // right edge midpoint

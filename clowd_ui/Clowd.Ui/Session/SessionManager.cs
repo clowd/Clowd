@@ -141,7 +141,7 @@ namespace Clowd
                     // a corrupt session.json (quarantined to .corrupt by FileSyncObject) is simply
                     // not shown; callers already handle a null return. Only that deliberate
                     // outcome is swallowed — a transient failure propagating here is better than
-                    // making a finished capture silently look cancelled.
+                    // making a finished capture silently look canceled.
                     Debug.WriteLine("Unable to load session: " + path + Environment.NewLine + e);
                     SentryConfig.CaptureHandled(e, "session.load");
                 }

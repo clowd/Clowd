@@ -25,7 +25,7 @@ namespace Clowd.UI.VideoEditor.Inspector
     public sealed class ClickHighlightPreview : Control
     {
         /// <summary>How long the held dot takes to arrive. The compositor has no such ramp — a
-        /// held button is simply down — but a dot that materialises out of nothing reads as an
+        /// held button is simply down — but a dot that materializes out of nothing reads as an
         /// accident, and this reads as a press.</summary>
         private const double PressInMs = 150.0;
 
@@ -65,8 +65,8 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly StyledProperty<string> AnimationProperty =
             AvaloniaProperty.Register<ClickHighlightPreview, string>(nameof(Animation));
 
-        /// <summary>The highlight colour, packed ARGB — the selected cursor row's own
-        /// <c>ClickColor</c>, so the preview is the colour that will be drawn.</summary>
+        /// <summary>The highlight color, packed ARGB — the selected cursor row's own
+        /// <c>ClickColor</c>, so the preview is the color that will be drawn.</summary>
         public static readonly StyledProperty<uint> ColorArgbProperty =
             AvaloniaProperty.Register<ClickHighlightPreview, uint>(nameof(ColorArgb),
                 SelectedItemViewModel.DefaultCursorClickColor);
@@ -224,7 +224,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             byte alpha = (byte)Math.Clamp(Math.Round(opacity * color.A), 0, 255);
             var brush = new SolidColorBrush(Color.FromArgb(alpha, color.R, color.G, color.B));
 
-            // normalised against the widest thing this cycle will draw rather than a fixed 40 DIP:
+            // normalized against the widest thing this cycle will draw rather than a fixed 40 DIP:
             // the tile then holds the whole animation at any size setting, and the held dot keeps
             // its true proportion to the burst instead of both being clipped
             double widestDip = Math.Max(ClickHighlight.RadiusEndDip * ClickHighlight.Factor(ClickSize), heldDip);
@@ -253,7 +253,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             var (down, up, duration) = ClocksAt(at, phase);
             double scale = ClickHighlight.RingScale(down, up, duration, AnimationSpeed);
 
-            // normalised against the overshoot's peak plus the stroke, so the breathe-out
+            // normalized against the overshoot's peak plus the stroke, so the breathe-out
             // never clips against the tile's edge
             double sizeDial = ClickHighlight.Factor(ClickSize);
             double widestDip = ClickHighlight.RingRadiusDip * sizeDial * 1.06 + ClickHighlight.RingStrokeDip;
@@ -271,9 +271,9 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>The press tile: the warp cannot be previewed literally in a 30px vector tile,
-        /// so it is drawn schematically — concentric rings pulled toward the centre by the same
-        /// press envelope the compositor warps with, exaggerated to read at tile size. Colour is
-        /// deliberately neutral: the press has no colour of its own.</summary>
+        /// so it is drawn schematically — concentric rings pulled toward the center by the same
+        /// press envelope the compositor warps with, exaggerated to read at tile size. Color is
+        /// deliberately neutral: the press has no color of its own.</summary>
         private void RenderPress(DrawingContext context, double extent, double at, Phase phase)
         {
             var (down, up, duration) = ClocksAt(at, phase);

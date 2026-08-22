@@ -26,11 +26,11 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>SVG path data, in viewBox units.</summary>
         public string PathData { get; }
 
-        /// <summary>Fill colour (ARGB). Never transparent — every stored layer is a real fill.</summary>
+        /// <summary>Fill color (ARGB). Never transparent — every stored layer is a real fill.</summary>
         public SKColor Fill { get; }
 
-        /// <summary>Contrast-halo colour (ARGB), or transparent when the layer has no halo.
-        /// The halo is a *centred* stroke, so a caller must paint the stroke first and this
+        /// <summary>Contrast-halo color (ARGB), or transparent when the layer has no halo.
+        /// The halo is a *centered* stroke, so a caller must paint the stroke first and this
         /// layer's fill on top, otherwise the halo eats half of the layer's ink.</summary>
         public SKColor Stroke { get; }
 
@@ -129,7 +129,7 @@ namespace Clowd.VideoSDK.Composition
     }
 
     /// <summary>
-    /// One colourway of a cursor style. A style that ships more than one (see
+    /// One colorway of a cursor style. A style that ships more than one (see
     /// <see cref="CursorAssets.Variants"/>) draws the same geometry in each — only the palette
     /// differs — so <c>CursorContent.Variant</c> selects between them without changing anything
     /// else about the glyph.
@@ -157,9 +157,9 @@ namespace Clowd.VideoSDK.Composition
     /// <remarks>
     /// <para>
     /// A style covers a <b>kind</b> (see <see cref="Kinds"/> — the shapes the recorder reports, one
-    /// key per drawable <c>CursorKind</c>) in one or more <b>colourways</b>: one geometry, several
+    /// key per drawable <c>CursorKind</c>) in one or more <b>colorways</b>: one geometry, several
     /// palettes, declared in <see cref="Variants"/> and selected by <c>CursorContent.Variant</c>.
-    /// A style that declares no colourway has exactly one, unnamed, and stores a null variant.
+    /// A style that declares no colorway has exactly one, unnamed, and stores a null variant.
     /// </para>
     /// <para>
     /// Seven styles live here, from two families that are built quite differently.
@@ -168,7 +168,7 @@ namespace Clowd.VideoSDK.Composition
     /// <b>The iDarques packs</b> — <c>vision</c> (Vision Cursor, a conventional pointer set on a
     /// 128-unit viewBox) and <c>point</c> (Point.er, a minimal set built from one dot and one
     /// triangular cap on a 64-unit one) — each cover every drawable kind in a dark and a light
-    /// colourway, and their artwork is the path constants below. Neither is traced: both are read
+    /// colorway, and their artwork is the path constants below. Neither is traced: both are read
     /// out of the packs' own Photoshop sources, whose files carry every cursor as a shape layer and
     /// whose vector masks are that path data. Each constant is named after the PSD layer it came
     /// from.
@@ -178,20 +178,20 @@ namespace Clowd.VideoSDK.Composition
     /// and <c>neon</c> — carry no artwork here at all. Their SVG sources ship as embedded resources
     /// under <c>Composition/CursorPacks</c> and <see cref="CursorPackLoader"/> reads them at table
     /// build, so a pack is re-synced by re-copying files rather than by transcribing anything. Each
-    /// colourway is a recolouring of one stored drawing (see <see cref="CursorPackPalette"/>): the
-    /// four ful1e5 packs author against placeholder colours and declare the real ones per theme,
-    /// while <c>neon</c> ships one folder per colour, of which one is stored and the rest are its
-    /// palettes. <c>bibata</c> is the one style whose colourways are not purely a palette — its
+    /// colorway is a recoloring of one stored drawing (see <see cref="CursorPackPalette"/>): the
+    /// four ful1e5 packs author against placeholder colors and declare the real ones per theme,
+    /// while <c>neon</c> ships one folder per color, of which one is stored and the rest are its
+    /// palettes. <c>bibata</c> is the one style whose colorways are not purely a palette — its
     /// <c>R</c> and <c>S</c> halves are the pack's rounded and sharp edge sets, which is two
     /// geometries — and only its left-hand cursors are carried, the pack's <c>-Right</c> mirrors
     /// being a separate set for a different hand.
     /// </para>
     /// <para>
     /// Faithfulness notes for the iDarques packs, all of them forced by what this table can hold
-    /// (flat fills and one centred contrast stroke per layer):
+    /// (flat fills and one centered contrast stroke per layer):
     /// </para>
     /// <list type="bullet">
-    /// <item>Both stroke their shapes <i>outside</i> the path. A centred stroke painted under the
+    /// <item>Both stroke their shapes <i>outside</i> the path. A centered stroke painted under the
     /// layer's own fill is the same picture at double the authored width, which is where their halo
     /// widths come from (Vision authors 8/6/4, Point 3). The caller must use round joins for this to
     /// hold at a corner — see <c>CursorCompose.PaintGlyph</c>.</item>
@@ -201,18 +201,18 @@ namespace Clowd.VideoSDK.Composition
     /// in the source. Each is stored as a looping frame list (<see cref="CursorGlyph.Frames"/>),
     /// generated at table build from the static artwork rather than pasted per frame: Vision's
     /// rotating gradient becomes a paper sector orbiting the busy ring and a pointer whose fill
-    /// pulses towards the accent; Point's colour cycle is the source's own — the dot lerping between
-    /// the colourway's base colour and its link blue. (The SVG-sourced packs need none of this: the
+    /// pulses towards the accent; Point's color cycle is the source's own — the dot lerping between
+    /// the colorway's base color and its link blue. (The SVG-sourced packs need none of this: the
     /// ful1e5 four draw every frame, and Neon declares its animation in the file, which the loader
     /// samples — either way the loader hands back a finished loop.)</item>
     /// <item>Both <c>help</c> badges are raster in the source — live text in DIN Round Pro, a pixel
-    /// layer — so those two glyphs are traced from the PSDs' own rasterised layers.</item>
+    /// layer — so those two glyphs are traced from the PSDs' own rasterized layers.</item>
     /// <item>Only one of the two diagonal-resize cursors is authored per PSD (Vision's Black source
     /// has the NESW one, Point's the NWSE one). Each pack's pair is one geometry mirrored about the
     /// viewBox midline, so the two diagonals always match.</item>
     /// <item>Point's White source parks its dot at the <c>help</c> composition's lower position and
     /// omits the <c>vert</c>/<c>dgn</c> groups; geometry therefore comes from one file per pack,
-    /// with only the palette read per colourway.</item>
+    /// with only the palette read per colorway.</item>
     /// </list>
     /// <para>
     /// Every hotspot is the pack's own: the iDarques ones off their <c>.cur</c> headers scaled to the
@@ -282,9 +282,9 @@ namespace Clowd.VideoSDK.Composition
         });
 
         /// <summary>
-        /// The colourways a style offers, in picker order, or empty for a style with only one —
+        /// The colorways a style offers, in picker order, or empty for a style with only one —
         /// whose stored variant is then null, which is also what a project written before
-        /// colourways existed holds, so nothing needs migrating.
+        /// colorways existed holds, so nothing needs migrating.
         /// </summary>
         public static IReadOnlyList<CursorVariant> Variants(string style)
             => style != null && VariantTable.TryGetValue(style, out var variants)
@@ -293,9 +293,9 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>
         /// The variant id a (style, variant) pair actually resolves to: the stored one when the
-        /// style offers it, else the style's first — an unrecognised colourway degrades to the
-        /// style's default the way an unrecognised style degrades to the default style. Null when
-        /// the style has no colourways to choose between (or is not a themed style at all).
+        /// style offers it, else the style's first — an unrecognized colorway degrades to the
+        /// style's default the way an unrecognized style degrades to the default style. Null when
+        /// the style has no colorways to choose between (or is not a themed style at all).
         /// </summary>
         public static string ResolveVariant(string style, string variant)
         {
@@ -310,15 +310,15 @@ namespace Clowd.VideoSDK.Composition
             return variants[0].Id;
         }
 
-        /// <summary>The glyph for a (style, kind) pair in the style's default colourway; see the
+        /// <summary>The glyph for a (style, kind) pair in the style's default colorway; see the
         /// three-argument overload.</summary>
         public static CursorGlyph TryGet(string style, string kind) => TryGet(style, null, kind);
 
         /// <summary>
-        /// The glyph for a (style, colourway, kind) triple, or null when it has no artwork — an
+        /// The glyph for a (style, colorway, kind) triple, or null when it has no artwork — an
         /// unknown or <c>native</c> style, an unknown kind, or a kind the style does not cover. A
         /// caller that gets null for a kind should retry with <see cref="KindArrow"/>. An
-        /// unrecognised <paramref name="variant"/> is not a miss: it resolves to the style's
+        /// unrecognized <paramref name="variant"/> is not a miss: it resolves to the style's
         /// default (see <see cref="ResolveVariant"/>).
         /// </summary>
         public static CursorGlyph TryGet(string style, string variant, string kind)
@@ -330,16 +330,16 @@ namespace Clowd.VideoSDK.Composition
                 : null;
         }
 
-        /// <summary>The table key: a style with one colourway is keyed without a variant segment,
-        /// so giving a style colourways later is a table change and not a lookup change.</summary>
+        /// <summary>The table key: a style with one colorway is keyed without a variant segment,
+        /// so giving a style colorways later is a table change and not a lookup change.</summary>
         private static string Key(string style, string variant, string kind)
             => variant == null ? style + "/" + kind : style + "/" + variant + "/" + kind;
 
         // ------------------------------------------------------------------------ ful1e5 packs
 
-        /// <summary>One colourway of an SVG-sourced pack: the picker's two names for it, the
+        /// <summary>One colorway of an SVG-sourced pack: the picker's two names for it, the
         /// artwork folder it draws (only <see cref="BibataStyle"/> has more than one), and the
-        /// recolouring that turns that folder's stored colours into this theme's.</summary>
+        /// recoloring that turns that folder's stored colors into this theme's.</summary>
         private sealed class PackTheme
         {
             internal PackTheme(string id, string label, string folder,
@@ -360,9 +360,9 @@ namespace Clowd.VideoSDK.Composition
             internal CursorPackPalette Palette { get; }
         }
 
-        /// <summary>A ful1e5 pack as this table sees it: its colourways, how long each animation
+        /// <summary>A ful1e5 pack as this table sees it: its colorways, how long each animation
         /// frame shows, and the hotspots its build config overrides — everything else sits at the
-        /// config's own fallback, the centre of the 256-unit box.</summary>
+        /// config's own fallback, the center of the 256-unit box.</summary>
         private sealed class Pack
         {
             internal Pack(string style, float frameMs, (string Kind, float X, float Y)[] hotspots,
@@ -394,27 +394,27 @@ namespace Clowd.VideoSDK.Composition
                 => Hotspots.TryGetValue(kind, out var point) ? point : new SKPoint(128f, 128f);
         }
 
-        // A ful1e5 theme names the real colour of each placeholder its pack draws with; these three
+        // A ful1e5 theme names the real color of each placeholder its pack draws with; these three
         // spell which placeholder is being named. A pack whose themes never name an accent simply
         // omits it — the accent placeholder only ever appears in Bibata's artwork.
-        private static (uint, uint) Body(uint colour) => (0x00FF00, colour);
+        private static (uint, uint) Body(uint color) => (0x00FF00, color);
 
-        private static (uint, uint) Outline(uint colour) => (0x0000FF, colour);
+        private static (uint, uint) Outline(uint color) => (0x0000FF, color);
 
-        private static (uint, uint) Accent(uint colour) => (0xFF0000, colour);
+        private static (uint, uint) Accent(uint color) => (0xFF0000, color);
 
-        // Neon states its colours outright rather than through placeholders, so a theme is keyed on
+        // Neon states its colors outright rather than through placeholders, so a theme is keyed on
         // the stored folder's own four: the neon line, the pale core inside it, and the contrasting
         // pair the help badge is drawn in.
-        private static (uint, uint) NeonLine(uint colour) => (0x3B6EFF, colour);
+        private static (uint, uint) NeonLine(uint color) => (0x3B6EFF, color);
 
-        private static (uint, uint) NeonCore(uint colour) => (0xABC1FF, colour);
+        private static (uint, uint) NeonCore(uint color) => (0xABC1FF, color);
 
-        private static (uint, uint) NeonBadge(uint colour) => (0x45FF83, colour);
+        private static (uint, uint) NeonBadge(uint color) => (0x45FF83, color);
 
-        private static (uint, uint) NeonBadgeCore(uint colour) => (0xAFFFCA, colour);
+        private static (uint, uint) NeonBadgeCore(uint color) => (0xAFFFCA, color);
 
-        // The packs' own colours, off each repository's render.json (and, for Neon, off the eight
+        // The packs' own colors, off each repository's render.json (and, for Neon, off the eight
         // folders it ships).
         private static readonly Pack[] Packs =
         {
@@ -473,9 +473,9 @@ namespace Clowd.VideoSDK.Composition
             // Neon draws every cursor as a stack of strokes of one path — a wide dim glow, a
             // brighter bloom, a pale core — and animates its two busy cursors in the file, which is
             // why it declares a loop length: 6.4 s sampled every 100 ms, long enough to hold whole
-            // numbers of both the 1.6 s pulse and (stretched a touch) the 6 s colour cycle.
+            // numbers of both the 1.6 s pulse and (stretched a touch) the 6 s color cycle.
             // Its hotspots ship with no config, so they are read off the drawings — the pointer's
-            // tip, the fingertip, the pen's nib, the centre for everything else — and, like every
+            // tip, the fingertip, the pen's nib, the center for everything else — and, like every
             // pack here, quoted against a 256-unit box: Neon draws on 32, so each is the point in
             // its own units times eight (the arrow's tip at (8.5, 6) is (68, 48) below).
             new Pack(NeonStyle, 100f, new (string, float, float)[]
@@ -524,7 +524,7 @@ namespace Clowd.VideoSDK.Composition
                 },
             };
 
-            // A ful1e5 pack's colourways are its themes, in the order its own README lists them.
+            // A ful1e5 pack's colorways are its themes, in the order its own README lists them.
             foreach (var pack in Packs)
             {
                 var variants = new CursorVariant[pack.Themes.Length];
@@ -549,13 +549,13 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>An annular sector (a slice of a ring) as SVG path data, generated through
         /// <c>SKPath</c> so the stored layer is a plain path like every authored one. Angles are
         /// Skia's: degrees clockwise from 3 o'clock (y grows downward).</summary>
-        private static string RingSector(float centre, float outerRadius, float innerRadius,
+        private static string RingSector(float center, float outerRadius, float innerRadius,
             float startDeg, float sweepDeg)
         {
             using var path = new SKPath();
-            var outer = SKRect.Create(centre - outerRadius, centre - outerRadius,
+            var outer = SKRect.Create(center - outerRadius, center - outerRadius,
                 outerRadius * 2, outerRadius * 2);
-            var inner = SKRect.Create(centre - innerRadius, centre - innerRadius,
+            var inner = SKRect.Create(center - innerRadius, center - innerRadius,
                 innerRadius * 2, innerRadius * 2);
             path.AddArc(outer, startDeg, sweepDeg);
             path.ArcTo(inner, startDeg + sweepDeg, -sweepDeg, false);
@@ -578,7 +578,7 @@ namespace Clowd.VideoSDK.Composition
 
         // ---------------------------------------------------------------------- vision palette
 
-        /// <summary>Vision's two base colours. They trade places between the colourways: the dark
+        /// <summary>Vision's two base colors. They trade places between the colorways: the dark
         /// one fills in <see cref="Ink"/> and haloes in <see cref="Paper"/>, the light one the
         /// other way round.</summary>
         private const uint Ink = 0xFF0C1E35;
@@ -586,12 +586,12 @@ namespace Clowd.VideoSDK.Composition
         private const uint Paper = 0xFFFFFFFF;
 
         /// <summary>The "no entry" badge's red, and the accent the two animated cursors are built
-        /// on. Both are the same in every colourway — the source authors them that way.</summary>
+        /// on. Both are the same in every colorway — the source authors them that way.</summary>
         private const uint Deny = 0xFFCF0000;
 
         private const uint Spin = 0xFF50CAFF;
 
-        /// <summary>The pack's 8-, 6- and 4-unit outside strokes as the centred widths that draw
+        /// <summary>The pack's 8-, 6- and 4-unit outside strokes as the centered widths that draw
         /// the same picture.</summary>
         private const float Halo = 16f;
 
@@ -602,25 +602,25 @@ namespace Clowd.VideoSDK.Composition
         // ----------------------------------------------------------------------- point palette
 
         /// <summary>Point's ink. Its paper is the shared <see cref="Paper"/>, and the two trade
-        /// places between its colourways exactly as Vision's do.</summary>
+        /// places between its colorways exactly as Vision's do.</summary>
         private const uint PointInk = 0xFF2F303A;
 
         /// <summary>The blue Point builds its link cursor and its wait ring on, and the red pair
-        /// its "no entry" dot — the same in every colourway, as the source authors them.</summary>
+        /// its "no entry" dot — the same in every colorway, as the source authors them.</summary>
         private const uint PointLink = 0xFF3DA6FF;
 
         private const uint PointDeny = 0xFFD50000;
 
         private const uint PointDenyEdge = 0xFF720000;
 
-        /// <summary>Point's 3-unit outside stroke as the centred width that draws the same
+        /// <summary>Point's 3-unit outside stroke as the centered width that draws the same
         /// picture, on its smaller 64-unit viewBox.</summary>
         private const float PointHalo = 6f;
 
         // ------------------------------------------------------------------ animation generation
 
         /// <summary>Frames per animation loop and how long each shows: 18 × 60 ms ≈ one revolution
-        /// (or one colour cycle) every 1.08 s, the cadence a Windows <c>.ani</c> spinner runs at.</summary>
+        /// (or one color cycle) every 1.08 s, the cadence a Windows <c>.ani</c> spinner runs at.</summary>
         private const int SpinFrames = 18;
 
         private const float SpinFrameMs = 60f;
@@ -932,7 +932,7 @@ namespace Clowd.VideoSDK.Composition
         {
             var t = new Dictionary<string, CursorGlyph>(StringComparer.OrdinalIgnoreCase);
 
-            // One geometry, two palettes: `ink`/`paper` swap between the colourways, while a layer
+            // One geometry, two palettes: `ink`/`paper` swap between the colorways, while a layer
             // naming a palette constant outright (Deny, Spin, Paper) looks the same in both.
             foreach (var (variant, ink, paper) in new[]
             {
@@ -950,7 +950,7 @@ namespace Clowd.VideoSDK.Composition
                     P(VisionAlternate, ink, paper, Halo));
                 // wait: the source's rotating gradient, faked as a paper sector orbiting the ring.
                 // The ring layer is shared across frames so path caches key it once; the radii are
-                // VisionBusy's own (centre 64, ring 19.938..30.25), so the sector sits flush.
+                // VisionBusy's own (center 64, ring 19.938..30.25), so the sector sits flush.
                 var visionRing = P(VisionBusy, Spin, Ink, Halo);
                 var visionWaitFrames = new CursorGlyph[SpinFrames];
                 for (int i = 0; i < SpinFrames; i++)
@@ -962,7 +962,7 @@ namespace Clowd.VideoSDK.Composition
                 t[Key(VisionStyle, variant, KindWait)] = A(SpinFrameMs, visionWaitFrames);
 
                 // appstarting: the pointer cannot rotate, so the source's sweeping gradient becomes
-                // a fill pulsing towards the accent and back. Frame 0 is the old static colour.
+                // a fill pulsing towards the accent and back. Frame 0 is the old static color.
                 var visionWorkFrames = new CursorGlyph[SpinFrames];
                 for (int i = 0; i < SpinFrames; i++)
                 {
@@ -997,7 +997,7 @@ namespace Clowd.VideoSDK.Composition
                     P(VisionPointer, ink, paper, Halo), P(VisionHelpBadge, ink, paper, Halo));
             }
 
-            // Point is the same two-colourway arrangement on a 64-unit viewBox.
+            // Point is the same two-colorway arrangement on a 64-unit viewBox.
             foreach (var (variant, ink, paper) in new[]
             {
                 ("dark", PointInk, Paper),
@@ -1013,7 +1013,7 @@ namespace Clowd.VideoSDK.Composition
                 t[Key(PointStyle, variant, KindNo)] = G(64f, 32f, 32f,
                     P(PointDot, PointDeny, PointDenyEdge, PointHalo));
                 // appstarting: the source's own animation — the dot cycling between the
-                // colourway's base colour and the link blue. Frame 0 is the cycle's midpoint,
+                // colorway's base color and the link blue. Frame 0 is the cycle's midpoint,
                 // which is (near) the tint the old static table showed.
                 var pointWorkFrames = new CursorGlyph[SpinFrames];
                 for (int i = 0; i < SpinFrames; i++)
@@ -1025,7 +1025,7 @@ namespace Clowd.VideoSDK.Composition
                 t[Key(PointStyle, variant, KindAppStarting)] = A(SpinFrameMs, pointWorkFrames);
 
                 // wait: the same orbiting-sector fake as Vision's, on PointBusyRing's radii
-                // (centre 32, ring 11.888..18.02); ring and dot layers shared across frames. The
+                // (center 32, ring 11.888..18.02); ring and dot layers shared across frames. The
                 // sector's halo is half width — the ring is barely thicker than a full halo, which
                 // would read as a black crescent rather than an outlined highlight.
                 var pointRing = P(PointBusyRing, PointLink, paper, PointHalo);

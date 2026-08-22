@@ -10,16 +10,16 @@ using SkiaSharp;
 namespace Clowd.VideoSDK.Composition
 {
     /// <summary>
-    /// One theme of a cursor pack, as the recolouring it performs: which of the stored artwork's
-    /// colours becomes which. A colour the pack writes literally and means literally — the white of
+    /// One theme of a cursor pack, as the recoloring it performs: which of the stored artwork's
+    /// colors becomes which. A color the pack writes literally and means literally — the white of
     /// a "no entry" bar, the macOS spinner's own four — is not in the map and passes through.
     /// </summary>
     /// <remarks>
     /// The two families reach a palette from opposite directions. A ful1e5 pack draws every cursor
-    /// in placeholder colours (<c>#00FF00</c> body, <c>#0000FF</c> outline, <c>#FF0000</c> accent)
-    /// and ships a <c>render.json</c> naming the real colour of each per theme, so its map is those
-    /// three keys. Neon ships one folder per colour instead, all the same drawing; one of them is
-    /// stored and the rest are its map, keyed on that stored theme's own colours.
+    /// in placeholder colors (<c>#00FF00</c> body, <c>#0000FF</c> outline, <c>#FF0000</c> accent)
+    /// and ships a <c>render.json</c> naming the real color of each per theme, so its map is those
+    /// three keys. Neon ships one folder per color instead, all the same drawing; one of them is
+    /// stored and the rest are its map, keyed on that stored theme's own colors.
     /// </remarks>
     internal sealed class CursorPackPalette
     {
@@ -33,8 +33,8 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>
-        /// The theme colour for a source colour, keeping its alpha: only the RGB decides, so a
-        /// mapped colour that reaches here part-transparent (a ful1e5 pack fades one through a
+        /// The theme color for a source color, keeping its alpha: only the RGB decides, so a
+        /// mapped color that reaches here part-transparent (a ful1e5 pack fades one through a
         /// gradient, Neon draws its outer glow at 55%) is still the same key.
         /// </summary>
         internal uint Resolve(uint sourceArgb)
@@ -62,28 +62,28 @@ namespace Clowd.VideoSDK.Composition
     /// <list type="bullet">
     /// <item><b>Gradients.</b> A <c>fill="url(#…)"</c> is flattened to its stops' average, weighted
     /// by their offsets — the packs use them for the macOS beachball's segments and for a soft
-    /// vignette on BreezeX's crosshair, and both read correctly as one colour at cursor size.</item>
+    /// vignette on BreezeX's crosshair, and both read correctly as one color at cursor size.</item>
     /// <item><b>Outside strokes.</b> Figma exports an outside stroke either as a second, expanded
     /// path (which needs nothing — it is already the outline ring) or as a masked path over a
     /// duplicate of the shape. The masked path cannot be drawn without the mask, so it is dropped
     /// and the duplicate pair it belonged to collapses into one layer: the upper fill, haloed in
-    /// the lower one's colour, at the width the mask's own bounds imply.</item>
-    /// <item><b>Centred strokes.</b> A <c>stroke</c> attribute paints centred and <i>over</i> the
+    /// the lower one's color, at the width the mask's own bounds imply.</item>
+    /// <item><b>Centered strokes.</b> A <c>stroke</c> attribute paints centered and <i>over</i> the
     /// fill, so all of it shows; a halo here paints under the fill and only its outer half shows.
     /// The stored width is therefore twice the authored one, which keeps the outline as thick as
     /// the pack drew it at the cost of half a stroke on the silhouette.</item>
-    /// <item><b>Even-odd fills.</b> Normalised to the nonzero winding every stored path is in, so
+    /// <item><b>Even-odd fills.</b> Normalized to the nonzero winding every stored path is in, so
     /// a hole stays a hole when <c>CursorCompose</c> parses it back.</item>
     /// <item><b>Blur.</b> Neon draws each cursor three times — a wide dim stroke, a brighter one,
     /// and a pale core — with the outer two under a Gaussian blur that makes them a glow. There is
-    /// no blur to be had here, so the three land as concentric bands: the same colours at the same
+    /// no blur to be had here, so the three land as concentric bands: the same colors at the same
     /// widths and opacities, with a hard edge where the source has a falloff. It reads as neon,
     /// drawn flat.</item>
     /// </list>
     /// <para>
     /// A layer the pack leaves unstroked stays unstroked. These packs do not halo every shape the
     /// way Vision and Point do — the ful1e5 four draw the outline as a solid backing silhouette and
-    /// stack the body colour inside it, Neon stacks its glow bands — so a glyph's contrast comes
+    /// stack the body color inside it, Neon stacks its glow bands — so a glyph's contrast comes
     /// from the layers under the top one, not from a stroke on each.
     /// </para>
     /// </remarks>
@@ -99,7 +99,7 @@ namespace Clowd.VideoSDK.Composition
 
         private static readonly string[] ResourceNames = Assembly.GetManifestResourceNames();
 
-        /// <summary>The still for a (pack, kind) pair in one theme's colours, or null when the pack
+        /// <summary>The still for a (pack, kind) pair in one theme's colors, or null when the pack
         /// carries no artwork for it.</summary>
         internal static CursorGlyph LoadStatic(string pack, string kind, CursorPackPalette palette,
             float hotspotX, float hotspotY)
@@ -124,7 +124,7 @@ namespace Clowd.VideoSDK.Composition
         /// here, one every <paramref name="frameMs"/> across <paramref name="periodMs"/>. Each
         /// declared duration is stretched to the nearest whole number of cycles inside that period
         /// so every one closes where it opened (see <see cref="AnimationPhase"/>) — Neon's 6 s
-        /// colour cycle runs a touch slower for it, its 1.6 s pulse not at all.
+        /// color cycle runs a touch slower for it, its 1.6 s pulse not at all.
         /// </para>
         /// <para>Null when the pack has neither a frame folder nor a file for the kind.</para>
         /// </remarks>
@@ -228,7 +228,7 @@ namespace Clowd.VideoSDK.Composition
         // ------------------------------------------------------------------------------ reading
 
         /// <summary>The viewBox's longer side. Every pack authors square-ish boxes on 256; the odd
-        /// 257 is an export artefact, and squaring off the longer side keeps the art inside.</summary>
+        /// 257 is an export artifact, and squaring off the longer side keeps the art inside.</summary>
         private static float ReadViewBox(XElement root)
         {
             var parts = ((string)root.Attribute("viewBox") ?? "0 0 256 256")
@@ -238,7 +238,7 @@ namespace Clowd.VideoSDK.Composition
             return Math.Max(width, height);
         }
 
-        /// <summary>Gradient id → the one colour it flattens to (see the class remarks).</summary>
+        /// <summary>Gradient id → the one color it flattens to (see the class remarks).</summary>
         private static Dictionary<string, uint> ReadGradients(XElement root)
         {
             var table = new Dictionary<string, uint>(StringComparer.Ordinal);
@@ -253,7 +253,7 @@ namespace Clowd.VideoSDK.Composition
                 if (stops.Length == 0)
                     continue;
 
-                // Each stop covers the span to its neighbours' midpoints, so a colour that holds
+                // Each stop covers the span to its neighbors' midpoints, so a color that holds
                 // over most of the ramp weighs most. A lone stop is the whole ramp.
                 double r = 0, g = 0, b = 0, a = 0, total = 0;
                 for (int i = 0; i < stops.Length; i++)
@@ -265,12 +265,12 @@ namespace Clowd.VideoSDK.Composition
                         : (at + Num((string)stops[i + 1].Attribute("offset") ?? "1")) / 2f;
                     double weight = Math.Max(hi - lo, 0.0001);
 
-                    uint colour = ParseColour((string)stops[i].Attribute("stop-color") ?? "black", 0xFF000000);
+                    uint color = ParseColor((string)stops[i].Attribute("stop-color") ?? "black", 0xFF000000);
                     float opacity = Num((string)stops[i].Attribute("stop-opacity") ?? "1");
-                    r += ((colour >> 16) & 0xFF) * weight;
-                    g += ((colour >> 8) & 0xFF) * weight;
-                    b += (colour & 0xFF) * weight;
-                    a += ((colour >> 24) & 0xFF) * opacity * weight;
+                    r += ((color >> 16) & 0xFF) * weight;
+                    g += ((color >> 8) & 0xFF) * weight;
+                    b += (color & 0xFF) * weight;
+                    a += ((color >> 24) & 0xFF) * opacity * weight;
                     total += weight;
                 }
 
@@ -311,7 +311,7 @@ namespace Clowd.VideoSDK.Composition
             internal string MaskId;
 
             /// <summary>The stroke came from an animation's own value list rather than the stored
-            /// artwork, so a theme must not recolour it: Neon's spinner cycles all eight of the
+            /// artwork, so a theme must not recolor it: Neon's spinner cycles all eight of the
             /// pack's hues whichever theme is picked, and remapping the one that happens to be the
             /// stored theme's would put a duplicate in the cycle.</summary>
             internal bool StrokeIsLiteral;
@@ -346,7 +346,7 @@ namespace Clowd.VideoSDK.Composition
 
             /// <summary>The stroke came from an animation rather than the artwork, and inherits as
             /// such — the packs animate a whole group, and it is the paths inside it that end up
-            /// carrying the colour.</summary>
+            /// carrying the color.</summary>
             internal bool StrokeIsLiteral { get; }
 
             /// <summary>The root's paint. Its <c>fill</c> defaults to <c>none</c>, which every one
@@ -466,7 +466,7 @@ namespace Clowd.VideoSDK.Composition
 
             layers.Add(new Layer
             {
-                // Reserialising is only worth it when something actually moved; a path the reader
+                // Reserializing is only worth it when something actually moved; a path the reader
                 // left alone keeps the pack's own bytes.
                 PathData = transformed || evenOdd ? path.ToSvgPathData() : pathData,
                 FillArgb = fill,
@@ -496,7 +496,7 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>The <c>values</c> list of an animation as the pair it sits between at this
-        /// frame's phase, walked as SMIL's default linear ramp — one segment per neighbouring
+        /// frame's phase, walked as SMIL's default linear ramp — one segment per neighboring
         /// pair.</summary>
         private static bool SampleValues(XElement animation, AnimationClock clock,
             out string from, out string to, out float t)
@@ -522,7 +522,7 @@ namespace Clowd.VideoSDK.Composition
             return true;
         }
 
-        /// <summary>The colour an <c>&lt;animate attributeName="stroke"&gt;</c> child paints at this
+        /// <summary>The color an <c>&lt;animate attributeName="stroke"&gt;</c> child paints at this
         /// frame, or null when the element has none (or is being read as a still).</summary>
         private static string AnimatedStroke(XElement element, AnimationClock clock)
         {
@@ -534,7 +534,7 @@ namespace Clowd.VideoSDK.Composition
             {
                 if (!SampleValues(animation, clock, out var from, out var to, out float t))
                     continue;
-                uint mixed = Mix(ParseColour(from, 0xFF000000), ParseColour(to, 0xFF000000), t);
+                uint mixed = Mix(ParseColor(from, 0xFF000000), ParseColor(to, 0xFF000000), t);
                 return "#" + (mixed & 0x00FFFFFF).ToString("X6", CultureInfo.InvariantCulture);
             }
             return null;
@@ -592,7 +592,7 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>
         /// The read layers as stored ones: masked paths dropped and the duplicate pairs they stood
-        /// for collapsed, bare strokes turned into the outline they draw, and every colour put
+        /// for collapsed, bare strokes turned into the outline they draw, and every color put
         /// through the theme's palette.
         /// </summary>
         private static CursorGlyphPath[] Resolve(List<Layer> layers,
@@ -601,7 +601,7 @@ namespace Clowd.VideoSDK.Composition
             // A dropped outside-stroke leaves its width behind in its own geometry: the masked path
             // is the shape grown by that width all round, so the gap between its bounds and the
             // shape's is the width itself. (The mask's declared box is padded further still, which
-            // is why it is only used to recognise the pair.) Zero when the file has no such mask.
+            // is why it is only used to recognize the pair.) Zero when the file has no such mask.
             var expanded = new List<SKRect>();
             foreach (var layer in layers)
             {
@@ -636,7 +636,7 @@ namespace Clowd.VideoSDK.Composition
                 return best;
             }
 
-            // A shape drawn twice — once in the outline colour, once in the body colour on top — is
+            // A shape drawn twice — once in the outline color, once in the body color on top — is
             // the other half of that same outside-stroke export. One layer, haloed, is the picture.
             var byPath = new Dictionary<string, int>(StringComparer.Ordinal);
             var collapsed = new List<Layer>(layers.Count);
@@ -796,20 +796,20 @@ namespace Clowd.VideoSDK.Composition
             if (text.StartsWith("url(", StringComparison.Ordinal))
             {
                 string id = MaskIdOf(text);
-                return id != null && gradients.TryGetValue(id, out var colour) ? colour : fallback;
+                return id != null && gradients.TryGetValue(id, out var color) ? color : fallback;
             }
-            return ParseColour(text, fallback);
+            return ParseColor(text, fallback);
         }
 
-        private static uint ApplyOpacity(uint colour, float opacity)
+        private static uint ApplyOpacity(uint color, float opacity)
         {
-            if (opacity >= 1f || colour == 0)
-                return colour;
-            uint alpha = (uint)Math.Clamp(Math.Round(((colour >> 24) & 0xFF) * opacity), 0, 255);
-            return alpha << 24 | (colour & 0x00FFFFFF);
+            if (opacity >= 1f || color == 0)
+                return color;
+            uint alpha = (uint)Math.Clamp(Math.Round(((color >> 24) & 0xFF) * opacity), 0, 255);
+            return alpha << 24 | (color & 0x00FFFFFF);
         }
 
-        private static uint ParseColour(string text, uint fallback)
+        private static uint ParseColor(string text, uint fallback)
         {
             text = text?.Trim();
             if (string.IsNullOrEmpty(text))

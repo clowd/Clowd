@@ -192,7 +192,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.InRange(snapshot.ReadyBuckets, 780, 880);
             AssertToneAmplitude(snapshot);
 
-            // the accessor is silent (and false) outside what has been analysed
+            // the accessor is silent (and false) outside what has been analyzed
             Assert.False(snapshot.TryGetBucket(snapshot.ReadyBuckets, out float m, out float x));
             Assert.Equal(0f, m);
             Assert.Equal(0f, x);
@@ -534,7 +534,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Scheduler_drops_cancelled_work_and_survives_a_throwing_item()
+        public void Scheduler_drops_canceled_work_and_survives_a_throwing_item()
         {
             using var scheduler = new ThumbWorkScheduler();
             using var gate = new ManualResetEventSlim(false);
@@ -543,15 +543,15 @@ namespace Clowd.VideoSDK.Tests
             var blocker = scheduler.Enqueue(ThumbWorkPriority.Waveform, _ => gate.Wait(5000));
             var thrower = scheduler.Enqueue(ThumbWorkPriority.Keyframes,
                 _ => throw new InvalidOperationException("boom"));
-            var cancelled = scheduler.Enqueue(ThumbWorkPriority.Keyframes, _ => ran = true);
+            var canceled = scheduler.Enqueue(ThumbWorkPriority.Keyframes, _ => ran = true);
             var after = scheduler.Enqueue(ThumbWorkPriority.Refinement, _ => { });
 
-            cancelled.Cancel();
+            canceled.Cancel();
             gate.Set();
 
             Assert.True(after.Wait(5000)); // the throwing item did not take the thread down
             Assert.False(ran);
-            Assert.True(cancelled.IsCancelled);
+            Assert.True(canceled.IsCanceled);
             Assert.IsType<InvalidOperationException>(thrower.Error);
             Assert.True(blocker.IsFinished);
         }
@@ -584,7 +584,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Scheduler_skips_work_whose_token_is_already_cancelled()
+        public void Scheduler_skips_work_whose_token_is_already_canceled()
         {
             using var scheduler = new ThumbWorkScheduler();
             using var cts = new CancellationTokenSource();

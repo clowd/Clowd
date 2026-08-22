@@ -12,7 +12,7 @@ namespace Clowd.Shared.Tests
         {
             Assert.Equal(1.0, AccentColors.ContrastWithWhite(Colors.White), 3);
             Assert.Equal(21.0, AccentColors.ContrastWithWhite(Colors.Black), 3);
-            // the legacy clowd blue is the colour issue #48 is about: readable-ish, but under AA.
+            // the legacy clowd blue is the color issue #48 is about: readable-ish, but under AA.
             Assert.InRange(AccentColors.ContrastWithWhite(AccentColors.ClowdBlue), 3.2, 3.25);
         }
 
@@ -79,7 +79,7 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void EffectiveAccentColor_IsAlwaysLegible()
         {
-            // whatever the platform hands back (system accent or the stored colour), the overlay
+            // whatever the platform hands back (system accent or the stored color), the overlay
             // never receives something white text cannot sit on.
             var settings = new SettingsCapture();
 

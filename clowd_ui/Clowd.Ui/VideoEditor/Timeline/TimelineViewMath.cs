@@ -167,9 +167,9 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// fractional position turns it into two half-lit columns that read as a soft, translucent
         /// smear rather than a line.
         ///
-        /// <paramref name="strokeWidth"/> is the pen width the coordinate is the <i>centre</i> of
+        /// <paramref name="strokeWidth"/> is the pen width the coordinate is the <i>center</i> of
         /// (0 for a fill edge). A stroke an odd number of pixels wide has to straddle a pixel
-        /// centre to stay crisp; an even one has to sit on the boundary between two.
+        /// center to stay crisp; an even one has to sit on the boundary between two.
         /// </summary>
         public static double SnapToPixel(double x, double renderScaling, double strokeWidth = 0)
         {
@@ -179,7 +179,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             var physical = x * renderScaling;
             var strokePx = (int)Math.Round(Math.Max(0, strokeWidth) * renderScaling);
 
-            // odd stroke: the nearest pixel CENTRE (every x in [n, n+1) has n + 0.5 as its
+            // odd stroke: the nearest pixel CENTER (every x in [n, n+1) has n + 0.5 as its
             // nearest); even stroke or a fill edge: the nearest boundary.
             physical = strokePx % 2 == 1 ? Math.Floor(physical) + 0.5 : Math.Round(physical);
             return physical / renderScaling;

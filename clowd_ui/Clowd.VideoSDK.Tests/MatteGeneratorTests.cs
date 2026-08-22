@@ -15,7 +15,7 @@ namespace Clowd.VideoSDK.Tests
     /// <see cref="MatteGenerator"/>: the model rules (which streams want a matte, the analysis
     /// resolution) run everywhere; the end-to-end generation runs against the real
     /// <c>clowd_ai</c> binary — encode a small fixture, generate its matte sidecar, and
-    /// assert the mp4 + companion honour the sidecar contract (analysis-sized gray-in-luma
+    /// assert the mp4 + companion honor the sidecar contract (analysis-sized gray-in-luma
     /// frames on the source's PTS grid, valid companion). Skips when FFmpeg, the binary
     /// (build <c>cargo build -p clowd_ai --release</c>) or an ONNX Runtime dylib (see
     /// BUILDING.md) is absent — the same gating as <see cref="DenoiseGeneratorTests"/>.
@@ -255,7 +255,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void A_cancelled_generation_throws_and_leaves_no_sidecar_behind()
+        public void A_canceled_generation_throws_and_leaves_no_sidecar_behind()
         {
             Assert.SkipUnless(FFmpegAvailable,
                 $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");

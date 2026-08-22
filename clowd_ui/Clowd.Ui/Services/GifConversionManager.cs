@@ -31,7 +31,7 @@ namespace Clowd.UI.Services
 
         public string ProgressText => $"{Progress:0}%";
 
-        public bool IsCancelled { get; private set; }
+        public bool IsCanceled { get; private set; }
 
         private readonly Vid2GifRunner _runner;
         private string _status = "Converting…";
@@ -43,17 +43,17 @@ namespace Clowd.UI.Services
             _runner = runner;
         }
 
-        /// <summary>Asks the conversion to stop. The row stays on the page (showing "Cancelling…")
+        /// <summary>Asks the conversion to stop. The row stays on the page (showing "Canceling…")
         /// until the process is actually gone, at which point the manager removes it — unlike an
         /// upload, there is a child process that must be given a chance to clean up its partial
         /// output first.</summary>
         public void Cancel()
         {
-            if (IsCancelled)
+            if (IsCanceled)
                 return;
 
-            IsCancelled = true;
-            PostStatus("Cancelling…");
+            IsCanceled = true;
+            PostStatus("Canceling…");
             _ = CancelCoreAsync();
         }
 
@@ -76,7 +76,7 @@ namespace Clowd.UI.Services
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (IsCancelled)
+                if (IsCanceled)
                     return;
 
                 Progress = Math.Clamp(percent, 0, 100);
@@ -96,7 +96,7 @@ namespace Clowd.UI.Services
     /// the external vid2gif tool. The conversion is surfaced as its own Recent-page entry named
     /// "GIF" carrying an <see cref="SessionInfo.ActiveGifConversion"/> while it runs; when it
     /// finishes the entry drops the conversion and behaves like any other video entry, and when it
-    /// is cancelled or fails the entry is removed again.
+    /// is canceled or fails the entry is removed again.
     /// </summary>
     public static class GifConversionManager
     {
@@ -266,7 +266,7 @@ namespace Clowd.UI.Services
                     Toast.Show(Toast.GetActiveOrMainWindow(), "GIF saved");
                     break;
 
-                case Vid2GifOutcome.Cancelled:
+                case Vid2GifOutcome.Canceled:
                     DeleteQuietly(session);
                     DeletePartialOutput(gifPath);
                     break;

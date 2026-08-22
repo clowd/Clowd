@@ -24,7 +24,7 @@ namespace Clowd.VideoSDK.Thumbs
         /// the sbyte range stays symmetric about zero (−128 is never produced).</summary>
         internal const int Scale = 127;
 
-        /// <summary>Nothing analysed yet — what a provider returns for a stream whose pass has not
+        /// <summary>Nothing analyzed yet — what a provider returns for a stream whose pass has not
         /// produced its first bucket.</summary>
         public static readonly WaveformSnapshot Empty =
             new WaveformSnapshot(WaveformBuilder.DefaultBucketsPerSecond, Array.Empty<sbyte>(), 0, false);
@@ -45,7 +45,7 @@ namespace Clowd.VideoSDK.Thumbs
         /// The timeline re-buckets from this to whatever the current zoom needs.</summary>
         public int BucketsPerSecond { get; }
 
-        /// <summary>Buckets analysed so far, from source time 0.</summary>
+        /// <summary>Buckets analyzed so far, from source time 0.</summary>
         public int ReadyBuckets { get; }
 
         /// <summary>True once the pass has reached the end of the stream, so the consumer can stop
@@ -56,7 +56,7 @@ namespace Clowd.VideoSDK.Thumbs
         /// 10^7 (it does at the default 200); <see cref="BucketStartTicks"/> is the authority.</summary>
         public long TicksPerBucket => TimeBase.TicksPerSecond / BucketsPerSecond;
 
-        /// <summary>Source time analysed so far.</summary>
+        /// <summary>Source time analyzed so far.</summary>
         public long ReadyTicks => BucketStartTicks(ReadyBuckets);
 
         /// <summary>Source time bucket <paramref name="index"/> starts at.</summary>
@@ -76,7 +76,7 @@ namespace Clowd.VideoSDK.Thumbs
         }
 
         /// <summary>Reads one bucket's mono-folded peaks. Returns false (and silence) outside the
-        /// analysed range, so callers can walk a pixel range without bounds-checking every step —
+        /// analyzed range, so callers can walk a pixel range without bounds-checking every step —
         /// the same shape the timeline's own <c>AudioPeaks</c> accessor has.</summary>
         public bool TryGetBucket(int index, out float min, out float max)
         {
@@ -196,7 +196,7 @@ namespace Clowd.VideoSDK.Thumbs
         /// <summary>
         /// Runs the pass into <paramref name="buffer"/>, publishing (and calling
         /// <paramref name="onProgress"/>) after every decoded chunk. Returns true when the stream
-        /// was analysed to its end — the buffer's final publish is marked complete — and false when
+        /// was analyzed to its end — the buffer's final publish is marked complete — and false when
         /// <paramref name="cancellationToken"/> stopped it, in which case the buffer keeps whatever
         /// was published and stays incomplete.
         /// </summary>

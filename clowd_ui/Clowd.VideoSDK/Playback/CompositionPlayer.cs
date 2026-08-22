@@ -861,7 +861,7 @@ namespace Clowd.VideoSDK.Playback
 
             if (set != null && set.Files.Length > 0)
             {
-                // 1. record per-worker post-flush behaviour (source-domain targets).
+                // 1. record per-worker post-flush behavior (source-domain targets).
                 foreach (var pipe in set.AllVideo)
                     pipe.Worker.PrepareSeek(new TimeSpan(VideoSourceTarget(map, pipe.Key, tl)), mode);
 

@@ -82,7 +82,7 @@ namespace Clowd.UI
                 if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
                 {
                     // When both profiles are built, the freshest one is the one being worked on.
-                    // Preferring debug unconditionally (the old behaviour) made a just-built
+                    // Preferring debug unconditionally (the old behavior) made a just-built
                     // --release binary unreachable for anyone with a stale target/debug lying
                     // around, which is everybody who has ever run a plain `cargo build`.
                     var debug = Path.Combine(dir.FullName, "target", "debug", BinaryFileName);
@@ -90,7 +90,7 @@ namespace Clowd.UI
                     var debugBuilt = LastWriteUtcOrNull(debug);
                     var releaseBuilt = LastWriteUtcOrNull(release);
 
-                    // Strictly-greater, so an exact tie keeps the old debug-wins behaviour. Ties are
+                    // Strictly-greater, so an exact tie keeps the old debug-wins behavior. Ties are
                     // not theoretical: coarse filesystem timestamp granularity makes two builds a
                     // moment apart compare equal.
                     if (debugBuilt.HasValue && releaseBuilt.HasValue)
@@ -139,7 +139,7 @@ namespace Clowd.UI
     /// capture (session.json present) loads the session, names it "Screenshot" and opens the
     /// editor or the upload flow depending on the action.txt marker; a SELECT-COLOR capture
     /// (action.txt only) opens the color viewer; an OCR-UPLOAD capture (an "ocr-upload" marker
-    /// plus an ocr.txt sidecar, no image) uploads the recognized text as a paste; a cancelled
+    /// plus an ocr.txt sidecar, no image) uploads the recognized text as a paste; a canceled
     /// capture (neither file) deletes the pre-created session directory. COPY/SAVE are handled
     /// inside the capturer itself and never produce a session.
     /// </summary>
@@ -230,7 +230,7 @@ namespace Clowd.UI
                 await process.WaitForExitAsync();
                 var stderr = await stderrTask;
 
-                // Every normal outcome (edit / upload / colour / video / cancel) exits 0.
+                // Every normal outcome (edit / upload / color / video / cancel) exits 0.
                 // A non-zero exit means the capturer crashed or aborted — e.g. a GPU shader
                 // that failed to load — so surface it instead of silently treating the empty
                 // session directory as a user cancellation (which produced no error at all).
@@ -500,7 +500,7 @@ namespace Clowd.UI
         OcrUpload,
     }
 
-    /// <summary>A finished, non-cancelled capture. <see cref="Session"/> is set for
+    /// <summary>A finished, non-canceled capture. <see cref="Session"/> is set for
     /// Edit/Upload; <see cref="Color"/> for SelectColor; <see cref="Region"/> and
     /// <see cref="SessionDir"/> for Video and Scroll, which additionally carry
     /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>; <see cref="Text"/> for
@@ -540,7 +540,7 @@ namespace Clowd.UI
         /// "select-color #RRGGBB" without a session carries just the picked color; the
         /// directory is deleted. An "ocr-upload" marker carries its text in an ocr.txt sidecar,
         /// which is read out before the directory is deleted. Otherwise the capture was
-        /// cancelled: the pre-created directory is deleted and null is returned.
+        /// canceled: the pre-created directory is deleted and null is returned.
         /// </summary>
         public static CaptureResult ProcessFinishedSession(string sessionDir)
         {
@@ -661,7 +661,7 @@ namespace Clowd.UI
                 return null;
             }
 
-            // no session payload — either a color pick or a cancelled capture; in both cases
+            // no session payload — either a color pick or a canceled capture; in both cases
             // the pre-created directory has nothing worth keeping.
             DeleteSessionDir(sessionDir);
 

@@ -6,7 +6,7 @@ namespace Clowd.VideoSDK.Model;
 
 /// <summary>
 /// The editing operations, and the <b>only</b> place <see cref="Item.LinkGroupId"/> semantics
-/// live — timeline control, keyboard shortcuts and tests all come through here, so link behaviour
+/// live — timeline control, keyboard shortcuts and tests all come through here, so link behavior
 /// cannot drift between entry points. The operations that change <i>when</i> content plays
 /// (<see cref="Move"/>, <see cref="Split"/>, <see cref="RippleDelete"/>) resolve the target item's
 /// link group first and apply to the members concerned — all of them for a move, those covering
@@ -182,7 +182,7 @@ public static class TimelineOps
 
     /// <summary>
     /// Cuts <b>one</b> item, leaving the rest of its link group alone — the timeline's right-click
-    /// split, where the pointer picked out a single clip and cutting its neighbours with it would
+    /// split, where the pointer picked out a single clip and cutting its neighbors with it would
     /// be an edit the user did not ask for.
     ///
     /// <para>Both halves keep the item's existing <see cref="Item.LinkGroupId"/>: the clip is still
@@ -439,7 +439,7 @@ public static class TimelineOps
     /// keeps showing the same stretch of source, so its timeline duration scales by
     /// <c>oldSpeed / newSpeed</c>, anchored at its start. The new duration is clamped to at least
     /// <see cref="MinSegmentTicks"/> and to the gap before the next item on the track (slowing a
-    /// clip down must not run it into its neighbour — the content is end-trimmed instead). Single
+    /// clip down must not run it into its neighbor — the content is end-trimmed instead). Single
     /// item, media only; returns the speed actually stored (unchanged for non-media).
     /// </summary>
     public static double SetSpeed(Project project, Guid itemId, double speed)
@@ -475,7 +475,7 @@ public static class TimelineOps
         media != null && media.Speed > 0 ? media.Speed : 1.0;
 
     /// <summary>A timeline span rendered into source ticks at <paramref name="speed"/> — exact
-    /// for realtime so speed-1 projects keep their integer-perfect maths.</summary>
+    /// for realtime so speed-1 projects keep their integer-perfect math.</summary>
     private static long ToSourceTicks(long timelineTicks, double speed) =>
         speed == 1.0 ? timelineTicks : (long)Math.Round(timelineTicks * speed);
 

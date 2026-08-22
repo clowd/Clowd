@@ -65,7 +65,7 @@ namespace Clowd.VideoSDK.Tests
                         TimelineStartTicks = 0,
                         DurationTicks = Ms(10_000),
                         Content = new MediaContent { SourceId = sourceId, StreamIndex = 1, SourceInTicks = Ms(2_500) },
-                        // the v1 webcam PiP, expressed exactly: centre 0.82/0.78, width 0.2,
+                        // the v1 webcam PiP, expressed exactly: center 0.82/0.78, width 0.2,
                         // rounded-rect mask with 0.25-height corners, plus a crop for good measure.
                         Transform = new Transform
                         {

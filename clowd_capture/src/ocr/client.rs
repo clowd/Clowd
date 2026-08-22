@@ -111,12 +111,12 @@ pub fn warm() {
     }
 }
 
-/// Where this request's artefacts go. Deletes the response file when dropped,
-/// which is what makes cleanup unconditional: a recognition cancelled in the
+/// Where this request's artifacts go. Deletes the response file when dropped,
+/// which is what makes cleanup unconditional: a recognition canceled in the
 /// window between the child writing its answer and us reading it would
 /// otherwise leave an `ocr.json` behind in the session directory, to ship to
 /// the editor alongside the screenshot. (`ocr.log` is deliberately kept — it
-/// is the diagnostic artefact.)
+/// is the diagnostic artifact.)
 struct ResponsePaths {
     response: PathBuf,
     /// `None` outside a session directory: an `ocr.log` per recognition in
@@ -214,7 +214,7 @@ fn upload(child: &mut Child, req: &OcrRequest, cancel: &AtomicBool) -> Result<()
     write(&mut stdin, &line)?;
     for chunk in req.bgra.chunks(CHUNK) {
         if cancel.load(Ordering::Acquire) {
-            return Err(cancelled());
+            return Err(canceled());
         }
         write(&mut stdin, chunk)?;
     }
@@ -229,7 +229,7 @@ fn wait(child: &mut Child, cancel: &AtomicBool, paths: &ResponsePaths) -> Result
     let started = std::time::Instant::now();
     loop {
         if cancel.load(Ordering::Acquire) {
-            return Err(cancelled());
+            return Err(canceled());
         }
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -275,12 +275,12 @@ fn panic_detail(paths: &ResponsePaths) -> String {
     }
 }
 
-/// The error a cancelled recognition reports. Only the OCR worker thread ever
+/// The error a canceled recognition reports. Only the OCR worker thread ever
 /// sees it — the worker re-checks its cancel flag after `recognize` returns
 /// and drops the result without setting the latch, so no user-facing path
 /// renders this string.
-fn cancelled() -> OcrError {
-    OcrError::Failed("cancelled".into())
+fn canceled() -> OcrError {
+    OcrError::Failed("canceled".into())
 }
 
 impl Drop for ResponsePaths {
@@ -294,7 +294,7 @@ impl Drop for ResponsePaths {
 ///
 /// `kill` on an already-exited process is a no-op that still needs its
 /// `wait`, so both run unconditionally: skipping the `wait` would leave a
-/// zombie on Unix, and skipping the `kill` would let a cancelled recognition
+/// zombie on Unix, and skipping the `kill` would let a canceled recognition
 /// run a full page to completion in the background, holding the engine while
 /// the next request spawns its own copy of it.
 struct ChildGuard(Child);
@@ -311,7 +311,7 @@ mod tests {
     use super::*;
     use clowd_rust_core::geometry::ScreenRect;
 
-    /// A capture with a session directory keeps both artefacts there; one
+    /// A capture with a session directory keeps both artifacts there; one
     /// without gets a collision-proof temp path and no log.
     #[test]
     fn response_paths_follow_the_session_dir_or_fall_back_to_temp() {
@@ -363,9 +363,9 @@ mod tests {
         assert!(outcome.lines.is_empty(), "blank image produced {:?}", outcome.lines);
         assert_eq!(outcome.full_text, "");
 
-        // An already-cancelled request must come back as an error rather than
+        // An already-canceled request must come back as an error rather than
         // a result, and must not leave the child running.
-        let err = recognize(&blank(160, 120), &AtomicBool::new(true), None).expect_err("a cancelled request must not produce an outcome");
+        let err = recognize(&blank(160, 120), &AtomicBool::new(true), None).expect_err("a canceled request must not produce an outcome");
         assert!(matches!(err, OcrError::Failed(_)), "unexpected error {err:?}");
     }
 }

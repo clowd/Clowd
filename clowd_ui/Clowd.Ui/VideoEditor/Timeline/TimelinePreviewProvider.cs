@@ -65,7 +65,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// so undo (which replaces the project instance) needs no notification here.</param>
         /// <param name="cacheDir">Where waveforms are cached between opens: the directory holding
         /// <c>videoedit.json</c>, or null in the <c>--video-edit</c> dev harness, which has no
-        /// session directory and analyses in memory.</param>
+        /// session directory and analyzes in memory.</param>
         public TimelinePreviewProvider(EditorSession session, string cacheDir)
         {
             ArgumentNullException.ThrowIfNull(session);
@@ -496,7 +496,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>
         /// Re-buckets one audio stream's peaks to the bucket size the current zoom asked for. The
-        /// SDK analyses at a fixed 200 buckets/s and the timeline draws roughly one bucket per
+        /// SDK analyzes at a fixed 200 buckets/s and the timeline draws roughly one bucket per
         /// pixel, so this is always a reduction: each output bucket takes the extremes of the SDK
         /// buckets it covers. The last result is kept — an unchanged (request, snapshot) pair is
         /// the common case while the user drags a playhead across a finished waveform.
@@ -539,12 +539,12 @@ namespace Clowd.UI.VideoEditor.Timeline
 
                 // complete once the analysis has passed the end of this item, even when the rest of
                 // the stream is still being decoded: the row is final and stops rebuilding.
-                var analysed = snapshot.IsComplete ||
+                var analyzed = snapshot.IsComplete ||
                     snapshot.ReadyTicks >= request.SourceInTicks + request.DurationTicks;
 
                 _snapshot = snapshot;
                 _request = request;
-                _peaks = new AudioPeaks(request.SourceInTicks, perBucket, minMax, analysed);
+                _peaks = new AudioPeaks(request.SourceInTicks, perBucket, minMax, analyzed);
                 return _peaks;
             }
         }

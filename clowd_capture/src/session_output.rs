@@ -9,7 +9,7 @@
 //! with `Clowd.Ui` (`SessionInfo`, MIGRATION.md §2.11) and documented in
 //! CAPTURE_PROTOCOL.md at the repo root.
 //!
-//! Actions the shell must perform are signalled through an `action.txt`
+//! Actions the shell must perform are signaled through an `action.txt`
 //! sidecar in the same directory: `upload` (session payload present,
 //! upload instead of edit) or `select-color #RRGGBB` (no session
 //! payload). No file means edit — the historical default.
@@ -68,7 +68,7 @@ pub fn write_session(
 }
 
 /// Write only the `action.txt` marker for a SELECT-COLOR capture: the
-/// shell opens its colour viewer with this colour and deletes the
+/// shell opens its color viewer with this color and deletes the
 /// directory — no session payload is produced.
 pub fn write_color_action(session_dir: &Path, r: u8, g: u8, b: u8) -> ActionResult {
     let write = std::fs::create_dir_all(session_dir)
@@ -509,7 +509,7 @@ fn write_session_inner(
     }
 
     // session.json — written last; the shell treats its presence as the
-    // success signal (missing file = capture cancelled).
+    // success signal (missing file = capture canceled).
     let origin = buffer.bounds.origin;
     let cropped_rect = selection.translate(euclid::Vector2D::new(-origin.x, -origin.y));
 

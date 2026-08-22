@@ -8,14 +8,14 @@ use crate::ui::gpu::rect::RectInstance;
 /// Dark outline behind every bright element.
 const HALO_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.55];
 /// The hairs inside the ring — white, so they stay legible over the accent
-/// ring's colour whatever it is.
+/// ring's color whatever it is.
 const HAIR_COLOR: [f32; 4] = [1.0, 1.0, 1.0, 0.95];
 /// AA fringe for the SDF (rounded) instances, matching the hints renderer.
 const AA: f32 = 1.5;
 
-/// Emit the reticle centred on the cursor. `layout` is in window-local
-/// physical pixels; `accent` is the user's accent colour, used for the
-/// ring, the outer ticks and the centre dot.
+/// Emit the reticle centered on the cursor. `layout` is in window-local
+/// physical pixels; `accent` is the user's accent color, used for the
+/// ring, the outer ticks and the center dot.
 pub fn emit_scope(rects: &mut Vec<RectInstance>, layout: &ScopeLayout, accent: [f32; 4]) {
     let cx = layout.center_x;
     let cy = layout.center_y;
@@ -54,13 +54,13 @@ pub fn emit_scope(rects: &mut Vec<RectInstance>, layout: &ScopeLayout, accent: [
         }
     }
 
-    // Centre dot — the exact point the wheel will be aimed at.
+    // Center dot — the exact point the wheel will be aimed at.
     push_disc(rects, cx, cy, layout.dot_radius + halo, HALO_COLOR);
     push_disc(rects, cx, cy, layout.dot_radius, accent);
 }
 
 /// The four arms of a cross: left, right, top, bottom, each spanning
-/// `inner..outer` from the centre.
+/// `inner..outer` from the center.
 fn arm_rects(cx: f32, cy: f32, inner: f32, outer: f32, thickness: f32) -> [[f32; 4]; 4] {
     let (x0, x1) = line_span(cx, thickness);
     let (y0, y1) = line_span(cy, thickness);
@@ -99,7 +99,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn arms_are_symmetric_about_the_centre() {
+    fn arms_are_symmetric_about_the_center() {
         let [left, right, top, bottom] = arm_rects(100.0, 100.0, 4.0, 12.0, 1.0);
         assert_eq!(left[0], 88.0);
         assert_eq!(left[2], 96.0);

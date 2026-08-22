@@ -117,7 +117,7 @@ pub struct PanelRenderer {
     /// sets share icons and have different lengths). Kept around so the
     /// atlas can be rebuilt at a new DPI without re-parsing.
     svg_trees: Vec<usvg::Tree>,
-    /// CPU-rasterised icon atlas, built lazily on the first `prepare()`
+    /// CPU-rasterized icon atlas, built lazily on the first `prepare()`
     /// and rebuilt whenever the target icon size (DPI) changes.
     atlas: Option<IconAtlas>,
     last_icon_px: u32,
@@ -301,7 +301,7 @@ impl PanelRenderer {
         rects.push(RectInstance::filled(ar - arm_px, ab - line_px, ar, ab, white));
         rects.push(RectInstance::filled(ar - line_px, ab - arm_px, ar, ab, white));
 
-        // Button icons (CPU-rasterised atlas).
+        // Button icons (CPU-rasterized atlas).
         let icon_px = ((ICON_UNSCALED_PX * dpi).round() as u32).max(1);
         if self.atlas.is_none() || self.last_icon_px != icon_px {
             self.atlas = Some(IconAtlas::build(device, queue, &self.svg_trees, icon_px));

@@ -152,9 +152,9 @@ namespace Clowd.UI.Config
             var editor = GetRowForProperty(pd);
 
             // [DisabledWhen] rows stay visible but stop responding (and dim) while the bool they
-            // defer to holds the disabling value — e.g. the manual accent colour while the OS
+            // defer to holds the disabling value — e.g. the manual accent color while the OS
             // accent is followed, or the scroll rewind while scrolling capture is switched off.
-            // The whole row dims, label and caption included: a greyed control beside a bright
+            // The whole row dims, label and caption included: a grayed control beside a bright
             // label reads as a broken control rather than as a switched-off option, and a run of
             // gated rows (the composition section) makes that especially obvious.
             var disabledWhen = GetFirstAttributeOrDefault<DisabledWhenAttribute>(pd);

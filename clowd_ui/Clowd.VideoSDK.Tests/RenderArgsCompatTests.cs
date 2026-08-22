@@ -483,7 +483,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Webcam_rect_becomes_a_normalized_transform()
         {
-            // 320x240 at (1560,780) in a 1920x1080 frame: centre (1720, 900), width 1/6 of the frame.
+            // 320x240 at (1560,780) in a 1920x1080 frame: center (1720, 900), width 1/6 of the frame.
             var project = Build(ArgsJson(
                 webcam: "{\"stream_index\":1,\"rect\":{\"x\":1560,\"y\":780,\"w\":320,\"h\":240}}")).Project;
 
@@ -504,7 +504,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Webcam_transform_round_trips_the_v1_overlay_geometry()
         {
-            // WebcamOverlay stores a normalized centre + width; the UI expanded it into pixels.
+            // WebcamOverlay stores a normalized center + width; the UI expanded it into pixels.
             // Expanding and mapping back must land on the original numbers.
             const double centerX = 0.82, centerY = 0.78, width = 0.2;
             int w = (int)Math.Round(width * ScreenW);          // 384

@@ -196,7 +196,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Mapping_scaled_item_offsets_and_scales_points()
         {
-            var transform = new Transform { Scale = 0.5 }; // 32x32 centred on 64x64
+            var transform = new Transform { Scale = 0.5 }; // 32x32 centered on 64x64
             Assert.True(PictureMapping.TryMap(transform, ItemEffects.Identity, W, H, W, H, out var map));
             Assert.Equal(0.5, map.ScaleX, 6);
             Assert.Equal(new SKPoint(16, 16), map.Map(0, 0));
@@ -212,7 +212,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.True(PictureMapping.TryMap(transform, ItemEffects.Identity, W, H, W, H, out var map));
             Assert.Equal(2.0, map.ScaleX, 6);
             Assert.Equal(new SKPoint(0, 0), map.Map(32, 0));   // region's left edge → canvas left
-            Assert.Equal(new SKPoint(32, 32), map.Map(48, 32)); // region centre → canvas centre
+            Assert.Equal(new SKPoint(32, 32), map.Map(48, 32)); // region center → canvas center
         }
 
         [Fact]
@@ -243,12 +243,12 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void ResolveGlyph_draws_the_asked_for_colourway()
+        public void ResolveGlyph_draws_the_asked_for_colorway()
         {
             Assert.Same(CursorAssets.TryGet("vision", "light", "hand"),
                 CursorCompose.ResolveGlyph("vision", "light", CursorKind.Hand));
 
-            // an unrecognised colourway is the style's default, not a miss
+            // an unrecognized colorway is the style's default, not a miss
             Assert.Same(CursorAssets.TryGet("vision", "dark", "hand"),
                 CursorCompose.ResolveGlyph("vision", "sepia", CursorKind.Hand));
             Assert.Same(CursorAssets.TryGet("vision", "dark", "hand"),
@@ -335,7 +335,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void The_hotspot_pins_the_sprite_to_the_captured_position()
         {
-            // hotspot (4,4) on an 8px sprite: the frame position (32,32) is the sprite's centre,
+            // hotspot (4,4) on an 8px sprite: the frame position (32,32) is the sprite's center,
             // so its ink covers [28,36) rather than [32,40)
             var p = NewProject();
             string capture = WriteCapture(Header,
@@ -746,7 +746,7 @@ namespace Clowd.VideoSDK.Tests
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
 
-            // 2x zoom about the centre maps the hotspot (16,16) → (0,0): the sprite must land
+            // 2x zoom about the center maps the hotspot (16,16) → (0,0): the sprite must land
             // at the canvas corner with the zoomed pixels, not stay at the unzoomed (16,16).
             AssertColor(Px(px, 2, 2), 0, 0, 255);
             AssertColor(Px(px, 24, 24), 255, 0, 0);
@@ -788,7 +788,7 @@ namespace Clowd.VideoSDK.Tests
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, (long)(1.2 * Sec), frames);
 
-            var inside = Px(px, 30, 20); // 10px from centre, well inside radius 25
+            var inside = Px(px, 30, 20); // 10px from center, well inside radius 25
             Assert.True(inside.R > 60, $"expected red tint inside the ripple, got R={inside.R}");
             AssertColor(Px(px, 56, 8), 255, 0, 0, tolerance: 3); // outside the ripple: pure blue
 
@@ -1000,13 +1000,13 @@ namespace Clowd.VideoSDK.Tests
             using var frames = new MultiStreamSource().Set(0, Blue, 64);
             var px = Render(p, 5 * Sec, frames);
 
-            // the outline (stroke centre at radius 18) is the colour, near enough opaque
+            // the outline (stroke center at radius 18) is the color, near enough opaque
             Assert.True(Px(px, 50, 32).R > 150, "no ring outline at the resting radius");
 
             // inside it the default 15% fill barely tints the screen
-            var centre = Px(px, 32, 32);
-            Assert.InRange(centre.R, 20, 80);
-            Assert.True(centre.B > 150, "the fill should stay translucent");
+            var center = Px(px, 32, 32);
+            Assert.InRange(center.R, 20, 80);
+            Assert.True(center.B > 150, "the fill should stay translucent");
 
             // and past the ring the screen is untouched
             AssertColor(Px(px, 56, 32), 255, 0, 0, tolerance: 3);

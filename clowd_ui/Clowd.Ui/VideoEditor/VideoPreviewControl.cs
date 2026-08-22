@@ -361,7 +361,7 @@ namespace Clowd.UI.VideoEditor
         /// frame is on screen rather than cropped by the window.</summary>
         private const double LetterboxPadding = 12;
 
-        /// <summary>Stretch.Uniform of the video frame into the control bounds, centred — capped at
+        /// <summary>Stretch.Uniform of the video frame into the control bounds, centered — capped at
         /// 100% when <see cref="FitToWindow"/> is off. Also publishes <see cref="ZoomScale"/>: the
         /// cap is expressed in device pixels, so 100% means one video pixel per device pixel on a
         /// scaled display too, not one per DIP.</summary>
@@ -378,7 +378,7 @@ namespace Clowd.UI.VideoEditor
             if (renderScaling <= 0)
                 renderScaling = 1.0;
 
-            // the fit is computed against the padded box, but the result is still centred in the
+            // the fit is computed against the padded box, but the result is still centered in the
             // full bounds — a preview area too small to hold the gap keeps the picture rather than
             // collapsing it to nothing.
             var fitWidth = Math.Max(1, finalSize.Width - (LetterboxPadding * 2));

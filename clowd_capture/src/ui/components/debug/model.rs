@@ -13,7 +13,7 @@ use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 pub const COLOR_WHITE: [u8; 4] = [0xFF, 0xFF, 0xFF, 0xFF];
 
-/// Reusable line buffer with per-line colour. Holds `Vec<String>` across
+/// Reusable line buffer with per-line color. Holds `Vec<String>` across
 /// frames so the debug panel's per-line `format!` calls can write into
 /// existing allocations via `String::clear()` + `write!`. After the first
 /// few frames no allocation happens unless the rendered text grows (which
@@ -328,7 +328,7 @@ impl<'a> PrimaryPanelData<'a> {
             }
             // `prep_ui_pipelines`/`prep_fonts` moved off the critical path onto
             // the deferred builder thread, so they are no longer phases BETWEEN
-            // neighbouring critical-path marks: the two jobs run concurrently
+            // neighboring critical-path marks: the two jobs run concurrently
             // (fonts can land first), and the whole build routinely outlives
             // frame 0. Shown as absolute offsets at the end of the worker's
             // block — a delta against `prep_pipelines` would report the deferred

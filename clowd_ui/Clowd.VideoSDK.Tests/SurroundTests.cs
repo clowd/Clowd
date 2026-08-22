@@ -11,7 +11,7 @@ using Xunit;
 namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
-    /// The item surround (shadow / glow / outline): the model's own rules, the fraction→pixel maths
+    /// The item surround (shadow / glow / outline): the model's own rules, the fraction→pixel math
     /// the compositor and the editor's tiles share, and the inspector's SURROUND section — which
     /// items offer it, what a style change seeds, that a dial writes the whole row, and what the
     /// tiles preview. Framework-free like <see cref="EffectInspectorTests"/> — no Avalonia here.
@@ -206,7 +206,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(SurroundMath.CreateDecoration(null, 100));
             Assert.Null(SurroundMath.CreateDecoration(
                 new Surround { Kind = SurroundKind.Shadow, Size = 0.1 }, extentPx: 0));
-            // a transparent colour, a shadow with nowhere to fall and no blur, a glow with no
+            // a transparent color, a shadow with nowhere to fall and no blur, a glow with no
             // spread, and an outline thinner than half a pixel all draw nothing
             Assert.Null(SurroundMath.CreateDecoration(
                 new Surround { Kind = SurroundKind.Glow, Color = 0x00FFFFFF, Size = 0.2 }, 100));
@@ -326,7 +326,7 @@ namespace Clowd.VideoSDK.Tests
             vm.SurroundDistance = Double.NaN;
             Assert.Equal(0, vm.SurroundDistance);
 
-            // a half-typed colour stays in the well and never reaches the model
+            // a half-typed color stays in the well and never reaches the model
             vm.SurroundColorHex = "#40FF";
             Assert.All(RowSurrounds(session, video), e => Assert.Equal(0x4000FF00u, e.Color));
         }

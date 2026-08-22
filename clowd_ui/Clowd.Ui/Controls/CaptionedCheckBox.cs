@@ -6,7 +6,7 @@ using Avalonia.Input;
 namespace Clowd.UI.Controls
 {
     /// <summary>
-    /// The editor properties-bar checkbox: a small check over a caption. A labelled CheckBox is the
+    /// The editor properties-bar checkbox: a small check over a caption. A labeled CheckBox is the
     /// wrong shape there — the bar is 30px tall and its labels read as captions, not as content
     /// beside a box — so the check is scaled into a Viewbox and the word goes underneath it.
     ///

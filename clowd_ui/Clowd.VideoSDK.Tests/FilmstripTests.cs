@@ -13,9 +13,9 @@ using ThumbnailRequest = Clowd.UI.VideoEditor.Timeline.ThumbnailRequest;
 
 namespace Clowd.VideoSDK.Tests
 {
-    // Real-decode round trips for the timeline filmstrip. The fixture is one distinct solid colour
-    // per second, so a thumbnail's own centre pixel says which second it was decoded from: every
-    // colour assertion below is really "this thumbnail is at the source time it claims to be at",
+    // Real-decode round trips for the timeline filmstrip. The fixture is one distinct solid color
+    // per second, so a thumbnail's own center pixel says which second it was decoded from: every
+    // color assertion below is really "this thumbnail is at the source time it claims to be at",
     // which is the only property a filmstrip has to get right.
     //
     // Scheduling is injected, so the two-tier pass runs synchronously inside the call that triggers
@@ -29,9 +29,9 @@ namespace Clowd.VideoSDK.Tests
         private const long Second = TimeBase.TicksPerSecond;
         private const long FrameDurTicks = Second / Fps;
 
-        /// <summary>One colour per second, as BGR. No two are closer than 70 units on their
-        /// furthest channel, so a yuv420p round trip (which moves a solid colour by single digits)
-        /// can never carry a frame closer to a neighbour's colour than to its own.</summary>
+        /// <summary>One color per second, as BGR. No two are closer than 70 units on their
+        /// furthest channel, so a yuv420p round trip (which moves a solid color by single digits)
+        /// can never carry a frame closer to a neighbor's color than to its own.</summary>
         private static readonly (byte B, byte G, byte R)[] Palette =
         {
             (60, 60, 60), (200, 60, 60), (60, 200, 60), (60, 60, 200), (200, 200, 60),
@@ -76,7 +76,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>Encodes (once per test) a 10 s mp4 whose every second is a different solid
-        /// colour. Ten seconds is past x264's default keyframe interval, so the stream is
+        /// color. Ten seconds is past x264's default keyframe interval, so the stream is
         /// guaranteed more than one keyframe even if scene-cut detection never fires.</summary>
         private string ColorFixture()
         {
@@ -181,7 +181,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>The real scheduler's shape in miniature: one worker thread, items removed when
-        /// their handle is disposed before they start, token cancelled when it is disposed after.
+        /// their handle is disposed before they start, token canceled when it is disposed after.
         /// The gate lets a test hold an item in the queue and prove it is dropped rather than
         /// decoded.</summary>
         private sealed class ThreadQueue : IThumbWorkQueue, IDisposable
@@ -219,7 +219,7 @@ namespace Clowd.VideoSDK.Tests
                 foreach (var item in _items.GetConsumingEnumerable())
                 {
                     _gate.Wait();
-                    if (item.Cancelled)
+                    if (item.Canceled)
                     {
                         Interlocked.Increment(ref _dropped);
                         continue;
@@ -246,11 +246,11 @@ namespace Clowd.VideoSDK.Tests
 
                 public readonly Action<CancellationToken> Work;
                 public readonly CancellationTokenSource Cts = new CancellationTokenSource();
-                public volatile bool Cancelled;
+                public volatile bool Canceled;
 
                 public void Dispose()
                 {
-                    Cancelled = true;
+                    Canceled = true;
                     Cts.Cancel();
                 }
             }
@@ -265,7 +265,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>Which palette entry a decoded pixel is, plus how far off it landed — the codec
-        /// round trip moves solid colours by a few units, never by a hundred.</summary>
+        /// round trip moves solid colors by a few units, never by a hundred.</summary>
         private static (int Index, int Distance) NearestColor((byte B, byte G, byte R) px)
         {
             int best = 0, bestDistance = Int32.MaxValue;
@@ -285,7 +285,7 @@ namespace Clowd.VideoSDK.Tests
         private static void AssertColorOfSecond(int second, FilmstripThumbnail thumb, string what)
         {
             var (index, distance) = NearestColor(CenterPixel(thumb));
-            Assert.True(distance <= 30, $"{what}: centre pixel {CenterPixel(thumb)} is not a palette colour (off by {distance}).");
+            Assert.True(distance <= 30, $"{what}: center pixel {CenterPixel(thumb)} is not a palette color (off by {distance}).");
             Assert.Equal(second % Palette.Length, index);
         }
 
@@ -373,7 +373,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Keyframe_pass_thumbnails_show_the_colour_of_their_own_timestamp()
+        public void Keyframe_pass_thumbnails_show_the_color_of_their_own_timestamp()
         {
             RequireFFmpeg();
             string fixture = ColorFixture();
@@ -406,7 +406,7 @@ namespace Clowd.VideoSDK.Tests
                 Assert.Equal(thumb.Stride * thumb.Height, thumb.Pixels.Length);
 
                 // sample the middle of the frame's display interval, so a pts that rounded a tick
-                // the wrong way cannot move it across a colour change
+                // the wrong way cannot move it across a color change
                 long frame = TimeBase.TicksToFrameIndex(thumb.SourceTicks + FrameDurTicks / 2, Fps, 1);
                 AssertColorOfSecond((int)(frame / Fps), thumb, $"keyframe at {thumb.SourceTicks}");
             }
@@ -441,7 +441,7 @@ namespace Clowd.VideoSDK.Tests
                     $"grid slot {slot} is only covered by a thumbnail at {thumb.SourceTicks}");
 
                 // the covering frame is the last one at or before the slot; when that is the first
-                // or last frame of a second, a one-frame difference is a different colour and the
+                // or last frame of a second, a one-frame difference is a different color and the
                 // assertion would be about pts rounding rather than about the filmstrip
                 long frame = TimeBase.TicksToFrameIndex(slot, Fps, 1);
                 if (frame % Fps <= 1 || frame % Fps >= Fps - 1)
@@ -453,7 +453,7 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>A cut recording's viewport is a list of kept-segment spans, not their union:
         /// refinement must fill each visible span and never decode the removed material between
-        /// them (with a union, the picker centres on the middle of the cut and the visible strips
+        /// them (with a union, the picker centers on the middle of the cut and the visible strips
         /// never refine at all).</summary>
         [Fact]
         public void Refinement_fills_each_visible_span_and_skips_the_cut_between_them()

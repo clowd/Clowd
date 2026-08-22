@@ -401,7 +401,7 @@ namespace Clowd.UI
         /// tears the PopupRoot down mid-dispatch (Avalonia logs "PlatformImpl is null, couldn't
         /// handle input"), and the click is simply lost: the first drag does nothing and the
         /// second — with no tip open yet — works. Anchoring to the control keeps the tip clear of
-        /// both the cursor and the neighbouring buttons, which is why the side follows the
+        /// both the cursor and the neighboring buttons, which is why the side follows the
         /// rotation rather than being fixed.
         /// </remarks>
         private void UpdateToolTipPlacement()

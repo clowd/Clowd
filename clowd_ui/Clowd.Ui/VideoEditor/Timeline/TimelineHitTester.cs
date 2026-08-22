@@ -126,7 +126,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
 
         /// <summary>Coincident-edge epsilon: rects come from two float paths (<c>X + Width</c> vs
-        /// the neighbour's own <c>X</c>) that can differ by an ULP, which must still count as a
+        /// the neighbor's own <c>X</c>) that can differ by an ULP, which must still count as a
         /// tie rather than an arbitrary winner.</summary>
         private const double EdgeTieEpsilon = 1e-6;
 

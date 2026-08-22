@@ -10,7 +10,7 @@
 
         <!-- One joined pill: the segments touch, so only the outer corners are rounded (the bar puts
              the first/last classes on them) and only the first segment draws a left border — every
-             other one lets its neighbour's right border be the divider, which is what keeps the
+             other one lets its neighbor's right border be the divider, which is what keeps the
              seam 1px rather than 2. Accent-filled while active.
 
              Templated rather than styled on top of Semi's ToggleButton so the resting / hover /
@@ -64,7 +64,7 @@
         </ControlTheme>
 
         <!-- The collapsed strip: one pill wearing the resting segment chrome, carrying the selected
-             label and a chevron. Never drawn in the checked colours — it stands for the whole
+             label and a chevron. Never drawn in the checked colors — it stands for the whole
              strip, not for the option that happens to be active. -->
         <ControlTheme x:Key="ClowdSegmentedDropDown" TargetType="Button">
             <Setter Property="Padding" Value="12,5" />

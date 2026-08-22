@@ -13,7 +13,7 @@ pub const BODY_FONT_PX: f32 = 12.0;
 /// Sparkline graph height (pre-DPI). Covers enough vertical range to see
 /// one budget line plus spikes above it without dominating the panel.
 pub const GRAPH_HEIGHT: f32 = 60.0;
-/// Extra height reserved below the sparkline for its colour legend row
+/// Extra height reserved below the sparkline for its color legend row
 /// (swatches + short labels). Pre-DPI.
 pub const LEGEND_HEIGHT: f32 = 16.0;
 

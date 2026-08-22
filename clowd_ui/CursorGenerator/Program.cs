@@ -196,7 +196,7 @@ internal class Program
     private const float HandOffsetX = 5f;
     private const float HandOffsetY = 4f;
 
-    /// <summary>Open hand. Hotspot at the palm centre.</summary>
+    /// <summary>Open hand. Hotspot at the palm center.</summary>
     private static Point DrawGrabHand(float scale, int lineWidth, Graphics g)
     {
         PointF S(float x, float y) =>
@@ -257,7 +257,7 @@ internal class Program
         return new Point((int)S(17.5f, 21f).X, (int)S(17.5f, 21f).Y);
     }
 
-    /// <summary>Closed fist. Hotspot at the palm centre.</summary>
+    /// <summary>Closed fist. Hotspot at the palm center.</summary>
     private static Point DrawGrabbingHand(float scale, int lineWidth, Graphics g)
     {
         PointF S(float x, float y) =>
@@ -321,7 +321,7 @@ internal class Program
     /// with a white halo. Axis-aligned pixel art, so it is built the way DrawRuler is — every
     /// coordinate rounded to a pixel boundary, 1px features sized by lineWidth, HighQuality
     /// pixel offset — rather than from fractional geometry the rasterizer has to smear.
-    /// Hotspot dead centre between the bars, on the arrows' axis.</summary>
+    /// Hotspot dead center between the bars, on the arrows' axis.</summary>
     private static Point DrawColResize(float scale, int lineWidth, Graphics g)
     {
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
@@ -510,7 +510,7 @@ internal class Program
     private static void DrawRuler(float scale, int lineWidth, Graphics g)
     {
         // every edge here is axis aligned, so the shape is built from fills rather than pens:
-        // a centred pen of width lineWidth*2 leaves a one pixel border on two sides and two on
+        // a centered pen of width lineWidth*2 leaves a one pixel border on two sides and two on
         // the others once the interior is filled over it, which is visible at 32px
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 

@@ -36,7 +36,7 @@ namespace Clowd.UI.Services
 
         public string ProgressText => $"{Progress:0}%";
 
-        public bool IsCancelled { get; private set; }
+        public bool IsCanceled { get; private set; }
 
         /// <summary>Bindable form of <see cref="Cancel"/>, for hosts that prefer a command to a
         /// click handler (the Recent page uses the handler, like the gif row does).</summary>
@@ -54,21 +54,21 @@ namespace Clowd.UI.Services
             {
                 Text = "Cancel",
                 Executed = _ => Cancel(),
-                CanExecute = _ => !IsCancelled,
+                CanExecute = _ => !IsCanceled,
             };
         }
 
-        /// <summary>Asks the render to stop. The row stays on the page (showing "Cancelling…")
+        /// <summary>Asks the render to stop. The row stays on the page (showing "Canceling…")
         /// until the process is actually gone, at which point the manager removes it — unlike an
         /// upload, there is a child process that must be given a chance to clean up its partial
         /// output first.</summary>
         public void Cancel()
         {
-            if (IsCancelled)
+            if (IsCanceled)
                 return;
 
-            IsCancelled = true;
-            PostStatus("Cancelling…");
+            IsCanceled = true;
+            PostStatus("Canceling…");
             _ = CancelCoreAsync();
         }
 
@@ -91,7 +91,7 @@ namespace Clowd.UI.Services
         {
             Dispatcher.UIThread.Post(() =>
             {
-                if (IsCancelled)
+                if (IsCanceled)
                     return;
 
                 Progress = Math.Clamp(percent, 0, 100);
@@ -111,7 +111,7 @@ namespace Clowd.UI.Services
     /// in the out-of-process <c>Clowd.VideoRender</c> tool. The render is surfaced as its own Recent-page entry
     /// named "Rendered Video" carrying a <see cref="SessionInfo.ActiveRender"/> while it runs; when it
     /// finishes the entry drops the render and behaves like any other video entry, and when it is
-    /// cancelled or fails the entry is removed again. Re-rendering the same recording replaces the
+    /// canceled or fails the entry is removed again. Re-rendering the same recording replaces the
     /// entry it made last time rather than accumulating them.
     /// </summary>
     public static class VideoRenderManager
@@ -449,7 +449,7 @@ namespace Clowd.UI.Services
                     Toast.Show(Toast.GetActiveOrMainWindow(), "Video saved");
                     break;
 
-                case VidRenderOutcome.Cancelled:
+                case VidRenderOutcome.Canceled:
                     DeleteQuietly(session);
                     DeletePartialOutput(outputPath);
                     break;

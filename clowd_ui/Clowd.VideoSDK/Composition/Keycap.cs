@@ -20,7 +20,7 @@ namespace Clowd.VideoSDK.Composition
         private static readonly SKColor SeatColor = SKColors.Black;
         private static readonly SKColor LegendColor = SKColors.White;
 
-        private readonly SKFont _centred;
+        private readonly SKFont _centered;
         private readonly SKFont _legend;
 
         public Keycap(SKTypeface typeface, float fontPx, float rowHeight)
@@ -34,7 +34,7 @@ namespace Clowd.VideoSDK.Composition
             IconSize = Height * 0.40f;
 
             // legends are smaller than the typing they sit beside, as they are on a real keyboard
-            _centred = new SKFont(typeface, fontPx * 0.78f) { Subpixel = true };
+            _centered = new SKFont(typeface, fontPx * 0.78f) { Subpixel = true };
             _legend = new SKFont(typeface, fontPx * 0.60f) { Subpixel = true };
         }
 
@@ -58,7 +58,7 @@ namespace Clowd.VideoSDK.Composition
         private float IconSize { get; }
 
         /// <summary>Wide keys wear their legend bottom-left with an icon top-right, the way the
-        /// real keys are moulded; everything else centres its legend.</summary>
+        /// real keys are molded; everything else centers its legend.</summary>
         private static bool IsWide(string label) => label is
             "Ctrl" or "Shift" or "Alt" or "Win" or "Enter" or "Tab" or "Space" or "Bksp" or "Caps";
 
@@ -74,15 +74,15 @@ namespace Clowd.VideoSDK.Composition
                 return Height;
             if (IsWide(label))
                 return Math.Max(Height * 1.7f, _legend.MeasureText(label) + IconSize + 3 * PadX);
-            return Math.Max(Height, _centred.MeasureText(label) + 2 * PadX);
+            return Math.Max(Height, _centered.MeasureText(label) + 2 * PadX);
         }
 
         /// <summary>Draws the cap with its left edge at <paramref name="left"/>, its footprint
-        /// centred on <paramref name="centreY"/>.</summary>
-        public void Draw(SKCanvas canvas, string label, float left, float centreY, double alpha)
+        /// centered on <paramref name="centerY"/>.</summary>
+        public void Draw(SKCanvas canvas, string label, float left, float centerY, double alpha)
         {
             float width = Width(label);
-            float top = centreY - TotalHeight / 2;
+            float top = centerY - TotalHeight / 2;
             var face = new SKRect(left, top, left + width, top + Height);
             var seat = new SKRect(left, top + BaseDrop, left + width, top + Height + BaseDrop);
 
@@ -120,17 +120,17 @@ namespace Clowd.VideoSDK.Composition
             }
 
             paint.Color = ink;
-            canvas.DrawText(label, face.MidX, Baseline(_centred, face.MidY),
-                SKTextAlign.Center, _centred, paint);
+            canvas.DrawText(label, face.MidX, Baseline(_centered, face.MidY),
+                SKTextAlign.Center, _centered, paint);
         }
 
-        /// <summary>The baseline that centres a line's ink on <paramref name="centreY"/>, from the
+        /// <summary>The baseline that centers a line's ink on <paramref name="centerY"/>, from the
         /// font's real ascent/descent rather than a guess at the cap height — the fix for text
         /// riding high in its pill.</summary>
-        public static float Baseline(SKFont font, float centreY)
+        public static float Baseline(SKFont font, float centerY)
         {
             var metrics = font.Metrics;
-            return centreY - (metrics.Ascent + metrics.Descent) / 2;
+            return centerY - (metrics.Ascent + metrics.Descent) / 2;
         }
 
         public static SKColor Fade(SKColor color, double alpha)
@@ -141,7 +141,7 @@ namespace Clowd.VideoSDK.Composition
 
         public void Dispose()
         {
-            _centred.Dispose();
+            _centered.Dispose();
             _legend.Dispose();
         }
 

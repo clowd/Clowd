@@ -150,7 +150,7 @@ namespace Clowd.UI
             AddHandler(KeyUpEvent, OnTunnelKeyUp, RoutingStrategies.Tunnel);
 
             // feeds the "has this editor been touched lately" test that gates background update
-            // restarts (IdleMonitor). Tunnelling handlers so they see the input regardless of
+            // restarts (IdleMonitor). Tunneling handlers so they see the input regardless of
             // which child control ends up handling it.
             AddHandler(KeyDownEvent, (object s, KeyEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
             AddHandler(PointerPressedEvent, (object s, PointerPressedEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
@@ -183,7 +183,7 @@ namespace Clowd.UI
             btnUpload.AddHandler(PointerPressedEvent, btnUpload_RightMouseDown, RoutingStrategies.Tunnel);
 
             miniColor.ParentWindow = this;
-            miniColor.Cancelled += (_, _) => miniColorPopup.IsOpen = false;
+            miniColor.Canceled += (_, _) => miniColorPopup.IsOpen = false;
 
             // opt-in editor features (customizable toolbar / layers sidebar). The sidebar is
             // per-window and always starts closed, so the strip renders exactly as before plus the
@@ -521,7 +521,7 @@ namespace Clowd.UI
             // pressed-set repeat tracker (decision table #37)
             bool isRepeat = !_pressedKeys.Add(e.Key);
 
-            // An open mini colour picker owns Escape and Enter, and neither may reach the canvas
+            // An open mini color picker owns Escape and Enter, and neither may reach the canvas
             // underneath (Escape cancels the in-progress drawing operation). Checked ahead of the
             // TextBox bail-out so the keys still work from the hex field. The picker hooks its own
             // popup root as well — that path handles the usual case where the popup holds focus.

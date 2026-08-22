@@ -163,7 +163,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(3, OrderOf(session, webcamTrack.Id));
             Assert.Empty(session.Project.Validate());
 
-            // keyboard placement is the item's transform: bottom-centre anchor, half width.
+            // keyboard placement is the item's transform: bottom-center anchor, half width.
             Assert.Equal(0.5, keys.Transform.X);
             Assert.Equal(0.85, keys.Transform.Y);
             Assert.Equal(0.5, keys.Transform.Scale);

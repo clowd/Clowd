@@ -84,7 +84,7 @@ namespace Clowd.VideoSDK.Composition
         /// the effect is a dent in the page, not a lens.</summary>
         public const double PressRadiusDip = 100.0;
 
-        /// <summary>The sampling stretch at the very centre of a fully-engaged press — how hard
+        /// <summary>The sampling stretch at the very center of a fully-engaged press — how hard
         /// the paper is pushed down.</summary>
         public const double PressMaxAmount = 0.30;
 
@@ -103,7 +103,7 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>The mode a wire name selects; <see cref="HighlightMode.None"/> for anything
-        /// unrecognised.</summary>
+        /// unrecognized.</summary>
         public static HighlightMode ModeOf(string animation)
         {
             if (string.Equals(animation, "ripple", StringComparison.OrdinalIgnoreCase))
@@ -141,7 +141,7 @@ namespace Clowd.VideoSDK.Composition
         public static double DurationMsAt(double animationSpeed) => DurationMs / Factor(animationSpeed);
 
         /// <summary>The circle's opacity at <paramref name="progress"/>, before the highlight
-        /// colour's own alpha and the item's opacity are folded in.</summary>
+        /// color's own alpha and the item's opacity are folded in.</summary>
         public static double Opacity(double progress) => (1 - progress) * MaxOpacity;
 
         /// <summary>

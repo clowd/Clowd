@@ -74,7 +74,7 @@ Anything longer than its English source by more than roughly half is worth a sec
 2. Translate the `<value>` elements **only**. Leave `name` attributes, `<comment>` elements, the
    `<xsd:schema>` block and the `<resheader>` entries exactly as they are.
 3. Keep the file sorted by key, same order as `Strings.resx`, so diffs stay readable.
-4. Run `dotnet test clowd_ui/Clowd.Shared.Tests`. The localisation tests check key parity,
+4. Run `dotnet test clowd_ui/Clowd.Shared.Tests`. The localization tests check key parity,
    placeholder arity and key syntax.
 5. Build and run — the new language shows up in the General settings language list automatically.
 
@@ -97,7 +97,7 @@ This is the intended way to produce and maintain a translation:
 2. Ask it to produce the complete target file, with these instructions:
    - translate `<value>` only; preserve every `name` attribute and `<comment>` verbatim,
    - preserve the placeholder index set of each English string,
-   - honour the length limits above,
+   - honor the length limits above,
    - keep product and brand names untranslated,
    - use the register of a desktop utility: short, plain, imperative for buttons.
 3. Save the result, run `dotnet test clowd_ui/Clowd.Shared.Tests`, and feed any failure message

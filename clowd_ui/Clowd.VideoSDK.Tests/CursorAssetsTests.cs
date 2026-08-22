@@ -11,13 +11,13 @@ namespace Clowd.VideoSDK.Tests
     /// The themed cursor artwork table: every stored path must round-trip through
     /// <c>SKPath.ParseSvgPathData</c> (the store is generated SVG, so a bad edit would only surface
     /// as a silently missing cursor at compose time), every glyph must stay inside its viewBox with
-    /// its hotspot on the ink, and the lookup must degrade to null rather than throw. Colourways
+    /// its hotspot on the ink, and the lookup must degrade to null rather than throw. Colorways
     /// are held to the same bar: every one a style declares must resolve to real artwork, and one
     /// it does not declare must fall back to its default rather than draw nothing.
     /// </summary>
     public class CursorAssetsTests
     {
-        /// <summary>Every (style, colourway) pair the table offers — a style with one colourway
+        /// <summary>Every (style, colorway) pair the table offers — a style with one colorway
         /// contributes a single null-variant pair, which is the two-argument lookup.</summary>
         private static IEnumerable<(string Style, string Variant)> AllStyles()
         {
@@ -71,24 +71,24 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Every_pack_covers_every_kind_in_every_colourway()
+        public void Every_pack_covers_every_kind_in_every_colorway()
         {
             foreach (var (style, variant) in AllStyles())
                 foreach (var kind in CursorAssets.Kinds)
                     Assert.NotNull(CursorAssets.TryGet(style, variant, kind));
         }
 
-        /// <summary>Every style offers colourways, and the first is what an unset variant draws.
+        /// <summary>Every style offers colorways, and the first is what an unset variant draws.
         /// The iDarques packs offer the dark/light pair they are authored in; a ful1e5 pack offers
         /// whatever its own repository's themes are, so the test holds the shape and not the
         /// names.</summary>
         [Fact]
-        public void Every_style_declares_its_colourways_and_leads_with_its_default()
+        public void Every_style_declares_its_colorways_and_leads_with_its_default()
         {
             foreach (var style in CursorAssets.Styles)
             {
                 var variants = CursorAssets.Variants(style);
-                Assert.True(variants.Count >= 2, $"{style}: a style with one colourway needs none");
+                Assert.True(variants.Count >= 2, $"{style}: a style with one colorway needs none");
                 Assert.All(variants, v => Assert.False(string.IsNullOrWhiteSpace(v.Id)));
                 Assert.All(variants, v => Assert.False(string.IsNullOrWhiteSpace(v.Label)));
                 Assert.Equal(variants.Count, variants.Select(v => v.Id).Distinct().Count());
@@ -108,9 +108,9 @@ namespace Clowd.VideoSDK.Tests
             Assert.Empty(CursorAssets.Variants(null));
         }
 
-        /// <summary>The SVG-sourced packs' colourways, which are their own sources' theme lists.
+        /// <summary>The SVG-sourced packs' colorways, which are their own sources' theme lists.
         /// Bibata's are the six the editor offers: three palettes on each of the pack's two edge
-        /// sets, left-hand only. Neon's are the eight colour folders it ships.</summary>
+        /// sets, left-hand only. Neon's are the eight color folders it ships.</summary>
         [Theory]
         [InlineData("bibata", "amber-r|amber-s|classic-r|classic-s|ice-r|ice-s",
             "Amber R|Amber S|Classic R|Classic S|Ice R|Ice S")]
@@ -119,14 +119,14 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("fuchsia", "fuchsia|pop|red|amber", "Fuchsia|Pop|Red|Amber")]
         [InlineData("neon", "blue|cyan|green|yellow|orange|red|pink|purple",
             "Blue|Cyan|Green|Yellow|Orange|Red|Pink|Purple")]
-        public void A_packs_colourways_are_its_own_themes(string style, string ids, string labels)
+        public void A_packs_colorways_are_its_own_themes(string style, string ids, string labels)
         {
             Assert.Equal(ids.Split('|'), CursorAssets.Variants(style).Select(v => v.Id).ToArray());
             Assert.Equal(labels.Split('|'), CursorAssets.Variants(style).Select(v => v.Label).ToArray());
         }
 
         [Fact]
-        public void An_unknown_colourway_resolves_to_the_styles_default_rather_than_nothing()
+        public void An_unknown_colorway_resolves_to_the_styles_default_rather_than_nothing()
         {
             Assert.Equal("dark", CursorAssets.ResolveVariant("vision", null));
             Assert.Equal("dark", CursorAssets.ResolveVariant("vision", "sepia"));
@@ -141,13 +141,13 @@ namespace Clowd.VideoSDK.Tests
                 CursorAssets.TryGet("vision", CursorAssets.KindArrow));
         }
 
-        /// <summary>An iDarques pack's colourways are one geometry drawn in two palettes — nothing
+        /// <summary>An iDarques pack's colorways are one geometry drawn in two palettes — nothing
         /// about the shapes, hotspots or halo widths may differ between them, which is the property
         /// that lets the picker present the choice as a palette and nothing more.</summary>
         [Theory]
         [InlineData("vision")]
         [InlineData("point")]
-        public void A_packs_colourways_are_one_geometry_in_two_palettes(string style)
+        public void A_packs_colorways_are_one_geometry_in_two_palettes(string style)
         {
             foreach (var kind in CursorAssets.Kinds)
             {
@@ -168,9 +168,9 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>
         /// The same property for the SVG-sourced packs, which reach it a different way: their themes
-        /// are a colour map over one set of SVGs, so two themes of one pack are the same geometry
+        /// are a color map over one set of SVGs, so two themes of one pack are the same geometry
         /// unless they name different artwork. Bibata is the one that does — its <c>R</c> and
-        /// <c>S</c> colourways are the pack's rounded and sharp edge sets — so geometry is compared
+        /// <c>S</c> colorways are the pack's rounded and sharp edge sets — so geometry is compared
         /// within an edge set, and across the two only to prove they really are different drawings.
         /// </summary>
         [Theory]
@@ -180,7 +180,7 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("macos", "black", "white")]
         [InlineData("fuchsia", "fuchsia", "amber")]
         [InlineData("neon", "blue", "purple")]
-        public void A_packs_themes_are_one_geometry_recoloured(string style, string a, string b)
+        public void A_packs_themes_are_one_geometry_recolored(string style, string a, string b)
         {
             foreach (var kind in CursorAssets.Kinds)
             {
@@ -218,13 +218,13 @@ namespace Clowd.VideoSDK.Tests
             }
 
             // the pack shares a few cursors between its sets (the crosshair, the pencil); most are
-            // drawn twice, and a build that silently pointed both colourways at one folder would
+            // drawn twice, and a build that silently pointed both colorways at one folder would
             // show none differing at all
             Assert.True(differing >= 8, $"only {differing} kinds differ between Bibata's edge sets");
         }
 
         /// <summary>A theme really is applied: two themes of a pack paint the same layer different
-        /// colours. Catches a palette that never reached the loader, which no geometry check would
+        /// colors. Catches a palette that never reached the loader, which no geometry check would
         /// notice.</summary>
         [Theory]
         [InlineData("bibata", "amber-r", "ice-r")]
@@ -232,7 +232,7 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("macos", "black", "white")]
         [InlineData("fuchsia", "fuchsia", "amber")]
         [InlineData("neon", "blue", "purple")]
-        public void A_packs_themes_actually_recolour_it(string style, string a, string b)
+        public void A_packs_themes_actually_recolor_it(string style, string a, string b)
         {
             var first = CursorAssets.TryGet(style, a, CursorAssets.KindArrow);
             var second = CursorAssets.TryGet(style, b, CursorAssets.KindArrow);
@@ -241,13 +241,13 @@ namespace Clowd.VideoSDK.Tests
                     || first.Paths[i].StrokeArgb != second.Paths[i].StrokeArgb);
         }
 
-        /// <summary>The plain pointer is where an iDarques pack's two base colours show plainest:
-        /// its fill and halo trade places between the colourways. (Other kinds hold an accent that
+        /// <summary>The plain pointer is where an iDarques pack's two base colors show plainest:
+        /// its fill and halo trade places between the colorways. (Other kinds hold an accent that
         /// is the same in both — the deny red, the wait blue — so only this one is universal.)</summary>
         [Theory]
         [InlineData("vision")]
         [InlineData("point")]
-        public void The_arrows_two_colourways_trade_the_packs_base_colours(string style)
+        public void The_arrows_two_colorways_trade_the_packs_base_colors(string style)
         {
             var dark = CursorAssets.TryGet(style, "dark", CursorAssets.KindArrow);
             var light = CursorAssets.TryGet(style, "light", CursorAssets.KindArrow);
@@ -284,11 +284,11 @@ namespace Clowd.VideoSDK.Tests
             foreach (var layer in glyph.Paths)
             {
                 Assert.True(layer.Fill.Alpha > 0, $"{style}/{variant}/{kind}: invisible fill");
-                // A halo is either fully specified or fully absent — a colour without a width (or
+                // A halo is either fully specified or fully absent — a color without a width (or
                 // the reverse) would silently paint nothing.
                 Assert.Equal(layer.Stroke.Alpha > 0, layer.StrokeWidth > 0);
                 Assert.Equal(layer.Stroke.Alpha > 0 && layer.StrokeWidth > 0, layer.HasStroke);
-                // the non-Skia view of the same two colours (the inspector's style tiles)
+                // the non-Skia view of the same two colors (the inspector's style tiles)
                 Assert.Equal((uint)layer.Fill, layer.FillArgb);
                 Assert.Equal((uint)layer.Stroke, layer.StrokeArgb);
             }
@@ -297,7 +297,7 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>Vision and Point draw every shape over dark and light video alike, so every
         /// layer of every one of their glyphs carries a contrast halo — the one property that keeps
         /// those cursors readable wherever they land. The ful1e5 packs get their contrast a
-        /// different way (a solid outline-coloured shape under the body colour, which needs no
+        /// different way (a solid outline-colored shape under the body color, which needs no
         /// stroke), so this is a rule about those two packs and not about the table.</summary>
         [Theory]
         [InlineData("vision")]
@@ -313,14 +313,14 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>
         /// However a pack gets there, its glyphs carry contrast: a halo on some layer, or ink in
-        /// more than one colour. That is what stops a cursor vanishing into video of its own shade,
-        /// and it is the property Bibata's colourways lean on hardest — <c>ice</c> is a white body
+        /// more than one color. That is what stops a cursor vanishing into video of its own shade,
+        /// and it is the property Bibata's colorways lean on hardest — <c>ice</c> is a white body
         /// with a black outline and <c>classic</c> the reverse, and both must carry both.
         /// </summary>
         /// <remarks>
         /// <c>fuchsia</c> is the deliberate exception and is not swept here: that pack is drawn flat
         /// on purpose, one solid shape per cursor with no outline at all (only its crosshair uses
-        /// the outline colour its theme declares). Nothing is added to make it pass — the artwork is
+        /// the outline color its theme declares). Nothing is added to make it pass — the artwork is
         /// the pack's, and the picker offers it alongside six styles that do outline.
         /// </remarks>
         [Theory]
@@ -335,11 +335,11 @@ namespace Clowd.VideoSDK.Tests
             bool haloed = glyph.Paths.Any(p => p.HasStroke);
             bool multitoned = glyph.Paths.Select(p => p.FillArgb).Distinct().Count() > 1;
             Assert.True(haloed || multitoned,
-                $"{style}/{variant}/{kind}: one colour, no halo — nothing to read it against");
+                $"{style}/{variant}/{kind}: one color, no halo — nothing to read it against");
         }
 
         /// <summary>...and Fuchsia really is that flat, rather than having quietly lost its outline
-        /// on the way in: most of its glyphs are a single shape in a single colour.</summary>
+        /// on the way in: most of its glyphs are a single shape in a single color.</summary>
         [Fact]
         public void Fuchsia_is_flat_by_design()
         {
@@ -381,14 +381,14 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>
         /// Where each Vision kind's hotspot has to be, which is what the recorded position means
         /// for that pack: a pointer-shaped cursor points with its top-left tip, the hand and its
-        /// badged variant with the fingertip, and everything else is centred on the ink, which is
+        /// badged variant with the fingertip, and everything else is centered on the ink, which is
         /// what the OS does for the resize, crosshair and text cursors. This is Vision's shape, not
         /// a rule about packs — see the Point case below.
         /// </summary>
         [Theory]
         [InlineData("dark")]
         [InlineData("light")]
-        public void Visions_hotspots_are_the_tip_the_fingertip_or_the_centre(string variant)
+        public void Visions_hotspots_are_the_tip_the_fingertip_or_the_center(string variant)
         {
             foreach (var kind in CursorAssets.Kinds)
             {
@@ -409,7 +409,7 @@ namespace Clowd.VideoSDK.Tests
                 }
                 else if (kind == CursorAssets.KindUpArrow)
                 {
-                    // "alternate select" points straight up: top edge, horizontally centred
+                    // "alternate select" points straight up: top edge, horizontally centered
                     Assert.True(glyph.Hotspot.Y <= ink.Top + ink.Height * 0.2f);
                     Assert.Equal(ink.MidX, glyph.Hotspot.X, 0);
                 }
@@ -449,13 +449,13 @@ namespace Clowd.VideoSDK.Tests
             var nesw = CursorAssets.TryGet(style, "dark", CursorAssets.KindSizeNesw);
             float mid = nwse.ViewBox / 2;
 
-            // same extent, both centred in the viewBox
+            // same extent, both centered in the viewBox
             Assert.Equal(InkOf(nwse).Width, InkOf(nesw).Width, 1);
             Assert.Equal(InkOf(nwse).Height, InkOf(nesw).Height, 1);
             Assert.Equal(mid, InkOf(nwse).MidX, 0);
             Assert.Equal(mid, InkOf(nesw).MidX, 0);
 
-            // ...but the arms sit in opposite corners. A layer sitting on the centre (Point's dot)
+            // ...but the arms sit in opposite corners. A layer sitting on the center (Point's dot)
             // belongs to neither diagonal and is skipped.
             foreach (var (glyph, sameSign, label) in new[]
             {
@@ -463,7 +463,7 @@ namespace Clowd.VideoSDK.Tests
                 (nesw, false, "sizenesw should run bottom-left to top-right"),
             })
             {
-                var arms = LayerCentres(glyph)
+                var arms = LayerCenters(glyph)
                     .Where(c => Math.Abs(c.X - mid) > 1 && Math.Abs(c.Y - mid) > 1)
                     .ToArray();
                 Assert.NotEmpty(arms);
@@ -516,7 +516,7 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>
         /// Neon's two busy cursors animate in the file, with SMIL, and are sampled into stills at
         /// table build — the loop has to come out long enough to hold whole cycles of both the
-        /// colour ramp and the scale pulse, and the ramp really has to reach every one of the pack's
+        /// color ramp and the scale pulse, and the ramp really has to reach every one of the pack's
         /// hues rather than sitting on the stored theme's.
         /// </summary>
         [Theory]
@@ -530,7 +530,7 @@ namespace Clowd.VideoSDK.Tests
                 Assert.Equal(64, glyph.Frames.Count);
                 Assert.Equal(100f, glyph.FrameDurationMs);
 
-                // the spinner's colour is the pack's own cycle, so it is the same whichever theme
+                // the spinner's color is the pack's own cycle, so it is the same whichever theme
                 // is picked, and it visits far more than one hue
                 var hues = glyph.Frames
                     .Select(f => f.Paths[f.Paths.Count - 1].FillArgb & 0x00FFFFFF)
@@ -540,7 +540,7 @@ namespace Clowd.VideoSDK.Tests
             }
 
             // ...and the cycle is genuinely theme-independent: two themes' spinners match frame for
-            // frame, even though everything else about them is recoloured.
+            // frame, even though everything else about them is recolored.
             var blue = CursorAssets.TryGet("neon", "blue", CursorAssets.KindWait);
             var other = CursorAssets.TryGet("neon", variant, CursorAssets.KindWait);
             for (int i = 0; i < blue.Frames.Count; i++)
@@ -602,15 +602,15 @@ namespace Clowd.VideoSDK.Tests
             return ink;
         }
 
-        private static List<SKPoint> LayerCentres(CursorGlyph glyph)
+        private static List<SKPoint> LayerCenters(CursorGlyph glyph)
         {
-            var centres = new List<SKPoint>();
+            var centers = new List<SKPoint>();
             foreach (var layer in glyph.Paths)
             {
                 using var path = SKPath.ParseSvgPathData(layer.PathData);
-                centres.Add(new SKPoint(path.Bounds.MidX, path.Bounds.MidY));
+                centers.Add(new SKPoint(path.Bounds.MidX, path.Bounds.MidY));
             }
-            return centres;
+            return centers;
         }
     }
 }

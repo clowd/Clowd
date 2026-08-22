@@ -76,7 +76,7 @@ namespace Clowd.Drawing.Graphics
             ctx.DrawText(text, new Point(pill.X + LabelPaddingX, pill.Y + LabelPaddingY));
         }
 
-        /// <summary>Total length of an end tick, perpendicular to the line and centred on the
+        /// <summary>Total length of an end tick, perpendicular to the line and centered on the
         /// endpoint. Tracks the stroke weight so a heavy line does not swallow its own caps, and is
         /// clamped so the caps stay readable at 1px and never grow into a cross at 8px.</summary>
         private double TickLength => Math.Clamp(LineWidth * 4, 8, 16);

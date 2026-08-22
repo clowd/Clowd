@@ -8,7 +8,7 @@ namespace Clowd.VideoSDK.Tests
     /// <summary>
     /// The effect item model: <see cref="SpeedContent"/>/<see cref="ZoomContent"/> serialization,
     /// the <see cref="Project.Validate"/> rules that keep effect rows well-formed, the duration
-    /// exclusion, and <see cref="TimelineOps"/> behaviour on sourceless effect items.
+    /// exclusion, and <see cref="TimelineOps"/> behavior on sourceless effect items.
     /// </summary>
     public class EffectContentTests
     {

@@ -54,7 +54,7 @@ namespace Clowd.Config
         /// and capturing only the bottom half gives them no sign the top is missing. Turning it
         /// off is the "capture from here" intent — a long thread from one particular message.
         ///
-        /// Lives beside its parent switch and greys out with it: with scrolling capture off there
+        /// Lives beside its parent switch and grays out with it: with scrolling capture off there
         /// is no scrolling capture for it to describe.
         /// </summary>
         [Category("Optional features")]
@@ -148,8 +148,8 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// Follow the OS accent colour instead of <see cref="AccentColor"/>. Reads as false wherever
-        /// there is no system accent to read (macOS), so the row it disables cannot get stuck greyed
+        /// Follow the OS accent color instead of <see cref="AccentColor"/>. Reads as false wherever
+        /// there is no system accent to read (macOS), so the row it disables cannot get stuck grayed
         /// out on a platform that hides this checkbox.
         /// </summary>
         [Category("Appearance")]
@@ -163,8 +163,8 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// The manually chosen overlay accent. Normalised on assignment so the swatch in the
-        /// settings page shows exactly the colour the overlay will be drawn in — a colour too light
+        /// The manually chosen overlay accent. Normalized on assignment so the swatch in the
+        /// settings page shows exactly the color the overlay will be drawn in — a color too light
         /// to carry white text is darkened (issue #48).
         /// </summary>
         [Category("Appearance")]
@@ -197,7 +197,7 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// The colour the capture overlay is actually launched with (<c>--accent-color</c>): the OS
+        /// The color the capture overlay is actually launched with (<c>--accent-color</c>): the OS
         /// accent when the user asked for it and there is one to read, otherwise their own choice —
         /// in both cases dark enough for the white text drawn on top of it.
         /// </summary>

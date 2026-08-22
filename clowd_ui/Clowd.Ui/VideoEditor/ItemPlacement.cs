@@ -44,18 +44,18 @@ namespace Clowd.UI.VideoEditor
     /// and <c>Scale</c> multiplies that measured block rather than mapping to a canvas-width
     /// fraction. A keyboard overlay is the second exception, in the other direction: its
     /// <c>Scale</c> is a canvas-width fraction like a picture's, but the transform anchors the
-    /// block's <b>bottom</b> centre (the rows stack upward from it) and its height is measured from
+    /// block's <b>bottom</b> center (the rows stack upward from it) and its height is measured from
     /// the font, not derived from the width.
     ///
-    /// Rotation is deliberately not modelled in the <b>placement</b>: the composer rotates about
-    /// the item centre, so the unrotated rect is still the item's extent — the gizmo is arranged on
+    /// Rotation is deliberately not modeled in the <b>placement</b>: the composer rotates about
+    /// the item center, so the unrotated rect is still the item's extent — the gizmo is arranged on
     /// it and then visually rotated as a whole. The click hit-test <i>is</i> rotation-aware: it
-    /// unrotates the point about each candidate's centre, so a click lands on what is actually
+    /// unrotates the point about each candidate's center, so a click lands on what is actually
     /// drawn there.
     /// </summary>
     internal static class ItemPlacement
     {
-        /// <param name="transform">The item's transform — normalized centre and width fraction.</param>
+        /// <param name="transform">The item's transform — normalized center and width fraction.</param>
         /// <param name="pictureAspect">The drawn picture's height/width (after any crop).</param>
         /// <param name="canvasWidth">Canvas width; for the preview, the letterboxed video rect.</param>
         /// <param name="canvasHeight">Canvas height.</param>
@@ -89,7 +89,7 @@ namespace Clowd.UI.VideoEditor
                 canvasWidth, canvasHeight);
         }
 
-        /// <summary>FrameComposer.PlaceRect: the dest size centred on the normalized transform.
+        /// <summary>FrameComposer.PlaceRect: the dest size centered on the normalized transform.
         /// (The transition slide offset is not applied — the gizmo tracks where the item lives, not
         /// where a transition is momentarily throwing it.)</summary>
         private static (double X, double Y, double W, double H) Place(
@@ -119,8 +119,8 @@ namespace Clowd.UI.VideoEditor
             double x, y, w, h, aspect, denominator, denominatorY;
             if (item.Content is KeyboardContent keyboard)
             {
-                // The one placement that is NOT centred on the transform: FrameComposer.DrawKeyboard
-                // treats X/Y as the block's bottom centre and stacks the rows upward from it, so the
+                // The one placement that is NOT centered on the transform: FrameComposer.DrawKeyboard
+                // treats X/Y as the block's bottom center and stacks the rows upward from it, so the
                 // rect hangs above the anchor. Width is the wrap box (Scale · canvas width, the
                 // picture rule); the height is the font's, measured — never a scale's.
                 (w, h) = KeyboardBlock(project, keyboard, transform, canvasWidth, canvasHeight);
@@ -276,7 +276,7 @@ namespace Clowd.UI.VideoEditor
                     if (!TryResolve(project, item, canvasWidth, canvasHeight, out var placed))
                         continue;
 
-                    // the composer rotates the picture about its centre, so test the point in the
+                    // the composer rotates the picture about its center, so test the point in the
                     // item's unrotated space — otherwise a rotated item claims its empty AABB
                     // corners and disowns the pixels it actually covers. The keyboard block is
                     // the exception: the composer draws it upright whatever Transform.Rotation
@@ -343,7 +343,7 @@ namespace Clowd.UI.VideoEditor
     /// </summary>
     internal static class GizmoMath
     {
-        /// <summary>Body drag: the pointer delta since the press, as a normalized centre. Clamped
+        /// <summary>Body drag: the pointer delta since the press, as a normalized center. Clamped
         /// to the canvas exactly as the inspector's own Position spinners are, so the two cannot
         /// disagree about how far off-frame an item may go.</summary>
         public static (double X, double Y) Move(double startX, double startY,
@@ -400,7 +400,7 @@ namespace Clowd.UI.VideoEditor
         /// <param name="draggingPositive">Whether the dragged edge is right of / below the anchor.</param>
         /// <param name="denominatorPx">Pixel extent that a scale of 1 means on this axis: the canvas
         /// width/height for pictures, the natural block width/height for text.</param>
-        /// <returns>The scale for this axis and the item's new normalized centre on it.</returns>
+        /// <returns>The scale for this axis and the item's new normalized center on it.</returns>
         public static (double Scale, double Center) ResizeAxis(
             double pointer, double anchor, bool draggingPositive, double denominatorPx,
             double canvasOrigin, double canvasExtent, double minScale, double maxScale)
@@ -433,7 +433,7 @@ namespace Clowd.UI.VideoEditor
             return (scaleX, scaleY, x, y);
         }
 
-        /// <summary>Rotates a point about a centre by <paramref name="degrees"/> (clockwise, the
+        /// <summary>Rotates a point about a center by <paramref name="degrees"/> (clockwise, the
         /// composer's <c>Transform.Rotation</c> sense). Pass the negated angle to unrotate — a
         /// pointer position is mapped into a rotated item's own space this way before any of the
         /// axis-aligned resize math above sees it.</summary>
@@ -447,16 +447,16 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>
-        /// The centre a rotated resize must land on so the anchor stays put <i>on screen</i>: the
-        /// composer rotates about the item centre, and a resize moves that centre — so the anchored
-        /// corner would orbit if the centre were derived in unrotated space alone. Solving
-        /// <c>anchorVis == centre + Rot(toAnchor)</c> for the centre pins it exactly.
+        /// The center a rotated resize must land on so the anchor stays put <i>on screen</i>: the
+        /// composer rotates about the item center, and a resize moves that center — so the anchored
+        /// corner would orbit if the center were derived in unrotated space alone. Solving
+        /// <c>anchorVis == center + Rot(toAnchor)</c> for the center pins it exactly.
         /// </summary>
         /// <param name="anchorVisX">Where the anchor is drawn (rotated space, preview px).</param>
-        /// <param name="toAnchorX">Centre-to-anchor vector in the item's own (unrotated) space —
+        /// <param name="toAnchorX">Center-to-anchor vector in the item's own (unrotated) space —
         /// ±width/2, and 0 on the axis an edge handle does not touch.</param>
         /// <param name="degrees">The item's rotation.</param>
-        /// <returns>The new normalized centre, clamped to the canvas like every other write.</returns>
+        /// <returns>The new normalized center, clamped to the canvas like every other write.</returns>
         public static (double X, double Y) AnchoredCenter(
             double anchorVisX, double anchorVisY, double toAnchorX, double toAnchorY, double degrees,
             double canvasX, double canvasY, double canvasWidth, double canvasHeight)

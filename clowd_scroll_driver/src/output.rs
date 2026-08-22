@@ -11,7 +11,7 @@
 //!   virtual desktop the capture came from, and the editor uses it to open
 //!   the window over that spot — which for a 20,000 px tall composite would
 //!   mean a window taller than every monitor stacked. Empty bounds make the
-//!   editor centre instead.
+//!   editor center instead.
 //! - `CroppedRect` is `0,0,W,H`: the whole composite is the selection. There
 //!   is no larger desktop bitmap for it to be a crop of.
 

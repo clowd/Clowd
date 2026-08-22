@@ -8,7 +8,7 @@ using System.Text;
 namespace Clowd.VideoSDK.Thumbs
 {
     /// <summary>
-    /// The on-disk waveform cache: one <c>waveform-{sourceKey}-{streamIndex}.cwf</c> per analysed
+    /// The on-disk waveform cache: one <c>waveform-{sourceKey}-{streamIndex}.cwf</c> per analyzed
     /// stream, written beside the project's <c>videoedit.json</c>, so reopening an edit draws its
     /// audio rows immediately instead of decoding the whole recording again. The source key
     /// identifies which <i>file</i> the peaks belong to — every source in a project shares one
@@ -25,7 +25,7 @@ namespace Clowd.VideoSDK.Thumbs
     ///
     /// <para>
     /// Nothing here throws outward: a cache is an optimization, so a missing, truncated, corrupt or
-    /// unreadable file simply means "analyse it again", and a failed write means "no cache this
+    /// unreadable file simply means "analyze it again", and a failed write means "no cache this
     /// time". Only complete waveforms are ever written.
     /// </para>
     /// </summary>

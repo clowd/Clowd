@@ -50,7 +50,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>The insertion slot a drop at <paramref name="y"/> is asking for: the boundary
         /// nearest the pointer, clamped to the dragged row's own block and then to one the model
-        /// will honour (see <see cref="LegalSlot"/>). A pointer above the block (or off the top of
+        /// will honor (see <see cref="LegalSlot"/>). A pointer above the block (or off the top of
         /// the panel) gives its first slot, one below gives its last.</summary>
         public static int DropIndexAt(IReadOnlyList<TimelineRow> rows, int rowIndex, double y)
         {

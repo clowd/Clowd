@@ -66,7 +66,7 @@ namespace Clowd.UI.Controls
         (int Start, int End) SlotGroup(int row);
 
         /// <summary>Bends the slot the pointer asked for to one the host's model will actually
-        /// honour — for boundaries a block cannot express, e.g. a pair of rows glued together that
+        /// honor — for boundaries a block cannot express, e.g. a pair of rows glued together that
         /// nothing may land between. Called on every move, so it must be idempotent and cheap; the
         /// default accepts whatever the pointer picked.</summary>
         int CoerceSlot(int row, int slot) => slot;
@@ -100,7 +100,7 @@ namespace Clowd.UI.Controls
         public const double GripWidth = 10;
 
         /// <summary>Grip dots at rest. Not fully opaque — bright dots on every row would
-        /// out-shout the row content — but well clear of the "is that an artefact?" range.</summary>
+        /// out-shout the row content — but well clear of the "is that an artifact?" range.</summary>
         private const double GripRestOpacity = 0.75;
 
         /// <summary>How far the pointer has to travel before a press on a grip becomes a drag: a

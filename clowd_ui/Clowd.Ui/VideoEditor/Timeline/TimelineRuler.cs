@@ -221,7 +221,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// in the top half of the strip with a line dropping from it to the rows below (the surface
         /// carries that line on down). Every edge is snapped to whole device pixels — see
         /// <see cref="TimelineViewMath.SnapToPixel"/> for why a hairline that is not costs the
-        /// playhead its colour.</summary>
+        /// playhead its color.</summary>
         private void RenderHead(DrawingContext context, double x, IBrush fill, IPen linePen)
         {
             if (x < -HeadWidth || x > Bounds.Width + HeadWidth)

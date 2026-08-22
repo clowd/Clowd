@@ -11,7 +11,7 @@ namespace Clowd.VideoSDK.Render
     /// (project-time sample frames) and the muxer (output-time sample frames), bending the mix
     /// through a <see cref="TimeWarp"/> the way <c>AudioMixWorker.MixResampledChunk</c> bends the
     /// preview mix through a constant rate — a per-sample project cursor advancing at the warp's
-    /// local slope, linearly interpolating between neighbouring project frames so pitch rides
+    /// local slope, linearly interpolating between neighboring project frames so pitch rides
     /// with the speed.
     ///
     /// <para>
@@ -25,7 +25,7 @@ namespace Clowd.VideoSDK.Render
     /// <para>
     /// Chunks must be requested in forward order (the mixer's sources are forward-only). Mixed
     /// project frames are held in a carry window across chunk and span boundaries so the mixer is
-    /// asked for each project frame exactly once — the interpolation's right neighbour is needed
+    /// asked for each project frame exactly once — the interpolation's right neighbor is needed
     /// again by the next chunk, and re-requesting it would be a backwards read.
     /// </para>
     /// </summary>
@@ -172,7 +172,7 @@ namespace Clowd.VideoSDK.Render
 
         /// <summary>The warped run: each output sample's tick maps through the warp to a
         /// fractional project frame, clamped monotone across span joins, and interpolates
-        /// between its two neighbours in the window.</summary>
+        /// between its two neighbors in the window.</summary>
         private void ResampleRun(long firstOutputFrame, int run, float[] dst, int dstOffset)
         {
             if (_positions.Length < run)
@@ -191,7 +191,7 @@ namespace Clowd.VideoSDK.Render
             _lastPos = last;
 
             long firstNeeded = (long)Math.Floor(_positions[0]);
-            long endNeeded = (long)Math.Floor(_positions[run - 1]) + 2; // right neighbour, exclusive
+            long endNeeded = (long)Math.Floor(_positions[run - 1]) + 2; // right neighbor, exclusive
             EnsureWindow(firstNeeded, endNeeded);
 
             long windowLast = _windowStart + _windowFrames - 1;

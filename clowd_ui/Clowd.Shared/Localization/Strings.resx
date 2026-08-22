@@ -77,7 +77,7 @@
   </data>
   <data name="Nav_About" xml:space="preserve">
     <value>About</value>
-    <comment>Navigation item: version, licence and credits.</comment>
+    <comment>Navigation item: version, license and credits.</comment>
   </data>
   <data name="Nav_RecentSessions" xml:space="preserve">
     <value>Recent</value>
@@ -113,7 +113,7 @@
   </data>
   <data name="Tray_ColorPicker" xml:space="preserve">
     <value>Color Picker</value>
-    <comment>Tray menu item: opens the screen colour picker.</comment>
+    <comment>Tray menu item: opens the screen color picker.</comment>
   </data>
   <data name="Tray_Exit" xml:space="preserve">
     <value>Exit</value>

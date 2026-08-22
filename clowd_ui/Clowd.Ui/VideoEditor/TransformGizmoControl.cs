@@ -64,7 +64,7 @@ namespace Clowd.UI.VideoEditor
         private const int HandleLeft = 4, HandleTop = 5, HandleRight = 6, HandleBottom = 7;
         private const int HandleRotate = 8;
 
-        /// <summary>How far past the right edge the rotate handle's centre floats — the image
+        /// <summary>How far past the right edge the rotate handle's center floats — the image
         /// editor's 32px (<c>GraphicRectangle.GetHandle</c> case 9).</summary>
         private const double RotateHandleOffset = 32;
 
@@ -123,7 +123,7 @@ namespace Clowd.UI.VideoEditor
         private double _startX, _startY;
         private Point _resizeAnchor; // opposite corner (or edge midpoint), unrotated parent coords
         private Point _anchorVis; // where that anchor is actually drawn (rotated), parent coords
-        private Point _rotationCenter; // item centre at press time, parent coords
+        private Point _rotationCenter; // item center at press time, parent coords
         private double _rotationAtPress;
         private int _dragHandle = -1;
         private bool _dragRight, _dragDown;
@@ -183,7 +183,7 @@ namespace Clowd.UI.VideoEditor
         /// <summary>
         /// Crop mode: the handles adjust <c>Transform.Crop</c> instead of the size — dragging an
         /// edge inward shaves the source picture while the rest of it holds still on screen (the
-        /// scale and centre are compensated per move), dragging back out restores it. The inspector
+        /// scale and center are compensated per move), dragging back out restores it. The inspector
         /// owns this flag; the gizmo only reads it. Rotate is parked while it is on.
         /// </summary>
         public bool CropMode
@@ -254,7 +254,7 @@ namespace Clowd.UI.VideoEditor
             }
 
             // The whole control (outline, handles, hit area) rotates the way the composer rotates
-            // the picture: about the item's centre — which is not this control's centre, because
+            // the picture: about the item's center — which is not this control's center, because
             // the arrange rect carries the asymmetric rotate-handle pad. Avalonia hit-tests through
             // render transforms, so local coordinates stay unrotated and all the handle math below
             // is untouched by this.
@@ -363,10 +363,10 @@ namespace Clowd.UI.VideoEditor
             _startX = transform.X;
             _startY = transform.Y;
 
-            // Rotation is about the item centre, which a rotation cannot move — so this centre is
+            // Rotation is about the item center, which a rotation cannot move — so this center is
             // stable for a rotate drag, and for a resize it is the fixed frame the pointer is
             // unrotated in (rotation is rigid, so distances to the press-time anchor survive the
-            // centre itself moving mid-drag).
+            // center itself moving mid-drag).
             _rotationAtPress = _rotation;
             _rotationCenter = ItemRectInParent().Center;
 
@@ -481,7 +481,7 @@ namespace Clowd.UI.VideoEditor
             if (_drag == DragKind.Rotate)
             {
                 // the handle sits on the item's 0° axis (right-edge midpoint), so the pointer's
-                // bearing from the centre *is* the rotation — the image editor's handle-9 rule.
+                // bearing from the center *is* the rotation — the image editor's handle-9 rule.
                 var degrees = Math.Atan2(p.Y - _rotationCenter.Y, p.X - _rotationCenter.X)
                     * 180 / Math.PI;
                 WriteRow(item, "gizmo:rotate", t => t.Rotation = degrees);
@@ -491,10 +491,10 @@ namespace Clowd.UI.VideoEditor
 
             // Crop and resize share the unrotated pointer: the axis-aligned math below is only
             // valid in the item's own unrotated space, so the pointer is unrotated about the
-            // press-time centre first (rotation is rigid, so the anchor distances survive the
-            // centre itself moving mid-drag). For a rotated item the centre those helpers return is
-            // then discarded: the composer rotates about the centre a resize moves, so the anchored
-            // corner would orbit — AnchoredCenter solves for the centre that pins the anchor's
+            // press-time center first (rotation is rigid, so the anchor distances survive the
+            // center itself moving mid-drag). For a rotated item the center those helpers return is
+            // then discarded: the composer rotates about the center a resize moves, so the anchored
+            // corner would orbit — AnchoredCenter solves for the center that pins the anchor's
             // *drawn* position instead.
             var (pux, puy) = GizmoMath.RotateAbout(p.X, p.Y,
                 _rotationCenter.X, _rotationCenter.Y, -_rotationAtPress);
@@ -689,8 +689,8 @@ namespace Clowd.UI.VideoEditor
             }
         }
 
-        /// <summary>The centre that keeps the resize anchor's drawn position fixed for a rotated
-        /// item — press-time capture and canvas plumbed in, the maths in
+        /// <summary>The center that keeps the resize anchor's drawn position fixed for a rotated
+        /// item — press-time capture and canvas plumbed in, the math in
         /// <see cref="GizmoMath.AnchoredCenter"/>.</summary>
         private (double X, double Y) AnchoredCenter(double toAnchorX, double toAnchorY) =>
             GizmoMath.AnchoredCenter(_anchorVis.X, _anchorVis.Y, toAnchorX, toAnchorY,
@@ -698,7 +698,7 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>
         /// One crop-drag move: the dragged edges' insets follow the pointer, and the scale and
-        /// centre are compensated so the surviving pixels hold still on screen — the drawn box
+        /// center are compensated so the surviving pixels hold still on screen — the drawn box
         /// simply shrinks (or grows) from the dragged edge, which is what a crop handle visually
         /// promises. All computed from press-time state; only the per-axis rules differ (an
         /// explicit height scales <c>ScaleY</c>, a derived one follows the cropped aspect free).
@@ -732,7 +732,7 @@ namespace Clowd.UI.VideoEditor
                 : Math.Clamp(_pressScaleY * (1 - t - b) / survivedY0,
                     SelectedItemViewModel.MinScale, SelectedItemViewModel.MaxScale);
 
-            // the surviving region's centre moves by half of what each edge gave up, along the
+            // the surviving region's center moves by half of what each edge gave up, along the
             // item's own axes — rotated into canvas space for a rotated item.
             var shiftLocalX = ((l - _cropL0) - (r - _cropR0)) * _pressFullW / 2;
             var shiftLocalY = ((t - _cropT0) - (b - _cropB0)) * _pressFullH / 2;
@@ -764,7 +764,7 @@ namespace Clowd.UI.VideoEditor
                 coalesceKey, structural: false, origin: this);
 
         /// <summary>The text-card resize write: the font size that draws the dragged width plus the
-        /// anchored centre, in one mutation (a text card is a row of one, but the row scope keeps
+        /// anchored center, in one mutation (a text card is a row of one, but the row scope keeps
         /// the coalescing identical to every other gizmo write).</summary>
         private void WriteTextResize(Item item, double fontSize, double x, double y) =>
             _session.EditItems(ItemRowScope.RowItemIds(_session, item), i =>
@@ -827,11 +827,11 @@ namespace Clowd.UI.VideoEditor
         /// Edge handles are included only when the item has them.
         ///
         /// <paramref name="widthOnly"/> is a keyboard overlay: its transform anchors the block's
-        /// bottom centre rather than its centre, and its height is the font's — so it is offered
-        /// the two side handles and nothing else. Every other handle would write a centre-derived
+        /// bottom center rather than its center, and its height is the font's — so it is offered
+        /// the two side handles and nothing else. Every other handle would write a center-derived
         /// <c>Y</c> (or a <c>ScaleY</c>/<c>Rotation</c> the composer does not read for it) and jump
         /// the block out from under the pointer; the drag it does get, an anchored horizontal
-        /// resize, writes exactly the wrap-width fraction and centre-x the composer draws with.
+        /// resize, writes exactly the wrap-width fraction and center-x the composer draws with.
         /// </summary>
         private static (int Index, Point Point)[] HandlePoints(Rect b, bool withEdges, bool widthOnly)
         {
@@ -863,7 +863,7 @@ namespace Clowd.UI.VideoEditor
             return points.ToArray();
         }
 
-        /// <summary>The rotate handle's centre: floating <see cref="RotateHandleOffset"/> past the
+        /// <summary>The rotate handle's center: floating <see cref="RotateHandleOffset"/> past the
         /// right-edge midpoint (the image editor's handle 9). Rotates with the whole control, so it
         /// orbits the item exactly as the image editor's does.</summary>
         private static Point RotateHandleCenter(Rect b) =>

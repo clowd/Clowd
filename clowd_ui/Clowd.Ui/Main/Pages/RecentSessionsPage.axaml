@@ -256,7 +256,7 @@
                                                 </ContextMenu>
                                             </Grid.ContextMenu>
                                             <!-- what PulseSelection animates to point out a row the app selected on the
-                                                 user's behalf. First child, so it washes over the selection colour but
+                                                 user's behalf. First child, so it washes over the selection color but
                                                  stays behind the row's own content; -4 cancels the ListBoxItem padding so
                                                  it covers the whole card. Carries no content, so it adds no height. -->
                                             <Border Name="PulseOverlay"
@@ -353,7 +353,7 @@
                                                                      material canvas the other row icons use. Without the explicit canvas size the
                                                                      Path measures to the glyph's right/bottom edge, so its leading padding is kept
                                                                      and its trailing padding is not — the Viewbox then scales a box the triangle
-                                                                     sits off-centre in. -->
+                                                                     sits off-center in. -->
                                                                 <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconPlay}" />
                                                             </Viewbox>
                                                         </Button>

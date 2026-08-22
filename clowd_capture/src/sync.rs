@@ -51,7 +51,7 @@ impl<T: Clone> Latch<T> {
 
 /// Panic-safe replacement for `std::sync::Barrier`. `signal_all` wakes
 /// every thread blocked in `wait`; if a worker panics before reaching
-/// `wait`, the remaining workers and the signaller aren't deadlocked.
+/// `wait`, the remaining workers and the signaler aren't deadlocked.
 pub struct VisibleLatch {
     inner: Mutex<bool>,
     cv: Condvar,
@@ -75,12 +75,12 @@ impl VisibleLatch {
         let guard = self.inner.lock().unwrap();
         let _guard = self
             .cv
-            .wait_while(guard, |signalled| !*signalled)
+            .wait_while(guard, |signaled| !*signaled)
             .unwrap();
     }
 
     /// Like [`wait`](Self::wait), but gives up after `timeout`; returns whether
-    /// the latch was actually signalled. For background work that only wants to
+    /// the latch was actually signaled. For background work that only wants to
     /// stay off the critical path — the signal comes from the show gate (or from
     /// `finish_cycle` on a cancel), and the exit paths that reach neither (window
     /// creation failing on every monitor) would otherwise park the waiter forever.
@@ -88,7 +88,7 @@ impl VisibleLatch {
         let guard = self.inner.lock().unwrap();
         let (guard, _) = self
             .cv
-            .wait_timeout_while(guard, timeout, |signalled| !*signalled)
+            .wait_timeout_while(guard, timeout, |signaled| !*signaled)
             .unwrap();
         *guard
     }

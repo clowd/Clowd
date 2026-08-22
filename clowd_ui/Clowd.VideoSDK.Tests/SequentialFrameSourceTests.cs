@@ -380,9 +380,9 @@ namespace Clowd.VideoSDK.Tests
                 var pixels = new byte[rowBytes * H];
                 Marshal.Copy(native, pixels, 0, pixels.Length);
 
-                int centre = (H / 2) * rowBytes + (W / 2) * 4;
+                int center = (H / 2) * rowBytes + (W / 2) * 4;
                 int expected = 10 * GrayStep;
-                Assert.InRange(pixels[centre + 1], expected - 12, expected + 12); // G of the gray
+                Assert.InRange(pixels[center + 1], expected - 12, expected + 12); // G of the gray
             }
             finally
             {

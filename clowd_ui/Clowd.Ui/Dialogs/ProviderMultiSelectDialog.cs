@@ -28,14 +28,14 @@ namespace Clowd.UI.Dialogs
             /// <summary>Opens a fresh icon stream, or null when this build has no such provider.</summary>
             public Func<Stream> Icon { get; init; }
 
-            /// <summary>False greys the row out and makes it unselectable — used for providers
+            /// <summary>False grays the row out and makes it unselectable — used for providers
             /// present in an imported string but unknown to this build.</summary>
             public bool IsAvailable { get; init; } = true;
 
             public bool IsCheckedByDefault { get; init; }
         }
 
-        /// <summary>Shows the picker and returns the checked keys, or null if the user cancelled.</summary>
+        /// <summary>Shows the picker and returns the checked keys, or null if the user canceled.</summary>
         public static async Task<string[]> ShowAsync(
             Window owner, string title, string heading, string actionLabel, IReadOnlyList<Item> items)
         {

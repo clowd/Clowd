@@ -83,7 +83,7 @@ const SETTLE_MIN: Duration = Duration::from_millis(150);
 
 /// Between foregrounding the target and the first capture. The window has
 /// to finish repainting its activated state — focus rings, title bar
-/// colour, whatever it dims while inactive — or frame 0 disagrees with
+/// color, whatever it dims while inactive — or frame 0 disagrees with
 /// every frame after it.
 const START_DELAY: Duration = Duration::from_millis(350);
 
@@ -262,7 +262,7 @@ enum DriveResult {
     NoMovement,
     /// No session was produced. Part of the contract because the shell has
     /// to handle it; the driver currently reports every failure it can
-    /// recognise as `fatal_error` instead, since those all happen before
+    /// recognize as `fatal_error` instead, since those all happen before
     /// there is anything worth keeping.
     #[allow(dead_code)]
     Failed,
@@ -384,7 +384,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     // this function polls the key into this latch; `stop_requested`
     // consumes it at the top of each step. Only the driver thread touches
     // it — the atomic is for tidy shared references, not cross-thread
-    // signalling.
+    // signaling.
     let esc_latch = AtomicBool::new(false);
 
     let run = Run {
@@ -417,8 +417,8 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
         match rewind_to_top(&run)? {
             // The user asked to abandon the run while it was still winding
             // back; there is nothing captured to keep.
-            Rewind::Cancelled => {
-                info!("cancelled during rewind; writing nothing");
+            Rewind::Canceled => {
+                info!("canceled during rewind; writing nothing");
                 return Ok(());
             }
             Rewind::Finished(why) => info!("rewind finished: {why}"),
@@ -451,8 +451,8 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
     let mut use_message_wheel = false;
 
     let outcome = loop {
-        if signals.cancelled() {
-            info!("cancelled after {} frames; writing nothing", stitcher.frames());
+        if signals.canceled() {
+            info!("canceled after {} frames; writing nothing", stitcher.frames());
             return Ok(());
         }
         if let Some(reason) = stop_requested(&run) {
@@ -475,8 +475,8 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
                     skip_wheel = true;
                 }
             }
-            Paused::Cancelled => {
-                info!("cancelled while paused; writing nothing");
+            Paused::Canceled => {
+                info!("canceled while paused; writing nothing");
                 return Ok(());
             }
             Paused::Stopped(reason) => {
@@ -625,8 +625,8 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
 
     // Last chance for a cancel that arrived while we were settling — the
     // point of cancel is that no session appears.
-    if signals.cancelled() {
-        info!("cancelled during the final step; writing nothing");
+    if signals.canceled() {
+        info!("canceled during the final step; writing nothing");
         return Ok(());
     }
 
@@ -647,7 +647,7 @@ fn drive(cfg: DriveArgs) -> anyhow::Result<()> {
 /// ending, including hitting a cap, just means "start capturing here".
 enum Rewind {
     Finished(String),
-    Cancelled,
+    Canceled,
 }
 
 /// Wind the document back to the top before frame 0.
@@ -679,8 +679,8 @@ fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
     let mut previous = frame::capture_region(run.cfg.region)?;
 
     for burst in 1..=REWIND_MAX_BURSTS {
-        if run.signals.cancelled() {
-            return Ok(Rewind::Cancelled);
+        if run.signals.canceled() {
+            return Ok(Rewind::Canceled);
         }
         // Same stop conditions as the capture loop — Esc, a `stop`, the
         // target window going away — and the same pause when the user takes
@@ -694,7 +694,7 @@ fn rewind_to_top(run: &Run) -> anyhow::Result<Rewind> {
             Paused::Ready {
                 waited,
             } => started += waited,
-            Paused::Cancelled => return Ok(Rewind::Cancelled),
+            Paused::Canceled => return Ok(Rewind::Canceled),
             Paused::Stopped(reason) => return Ok(Rewind::Finished(format!("{reason}; capturing from here"))),
         }
 
@@ -783,7 +783,7 @@ enum Paused {
     /// The user ended the run while it was paused. Keep what we have.
     Stopped(String),
     /// The user abandoned the run while it was paused. Write nothing.
-    Cancelled,
+    Canceled,
 }
 
 /// Hold the run for as long as the user has the mouse.
@@ -799,7 +799,7 @@ enum Paused {
 /// cursor somewhere new restarts the clock, so a user who keeps moving
 /// stays paused; [`RESUME_STILL_FOR`] of stillness parks the cursor back on
 /// the scroll point and hands the run back. `stop`, `cancel`, Esc and the
-/// target window going away are all still honoured while paused — a paused
+/// target window going away are all still honored while paused — a paused
 /// run is not an unresponsive one.
 ///
 /// `resume_state` is what the run goes back to doing: the rewind and the
@@ -838,8 +838,8 @@ fn pause_while_drifting(run: &Run, frames: u32, height_px: u32, resume_state: Dr
     let mut counting_down: Option<u64> = None;
 
     loop {
-        if run.signals.cancelled() {
-            return Paused::Cancelled;
+        if run.signals.canceled() {
+            return Paused::Canceled;
         }
         if let Some(reason) = stop_requested(run) {
             return Paused::Stopped(reason);
@@ -1062,7 +1062,7 @@ struct Signals {
 }
 
 impl Signals {
-    fn cancelled(&self) -> bool {
+    fn canceled(&self) -> bool {
         self.cancel.load(Ordering::Acquire)
     }
 }

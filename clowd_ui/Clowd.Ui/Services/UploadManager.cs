@@ -419,7 +419,7 @@ namespace Clowd
             }
             catch
             {
-                // the consumer failed (or was cancelled) first — stop and drain the producer so
+                // the consumer failed (or was canceled) first — stop and drain the producer so
                 // the exception that reaches HandleUploadResult is the one that struck first.
                 producerCts.Cancel();
                 await pipe.Reader.CompleteAsync();

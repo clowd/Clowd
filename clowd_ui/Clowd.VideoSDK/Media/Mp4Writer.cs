@@ -36,7 +36,7 @@ namespace Clowd.VideoSDK.Media
         /// dts deltas, gives the final sample duration 0, and rounds the track's edit-list duration
         /// up to whole milliseconds — with the quirk that a final frame whose pts lands on an exact
         /// millisecond falls outside the edit window and is invisible to decoders. The v1 parity
-        /// gate requires this byte-level behaviour; leave it off for v2 renders, where every sample
+        /// gate requires this byte-level behavior; leave it off for v2 renders, where every sample
         /// carries its true duration and the last frame is always decodable.
         /// </summary>
         public bool LegacyContainerTiming { get; init; }
@@ -302,7 +302,7 @@ namespace Clowd.VideoSDK.Media
             // movenc sample duration; without it the final sample gets duration 0 and the track's
             // avg_frame_rate probes back as nb_frames/(n-1 intervals) instead of the true rate.
             // Legacy mode leaves the duration unset — vid-render never set one, and its movenc
-            // edit-list behaviour (see Mp4WriterOptions.LegacyContainerTiming) depends on that.
+            // edit-list behavior (see Mp4WriterOptions.LegacyContainerTiming) depends on that.
             _vframe->duration = _legacyContainerTiming ? 0 : 1;
             // No decoder upstream here, but keep render.rs's contract: x264 chooses its own GOP.
             _vframe->pict_type = AVPictureType.AV_PICTURE_TYPE_NONE;

@@ -248,7 +248,7 @@ namespace Clowd.VideoSDK.Playback
 
         /// <summary>True when the two warps describe the same project ↔ output mapping. Only the
         /// bent spans participate: speed-1 segments (including the trailing one a longer project
-        /// appends) never move an anchor relative to their neighbours, so timelines differing
+        /// appends) never move an anchor relative to their neighbors, so timelines differing
         /// only in unwarped footage compare equal — which lets the player skip re-anchoring the
         /// clock and flushing audio on edits that cannot have moved any output instant.</summary>
         public bool MappingEquals(TimeWarp other)

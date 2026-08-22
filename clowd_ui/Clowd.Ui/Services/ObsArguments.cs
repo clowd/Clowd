@@ -212,7 +212,7 @@ namespace Clowd.UI
                 // pipeline from the start or not at all, so an unticked box (or no device picked)
                 // is written as "" rather than a device the recorder would open and then mute.
                 // Composition off means no --multi-track, and the recorder REFUSES to start with a
-                // webcam_device it has no second video track for — so the gate that greys the
+                // webcam_device it has no second video track for — so the gate that grays the
                 // webcam rows out in settings has to be enforced here too, not just in the UI.
                 WebcamDevice = UsesWebcam(settings) ? settings.WebcamDeviceId : "",
             };

@@ -303,7 +303,7 @@
         <Grid x:Name="contentGrid" Grid.Row="1">
             <Grid.Styles>
                 <!--  The splitter is an invisible 8px grab zone straddling the sidebar's edge (its
-                      column is 2px wide; negative margins overlap the neighbours) drawing only the
+                      column is 2px wide; negative margins overlap the neighbors) drawing only the
                       2px edge line — resizing should feel like grabbing the panel edge, not a
                       separate handle. Hover/drag brighten the line.  -->
                 <Style Selector="GridSplitter#sidebarSplitter /template/ Rectangle#splitterLine">
