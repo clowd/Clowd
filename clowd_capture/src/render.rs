@@ -164,9 +164,7 @@ fn present_first_frame(
     let frame = loop {
         match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => break f,
-            wgpu::CurrentSurfaceTexture::Occluded
-                if cfg!(target_os = "macos") && Instant::now() < occluded_deadline =>
-            {
+            wgpu::CurrentSurfaceTexture::Occluded if cfg!(target_os = "macos") && Instant::now() < occluded_deadline => {
                 thread::sleep(Duration::from_millis(1));
             }
             wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return false,
