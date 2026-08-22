@@ -67,7 +67,7 @@ namespace Clowd.VideoRender
 
                 if (!FFmpegLoader.TryInitialize(FindFFmpegDirectory))
                     throw new InvalidOperationException(FFmpegLoader.FailureReason);
-                TractnniLoader.Configure(FindTractnniBinary);
+                AiLoader.Configure(FindAiBinary);
 
                 var job = LoadJob(argsPath, outputOverride);
                 output = job.OutputPath;
@@ -291,14 +291,14 @@ namespace Clowd.VideoRender
         }
 
         /// <summary>
-        /// Where the <c>clowd_tractnni</c> inference binary ships when <c>CLOWD_TRACTNNI_PATH</c>
+        /// Where the <c>clowd_ai</c> inference binary ships when <c>CLOWD_AI_PATH</c>
         /// is unset (the loader consults the env var itself): beside this exe, the release
         /// layout. The probe lives here rather than in the SDK because the SDK cannot know the
         /// app's layout — the same seam as <see cref="FindFFmpegDirectory"/>.
         /// </summary>
-        private static string FindTractnniBinary()
+        private static string FindAiBinary()
         {
-            string name = OperatingSystem.IsWindows() ? "clowd_tractnni.exe" : "clowd_tractnni";
+            string name = OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
             var candidate = Path.Combine(AppContext.BaseDirectory, name);
             return File.Exists(candidate) ? candidate : null;
         }

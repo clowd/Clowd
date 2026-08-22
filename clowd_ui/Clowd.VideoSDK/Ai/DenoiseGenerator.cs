@@ -11,7 +11,7 @@ namespace Clowd.VideoSDK.Ai
 {
     /// <summary>
     /// Generates the denoise sidecar for one audio stream: decode at 48 kHz, stream the PCM
-    /// through <c>clowd_tractnni denoise</c>, and write the result as
+    /// through <c>clowd_ai denoise</c>, and write the result as
     /// <c>denoise-{SourceId}-{StreamIndex}.wav</c> (float32, companion json per
     /// <see cref="AiSidecars"/>) beside the project. The wav shares the source stream's timeline —
     /// same sample positions, same length — so <see cref="DenoisedAudioSource"/> can read it at
@@ -25,7 +25,7 @@ namespace Clowd.VideoSDK.Ai
     /// <see cref="DownmixInto"/>, which inverts the decoder's mono→stereo rematrix gain.</para>
     ///
     /// <para>The stdin write runs on its own task while this thread drains stdout (see
-    /// <see cref="TractnniClient"/> for why), spooling into a temp file that becomes the wav in
+    /// <see cref="AiClient"/> for why), spooling into a temp file that becomes the wav in
     /// one atomic move. The companion json is written only after the wav is in place, so a valid
     /// companion always implies a complete sidecar.</para>
     /// </summary>
@@ -44,7 +44,7 @@ namespace Clowd.VideoSDK.Ai
         /// Generates the sidecar for (<paramref name="source"/>, <paramref name="streamIndex"/>),
         /// replacing any existing one. Returns false without doing anything when there is nowhere
         /// to cache (<paramref name="cacheDir"/> null — the dev harness) or no
-        /// <c>clowd_tractnni</c> binary resolves; throws on decode or inference failure (with the
+        /// <c>clowd_ai</c> binary resolves; throws on decode or inference failure (with the
         /// process's stderr tail), <see cref="NotSupportedException"/> before any inference when
         /// the stream is too long for the wav's 32-bit RIFF size (~3.1 h at stereo 48 kHz), and
         /// <see cref="OperationCanceledException"/> on cancellation. Progress is 0..1.
@@ -56,7 +56,7 @@ namespace Clowd.VideoSDK.Ai
             if (String.IsNullOrEmpty(cacheDir))
                 return false;
 
-            var exe = TractnniLoader.TryGetPath();
+            var exe = AiLoader.TryGetPath();
             if (exe == null)
                 return false;
 
@@ -84,7 +84,7 @@ namespace Clowd.VideoSDK.Ai
             Directory.CreateDirectory(cacheDir);
             var temp = wavPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
-            using var client = TractnniClient.Start(exe, new[]
+            using var client = AiClient.Start(exe, new[]
             {
                 "denoise", "--channels", channels.ToString(CultureInfo.InvariantCulture),
             });
@@ -123,7 +123,7 @@ namespace Clowd.VideoSDK.Ai
                     {
                         client.Kill();
                         throw new InvalidOperationException(
-                            "clowd_tractnni did not exit after its output ended." + StderrSuffix(client));
+                            "clowd_ai did not exit after its output ended." + StderrSuffix(client));
                     }
                     client.ThrowIfFailed();
                     if (pumpError != null)
@@ -133,7 +133,7 @@ namespace Clowd.VideoSDK.Ai
                     if (bytes % blockAlign != 0 || framesReceived != framesSent)
                     {
                         throw new InvalidOperationException(
-                            $"clowd_tractnni returned {bytes} bytes for {framesSent} frames of " +
+                            $"clowd_ai returned {bytes} bytes for {framesSent} frames of " +
                             $"{channels}ch input — the streams must match 1:1." + StderrSuffix(client));
                     }
 
@@ -162,7 +162,7 @@ namespace Clowd.VideoSDK.Ai
         /// <summary>Decodes the stream forward and writes f32le interleaved PCM to the process's
         /// stdin, returning the sample-frame count sent. Always closes stdin, so the process (and
         /// with it the caller's stdout drain) terminates whatever happens here.</summary>
-        private static long PumpInput(TractnniClient client, Source source, int streamIndex,
+        private static long PumpInput(AiClient client, Source source, int streamIndex,
             int channels, CancellationToken cancellationToken)
         {
             try
@@ -252,7 +252,7 @@ namespace Clowd.VideoSDK.Ai
             writer.Write(dataBytes);
         }
 
-        private static string StderrSuffix(TractnniClient client)
+        private static string StderrSuffix(AiClient client)
         {
             var tail = client.StderrTail;
             return tail.Length > 0 ? Environment.NewLine + tail : "";

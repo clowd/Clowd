@@ -37,7 +37,7 @@ namespace Clowd.UI.Services
         /// requeueing on every project change would grind the same failure forever.</summary>
         Failed,
 
-        /// <summary>No <c>clowd_tractnni</c> binary resolves (or there is nowhere to cache — the
+        /// <summary>No <c>clowd_ai</c> binary resolves (or there is nowhere to cache — the
         /// dev harness has no session directory). Re-probed on every structural change, so a
         /// binary appearing mid-session upgrades this to a queued job.</summary>
         Unavailable,
@@ -223,7 +223,7 @@ namespace Clowd.UI.Services
                     changed = true;
                 }
 
-                var available = _cacheDir != null && TractnniLoader.TryGetPath() != null;
+                var available = _cacheDir != null && AiLoader.TryGetPath() != null;
                 foreach (var key in required)
                 {
                     var source = project.Sources?.FirstOrDefault(s => s.Id == key.SourceId);

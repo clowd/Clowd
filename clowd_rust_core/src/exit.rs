@@ -22,10 +22,10 @@ pub const NO_SCREEN_PERMISSION: i32 = 3;
 /// it is not implemented.
 pub const CAPTURE_FAILED: i32 = 4;
 
-/// "Inference is unavailable on this install" (`clowd_tractnni`). The
+/// "Inference is unavailable on this install" (`clowd_ai`). The
 /// binary now links ONNX Runtime statically, so it no longer emits this at
 /// startup; the code stays reserved because the shell's AI effect
-/// generators still map it (`TractnniClient.cs`'s `ExitInferenceUnavailable`
+/// generators still map it (`AiClient.cs`'s `ExitInferenceUnavailable`
 /// falls back to raw passthrough without a crash report), and an older
 /// shipped binary may still exit with it.
 pub const INFERENCE_UNAVAILABLE: i32 = 7;

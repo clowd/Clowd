@@ -11,17 +11,17 @@ using Xunit;
 namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
-    /// <see cref="DenoiseGenerator"/> against the real <c>clowd_tractnni</c> binary: encode a sine
+    /// <see cref="DenoiseGenerator"/> against the real <c>clowd_ai</c> binary: encode a sine
     /// fixture, generate its denoise sidecar, and assert the wav + companion honour the sidecar
     /// contract (float32 48 kHz, source-matched length, valid companion). This is the one place
-    /// the dual-pipe pump (<see cref="TractnniClient"/>) runs for real — the design exists to
+    /// the dual-pipe pump (<see cref="AiClient"/>) runs for real — the design exists to
     /// avoid a stdin/stdout pipe deadlock, which only a real child process can exercise. Skips
-    /// when FFmpeg, the binary (build <c>cargo build -p clowd_tractnni --release</c>) or an ONNX
+    /// when FFmpeg, the binary (build <c>cargo build -p clowd_ai --release</c>) or an ONNX
     /// Runtime dylib (see BUILDING.md) is absent; the degrade-gracefully paths run everywhere.
     /// Collected with <see cref="MatteGeneratorTests"/>: both configure the process-wide
-    /// <see cref="TractnniLoader"/>, so they must never run in parallel.
+    /// <see cref="AiLoader"/>, so they must never run in parallel.
     /// </summary>
-    [Collection("TractnniLoader")]
+    [Collection("AiLoader")]
     public class DenoiseGeneratorTests : IDisposable
     {
         private const int W = 64, H = 64, Fps = 30, Rate = 48000;
@@ -47,9 +47,9 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The repo's own build of the inference binary. The ONNX Runtime is statically
         /// linked into it, so any built exe runs inference as-is.</summary>
-        private static string FindUsableTractnni()
+        private static string FindUsableAi()
         {
-            string exeName = OperatingSystem.IsWindows() ? "clowd_tractnni.exe" : "clowd_tractnni";
+            string exeName = OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
             while (dir != null)
             {
@@ -75,7 +75,7 @@ namespace Clowd.VideoSDK.Tests
 
         public void Dispose()
         {
-            TractnniLoader.Configure(null);
+            AiLoader.Configure(null);
             foreach (var f in _tempFiles)
             {
                 try { File.Delete(f); }
@@ -145,31 +145,31 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.False(DenoiseGenerator.Generate(source, 1, null));
 
-            TractnniLoader.Configure(() => null);
-            var hadEnv = Environment.GetEnvironmentVariable(TractnniLoader.EnvVarName);
+            AiLoader.Configure(() => null);
+            var hadEnv = Environment.GetEnvironmentVariable(AiLoader.EnvVarName);
             Assert.SkipWhen(!String.IsNullOrEmpty(hadEnv),
-                $"{TractnniLoader.EnvVarName} is set in this environment; the no-binary path cannot be observed.");
+                $"{AiLoader.EnvVarName} is set in this environment; the no-binary path cannot be observed.");
             Assert.False(DenoiseGenerator.Generate(source, 1, _cacheDir));
         }
 
         [Fact]
         public void The_loader_prefers_the_configured_resolver_and_falls_back_to_the_env()
         {
-            var configured = Path.Combine(_cacheDir, "tractnni-probe.exe");
+            var configured = Path.Combine(_cacheDir, "ai-probe.exe");
             File.WriteAllBytes(configured, new byte[] { 1 });
 
-            TractnniLoader.Configure(() => configured);
-            Assert.Equal(Path.GetFullPath(configured), TractnniLoader.TryGetPath());
+            AiLoader.Configure(() => configured);
+            Assert.Equal(Path.GetFullPath(configured), AiLoader.TryGetPath());
 
             // a resolver pointing nowhere falls through to the env (unset here → null)
-            TractnniLoader.Configure(() => Path.Combine(_cacheDir, "missing.exe"));
-            if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable(TractnniLoader.EnvVarName)))
-                Assert.Null(TractnniLoader.TryGetPath());
+            AiLoader.Configure(() => Path.Combine(_cacheDir, "missing.exe"));
+            if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable(AiLoader.EnvVarName)))
+                Assert.Null(AiLoader.TryGetPath());
 
             // and a throwing resolver is treated as "not available", never propagated
-            TractnniLoader.Configure(() => throw new InvalidOperationException("boom"));
-            if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable(TractnniLoader.EnvVarName)))
-                Assert.Null(TractnniLoader.TryGetPath());
+            AiLoader.Configure(() => throw new InvalidOperationException("boom"));
+            if (String.IsNullOrEmpty(Environment.GetEnvironmentVariable(AiLoader.EnvVarName)))
+                Assert.Null(AiLoader.TryGetPath());
         }
 
         [Fact]
@@ -212,9 +212,9 @@ namespace Clowd.VideoSDK.Tests
 
             // the guard fires after the channel probe but before the process starts, so a stub
             // binary that could never run is proof no inference was attempted
-            var stub = Path.Combine(_cacheDir, "tractnni-stub.exe");
+            var stub = Path.Combine(_cacheDir, "ai-stub.exe");
             File.WriteAllBytes(stub, new byte[] { 1 });
-            TractnniLoader.Configure(() => stub);
+            AiLoader.Configure(() => stub);
 
             var source = SourceFor(EncodeSineFixture());
             source.Streams[1].DurationTicks = TimeSpan.FromHours(4).Ticks;
@@ -230,11 +230,11 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(FFmpegAvailable,
                 $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
-            var exe = FindUsableTractnni();
+            var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_tractnni.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_tractnni --release, see BUILDING.md).");
+                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
 
-            TractnniLoader.Configure(() => exe);
+            AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeSineFixture());
             var progress = new List<double>();
 
@@ -269,11 +269,11 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(FFmpegAvailable,
                 $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
-            var exe = FindUsableTractnni();
+            var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_tractnni.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_tractnni --release, see BUILDING.md).");
+                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
 
-            TractnniLoader.Configure(() => exe);
+            AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeSineFixture(channels: 1));
 
             Assert.True(DenoiseGenerator.Generate(source, 1, _cacheDir));
@@ -294,11 +294,11 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.SkipUnless(FFmpegAvailable,
                 $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
-            var exe = FindUsableTractnni();
+            var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
-                "clowd_tractnni.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_tractnni --release, see BUILDING.md).");
+                "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
 
-            TractnniLoader.Configure(() => exe);
+            AiLoader.Configure(() => exe);
             var source = SourceFor(EncodeSineFixture());
             using var cts = new CancellationTokenSource();
             cts.Cancel();

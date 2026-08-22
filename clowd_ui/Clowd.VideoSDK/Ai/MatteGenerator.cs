@@ -14,7 +14,7 @@ namespace Clowd.VideoSDK.Ai
 {
     /// <summary>
     /// Generates the person-matte sidecar for one video stream: decode the frames, scale each to
-    /// the analysis resolution and stream it as RGB24 through <c>clowd_tractnni matte</c>, then
+    /// the analysis resolution and stream it as RGB24 through <c>clowd_ai matte</c>, then
     /// encode the returned gray8 mattes (alpha in luma) as
     /// <c>matte-{SourceId}-{StreamIndex}.mp4</c> (H.264 yuv420p, companion json per
     /// <see cref="AiSidecars"/>) beside the project. Every matte frame keeps its source frame's
@@ -28,7 +28,7 @@ namespace Clowd.VideoSDK.Ai
     /// past this file and the companion json.</para>
     ///
     /// <para>The decode+scale runs on its own task feeding stdin while this thread drains stdout
-    /// into the encoder (see <see cref="TractnniClient"/> for why), with each input frame's PTS
+    /// into the encoder (see <see cref="AiClient"/> for why), with each input frame's PTS
     /// queued across to be re-attached to its output matte — the streams are 1:1 in order by the
     /// CLI contract. The mp4 spools at a temp name that becomes the sidecar in one atomic move,
     /// and the companion json is written only after, so a valid companion always implies a
@@ -43,7 +43,7 @@ namespace Clowd.VideoSDK.Ai
         /// Generates the sidecar for (<paramref name="source"/>, <paramref name="streamIndex"/>),
         /// replacing any existing one. Returns false without doing anything when there is nowhere
         /// to cache (<paramref name="cacheDir"/> null — the dev harness) or no
-        /// <c>clowd_tractnni</c> binary resolves; throws on decode or inference failure (with the
+        /// <c>clowd_ai</c> binary resolves; throws on decode or inference failure (with the
         /// process's stderr tail) and <see cref="OperationCanceledException"/> on cancellation.
         /// Progress is 0..1.
         /// </summary>
@@ -54,7 +54,7 @@ namespace Clowd.VideoSDK.Ai
             if (String.IsNullOrEmpty(cacheDir))
                 return false;
 
-            var exe = TractnniLoader.TryGetPath();
+            var exe = AiLoader.TryGetPath();
             if (exe == null)
                 return false;
 
@@ -80,7 +80,7 @@ namespace Clowd.VideoSDK.Ai
             Directory.CreateDirectory(cacheDir);
             var temp = mp4Path + "." + Guid.NewGuid().ToString("N") + ".tmp";
 
-            using var client = TractnniClient.Start(exe, new[]
+            using var client = AiClient.Start(exe, new[]
             {
                 "matte",
                 "--width", width.ToString(CultureInfo.InvariantCulture),
@@ -120,7 +120,7 @@ namespace Clowd.VideoSDK.Ai
                     if (!ptsQueue.TryDequeue(out long ptsTicks))
                     {
                         throw new InvalidOperationException(
-                            "clowd_tractnni produced more output frames than were sent."
+                            "clowd_ai produced more output frames than were sent."
                             + StderrSuffix(client));
                     }
 
@@ -163,7 +163,7 @@ namespace Clowd.VideoSDK.Ai
                 {
                     client.Kill();
                     throw new InvalidOperationException(
-                        "clowd_tractnni did not exit after its output ended." + StderrSuffix(client));
+                        "clowd_ai did not exit after its output ended." + StderrSuffix(client));
                 }
                 client.ThrowIfFailed();
                 if (pumpError != null)
@@ -171,7 +171,7 @@ namespace Clowd.VideoSDK.Ai
                 if (framesReceived != framesSent)
                 {
                     throw new InvalidOperationException(
-                        $"clowd_tractnni returned {framesReceived} matte frames for {framesSent} " +
+                        $"clowd_ai returned {framesReceived} matte frames for {framesSent} " +
                         "input frames — the streams must match 1:1." + StderrSuffix(client));
                 }
 
@@ -254,7 +254,7 @@ namespace Clowd.VideoSDK.Ai
         /// analysis size and writes it to the process's stdin, returning the frame count sent
         /// (with each frame's PTS enqueued first). Always closes stdin, so the process (and with
         /// it the caller's stdout drain) terminates whatever happens here.</summary>
-        private static unsafe long PumpInput(TractnniClient client, Source source, int streamIndex,
+        private static unsafe long PumpInput(AiClient client, Source source, int streamIndex,
             int width, int height, ConcurrentQueue<long> ptsQueue, CancellationToken cancellationToken)
         {
             using var pool = new FrameBufferPool();
@@ -332,7 +332,7 @@ namespace Clowd.VideoSDK.Ai
                     if (offset == 0)
                         return false;
                     throw new InvalidOperationException(
-                        $"clowd_tractnni's output ended {gray.Length - offset} bytes into a matte frame.");
+                        $"clowd_ai's output ended {gray.Length - offset} bytes into a matte frame.");
                 }
                 offset += read;
             }
@@ -340,7 +340,7 @@ namespace Clowd.VideoSDK.Ai
             return true;
         }
 
-        private static string StderrSuffix(TractnniClient client)
+        private static string StderrSuffix(AiClient client)
         {
             var tail = client.StderrTail;
             return tail.Length > 0 ? Environment.NewLine + tail : "";

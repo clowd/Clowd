@@ -4,7 +4,8 @@ name: CI
 # Each package is the published Clowd.Ui app with the Rust binaries beside it and
 # obs-express in a subdirectory, the layout ScreenCaptureService/ObsBinaryLocator expects.
 # Every package except osx-x64 (which upstream ONNX Runtime no longer supports) also
-# carries the clowd_tractnni AI effects binary with its execution-provider dylibs.
+# carries the clowd_ai inference binary (OCR, matting, denoising) with its
+# execution-provider dylibs.
 
 on:
   push:
@@ -56,10 +57,8 @@ jobs:
           cargo test -p clowd_capture_wgpu
           cargo clippy -p clowd_scroll_driver --all-targets -- -D warnings
           cargo test -p clowd_scroll_driver
-          cargo clippy -p clowd_ocr --all-targets -- -D warnings
-          cargo test -p clowd_ocr
-          cargo clippy -p clowd_tractnni --all-targets -- -D warnings
-          cargo test -p clowd_tractnni
+          cargo clippy -p clowd_ai --all-targets -- -D warnings
+          cargo test -p clowd_ai
         shell: bash
 
       # The shell extension is a Windows COM dll and an empty crate elsewhere.
@@ -105,10 +104,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ai: whether the clowd_tractnni AI effects binary builds for this
+          # ai: whether the clowd_ai inference binary builds for this
           # target. false only on osx-x64: upstream ONNX Runtime dropped
           # macOS x86_64, so ort has no binaries for it — the app greys the
-          # AI features out there instead.
+          # AI effects out there and the overlay reports OCR as unavailable.
           - rid: win-x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
@@ -191,13 +190,13 @@ jobs:
       - name: Build rust binaries
         shell: bash
         run: |
-          PKGS="-p clowd_capture_wgpu -p clowd_ocr -p clowd_scroll_driver"
+          PKGS="-p clowd_capture_wgpu -p clowd_scroll_driver"
           if [ "${{ runner.os }}" = "Windows" ]; then
             PKGS="$PKGS -p clowd_shell_ext"
           fi
           # The ort crate's build downloads pyke's prebuilt ONNX Runtime for the target and links it statically (see the matrix `ai` flag).
           if [ "${{ matrix.ai }}" = "true" ]; then
-            PKGS="$PKGS -p clowd_tractnni"
+            PKGS="$PKGS -p clowd_ai"
           fi
           cargo build --release --target ${{ matrix.target }} $PKGS
 
@@ -211,54 +210,47 @@ jobs:
           # Name the artefacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
           if [ "${{ runner.os }}" = "Windows" ]; then
             DIF="$OUT/clowd_capture_wgpu.pdb"
-            OCR_DIF="$OUT/clowd_ocr.pdb"
             SCROLL_DIF="$OUT/clowd_scroll_driver.pdb"
-            TRACT_DIF="$OUT/clowd_tractnni.pdb"
+            AI_DIF="$OUT/clowd_ai.pdb"
           else
             DIF="$OUT/clowd_capture_wgpu.dSYM"
-            OCR_DIF="$OUT/clowd_ocr.dSYM"
             SCROLL_DIF="$OUT/clowd_scroll_driver.dSYM"
-            TRACT_DIF="$OUT/clowd_tractnni.dSYM"
+            AI_DIF="$OUT/clowd_ai.dSYM"
           fi
           # The executable goes up alongside the debug file for its symbol table.
           sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
-          sentry-cli debug-files upload "$OCR_DIF" "$OUT/clowd_ocr${{ matrix.exe }}"
           sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/clowd_scroll_driver${{ matrix.exe }}"
-          # absent on the one leg that does not build the AI effects binary
+          # absent on the one leg that does not build the AI inference binary
           if [ "${{ matrix.ai }}" = "true" ]; then
-            sentry-cli debug-files upload "$TRACT_DIF" "$OUT/clowd_tractnni${{ matrix.exe }}"
+            sentry-cli debug-files upload "$AI_DIF" "$OUT/clowd_ai${{ matrix.exe }}"
           fi
           if [ "${{ runner.os }}" = "Windows" ]; then
             sentry-cli debug-files upload "$OUT/clowd_shell_ext.pdb" "$OUT/clowd_shell_ext.dll"
           fi
 
-      # All three sit beside the overlay, which resolves them as siblings of its own executable.
+      # The driver (and clowd_ai, below) sit beside the overlay, which resolves them as siblings of its own executable.
       - name: Copy capture binary into package
         run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
-        shell: bash
-
-      - name: Copy OCR recognizer into package
-        run: cp "target/${{ matrix.target }}/release/clowd_ocr${{ matrix.exe }}" publish/
         shell: bash
 
       - name: Copy scrolling capture driver into package
         run: cp "target/${{ matrix.target }}/release/clowd_scroll_driver${{ matrix.exe }}" publish/
         shell: bash
 
-      # Beside Clowd.Ui, which is where TractnniLoader looks for it.
-      - name: Copy AI effects binary into package
+      # Beside Clowd.Ui (where AiLoader looks for it) and beside the overlay (which spawns it for OCR).
+      - name: Copy AI inference binary into package
         if: matrix.ai
-        run: cp "target/${{ matrix.target }}/release/clowd_tractnni${{ matrix.exe }}" publish/
+        run: cp "target/${{ matrix.target }}/release/clowd_ai${{ matrix.exe }}" publish/
         shell: bash
 
-      # clowd_tractnni is GPL-3.0 (it embeds the RobustVideoMatting weights);
+      # clowd_ai is GPL-3.0 (it embeds the RobustVideoMatting weights);
       # GPL sections 4/6 require the license text and source offer to travel
       # with every distributed copy.
-      - name: Copy AI effects license into package
+      - name: Copy AI inference license into package
         if: matrix.ai
         run: |
-          cp clowd_tractnni/LICENSE publish/clowd_tractnni.LICENSE.txt
-          cp clowd_tractnni/NOTICE.txt publish/clowd_tractnni.NOTICE.txt
+          cp clowd_ai/LICENSE publish/clowd_ai.LICENSE.txt
+          cp clowd_ai/NOTICE.txt publish/clowd_ai.NOTICE.txt
         shell: bash
 
       # The runtime itself is statically linked, but the DirectML EP needs
@@ -269,7 +261,7 @@ jobs:
         run: cp "target/${{ matrix.target }}/release/DirectML.dll" publish/
         shell: bash
 
-      # clowd_tractnni is the workspace's one /MD binary (its build.rs swaps
+      # clowd_ai is the workspace's one /MD binary (its build.rs swaps
       # it off `+crt-static` to match pyke's ONNX Runtime libs), so it
       # imports msvcp140/vcruntime140 at runtime. Those are not OS
       # components; ship them app-local from the runner's own VS redist,

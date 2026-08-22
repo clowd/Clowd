@@ -151,7 +151,7 @@
         },
         {
           "name": "clap",
-          "version": "4.6.5",
+          "version": "4.6.6",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/clap-rs/clap"
         },
@@ -252,12 +252,6 @@
           "url": "https://github.com/madsmtm/objc2"
         },
         {
-          "name": "ocr-rs",
-          "version": "2.4.1",
-          "license": "Apache-2.0",
-          "url": "https://github.com/zibo-chen/rust-paddle-ocr"
-        },
-        {
           "name": "ONNX Runtime",
           "version": "",
           "license": "MIT",
@@ -268,6 +262,12 @@
           "version": "2.0.0-rc.13",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/pykeio/ort"
+        },
+        {
+          "name": "PaddleOCR PP-OCRv6 models",
+          "version": "",
+          "license": "Apache-2.0",
+          "url": "https://github.com/PaddlePaddle/PaddleOCR"
         },
         {
           "name": "pollster",
@@ -355,7 +355,7 @@
         },
         {
           "name": "xdialog",
-          "version": "3.1.1",
+          "version": "3.1.5",
           "license": "MIT",
           "url": "https://github.com/velopack/xdialog"
         }

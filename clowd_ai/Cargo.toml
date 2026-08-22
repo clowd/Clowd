@@ -1,0 +1,71 @@
+[package]
+name = "clowd_ai"
+version = "1.0.0"
+edition = "2021"
+# The ONLY GPL crate in an otherwise MIT repository, and deliberately so: the
+# embedded RobustVideoMatting weights (assets/models/, see the README there)
+# are released under GPL-3.0, so the binary that embeds them is GPL-3.0 too.
+# That licence must not reach the rest of Clowd, which is the second reason —
+# after fault isolation — that AI inference is its own process: the GPL ends
+# at this process boundary (mere aggregation; the app talks to it over pipes),
+# exactly like the GPL'd obs-express recording process the app already ships.
+license = "GPL-3.0-only"
+
+# Every on-device AI model Clowd runs, as its own process, one subcommand per
+# job kind:
+# - `ocr`: PaddleOCR text recognition for the capture overlay. The overlay
+#   (`clowd_capture_wgpu`) spawns it per OCR press with the selected pixels on
+#   stdin and reads the answer from the `--out` file (contract in
+#   `clowd_rust_core::ocr`).
+# - `matte` / `denoise`: Clowd.VideoSDK's sidecar generators (AiClient.cs)
+#   spawn it per job and stream raw frames/samples down stdin; it streams
+#   matte frames / denoised samples back up stdout.
+#
+# Split out of the app for three reasons:
+# - the GPL boundary above;
+# - ONNX Runtime is a large native library; a crash in native inference kills
+#   a per-job child, not the editor or the capture overlay;
+# - the embedded model weights (~15 MB RobustVideoMatting fp32 + ~10.6 MB
+#   DPDFNet2 48 kHz + ~35.5 MB PP-OCRv6 det/rec, all fp32) stay out of every
+#   process that never runs a model — the overlay in particular is spawned
+#   fresh for every capture and pays for its own size in start-up latency.
+#   Cancelling a job is killing a process.
+#
+# Only Windows (x64 + arm64) and Apple Silicon build this crate: upstream
+# ONNX Runtime dropped macOS x86_64, and ort has no prebuilt binaries for it.
+# CI skips it on the osx-x64 leg; the app greys the AI effects out there and
+# the overlay reports OCR as unavailable.
+
+[dependencies]
+clowd_rust_core.workspace = true
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+log.workspace = true
+serde_json.workspace = true
+simplelog.workspace = true
+# Crop/resize for the OCR recognition crops (src/ocr.rs). Decoders are not
+# needed: the overlay hands over raw BGRA.
+image.workspace = true
+# ONNX Runtime bindings: ort-sys downloads pyke's prebuilt runtime for the
+# cargo TARGET at build time and links it statically, so the shipped binary
+# needs no runtime dylib beside it. Execution providers are per-target
+# features below — pyke publishes one binary build per EP set, so the set
+# has to match what exists for each target (see ort-sys's dist.tsv). The
+# libs are compiled /MD; build.rs swaps this binary onto the dynamic CRT.
+ort.workspace = true
+# STFT/ISTFT for the DPDFNet denoiser (src/denoise.rs).
+realfft.workspace = true
+
+[dev-dependencies]
+# png/jpeg are only for the env-gated diagnostic tests in src/ocr.rs.
+image = { workspace = true, features = ["png", "jpeg"] }
+
+# DirectML: GPU inference on any DX12 hardware with no user-installed
+# runtime (DirectML.dll ships in the package). Deliberately NOT CUDA — the
+# CUDA EP needs the user's own CUDA 13 + cuDNN 9 install, which end users
+# will never have, so it could only ever fall back.
+[target.'cfg(windows)'.dependencies]
+ort = { workspace = true, features = ["directml"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+ort = { workspace = true, features = ["coreml"] }

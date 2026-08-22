@@ -47,8 +47,8 @@ namespace Clowd.VideoSDK.Render
         /// audio mix reads denoise sidecars for tracks with <see cref="Model.Track.Denoise"/>
         /// on and the frame source reads matte sidecars for items with a segmented
         /// <see cref="Model.VideoEffect"/>. Sidecars that are needed but missing/stale are
-        /// generated here before the render loop when a <c>clowd_tractnni</c> binary resolves
-        /// (see <see cref="Clowd.VideoSDK.Ai.TractnniLoader"/>). Null renders every stream raw
+        /// generated here before the render loop when a <c>clowd_ai</c> binary resolves
+        /// (see <see cref="Clowd.VideoSDK.Ai.AiLoader"/>). Null renders every stream raw
         /// and the segmented effects degrade to plain draws.</summary>
         public string SidecarCacheDir { get; init; }
     }
@@ -404,7 +404,7 @@ namespace Clowd.VideoSDK.Render
         /// Brings the AI sidecars the render consumes up to date: every needed-but-missing/stale
         /// matte (items with a segmented <see cref="VideoEffect"/>) and denoise (tracks with
         /// <see cref="Track.Denoise"/>) sidecar is generated synchronously when a
-        /// <c>clowd_tractnni</c> binary resolves. Without a binary — or a cache directory — the
+        /// <c>clowd_ai</c> binary resolves. Without a binary — or a cache directory — the
         /// render proceeds and the effects degrade exactly as the preview does: plain Blur still
         /// applies, the segmented kinds draw plain, denoise plays raw. A stream too long for the
         /// sidecar wav format (denoise's <see cref="NotSupportedException"/>) degrades the same
@@ -440,10 +440,10 @@ namespace Clowd.VideoSDK.Render
             if (jobs.Count == 0)
                 return 0;
 
-            if (TractnniLoader.TryGetPath() == null)
+            if (AiLoader.TryGetPath() == null)
             {
                 options.DiagnosticLog?.Invoke(
-                    $"RenderJob: {jobs.Count} AI sidecar(s) needed but no clowd_tractnni binary resolves — rendering without them.");
+                    $"RenderJob: {jobs.Count} AI sidecar(s) needed but no clowd_ai binary resolves — rendering without them.");
                 return 0;
             }
 

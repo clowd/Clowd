@@ -12,14 +12,17 @@ at all — no window, no event loop, no GPU — and shares the session format wi
 the capturer and nothing else. It is documented here because it speaks to the
 same shell across the same boundary.
 
-A second separate binary, `clowd_ocr` (§3), does text recognition. It is the
-odd one out: the shell never spawns it and never speaks to it — the *overlay*
-does, per OCR press. It is documented here because it is the third process in
-the same family and shares `clowd_rust_core` with the other two.
+A second separate binary, `clowd_ai` (§3, its `ocr` subcommand), does text
+recognition. It is the odd one out: the shell never spawns it for this and
+never speaks to it — the *overlay* does, per OCR press. (The same binary's
+`matte`/`denoise` subcommands serve the video editor's AI effects, over a
+different protocol owned by `Clowd.VideoSDK`'s `AiClient.cs`.) It is
+documented here because it is the third process in the same family and shares
+`clowd_rust_core` with the other two.
 
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `clowd_scroll_driver/src/drive.rs` (scrolling-capture driver),
-`src/ocr/client.rs` + `clowd_ocr/src/main.rs` (recognizer), and
+`src/ocr/client.rs` + `clowd_ai/src/ocr.rs` (recognizer), and
 `clowd_rust_core` for what the binaries must agree on — the `session.json`
 shape (`session.rs`), the recognition contract (`ocr.rs`), the coordinate space
 (`geometry.rs`) and the exit codes (`exit.rs`). C# counterparts:
@@ -320,38 +323,43 @@ excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
 as `stopped` with everything captured so far.
 
-## 3. Text recognizer (`clowd_ocr`)
+## 3. Text recognizer (`clowd_ai ocr`)
 
 The only protocol here that the shell is not a party to. When the user presses
 OCR, the overlay extracts the selected region's pixels — compositing a
 click-locked peek if one is up, so what is recognized is what the user can
-actually see — spawns `clowd_ocr`, and waits for it on the detached `ocr`
+actually see — spawns `clowd_ai ocr`, and waits for it on the detached `ocr`
 worker thread. **One request, one process, one answer.**
 
-It is a **separate binary** because recognition runs on a static C++ engine
-(MNN, via `ocr-rs`). A Rust panic in it would unwind harmlessly, but an
-`abort`, a segfault or a refused allocation on a degenerate selection kills the
-process it is running in — which in-process meant the overlay, mid-capture,
-with the user's selection already framed. Out-of-process the same failure is an
-exit code the capturer turns into an "OCR failed" pill.
+It is a **separate binary** because recognition runs on a large native engine
+(PaddleOCR models on ONNX Runtime, via the `ort` crate). A Rust panic in it
+would unwind harmlessly, but an `abort`, a segfault or a refused allocation on
+a degenerate selection kills the process it is running in — which in-process
+meant the overlay, mid-capture, with the user's selection already framed.
+Out-of-process the same failure is an exit code the capturer turns into an
+"OCR failed" pill. It is also the licence boundary: `clowd_ai` embeds GPL-3.0
+matting weights and is GPL-3.0 itself, which the process boundary keeps out of
+the MIT overlay.
 
 Two things follow from that split, both improvements rather than costs:
 cancelling (BACK) is killing a process rather than polling a flag between
 inference batches, so a superseded request can no longer hold the engine while
-the next one queues behind it; and the ~18 MB of embedded models plus the
-static MNN left the overlay, which is spawned fresh for every capture and
+the next one queues behind it; and the tens of MB of embedded models plus the
+static runtime left the overlay, which is spawned fresh for every capture and
 therefore pays for its own size in start-up latency.
 
-It ships beside `clowd_capture_wgpu` on **every** platform, which is where
-`src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
-`CLOWD_OCR_BINARY` environment variable overrides that, for tests and local
+It ships beside `clowd_capture_wgpu` on every platform that has an ONNX
+Runtime build — Windows x64/arm64 and Apple Silicon, **not** Intel macOS,
+where the spawn fails and the overlay shows OCR as unavailable — which is
+where `src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
+`CLOWD_AI_BINARY` environment variable overrides that, for tests and local
 development). It needs no window, no event loop, no GPU, and — because it is
 handed pixels rather than taking them — no screen-recording permission.
 
 ### 3.1 Spawn
 
 ```
-clowd_ocr --out <path> [--log-file <path>]
+clowd_ai ocr --out <path> [--log-file <path>]
 ```
 
 | Flag | Required | Meaning |
@@ -364,7 +372,7 @@ Stdio, all three of which the capturer sets deliberately:
 | Stream | Setting | Why |
 |---|---|---|
 | stdin | pipe | Carries the request (§3.2). |
-| stdout | **null** | MNN prints device capabilities to stdout on session creation, so stdout cannot carry a protocol here — hence the `--out` file. A pipe would work but one nobody drains can eventually block the child; null cannot. |
+| stdout | **null** | The `ocr` subcommand writes nothing to stdout — the answer is the `--out` file, which doubles as the session's `ocr.json` artefact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is the NDJSON protocol of §1, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
 | stderr | inherited | Log chatter, by the same convention §2.2 follows. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
 
 On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a
@@ -419,8 +427,11 @@ about 1.1 s end to end — but the `Scanning` phase has no other way out, and
 without it a child that hung instead of exiting would leave the user under the
 sweep animation indefinitely.
 
-The recognizer reports to Sentry under `app = clowd_ocr`, with release-health
-session tracking **off** (`telemetry::init_short_lived`): it runs once per OCR
-press rather than once per app run, so tracked sessions would bury the shell's
-and capturer's real ones — and the session envelope measured ~100 ms on a
-process that lives for about a second.
+The recognizer has **no Sentry client** of its own: it runs once per OCR
+press rather than once per app run, so release-health sessions would measure
+key presses rather than app runs — and the session envelope measured ~100 ms
+on a process that lives for about a second. The capturer reports on its
+behalf: an abnormal exit is logged at `error!` with the exit code, and a Rust
+panic in the child leaves its message (file and line) in the response file
+from a panic hook, which the capturer reads only for that message and appends
+to the report instead of a bare exit code.
