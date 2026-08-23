@@ -28,7 +28,8 @@ pub const MAX_AUDIO_TRACKS: usize = 6;
 // slot.
 const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_AUDIO_MIXES as usize);
 const _: () = assert!(MAX_AUDIO_TRACKS <= obs_sys::MAX_OUTPUT_AUDIO_ENCODERS as usize);
-// The webcam occupies video track 1 (`webcam::create` / `Recorder::new`).
+// The webcam occupies video track 1 (`webcam::create` / `Recorder::new`), so
+// a screen + webcam recording needs two video encoder slots.
 const _: () = assert!(obs_sys::MAX_OUTPUT_VIDEO_ENCODERS >= 2);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,7 +76,11 @@ pub struct AudioTrack {
 /// Sources beyond [`MAX_AUDIO_TRACKS`] are not silently dropped here; callers
 /// reject that configuration up front (`Cli::validate`), and
 /// [`audio_mixer_mask`] folds any excess into the last track as a backstop.
-pub fn plan_audio_tracks(speakers: &[String], mics: &[String], multi_track: bool) -> Vec<AudioTrack> {
+pub fn plan_audio_tracks(
+    speakers: &[String],
+    mics: &[String],
+    multi_track: bool,
+) -> Vec<AudioTrack> {
     if !multi_track || (speakers.is_empty() && mics.is_empty()) {
         return vec![AudioTrack {
             kind: AudioKind::Mixed,

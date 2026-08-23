@@ -45,8 +45,7 @@ pub fn run() -> ! {
 
 fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
     platform::init_process();
-    let context =
-        ObsContext::new("en-US").map_err(|e| format!("Failed to initialize OBS: {e}"))?;
+    let context = ObsContext::new("en-US").map_err(|e| format!("Failed to initialize OBS: {e}"))?;
 
     // Same init order as Recorder::new — data path before reset_video
     // (graphics init resolves default.effect through the data path), modules

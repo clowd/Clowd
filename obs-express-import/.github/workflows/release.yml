@@ -2,7 +2,7 @@ name: Release
 
 # Manually dispatched. Bumps the obs-express version to the freetext input,
 # commits it, builds all four variants (via the reusable build.yml), and
-# publishes a GitHub Release with each build attached as a zipped asset.
+# publishes a GitHub Release with each build's zip attached as an asset.
 on:
   workflow_dispatch:
     inputs:
@@ -65,19 +65,22 @@ jobs:
     needs: [bump, build]
     runs-on: ubuntu-latest
     steps:
+      # Each build job uploads an already-zipped bundle (see build.yml: the
+      # macOS tree would lose its execute bits and symlinks if it round-tripped
+      # through the artifact store unpacked), so the release attaches the
+      # artifacts as-is.
       - name: Download all build artifacts
         uses: actions/download-artifact@v8
         with:
           path: artifacts
+          merge-multiple: true
 
-      - name: Zip each variant
+      - name: List release assets
         run: |
-          cd artifacts
-          for d in */; do
-            name="${d%/}"
-            (cd "$d" && zip -r "../${name}.zip" .)
+          ls -la artifacts
+          for expected in windows-x64 windows-arm64 macos-x64 macos-arm64; do
+            test -f "artifacts/obs-express-$expected.zip" || { echo "::error::missing obs-express-$expected.zip"; exit 1; }
           done
-          ls -la
 
       - name: Create GitHub Release
         env:

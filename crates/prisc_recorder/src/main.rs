@@ -1,7 +1,10 @@
 mod cameras;
 mod cli;
 mod commands;
+mod cursor_sprite;
 mod encoder_config;
+mod input_capture;
+mod input_hook;
 mod platform;
 mod recorder;
 mod region;

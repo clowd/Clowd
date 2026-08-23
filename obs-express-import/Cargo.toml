@@ -18,6 +18,9 @@ ffmpeg-sys = { path = "crates/ffmpeg-sys" }
 # External crates. Versions (and shared feature sets) live here only; members
 # declare `{ workspace = true }`.
 anyhow = "1"
+# base64 + png: the input-capture sidecar's `cursor_image` rows carry sprite
+# planes as base64-encoded PNG (crates/obs-express/src/cursor_sprite.rs).
+base64 = "0.23"
 # 0.72+ required: bindgen 0.71 + libclang 22 intermittently emitted opaque
 # 1-byte structs (vec2/vec3/vec4/obs_transform_info/obs_audio_data/
 # obs_source_frame) whose layout asserts then fail with E0080. See the
@@ -26,6 +29,7 @@ bindgen = "0.72"
 clap = { version = "4", features = ["derive"] }
 ctrlc = { version = "3", features = ["termination"] }
 libc = "0.2"
+png = "0.18"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 windows-sys = { version = "0.61", features = [
@@ -35,6 +39,9 @@ windows-sys = { version = "0.61", features = [
     # GetCursorPos / GetAsyncKeyState: pointer sampling for --tracker.
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
+    # GetProcAddress: resolving user32!GetCursorFrameInfo (animated cursor
+    # sprites — the export is undocumented, so it cannot be linked).
+    "Win32_System_LibraryLoader",
     "Win32_System_Threading",
     "Win32_System_Console",
     # CoInitializeEx / CoCreateInstance: endpoint-volume query for

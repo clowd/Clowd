@@ -2,8 +2,9 @@ name: Build
 
 # Reusable build matrix: Windows and macOS, each for x64 and arm64. Called by
 # ci.yml (on push / PR) and release.yml (after the version bump). Every variant
-# uploads an `obs-express-<os>-<arch>` artifact that the release job attaches to
-# the GitHub Release.
+# uploads an `obs-express-<os>-<arch>` artifact containing the zipped bundle
+# (`obs-express-<os>-<arch>.zip`, members at the archive root) that the release
+# job attaches to the GitHub Release unchanged.
 on:
   workflow_call:
     inputs:
@@ -20,8 +21,8 @@ jobs:
   # ---------------------------------------------------------------------------
   # Windows: VS 2022 generator (-A per arch), obs-sys builds libobs into
   # target/obs-<arch>, and the obs-express build.rs assembles a self-contained
-  # runtime tree in target/release. That whole tree is the artifact. Each arch
-  # builds natively on its matching runner (windows-2022 = x64,
+  # runtime tree in target/release. That whole tree, zipped, is the artifact.
+  # Each arch builds natively on its matching runner (windows-2022 = x64,
   # windows-11-arm = arm64), so no --target / cross toolchain is needed.
   # ---------------------------------------------------------------------------
   windows:
@@ -145,12 +146,24 @@ jobs:
           $mb = (Get-ChildItem -Recurse $dist | Measure-Object -Property Length -Sum).Sum / 1MB
           Write-Host ("Total staged size: {0:N1} MB" -f $mb)
 
+      # Archive in the build job so the artifact IS the release asset (the
+      # macOS job must do this to survive upload-artifact; doing it here too
+      # keeps release.yml a plain "attach what was downloaded"). Members sit at
+      # the archive root, matching the previous release layout.
+      - name: Archive bundle
+        run: |
+          $dist = "dist/obs-express-windows-${{ matrix.arch }}"
+          Compress-Archive -Path "$dist/*" -DestinationPath "$dist.zip" -CompressionLevel Optimal
+          Get-Item "$dist.zip" | Select-Object Name, Length
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: obs-express-windows-${{ matrix.arch }}
-          path: dist/obs-express-windows-${{ matrix.arch }}
+          path: dist/obs-express-windows-${{ matrix.arch }}.zip
           if-no-files-found: error
+          # Already a zip; re-deflating it only costs time.
+          compression-level: 0
 
   # ---------------------------------------------------------------------------
   # macOS: Xcode generator, obs-sys builds libobs.framework. Both slices run on
@@ -158,7 +171,8 @@ jobs:
   # `--target x86_64-apple-darwin` (build.rs forwards the arch to
   # CMAKE_OSX_ARCHITECTURES; OBS's macOS prebuilt deps are universal). The Stage
   # step assembles a self-contained, relocatable bundle (framework + graphics
-  # modules + dep dylibs + plugins) and rewrites rpaths to @executable_path.
+  # modules + dep dylibs + plugins), rewrites rpaths to @executable_path, and
+  # zips it with ditto (symlinks and modes intact) for upload.
   # ---------------------------------------------------------------------------
   macos:
     name: Build (macOS ${{ matrix.arch }})
@@ -294,11 +308,20 @@ jobs:
           cp -a "$obs_build/libobs-metal/$config/"*.dylib "$dist/Frameworks/" 2>/dev/null || true
           cp -a "$obs_build/libobs-opengl/$config/"*.dylib "$dist/Frameworks/" 2>/dev/null || true
 
-          # 3. Prebuilt dependency dylibs (FFmpeg, x264, ...)
-          deps_lib=$(ls -d obs-studio/.deps/obs-deps-*/lib 2>/dev/null | grep -v qt6 | head -1 || true)
-          if [ -n "$deps_lib" ]; then
-            find "$deps_lib" -maxdepth 1 -name '*.dylib' -exec cp -a {} "$dist/Frameworks/" \;
-          fi
+          # 3. Prebuilt dependency dylibs (FFmpeg, x264, ...). Taken from the
+          #    profile dir, NOT from obs-studio/.deps: build.rs stages them
+          #    there (stage_macos_dylibs) with an @loader_path rpath and a
+          #    fresh ad-hoc signature, so they are self-resolving for any
+          #    consumer that dlopens them, and the dev tree and this bundle
+          #    carry byte-identical files. `cp -a` keeps the versioned aliases
+          #    as symlinks (the Archive step preserves them).
+          find "$outdir" -maxdepth 1 -name '*.dylib' -exec cp -a {} "$dist/Frameworks/" \;
+          for required in libavcodec.dylib libavformat.dylib libavutil.dylib libx264.dylib; do
+            if [ ! -e "$dist/Frameworks/$required" ]; then
+              echo "::error::required dylib missing from dist (build.rs did not stage it): $required"
+              exit 1
+            fi
+          done
 
           # 4. Plugins (.plugin bundles), preserving the <name>/RelWithDebInfo
           #    layout the runtime plugin-path template expects.
@@ -344,6 +367,10 @@ jobs:
           path is resolved relative to obs-express at runtime, so this whole
           directory can be moved anywhere and run in place.
 
+          The dylibs in Frameworks/ carry an @loader_path rpath, so they can
+          also be dlopen'd directly (e.g. to use FFmpeg in-process) by any
+          program, as long as they stay together in one directory.
+
           The binaries are ad-hoc signed (not notarized); first launch may need:
             xattr -dr com.apple.quarantine <this directory>
           EOF
@@ -365,14 +392,58 @@ jobs:
             [ "$(head -c 6 /tmp/vid2gif-smoke.gif)" = "GIF89a" ]
             echo "vid2gif GIF toolchain OK"
           fi
+          # 8. Verify the dep dylibs are self-resolving: @loader_path rpath and
+          #    a valid signature on every real file (the symlink aliases resolve
+          #    to them), and — on the native slice — an actual dlopen from a
+          #    process that is NOT obs-express. libavformat has the widest
+          #    @rpath fan-out in the payload (avcodec, swresample, avutil, rist,
+          #    srt, mbedtls x3, x264), so if it loads, everything does.
+          find "$dist/Frameworks" -maxdepth 1 -type f -name 'lib*.dylib' \
+              ! -name 'libobs-*.dylib' | while read -r lib; do
+            if ! otool -l "$lib" | grep -A2 'cmd LC_RPATH' | grep -q 'path @loader_path'; then
+              echo "::error::$(basename "$lib") has no @loader_path rpath"; exit 1
+            fi
+            codesign -v "$lib" || { echo "::error::$(basename "$lib") signature invalid"; exit 1; }
+          done
+          if [ "$arch" = "arm64" ]; then
+            python3 -c "import ctypes, sys; [ctypes.CDLL(p) for p in sys.argv[1:]]" \
+              "$PWD/$dist/Frameworks/libavformat.dylib" \
+              "$PWD/$dist/Frameworks/libavfilter.dylib" \
+              "$PWD/$dist/Frameworks/libavdevice.dylib"
+            echo "dep dylibs dlopen OK from a foreign host"
+          fi
 
           echo "Frameworks:"; ls "$dist/Frameworks"
           echo "Plugins:";    ls "$dist/obs-plugins"
           echo "Bundle size:"; du -sh "$dist"
 
+      # The staged tree is correct (755 executables, symlinked dylib aliases,
+      # a symlinked libobs.framework), but actions/upload-artifact does not
+      # preserve modes and follows symlinks, so uploading the tree ships 644
+      # binaries, triplicated dylibs and a framework codesign rejects as
+      # "bundle format is ambiguous". Archive here, upload the archive, and
+      # release.yml attaches it as-is. ditto keeps symlinks and modes; no
+      # --keepParent so members sit at the archive root (the layout consumers
+      # already unzip into a directory of their own); --norsrc so no xattrs
+      # become `._*` AppleDouble entries (embedded code signatures live in
+      # the Mach-O, nothing here needs a resource fork).
+      - name: Archive bundle
+        run: |
+          set -euo pipefail
+          dist="dist/obs-express-macos-${{ matrix.arch }}"
+          zip="$dist.zip"
+          ditto -c -k --norsrc "$dist" "$zip"
+          echo "symlink entries: $(zipinfo "$zip" | grep -c '^l' || true)"
+          zipinfo "$zip" | grep -E ' (obs-express|vid2gif|obs-ffmpeg-mux)$'
+          [ "$(zipinfo "$zip" | grep -c '^l')" -gt 0 ] || { echo "::error::archive lost its symlinks"; exit 1; }
+          zipinfo "$zip" | grep -E ' obs-express$' | grep -q '^-rwx' || { echo "::error::archive lost the execute bit"; exit 1; }
+          ls -la "$zip"
+
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: obs-express-macos-${{ matrix.arch }}
-          path: dist/obs-express-macos-${{ matrix.arch }}
+          path: dist/obs-express-macos-${{ matrix.arch }}.zip
           if-no-files-found: error
+          # Already a zip; re-deflating it only costs time.
+          compression-level: 0

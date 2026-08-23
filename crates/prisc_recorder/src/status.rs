@@ -27,8 +27,14 @@ pub fn emit_simple(msg_type: &str) {
 
 /// `tracks` is the optional per-track stream map (same shape as in
 /// `started_recording`); omitted entirely when None so consumers that key on
-/// field presence keep their previous value.
-pub fn emit_stopped_recording(code: i64, error: Option<String>, tracks: Option<serde_json::Value>) {
+/// field presence keep their previous value. `input_capture` is the sidecar
+/// path when `--input-capture` is active — also key-omitted when absent.
+pub fn emit_stopped_recording(
+    code: i64,
+    error: Option<String>,
+    tracks: Option<serde_json::Value>,
+    input_capture: Option<&std::path::Path>,
+) {
     let mut msg = serde_json::json!({
         "type": "stopped_recording",
         "code": code,
@@ -37,6 +43,9 @@ pub fn emit_stopped_recording(code: i64, error: Option<String>, tracks: Option<s
     });
     if let Some(tracks) = tracks {
         msg["tracks"] = tracks;
+    }
+    if let Some(path) = input_capture {
+        msg["input_capture"] = serde_json::json!(path.to_string_lossy());
     }
     emit_json(msg);
 }
@@ -334,7 +343,10 @@ pub fn start_levels_thread(
             };
 
             let same_devices = devices.len() == comp_last.len()
-                && devices.iter().zip(&comp_last).all(|(d, (last, _))| d == last);
+                && devices
+                    .iter()
+                    .zip(&comp_last)
+                    .all(|(d, (last, _))| d == last);
             if compensate != comp_on || !same_devices {
                 comp_on = compensate;
                 comp_last = devices.into_iter().map(|d| (d, f32::NAN)).collect();

@@ -13,13 +13,19 @@ fn main() {
 }
 
 // ---------------------------------------------------------------------------
-// macOS (unchanged behavior — framework rpaths + obs-ffmpeg-mux patch)
+// macOS (framework rpaths, obs-ffmpeg-mux patch, dep dylibs staged next to
+// the binary)
 // ---------------------------------------------------------------------------
 
 fn build_macos() {
     println!("cargo:rustc-link-lib=framework=CoreGraphics");
     println!("cargo:rustc-link-lib=framework=CoreFoundation");
     println!("cargo:rustc-link-lib=framework=ColorSync");
+    // Cursor-shape classification matches the live cursor against the stock
+    // NSCursor set (platform/macos.rs::cursor_shape), which needs AppKit and
+    // the Objective-C runtime.
+    println!("cargo:rustc-link-lib=framework=AppKit");
+    println!("cargo:rustc-link-lib=objc");
 
     let build_dir = env::var("DEP_OBS_OBS_BUILD_DIR").expect("DEP_OBS_OBS_BUILD_DIR not set");
     let config = env::var("DEP_OBS_OBS_BUILD_CONFIG").expect("DEP_OBS_OBS_BUILD_CONFIG not set");
@@ -85,10 +91,176 @@ fn build_macos() {
             run("codesign", &["--force", "--sign", "-", mux_path]);
         }
     }
+
+    // Stage the prebuilt dependency dylibs (FFmpeg, x264, rist/srt, mbedtls,
+    // ...) beside the binaries, the way build_windows() stages the DLLs.
+    // OUT_DIR = target[/<triple>]/{debug,release}/build/obs-express-<hash>/out
+    if let Some(ref deps) = deps_lib {
+        let profile_dir = Path::new(&out_dir)
+            .ancestors()
+            .nth(3)
+            .expect("could not resolve the cargo profile dir from OUT_DIR");
+        stage_macos_dylibs(deps, profile_dir);
+    }
+}
+
+/// Copy every top-level `*.dylib` in the obs-deps `lib` dir into the cargo
+/// profile dir and make each one self-resolving.
+///
+/// obs-express itself does not need this: it carries absolute rpaths into
+/// `.deps`. Two things do:
+///
+/// - Parity with Windows, where the profile dir holds a complete FFmpeg runtime
+///   next to the executable. A consumer that links or `dlopen`s FFmpeg (Clowd
+///   does) can then probe `target/{debug,release}` on both platforms instead of
+///   reaching into `obs-studio/.deps/obs-deps-*/lib` and pinning its layout.
+/// - The CI Stage step ships *these* copies (not the raw `.deps` files), so the
+///   relocation below is defined once, here, for dev builds and releases alike.
+///
+/// The dylibs are linked with `@rpath` install names and reference their
+/// siblings the same way, but the prebuilt bundle gives them no `LC_RPATH` at
+/// all — only an image that already has a usable rpath (our executables) can
+/// load them, and `dlopen` from anything else fails with "no LC_RPATH's found".
+/// Every sibling lives in the same directory, so `@loader_path` is exactly the
+/// right rpath and needs no knowledge of the consumer's layout. The ad-hoc
+/// re-sign is mandatory: `install_name_tool` invalidates the signature, and on
+/// Apple Silicon an invalid signature is a load failure, not a warning.
+///
+/// The versioned aliases (`libavcodec.dylib`, `libavcodec.61.dylib`) are
+/// symlinks to one real file; they are recreated as symlinks so the payload is
+/// not tripled and the real file is patched exactly once.
+fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
+    let entries = match fs::read_dir(deps_lib) {
+        Ok(e) => e,
+        Err(e) => {
+            println!(
+                "cargo:warning=obs-express: cannot read {}: {e}",
+                deps_lib.display()
+            );
+            return;
+        }
+    };
+    let _ = fs::create_dir_all(profile_dir);
+
+    for entry in entries.flatten() {
+        let src = entry.path();
+        if src.extension().and_then(|e| e.to_str()) != Some("dylib") {
+            continue;
+        }
+        let dst = profile_dir.join(entry.file_name());
+
+        // symlink_metadata, not metadata: copying *through* the aliases would
+        // triple the payload on disk and re-patch the same file three times.
+        let Ok(meta) = fs::symlink_metadata(&src) else {
+            continue;
+        };
+        if meta.file_type().is_symlink() {
+            let Ok(target) = fs::read_link(&src) else {
+                continue;
+            };
+            if fs::read_link(&dst).ok().as_deref() == Some(target.as_path()) {
+                continue;
+            }
+            let _ = fs::remove_file(&dst);
+            if let Err(e) = symlink(&target, &dst) {
+                println!(
+                    "cargo:warning=obs-express: failed to symlink {} -> {}: {e}",
+                    dst.display(),
+                    target.display()
+                );
+            }
+            continue;
+        }
+        if !meta.file_type().is_file() {
+            continue;
+        }
+
+        // mtime-only, not copy_if_newer's size check: the re-sign below changes
+        // the file size, so a size comparison would recopy (and re-sign) every
+        // build. After patching, dst is newer than src and stays put until the
+        // bundle itself is replaced. symlink_metadata on dst: a stale symlink
+        // left from an older bundle (where this name was an alias) must be
+        // replaced, not followed to its up-to-date target.
+        let up_to_date = match fs::symlink_metadata(&dst) {
+            Ok(d) if d.file_type().is_file() => match (meta.modified(), d.modified()) {
+                (Ok(s), Ok(d)) => d > s,
+                _ => false,
+            },
+            _ => false,
+        };
+        if up_to_date {
+            continue;
+        }
+        let _ = fs::remove_file(&dst);
+        if let Err(e) = fs::copy(&src, &dst) {
+            println!(
+                "cargo:warning=obs-express: failed to copy {} -> {}: {e}",
+                src.display(),
+                dst.display()
+            );
+            continue;
+        }
+        let dst_s = dst.to_str().unwrap();
+        // A fresh copy carries no @loader_path rpath, so "would duplicate" can
+        // only mean the bundle already ships one — fine either way.
+        let patched = run_checked(
+            "install_name_tool",
+            &["-add_rpath", "@loader_path", dst_s],
+            &["would duplicate"],
+        ) && run_checked("codesign", &["--force", "--sign", "-", dst_s], &[]);
+        // Never leave a half-done copy behind: on APFS fs::copy clones the
+        // file with the source's mtime, and a patch-less or unsigned copy is
+        // unloadable. Removing it makes the next build retry instead of the
+        // mtime gate treating it as up to date forever.
+        if !patched {
+            let _ = fs::remove_file(&dst);
+        }
+    }
+}
+
+// build.rs selects the platform at run time (CARGO_CFG_TARGET_OS), so the whole
+// file compiles on every host; std::os::unix does not exist on Windows.
+#[cfg(unix)]
+fn symlink(target: &Path, dst: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, dst)
+}
+
+#[cfg(not(unix))]
+fn symlink(_target: &Path, _dst: &Path) -> std::io::Result<()> {
+    // Only reachable when cross-building for macOS from a non-unix host,
+    // which the rest of build_macos() cannot do either.
+    Err(std::io::Error::other(
+        "symlinks are only staged on unix hosts",
+    ))
 }
 
 fn run(cmd: &str, args: &[&str]) {
     let _ = std::process::Command::new(cmd).args(args).output();
+}
+
+/// Run `cmd`; returns whether it succeeded (a failure whose stderr contains
+/// one of `benign` counts as success). Real failures are surfaced as cargo
+/// warnings.
+fn run_checked(cmd: &str, args: &[&str], benign: &[&str]) -> bool {
+    match std::process::Command::new(cmd).args(args).output() {
+        Ok(out) if out.status.success() => true,
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if benign.iter().any(|b| stderr.contains(b)) {
+                return true;
+            }
+            println!(
+                "cargo:warning=obs-express: `{cmd} {}` failed: {}",
+                args.join(" "),
+                stderr.trim()
+            );
+            false
+        }
+        Err(e) => {
+            println!("cargo:warning=obs-express: failed to run {cmd}: {e}");
+            false
+        }
+    }
 }
 
 fn find_obs_deps_lib(repo_root: &Path) -> Option<PathBuf> {

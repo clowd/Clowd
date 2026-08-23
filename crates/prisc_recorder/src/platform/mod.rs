@@ -49,6 +49,76 @@ pub struct MouseInfo {
     pub scale: f64,
 }
 
+/// What the system cursor currently looks like, classified against the stock
+/// cursor set. The string forms are the input-capture wire contract (`c` in
+/// frame rows) — the editor keys its themed cursor assets off them, so the
+/// list is append-only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorKind {
+    Arrow,
+    IBeam,
+    Wait,
+    Cross,
+    UpArrow,
+    SizeNwse,
+    SizeNesw,
+    SizeWe,
+    SizeNs,
+    SizeAll,
+    No,
+    Hand,
+    AppStarting,
+    Help,
+    Pen,
+    Person,
+    /// A cursor handle matching none of the cached stock cursors (application
+    /// custom cursor).
+    Custom,
+    /// The cursor is not currently shown at all.
+    Hidden,
+}
+
+impl CursorKind {
+    /// The `c` value in input-capture frame rows (wire contract).
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CursorKind::Arrow => "arrow",
+            CursorKind::IBeam => "ibeam",
+            CursorKind::Wait => "wait",
+            CursorKind::Cross => "cross",
+            CursorKind::UpArrow => "uparrow",
+            CursorKind::SizeNwse => "sizenwse",
+            CursorKind::SizeNesw => "sizenesw",
+            CursorKind::SizeWe => "sizewe",
+            CursorKind::SizeNs => "sizens",
+            CursorKind::SizeAll => "sizeall",
+            CursorKind::No => "no",
+            CursorKind::Hand => "hand",
+            CursorKind::AppStarting => "appstarting",
+            CursorKind::Help => "help",
+            CursorKind::Pen => "pen",
+            CursorKind::Person => "person",
+            CursorKind::Custom => "custom",
+            CursorKind::Hidden => "hidden",
+        }
+    }
+}
+
+/// One sample of the cursor for input capture: hotspot position in the
+/// platform capture coordinate space (same space as `MonitorInfo::x/y` and
+/// `--region`) plus the classified cursor shape.
+#[derive(Debug, Clone, Copy)]
+pub struct CursorState {
+    pub x: i32,
+    pub y: i32,
+    pub kind: CursorKind,
+    /// Platform-private shape identity from the same snapshot as `x`/`y`,
+    /// consumed by `take_cursor_sprite` so sprite pixels always match the
+    /// sampled position. Windows: the live `HCURSOR`; macOS: 0 (identity is
+    /// the cursor seed inside the classifier, not a handle).
+    pub handle: isize,
+}
+
 /// Paths handed to `obs_add_module_path` / `obs_add_data_path`. `module_bin` /
 /// `module_data` are passed to libobs verbatim (they may contain the
 /// `%module%` template token).
@@ -155,5 +225,33 @@ mod tests {
     #[test]
     fn no_match() {
         assert!(match_monitor("nope", &synthetic()).is_none());
+    }
+
+    #[test]
+    fn cursor_kind_strings_are_the_wire_contract() {
+        // DESIGN §1: the full `c` value list, append-only.
+        let all = [
+            (CursorKind::Arrow, "arrow"),
+            (CursorKind::IBeam, "ibeam"),
+            (CursorKind::Wait, "wait"),
+            (CursorKind::Cross, "cross"),
+            (CursorKind::UpArrow, "uparrow"),
+            (CursorKind::SizeNwse, "sizenwse"),
+            (CursorKind::SizeNesw, "sizenesw"),
+            (CursorKind::SizeWe, "sizewe"),
+            (CursorKind::SizeNs, "sizens"),
+            (CursorKind::SizeAll, "sizeall"),
+            (CursorKind::No, "no"),
+            (CursorKind::Hand, "hand"),
+            (CursorKind::AppStarting, "appstarting"),
+            (CursorKind::Help, "help"),
+            (CursorKind::Pen, "pen"),
+            (CursorKind::Person, "person"),
+            (CursorKind::Custom, "custom"),
+            (CursorKind::Hidden, "hidden"),
+        ];
+        for (kind, s) in all {
+            assert_eq!(kind.as_str(), s);
+        }
     }
 }

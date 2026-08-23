@@ -501,6 +501,9 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         .allowlist_function("calldata_.*")
         .allowlist_function("video_output_.*")
         .allowlist_function("audio_output_.*")
+        // The libobs monotonic clock (util/platform.h): input-capture event
+        // timestamps must share obs_get_video_frame_time's timebase.
+        .allowlist_function("os_gettime_ns")
         .allowlist_type("obs_.*")
         .allowlist_type("signal_handler_t")
         .allowlist_type("calldata_t")
