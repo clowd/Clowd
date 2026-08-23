@@ -193,14 +193,23 @@ mod tests {
     /// Perf probe, kept because `ensure_fallback_fonts`'s frame-budget
     /// claim rests on it: the system font scan must stay ~one-frame cheap
     /// (measured 11 ms / 363 faces on the dev box — fontdb only parses
-    /// name tables). Prints with --nocapture; asserts only a sanity bound
-    /// loose enough for any CI box.
+    /// name tables). Prints with --nocapture; asserts only a sanity bound.
+    ///
+    /// The bound is deliberately enormous relative to that measurement, and
+    /// it has to be: a hosted Windows runner was seen taking 5.11 s over 176
+    /// faces — three orders of magnitude off the dev box, from cold disk and
+    /// on-access scanning rather than from anything in this code. What the
+    /// assertion is for is a catastrophic regression (a scan that walks glyph
+    /// tables, or rescans per frame), and that shows up as minutes, not as
+    /// the difference between 5 and 30 seconds. Timing the machine instead of
+    /// the code is how a probe becomes a flake, so read the printed number,
+    /// not the bound.
     #[test]
     fn probe_system_font_load_cost() {
         let mut db = glyphon::fontdb::Database::new();
         let t = std::time::Instant::now();
         db.load_system_fonts();
         eprintln!("load_system_fonts: {} faces in {:?}", db.faces().count(), t.elapsed());
-        assert!(t.elapsed().as_secs() < 5, "system font scan took {:?}", t.elapsed());
+        assert!(t.elapsed().as_secs() < 60, "system font scan took {:?}", t.elapsed());
     }
 }
