@@ -580,11 +580,16 @@ namespace Clowd.VideoSDK.Tests
 
             await player.SeekAsync(player.Duration, SeekMode.Exact);
 
+            // 15s rather than the 4s this waited originally, matching the longer waits elsewhere in
+            // this file: a hosted Windows runner failed here with pts=0 — the seek had delivered
+            // nothing at all — on the same run whose font-scan probe took 5.1s for 176 faces. A
+            // seek that lands late is this wait's business; a seek that lands wrong is asserted
+            // below, and no amount of waiting turns one into the other.
             Assert.True(WaitUntil(() =>
             {
                 var pts = LatestPts(player, cache, sourceId);
                 return pts is { } p && p >= keptTicks - 2 * FrameTicks;
-            }, 4000), $"end seek did not land: pts={LatestPts(player, cache, sourceId)}");
+            }, 15000), $"end seek did not land: pts={LatestPts(player, cache, sourceId)}");
 
             var final = LatestPts(player, cache, sourceId);
             Assert.NotNull(final);
