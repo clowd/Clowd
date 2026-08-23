@@ -539,15 +539,48 @@ namespace Clowd
         }
 
         /// <summary>The user "launched" Clowd while it was already running (Windows second
-        /// instance with no args, macOS reopen). Surface the main window on Recents; if it is
-        /// already visible just bring it forward without yanking the user off their tab.</summary>
+        /// instance with no args, macOS reopen). Bring back whatever is already on screen: the
+        /// main window if it is up (without yanking the user off their tab), otherwise the
+        /// editors they have open. Only when nothing is showing does this open the main window
+        /// on Recents.</summary>
         private void ShowMainWindowForAppActivation()
         {
-            bool alreadyVisible = ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop
-                                  && desktop.Windows.OfType<MainWindow>().Any(w => w.IsVisible);
+            if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                if (desktop.Windows.OfType<MainWindow>().Any(w => w.IsVisible))
+                {
+                    PageManager.Current.GetSettingsPage().Open();
+                    return;
+                }
 
-            PageManager.Current.GetSettingsPage().Open(alreadyVisible ? null : SettingsPageTab.RecentSessions);
+                // no main window, but the user still has editors open — "launch Clowd" then means
+                // "show me the Clowd I already have", which is what the Dock does for every other
+                // app. Opening a main window nobody asked for on top of them is the wrong answer.
+                var open = desktop.Windows.Where(w => w.IsVisible && IsUserEditingWindow(w)).ToArray();
+                if (open.Length > 0)
+                {
+                    // all of them come forward (that is what a mac reopen means), but the one the
+                    // user was last in is raised last so it keeps the focus.
+                    foreach (var window in open.OrderBy(w => w.IsActive))
+                    {
+                        if (window.WindowState == WindowState.Minimized)
+                            window.WindowState = WindowState.Normal;
+
+                        window.Activate();
+                    }
+
+                    return;
+                }
+            }
+
+            PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
         }
+
+        /// <summary>Windows the user works in, as opposed to the transient HUD pieces that ride
+        /// along with a capture (recording border/toolbar, scroll status) and the dialogs owned by
+        /// a parent window. Only these keep an activation from opening the main window.</summary>
+        private static bool IsUserEditingWindow(Window window)
+            => window is EditorWindow or Clowd.UI.VideoEditor.VideoEditorWindow;
 
         private async void OnFilesReceived(string[] filePaths)
         {
