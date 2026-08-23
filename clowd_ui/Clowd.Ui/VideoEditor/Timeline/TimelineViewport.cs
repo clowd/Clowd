@@ -1,4 +1,5 @@
 using System;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI.VideoEditor.Timeline
 {
@@ -18,6 +19,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private long _scrollTicks;
         private double _viewportWidth;
         private long _durationTicks;
+        private TimeWarp _warp;
 
         /// <summary>Raised after any observable change, already coalesced per public call — one
         /// event per operation, never one per clamped field.</summary>
@@ -35,6 +37,12 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>The project's length. Bounds the zoom-out limit and the scroll range.</summary>
         public long DurationTicks => _durationTicks;
+
+        /// <summary>The speed warp the ruler labels through, or null while nothing bends time. It
+        /// touches no coordinate on this axis — x stays project time, so items, the playhead and
+        /// every drag are measured exactly as they were — only what the ruler <i>calls</i> each
+        /// instant.</summary>
+        public TimeWarp Warp => _warp;
 
         /// <summary>Length of the visible span, in ticks.</summary>
         public long VisibleTicks => (long)Math.Round(Math.Max(0, _viewportWidth) * _ticksPerPixel);
@@ -76,6 +84,24 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             _durationTicks = durationTicks;
             Reclamp();
+        }
+
+        /// <summary>Reports the project's speed warp (see <see cref="Warp"/>). Redraws only when
+        /// the mapping actually moved: rebuilding the warp is part of every project change, and an
+        /// edit that touches no speed item produces an equal one.</summary>
+        public void SetWarp(TimeWarp warp)
+        {
+            var was = _warp;
+            _warp = warp;
+
+            var wasIdentity = was == null || was.IsIdentity;
+            var isIdentity = warp == null || warp.IsIdentity;
+            if (wasIdentity && isIdentity)
+                return;
+            if (!wasIdentity && !isIdentity && was.MappingEquals(warp))
+                return;
+
+            RaiseChanged();
         }
 
         /// <summary>

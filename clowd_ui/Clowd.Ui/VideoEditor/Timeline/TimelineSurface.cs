@@ -939,6 +939,17 @@ namespace Clowd.UI.VideoEditor.Timeline
                 band++;
             }
 
+            // past the end of the project the rows stop — but a row band painted to the right
+            // border reads as content running on past what is there (the view can scroll a little
+            // past the end so the last item's edge stays grabbable). So the tail gets the gutter
+            // texture, the same one the block gaps use to say nothing lands here, and the ruler
+            // above paints the identical strip: one dead zone, ruler to bottom row.
+            var endX = _viewport.TickToX(_viewport.DurationTicks);
+            var endVisible = _viewport.DurationTicks > 0 && endX < Bounds.Width;
+            if (endVisible)
+                palette.DrawBlockGap(context,
+                    new Rect(Math.Max(0, endX), 0, Bounds.Width - Math.Max(0, endX), Bounds.Height));
+
             var selection = _session.SelectedItemIds;
             for (var i = 0; i < _rows.Count; i++)
             {
@@ -962,6 +973,10 @@ namespace Clowd.UI.VideoEditor.Timeline
                         evenRow: i % 2 == 0);
                 }
             }
+
+            // the boundary itself, over the items: the last frame of the project is on its left.
+            if (endVisible && endX >= 0)
+                DrawFullHeightLine(context, palette.ProjectEndPen, endX);
 
             if (_snapGuideTicks is long guide)
             {

@@ -84,6 +84,9 @@ namespace Clowd.UI.VideoEditor
         private bool _playerUpdatePending; // an edit arrived while the player was Opening — re-applied on Ready
         private bool _emptyEditShown; // the status overlay currently shows the empty-edit notice
         private bool _closing;
+        // add-speed's CanExecute, recomputed from the playhead (see RefreshAddSpeedButton); null
+        // until the first refresh, so that one always lands.
+        private bool? _canAddSpeed;
 
         // the session's debounced persistence: the session hands ScheduleSave its write callback,
         // this timer runs the latest one 500ms after the last edit (flushed on close).
@@ -194,7 +197,7 @@ namespace Clowd.UI.VideoEditor
             CommandAddSpeedEffect = new RelayCommand
             {
                 Executed = _ => AddSpeedEffect(),
-                CanExecute = _ => _editor is { HasSpeedTrack: false },
+                CanExecute = _ => _canAddSpeed == true,
                 Text = "Add _Speed",
             };
             CommandAddCursorTrack = new RelayCommand
@@ -1070,8 +1073,10 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>Adds a speed-change item at the playhead, on the one pinned Speed row (created
-        /// on first use). The session may refuse (null): the playhead is inside an existing speed
-        /// item, or the gap before the next one is too small to hold anything.</summary>
+        /// on first use, then shared by every later speed change). The session may refuse (null):
+        /// the playhead is inside an existing speed item, or the gap it stands in is too small to
+        /// hold anything — the same two cases <see cref="RefreshAddSpeedButton"/> disables the
+        /// button for.</summary>
         private void AddSpeedEffect()
         {
             if (!CanAddToProject)
@@ -1082,15 +1087,25 @@ namespace Clowd.UI.VideoEditor
                 RevealNewItem(item);
         }
 
-        /// <summary>The add-speed button is single-use (one Speed row per project): re-evaluates
-        /// its CanExecute and swaps its tooltip so the disabled state explains itself. Called on
-        /// every project/history change — an undo can create or remove the row.</summary>
+        /// <summary>
+        /// The add-speed button follows the <i>playhead</i>, not just the project: the Speed row is
+        /// unique but carries any number of items, so the button is live wherever the playhead
+        /// stands in a free stretch of that row and disabled only over an existing speed item (or a
+        /// gap too small to hold one). Called on every project/history change and on every position
+        /// change — hence the cached state, which keeps a playing timeline from re-raising
+        /// CanExecuteChanged sixty times a second.
+        /// </summary>
         private void RefreshAddSpeedButton()
         {
+            var can = _editor != null && !_closing && _editor.CanAddSpeedEffect(PlayheadTicks);
+            if (_canAddSpeed == can)
+                return;
+
+            _canAddSpeed = can;
             CommandAddSpeedEffect.RaiseCanExecuteChanged();
-            ToolTip.SetTip(btnAddSpeed, _editor is { HasSpeedTrack: true }
-                ? "A Speed row already exists — split or modify the existing Speed row instead."
-                : "Add speed change");
+            ToolTip.SetTip(btnAddSpeed, can
+                ? "Add speed change"
+                : "The playhead is inside an existing speed change — move it to a free stretch of the Speed row to add another.");
         }
 
         /// <summary>Adds the cursor overlay row — one per project, mirroring the recording's screen
@@ -1740,6 +1755,10 @@ namespace Clowd.UI.VideoEditor
         /// identity and this is the project-time readout it always was.</summary>
         private void UpdatePositionReadout(TimeSpan position)
         {
+            // add-speed is a function of where the playhead stands, so this funnel is also where
+            // that button is re-evaluated (it no-ops unless the answer actually flipped).
+            RefreshAddSpeedButton();
+
             var elapsedTicks = _player?.ToOutputTicks(position.Ticks) ?? position.Ticks;
             var totalTicks = _player?.OutputDurationTicks ?? 0;
             if (totalTicks <= 0)

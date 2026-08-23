@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using Clowd.VideoSDK.Playback;
 
 // The timeline's pure math (this file, TimelineRowLayout, TimelineHitTester, the persistence
 // loader…) is unit-tested against the real production code by the SDK test project.
@@ -45,6 +46,17 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Minimum gap between ruler labels; the tick step is the smallest ladder step
         /// that clears it.</summary>
         public const double DefaultTickSpacingPx = 70.0;
+
+        /// <summary>Minimum gap between two ruler notches. Never reached on an unwarped ruler (its
+        /// minor notches are a fifth of a step at least <see cref="DefaultTickSpacingPx"/> wide);
+        /// it is the crowding limit inside a slowed span, where the same step of output time buys
+        /// fewer pixels.</summary>
+        public const double MinorTickSpacingPx = 5.0;
+
+        /// <summary>Backstop on <see cref="BuildRulerMarks"/>'s walk, so a pathological warp cannot
+        /// turn one render pass into an unbounded loop. Two orders of magnitude above the ~150
+        /// notches a full-width viewport actually holds.</summary>
+        private const int MaxRulerMarks = 4096;
 
         /// <summary>Ruler steps below the doubling range, in ticks: 100 ms, 250 ms, 500 ms, then
         /// 1/5/10/30/60 s. Beyond a minute the step keeps doubling (see
@@ -223,6 +235,125 @@ namespace Clowd.UI.VideoEditor.Timeline
                 return t.ToString(subSecond ? @"h\:mm\:ss\.f" : @"h\:mm\:ss");
 
             return t.ToString(subSecond ? @"m\:ss\.f" : @"m\:ss");
+        }
+
+        /// <summary>One notch on the ruler: where it lands on the timeline's (project-time) x axis,
+        /// and the output instant it stands for — the two are the same tick only on unwarped
+        /// footage.</summary>
+        internal readonly record struct RulerMark(double X, long OutputTicks, bool IsMajor);
+
+        /// <summary>The notches for one ruler pass, with the major step they were laid out on (the
+        /// step a label is formatted against — see <see cref="FormatTick"/>).</summary>
+        internal readonly record struct RulerTicks(long StepTicks, IReadOnlyList<RulerMark> Marks);
+
+        /// <summary>
+        /// The ruler's notches for the current view. The timeline's x axis is <b>project</b> time,
+        /// but every time the ruler <i>says</i> is output time — the clock the finished video runs
+        /// on, which is what the transport readout and the exported file agree with. So the notches
+        /// step evenly through output time and each one lands wherever
+        /// <see cref="TimeWarp.ToProject"/> puts that instant on the project axis: a 2x span spends
+        /// twice the pixels per notch as the footage around it, a 0.5x span half. The spacing is
+        /// the speed change, drawn.
+        ///
+        /// The step is <see cref="PickTickStepTicks"/> of the zoom alone, exactly as it always was,
+        /// so <b>unwarped footage is untouched</b>: same ladder, same notches, same labels, whether
+        /// or not a speed item sits somewhere else in the view. Only the warped spans move.
+        /// Notches closer than <see cref="MinorTickSpacingPx"/> to the one before them are dropped,
+        /// majors evicting the minors they crowd — which can only bite inside a slowed span, since
+        /// an unwarped ruler's minor notches are a fifth of a step that already clears
+        /// <see cref="DefaultTickSpacingPx"/>.
+        ///
+        /// A null or identity warp is the plain ruler this replaced, tick for tick.
+        /// </summary>
+        public static RulerTicks BuildRulerMarks(long scrollTicks, double ticksPerPixel,
+            double viewportWidth, long durationTicks, TimeWarp warp)
+        {
+            if (!(ticksPerPixel > 0) || !(viewportWidth > 0) || durationTicks <= 0)
+                return new RulerTicks(0, Array.Empty<RulerMark>());
+
+            var projectStart = Math.Max(0, scrollTicks);
+            var projectEnd = Math.Min(durationTicks, scrollTicks + (long)Math.Round(viewportWidth * ticksPerPixel));
+            if (projectEnd < projectStart)
+                return new RulerTicks(0, Array.Empty<RulerMark>());
+
+            var warped = warp is { IsIdentity: false };
+            var outputStart = warped ? warp.ToOutput(projectStart) : projectStart;
+            var outputEnd = warped ? warp.ToOutput(projectEnd) : projectEnd;
+
+            var step = PickTickStepTicks(ticksPerPixel);
+            if (step <= 0)
+                return new RulerTicks(0, Array.Empty<RulerMark>());
+
+            // minor notches at a fifth of the step; the first mark starts at or just before the
+            // left edge so a notch straddling it is not lost.
+            var minorStep = step / 5;
+            var increment = minorStep > 0 ? minorStep : step;
+            var marks = new List<RulerMark>();
+
+            for (var t = outputStart - outputStart % increment; t <= outputEnd; t += increment)
+            {
+                var isMajor = t % step == 0;
+                var x = TickToX(warped ? warp.ToProject(t) : t, scrollTicks, ticksPerPixel);
+
+                // a major never yields to the minors it crowds — that notch is the one carrying a
+                // label, and the label ladder has to stay on round numbers.
+                while (isMajor && marks.Count > 0 && !marks[^1].IsMajor
+                    && x - marks[^1].X < MinorTickSpacingPx)
+                    marks.RemoveAt(marks.Count - 1);
+
+                if (marks.Count > 0 && x - marks[^1].X < MinorTickSpacingPx)
+                    continue;
+
+                marks.Add(new RulerMark(x, t, isMajor));
+                if (marks.Count >= MaxRulerMarks)
+                    break;
+            }
+
+            return new RulerTicks(step, marks);
+        }
+
+        /// <summary>A stretch of warped time on the x axis, with the instantaneous speed at each
+        /// end: equal on a constant-factor span (a flat wash between hard edges), different across
+        /// a transition ramp (a fade from one to the other).</summary>
+        internal readonly record struct SpeedBand(double X0, double X1, double SpeedStart, double SpeedEnd);
+
+        /// <summary>
+        /// The visible warped stretches, as x spans — one per <see cref="TimeWarp"/> segment that
+        /// bends time, clipped to the view. Speed-1 spans produce nothing at all, so unwarped
+        /// footage is left bare; the entry/exit ramps come through as their own bands whose two
+        /// ends differ, which is what draws a ramp as a gradient and a hard speed change as an
+        /// edge. Empty for a null or identity warp.
+        /// </summary>
+        public static List<SpeedBand> BuildSpeedBands(long scrollTicks, double ticksPerPixel,
+            double viewportWidth, long durationTicks, TimeWarp warp)
+        {
+            var bands = new List<SpeedBand>();
+            if (warp is not { IsIdentity: false } || !(ticksPerPixel > 0) || !(viewportWidth > 0)
+                || durationTicks <= 0)
+                return bands;
+
+            var visibleStart = Math.Max(0, scrollTicks);
+            var visibleEnd = Math.Min(durationTicks, scrollTicks + (long)Math.Round(viewportWidth * ticksPerPixel));
+
+            foreach (var segment in warp.Segments)
+            {
+                var start = Math.Max(segment.ProjectStartTicks, visibleStart);
+                var end = Math.Min(segment.ProjectEndTicks, visibleEnd);
+                if (end <= start)
+                    continue;
+
+                // sampled at the ends of the *clipped* span, so a ramp running off the edge of the
+                // view keeps the slope of the part still on screen
+                var speedStart = warp.SpeedAt(start);
+                var speedEnd = warp.SpeedAt(end - 1);
+                if (speedStart == 1 && speedEnd == 1)
+                    continue;
+
+                bands.Add(new SpeedBand(TickToX(start, scrollTicks, ticksPerPixel),
+                    TickToX(end, scrollTicks, ticksPerPixel), speedStart, speedEnd));
+            }
+
+            return bands;
         }
 
         // -------------------------------------------------------------------------------- snapping

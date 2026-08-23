@@ -12,6 +12,7 @@ using Avalonia.Media;
 using Clowd.UI.Controls;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
+using Clowd.VideoSDK.Playback;
 
 namespace Clowd.UI.VideoEditor.Timeline
 {
@@ -262,6 +263,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _surface.Session = value;
                 _headers.SetSession(value);
                 _viewport.SetDuration(value?.DurationTicks ?? 0);
+                UpdateWarp();
 
                 // a new project opens at the default scale, not fitted: one second is always the
                 // same width, whatever the length of the recording or the size of the window.
@@ -386,6 +388,11 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (e.Kind != ProjectChangeKind.Preview || _session.DurationTicks > _viewport.DurationTicks)
                 _viewport.SetDuration(_session.DurationTicks);
 
+            // the warp follows every change, Preview included: it moves no coordinate on the
+            // horizontal axis (only the times the ruler prints), so unlike the duration it cannot
+            // feed back into a gesture measuring itself through XToTicks.
+            UpdateWarp();
+
             if (e.Kind == ProjectChangeKind.Structural)
             {
                 _surface.RebuildRows();
@@ -400,6 +407,13 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             _surface.InvalidateVisual();
         }
+
+        /// <summary>Hands the ruler the project's speed warp so it can label in output time — the
+        /// clock the finished video runs on. Rebuilt rather than borrowed from the player: the
+        /// timeline draws the session's model, including the provisional one mid-gesture, and the
+        /// player is a frame behind that (and absent entirely in a preview-less host).</summary>
+        private void UpdateWarp() =>
+            _viewport.SetWarp(_session?.Project is Project project ? TimeWarp.Build(project) : null);
 
         private void Session_SelectionChanged(object sender, EventArgs e)
         {

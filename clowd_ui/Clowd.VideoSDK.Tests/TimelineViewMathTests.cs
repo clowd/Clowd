@@ -1,5 +1,8 @@
 using System;
+using System.Linq;
 using Clowd.UI.VideoEditor.Timeline;
+using Clowd.VideoSDK.Model;
+using Clowd.VideoSDK.Playback;
 using Xunit;
 
 namespace Clowd.VideoSDK.Tests
@@ -290,6 +293,199 @@ namespace Clowd.VideoSDK.Tests
             var step = TimeSpan.TicksPerMillisecond * 250;
             Assert.Equal("0:01.5", TimelineViewMath.FormatTick(15_000_000, step));
             Assert.Equal("1:00:00.0", TimelineViewMath.FormatTick(TimeSpan.TicksPerHour, step));
+        }
+
+        // --------------------------------------------------------------------------- ruler marks
+
+        private const double DefaultZoom = TimelineViewMath.DefaultTicksPerPixel; // 200_000 = 50px/s
+        private const double Width = 800;
+
+        /// <summary>One 20s solid on a video row, plus the speed items asked for on a single effect
+        /// row — the shape <see cref="TimeWarp.Build"/> reads.</summary>
+        private static TimeWarp Warp(params (long StartTicks, long DurationTicks, double Factor)[] speeds)
+        {
+            var project = SpeedProject(out var effect);
+            foreach (var (start, duration, factor) in speeds)
+            {
+                project.Items.Add(new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = effect.Id,
+                    TimelineStartTicks = start,
+                    DurationTicks = duration,
+                    Content = new SpeedContent { Factor = factor },
+                });
+            }
+
+            return TimeWarp.Build(project);
+        }
+
+        private static Project SpeedProject(out Track effectTrack)
+        {
+            var video = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Video", Order = 0 };
+            var effect = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Effect, Name = "Speed", Order = 1 };
+            effectTrack = effect;
+            return new Project
+            {
+                Output = new OutputSettings { WidthPx = 1920, HeightPx = 1080, FpsNum = 30, FpsDen = 1, SampleRate = 48000 },
+                Tracks = { video, effect },
+                Items =
+                {
+                    new Item
+                    {
+                        Id = Guid.NewGuid(),
+                        TrackId = video.Id,
+                        TimelineStartTicks = 0,
+                        DurationTicks = 20 * OneSecond,
+                        Content = new SolidContent { Color = "#FF000000" },
+                    },
+                },
+            };
+        }
+
+        [Fact]
+        public void BuildRulerMarks_unwarped_is_the_even_ladder()
+        {
+            var ruler = TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 20 * OneSecond, null);
+
+            // 50px/s: the 5s step is the first that clears the 70px label gap, minors every 1s
+            Assert.Equal(5 * OneSecond, ruler.StepTicks);
+            Assert.Equal(17, ruler.Marks.Count); // 0..16s inclusive, one per second
+            Assert.Equal(0, ruler.Marks[0].X);
+            Assert.Equal(50, ruler.Marks[1].X, 6);
+            Assert.Equal(OneSecond, ruler.Marks[1].OutputTicks);
+            Assert.Equal(new[] { 0L, 5, 10, 15 }.Select(s => s * OneSecond),
+                ruler.Marks.Where(m => m.IsMajor).Select(m => m.OutputTicks));
+        }
+
+        [Fact]
+        public void BuildRulerMarks_an_identity_warp_is_the_unwarped_ruler()
+        {
+            var plain = TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 20 * OneSecond, null);
+            var identity = TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 20 * OneSecond, Warp());
+
+            Assert.Equal(plain.StepTicks, identity.StepTicks);
+            Assert.Equal(plain.Marks, identity.Marks);
+        }
+
+        [Fact]
+        public void BuildRulerMarks_labels_output_time_and_spreads_a_sped_up_span()
+        {
+            // the whole 20s doubled: 10s of output, so every notch covers twice the pixels
+            var ruler = TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 20 * OneSecond,
+                Warp((0, 20 * OneSecond, 2.0)));
+
+            // the ladder is the zoom's, untouched — only where each notch lands moves
+            Assert.Equal(5 * OneSecond, ruler.StepTicks);
+            var second = ruler.Marks.First(m => m.OutputTicks == OneSecond);
+            Assert.Equal(100, second.X, 6);            // output 1s = project 2s = 100px
+            Assert.Equal(8 * OneSecond, ruler.Marks[^1].OutputTicks); // 16s of project on screen
+        }
+
+        [Fact]
+        public void BuildRulerMarks_packs_a_slowed_span_against_the_footage_around_it()
+        {
+            // 10s..20s at half speed: the same second of output buys half the pixels there
+            var ruler = TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 20 * OneSecond,
+                Warp((10 * OneSecond, 10 * OneSecond, 0.5)));
+
+            var majors = ruler.Marks.Where(m => m.IsMajor).ToList();
+            double Spacing(int i) => majors[i + 1].X - majors[i].X;
+
+            var unwarped = majors.FindIndex(m => m.OutputTicks + ruler.StepTicks <= 10 * OneSecond);
+            var slowed = majors.FindIndex(m => m.X >= 500); // past 10s of project time
+            Assert.True(slowed > unwarped);
+            Assert.Equal(Spacing(unwarped) / 2, Spacing(slowed), 3);
+        }
+
+        [Fact]
+        public void BuildRulerMarks_never_crowds_two_notches_and_stays_monotone()
+        {
+            foreach (var warp in new[]
+            {
+                Warp((5 * OneSecond, 5 * OneSecond, 10.0)),
+                Warp((5 * OneSecond, 5 * OneSecond, 0.1)),
+                Warp((0, OneSecond / 2, 0.1), (2 * OneSecond, 8 * OneSecond, 4.0)),
+            })
+            {
+                foreach (var zoom in new[] { DefaultZoom / 4, DefaultZoom, DefaultZoom * 8 })
+                {
+                    var ruler = TimelineViewMath.BuildRulerMarks(0, zoom, Width, 20 * OneSecond, warp);
+                    for (var i = 1; i < ruler.Marks.Count; i++)
+                    {
+                        Assert.True(ruler.Marks[i].OutputTicks > ruler.Marks[i - 1].OutputTicks);
+                        Assert.True(ruler.Marks[i].X - ruler.Marks[i - 1].X >= TimelineViewMath.MinorTickSpacingPx,
+                            $"notches {i - 1} and {i} are {ruler.Marks[i].X - ruler.Marks[i - 1].X:0.##}px apart");
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public void BuildRulerMarks_leaves_unwarped_footage_alone()
+        {
+            // a speed item in the second half must not move a single notch in the first
+            var plain = TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 20 * OneSecond, null);
+            var warped = TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 20 * OneSecond,
+                Warp((10 * OneSecond, 10 * OneSecond, 4.0)));
+
+            Assert.Equal(plain.StepTicks, warped.StepTicks);
+            foreach (var mark in plain.Marks.Where(m => m.OutputTicks < 10 * OneSecond))
+                Assert.Contains(mark, warped.Marks);
+        }
+
+        [Fact]
+        public void BuildSpeedBands_covers_only_the_warped_stretches()
+        {
+            var bands = TimelineViewMath.BuildSpeedBands(0, DefaultZoom, Width, 20 * OneSecond,
+                Warp((5 * OneSecond, 5 * OneSecond, 4.0)));
+
+            var band = Assert.Single(bands);
+            Assert.Equal(250, band.X0, 6);   // 5s at 50px/s
+            Assert.Equal(500, band.X1, 6);
+            Assert.Equal(4.0, band.SpeedStart);
+            Assert.Equal(4.0, band.SpeedEnd);
+        }
+
+        [Fact]
+        public void BuildSpeedBands_gives_a_ramp_two_different_ends()
+        {
+            var project = SpeedProject(out var effect);
+            project.Items.Add(new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = effect.Id,
+                TimelineStartTicks = 5 * OneSecond,
+                DurationTicks = 5 * OneSecond,
+                Content = new SpeedContent { Factor = 4.0 },
+                Entry = new Transition { Kind = TransitionKind.Ramp, DurationTicks = OneSecond },
+            });
+
+            var bands = TimelineViewMath.BuildSpeedBands(0, DefaultZoom, Width, 20 * OneSecond,
+                TimeWarp.Build(project));
+
+            // the ramp is its own band, easing 1 -> 4, then the flat span holds 4
+            Assert.Equal(2, bands.Count);
+            Assert.True(bands[0].SpeedStart < bands[0].SpeedEnd);
+            Assert.Equal(1.0, bands[0].SpeedStart, 3);
+            Assert.Equal(bands[0].X1, bands[1].X0, 6);
+            Assert.Equal(4.0, bands[1].SpeedStart);
+            Assert.Equal(4.0, bands[1].SpeedEnd);
+        }
+
+        [Fact]
+        public void BuildSpeedBands_is_empty_without_a_warp()
+        {
+            Assert.Empty(TimelineViewMath.BuildSpeedBands(0, DefaultZoom, Width, 20 * OneSecond, null));
+            Assert.Empty(TimelineViewMath.BuildSpeedBands(0, DefaultZoom, Width, 20 * OneSecond, Warp()));
+        }
+
+        [Fact]
+        public void BuildRulerMarks_degenerate_input_draws_nothing()
+        {
+            Assert.Empty(TimelineViewMath.BuildRulerMarks(0, 0, Width, OneSecond, null).Marks);
+            Assert.Empty(TimelineViewMath.BuildRulerMarks(0, DefaultZoom, 0, OneSecond, null).Marks);
+            Assert.Empty(TimelineViewMath.BuildRulerMarks(0, DefaultZoom, Width, 0, null).Marks);
         }
 
         // ------------------------------------------------------------------------------ snapping
