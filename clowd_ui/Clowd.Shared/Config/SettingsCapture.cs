@@ -187,6 +187,13 @@ namespace Clowd.Config
             set => Set(ref _openSavedInExplorer, value);
         }
 
+        /// <summary>
+        /// Applied when the setting is left blank, and the value the capture overlay already
+        /// defaults to — so the shell only spends a <c>--filename-pattern</c> argument on a
+        /// pattern the user actually changed.
+        /// </summary>
+        public const string DefaultFilenamePattern = "yyyy-MM-dd HH-mm-ss";
+
         [Category("Saving")]
         [DisplayName("Filename pattern")]
         [Description("Date format used to name saved captures and uploads (.NET date format string)")]
@@ -207,7 +214,7 @@ namespace Clowd.Config
             return AccentColors.EnsureContrastWithWhite(color);
         }
 
-        private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
+        private string _filenamePattern = DefaultFilenamePattern;
         private bool _screenshotWithCursor = true;
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;

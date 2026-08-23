@@ -8,6 +8,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Clowd.Config;
 using Clowd.UI.Dialogs;
 using Clowd.UI.Dialogs.ColorPicker;
 using Clowd.Util;
@@ -146,7 +147,7 @@ namespace Clowd.UI.Helpers
             if (String.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
-            filePattern ??= "yyyy-MM-dd HH-mm-ss";
+            filePattern ??= SettingsCapture.DefaultFilenamePattern;
             filePattern = Path.GetFileNameWithoutExtension(filePattern);
 
             string fileName;

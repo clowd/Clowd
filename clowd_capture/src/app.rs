@@ -1312,9 +1312,15 @@ impl App {
                 hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => match self.windows.get(&window_id) {
-                        Some(handle) => {
-                            handle.save_to_file_with_peek(sel, cycle.input.selection_radius, buf, active_peek_image, cursor, cursor_visible)
-                        }
+                        Some(handle) => handle.save_to_file_with_peek(
+                            sel,
+                            cycle.input.selection_radius,
+                            buf,
+                            active_peek_image,
+                            cursor,
+                            cursor_visible,
+                            &cycle.settings,
+                        ),
                         None => ActionResult::Failed("No active window".into()),
                     },
                     _ => ActionResult::Failed("No selection or buffer".into()),
