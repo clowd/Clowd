@@ -20,6 +20,14 @@ namespace Clowd.Drawing.Tests
     /// </summary>
     public class GraphicImageTests
     {
+        static GraphicImageTests()
+        {
+            // The corner-radius tests go through DrawingCanvas, which reads tool settings from
+            // SettingsRoot.Current — assigned by the application at startup; give the tests a
+            // defaults instance so they do not depend on another class having run first.
+            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+        }
+
         private static readonly MethodInfo ImgUpdateObscure =
             typeof(GraphicImage).GetMethod("UpdateObscureCache", BindingFlags.Instance | BindingFlags.NonPublic);
 
