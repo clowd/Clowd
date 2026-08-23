@@ -1179,7 +1179,7 @@
                                   enum ones are: a XAML DefaultValue is a string  -->
                             <controls:ResetDefaultButton x:Name="dotCursorDebounce" CurrentValue="{Binding CursorDebounce, Mode=TwoWay}" />
                         </Panel>
-                        <TextBlock Classes="label" Text="Debounce" />
+                        <TextBlock Classes="label" Text="Debounce Visibility" />
                         <CheckBox IsChecked="{Binding CursorDebounce, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
                     </DockPanel>
 
