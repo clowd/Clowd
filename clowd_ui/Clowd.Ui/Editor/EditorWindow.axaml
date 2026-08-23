@@ -224,7 +224,10 @@
 
             <StackPanel IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Radius}">
                 <TextBlock VerticalAlignment="Center" Text="Radius:" />
+                <!-- 4px wider than the theme's 70: a window's corner radius runs to two digits
+                     plus the "px" suffix, which sits tight at the default width. -->
                 <controls:SpinnerTextBox
+                    Width="74"
                     Min="0"
                     SnapToWholeNumber="True"
                     SpinAmount="1"
