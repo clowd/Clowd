@@ -21,8 +21,15 @@ namespace Clowd.VideoSDK.Tests
         {
             public AudioRenderCallback Render { get; private set; }
 
+            /// <summary>What this "device" reports back, as a real one does once it has bound its
+            /// hardware: the requested figure until a test says otherwise.</summary>
+            public int ActualLatencyMs { get; set; }
+
             public void Initialize(int sampleRate, int channels, int latencyMs, AudioRenderCallback render)
-                => Render = render;
+            {
+                Render = render;
+                ActualLatencyMs = latencyMs;
+            }
 
             public void Play() { }
             public void Pause() { }
@@ -121,6 +128,29 @@ namespace Clowd.VideoSDK.Tests
             Pull(loudOutput, loudRing, block, 1.0, loud);
 
             Assert.Equal(loud.PlayedTime, muted);
+        }
+
+        /// <summary>The clock backs off by the latency the <em>device</em> reports, not the one it
+        /// was asked for — and it reads it late, because a backend that binds its hardware on the
+        /// first Play (CoreAudio: ~14 ms, against the 100 ms requested) only knows the real figure
+        /// after the sink was constructed. Correcting by the request there would put every preview
+        /// most of a tenth of a second out of sync.</summary>
+        [Fact]
+        public void The_clock_uses_the_latency_the_device_reports_not_the_one_requested()
+        {
+            using var sink = Create(out var output, out var ring);
+            sink.TrySetBasePts(TimeSpan.Zero);
+
+            // as CoreAudio does: the honest figure only appears once the device is bound.
+            Assert.Equal(100, output.ActualLatencyMs);
+            output.ActualLatencyMs = 14;
+
+            var block = new float[SampleRate * Channels / 2]; // half a second of device frames
+            Pull(output, ring, block, 1.0, sink);
+
+            // 0.5s delivered, less 14ms in the device's buffers — not the 0.4s a 100ms correction
+            // would have given.
+            Assert.InRange(sink.PlayedTime, TimeSpan.FromSeconds(0.4859), TimeSpan.FromSeconds(0.4861));
         }
     }
 }

@@ -29,6 +29,7 @@ namespace Clowd.VideoSDK.Audio
         private float[] _block = Array.Empty<float>();
 
         private Timer _pump;
+        private int _latencyMs;
         private int _pumping;
         private bool _playing;
         private TimeSpan _basePosition;     // position accumulated over earlier play spans
@@ -51,6 +52,11 @@ namespace Clowd.VideoSDK.Audio
             get { lock (_sync) return PositionLocked(); }
         }
 
+        /// <summary>The requested latency, reported back unchanged. There is no device here, so
+        /// there is nothing truer to say — and the clock this feeds is the same fiction either
+        /// way, which is the point of the silent output.</summary>
+        public int ActualLatencyMs => Volatile.Read(ref _latencyMs);
+
         public void Initialize(int sampleRate, int channels, int latencyMs, AudioRenderCallback render)
         {
             if (sampleRate <= 0)
@@ -65,6 +71,7 @@ namespace Clowd.VideoSDK.Audio
                 _sampleRate = sampleRate;
                 _channels = channels;
                 _render = render;
+                _latencyMs = latencyMs;
                 // one pump interval of interleaved samples per callback, so the callback sees
                 // block sizes in the same ballpark a shared-mode device would ask for.
                 _block = new float[Math.Max(1, sampleRate / (1000 / PumpIntervalMs)) * channels];
@@ -86,7 +93,13 @@ namespace Clowd.VideoSDK.Audio
                     _playing = true;
                 }
 
-                _pump ??= new Timer(Pump, null, PumpIntervalMs, PumpIntervalMs);
+                // created on the first Play, and re-armed on every one after: Pause and Stop park
+                // it rather than leaving a 100 Hz wake-up running for as long as the editor is
+                // open on a paused preview.
+                if (_pump == null)
+                    _pump = new Timer(Pump, null, PumpIntervalMs, PumpIntervalMs);
+                else
+                    _pump.Change(PumpIntervalMs, PumpIntervalMs);
             }
         }
 
@@ -98,6 +111,7 @@ namespace Clowd.VideoSDK.Audio
                     return;
                 _basePosition = PositionLocked();
                 _playing = false;
+                ParkPumpLocked();
             }
         }
 
@@ -108,8 +122,14 @@ namespace Clowd.VideoSDK.Audio
                 _playing = false;
                 _basePosition = TimeSpan.Zero;
                 _deliveredFrames = 0;
+                ParkPumpLocked();
             }
         }
+
+        /// <summary>Stops the timer waking us while nothing is playing. A pump already on a thread
+        /// pool thread still runs to completion; it sees <c>_playing == false</c> and returns.
+        /// </summary>
+        private void ParkPumpLocked() => _pump?.Change(Timeout.Infinite, Timeout.Infinite);
 
         private TimeSpan PositionLocked()
         {

@@ -1071,5 +1071,295 @@ namespace Clowd.VideoSDK.Tests
             byte red = px[(y * BigW + x) * 4 + 2];
             Assert.InRange(red, 100, 160); // 0.5 · 255, not 0.25 · 255
         }
+
+        // --------------------------------------------------------------------- macOS captures
+
+        // The recorder hands the OS's own key numbering straight through and stamps the header
+        // with which OS that was: Win32 virtual keys under "windows", CGKeyCodes under "macos".
+        // The two spaces share no meaning, so the same bytes have to read as two different
+        // keyboards, and a capture's platform is the RECORDING machine's — never the one playing
+        // it back.
+
+        private static InputEvent MacKd(double t, int code, string ch = null) =>
+            new InputEvent(t, InputEventKind.KeyDown, code, ch, 0, 0);
+
+        private static IReadOnlyList<KeyRun> MacSegment(params InputEvent[] events) =>
+            KeyboardLayout.Segment(events, pauseBreakMs: 1000, KeystrokeFilter.None,
+                KeyboardPlatform.MacOS);
+
+        /// <summary>The header field is the whole mechanism: an absent or unknown platform reads
+        /// as Windows, which is what every capture written before the macOS port actually is, so
+        /// old files keep rendering exactly as they always did.</summary>
+        [Fact]
+        public void Platform_defaults_to_windows_and_only_macos_opts_out()
+        {
+            Assert.Equal(KeyboardPlatform.Windows, KeyboardLayout.PlatformOf(null));
+            Assert.Equal(KeyboardPlatform.Windows,
+                KeyboardLayout.PlatformOf(new InputCaptureHeader()));
+            Assert.Equal(KeyboardPlatform.Windows,
+                KeyboardLayout.PlatformOf(new InputCaptureHeader { Platform = "linux" }));
+            Assert.Equal(KeyboardPlatform.MacOS,
+                KeyboardLayout.PlatformOf(new InputCaptureHeader { Platform = "macos" }));
+            Assert.Equal(KeyboardPlatform.MacOS,
+                KeyboardLayout.PlatformOf(new InputCaptureHeader { Platform = "macOS" }));
+        }
+
+        /// <summary>Cmd+C off a Mac board. Codes 55 (left command) and 8 (the C key) mean 7 and
+        /// Backspace in the Win32 space — reading them through the wrong table is the bug this
+        /// whole split exists for.</summary>
+        [Fact]
+        public void A_mac_chord_is_named_with_the_mac_modifiers()
+        {
+            var run = Assert.Single(MacSegment(MacKd(0, 55), MacKd(20, 8), Ku(40, 55)));
+            Assert.True(run.IsChord);
+            Assert.Equal("Cmd+C", run.FullText);
+
+            // …and the very same bytes under the Windows table are two ordinary keycaps
+            var win = KeyboardLayout.Segment(new[] { Kd(0, 55), Kd(20, 8), Ku(40, 55) }, 1000);
+            Assert.Equal("7 Bksp", Assert.Single(win).FullText);
+            Assert.False(win[0].IsChord);
+        }
+
+        /// <summary>Every non-shift Mac modifier, in Apple's own ⌃⌥⇧⌘ order. "Win" and "Alt" must
+        /// never appear on a cap a Mac user pressed.</summary>
+        [Fact]
+        public void Mac_modifier_names_follow_the_mac_keyboard()
+        {
+            var run = Assert.Single(MacSegment(
+                MacKd(0, 59),   // control
+                MacKd(10, 58),  // option
+                MacKd(20, 56),  // shift
+                MacKd(30, 55),  // command
+                MacKd(40, 35),  // P
+                Ku(50, 59), Ku(60, 58), Ku(70, 56), Ku(80, 55)));
+
+            Assert.Equal("Ctrl+Option+Shift+Cmd+P", run.FullText);
+            Assert.DoesNotContain("Win", run.FullText);
+            Assert.DoesNotContain("Alt", run.FullText);
+
+            // right-hand twins are the same keys and legend the same
+            Assert.Equal("Option+Cmd+P", Assert.Single(MacSegment(
+                MacKd(0, 61), MacKd(10, 54), MacKd(20, 35), Ku(30, 61), Ku(40, 54))).FullText);
+        }
+
+        /// <summary>Return, the keypad's own Enter and Esc all close their run with the key
+        /// included — the Mac codes for them (36 / 76 / 53), not the Win32 13 / 27, which in this
+        /// space are the W key and the minus key and would end nothing.</summary>
+        [Fact]
+        public void Mac_return_keypad_enter_and_esc_close_the_run()
+        {
+            var runs = MacSegment(
+                MacKd(0, 0, "a"), MacKd(20, 36),
+                MacKd(40, 1, "b"), MacKd(60, 76),
+                MacKd(80, 2, "c"), MacKd(100, 53),
+                MacKd(120, 3, "d"));
+
+            Assert.Equal(4, runs.Count);
+            Assert.Equal(new[] { "a Return", "b Enter", "c Esc", "d" },
+                runs.Select(r => r.FullText));
+
+            // 13 and 27 are just W and "-" here: they end nothing
+            Assert.Equal("a W -", Assert.Single(MacSegment(
+                MacKd(0, 0, "a"), MacKd(20, 13), MacKd(40, 27))).FullText);
+        }
+
+        /// <summary>
+        /// Caps Lock is a key on a Mac capture, not a modifier. macOS reports the ⇪ flag as held
+        /// for as long as the lock is engaged, so treating it as a modifier would staple "Caps"
+        /// onto the front of every chord typed for the rest of the recording; as a plain key it
+        /// draws one cap where the user toggled the lock, exactly as the Windows table does.
+        /// </summary>
+        [Fact]
+        public void Mac_caps_lock_draws_a_cap_and_never_joins_a_chord()
+        {
+            var runs = MacSegment(
+                MacKd(0, 57),                      // caps lock on — held from here
+                MacKd(20, 55), MacKd(40, 8), Ku(60, 55),
+                Ku(5000, 57));                     // …released only much later
+
+            Assert.Equal(2, runs.Count);
+            Assert.Equal("Caps", runs[0].FullText);
+            Assert.Equal("Cmd+C", runs[1].FullText);
+        }
+
+        /// <summary>Fn never opens a chord — a laptop's arrows and function keys report their own
+        /// keycode whether or not Fn was held to reach them, so chording it would print "Fn+Left"
+        /// over every arrow press — but it does join one another modifier opened.</summary>
+        [Fact]
+        public void Mac_fn_joins_a_chord_but_never_starts_one()
+        {
+            Assert.Equal("Left", Assert.Single(MacSegment(
+                MacKd(0, 63), MacKd(20, 123), Ku(40, 63))).FullText);
+
+            Assert.Equal("Cmd+Fn+Left", Assert.Single(MacSegment(
+                MacKd(0, 55), MacKd(10, 63), MacKd(20, 123), Ku(30, 63), Ku(40, 55))).FullText);
+        }
+
+        [Fact]
+        public void Mac_key_names_cover_the_common_keys()
+        {
+            Assert.Equal("A", KeyboardLayout.MacKeyName(0));
+            Assert.Equal("W", KeyboardLayout.MacKeyName(13));      // Enter in the Win32 space
+            Assert.Equal("§", KeyboardLayout.MacKeyName(10));      // the ISO board's extra key
+            Assert.Equal("1", KeyboardLayout.MacKeyName(18));
+            Assert.Equal("6", KeyboardLayout.MacKeyName(22));      // 5 and 6 are transposed
+            Assert.Equal("5", KeyboardLayout.MacKeyName(23));
+            Assert.Equal("Return", KeyboardLayout.MacKeyName(36));
+            Assert.Equal("Tab", KeyboardLayout.MacKeyName(48));
+            Assert.Equal("Space", KeyboardLayout.MacKeyName(49));
+            Assert.Equal("Delete", KeyboardLayout.MacKeyName(51));
+            Assert.Equal("Fwd Del", KeyboardLayout.MacKeyName(117));
+            Assert.Equal("Esc", KeyboardLayout.MacKeyName(53));
+            Assert.Equal("Cmd", KeyboardLayout.MacKeyName(55));
+            Assert.Equal("Option", KeyboardLayout.MacKeyName(58));
+            Assert.Equal("Ctrl", KeyboardLayout.MacKeyName(59));
+            Assert.Equal("Caps", KeyboardLayout.MacKeyName(57));
+            Assert.Equal("Fn", KeyboardLayout.MacKeyName(63));
+            Assert.Equal("Enter", KeyboardLayout.MacKeyName(76));  // the keypad's, not Return
+            Assert.Equal("0", KeyboardLayout.MacKeyName(82));      // keypad
+            Assert.Equal("9", KeyboardLayout.MacKeyName(92));      // keypad, out of the run
+            Assert.Equal("F1", KeyboardLayout.MacKeyName(122));
+            Assert.Equal("F12", KeyboardLayout.MacKeyName(111));
+            Assert.Equal("F20", KeyboardLayout.MacKeyName(90));
+            Assert.Equal(new[] { "Left", "Right", "Down", "Up" },
+                new[] { 123, 124, 125, 126 }.Select(KeyboardLayout.MacKeyName));
+            Assert.Equal("Key52", KeyboardLayout.MacKeyName(52));  // unassigned
+        }
+
+        /// <summary>The same no-tofu contract <see cref="Every_vk_label_draws_real_glyphs_in_the_default_typeface"/>
+        /// holds the Win32 table to, for the Mac table: no label may reach the drawing as a glyph
+        /// the platform's default typeface does not carry, which is why the symbol keys are
+        /// spelled out and drawn as vector icons instead.</summary>
+        [Fact]
+        public void Every_mac_key_label_draws_real_glyphs_in_the_default_typeface()
+        {
+            using var typeface = SKTypeface.CreateDefault();
+            using var font = new SKFont(typeface, 28);
+
+            for (int code = 0; code <= 126; code++) // the CGKeyCode space stops here
+            {
+                var label = KeyboardLayout.MacKeyName(code);
+                Assert.False(string.IsNullOrWhiteSpace(label), $"key {code} has no label");
+                Assert.True(font.ContainsGlyphs(label), $"key {code} label '{label}' has a missing glyph");
+                Assert.All(font.GetGlyphs(label), g => Assert.NotEqual(0, g)); // 0 == .notdef
+                Assert.True(font.MeasureText(label) > 0, $"key {code} label '{label}' measures empty");
+            }
+        }
+
+        /// <summary>
+        /// The end-to-end constraint, through the cache and the file: identical event rows, two
+        /// headers. The keycaps belong to the machine that recorded, so the Windows capture still
+        /// says Win+R when it is opened on a Mac and the Mac capture still says Cmd — the platform
+        /// of the process doing the reading never enters into it.
+        /// </summary>
+        [Fact]
+        public void The_capture_files_own_platform_decides_its_keycaps()
+        {
+            const string ModDown =
+                "{\"type\":\"event\",\"t\":0,\"kind\":\"kd\",\"vk\":91}";
+            const string KeyDown =
+                "{\"type\":\"event\",\"t\":20,\"kind\":\"kd\",\"vk\":82}";
+            const string ModUp =
+                "{\"type\":\"event\",\"t\":40,\"kind\":\"ku\",\"vk\":91}";
+
+            string Header(string platform) =>
+                "{\"type\":\"header\",\"version\":2,\"region\":[0,0,1920,1080]," +
+                "\"fps_num\":30,\"fps_den\":1,\"platform\":\"" + platform + "\"}";
+
+            // 91 is the left Windows key and 82 is R: a Windows capture reads Win+R
+            Assert.Equal("Win+R", Assert.Single(
+                KeyboardLayout.GetRuns(WriteCapture(Header("windows"), ModDown, KeyDown, ModUp), 1000)).FullText);
+
+            // the identical bytes off a Mac are two keypad digits — nothing there is a modifier
+            Assert.Equal("8 0", Assert.Single(
+                KeyboardLayout.GetRuns(WriteCapture(Header("macos"), ModDown, KeyDown, ModUp), 1000)).FullText);
+
+            // and a headerless file (the pre-port capture) still reads as Windows
+            Assert.Equal("Win+R", Assert.Single(
+                KeyboardLayout.GetRuns(WriteCapture(ModDown, KeyDown, ModUp), 1000)).FullText);
+        }
+
+        /// <summary>The x extents of each matching run along row <paramref name="y"/> — where
+        /// <see cref="RunsAcross"/> only counts them.</summary>
+        private static List<(int Left, int Right)> ColorRuns(byte[] px, int y,
+            Func<byte, byte, byte, bool> match)
+        {
+            var runs = new List<(int, int)>();
+            int start = -1;
+            for (int x = 0; x < BigW; x++)
+            {
+                int i = (y * BigW + x) * 4;
+                bool hit = match(px[i], px[i + 1], px[i + 2]);
+                if (hit && start < 0)
+                    start = x;
+                else if (!hit && start >= 0)
+                {
+                    runs.Add((start, x - 1));
+                    start = -1;
+                }
+            }
+            if (start >= 0)
+                runs.Add((start, BigW - 1));
+            return runs;
+        }
+
+        private static bool AnyWhite(byte[] px, int x0, int x1, int y0, int y1)
+        {
+            for (int y = Math.Max(0, y0); y <= Math.Min(BigH - 1, y1); y++)
+            {
+                for (int x = Math.Max(0, x0); x <= Math.Min(BigW - 1, x1); x++)
+                {
+                    int i = (y * BigW + x) * 4;
+                    if (px[i] > 180 && px[i + 1] > 180 && px[i + 2] > 180)
+                        return true;
+                }
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// A Mac chord draws in real pixels the way a Mac keyboard is molded: Cmd is a wide cap
+        /// wearing its legend bottom-left and the ⌘ vector icon top-right (the glyph itself is
+        /// exactly what a default typeface will not have), with the plain C cap beside it.
+        /// </summary>
+        [Fact]
+        public void The_cmd_keycap_draws_wide_with_its_own_icon()
+        {
+            var capture = WriteCapture(
+                "{\"type\":\"header\",\"version\":2,\"fps_num\":30,\"fps_den\":1,\"platform\":\"macos\"}",
+                "{\"type\":\"event\",\"t\":0,\"kind\":\"kd\",\"vk\":55}",   // left command
+                "{\"type\":\"event\",\"t\":20,\"kind\":\"kd\",\"vk\":8}",   // C
+                "{\"type\":\"event\",\"t\":40,\"kind\":\"ku\",\"vk\":55}");
+            var p = BigKeyboardProject(capture, out _, out _, white: true);
+
+            var px = RenderAt(p, (long)(0.1 * Sec), BigW, BigH);
+            // the face color exactly, not IsFace's window: the anti-aliased edge where the black
+            // seat meets the white sheet passes through that same gray, which would put the
+            // "face" bottom a couple of rows below the whole cap
+            var face = Bounds(px, BigW, BigH, (b, g, r) => b == 0x3D && g == 0x3D && r == 0x3D);
+            Assert.NotNull(face);
+
+            // measured off the black seat that peeks out under the faces, not off the faces
+            // themselves: a cap's face is broken up by its own white legend and icon, while the
+            // seat is the one band of a cap that carries no ink at all, so its runs are the caps
+            var caps = ColorRuns(px, face.Value.Bottom + 2, (b, g, r) => b < 0x10 && g < 0x10 && r < 0x10);
+            Assert.Equal(2, caps.Count);
+
+            var cmd = caps[0];
+            int cmdWidth = cmd.Right - cmd.Left;
+            Assert.True(cmdWidth > caps[1].Right - caps[1].Left,
+                "the Cmd cap is not the wide one");
+
+            // legend bottom-left, icon top-right — the molded layout, not a centered word
+            int height = face.Value.Bottom - face.Value.Top;
+            Assert.True(
+                AnyWhite(px, cmd.Left, cmd.Left + cmdWidth / 2,
+                    face.Value.Top + height / 2, face.Value.Bottom),
+                "no 'Cmd' legend in the cap's lower-left");
+            Assert.True(
+                AnyWhite(px, cmd.Right - cmdWidth / 3, cmd.Right,
+                    face.Value.Top, face.Value.Top + height / 2),
+                "no command icon in the cap's upper-right");
+        }
     }
 }

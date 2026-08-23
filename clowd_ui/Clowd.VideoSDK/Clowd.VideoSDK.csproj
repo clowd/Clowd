@@ -16,9 +16,12 @@
   <ItemGroup>
     <!-- The ful1e5 cursor packs' own SVG sources, read by CursorPackLoader. The logical name is
          spelled out because the default one mangles the hyphen in a folder like `bibata-r` into an
-         underscore, and the loader addresses a pack by the name it has on disk. -->
+         underscore, and the loader addresses a pack by the name it has on disk. Both separators are
+         folded: MSBuild fills %(RecursiveDir) with the host OS's separator, so on macOS/Linux a
+         backslash-only replace would leave `bibata-r/appstarting/000.svg` in the name and every
+         pack would silently fail to load. -->
     <EmbeddedResource Include="Composition\CursorPacks\**\*.svg">
-      <LogicalName>Clowd.VideoSDK.Composition.CursorPacks.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.'))%(Filename)%(Extension)</LogicalName>
+      <LogicalName>Clowd.VideoSDK.Composition.CursorPacks.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.').Replace('/','.'))%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>

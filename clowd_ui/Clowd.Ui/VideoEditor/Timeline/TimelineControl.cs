@@ -24,8 +24,12 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// million-pixel control).
     ///
     /// Wheel gestures are tunnel-handled here so the inner ScrollViewer only sees the ones meant
-    /// for it: plain (and Ctrl) wheel = anchored zoom around the pointer, Shift+wheel = horizontal
-    /// scroll, Alt+wheel = the ScrollViewer's vertical scroll. Everything the timeline edits goes through
+    /// for it. What each one means is per-platform and lives in <see cref="TimelineScrollInput"/>:
+    /// on Windows plain (and Ctrl) wheel = anchored zoom around the pointer, Shift+wheel =
+    /// horizontal scroll, Alt+wheel = the ScrollViewer's vertical scroll; on macOS a two-finger
+    /// scroll pans (vertically via that same ScrollViewer), Cmd/Ctrl+scroll zooms, and the pinch —
+    /// a bubbling <c>PointerTouchPadGestureMagnify</c>, not a wheel — is the primary zoom.
+    /// Everything the timeline edits goes through
     /// <see cref="Session"/>; the control re-reads <c>Session.Project</c> on every
     /// <c>ProjectChanged</c> and rebuilds rows/headers only on Structural changes.
     /// </summary>
@@ -35,8 +39,6 @@ namespace Clowd.UI.VideoEditor.Timeline
         // cell's four buttons above them) — wider only buys blank space between the two.
         internal const double HeaderWidth = 130;
 
-        private const double ZoomStepPerNotch = 1.25;
-        private const double WheelScrollPxPerNotch = 60;
         private const double FollowMarginPx = 40;
 
         public static readonly StyledProperty<TimeSpan> PositionProperty =
@@ -187,6 +189,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             // tunnel so the ScrollViewer never sees a modified wheel (it would eat Ctrl+wheel as
             // a plain vertical scroll before the zoom could run).
             AddHandler(PointerWheelChangedEvent, OnTunnelPointerWheel, RoutingStrategies.Tunnel);
+            AddHandler(PointerTouchPadGestureMagnifyEvent, OnTouchPadMagnify);
 
             _viewport.Changed += Viewport_Changed;
             _hscroll.Scroll += HorizontalScrollBar_Scroll;
@@ -462,33 +465,65 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private void OnTunnelPointerWheel(object sender, PointerWheelEventArgs e)
         {
-            var delta = e.Delta.Y != 0 ? e.Delta.Y : e.Delta.X;
-            if (delta == 0)
+            // what the gesture means is decided by TimelineScrollInput (pure, and unit-tested for
+            // both platforms); this method only carries it out.
+            var decision = TimelineScrollInput.DecideWheel(e.Delta.X, e.Delta.Y,
+                ToScrollModifiers(e.KeyModifiers), OperatingSystem.IsMacOS());
+
+            switch (decision.Action)
+            {
+                case TimelineScrollAction.Zoom:
+                    // The anchor x is measured in the surface's space so ruler and rows zoom
+                    // identically; a wheel over the header column or the vertical scroll bar lands
+                    // outside [0, width] and the viewport clamps it to the nearest surface edge
+                    // (zooming around an off-screen tick would pan, not zoom).
+                    _viewport.SetZoomAnchored(_viewport.TicksPerPixel * decision.ZoomFactor,
+                        e.GetPosition(_surface).X);
+                    e.Handled = true;
+                    break;
+
+                case TimelineScrollAction.PanHorizontal:
+                    _viewport.ScrollByPixels(decision.PanPixels);
+                    e.Handled = true;
+                    break;
+
+                // ScrollRows and None are left unhandled on purpose: the tunnel handler declining
+                // the event is exactly how the inner ScrollViewer gets to see it.
+            }
+        }
+
+        /// <summary>
+        /// Trackpad pinch, macOS only (an X11/Win32 trackpad never raises this). Bubbling, not
+        /// tunnelling: Avalonia registers the touch-pad gesture events with
+        /// <c>RoutingStrategies.Bubble</c> alone, so a tunnel handler for it would never run —
+        /// harmless here because nothing inside the timeline handles a magnify.
+        ///
+        /// This is the one gesture Avalonia's <c>PinchGestureRecognizer</c> does <i>not</i> cover on
+        /// a Mac: that recognizer builds a pinch out of two touch/pen contacts, and a macOS trackpad
+        /// delivers no contacts to the app at all — AppKit resolves the fingers itself and sends a
+        /// single <c>magnifyWithEvent:</c>, which is what lands here.
+        /// </summary>
+        private void OnTouchPadMagnify(object sender, PointerDeltaEventArgs e)
+        {
+            var factor = TimelineScrollInput.ZoomFactorForMagnification(e.Delta.Y);
+            if (factor == 1)
                 return;
 
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-            {
-                _viewport.ScrollByPixels(-delta * WheelScrollPxPerNotch);
-                e.Handled = true;
-            }
-            else if (e.KeyModifiers.HasFlag(KeyModifiers.Alt))
-            {
-                // the rows' vertical scroll, which the plain wheel used to carry — it is also
-                // still on the ScrollViewer's own scroll bar.
-                return;
-            }
-            else
-            {
-                // Plain wheel (and Ctrl+wheel, the habit) is an anchored zoom around the pointer:
-                // over a timeline that is what a wheel means, and the rows are rarely tall enough
-                // to scroll. The anchor x is measured in the surface's space so ruler and rows zoom
-                // identically; a wheel over the header column or the vertical scroll bar lands
-                // outside [0, width] and the viewport clamps it to the nearest surface edge
-                // (zooming around an off-screen tick would pan, not zoom).
-                _viewport.SetZoomAnchored(_viewport.TicksPerPixel * Math.Pow(ZoomStepPerNotch, -delta),
-                    e.GetPosition(_surface).X);
-                e.Handled = true;
-            }
+            _viewport.SetZoomAnchored(_viewport.TicksPerPixel * factor, e.GetPosition(_surface).X);
+            e.Handled = true;
+        }
+
+        /// <summary>Avalonia's modifier flags as the pure decoder's own — spelled out rather than
+        /// cast, so the decoder cannot silently disagree with Avalonia if either enum is ever
+        /// renumbered.</summary>
+        private static TimelineScrollModifiers ToScrollModifiers(KeyModifiers modifiers)
+        {
+            var result = TimelineScrollModifiers.None;
+            if (modifiers.HasFlag(KeyModifiers.Alt)) result |= TimelineScrollModifiers.Alt;
+            if (modifiers.HasFlag(KeyModifiers.Control)) result |= TimelineScrollModifiers.Control;
+            if (modifiers.HasFlag(KeyModifiers.Shift)) result |= TimelineScrollModifiers.Shift;
+            if (modifiers.HasFlag(KeyModifiers.Meta)) result |= TimelineScrollModifiers.Meta;
+            return result;
         }
 
         // ------------------------------------------------------------------------------- chrome

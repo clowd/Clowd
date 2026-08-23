@@ -526,14 +526,14 @@ namespace Clowd.Drawing
                 Executed = (obj) => ZoomPanAuto(),
                 CanExecute = (obj) => Count > 0,
                 Text = "Zoom to fit content",
-                GestureText = "Ctrl+0",
+                GestureText = OperatingSystem.IsMacOS() ? "Cmd+0" : "Ctrl+0",
             };
             CommandZoomPanActualSize = new RelayCommand()
             {
                 Executed = (obj) => ZoomPanActualSize(parseDoubleOrDefault(obj, 1)),
                 CanExecute = (obj) => Count > 0,
                 Text = "Zoom to actual size",
-                GestureText = "Ctrl+1",
+                GestureText = OperatingSystem.IsMacOS() ? "Cmd+1" : "Ctrl+1",
             };
             CommandUndo = new RelayCommand()
             {

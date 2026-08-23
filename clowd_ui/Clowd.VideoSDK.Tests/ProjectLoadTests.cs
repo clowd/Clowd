@@ -25,7 +25,7 @@ namespace Clowd.VideoSDK.Tests
     {
         private const long Ms = TimeSpan.TicksPerMillisecond;
         private const long DurationMs = 10_000;
-        private const string VideoPath = @"C:\recordings\video.mp4";
+        private static readonly string VideoPath = TestPath.Native(@"C:\recordings\video.mp4");
 
         // A real videoedit.json written by the shipped v1 editor (session_20260810_162448_241.0),
         // copied in verbatim so the migration is tested against the actual shipped format.
@@ -302,7 +302,7 @@ namespace Clowd.VideoSDK.Tests
             var hints = new RecordingTrackHints
             {
                 Webcam = SessionTrack(1, 640, 480),
-                InputCapturePath = @"C:\recordings\input-capture.jsonl",
+                InputCapturePath = TestPath.Native(@"C:\recordings\input-capture.jsonl"),
             };
 
             var project = VideoEditPersistence.LoadOrCreate(null, VideoPath,
@@ -310,7 +310,7 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Empty(project.Validate());
             var source = Assert.Single(project.Sources);
-            Assert.Equal(@"C:\recordings\input-capture.jsonl", source.InputCapturePath);
+            Assert.Equal(TestPath.Native(@"C:\recordings\input-capture.jsonl"), source.InputCapturePath);
             Assert.Equal(new[] { 0, 1, 2 }, source.Streams.Select(s => s.Index));
             Assert.Contains(project.Tracks, t => t.Name == "Webcam");
             Assert.DoesNotContain(project.Tracks, t => t.Name == "Cursor");
@@ -548,8 +548,8 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void The_recordings_own_source_is_pointed_back_at_the_file_being_opened()
         {
-            var project = VideoEditPersistence.LoadOrCreate(null, @"D:\old-session\video.mp4", Probe());
-            var import = AddImport(project, @"D:\media\overlay.mp4");
+            var project = VideoEditPersistence.LoadOrCreate(null, TestPath.Native(@"D:\old-session\video.mp4"), Probe());
+            var import = AddImport(project, TestPath.Native(@"D:\media\overlay.mp4"));
             Assert.Empty(project.Validate());
 
             var path = WriteTemp(project.ToJson());
@@ -558,7 +558,7 @@ namespace Clowd.VideoSDK.Tests
                 var reloaded = VideoEditPersistence.LoadOrCreate(path, VideoPath, Probe());
 
                 Assert.Equal(VideoPath, reloaded.Sources.Single(s => s.Id != import).Path);
-                Assert.Equal(@"D:\media\overlay.mp4", reloaded.Sources.Single(s => s.Id == import).Path);
+                Assert.Equal(TestPath.Native(@"D:\media\overlay.mp4"), reloaded.Sources.Single(s => s.Id == import).Path);
             }
             finally
             {
@@ -575,9 +575,9 @@ namespace Clowd.VideoSDK.Tests
             var session = new EditorSession(
                 VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe()), null, null);
 
-            var created = session.ImportMedia(@"D:\media\overlay.mp4", new MediaProbeResult
+            var created = session.ImportMedia(TestPath.Native(@"D:\media\overlay.mp4"), new MediaProbeResult
             {
-                Path = @"D:\media\overlay.mp4",
+                Path = TestPath.Native(@"D:\media\overlay.mp4"),
                 DurationTicks = 5_000 * Ms,
                 VideoStreams = new[]
                 {
@@ -601,7 +601,7 @@ namespace Clowd.VideoSDK.Tests
 
                 // the import keeps its own path (only the recording's source is reconciled), its
                 // two rows and its link group.
-                var import = reloaded.Sources.Single(s => s.Path == @"D:\media\overlay.mp4");
+                var import = reloaded.Sources.Single(s => s.Path == TestPath.Native(@"D:\media\overlay.mp4"));
                 var items = reloaded.Items.Where(i => ((MediaContent)i.Content).SourceId == import.Id).ToList();
                 Assert.Equal(2, items.Count);
                 Assert.Equal(2_000 * Ms, items[0].TimelineStartTicks);

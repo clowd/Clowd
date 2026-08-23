@@ -159,13 +159,7 @@ namespace Clowd.UI.VideoEditor
             }
         }
 
-        private static string ResolveFFmpegDirectory()
-        {
-            // production layout: the FFmpeg DLLs sit in the obs-express folder next to the exe;
-            // dev machines set CLOWD_FFMPEG_PATH (checked by FFmpegLoader before this runs).
-            var obs = ObsBinaryLocator.Resolve();
-            return obs != null ? Path.GetDirectoryName(obs) : null;
-        }
+        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         private void PrintStats()
         {

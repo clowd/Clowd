@@ -40,7 +40,7 @@ namespace Clowd.VideoSDK.Tests
             };
 
         private static string[] Build(SettingsRecording settings)
-            => ObsArguments.Build(new ScreenRect(10, 20, 640, 480), @"C:\out\video.mp4", @"C:\out\obs.json", settings)
+            => ObsArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"), settings)
                            .ToArray();
 
         [Fact]
@@ -51,9 +51,9 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("--region", args[0]);
             Assert.Equal("10,20,640,480", args[1]);
             Assert.Equal("--output", args[2]);
-            Assert.Equal(@"C:\out\video.mp4", args[3]);
+            Assert.Equal(TestPath.Native(@"C:\out\video.mp4"), args[3]);
             Assert.Equal("--settings", args[4]);
-            Assert.Equal(@"C:\out\obs.json", args[5]);
+            Assert.Equal(TestPath.Native(@"C:\out\obs.json"), args[5]);
             Assert.Equal("--pause", args[6]);
         }
 
@@ -112,7 +112,7 @@ namespace Clowd.VideoSDK.Tests
             var i = Array.IndexOf(args, "--input-capture");
 
             Assert.True(i >= 0);
-            Assert.Equal(@"C:\out\input-capture.jsonl", args[i + 1]);
+            Assert.Equal(TestPath.Native(@"C:\out\input-capture.jsonl"), args[i + 1]);
 
             Assert.DoesNotContain("--input-capture", Build(Settings(composition: false)));
         }

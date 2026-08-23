@@ -33,6 +33,20 @@ namespace Clowd.VideoSDK.Audio
         /// another one.</param>
         void Initialize(int sampleRate, int channels, int latencyMs, AudioRenderCallback render);
 
+        /// <summary>
+        /// How far ahead of the speaker the samples handed to <see cref="AudioRenderCallback"/>
+        /// are, in milliseconds — what the master clock subtracts to get the media time actually
+        /// being heard. Valid after <see cref="Initialize"/>.
+        /// <para>
+        /// Usually the <c>latencyMs</c> that was requested, which is why the request may not be
+        /// silently substituted. It is a property rather than that constant because one backend
+        /// does not get to choose: CoreAudio hands out the device's own buffer size (512 frames,
+        /// ~11 ms, plus a couple more for the device and its safety offset), and correcting a
+        /// ~14 ms pipeline by 100 ms would put every preview 86 ms out of sync.
+        /// </para>
+        /// </summary>
+        int ActualLatencyMs { get; }
+
         /// <summary>Starts or resumes pulling. Idempotent while already playing.</summary>
         void Play();
 

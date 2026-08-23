@@ -45,6 +45,26 @@ namespace Clowd
         }
 
         /// <summary>
+        /// This gesture as an <em>in-app command</em> binding for the running OS: on macOS the
+        /// Control modifier becomes Meta, because ⌘ is where every Mac app puts Undo, Redo, Split
+        /// and friends, and Control there is a separate modifier with its own meanings (⌃-click is
+        /// the secondary click). Everywhere else it is this gesture unchanged.
+        /// <para>
+        /// Global hotkeys deliberately do <b>not</b> go through this. Those are the literal keys
+        /// the user configured; <see cref="UI.GlobalHotkeyHost"/> registers them off
+        /// <see cref="Modifiers"/> directly, and the tray menu shows them with
+        /// <see cref="ToKeyGesture"/> so what is displayed is what will actually fire.
+        /// </para>
+        /// </summary>
+        public SimpleKeyGesture ForApp()
+        {
+            if (!OperatingSystem.IsMacOS() || !Modifiers.HasFlag(KeyModifiers.Control))
+                return this;
+
+            return new SimpleKeyGesture(Key, (Modifiers & ~KeyModifiers.Control) | KeyModifiers.Meta);
+        }
+
+        /// <summary>
         /// Canonical round-trippable form used by the settings file: modifier flag names joined
         /// with '+', followed by the exact <see cref="Avalonia.Input.Key"/> name — e.g.
         /// "Control+Shift+Snapshot". The pretty <see cref="ToString"/> ("Ctrl+Shift+PrtScr") is
@@ -110,6 +130,8 @@ namespace Clowd
             return string.Join("+", strBinding.Split('+', ',').Select(c => c.Trim()))
                 .Replace("Snapshot", "PrtScr")
                 .Replace("Control", "Ctrl")
+                // what ⌘ is called in text; only ForApp() ever puts it here.
+                .Replace("Meta", "Cmd")
                 .Replace("Delete", "Del")
                 .Replace("Escape", "Esc");
         }

@@ -21,28 +21,12 @@ namespace Clowd.VideoSDK.Tests
         private const int Rate = 48000;
         private const long Second = 10_000_000;
 
-        private static bool FFmpegAvailable => FFmpegLoader.TryInitialize(FindFFmpegDirectory);
+        private static bool FFmpegAvailable => TestFFmpeg.Available;
 
-        private static string FindFFmpegDirectory()
-        {
-            string probeFile = OperatingSystem.IsWindows() ? "avcodec-61.dll" : "libavcodec.so.61";
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null)
-            {
-                foreach (var cfg in new[] { "release", "debug" })
-                {
-                    var candidate = Path.Combine(dir.FullName, "obs-express-rs", "target", cfg);
-                    if (File.Exists(Path.Combine(candidate, probeFile)))
-                        return candidate;
-                }
-                dir = dir.Parent;
-            }
-            return null;
-        }
 
         private static void RequireFFmpeg() =>
             Assert.SkipUnless(FFmpegAvailable,
-                $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
+                TestFFmpeg.SkipReason);
 
         // ----------------------------------------------------------------------------- helpers
 

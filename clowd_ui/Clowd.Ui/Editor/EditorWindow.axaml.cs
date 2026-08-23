@@ -485,10 +485,9 @@ namespace Clowd.UI
             KeyBindings.Add(kb);
 
             // macOS: every Ctrl gesture is also registered with Meta (§2.4)
-            if (OperatingSystem.IsMacOS() && (command.Gesture.Modifiers & KeyModifiers.Control) != 0) {
-                var metaMods = (command.Gesture.Modifiers & ~KeyModifiers.Control) | KeyModifiers.Meta;
-                KeyBindings.Add(new KeyBinding { Command = command, Gesture = new KeyGesture(command.Gesture.Key, metaMods) });
-            }
+            var meta = command.CreateMacMetaKeyBinding();
+            if (meta != null)
+                KeyBindings.Add(meta);
         }
 
         private void AddKeyBinding(System.Windows.Input.ICommand command, Key key, object parameter = null)

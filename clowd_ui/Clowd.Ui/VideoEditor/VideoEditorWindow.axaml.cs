@@ -245,6 +245,8 @@ namespace Clowd.UI.VideoEditor
             AddCommandKeyBinding(CommandUndo);
             AddCommandKeyBinding(CommandRedo);
             KeyBindings.Add(new KeyBinding { Command = CommandRedo, Gesture = new KeyGesture(Key.Z, KeyModifiers.Control | KeyModifiers.Shift) });
+            if (OperatingSystem.IsMacOS())
+                KeyBindings.Add(new KeyBinding { Command = CommandRedo, Gesture = new KeyGesture(Key.Z, KeyModifiers.Meta | KeyModifiers.Shift) });
             AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
 
             // media keys (opt-in, Settings ▸ Recording ▸ Composition) drive the transport only
@@ -359,7 +361,7 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
-            if (!OperatingSystem.IsWindows() || !FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
             {
                 // no in-app playback available — hand the file to the OS player so the user still
                 // sees their recording, and say why the editor did not open. A project has no file
@@ -396,7 +398,7 @@ namespace Clowd.UI.VideoEditor
         /// </summary>
         public static void ShowBlankProject()
         {
-            if (!OperatingSystem.IsWindows() || !FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+            if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
             {
                 _ = NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
                     UnavailableMessage(playerFallback: false), "Can't open the video editor");
@@ -424,13 +426,12 @@ namespace Clowd.UI.VideoEditor
             wnd.Activate();
         }
 
-        /// <summary>Why the editor did not open, in the one wording both entry points use.</summary>
+        /// <summary>Why the editor did not open, in the one wording both entry points use. The only
+        /// way to get here now is a missing FFmpeg — the engine itself (decode, the Metal/D3D12
+        /// compositor, CoreAudio/WASAPI, the AI effects) runs on every desktop platform.</summary>
         private static string UnavailableMessage(bool playerFallback)
         {
-            var reason = OperatingSystem.IsWindows()
-                ? FFmpegLoader.FailureReason
-                : "the editor is only available on Windows";
-            return $"The built-in video editor is not available ({reason})."
+            return $"The built-in video editor is not available ({FFmpegLoader.FailureReason})."
                    + (playerFallback ? " The recording has been opened in your default video player instead." : "");
         }
 
@@ -463,13 +464,7 @@ namespace Clowd.UI.VideoEditor
             return Enumerable.Empty<VideoEditorWindow>();
         }
 
-        private static string ResolveFFmpegDirectory()
-        {
-            // production layout: the FFmpeg DLLs sit in the obs-express folder next to the exe;
-            // dev machines set CLOWD_FFMPEG_PATH (checked by FFmpegLoader before this runs).
-            var obs = ObsBinaryLocator.Resolve();
-            return obs != null ? Path.GetDirectoryName(obs) : null;
-        }
+        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         // ====================================================================
         // Session + playback
@@ -1218,6 +1213,11 @@ namespace Clowd.UI.VideoEditor
                 return;
 
             KeyBindings.Add(kb);
+
+            // macOS: every Ctrl gesture is also registered with Meta, so ⌘Z/⌘Y/⌘K work (§2.4).
+            var meta = command.CreateMacMetaKeyBinding();
+            if (meta != null)
+                KeyBindings.Add(meta);
         }
 
         private void OnTunnelKeyDown(object sender, KeyEventArgs e)
@@ -1261,6 +1261,9 @@ namespace Clowd.UI.VideoEditor
                     e.Handled = true;
                     return;
                 case Key.Delete:
+                // the Mac keyboard's Delete key is a backspace: it arrives as Key.Back, and it is
+                // the only delete key most Mac laptops have.
+                case Key.Back:
                     if (timeline.DeleteSelection())
                         e.Handled = true;
                     return;

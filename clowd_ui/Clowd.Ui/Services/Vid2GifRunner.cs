@@ -82,14 +82,14 @@ namespace Clowd.UI.Services
         {
             var env = Environment.GetEnvironmentVariable(EnvVarName);
             if (!String.IsNullOrWhiteSpace(env) && File.Exists(env))
-                return Path.GetFullPath(env);
+                return HelperBinary.EnsureExecutable(Path.GetFullPath(env));
 
             var obs = ObsBinaryLocator.Resolve();
             if (String.IsNullOrEmpty(obs))
                 return null;
 
             var candidate = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(obs)), BinaryFileName);
-            return File.Exists(candidate) ? candidate : null;
+            return File.Exists(candidate) ? HelperBinary.EnsureExecutable(candidate) : null;
         }
 
         /// <summary>

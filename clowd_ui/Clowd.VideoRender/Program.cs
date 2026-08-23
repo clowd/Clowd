@@ -274,6 +274,11 @@ namespace Clowd.VideoRender
             if (HasFFmpeg(obsSubdir))
                 return obsSubdir;
 
+            // …and in a macOS bundle they are one level further in, under Frameworks/.
+            var obsFrameworks = Path.Combine(obsSubdir, "Frameworks");
+            if (HasFFmpeg(obsFrameworks))
+                return obsFrameworks;
+
             var directory = new DirectoryInfo(baseDirectory);
             while (directory != null)
             {
@@ -308,17 +313,16 @@ namespace Clowd.VideoRender
             if (String.IsNullOrEmpty(directory))
                 return false;
 
-            string[] probes = OperatingSystem.IsWindows() ? new[] { "avcodec-61.dll" }
-                : OperatingSystem.IsMacOS() ? new[] { "libavcodec.61.dylib", "libavcodec.dylib" }
-                : new[] { "libavcodec.so.61" };
+            // Named for the major the bindings were generated against, and built from the binding
+            // constant so a FFmpeg.AutoGen bump cannot leave a stale literal here. The unversioned
+            // libavcodec.dylib is deliberately not accepted: it is a dev symlink that says nothing
+            // about the major, and it is not the name the loader goes on to open.
+            int major = FFmpeg.AutoGen.Abstractions.ffmpeg.LIBAVCODEC_VERSION_MAJOR;
+            string probe = OperatingSystem.IsWindows() ? $"avcodec-{major}.dll"
+                : OperatingSystem.IsMacOS() ? $"libavcodec.{major}.dylib"
+                : $"libavcodec.so.{major}";
 
-            foreach (var probe in probes)
-            {
-                if (File.Exists(Path.Combine(directory, probe)))
-                    return true;
-            }
-
-            return false;
+            return File.Exists(Path.Combine(directory, probe));
         }
 
         // ---------------------------------------------------------------------------- protocol

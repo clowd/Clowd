@@ -41,6 +41,10 @@ namespace Clowd.VideoSDK.Audio
             _latencyMs = latencyMs;
         }
 
+        /// <summary>The requested latency: WasapiOut is constructed with it in shared mode and
+        /// honors it.</summary>
+        public int ActualLatencyMs => _latencyMs;
+
         public void Play()
         {
             if (_disposed)
