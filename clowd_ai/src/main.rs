@@ -148,19 +148,67 @@ fn main() -> anyhow::Result<()> {
     result
 }
 
+/// Whether CoreML may take a model.
+///
+/// Worth knowing before reading either variant, because it is not what the
+/// name "hardware execution provider" suggests: on macOS CoreML is *not* a
+/// route to the Neural Engine for anything this crate runs. Asking CoreML for
+/// its own compute plan (`ProfileComputePlan`) reports every operation of
+/// RVM, of DPDFNet and of the PP-OCRv6 detector on `MLCPUComputeDevice`, under
+/// every `MLComputeUnits` setting including `CPUAndNeuralEngine`. Why it
+/// refuses is inferred rather than measured — the ANE wants static shapes,
+/// and all three graphs are exported with dynamic dimensions — but that it
+/// refuses is not. So the real choice here is between two CPU
+/// implementations: CoreML's (Accelerate/AMX, ~1.2 cores busy) and ONNX
+/// Runtime's own (portable SIMD, as many threads as there are cores). Which
+/// one wins is a per-machine race between efficiency and core count, and the
+/// answer below was measured on an M2 Pro (8 P + 4 E) — see each variant.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CoreMl {
+    /// Register CoreML on macOS like any other platform provider.
+    Allowed,
+    /// Keep this model on ONNX Runtime's own CPU provider.
+    ///
+    /// The 48 kHz speech enhancer is the one that asks for this, for two
+    /// reasons, in this order:
+    ///
+    /// 1. It is *slower* on CoreML. DPDFNet is a small recurrent graph run
+    ///    once per 10 ms audio frame — ~100 dispatches a second, split across
+    ///    six CoreML partitions with the recurrent state crossing the boundary
+    ///    every time — and per-dispatch overhead swamps a graph that size. 10 s
+    ///    of mono measured 1.98 s of inference on the CPU against 2.54 s on
+    ///    CoreML, plus ~0.9 s more to build the session. There is no hardware
+    ///    being left on the table (see the type's own docs); it is simply the
+    ///    slower of two CPU paths here.
+    /// 2. On CoreML's default `NeuralNetwork` model format it does not merely
+    ///    run slowly, it fails outright: that format pads every tensor to
+    ///    rank 5, so DPDFNet's rank-3 recurrent state comes back as
+    ///    `{1,1,1,96,96}` where the graph inferred `{1,1,96}` and every
+    ///    inference dies in `GetStaticOutputShape` with "different ranks".
+    ///    [`ep_session_builder`] asks for `MLProgram` instead, which compiles
+    ///    the same graph correctly and to within 1.5e-6 of the CPU — so this
+    ///    variant is a performance decision now, not a crash workaround, and
+    ///    flipping it back to [`Allowed`](CoreMl::Allowed) would produce
+    ///    correct output, just less of it per second.
+    ///
+    /// Windows is unaffected either way: DirectML takes this model there.
+    Declined,
+}
+
 /// Builds a session builder with the platform's hardware execution provider
 /// registered: DirectML on Windows (any DX12 GPU; DirectML.dll ships beside
 /// this exe — chosen over CUDA, which would need a user-installed CUDA
-/// toolkit no end user has), CoreML on macOS. A provider that fails to
-/// register is skipped and the CPU takes over, so this can never make
-/// inference unavailable, only faster.
+/// toolkit no end user has), CoreML on macOS unless the caller passes
+/// [`CoreMl::Declined`]. A provider that fails to register is skipped and
+/// the CPU takes over, so registration can never make inference unavailable,
+/// only faster.
 ///
 /// Registration is explicit per provider rather than through ort's own
 /// fallback (`with_execution_providers`): that path logs failures through the
 /// `tracing` feature this build turns off, which made "why is this running on
 /// the CPU?" undiagnosable. Here every provider's outcome lands on stderr,
 /// which the spawner pumps into its diagnostic ring.
-pub fn ep_session_builder() -> anyhow::Result<ort::session::builder::SessionBuilder> {
+pub fn ep_session_builder(coreml: CoreMl) -> anyhow::Result<ort::session::builder::SessionBuilder> {
     use ort::ep::ExecutionProvider;
 
     let mut builder = ort::session::Session::builder()?;
@@ -179,12 +227,40 @@ pub fn ep_session_builder() -> anyhow::Result<ort::session::builder::SessionBuil
             .map_err(|e| anyhow::anyhow!("selecting sequential execution: {e}"))?;
     }
 
-    let eps: Vec<Box<dyn ExecutionProvider>> = vec![
-        #[cfg(windows)]
-        Box::new(ort::ep::DirectML::default()),
-        #[cfg(target_os = "macos")]
-        Box::new(ort::ep::CoreML::default()),
-    ];
+    #[cfg(not(target_os = "macos"))]
+    let _ = coreml;
+
+    #[allow(unused_mut)]
+    let mut eps: Vec<Box<dyn ExecutionProvider>> = Vec::new();
+    #[cfg(windows)]
+    eps.push(Box::new(ort::ep::DirectML::default()));
+    #[cfg(target_os = "macos")]
+    if coreml == CoreMl::Allowed {
+        eps.push(Box::new(
+            ort::ep::CoreML::default()
+                // MLProgram, not the `NeuralNetwork` default. That default is
+                // an fp16 format, and the precision is not academic: RVM's
+                // first frames come back visibly wrong on it — mean |Δalpha|
+                // 37.8/255 against the fp32 reference on frame 0, decaying
+                // over the next ~10 frames as the recurrent state warms, i.e.
+                // a wrong matte at the head of every clip. MLProgram matches
+                // the CPU to within one 8-bit step everywhere. It also
+                // rank-pads nothing, which is what makes the speech enhancer
+                // merely slow rather than broken (see [`CoreMl::Declined`]).
+                // The cost is session build time: ~1.0 s against ~0.37 s,
+                // paid once per job.
+                .with_model_format(ort::ep::coreml::ModelFormat::MLProgram)
+                // Not the `ALL` default, which measured 10-30% slower and far
+                // noisier (48-50 ms/frame against 53-67 for RVM at 960x540).
+                // `ALL` lets CoreML's planner shop partitions around the GPU;
+                // narrowing the choice skips that, and costs nothing real,
+                // because the ANE does not take these graphs anyway and the
+                // work lands on the CPU under either setting.
+                .with_compute_units(ort::ep::coreml::ComputeUnits::CPUAndNeuralEngine),
+        ));
+    } else {
+        log::info!("CoreML skipped: this model measured faster on the CPU provider");
+    }
     for ep in &eps {
         match ep.register(&mut builder) {
             Ok(()) => log::info!("execution provider registered: {}", ep.name()),
