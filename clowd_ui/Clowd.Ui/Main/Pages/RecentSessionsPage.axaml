@@ -437,8 +437,8 @@
                                                                 ToolTip.Tip="Render into a video"
                                                                 AutomationProperties.Name="Render into a video">
                                                             <Viewbox>
-                                                                <!-- IconExport is drawn on a 48px canvas (AppStyles icon table) -->
-                                                                <Path Width="48" Height="48" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconExport}" />
+                                                                <!-- IconProcess is drawn on a 24px canvas (AppStyles icon table) -->
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconProcess}" />
                                                             </Viewbox>
                                                         </Button>
                                                         <Button Classes="rowAction"

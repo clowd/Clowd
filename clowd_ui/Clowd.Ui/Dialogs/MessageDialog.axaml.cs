@@ -5,6 +5,19 @@ using Clowd.UI.Helpers;
 
 namespace Clowd.UI.Dialogs
 {
+    /// <summary>Which button of a <see cref="MessageDialog"/> the user pressed.</summary>
+    public enum MessageDialogChoice
+    {
+        /// <summary>The negative button, Escape, or Cmd+W.</summary>
+        Cancel = 0,
+
+        /// <summary>The affirmative (default-focused) button.</summary>
+        Primary,
+
+        /// <summary>The optional third button, offered between the other two.</summary>
+        Alternate,
+    }
+
     /// <summary>
     /// The single window backing all NiceDialog message prompts (notice / prompt / yes-no).
     /// Replaces the WinForms TaskDialog used by the WPF build (decision table #49).
@@ -13,16 +26,22 @@ namespace Clowd.UI.Dialogs
     {
         /// <summary>
         /// True when the affirmative button was clicked, false for the negative button or
-        /// Escape, and null when the window was closed by other means.
+        /// Escape, and null when the window was closed by other means. A click on the optional
+        /// third button resolves to false here — <see cref="Choice"/> is what tells the two apart.
         /// </summary>
         public bool? Result { get; private set; }
+
+        /// <summary>Which button closed the window, for the callers that offer three of them.
+        /// Escape, Cmd+W and the negative button all leave it <see cref="MessageDialogChoice.Cancel"/>.</summary>
+        public MessageDialogChoice Choice { get; private set; } = MessageDialogChoice.Cancel;
 
         public MessageDialog() : this(NiceDialogIcon.None, "", null, "OK", null)
         { }
 
         public MessageDialog(NiceDialogIcon icon, string content, string mainInstruction,
                              string trueTxt, string falseTxt,
-                             NiceDialogIcon footerIcon = NiceDialogIcon.None, string footerTxt = null)
+                             NiceDialogIcon footerIcon = NiceDialogIcon.None, string footerTxt = null,
+                             string altTxt = null)
         {
             InitializeComponent();
             Icon = AppStyles.AppIcon;
@@ -45,13 +64,22 @@ namespace Clowd.UI.Dialogs
             }
 
             TrueButton.Content = string.IsNullOrWhiteSpace(trueTxt) ? "OK" : trueTxt;
-            TrueButton.Click += (_, _) => CloseWithResult(true);
+            TrueButton.Click += (_, _) => CloseWithResult(MessageDialogChoice.Primary);
+
+            if (!string.IsNullOrWhiteSpace(altTxt))
+            {
+                // three labelled buttons do not fit the default width; only this shape widens.
+                Width = 500;
+                AltButton.Content = altTxt;
+                AltButton.IsVisible = true;
+                AltButton.Click += (_, _) => CloseWithResult(MessageDialogChoice.Alternate);
+            }
 
             if (!string.IsNullOrWhiteSpace(falseTxt))
             {
                 FalseButton.Content = falseTxt;
                 FalseButton.IsVisible = true;
-                FalseButton.Click += (_, _) => CloseWithResult(false);
+                FalseButton.Click += (_, _) => CloseWithResult(MessageDialogChoice.Cancel);
             }
 
             if (!string.IsNullOrWhiteSpace(footerTxt))
@@ -68,7 +96,7 @@ namespace Clowd.UI.Dialogs
             Opened += (_, _) => TrueButton.Focus();
 
             // Cmd+W is the macOS close gesture — same "not true" resolution as Escape (issue #73)
-            MacWindowShortcuts.AddCloseShortcut(this, () => CloseWithResult(false));
+            MacWindowShortcuts.AddCloseShortcut(this, () => CloseWithResult(MessageDialogChoice.Cancel));
         }
 
         protected override void OnKeyDown(KeyEventArgs e)
@@ -77,15 +105,19 @@ namespace Clowd.UI.Dialogs
             if (e.Key == Key.Escape)
             {
                 e.Handled = true;
-                CloseWithResult(false);
+                CloseWithResult(MessageDialogChoice.Cancel);
                 return;
             }
 
             base.OnKeyDown(e);
         }
 
-        private void CloseWithResult(bool result)
+        private void CloseWithResult(MessageDialogChoice choice)
         {
+            // only the affirmative button is "true": a two-button caller reading Result must not
+            // see a third-button click as a yes.
+            var result = choice == MessageDialogChoice.Primary;
+            Choice = choice;
             Result = result;
             Close(result);
         }

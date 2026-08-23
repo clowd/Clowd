@@ -24,6 +24,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Clowd.UI.Controls;
+using Clowd.UI.Dialogs;
 using Clowd.UI.Helpers;
 using Clowd.UI.Services;
 
@@ -742,28 +743,137 @@ namespace Clowd.UI
                 return;
             }
 
-            // a recording's mp4 lives in the user's own output folder (issue #50), outside the
-            // session directory this deletes — saying it "cannot be recovered" would be a lie.
-            var videoKept = session.IsVideo
-                            && !String.IsNullOrEmpty(session.VideoPath)
-                            && !session.IsInsideSessionDirectory(session.VideoPath);
+            var noun = DescribeEntry(session);
 
-            // a converted gif is written next to the recording it came from, so it takes the same
-            // "kept on disk" wording — just not the word "video".
-            var isGif = !String.IsNullOrEmpty(session.VideoPath)
-                        && session.VideoPath.EndsWith(".gif", StringComparison.OrdinalIgnoreCase);
+            // the one file the entry owns that deleting its session directory would leave behind
+            // (a recording saved to the user's output folder, a GIF, a render). Null when the entry
+            // keeps everything with itself, which is the only case with nothing to choose between.
+            var external = GetExternalContentPath(session);
 
-            string prompt;
-            if (!videoKept)
-                prompt = "Delete this capture? It cannot be recovered afterwards.";
-            else if (isGif)
-                prompt = $"Remove this GIF from Recents? The file is kept at {session.VideoPath}.";
-            else
-                prompt = $"Remove this recording from Recents? The video file is kept at {session.VideoPath}.";
-
-            if (await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning, prompt))
+            if (external == null)
             {
-                SessionManager.Current.DeleteSession(session);
+                // a project's mp4 carries one stream per track and lives in the session directory
+                // beside the composition that gives it meaning — the two are one thing, and there
+                // is no version of deleting the entry that keeps the video.
+                string content;
+                if (session.IsVideoProject)
+                    content = "The project is stored with the entry and will be deleted with it. "
+                              + "Media you imported into it stays where it is on disk.";
+                else if (session.IsProject)
+                    content = "Its video file is stored with the entry and will be deleted too. This cannot be undone.";
+                else
+                    content = $"This {noun} is stored with the entry. Deleting it cannot be undone.";
+
+                if (await NiceDialog.ShowDialogAsync(this, NiceDialogIcon.Warning, content,
+                        $"Delete this {noun}?", "Delete", "Cancel"))
+                {
+                    SessionManager.Current.DeleteSession(session);
+                }
+
+                return;
+            }
+
+            var fileNoun = DescribeExternalFile(session, external);
+            var choice = await NiceDialog.ShowThreeWayPromptAsync(this, NiceDialogIcon.Warning,
+                $"The {fileNoun} is saved outside this entry, at {external}. You can remove the entry "
+                + $"from Recents and keep the file, or delete both.",
+                $"Delete this {noun}?",
+                "Remove from Recents", "Delete both");
+
+            if (choice == MessageDialogChoice.Cancel)
+                return;
+
+            if (choice == MessageDialogChoice.Alternate)
+                await TryDeleteExternalFileAsync(external);
+
+            SessionManager.Current.DeleteSession(session);
+        }
+
+        /// <summary>What the confirmation calls this entry: the same word the Recent list has
+        /// taught the user for it, lowercased to sit inside a sentence.</summary>
+        private static string DescribeEntry(SessionInfo session)
+        {
+            if (session.IsVideoProject)
+                return "video project";
+
+            // a composition capture: a project too, but one the user thinks of as their recording.
+            if (session.IsProject)
+                return "screen recording";
+
+            if (!String.IsNullOrEmpty(session.SourceVideoPath))
+                return "GIF";
+
+            if (!String.IsNullOrEmpty(session.EditSourceVideoPath))
+                return "rendered video";
+
+            if (session.IsVideo)
+                return "video";
+
+            return session.ContentKind?.ToLowerInvariant() switch
+            {
+                "image" => "image",
+                "text" => "text upload",
+                "file" => "file upload",
+                _ => "capture", // a screenshot or a scrolling capture
+            };
+        }
+
+        /// <summary>
+        /// The file this entry owns that does <i>not</i> live in its session directory, and so
+        /// would survive the session being deleted. Null when there is none — a project (whose
+        /// media is inseparable from it), a capture, an upload — and null when the file has since
+        /// gone missing, because then there is nothing left to offer to delete.
+        /// </summary>
+        private static string GetExternalContentPath(SessionInfo session)
+        {
+            if (session.IsProject)
+                return null;
+
+            // the recording/GIF/render first, then the image: a video entry's PreviewImgPath is
+            // only its poster frame, which lives in the session directory either way.
+            foreach (var path in new[] { session.VideoPath, session.PreviewImgPath })
+            {
+                if (String.IsNullOrEmpty(path) || session.IsInsideSessionDirectory(path))
+                    continue;
+
+                try
+                {
+                    if (File.Exists(path))
+                        return path;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // an unreachable path is one this dialog cannot promise to delete either.
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>What the confirmation calls the file kept outside the entry.</summary>
+        private static string DescribeExternalFile(SessionInfo session, string path)
+        {
+            if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase))
+                return "GIF file";
+
+            return session.IsVideo ? "video file" : "image file";
+        }
+
+        /// <summary>Deletes the kept-outside file the user asked to go with the entry. A failure
+        /// is reported and then let go: the entry itself is still removed, which is the part of
+        /// the request that can be honoured.</summary>
+        private async System.Threading.Tasks.Task TryDeleteExternalFileAsync(string path)
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Delete session file failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "recents.delete-file");
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error,
+                    $"{path} could not be deleted: {ex.Message}", "Delete failed");
             }
         }
 

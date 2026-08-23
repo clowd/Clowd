@@ -35,6 +35,10 @@
                             MinWidth="80"
                             HorizontalContentAlignment="Center"
                             IsDefault="True" />
+                    <Button x:Name="AltButton"
+                            MinWidth="80"
+                            HorizontalContentAlignment="Center"
+                            IsVisible="False" />
                     <Button x:Name="FalseButton"
                             MinWidth="80"
                             HorizontalContentAlignment="Center"
