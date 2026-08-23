@@ -162,6 +162,8 @@ jobs:
           name: obs-express-windows-${{ matrix.arch }}
           path: dist/obs-express-windows-${{ matrix.arch }}.zip
           if-no-files-found: error
+          # Already a zip; re-deflating it only costs time.
+          compression-level: 0
 
   # ---------------------------------------------------------------------------
   # macOS: Xcode generator, obs-sys builds libobs.framework. Both slices run on
@@ -443,3 +445,5 @@ jobs:
           name: obs-express-macos-${{ matrix.arch }}
           path: dist/obs-express-macos-${{ matrix.arch }}.zip
           if-no-files-found: error
+          # Already a zip; re-deflating it only costs time.
+          compression-level: 0

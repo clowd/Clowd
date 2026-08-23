@@ -29,7 +29,7 @@ Each release publishes a zipped, self-contained bundle for every supported targe
 
 Unzip and run `obs-express` in place — the bundled OBS runtime (plugins, data, and the FFmpeg/x264 libraries) lives alongside the executable and is fully relocatable.
 
-The bundled FFmpeg/x264 libraries are also usable on their own (e.g. by a host that uses the FFmpeg C API in-process): on Windows they are ordinary DLLs next to the executable, and on macOS the dylibs in `Frameworks/` carry an `@loader_path` rpath so they can be `dlopen`ed directly by any program as long as they stay together. On macOS, unzip with a tool that restores symlinks and modes (`unzip`, `ditto -x -k`, `tar`): the versioned aliases (`libavcodec.61.dylib`) are symlinks and the executables rely on their execute bits.
+The bundled FFmpeg/x264 libraries are also usable on their own (e.g. by a host that uses the FFmpeg C API in-process): on Windows they are ordinary DLLs next to the executable (load them from that directory, e.g. via `AddDllDirectory`/`LOAD_WITH_ALTERED_SEARCH_PATH`), and on macOS the dylibs in `Frameworks/` carry an `@loader_path` rpath so they can be `dlopen`ed directly by any program as long as they stay together. On macOS, unzip with a tool that restores symlinks and modes (`unzip`, `ditto -x -k`, `tar`): the versioned aliases (`libavcodec.61.dylib`) are symlinks and the executables rely on their execute bits.
 
 On macOS the binaries are ad-hoc signed but not notarized, so the first launch may need:
 

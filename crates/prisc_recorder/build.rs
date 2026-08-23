@@ -178,12 +178,14 @@ fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
         // mtime-only, not copy_if_newer's size check: the re-sign below changes
         // the file size, so a size comparison would recopy (and re-sign) every
         // build. After patching, dst is newer than src and stays put until the
-        // bundle itself is replaced.
-        let up_to_date = match (
-            meta.modified(),
-            fs::metadata(&dst).and_then(|d| d.modified()),
-        ) {
-            (Ok(s), Ok(d)) => d >= s,
+        // bundle itself is replaced. symlink_metadata on dst: a stale symlink
+        // left from an older bundle (where this name was an alias) must be
+        // replaced, not followed to its up-to-date target.
+        let up_to_date = match fs::symlink_metadata(&dst) {
+            Ok(d) if d.file_type().is_file() => match (meta.modified(), d.modified()) {
+                (Ok(s), Ok(d)) => d > s,
+                _ => false,
+            },
             _ => false,
         };
         if up_to_date {
@@ -201,12 +203,18 @@ fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
         let dst_s = dst.to_str().unwrap();
         // A fresh copy carries no @loader_path rpath, so "would duplicate" can
         // only mean the bundle already ships one — fine either way.
-        run_checked(
+        let patched = run_checked(
             "install_name_tool",
             &["-add_rpath", "@loader_path", dst_s],
             &["would duplicate"],
-        );
-        run_checked("codesign", &["--force", "--sign", "-", dst_s], &[]);
+        ) && run_checked("codesign", &["--force", "--sign", "-", dst_s], &[]);
+        // Never leave a half-done copy behind: on APFS fs::copy clones the
+        // file with the source's mtime, and a patch-less or unsigned copy is
+        // unloadable. Removing it makes the next build retry instead of the
+        // mtime gate treating it as up to date forever.
+        if !patched {
+            let _ = fs::remove_file(&dst);
+        }
     }
 }
 
@@ -230,22 +238,28 @@ fn run(cmd: &str, args: &[&str]) {
     let _ = std::process::Command::new(cmd).args(args).output();
 }
 
-/// Run `cmd`, surfacing a non-zero exit as a cargo warning unless stderr
-/// contains one of `benign`.
-fn run_checked(cmd: &str, args: &[&str], benign: &[&str]) {
+/// Run `cmd`; returns whether it succeeded (a failure whose stderr contains
+/// one of `benign` counts as success). Real failures are surfaced as cargo
+/// warnings.
+fn run_checked(cmd: &str, args: &[&str], benign: &[&str]) -> bool {
     match std::process::Command::new(cmd).args(args).output() {
-        Ok(out) if out.status.success() => {}
+        Ok(out) if out.status.success() => true,
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);
-            if !benign.iter().any(|b| stderr.contains(b)) {
-                println!(
-                    "cargo:warning=obs-express: `{cmd} {}` failed: {}",
-                    args.join(" "),
-                    stderr.trim()
-                );
+            if benign.iter().any(|b| stderr.contains(b)) {
+                return true;
             }
+            println!(
+                "cargo:warning=obs-express: `{cmd} {}` failed: {}",
+                args.join(" "),
+                stderr.trim()
+            );
+            false
         }
-        Err(e) => println!("cargo:warning=obs-express: failed to run {cmd}: {e}"),
+        Err(e) => {
+            println!("cargo:warning=obs-express: failed to run {cmd}: {e}");
+            false
+        }
     }
 }
 
