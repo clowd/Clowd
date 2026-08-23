@@ -12,18 +12,34 @@ namespace Clowd.Util
     /// Code-generated tiled checker brushes replacing the WPF DrawingBrush resources
     /// (decision table #42). Tile sizes match the WPF Viewport sizes: Light = 10px
     /// (CheckeredLightGrayBackgroundBrush), Medium = 16px (CheckeredMediumGrayBackgroundBrush),
-    /// Swatch = 13px (the ~13.4px mini color-popup tile, approximated per §6). All use the
-    /// original #96969696 checker color over transparent. The 50px #11FFFFFF canvas checker is
-    /// rendered procedurally by Clowd.Drawing.CheckeredBackground and is not provided here.
+    /// Swatch = 13px (the ~13.4px mini color-popup tile, approximated per §6). Those three use the
+    /// original #96969696 checker color over transparent; Canvas is the 50px #11FFFFFF checker the
+    /// image editor draws behind the artwork (Clowd.Drawing.CheckeredBackground renders the same
+    /// pattern procedurally, because there it also has to be pannable and hit-testable).
     /// </summary>
     public static class CheckerBrushes
     {
         private static readonly Color CheckerColor = Color.FromArgb(0x96, 0x96, 0x96, 0x96);
+        private static readonly Color CanvasCheckerColor = Color.FromArgb(0x11, 0xFF, 0xFF, 0xFF);
         private static readonly Dictionary<int, IBrush> _cache = new();
+        private static IBrush _canvas;
 
         public static IBrush Light => GetChecker(10);
         public static IBrush Medium => GetChecker(16);
         public static IBrush Swatch => GetChecker(13);
+
+        /// <summary>The canvas backdrop shared with the image editor: a 50px #11FFFFFF checker
+        /// meant to sit over a dark background, not the light gray swatch checker above.</summary>
+        public static IBrush Canvas
+        {
+            get
+            {
+                lock (_cache)
+                {
+                    return _canvas ??= CreateCheckerBrush(50, CanvasCheckerColor);
+                }
+            }
+        }
 
         private static IBrush GetChecker(int tileSize)
         {

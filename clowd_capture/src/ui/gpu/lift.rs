@@ -28,12 +28,12 @@ use clowd_rust_core::geometry::RectExt;
 struct LiftInstance {
     /// min_x, min_y, max_x, max_y in window-local physical pixels.
     dest_px: [f32; 4],
-    /// (alpha, band_centre, sweep σ, corner radius). The radius is the
+    /// (alpha, band_center, sweep σ, corner radius). The radius is the
     /// selection's, in window-local px (0 = square); the fragment clips the
     /// band to that rounded rect so it cannot spill into the faded corners
     /// outside a picked window's curved border.
     params: [f32; 4],
-    /// Band colour (straight alpha 1.0; the fragment premultiplies).
+    /// Band color (straight alpha 1.0; the fragment premultiplies).
     tint: [f32; 4],
 }
 
@@ -42,7 +42,7 @@ struct LiftInstance {
 struct LiftUniforms {
     viewport_px: [f32; 2],
     /// Seconds since the current phase's anchor. The shader does not read
-    /// it today (the band centre travels per-instance), but the slot is
+    /// it today (the band center travels per-instance), but the slot is
     /// uploaded anyway so a shader-side effect can use it without a layout
     /// change.
     t: f32,
@@ -212,7 +212,7 @@ impl LiftPipeline {
         // exactly one more pass (the reveal wave the bubbles rise under,
         // wrap-aligned by the app thread so the band re-enters seamlessly);
         // Retracting and Idle draw nothing — the only exit animation is the
-        // region's colour fade, which lives in the desktop pass.
+        // region's color fade, which lives in the desktop pass.
         let (anchor, region) = match &state.ocr {
             OcrState::Scanning {
                 anchor,
@@ -253,7 +253,7 @@ impl LiftPipeline {
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&uniforms));
 
-        // Band centre through sweep_band: the phase's fract() makes looping
+        // Band center through sweep_band: the phase's fract() makes looping
         // free, and the overshoot puts the wrap entirely off-screen so
         // back-to-back passes are seamless. σ rides along in params.z — see
         // the shader header.

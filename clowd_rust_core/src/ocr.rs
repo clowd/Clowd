@@ -1,18 +1,20 @@
 //! The text-recognition contract between the capture overlay and the
-//! `clowd_ocr` binary that does the recognizing.
+//! `clowd_ai` binary (its `ocr` subcommand) that does the recognizing.
 //!
 //! Recognition runs out-of-process for one reason: the engine underneath it
-//! is a static C++ library (MNN, via `ocr-rs`). A Rust panic in it would
-//! unwind harmlessly, but an `abort`, a segfault, or an allocation failure on
-//! a degenerate selection takes down whatever process it is running in — and
-//! in-process that is the overlay, mid-capture, with the user's selection
-//! already framed. Out-of-process the same failure is an exit code the
-//! capturer reports as [`OcrError::Failed`].
+//! is a large native library (ONNX Runtime, via `ort`). A Rust panic in it
+//! would unwind harmlessly, but an `abort`, a segfault, or an allocation
+//! failure on a degenerate selection takes down whatever process it is
+//! running in — and in-process that is the overlay, mid-capture, with the
+//! user's selection already framed. Out-of-process the same failure is an
+//! exit code the capturer reports as [`OcrError::Failed`]. (It also keeps the
+//! GPL-licensed `clowd_ai` binary, and its tens of MB of model weights, out
+//! of the overlay.)
 //!
 //! # Wire format
 //!
-//! The capturer spawns `clowd_ocr --out <path>` per request and speaks to it
-//! exactly once:
+//! The capturer spawns `clowd_ai ocr --out <path>` per request and speaks to
+//! it exactly once:
 //!
 //! * **stdin** — one [`RequestHeader`] as a single JSON line, then the raw
 //!   BGRA pixels (`width * height * 4` bytes, tightly packed) through to
@@ -22,12 +24,11 @@
 //!   recognition finishes. Exit code 0 means the file is there and can be
 //!   trusted; any other exit means the child died or could not write, and
 //!   the capturer reports [`OcrError::Failed`] without reading it.
-//! * **stdout** — nothing. MNN prints device capabilities to stdout on
-//!   session creation, so stdout is unusable as a protocol channel here;
-//!   that is why the response is a file rather than the NDJSON line the
-//!   scrolling-capture driver uses. The capturer spawns the child with
-//!   stdout redirected to null so MNN's device-capability chatter cannot be
-//!   mistaken for output of its own.
+//! * **stdout** — nothing. The response is a file rather than the NDJSON
+//!   line the scrolling-capture driver uses: it doubles as the session's
+//!   `ocr.json` artifact, and a native runtime that printed to stdout (the
+//!   original MNN engine did) could never corrupt it. The capturer spawns
+//!   the child with stdout redirected to null for the same reason.
 //!
 //! The two binaries always ship from the same build, so this format carries
 //! no version negotiation.
@@ -52,7 +53,7 @@ struct RectRepr<T> {
     height: T,
 }
 
-/// `#[serde(with = ...)]` bridges for the two rect flavours the contract
+/// `#[serde(with = ...)]` bridges for the two rect flavors the contract
 /// carries. The domain types keep their `ScreenRect`/`ScreenRectF` fields, so
 /// nothing downstream of recognition has to know the wire shape exists.
 macro_rules! rect_serde {
@@ -83,7 +84,7 @@ rect_serde!(rect_i32, ScreenRect, i32);
 
 /// Response file name used when the request's output directory is a capture
 /// session directory. Sits beside `capture.log` and `scroll.log` as one more
-/// per-capture artefact.
+/// per-capture artifact.
 pub const RESULT_FILE_NAME: &str = "ocr.json";
 
 /// One recognized line of text.
@@ -97,7 +98,7 @@ pub struct OcrLine {
     /// The line's approximate glyph-ink rect, in virtual-desktop screen
     /// coordinates — the bubble renderer sizes and places its pill from
     /// this, so it must track the SOURCE text's visual extent, not the
-    /// detector's padded box (see `UNCLIP_TIGHTEN` in `clowd_ocr`). Already
+    /// detector's padded box (see `UNCLIP_TIGHTEN` in `clowd_ai`'s `ocr.rs`). Already
     /// offset by the crop origin the extractor actually used.
     #[serde(with = "rect_f32")]
     pub rect: ScreenRectF,

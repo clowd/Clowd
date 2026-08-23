@@ -19,7 +19,7 @@ use clowd_rust_core::geometry::{RectExt, ScreenRectExt};
 pub(crate) const TOOLTIP_FILL: [f32; 4] = [1.0, 1.0, 1.0, 0.80];
 pub(crate) const TOOLTIP_BORDER: [f32; 4] = [0.75, 0.75, 0.75, 0.80];
 const SHADOW_FILL: [f32; 4] = [0.0, 0.0, 0.0, 0.40];
-/// The pill body-text colour (near-black at 88% alpha) — same sharing
+/// The pill body-text color (near-black at 88% alpha) — same sharing
 /// story as the fills above.
 pub(crate) const TOOLTIP_TEXT_COLOR: [u8; 4] = [0x1A, 0x1A, 0x1A, 0xE0];
 
@@ -225,7 +225,7 @@ impl HintsRenderer {
             if notice.visible() {
                 if let Some(sel) = state.selection {
                     // One copy, on the monitor holding the selection's
-                    // centre — the same rule that places the panel, so the
+                    // center — the same rule that places the panel, so the
                     // pill and the buttons that caused it share a monitor.
                     let b = this_monitor.bounds;
                     let cx = sel.center_x();
@@ -242,7 +242,7 @@ impl HintsRenderer {
                         let tooltip_w = padding_h * 2.0 + desc_w;
                         let tooltip_h = padding_v * 2.0 + text_line_h;
 
-                        // Centred over the selection, just above its top
+                        // Centered over the selection, just above its top
                         // edge, clamped fully inside the monitor (a
                         // selection at the very top pushes the pill down
                         // over itself rather than off screen).

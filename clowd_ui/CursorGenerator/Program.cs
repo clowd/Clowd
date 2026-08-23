@@ -66,7 +66,7 @@ internal class Program
         CsEmbed.AppendLine();
         CsEmbed.AppendLine("namespace Clowd.Drawing;");
         CsEmbed.AppendLine();
-        CsEmbed.AppendLine("internal partial class CursorResources {");
+        CsEmbed.AppendLine("public partial class CursorResources {");
 
         DrawSizes(sizes, "Default", DrawBaseCursor);
         DrawSizes(sizes, "Rect", DrawBaseCursor, DrawRect);
@@ -81,6 +81,10 @@ internal class Program
         DrawSizes(sizes, "Obscure", DrawBaseCursor, DrawObscure);
         DrawSizes(sizes, "Move", DrawBaseCursor, DrawResizeCursorSmall);
         DrawSizes(sizes, "SizeAll", (a1, a2, a3) => DrawResizeCursorNew(a1, a2, a3, 0, true));
+
+        DrawSizes(sizes, "Grab", DrawGrabHand);
+        DrawSizes(sizes, "Grabbing", DrawGrabbingHand);
+        DrawSizes(sizes, "ColResize", DrawColResize);
 
         for (var i = 0; i < angles.Length; i++)
         {
@@ -175,6 +179,209 @@ internal class Program
         var file = Path.Combine(CursorFileDirectory, fileName);
         f.Save(file, format: IconFile.FileFormat.Cur);
         CsEmbed.AppendLine("    public static Cursor " + variation + " => GetCursor(\"" + fileName + "\");");
+    }
+
+    // ================================================================ browser drag cursors
+    // The drag cursors browsers provide but Windows lacks (CSS grab / grabbing / col-resize),
+    // drawn as vectors so they stay crisp at every DPI size like the rest of the set. The hands
+    // are traced from Clarity's cursor-hand-open-line / cursor-hand-grab-line icons (MIT,
+    // github.com/vmware/clarity-assets), built the way the SVGs are: the outer silhouette filled
+    // black, the inner contour filled white on top — the black border is the space between the
+    // two contours, so adjacent fingers share a single border-width slit of black and no pen
+    // stroke is involved. col-resize is the black glyph with a white halo, the static equivalent
+    // of the XOR screen-invert cursor browsers ship on Windows.
+
+    /// <summary>Clarity 36-box → an ~19px glyph in the 32 cursor box.</summary>
+    private const float HandScale = 22f / 36f;
+    private const float HandOffsetX = 5f;
+    private const float HandOffsetY = 4f;
+
+    /// <summary>Open hand. Hotspot at the palm center.</summary>
+    private static Point DrawGrabHand(float scale, int lineWidth, Graphics g)
+    {
+        PointF S(float x, float y) =>
+            new PointF((x * HandScale + HandOffsetX) * scale, (y * HandScale + HandOffsetY) * scale);
+
+        // outer silhouette: across the four finger caps, down the left side to the thumb lever,
+        // around the palm and back up the right edge
+        using var outer = new GraphicsPath();
+        outer.StartFigure();
+        outer.AddBezier(S(31.46f, 8.57f), S(31.30f, 6.90f), S(29.30f, 5.50f), S(27.00f, 5.75f));
+        outer.AddBezier(S(27.00f, 5.75f), S(26.30f, 4.00f), S(24.40f, 3.00f), S(22.34f, 3.11f));
+        outer.AddBezier(S(22.34f, 3.11f), S(20.80f, -0.60f), S(17.90f, -0.60f), S(15.92f, 2.35f));
+        outer.AddBezier(S(15.92f, 2.35f), S(15.40f, 2.00f), S(14.80f, 1.85f), S(14.26f, 1.89f));
+        outer.AddBezier(S(14.26f, 1.89f), S(12.40f, 2.00f), S(11.00f, 3.40f), S(11.00f, 5.18f));
+        outer.AddLine(S(11.00f, 5.18f), S(11.00f, 17.84f));
+        outer.AddBezier(S(11.00f, 17.84f), S(9.72f, 16.24f), S(8.47f, 14.66f), S(8.28f, 14.39f));
+        outer.AddBezier(S(8.28f, 14.39f), S(7.60f, 13.40f), S(6.60f, 12.85f), S(5.56f, 12.90f));
+        outer.AddBezier(S(5.56f, 12.90f), S(3.60f, 12.85f), S(2.05f, 14.50f), S(2.09f, 16.38f));
+        outer.AddBezier(S(2.09f, 16.38f), S(2.18f, 18.18f), S(5.66f, 24.54f), S(8.00f, 28.00f));
+        outer.AddBezier(S(8.00f, 28.00f), S(11.54f, 33.24f), S(14.92f, 34.00f), S(15.25f, 34.00f));
+        outer.AddLine(S(15.25f, 34.00f), S(26.14f, 33.81f));
+        outer.AddBezier(S(26.14f, 33.81f), S(27.70f, 32.60f), S(29.20f, 30.40f), S(29.89f, 27.68f));
+        outer.AddBezier(S(29.89f, 27.68f), S(30.89f, 24.59f), S(31.42f, 20.15f), S(31.47f, 14.12f));
+        outer.CloseFigure();
+
+        // inner contour, finger slits included — everything white
+        using var inner = new GraphicsPath();
+        inner.StartFigure();
+        inner.AddBezier(S(28.18f, 27.12f), S(27.60f, 29.20f), S(26.50f, 31.10f), S(25.24f, 32.20f));
+        inner.AddLine(S(25.24f, 32.20f), S(15.33f, 32.20f));
+        inner.AddBezier(S(15.33f, 32.20f), S(14.86f, 32.06f), S(12.26f, 31.10f), S(9.46f, 26.95f));
+        inner.AddBezier(S(9.46f, 26.95f), S(6.66f, 22.80f), S(3.94f, 17.27f), S(3.89f, 16.29f));
+        inner.AddBezier(S(3.89f, 16.29f), S(3.86f, 15.86f), S(4.02f, 15.42f), S(4.34f, 15.16f));
+        inner.AddBezier(S(4.34f, 15.16f), S(4.66f, 14.84f), S(5.06f, 14.70f), S(5.48f, 14.70f));
+        inner.AddBezier(S(5.48f, 14.70f), S(6.00f, 14.72f), S(6.47f, 15.00f), S(6.80f, 15.41f));
+        inner.AddBezier(S(6.80f, 15.41f), S(7.09f, 15.84f), S(9.16f, 18.41f), S(10.37f, 19.94f));
+        inner.AddLine(S(10.37f, 19.94f), S(12.80f, 18.30f));
+        inner.AddLine(S(12.80f, 18.30f), S(12.80f, 5.18f));
+        inner.AddBezier(S(12.80f, 5.18f), S(12.80f, 3.21f), S(15.75f, 3.21f), S(15.75f, 5.18f));
+        inner.AddLine(S(15.75f, 5.18f), S(15.75f, 16.32f));
+        inner.AddLine(S(15.75f, 16.32f), S(17.55f, 16.32f));
+        inner.AddLine(S(17.55f, 16.32f), S(17.55f, 3.32f));
+        inner.AddBezier(S(17.55f, 3.32f), S(17.55f, 1.32f), S(20.55f, 1.32f), S(20.55f, 3.32f));
+        inner.AddLine(S(20.55f, 3.32f), S(20.55f, 16.45f));
+        inner.AddLine(S(20.55f, 16.45f), S(22.35f, 16.45f));
+        inner.AddLine(S(22.35f, 16.45f), S(22.35f, 6.00f));
+        inner.AddBezier(S(22.35f, 6.00f), S(22.35f, 4.10f), S(25.20f, 4.10f), S(25.20f, 6.00f));
+        inner.AddLine(S(25.20f, 6.00f), S(25.20f, 17.44f));
+        inner.AddLine(S(25.20f, 17.44f), S(27.00f, 17.44f));
+        inner.AddLine(S(27.00f, 17.44f), S(27.00f, 8.54f));
+        inner.AddBezier(S(27.00f, 8.54f), S(27.00f, 6.77f), S(29.65f, 6.77f), S(29.65f, 8.54f));
+        inner.AddLine(S(29.65f, 8.54f), S(29.65f, 14.09f));
+        inner.AddBezier(S(29.65f, 14.09f), S(29.65f, 20.03f), S(29.17f, 24.21f), S(28.18f, 27.12f));
+        inner.CloseFigure();
+
+        g.FillPath(Stroke, outer);
+        g.FillPath(Fill, inner);
+        return new Point((int)S(17.5f, 21f).X, (int)S(17.5f, 21f).Y);
+    }
+
+    /// <summary>Closed fist. Hotspot at the palm center.</summary>
+    private static Point DrawGrabbingHand(float scale, int lineWidth, Graphics g)
+    {
+        PointF S(float x, float y) =>
+            new PointF((x * HandScale + HandOffsetX) * scale, (y * HandScale + HandOffsetY) * scale);
+
+        // outer silhouette: across the curled finger caps, down the left side, around the palm
+        // and back up over the thumb
+        using var outer = new GraphicsPath();
+        outer.StartFigure();
+        outer.AddLine(S(28.09f, 9.74f), S(26.93f, 9.93f));
+        outer.AddBezier(S(26.93f, 9.93f), S(26.74f, 8.69f), S(25.38f, 7.75f), S(23.66f, 7.75f));
+        outer.AddBezier(S(23.66f, 7.75f), S(23.10f, 7.75f), S(22.60f, 7.83f), S(22.13f, 8.00f));
+        outer.AddBezier(S(22.13f, 8.00f), S(21.20f, 6.90f), S(20.20f, 6.30f), S(19.00f, 6.30f));
+        outer.AddBezier(S(19.00f, 6.30f), S(17.80f, 6.35f), S(16.90f, 6.85f), S(16.13f, 7.62f));
+        outer.AddBezier(S(16.13f, 7.62f), S(15.50f, 7.35f), S(14.90f, 7.10f), S(14.24f, 7.11f));
+        outer.AddBezier(S(14.24f, 7.11f), S(12.40f, 7.35f), S(11.00f, 8.35f), S(11.00f, 9.89f));
+        outer.AddLine(S(11.00f, 9.89f), S(11.00f, 10.80f));
+        outer.AddBezier(S(11.00f, 10.80f), S(9.94f, 11.20f), S(6.89f, 12.60f), S(6.09f, 15.64f));
+        outer.AddBezier(S(6.09f, 15.64f), S(5.29f, 18.68f), S(6.43f, 23.64f), S(8.78f, 27.42f));
+        outer.AddBezier(S(8.78f, 27.42f), S(10.80f, 30.30f), S(12.60f, 32.50f), S(15.21f, 34.00f));
+        outer.AddLine(S(15.21f, 34.00f), S(26.10f, 33.81f));
+        outer.AddBezier(S(26.10f, 33.81f), S(27.70f, 32.60f), S(29.20f, 30.40f), S(29.85f, 27.68f));
+        outer.AddBezier(S(29.85f, 27.68f), S(30.70f, 24.50f), S(31.41f, 21.30f), S(31.41f, 18.00f));
+        outer.AddLine(S(31.41f, 18.00f), S(31.41f, 12.50f));
+        outer.AddBezier(S(31.41f, 12.50f), S(31.30f, 10.70f), S(29.90f, 9.70f), S(28.09f, 9.74f));
+        outer.CloseFigure();
+
+        // inner contour, finger slits included
+        using var inner = new GraphicsPath();
+        inner.StartFigure();
+        inner.AddBezier(S(29.61f, 18.00f), S(29.61f, 21.10f), S(28.90f, 24.40f), S(28.14f, 27.15f));
+        inner.AddBezier(S(28.14f, 27.15f), S(27.55f, 29.20f), S(26.50f, 31.10f), S(25.20f, 32.20f));
+        inner.AddLine(S(25.20f, 32.20f), S(15.47f, 32.20f));
+        inner.AddBezier(S(15.47f, 32.20f), S(13.50f, 30.60f), S(11.70f, 28.60f), S(10.27f, 26.48f));
+        inner.AddBezier(S(10.27f, 26.48f), S(7.90f, 22.62f), S(7.27f, 18.25f), S(7.79f, 16.09f));
+        inner.AddBezier(S(7.79f, 16.09f), S(8.25f, 14.40f), S(9.50f, 13.20f), S(11.00f, 12.76f));
+        inner.AddLine(S(11.00f, 12.76f), S(11.00f, 20.41f));
+        inner.AddBezier(S(11.00f, 20.41f), S(11.00f, 21.60f), S(12.80f, 21.60f), S(12.80f, 20.41f));
+        inner.AddLine(S(12.80f, 20.41f), S(12.80f, 9.89f));
+        inner.AddBezier(S(12.80f, 9.89f), S(12.80f, 8.60f), S(15.75f, 8.60f), S(15.75f, 9.89f));
+        inner.AddLine(S(15.75f, 9.89f), S(15.75f, 15.61f));
+        inner.AddLine(S(15.75f, 15.61f), S(17.55f, 15.61f));
+        inner.AddLine(S(17.55f, 15.61f), S(17.55f, 8.81f));
+        inner.AddBezier(S(17.55f, 8.81f), S(17.55f, 7.70f), S(20.55f, 7.70f), S(20.55f, 8.85f));
+        inner.AddLine(S(20.55f, 8.85f), S(20.55f, 15.74f));
+        inner.AddLine(S(20.55f, 15.74f), S(22.35f, 15.74f));
+        inner.AddLine(S(22.35f, 15.74f), S(22.35f, 10.00f));
+        inner.AddBezier(S(22.35f, 10.00f), S(22.70f, 9.50f), S(24.60f, 9.50f), S(25.23f, 10.24f));
+        inner.AddLine(S(25.23f, 10.24f), S(25.23f, 16.74f));
+        inner.AddLine(S(25.23f, 16.74f), S(27.00f, 16.74f));
+        inner.AddLine(S(27.00f, 16.74f), S(27.00f, 11.87f));
+        inner.AddBezier(S(27.00f, 11.87f), S(27.60f, 11.40f), S(28.90f, 11.60f), S(29.61f, 12.48f));
+        inner.CloseFigure();
+
+        g.FillPath(Stroke, outer);
+        g.FillPath(Fill, inner);
+        return new Point((int)S(18f, 20f).X, (int)S(18f, 20f).Y);
+    }
+
+    /// <summary>CSS col-resize: two parallel vertical bars with an arrow out each side, black
+    /// with a white halo. Axis-aligned pixel art, so it is built the way DrawRuler is — every
+    /// coordinate rounded to a pixel boundary, 1px features sized by lineWidth, HighQuality
+    /// pixel offset — rather than from fractional geometry the rasterizer has to smear.
+    /// Hotspot dead center between the bars, on the arrows' axis.</summary>
+    private static Point DrawColResize(float scale, int lineWidth, Graphics g)
+    {
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+
+        var barLeft = round(10 * scale);          // bars and the gap between them are 1px features
+        var barRight = barLeft + lineWidth * 2;
+        var barTop = round(2 * scale);
+        var barHeight = round(16 * scale);
+        var stemTop = round(9 * scale);           // the arrows' stem, also a 1px feature
+        var reach = round(9 * scale);             // bar to arrow tip
+        var headLength = round(5 * scale);
+        var wing = round(3 * scale);              // head half-height beyond the stem
+        var tipLeft = barLeft - reach;
+        var tipRight = barRight + lineWidth + reach;
+        var cy = stemTop + lineWidth / 2f;
+
+        using var gp = new GraphicsPath(FillMode.Winding);
+        gp.AddRectangle(new RectangleF(barLeft, barTop, lineWidth, barHeight));
+        gp.CloseFigure();
+        gp.AddRectangle(new RectangleF(barRight, barTop, lineWidth, barHeight));
+        gp.CloseFigure();
+
+        // left arrow: head + stem running to the bars
+        gp.AddPolygon(new[]
+        {
+            mkpt(tipLeft, cy),
+            mkpt(tipLeft + headLength, stemTop - wing),
+            mkpt(tipLeft + headLength, stemTop),
+            mkpt(barLeft, stemTop),
+            mkpt(barLeft, stemTop + lineWidth),
+            mkpt(tipLeft + headLength, stemTop + lineWidth),
+            mkpt(tipLeft + headLength, stemTop + lineWidth + wing),
+        });
+        gp.CloseFigure();
+
+        // right arrow, mirrored
+        gp.AddPolygon(new[]
+        {
+            mkpt(tipRight, cy),
+            mkpt(tipRight - headLength, stemTop - wing),
+            mkpt(tipRight - headLength, stemTop),
+            mkpt(barRight + lineWidth, stemTop),
+            mkpt(barRight + lineWidth, stemTop + lineWidth),
+            mkpt(tipRight - headLength, stemTop + lineWidth),
+            mkpt(tipRight - headLength, stemTop + lineWidth + wing),
+        });
+        gp.CloseFigure();
+
+        // white halo first, black glyph on top — deliberately the inverse of the other cursors'
+        // fill/outline, matching how Mozilla's invert cursor reads over light content. Stroking
+        // each bar separately would notch the halo between their end caps, so the bar pair also
+        // gets one solid white rect containing both bars and the gap.
+        using var halo = new Pen(Fill, lineWidth * 2);
+        halo.LineJoin = LineJoin.Round;
+        g.DrawPath(halo, gp);
+        g.FillRectangle(Fill, barLeft - lineWidth, barTop - lineWidth,
+            lineWidth * 5, barHeight + lineWidth * 2);
+        g.FillPath(Stroke, gp);
+
+        return new Point((int)(barLeft + lineWidth + lineWidth / 2), (int)cy);
     }
 
     private static void DrawRect(float scale, int lineWidth, Graphics g)
@@ -303,7 +510,7 @@ internal class Program
     private static void DrawRuler(float scale, int lineWidth, Graphics g)
     {
         // every edge here is axis aligned, so the shape is built from fills rather than pens:
-        // a centred pen of width lineWidth*2 leaves a one pixel border on two sides and two on
+        // a centered pen of width lineWidth*2 leaves a one pixel border on two sides and two on
         // the others once the interior is filled over it, which is visible at 32px
         g.PixelOffsetMode = PixelOffsetMode.HighQuality;
 

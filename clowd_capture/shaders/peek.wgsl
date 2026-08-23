@@ -67,10 +67,10 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // longer draws the crosshair, so discarding would punch holes.
     //
     // The inner thin cross is NOT discarded here: the desktop shader
-    // picks its black/white contrast colour from the original
+    // picks its black/white contrast color from the original
     // screenshot, which is wrong wherever the peeked window covers
     // that pixel. Thin-cross pixels fall through to the composite
-    // below and are re-drawn from the peek colour actually displayed.
+    // below and are re-drawn from the peek color actually displayed.
     var on_thin = false;
     if (!captured) {
         let mouse_x = i32(u.cursor_params.x);

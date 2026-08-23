@@ -18,7 +18,7 @@ pub mod shaders;
 pub const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
 /// 80-byte uniform block written once per render-thread startup (UV region,
-/// DPI scale, crosshair colour) and updated every frame by each render
+/// DPI scale, crosshair color) and updated every frame by each render
 /// thread (fade factor, cursor position, selection rect, animation time).
 /// Five `vec4`s — still 16-byte-aligned and a single cache line on x86_64.
 /// The frozen-desktop snapshot uploaded to the GPU at startup. One per
@@ -131,7 +131,7 @@ pub fn stage_a_create_device(
 
 // ── Assemble final WindowGpu ────────────────────────────────────────
 
-pub fn finalise_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<desktop::DesktopSnapshot>>) -> WindowGpu {
+pub fn finalize_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<desktop::DesktopSnapshot>>) -> WindowGpu {
     WindowGpu {
         device: bundle.device,
         queue: bundle.queue,

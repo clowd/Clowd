@@ -63,9 +63,9 @@ pub enum DragMode {
     /// Resizing via one of the eight handles. The handle's edges are
     /// dragged to the cursor each frame; the un-touched edges keep
     /// their value from the snapshotted anchor selection. Hard-clamp
-    /// each moved edge to vd bounds, then normalise via min/max so
+    /// each moved edge to vd bounds, then normalize via min/max so
     /// the rect stays well-formed even when the user drags past the
-    /// opposite edge (matches the C++ `Xy12Rect` normalisation).
+    /// opposite edge (matches the C++ `Xy12Rect` normalization).
     Resize(Hittest),
 }
 
@@ -79,7 +79,7 @@ pub fn hit_test(cursor: ScreenPointF, sel: ScreenRect, dpi_scale: f32) -> Hittes
     let cx = cursor.x.floor() as i32;
     let cy = cursor.y.floor() as i32;
 
-    // Corner: a `(2r+1) × (2r+1)` square centred on the corner pixel,
+    // Corner: a `(2r+1) × (2r+1)` square centered on the corner pixel,
     // matching `PtToWidenedRect` at rectex.h:119-127.
     let in_corner = |x: i32, y: i32| -> bool { cx >= x - r && cx <= x + r && cy >= y - r && cy <= y + r };
     // Edge: a rect widened by `r` on every side around the line
@@ -170,8 +170,8 @@ pub fn intersect_rects(a: ScreenRect, b: ScreenRect) -> Option<ScreenRect> {
 ///   * inside / outside don't enter resize mode
 ///
 /// Each moved edge is hard-clamped to the vd bounds before the rect is
-/// re-normalised, so dragging the right edge past the left flips the
-/// rect (matches the C++ `Xy12Rect` normalisation at rectex.h:111-117
+/// re-normalized, so dragging the right edge past the left flips the
+/// rect (matches the C++ `Xy12Rect` normalization at rectex.h:111-117
 /// and DxScreenCapture.cpp:1419-1458).
 pub fn resize_with_clamp(anchor: ScreenRect, handle: Hittest, cursor_x: i32, cursor_y: i32, vd: ScreenRect) -> ScreenRect {
     let mut left = anchor.left();
@@ -215,13 +215,13 @@ pub fn resize_with_clamp(anchor: ScreenRect, handle: Hittest, cursor_x: i32, cur
     }
     // Clamp every edge — even ones we didn't move — so an anchor that
     // was already partly off-screen can't escape further. The C++
-    // `ClipRectBy` only runs at finalisation, but here we want the
-    // soft-clamp behaviour live on every frame.
+    // `ClipRectBy` only runs at finalization, but here we want the
+    // soft-clamp behavior live on every frame.
     left = left.clamp(vd.left(), vd.right());
     right = right.clamp(vd.left(), vd.right());
     top = top.clamp(vd.top(), vd.bottom());
     bottom = bottom.clamp(vd.top(), vd.bottom());
-    // Normalise into a min/max rect (mirrors `Xy12Rect`).
+    // Normalize into a min/max rect (mirrors `Xy12Rect`).
     let nl = left.min(right);
     let nr = left.max(right);
     let nt = top.min(bottom);
@@ -233,7 +233,7 @@ pub fn resize_with_clamp(anchor: ScreenRect, handle: Hittest, cursor_x: i32, cur
 /// returning `1.0` if the point falls in the multi-monitor dead zone.
 /// Used at mouse-down to seed the drag-distance threshold so that
 /// dragging across a monitor boundary doesn't change the threshold mid-
-/// gesture (matches the C++ behaviour at DxScreenCapture.cpp:1497, which
+/// gesture (matches the C++ behavior at DxScreenCapture.cpp:1497, which
 /// reads `dpizoom` once from the monitor under `mouseDownPt`).
 pub fn dpi_at_point(p: ScreenPointF, monitors: &[MonitorInfo]) -> f32 {
     for m in monitors {
@@ -259,8 +259,8 @@ pub fn clamp_to_nearest_monitor(p: &mut ScreenPointF, monitors: &[MonitorInfo]) 
             return;
         }
     }
-    // Not inside any monitor — pick the one whose centre is closest and
-    // clamp into its bounds. Distance-to-centre is good enough as a
+    // Not inside any monitor — pick the one whose center is closest and
+    // clamp into its bounds. Distance-to-center is good enough as a
     // "nearest monitor" heuristic for a cursor that's just crossed a
     // boundary.
     let (best_ix, _) = monitors
@@ -311,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn resize_with_clamp_normalises_when_dragged_past_opposite_edge() {
+    fn resize_with_clamp_normalizes_when_dragged_past_opposite_edge() {
         let vd = ScreenRect::from_xy_size(0, 0, 100, 100);
         let sel = ScreenRect::from_xy_size(20, 20, 30, 30);
 

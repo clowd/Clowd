@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
@@ -81,7 +82,7 @@ namespace Clowd.UI
                 if (File.Exists(Path.Combine(dir.FullName, "Cargo.toml")))
                 {
                     // When both profiles are built, the freshest one is the one being worked on.
-                    // Preferring debug unconditionally (the old behaviour) made a just-built
+                    // Preferring debug unconditionally (the old behavior) made a just-built
                     // --release binary unreachable for anyone with a stale target/debug lying
                     // around, which is everybody who has ever run a plain `cargo build`.
                     var debug = Path.Combine(dir.FullName, "target", "debug", BinaryFileName);
@@ -89,7 +90,7 @@ namespace Clowd.UI
                     var debugBuilt = LastWriteUtcOrNull(debug);
                     var releaseBuilt = LastWriteUtcOrNull(release);
 
-                    // Strictly-greater, so an exact tie keeps the old debug-wins behaviour. Ties are
+                    // Strictly-greater, so an exact tie keeps the old debug-wins behavior. Ties are
                     // not theoretical: coarse filesystem timestamp granularity makes two builds a
                     // moment apart compare equal.
                     if (debugBuilt.HasValue && releaseBuilt.HasValue)
@@ -138,7 +139,7 @@ namespace Clowd.UI
     /// capture (session.json present) loads the session, names it "Screenshot" and opens the
     /// editor or the upload flow depending on the action.txt marker; a SELECT-COLOR capture
     /// (action.txt only) opens the color viewer; an OCR-UPLOAD capture (an "ocr-upload" marker
-    /// plus an ocr.txt sidecar, no image) uploads the recognized text as a paste; a cancelled
+    /// plus an ocr.txt sidecar, no image) uploads the recognized text as a paste; a canceled
     /// capture (neither file) deletes the pre-created session directory. COPY/SAVE are handled
     /// inside the capturer itself and never produce a session.
     /// </summary>
@@ -209,7 +210,8 @@ namespace Clowd.UI
                     RedirectStandardError = true,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video))
+                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video,
+                                                          SettingsRoot.Current.General.LastSavePath))
                     psi.ArgumentList.Add(arg);
 
                 using var process = Process.Start(psi);
@@ -229,7 +231,7 @@ namespace Clowd.UI
                 await process.WaitForExitAsync();
                 var stderr = await stderrTask;
 
-                // Every normal outcome (edit / upload / colour / video / cancel) exits 0.
+                // Every normal outcome (edit / upload / color / video / cancel) exits 0.
                 // A non-zero exit means the capturer crashed or aborted — e.g. a GPU shader
                 // that failed to load — so surface it instead of silently treating the empty
                 // session directory as a user cancellation (which produced no error at all).
@@ -288,7 +290,8 @@ namespace Clowd.UI
                         // the capture-active interlock is released in `finally` before the video
                         // page runs its own lifetime — correct: the screenshot overlay is done and
                         // VideoCapturePage has its own single-instance guard.
-                        PageManager.Current.GetVideoCapturePage().Open(result.Region, result.SessionDir);
+                        PageManager.Current.GetVideoCapturePage()
+                            .Open(result.Region, result.CornerRadius, result.SessionDir);
                         break;
                     case CaptureAction.Scroll:
                         // same hand-off as Video: the overlay is gone, and the scroll page runs its
@@ -415,7 +418,7 @@ namespace Clowd.UI
     public static class CaptureArguments
     {
         public static IReadOnlyList<string> Build(string sessionDir, SettingsCapture settings, CaptureMode mode,
-                                                  bool video = false)
+                                                  bool video = false, string lastSavePath = null)
         {
             // the overlay accent follows the OS (or the user's pick) and is contrast-corrected for
             // the white text drawn on it — see SettingsCapture.GetEffectiveAccentColor, issue #48.
@@ -470,8 +473,30 @@ namespace Clowd.UI
             if (!settings.ScrollingCaptureEnabled)
                 args.Add("--no-scroll-capture");
 
-            if (!settings.OcrEnabled)
+            // OCR runs in the clowd_ai binary, which only exists where ONNX Runtime has a
+            // build: not on Intel Macs (the same gate as SelectedItemViewModel.AiEffectsSupported),
+            // so the overlay must not offer a button whose spawn can only ever fail.
+            bool ocrAvailable = !OperatingSystem.IsMacOS()
+                || RuntimeInformation.OSArchitecture == Architecture.Arm64;
+            if (!settings.OcrEnabled || !ocrAvailable)
                 args.Add("--no-ocr");
+
+            // The SAVE button writes the file inside the capturer, so the naming the editor's
+            // save dialog does — the user's filename pattern, rendered and uniquified against
+            // the folder they last saved into — has to travel with it. Both are omitted when
+            // they match what the capturer would do anyway.
+            var pattern = settings.FilenamePattern;
+            if (!String.IsNullOrWhiteSpace(pattern) && pattern != SettingsCapture.DefaultFilenamePattern)
+            {
+                args.Add("--filename-pattern");
+                args.Add(pattern);
+            }
+
+            if (!String.IsNullOrWhiteSpace(lastSavePath) && Directory.Exists(lastSavePath))
+            {
+                args.Add("--save-dir");
+                args.Add(lastSavePath);
+            }
 
             // the overlay was launched specifically to pick a recording region: a confirmed
             // selection immediately dispatches the video action (DESIGN §3.1).
@@ -494,7 +519,7 @@ namespace Clowd.UI
         OcrUpload,
     }
 
-    /// <summary>A finished, non-cancelled capture. <see cref="Session"/> is set for
+    /// <summary>A finished, non-canceled capture. <see cref="Session"/> is set for
     /// Edit/Upload; <see cref="Color"/> for SelectColor; <see cref="Region"/> and
     /// <see cref="SessionDir"/> for Video and Scroll, which additionally carry
     /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>; <see cref="Text"/> for
@@ -506,6 +531,11 @@ namespace Clowd.UI
         public Color? Color { get; init; }
         public ScreenRect Region { get; init; }
         public string SessionDir { get; init; }
+
+        /// <summary>Corner radius of the recording region, in the same space as
+        /// <see cref="Region"/>; 0 = square (Video only). The OS corner radius of the window the
+        /// user picked — the video counterpart of <see cref="SessionInfo.CornerRadius"/>.</summary>
+        public double CornerRadius { get; init; }
 
         /// <summary>The recognized text read out of the session dir's ocr.txt sidecar before that
         /// directory was deleted (OcrUpload only) — the whole payload of an OCR upload.</summary>
@@ -534,7 +564,7 @@ namespace Clowd.UI
         /// "select-color #RRGGBB" without a session carries just the picked color; the
         /// directory is deleted. An "ocr-upload" marker carries its text in an ocr.txt sidecar,
         /// which is read out before the directory is deleted. Otherwise the capture was
-        /// cancelled: the pre-created directory is deleted and null is returned.
+        /// canceled: the pre-created directory is deleted and null is returned.
         /// </summary>
         public static CaptureResult ProcessFinishedSession(string sessionDir)
         {
@@ -569,13 +599,14 @@ namespace Clowd.UI
                 return null;
             }
 
-            // a "video x,y,w,h" marker means the overlay confirmed a recording region: the dir
+            // a "video x,y,w,h [r]" marker means the overlay confirmed a recording region: the dir
             // holds cropped.png (the poster frame, DESIGN §4.1) and must NOT be deleted — only
             // the consumed action.txt marker is removed (§4.3).
             const string videoPrefix = "video";
             if (action != null && action.StartsWith(videoPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                var region = ParseRegion(action.Substring(videoPrefix.Length).Trim());
+                var payload = action.Substring(videoPrefix.Length).Trim();
+                var region = ParseVideoRegion(payload, out var cornerRadius);
                 if (region != null)
                 {
                     try
@@ -588,7 +619,13 @@ namespace Clowd.UI
                         SentryConfig.CaptureHandled(ex, "capture.delete-action-file");
                     }
 
-                    return new CaptureResult { Action = CaptureAction.Video, Region = region, SessionDir = sessionDir };
+                    return new CaptureResult
+                    {
+                        Action = CaptureAction.Video,
+                        Region = region,
+                        CornerRadius = cornerRadius,
+                        SessionDir = sessionDir,
+                    };
                 }
 
                 Debug.WriteLine("Unparseable video action: " + action);
@@ -655,7 +692,7 @@ namespace Clowd.UI
                 return null;
             }
 
-            // no session payload — either a color pick or a cancelled capture; in both cases
+            // no session payload — either a color pick or a canceled capture; in both cases
             // the pre-created directory has nothing worth keeping.
             DeleteSessionDir(sessionDir);
 
@@ -670,6 +707,37 @@ namespace Clowd.UI
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Parses the "x,y,w,h [r]" payload of a video action: the recording region, plus the
+        /// optional corner radius the capturer measured on the picked window (in the same
+        /// coordinate space as the rect, so a fraction of the region's height is unit-free —
+        /// CAPTURE_PROTOCOL.md §1.2). An absent radius — every dragged selection, and every
+        /// capturer that predates the field — is 0, i.e. square. A malformed radius is dropped
+        /// rather than failing the whole marker: the recording is the payload, the radius is
+        /// decoration.
+        /// </summary>
+        private static ScreenRect ParseVideoRegion(string payload, out double cornerRadius)
+        {
+            cornerRadius = 0;
+
+            var parts = payload.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length is < 1 or > 2)
+                return null;
+
+            var region = ParseRegion(parts[0]);
+            if (region == null)
+                return null;
+
+            if (parts.Length == 2 &&
+                Double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) &&
+                Double.IsFinite(radius) && radius > 0)
+            {
+                cornerRadius = radius;
+            }
+
+            return region;
         }
 
         /// <summary>Parses the "x,y,w,h" rect of a video or scroll action (invariant ints, x/y may

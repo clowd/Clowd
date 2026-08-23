@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <OutputType>Exe</OutputType>
+    <!-- EncoderTests probe encoded output (pixel format, codec ids) straight through the FFmpeg
+         C API — MediaProbe deliberately exposes only the composition model's view. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA2007;xUnit1051</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="xunit.v3" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Clowd.VideoSDK\Clowd.VideoSDK.csproj" />
+    <!-- Build-only: RenderArgsCompatTests runs the real render tool as a child process (protocol
+         smoke test) and finds its dll on disk, so it must be built — but its output must not be
+         copied into the test bin, where it would shadow nothing useful. -->
+    <ProjectReference Include="..\Clowd.VideoRender\Clowd.VideoRender.csproj"
+                      ReferenceOutputAssembly="false" Private="false" />
+    <!-- For TimelineMathTests: Clowd.Ui exposes its internals to this project so the timeline's
+         pixel<->time and hit-test math is tested against the real production code. -->
+    <ProjectReference Include="..\Clowd.Ui\Clowd.Ui.csproj" />
+  </ItemGroup>
+</Project>

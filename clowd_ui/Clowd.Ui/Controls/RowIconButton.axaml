@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- The small icon button that sits at the right of a list row: the layers panel's eye/lock/delete
+         and the timeline track headers' enable toggle. Both hosts are the hand-styled dark editor
+         chrome (NOT Semi tokens), so the feedback colors are the ToolButton ones (#33FFFFFF hover
+         veil, #55FFFFFF pressed fill) written literally.
+
+         State is expressed by swapping the icon (eye / eye-off), never by a checked fill — these are
+         plain Buttons, so a row of them reads as one row of icons rather than a row of switches. -->
+    <ControlTheme x:Key="RowIconButtonTheme" TargetType="Button">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Width" Value="20" />
+        <Setter Property="Height" Value="20" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="_bg"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="2">
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      HorizontalAlignment="Center"
+                                      VerticalAlignment="Center"
+                                      Content="{TemplateBinding Content}" />
+                </Border>
+            </ControlTemplate>
+        </Setter>
+        <Style Selector="^:pointerover /template/ Border#_bg">
+            <Setter Property="Background" Value="#33FFFFFF" />
+        </Style>
+        <Style Selector="^:pressed /template/ Border#_bg">
+            <Setter Property="Background" Value="#55FFFFFF" />
+        </Style>
+        <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Opacity" Value="0.35" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

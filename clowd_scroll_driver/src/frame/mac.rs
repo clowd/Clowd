@@ -6,8 +6,8 @@
 //! global CG coordinate space, which is exactly the space the `scroll` marker
 //! carried, so the region goes straight in with no display lookup and no
 //! per-display coordinate conversion. Both APIs are formally deprecated in
-//! favour of ScreenCaptureKit; the overlay has not moved either, and moving
-//! only the driver would mean two capture stacks with two sets of behaviour
+//! favor of ScreenCaptureKit; the overlay has not moved either, and moving
+//! only the driver would mean two capture stacks with two sets of behavior
 //! in one feature.
 //!
 //! `kCGWindowImageBestResolution` asks for the display's real pixels, so a

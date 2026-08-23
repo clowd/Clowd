@@ -44,7 +44,7 @@
 //!    changed word), so raw pixels get the final say over a *field* of
 //!    candidates: the top [`NCC_PEAKS_MAX`] local maxima reaching
 //!    [`NCC_ACCEPT`] are each checked, best first, at their dy and its ±2
-//!    neighbours, by mean absolute luma difference over a
+//!    neighbors, by mean absolute luma difference over a
 //!    [`VERIFY_STRIP`]-row strip from the middle of the overlap. Sparse
 //!    noise raises this a little; a wrong dy raises it an order of
 //!    magnitude. The first peak with a candidate under [`VERIFY_MAD_MAX`]
@@ -87,7 +87,7 @@
 //! registered frame appends the last `dy` rows of its content band; and the
 //! final frame's footer band goes on in [`Stitcher::finish`], so a real
 //! page bottom — which often *is* the "footer" — appears exactly once.
-//! Negative dy is not even hypothesised: we never scroll up, and elastic
+//! Negative dy is not even hypothesized: we never scroll up, and elastic
 //! bounce is absorbed by the driver's settle loop.
 //!
 //! Cost per append: one profile pass and one chrome walk (both O(W·H) over
@@ -545,7 +545,7 @@ impl Stitcher {
         }
         let max_dy = n - MIN_OVERLAP;
         // The profiles locate a seam to within a row or two; raw pixels pick
-        // the exact one, over every peak's dy and its ±2 neighbours.
+        // the exact one, over every peak's dy and its ±2 neighbors.
         let mut chosen: Option<(usize, f32)> = None;
         for (peak_dy, _) in self.coarse_peaks(cur_profile, header, footer) {
             for delta in [0isize, -1, 1, -2, 2] {
@@ -568,7 +568,7 @@ impl Stitcher {
     /// worth verifying — the local maxima of the NCC curve that reach
     /// [`NCC_ACCEPT`], strongest first, at most [`NCC_PEAKS_MAX`] of them.
     /// Local maxima, not the top samples: the curve around any peak is
-    /// smooth, so the K best samples would be K neighbours of the global
+    /// smooth, so the K best samples would be K neighbors of the global
     /// maximum, and the whole point is to surface *distinct* hypotheses.
     /// The caller guarantees the content band is at least [`MIN_OVERLAP`]
     /// rows.
@@ -598,7 +598,7 @@ impl Stitcher {
         // reference's rows reappear higher up in the new frame after a
         // downward scroll. dy starts at 0 — negative dy is not a
         // hypothesis we entertain. Skipped (degenerate-variance) windows
-        // keep NEG_INFINITY, which also makes their computed neighbours
+        // keep NEG_INFINITY, which also makes their computed neighbors
         // eligible as peaks.
         let max_dy = n - MIN_OVERLAP;
         let mut ncc = vec![f64::NEG_INFINITY; max_dy + 1];
@@ -1116,7 +1116,7 @@ mod tests {
     const LINE_TEXT: u32 = 28;
 
     /// Per-line marker amplitude. The cycle is longer than any whole-line
-    /// shift the coarse search can hypothesise on this viewport, and every
+    /// shift the coarse search can hypothesize on this viewport, and every
     /// pairwise difference within the cycle is at least 25 luma levels, so
     /// a strip laid over misaligned lines always fails verification.
     fn marker(line: u32) -> i32 {

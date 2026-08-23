@@ -20,6 +20,14 @@ namespace Clowd.Drawing.Tests
     /// </summary>
     public class GraphicImageTests
     {
+        static GraphicImageTests()
+        {
+            // The corner-radius tests go through DrawingCanvas, which reads tool settings from
+            // SettingsRoot.Current — assigned by the application at startup; give the tests a
+            // defaults instance so they do not depend on another class having run first.
+            Clowd.Config.SettingsRoot.Current ??= new Clowd.Config.SettingsRoot();
+        }
+
         private static readonly MethodInfo ImgUpdateObscure =
             typeof(GraphicImage).GetMethod("UpdateObscureCache", BindingFlags.Instance | BindingFlags.NonPublic);
 
@@ -58,7 +66,7 @@ namespace Clowd.Drawing.Tests
         }
 
         // color channel + alpha of one overlay pixel. Only the first color byte is read, so this
-        // does not care whether the backend hands back BGRA or RGBA (the fixture is greyscale).
+        // does not care whether the backend hands back BGRA or RGBA (the fixture is grayscale).
         private static (byte Value, byte Alpha) ObscuredPixel(GraphicImage img, int x, int y)
         {
             var overlay = (Bitmap)ImgObscured.GetValue(img);

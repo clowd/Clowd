@@ -263,7 +263,7 @@ namespace Clowd.Upload
             }
             catch
             {
-                // abort (not cancellable — cleanup should run even when the upload was cancelled)
+                // abort (not cancellable — cleanup should run even when the upload was canceled)
                 // so the parts don't linger as billable orphans.
                 try
                 {
@@ -319,11 +319,11 @@ namespace Clowd.Upload
                 DisablePayloadSigning = _disableChecksumValidation ? true : (bool?)null,
                 // belt-and-suspenders with the config-level checksum settings applied in CreateClient().
                 DisableDefaultChecksumValidation = _disableChecksumValidation ? true : (bool?)null,
-                // grant public read at the object level (only honoured by buckets with ACLs enabled).
+                // grant public read at the object level (only honored by buckets with ACLs enabled).
                 CannedACL = _makeObjectsPublic ? S3CannedACL.PublicRead : null,
             };
 
-            // filename hint + inline rendering, matching the Azure provider's behaviour.
+            // filename hint + inline rendering, matching the Azure provider's behavior.
             request.Headers.ContentDisposition = $"inline; filename=\"{uploadName}\"";
             return request;
         }
@@ -480,7 +480,7 @@ namespace Clowd.Upload
 
         /// <summary>Builds an <see cref="AmazonS3Client"/> from the current settings, validating the
         /// combination and translating the compatibility toggles into SDK config. Shared by upload
-        /// and delete so both honour the same endpoint/region/path-style/checksum choices.</summary>
+        /// and delete so both honor the same endpoint/region/path-style/checksum choices.</summary>
         internal AmazonS3Client CreateClient()
         {
             if (String.IsNullOrWhiteSpace(_accessKeyId) || String.IsNullOrWhiteSpace(_secretAccessKey))

@@ -89,7 +89,7 @@ namespace Clowd.Shared.Tests
             using var client = p.CreateClient();
             var config = (AmazonS3Config)client.Config;
 
-            // the SDK normalises ServiceURL with a trailing slash
+            // the SDK normalizes ServiceURL with a trailing slash
             Assert.Equal("https://s3.example-provider.com", config.ServiceURL.TrimEnd('/'));
             Assert.Equal("auto", config.AuthenticationRegion);
         }

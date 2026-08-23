@@ -2,6 +2,7 @@
 mod app;
 mod capture;
 mod capture_output;
+mod filename_pattern;
 mod gpu;
 mod image_extract;
 mod interaction;

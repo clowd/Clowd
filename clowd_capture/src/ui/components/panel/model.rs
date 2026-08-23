@@ -26,7 +26,7 @@
 use crate::ui::command::Command;
 
 /// The deduped union of every icon any button set can show, in the order
-/// `PanelRenderer` parses and rasterises them into the icon atlas.
+/// `PanelRenderer` parses and rasterizes them into the icon atlas.
 /// `ButtonDef::icon_id` indexes *this* table, not the button's position
 /// in its set, because the two sets share icons (UPLOAD/COPY/EXIT appear
 /// in both) and the atlas is built once for all of them.
@@ -148,7 +148,7 @@ impl PanelButtonSet {
     /// layout, hit-testing, rendering and the accelerator lookup.
     ///
     /// Its length is also what the geometry derives from: each strip is
-    /// re-centred with its own width (see `layout::compute_layout`), so
+    /// re-centered with its own width (see `layout::compute_layout`), so
     /// the panel moves under the cursor on a set swap. That is deliberate;
     /// the double-click hazard the movement creates is absorbed by
     /// `PanelSwapGuard` in app.rs.
@@ -174,13 +174,13 @@ pub struct ButtonDef {
     /// underlined as the keyboard accelerator hint. Matches
     /// `captureButtonDetail::underlineIndex`.
     pub underline_idx: usize,
-    /// True for the accent-coloured primary buttons (UPLOAD, EDIT,
+    /// True for the accent-colored primary buttons (UPLOAD, EDIT,
     /// VIDEO, SCROLL, OCR, COPY, SAVE); false for the gray secondary
     /// buttons (RESET, BACK, EXIT). See `captureButtonDetails[i].primary`
     /// at DxScreenCapture.cpp:52-60.
     pub primary: bool,
     /// Index into [`PANEL_ICONS`] of this button's icon, which is also
-    /// its slot in the rasterised icon atlas. Explicit rather than
+    /// its slot in the rasterized icon atlas. Explicit rather than
     /// derived from the button's position because the two sets share
     /// icons and have different lengths — a positional mapping would
     /// index the atlas out of bounds on the render thread.
@@ -296,10 +296,10 @@ const NORMAL_DEFS: &[ButtonDef] = &[
     },
 ];
 
-/// The buttons shown once recognised text has been lifted off the
+/// The buttons shown once recognized text has been lifted off the
 /// selection: what to *do* with that text, plus the two ways out.
 ///
-/// BACK and EXIT are grey, mirroring the RESET/EXIT pairing in the
+/// BACK and EXIT are gray, mirroring the RESET/EXIT pairing in the
 /// capture strip — the destructive/leave actions read as secondary.
 /// The accelerators reuse `u`/`s`/`c`/`x` from the capture strip on
 /// purpose: only one set is ever on screen, and `lookup_command_by_key`
@@ -382,7 +382,7 @@ impl ButtonDef {
 /// (case-insensitive) **within one set, under one feature switch set**.
 /// Returns `None` if no visible button matches.
 ///
-/// Scoping to a set is not an optimisation: the two sets deliberately
+/// Scoping to a set is not an optimization: the two sets deliberately
 /// reuse `u`, `s`, `c` and `x`, and a global search would let a key fire
 /// a button that is not on screen. The caller must pass the set the user
 /// is actually looking at. `features` closes the same hole from the other
@@ -599,7 +599,7 @@ mod tests {
     }
 
     // (The old `set_swap_reclick_collisions_are_pinned` test is gone with
-    // the fixed-footprint anchoring it described: the strips now re-centre
+    // the fixed-footprint anchoring it described: the strips now re-center
     // with their own widths on every swap, so a double-click's second
     // press has no fixed index alignment to pin — it can land on ANY
     // button of the new strip, or none. `PanelSwapGuard` in app.rs blocks

@@ -33,7 +33,7 @@ namespace Clowd.UI
 
         // the user asked for the run to be thrown away (or the app is exiting): the driver writes
         // nothing, so there is no outcome left to act on when it finally exits.
-        private bool _cancelled;
+        private bool _canceled;
 
         // this page has reached a terminal state and owns its own cleanup — suppresses the error
         // funnel and everything after an await.
@@ -121,7 +121,7 @@ namespace Clowd.UI
 
                 // a driver that saw the cancel in time writes nothing at all, so there is only an
                 // empty directory to remove.
-                if (DiscardIfCancelled(null))
+                if (DiscardIfCanceled(null))
                     return;
 
                 HideWindows();
@@ -135,7 +135,7 @@ namespace Clowd.UI
 
                     // loading registered the session with SessionManager, which is the first thing
                     // a cancel would have to undo; re-check before any of it becomes visible.
-                    if (DiscardIfCancelled(result?.Session))
+                    if (DiscardIfCanceled(result?.Session))
                         return;
 
                     if (result?.Session != null)
@@ -191,7 +191,7 @@ namespace Clowd.UI
         /// Esc reaches the driver directly, which polls it while the target holds focus).</summary>
         private void Finish()
         {
-            if (_closing || _cancelled)
+            if (_closing || _canceled)
                 return;
 
             _status?.SetStatus("Finishing…", "Stitching the last frames");
@@ -203,17 +203,17 @@ namespace Clowd.UI
         /// process that is still writing into it.</summary>
         private void Cancel()
         {
-            if (_closing || _cancelled)
+            if (_closing || _canceled)
                 return;
 
-            _cancelled = true;
+            _canceled = true;
             HideWindows();
             _driver?.Send(ScrollDriverCommand.Cancel);
-            WatchCancelledDriver();
+            WatchCanceledDriver();
         }
 
         /// <summary>
-        /// Honours a cancel that arrived while the run was already finishing. Reaching CANCEL
+        /// Honors a cancel that arrived while the run was already finishing. Reaching CANCEL
         /// means moving the cursor onto the HUD, which pauses the driver rather than ending it —
         /// but a cancel can still land in the window between the driver deciding it is done and
         /// this page hearing about it. It wins whenever it does: nothing the run produced is shown
@@ -221,9 +221,9 @@ namespace Clowd.UI
         /// <see cref="CaptureSessionDispatcher.ProcessFinishedSession"/> already loaded is
         /// unregistered along with its directory, or the directory alone when there is none.
         /// </summary>
-        private bool DiscardIfCancelled(SessionInfo session)
+        private bool DiscardIfCanceled(SessionInfo session)
         {
-            if (!_cancelled)
+            if (!_canceled)
                 return false;
 
             if (session != null)
@@ -238,7 +238,7 @@ namespace Clowd.UI
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine("Failed to discard a cancelled scrolling capture session: " + ex);
+                    Debug.WriteLine("Failed to discard a canceled scrolling capture session: " + ex);
                 }
             }
 
@@ -256,7 +256,7 @@ namespace Clowd.UI
         /// discarded. <see cref="ScrollDriver.ShutdownAsync"/> is idempotent, so racing the
         /// shutdown <see cref="ScrollDriver.RunAsync"/> performs on its own way out is harmless.
         /// </summary>
-        private async void WatchCancelledDriver()
+        private async void WatchCanceledDriver()
         {
             // the driver polls the cancel flag at the top of each step and once more after
             // settling, so a worst-case settle cycle plus the write is well inside this.
@@ -271,7 +271,7 @@ namespace Clowd.UI
                 if (_closing || driver == null)
                     return;
 
-                Debug.WriteLine("The scrolling capture driver did not exit after being cancelled; killing it.");
+                Debug.WriteLine("The scrolling capture driver did not exit after being canceled; killing it.");
                 await driver.ShutdownAsync();
             }
             catch (Exception ex)
@@ -298,7 +298,7 @@ namespace Clowd.UI
             if (_closing)
                 return;
             _closing = true; // suppresses the error funnel; cleanup is handled inline
-            _cancelled = true;
+            _canceled = true;
 
             HideWindows();
 
@@ -363,7 +363,7 @@ namespace Clowd.UI
 
         private void OnDriverStatus(object sender, ScrollProgress progress)
         {
-            if (_closing || _cancelled)
+            if (_closing || _canceled)
                 return;
 
             _status?.SetStatus(

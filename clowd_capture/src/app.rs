@@ -178,7 +178,7 @@ pub enum CycleAction {
     /// OCR mode's UPLOAD: the recognized text was handed to the shell to
     /// upload as a paste.
     OcrUpload,
-    Cancelled,
+    Canceled,
 }
 
 // ── Free helpers over (app, cycle) state ────────────────────────────
@@ -365,12 +365,12 @@ fn panel_swap_guard_window() -> Duration {
 /// panel button must never dispatch two different commands.**
 ///
 /// The set swap is synchronous on the first press, and the strip
-/// RE-CENTRES with its own width on every swap (`layout::compute_layout`),
+/// RE-CENTERS with its own width on every swap (`layout::compute_layout`),
 /// so the second press of a double-click lands at an arbitrary position in
 /// the new strip — possibly a different button, possibly nothing. Which
 /// button is a function of strip widths and selection position, i.e.
 /// unpinnable; ignoring panel-aimed mouse dispatch for one double-click
-/// interval after ANY swap (including None→Some — a panel materialising
+/// interval after ANY swap (including None→Some — a panel materializing
 /// under the cursor) closes the entire class at once, independent of
 /// geometry. Keyboard accelerators never consult this guard: a key press
 /// carries no screen position, so a swap cannot redirect it.
@@ -397,7 +397,7 @@ impl PanelSwapGuard {
     /// the panel without passing here first.
     ///
     /// `None -> Some` arms the guard too, deliberately: a double-click
-    /// that CAPTURES a selection materialises the panel under the cursor,
+    /// that CAPTURES a selection materializes the panel under the cursor,
     /// and its second press would otherwise fire whichever button appeared
     /// there.
     fn observe(&mut self, set: Option<panel::model::PanelButtonSet>, now: Instant) {
@@ -685,7 +685,7 @@ impl App {
         // were already restored via update_cursor_visibility.
         set_hardware_cursor_visible(true);
         if let Some(cycle) = self.cycle.take() {
-            // A recognition may still be running; flag it cancelled so the
+            // A recognition may still be running; flag it canceled so the
             // worker skips setting a latch nobody will read. NEVER joined:
             // this path also serves ParentGone, and a cold recognize can
             // take hundreds of ms — blocking here would strand a visible
@@ -795,7 +795,7 @@ impl App {
         }
         error!("timed out waiting for the desktop screenshot; tearing the cycle down");
         self.fatal = Some(anyhow!("timed out waiting for the desktop screenshot"));
-        self.finish_cycle(event_loop, CycleAction::Cancelled);
+        self.finish_cycle(event_loop, CycleAction::Canceled);
     }
 
     /// Non-blocking pickup of the OCR worker's result, plus the OCR phase
@@ -861,7 +861,7 @@ impl App {
                 match result {
                     Ok(outcome) if !outcome.lines.is_empty() => {
                         // ONE dpi_scale for all lift geometry — the monitor
-                        // containing the region's centre — so a line
+                        // containing the region's center — so a line
                         // crossing a mixed-DPI seam moves by the same
                         // physical amount on both halves instead of tearing.
                         let cx = region.center_x();
@@ -921,9 +921,10 @@ impl App {
                         });
                     }
                     Err(OcrError::Unavailable) => {
-                        // The recognizer could not be spawned, or its MNN
-                        // engine failed to init — either cause is already
-                        // logged at error level (ocr::client / clowd_ocr).
+                        // The recognizer could not be spawned (clowd_ai does
+                        // not ship on Intel macOS), or its ONNX Runtime failed
+                        // to init — either cause is already logged at error
+                        // level (ocr::client / clowd_ai).
                         log::warn!("OCR is unavailable on this machine");
                         cycle.input.ocr = OcrState::Idle;
                         cycle.input.ocr_notice = Some(OcrNotice {
@@ -961,7 +962,7 @@ impl App {
     }
 
     /// Leave OCR mode one step: Scanning cancels the job outright, Lifted
-    /// drops every bubble/crop AT ONCE and starts the region's colour
+    /// drops every bubble/crop AT ONCE and starts the region's color
     /// fade, Retracting (Escape pressed twice) skips straight to Idle.
     /// Serves both the panel's BACK button and Escape.
     ///
@@ -994,7 +995,7 @@ impl App {
                 // Fresh anchor: the exit fade starts NOW. The outcome is
                 // deliberately dropped here — the text vanishes on this
                 // very frame (no reverse animation, by design) and only
-                // the region's fade back to colour remains to play.
+                // the region's fade back to color remains to play.
                 cycle.input.ocr = OcrState::Retracting {
                     anchor: Instant::now(),
                     region,
@@ -1018,17 +1019,17 @@ impl App {
     }
 
     /// Capture a plain rect — a monitor, the whole desktop: square corners.
-    fn finalise_selection(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId) {
-        self.finalise_selection_inner(rect, 0.0, event_loop, window_id, false);
+    fn finalize_selection(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId) {
+        self.finalize_selection_inner(rect, 0.0, event_loop, window_id, false);
     }
 
     /// Capture a walker window: its rect AND its corner radius, with the
     /// hovered peek (if any) locked in.
-    fn finalise_window_selection_with_peek(&mut self, target: WindowTarget, event_loop: &ActiveEventLoop, window_id: WindowId) {
-        self.finalise_selection_inner(target.rect, target.corner_radius, event_loop, window_id, true);
+    fn finalize_window_selection_with_peek(&mut self, target: WindowTarget, event_loop: &ActiveEventLoop, window_id: WindowId) {
+        self.finalize_selection_inner(target.rect, target.corner_radius, event_loop, window_id, true);
     }
 
-    fn finalise_selection_inner(
+    fn finalize_selection_inner(
         &mut self,
         rect: ScreenRect,
         corner_radius: f32,
@@ -1063,7 +1064,7 @@ impl App {
     /// Auto-dispatch `Command::Video` the first time a selection becomes
     /// captured, when the overlay was launched with `--video`. Called from
     /// both captured-transition sites (mouse-release drag-select and the
-    /// keyboard/preselect `finalise_selection` path) so video mode works
+    /// keyboard/preselect `finalize_selection` path) so video mode works
     /// for every entry path (DESIGN §3.3).
     fn on_captured(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId) {
         let Some(cycle) = self.cycle.as_mut() else {
@@ -1128,11 +1129,11 @@ impl App {
         match self.preselect_target(mode) {
             Some(target) => {
                 log::info!("--capture-mode {:?}: pre-selecting {:?}", mode, target);
-                self.finalise_selection_inner(target.rect, target.corner_radius, event_loop, window_id, false);
+                self.finalize_selection_inner(target.rect, target.corner_radius, event_loop, window_id, false);
             }
             None => log::info!("--capture-mode {:?}: no target found; leaving free selection", mode),
         }
-        // finalise_selection may have ended the cycle (--video auto-dispatch).
+        // finalize_selection may have ended the cycle (--video auto-dispatch).
         if let Some(cycle) = self.cycle.as_mut() {
             cycle.pending_preselect = None;
         }
@@ -1251,14 +1252,14 @@ impl App {
         hide_overlay_for_action(&self.windows);
         match write_scroll_action(&session_dir, selection, point, hwnd, &self.monitors) {
             ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Scroll),
-            ActionResult::Cancelled => self.show_all_windows(),
+            ActionResult::Canceled => self.show_all_windows(),
             ActionResult::Failed(msg) => {
                 // Retry re-shows the overlay still in pick mode, so the
                 // user lands back on the crosshair, not on the panel.
                 if xdialog::show_message_retry_cancel("Clowd Capture", "Scrolling Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                     self.show_all_windows();
                 } else {
-                    self.finish_cycle(event_loop, CycleAction::Cancelled);
+                    self.finish_cycle(event_loop, CycleAction::Canceled);
                 }
             }
         }
@@ -1296,13 +1297,13 @@ impl App {
                 };
                 match result {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Copy),
-                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
                         {
                             self.show_all_windows();
                         } else {
-                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
                         }
                     }
                 }
@@ -1311,21 +1312,27 @@ impl App {
                 hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => match self.windows.get(&window_id) {
-                        Some(handle) => {
-                            handle.save_to_file_with_peek(sel, cycle.input.selection_radius, buf, active_peek_image, cursor, cursor_visible)
-                        }
+                        Some(handle) => handle.save_to_file_with_peek(
+                            sel,
+                            cycle.input.selection_radius,
+                            buf,
+                            active_peek_image,
+                            cursor,
+                            cursor_visible,
+                            &cycle.settings,
+                        ),
                         None => ActionResult::Failed("No active window".into()),
                     },
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Save),
-                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Save Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
                         }
                     }
                 }
@@ -1360,12 +1367,12 @@ impl App {
                 };
                 match result {
                     ActionResult::Success => self.finish_cycle(event_loop, cycle_action),
-                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Session Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
                         }
                     }
                 }
@@ -1390,19 +1397,19 @@ impl App {
                 hide_overlay_for_action(&self.windows);
                 match write_color_action(&session_dir, bgra[2], bgra[1], bgra[0]) {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::SelectColor),
-                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Color Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
                         }
                     }
                 }
             }
             Command::Reset => self.handle_reset(window_id),
             Command::Exit => {
-                self.finish_cycle(event_loop, CycleAction::Cancelled);
+                self.finish_cycle(event_loop, CycleAction::Canceled);
             }
             Command::Video => {
                 // Mirrors Edit|Upload: writes the video action payload
@@ -1415,17 +1422,19 @@ impl App {
                 };
                 hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => write_video_action(&session_dir, sel, buf, cursor_visible, &self.monitors),
+                    (Some(sel), Some(buf)) => {
+                        write_video_action(&session_dir, sel, cycle.input.selection_radius, buf, cursor_visible, &self.monitors)
+                    }
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Video),
-                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Video Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
                         }
                     }
                 }
@@ -1454,7 +1463,7 @@ impl App {
                 // hands the Normal strip back while the exit fade still
                 // owns the frozen selection); honouring it would arm
                 // scroll-pick mid-fade. It also backstops the double-click
-                // hazard: the strip recentres on the swap, so a stray
+                // hazard: the strip recenters on the swap, so a stray
                 // second press can land on ANY Normal button, and while
                 // the swap guard covers the double-click window, the
                 // 0.18 s fade can outlive it on slow double-click
@@ -1523,7 +1532,7 @@ impl App {
                 // Fresh id + latch + flag per request: the Latch is
                 // one-shot, so reusing one would replay the previous run's
                 // result forever; the id is what lets a BACK-superseded
-                // result be recognised as stale on pickup.
+                // result be recognized as stale on pickup.
                 cycle.ocr_req += 1;
                 let req = cycle.ocr_req;
                 let latch: Arc<Latch<Result<OcrOutcome, OcrError>>> = Arc::new(Latch::new());
@@ -1547,7 +1556,7 @@ impl App {
                             // child when the flag goes up): before, to skip
                             // work the user already backed out of; after,
                             // to avoid setting a latch whose reader is
-                            // gone, and because a cancelled recognize()
+                            // gone, and because a canceled recognize()
                             // returns a placeholder error that must never
                             // be surfaced as a real outcome.
                             if cancel.load(Ordering::Acquire) {
@@ -1599,13 +1608,13 @@ impl App {
                 hide_overlay_for_action(&self.windows);
                 match copy_text_to_clipboard(&text) {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrCopy),
-                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Copy to Clipboard Failed", &msg, ErrorIcon).unwrap_or(false)
                         {
                             self.show_all_windows();
                         } else {
-                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
                         }
                     }
                 }
@@ -1667,7 +1676,7 @@ impl App {
                 };
                 let text = outcome.full_text.clone();
                 // The shell treats an ocr-upload marker with whitespace-only
-                // text as a cancelled capture; don't emit one at all rather
+                // text as a canceled capture; don't emit one at all rather
                 // than lean on that fallback. Unreachable from a Lifted
                 // outcome (empty results never lift), hence belt-and-braces.
                 if text.trim().is_empty() {
@@ -1677,12 +1686,12 @@ impl App {
                 hide_overlay_for_action(&self.windows);
                 match write_ocr_upload_action(&session_dir, &text) {
                     ActionResult::Success => self.finish_cycle(event_loop, CycleAction::OcrUpload),
-                    ActionResult::Cancelled => self.show_all_windows(),
+                    ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Text Upload Failed", &msg, ErrorIcon).unwrap_or(false) {
                             self.show_all_windows();
                         } else {
-                            self.finish_cycle(event_loop, CycleAction::Cancelled);
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
                         }
                     }
                 }
@@ -1887,8 +1896,8 @@ impl ApplicationHandler for App {
                     info!("{}", self.startup.report());
 
                     // Warm the OCR backend off-thread so the first OCR press of
-                    // the process doesn't pay the MNN model parse + session setup
-                    // mid-scan (a one-time cost, cached for the process lifetime).
+                    // the process doesn't pay for the clowd_ai executable and its
+                    // embedded models coming off disk cold mid-scan.
                     // Once per process, and only when the OCR button exists at
                     // all. Deliberately behind the show gate: warming spawns a
                     // child process, and its deadline is the user's first OCR
@@ -1896,7 +1905,7 @@ impl ApplicationHandler for App {
                     // that belongs on the path to the first frame.
                     // `bench_startup` suppresses it entirely: the process exits
                     // a few statements below, so the spawn would only orphan a
-                    // `clowd_ocr` child (its kill-on-drop guard and temp-file
+                    // `clowd_ai` child (its kill-on-drop guard and temp-file
                     // cleanup are destructors, which a process exit never runs).
                     // That orphan would then burn cores through the NEXT launch
                     // and perturb exactly what the benchmark is measuring.
@@ -1921,7 +1930,7 @@ impl ApplicationHandler for App {
         // end the cycle the same way a cancel does — windows hidden, cursor
         // restored, no payload written.
         if bench_done {
-            self.finish_cycle(event_loop, CycleAction::Cancelled);
+            self.finish_cycle(event_loop, CycleAction::Canceled);
             return;
         }
 
@@ -1944,7 +1953,7 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                self.finish_cycle(event_loop, CycleAction::Cancelled);
+                self.finish_cycle(event_loop, CycleAction::Canceled);
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -1972,7 +1981,7 @@ impl ApplicationHandler for App {
                     broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     return;
                 }
-                self.finish_cycle(event_loop, CycleAction::Cancelled);
+                self.finish_cycle(event_loop, CycleAction::Canceled);
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -2087,7 +2096,7 @@ impl ApplicationHandler for App {
                                     .as_ref()
                                     .and_then(|w| w.hit_test_target(pt))
                                 {
-                                    self.finalise_window_selection_with_peek(target, event_loop, id);
+                                    self.finalize_window_selection_with_peek(target, event_loop, id);
                                 }
                             }
                             'f' => {
@@ -2101,11 +2110,11 @@ impl ApplicationHandler for App {
                                     .find(|m| m.bounds.contains(pt))
                                     .map(|m| m.bounds)
                                 {
-                                    self.finalise_selection(bounds, event_loop, id);
+                                    self.finalize_selection(bounds, event_loop, id);
                                 }
                             }
                             'a' => {
-                                self.finalise_selection(self.vd_bounds, event_loop, id);
+                                self.finalize_selection(self.vd_bounds, event_loop, id);
                             }
                             'h' => {
                                 // color-sampler row in the tips panel.
@@ -2339,7 +2348,7 @@ impl ApplicationHandler for App {
                         broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                     }
                     ElementState::Released => {
-                        let finalising = cycle.input.mouse_down && !cycle.input.captured && cycle.input.selection.is_some();
+                        let finalizing = cycle.input.mouse_down && !cycle.input.captured && cycle.input.selection.is_some();
                         let was_dragging = cycle.input.dragging;
                         let was_move_drag = matches!(cycle.input.drag_mode, Some(DragMode::Move));
                         cycle.input.mouse_down = false;
@@ -2362,7 +2371,7 @@ impl ApplicationHandler for App {
                             set_cursor_if_changed(&self.windows, &mut cycle.last_cursor, id, CursorIcon::Default);
                             broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
                         }
-                        if finalising {
+                        if finalizing {
                             if !was_dragging {
                                 // Click (no drag) on a peeked window → lock it permanently.
                                 cycle.locked_peek = cycle
@@ -2598,9 +2607,9 @@ mod tests {
     /// The swap guard's whole contract: a click inside one double-click
     /// interval of a set change is swallowed, one outside it is not, and
     /// only genuine *changes* arm it (the broadcast on every mouse move
-    /// re-observes the same set constantly). The strips recentre on every
+    /// re-observes the same set constantly). The strips recenter on every
     /// swap, so without this guard the second press of a double-click on
-    /// BACK — or on whatever materialises when a selection is captured by
+    /// BACK — or on whatever materializes when a selection is captured by
     /// double-click — fires whichever button happens to land under the
     /// cursor.
     #[test]
@@ -2614,7 +2623,7 @@ mod tests {
         assert!(!g.blocks_click_within(t0, window));
 
         // The panel appears (None -> Normal): armed — a double-click that
-        // CAPTURES a selection must not press whatever button materialised
+        // CAPTURES a selection must not press whatever button materialized
         // under the cursor.
         g.observe(Some(PanelButtonSet::Normal), t0);
         assert!(g.blocks_click_within(t0 + Duration::from_millis(100), window));

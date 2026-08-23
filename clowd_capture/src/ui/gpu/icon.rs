@@ -1,6 +1,6 @@
-//! CPU-rasterised icon atlas + instanced textured-quad pipeline.
+//! CPU-rasterized icon atlas + instanced textured-quad pipeline.
 //!
-//! Icons are rasterised once via `resvg` at physical pixel size, packed
+//! Icons are rasterized once via `resvg` at physical pixel size, packed
 //! into a texture atlas via `etagere`, and drawn as instanced quads.
 //! The atlas is rebuilt when the target icon size (DPI) changes.
 

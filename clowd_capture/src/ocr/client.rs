@@ -1,4 +1,4 @@
-//! Drives the `clowd_ocr` child process: one spawn per recognition.
+//! Drives the `clowd_ai ocr` child process: one spawn per recognition.
 //!
 //! The wire format lives in `clowd_rust_core::ocr`. What lives here is the
 //! parent's half of it — finding the binary, feeding it pixels without ever
@@ -20,17 +20,21 @@ use clowd_rust_core::ocr::{OcrError, OcrOutcome, OcrRequest, OcrResponse, Reques
 
 /// Binary we spawn, expected beside our own executable — which is where CI
 /// puts it (`publish/`, next to `clowd_capture_wgpu`) and where `cargo build`
-/// puts it too (`target/<profile>/`), so one resolution rule covers both.
+/// puts it too (`target/<profile>/`), so one resolution rule covers both. It
+/// is the one AI inference binary Clowd ships (its `ocr` subcommand; the
+/// video editor spawns the same exe for matting and denoising), and it does
+/// not exist on Intel macOS, where ONNX Runtime has no binaries — there the
+/// spawn fails and OCR reports as unavailable.
 #[cfg(windows)]
-const OCR_BINARY: &str = "clowd_ocr.exe";
+const AI_BINARY: &str = "clowd_ai.exe";
 #[cfg(not(windows))]
-const OCR_BINARY: &str = "clowd_ocr";
+const AI_BINARY: &str = "clowd_ai";
 
 /// Overrides the resolved path. The C# side has the same hatch for finding
 /// the capturer (`CaptureBinaryLocator.EnvVarName`); this one exists because
 /// sibling resolution cannot work from a test binary, which cargo puts in
 /// `target/<profile>/deps/` rather than beside the recognizer.
-const BINARY_OVERRIDE_VAR: &str = "CLOWD_OCR_BINARY";
+const BINARY_OVERRIDE_VAR: &str = "CLOWD_AI_BINARY";
 
 /// How often the wait loop wakes to poll the cancel flag. Small enough that
 /// BACK feels immediate and that the result is picked up the moment the child
@@ -66,12 +70,12 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool, session_dir: Option<&Pat
     let paths = ResponsePaths::new(session_dir);
     // Guarded from the moment it exists: every path below must reap the
     // child, and an early return that merely dropped it would leave a
-    // detached process holding a 20 MB MNN working set while it finished a
-    // page nobody wants.
+    // detached process holding the models and an ONNX Runtime session while
+    // it finished a page nobody wants.
     let mut child = ChildGuard(spawn(&paths).map_err(|e| {
         // A missing sibling binary is a packaging fault, not a bad capture —
         // report it so it cannot go unnoticed in the field.
-        log::error!("failed to spawn {OCR_BINARY}: {e}");
+        log::error!("failed to spawn {AI_BINARY}: {e}");
         OcrError::Unavailable
     })?);
 
@@ -86,8 +90,8 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool, session_dir: Option<&Pat
 }
 
 /// Pre-warm: spawn the child once on a 1x1 image and let it run to
-/// completion, so the first real OCR press does not pay for a cold 20 MB
-/// executable plus embedded models coming off disk. Blocking, best-effort,
+/// completion, so the first real OCR press does not pay for a cold
+/// executable (tens of MB of embedded models) coming off disk. Blocking, best-effort,
 /// and silent about failures — a broken engine is reported at recognize
 /// time, where there is a user waiting for an answer to put it in.
 ///
@@ -107,12 +111,12 @@ pub fn warm() {
     }
 }
 
-/// Where this request's artefacts go. Deletes the response file when dropped,
-/// which is what makes cleanup unconditional: a recognition cancelled in the
+/// Where this request's artifacts go. Deletes the response file when dropped,
+/// which is what makes cleanup unconditional: a recognition canceled in the
 /// window between the child writing its answer and us reading it would
 /// otherwise leave an `ocr.json` behind in the session directory, to ship to
 /// the editor alongside the screenshot. (`ocr.log` is deliberately kept — it
-/// is the diagnostic artefact.)
+/// is the diagnostic artifact.)
 struct ResponsePaths {
     response: PathBuf,
     /// `None` outside a session directory: an `ocr.log` per recognition in
@@ -133,7 +137,7 @@ impl ResponsePaths {
                 static SEQ: AtomicU64 = AtomicU64::new(0);
                 let n = SEQ.fetch_add(1, Ordering::Relaxed);
                 Self {
-                    response: std::env::temp_dir().join(format!("clowd_ocr_{}_{n}.json", std::process::id())),
+                    response: std::env::temp_dir().join(format!("clowd_ai_ocr_{}_{n}.json", std::process::id())),
                     log: None,
                 }
             }
@@ -147,18 +151,22 @@ fn spawn(paths: &ResponsePaths) -> std::io::Result<Child> {
         None => std::env::current_exe()?
             .parent()
             .ok_or_else(|| std::io::Error::other("our own executable has no parent directory"))?
-            .join(OCR_BINARY),
+            .join(AI_BINARY),
     };
 
     let mut command = Command::new(&binary);
     command
+        .arg("ocr")
         .arg("--out")
         .arg(&paths.response)
         .stdin(Stdio::piped())
-        // NEVER inherit: MNN prints device capabilities to stdout on session
-        // creation, and inheriting would let that chatter be mistaken for
-        // output of our own. A pipe would work too, but one nobody drains
-        // can eventually block the child — null cannot.
+        // Null, never inherited: the `ocr` subcommand writes nothing to
+        // stdout (its answer is the `--out` file, which doubles as the
+        // session's `ocr.json`), and inheriting would let anything a native
+        // runtime printed there be mistaken for output of our own — our
+        // stdout is the NDJSON host protocol Clowd.Ui line-parses. A pipe
+        // would work too, but one nobody drains can eventually block the
+        // child — null cannot.
         .stdout(Stdio::null())
         // Inherited on purpose: the child's log lines (det/rec timings, the
         // tier choice) are chatter by the same convention our own stderr
@@ -206,7 +214,7 @@ fn upload(child: &mut Child, req: &OcrRequest, cancel: &AtomicBool) -> Result<()
     write(&mut stdin, &line)?;
     for chunk in req.bgra.chunks(CHUNK) {
         if cancel.load(Ordering::Acquire) {
-            return Err(cancelled());
+            return Err(canceled());
         }
         write(&mut stdin, chunk)?;
     }
@@ -221,7 +229,7 @@ fn wait(child: &mut Child, cancel: &AtomicBool, paths: &ResponsePaths) -> Result
     let started = std::time::Instant::now();
     loop {
         if cancel.load(Ordering::Acquire) {
-            return Err(cancelled());
+            return Err(canceled());
         }
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -229,20 +237,20 @@ fn wait(child: &mut Child, cancel: &AtomicBool, paths: &ResponsePaths) -> Result
                     return Ok(());
                 }
                 // The whole point of the split: a C++ abort, a segfault or a
-                // refused allocation inside MNN lands here as an exit code
-                // instead of taking the overlay down with it. The recognizer
+                // refused allocation inside ONNX Runtime lands here as an exit
+                // code instead of taking the overlay down with it. The recognizer
                 // has no Sentry client of its own — this error! is the one
                 // that reports its death, which is why it works to get the
                 // message out of the file rather than leaving it at a code.
                 let detail = panic_detail(paths);
-                log::error!("{OCR_BINARY} exited abnormally: {status}{detail}");
+                log::error!("{AI_BINARY} exited abnormally: {status}{detail}");
                 return Err(OcrError::Failed(format!("recognizer exited with {status}{detail}")));
             }
             Ok(None) => {}
             Err(e) => return Err(OcrError::Failed(format!("waiting for the recognizer: {e}"))),
         }
         if started.elapsed() > TIMEOUT {
-            log::error!("{OCR_BINARY} did not finish within {TIMEOUT:?}; killing it");
+            log::error!("{AI_BINARY} did not finish within {TIMEOUT:?}; killing it");
             return Err(OcrError::Failed("recognizer timed out".into()));
         }
         std::thread::sleep(POLL_INTERVAL);
@@ -254,7 +262,7 @@ fn wait(child: &mut Child, cancel: &AtomicBool, paths: &ResponsePaths) -> Result
 ///
 /// A non-zero exit means the file is not a RESULT — but the recognizer's panic
 /// hook writes its message there on the way down precisely so this can recover
-/// it (see `clowd_ocr`'s `install_panic_reporter`). Without it a panic reaches
+/// it (see `clowd_ai`'s `ocr::install_panic_reporter`). Without it a panic reaches
 /// Sentry as "exited with code 101" and nothing else; with it, the panic's file
 /// and line come too.
 fn panic_detail(paths: &ResponsePaths) -> String {
@@ -267,12 +275,12 @@ fn panic_detail(paths: &ResponsePaths) -> String {
     }
 }
 
-/// The error a cancelled recognition reports. Only the OCR worker thread ever
+/// The error a canceled recognition reports. Only the OCR worker thread ever
 /// sees it — the worker re-checks its cancel flag after `recognize` returns
 /// and drops the result without setting the latch, so no user-facing path
 /// renders this string.
-fn cancelled() -> OcrError {
-    OcrError::Failed("cancelled".into())
+fn canceled() -> OcrError {
+    OcrError::Failed("canceled".into())
 }
 
 impl Drop for ResponsePaths {
@@ -286,7 +294,7 @@ impl Drop for ResponsePaths {
 ///
 /// `kill` on an already-exited process is a no-op that still needs its
 /// `wait`, so both run unconditionally: skipping the `wait` would leave a
-/// zombie on Unix, and skipping the `kill` would let a cancelled recognition
+/// zombie on Unix, and skipping the `kill` would let a canceled recognition
 /// run a full page to completion in the background, holding the engine while
 /// the next request spawns its own copy of it.
 struct ChildGuard(Child);
@@ -303,7 +311,7 @@ mod tests {
     use super::*;
     use clowd_rust_core::geometry::ScreenRect;
 
-    /// A capture with a session directory keeps both artefacts there; one
+    /// A capture with a session directory keeps both artifacts there; one
     /// without gets a collision-proof temp path and no log.
     #[test]
     fn response_paths_follow_the_session_dir_or_fall_back_to_temp() {
@@ -332,7 +340,7 @@ mod tests {
     }
 
     /// Opt-in round trip through the REAL recognizer: point
-    /// `CLOWD_OCR_BINARY` at a built `clowd_ocr` and run. Exercises the half
+    /// `CLOWD_AI_BINARY` at a built `clowd_ai` and run. Exercises the half
     /// of this module that unit tests cannot reach — header framing, the
     /// pixel upload, the wait, and parsing the response file — against the
     /// actual child rather than a stand-in.
@@ -355,9 +363,9 @@ mod tests {
         assert!(outcome.lines.is_empty(), "blank image produced {:?}", outcome.lines);
         assert_eq!(outcome.full_text, "");
 
-        // An already-cancelled request must come back as an error rather than
+        // An already-canceled request must come back as an error rather than
         // a result, and must not leave the child running.
-        let err = recognize(&blank(160, 120), &AtomicBool::new(true), None).expect_err("a cancelled request must not produce an outcome");
+        let err = recognize(&blank(160, 120), &AtomicBool::new(true), None).expect_err("a canceled request must not produce an outcome");
         assert!(matches!(err, OcrError::Failed(_)), "unexpected error {err:?}");
     }
 }

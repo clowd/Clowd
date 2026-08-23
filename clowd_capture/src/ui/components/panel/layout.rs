@@ -128,7 +128,7 @@ impl PanelLayout {
     }
 }
 
-/// Compute the panel layout for a freshly-finalised selection on a
+/// Compute the panel layout for a freshly-finalized selection on a
 /// given monitor. `monitor_bounds` is the monitor's full screen rect in
 /// virtual-desktop pixels; `selection` is the selection rect (already
 /// clipped to this monitor by the caller — the C++ does this via
@@ -137,10 +137,10 @@ impl PanelLayout {
 ///
 /// `set` selects which strip of buttons to place and `features` which of
 /// its optional buttons the user has left switched on. The strip is
-/// positioned with its OWN width — the shorter OCR strip re-centres under
+/// positioned with its OWN width — the shorter OCR strip re-centers under
 /// the selection on a swap rather than inheriting the capture strip's
 /// footprint (see `long_edge_px` below for the re-click hazard story), and
-/// a strip narrowed by a switched-off button re-centres the same way.
+/// a strip narrowed by a switched-off button re-centers the same way.
 ///
 /// Returns `None` if the selection doesn't overlap the monitor at all
 /// (i.e. the intersect produced an empty rect) — the caller handles
@@ -186,9 +186,9 @@ pub fn compute_layout(
         count += 1;
     }
     // The strip's OWN length: each strip is positioned by the same
-    // algorithm with its true width, so the shorter OCR strip re-centres
+    // algorithm with its true width, so the shorter OCR strip re-centers
     // under the selection instead of sitting left-aligned in the capture
-    // strip's wider footprint (owner call — an off-centre strip read as
+    // strip's wider footprint (owner call — an off-center strip read as
     // misplaced). The strip therefore MOVES on every set swap; the
     // double-click hazard that motivated the old fixed-footprint
     // anchoring is absorbed by `PanelSwapGuard` in app.rs, which ignores
@@ -293,7 +293,7 @@ pub fn compute_layout(
         // The C++ has an `if (i == 0) *vchange += buttonSpacing;` after
         // the first button. That spacing is already consumed above
         // (we skipped ahead before placing button[0]), so we don't
-        // duplicate it here — but we keep the second-spacing behaviour
+        // duplicate it here — but we keep the second-spacing behavior
         // by... actually, re-reading the C++: the loop body does
         // `*vchange += svgButtonSize; if (i == 0) *vchange += buttonSpacing;`
         // which means the spacing appears *between* button[0] and
@@ -354,7 +354,7 @@ mod tests {
     /// for the whole two-set refactor.
     ///
     /// Each added button widens `long_edge_px` by one `svg_button_size`
-    /// and therefore shifts the centred panel left by half of that. The
+    /// and therefore shifts the centered panel left by half of that. The
     /// original single-set capture (7 buttons) was area x=597 with
     /// buttons at 650/703/…/953; the strip as it stands (9 buttons, + OCR
     /// and SCROLL) is that shifted left by 50. Nothing else about the
@@ -375,10 +375,10 @@ mod tests {
 
     /// Each strip spans exactly its own `long_edge_px` (area box, both
     /// spacings, one button per slot of the set actually drawn) and is
-    /// centred under the selection with THAT width — the recentring the
+    /// centered under the selection with THAT width — the recentring the
     /// owner asked for, at every DPI, for both sets.
     #[test]
-    fn each_set_is_centred_with_its_own_width_at_every_dpi() {
+    fn each_set_is_centered_with_its_own_width_at_every_dpi() {
         for dpi in [1.0_f32, 1.25, 1.5, 2.0] {
             for set in PanelButtonSet::ALL {
                 let (button_size, spacing) = metrics(dpi);
@@ -389,8 +389,8 @@ mod tests {
                 let spanned = l.buttons().last().unwrap().right() - l.area_rect.left();
                 assert_eq!(spanned, long_edge, "{set:?} span at dpi {dpi}");
 
-                let centred_left = SEL.0 + SEL.2 / 2 - long_edge / 2;
-                assert_eq!(l.area_rect.left(), centred_left, "{set:?} at dpi {dpi}");
+                let centered_left = SEL.0 + SEL.2 / 2 - long_edge / 2;
+                assert_eq!(l.area_rect.left(), centered_left, "{set:?} at dpi {dpi}");
             }
         }
     }
@@ -416,7 +416,7 @@ mod tests {
     /// necessarily means it does NOT share the capture strip's left edge
     /// — the old fixed-footprint anchoring is intentionally gone.
     #[test]
-    fn ocr_strip_recentres_on_swap() {
+    fn ocr_strip_recenters_on_swap() {
         let normal = layout_for(PanelButtonSet::Normal, 1.0);
         let ocr = layout_for(PanelButtonSet::Ocr, 1.0);
         assert!(
@@ -432,7 +432,7 @@ mod tests {
         // And therefore the two strips genuinely moved relative to each
         // other — a regression back to shared-footprint anchoring would
         // keep the midpoints equal only by failing this.
-        assert!(ocr.area_rect.left() > normal.area_rect.left(), "OCR strip did not recentre");
+        assert!(ocr.area_rect.left() > normal.area_rect.left(), "OCR strip did not recenter");
     }
 
     /// The padded tail of the fixed-size button array must never be
@@ -472,7 +472,7 @@ mod tests {
             }
             // The vertical branch is bottom-anchored to the selection, so
             // the per-set length shows up as a different TOP while the
-            // column's bottom edge stays put — the vertical analogue of
+            // column's bottom edge stays put — the vertical analog of
             // the horizontal recentring.
             assert_eq!(b[b.len() - 1].bottom(), sel.bottom(), "{name} column is not bottom-anchored");
         }
@@ -558,11 +558,11 @@ mod tests {
         assert_eq!(no_upload.command_at(idx), Command::Edit);
     }
 
-    /// A narrowed strip re-centres with its own width, exactly like a set
+    /// A narrowed strip re-centers with its own width, exactly like a set
     /// swap does — it must not sit left-aligned in the full strip's
     /// footprint.
     #[test]
-    fn a_narrowed_strip_recentres() {
+    fn a_narrowed_strip_recenters() {
         let (button_size, spacing) = metrics(1.0);
         let features = PanelFeatures {
             upload: false,
@@ -582,7 +582,7 @@ mod tests {
                 > layout_for(PanelButtonSet::Normal, 1.0)
                     .area_rect
                     .left(),
-            "narrowed strip did not recentre"
+            "narrowed strip did not recenter"
         );
     }
 }

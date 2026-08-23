@@ -1,0 +1,723 @@
+<local:SystemThemedWindow
+    x:Class="Clowd.UI.VideoEditor.VideoEditorWindow"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:insp="clr-namespace:Clowd.UI.VideoEditor.Inspector"
+    xmlns:local="clr-namespace:Clowd.UI"
+    xmlns:tl="clr-namespace:Clowd.UI.VideoEditor.Timeline"
+    xmlns:util="clr-namespace:Clowd.Util"
+    xmlns:ve="clr-namespace:Clowd.UI.VideoEditor"
+    Title="Edit Video - Clowd"
+    Width="1100"
+    Height="720"
+    MinWidth="640"
+    MinHeight="480"
+    FontSize="13"
+    Foreground="White"
+    UseLayoutRounding="True"
+    WindowStartupLocation="CenterScreen">
+    <Window.Resources>
+        <!--  transport icons not in VectorIcons: frame-step (bar + triangle)  -->
+        <StreamGeometry x:Key="IconFrameNext">M2,2 L2,14 L11,8 Z M12,2 L14,2 L14,14 L12,14 Z</StreamGeometry>
+        <StreamGeometry x:Key="IconFramePrev">M14,2 L14,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
+        <!--  jump-to-end / jump-to-start: bar + two overlapping triangles (fast-forward style). The
+              ink bounds are the frame-step icons' 12x12 exactly — ToolButton stretches the icon
+              Uniform over its ink, so a wider box would scale the whole glyph down and sit visibly
+              short next to them.  -->
+        <StreamGeometry x:Key="IconJumpEnd">M2,2 L2,14 L7.5,8 Z M5.5,2 L5.5,14 L11,8 Z M12,2 L14,2 L14,14 L12,14 Z</StreamGeometry>
+        <StreamGeometry x:Key="IconJumpStart">M14,2 L14,14 L8.5,8 Z M10.5,2 L10.5,14 L5,8 Z M2,2 L4,2 L4,14 L2,14 Z</StreamGeometry>
+
+        <!--  a local instance so the ring geometry resolves from this window's scope: the shared one
+              lives in ToolButton.axaml, which is merged into the app resources at runtime.  -->
+        <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
+
+        <!--  The playback-speed picker: a ToolButton is icon-only, and this one has to show which
+              speed is active, so it is a labeled button wearing the same transparent fill and
+              white hover veil as the transport buttons beside it.  -->
+        <ControlTheme x:Key="SpeedButtonTheme" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="MinWidth" Value="54" />
+            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Grid>
+                        <Rectangle Name="_bg" Fill="{TemplateBinding Background}" />
+                        <StackPanel
+                            Margin="{TemplateBinding Padding}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="5">
+                            <ContentPresenter VerticalAlignment="Center" Content="{TemplateBinding Content}" />
+                            <Path
+                                Width="8"
+                                Height="5"
+                                VerticalAlignment="Center"
+                                Data="M0,0 L8,0 L4,5 Z"
+                                Fill="{TemplateBinding Foreground}"
+                                Stretch="None" />
+                        </StackPanel>
+                        <Rectangle Name="_hover" Fill="#33FFFFFF">
+                            <Rectangle.Transitions>
+                                <Transitions>
+                                    <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                                </Transitions>
+                            </Rectangle.Transitions>
+                        </Rectangle>
+                    </Grid>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^ /template/ Rectangle#_hover">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Rectangle#_hover">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:pressed /template/ Rectangle#_hover">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.5" />
+            </Style>
+        </ControlTheme>
+
+        <!--  Render is the window's primary action, so it is a labeled accent button rather than
+              another 30x30 icon. It stays a ToolButton to keep the progress ring the code-behind
+              drives (btnRender.Progress / ShowProgress), drawn here in place of the icon.  -->
+        <ControlTheme x:Key="RenderButtonTheme" TargetType="controls:ToolButton">
+            <Setter Property="Width" Value="NaN" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Padding" Value="12,0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Background="{DynamicResource SemiColorPrimary}"
+                        ClipToBounds="True">
+                        <Panel>
+                            <!--  hover/press read as a white veil over the accent fill, like the
+                                  30x30 ToolButtons, rather than a second accent token  -->
+                            <Rectangle Name="_veil" Fill="#26FFFFFF">
+                                <Rectangle.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition Property="Opacity" Duration="0:0:0.1" />
+                                    </Transitions>
+                                </Rectangle.Transitions>
+                            </Rectangle>
+                            <StackPanel
+                                Margin="{TemplateBinding Padding}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="7">
+                                <Panel Width="16" Height="16">
+                                    <Path
+                                        Name="_icon"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Data="{TemplateBinding IconPath}"
+                                        Fill="{TemplateBinding Foreground}"
+                                        Stretch="Uniform" />
+                                    <!--  same 16x16 absolute-coordinate ring as ToolButton's  -->
+                                    <Grid Name="_progress" IsVisible="False">
+                                        <Ellipse
+                                            Width="14"
+                                            Height="14"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Stroke="#55FFFFFF"
+                                            StrokeThickness="2" />
+                                        <Path
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch"
+                                            Data="{TemplateBinding Progress, Converter={StaticResource progressToArc}}"
+                                            Stretch="None"
+                                            Stroke="{TemplateBinding Foreground}"
+                                            StrokeLineCap="Round"
+                                            StrokeThickness="2" />
+                                    </Grid>
+                                </Panel>
+                                <ContentPresenter
+                                    VerticalAlignment="Center"
+                                    Content="{TemplateBinding Content}"
+                                    FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Panel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^ /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:pointerover /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="1" />
+            </Style>
+            <Style Selector="^:pressed /template/ Rectangle#_veil">
+                <Setter Property="Opacity" Value="0" />
+            </Style>
+            <Style Selector="^:disabled /template/ Border#_bg">
+                <Setter Property="Opacity" Value="0.5" />
+            </Style>
+            <Style Selector="^[ShowProgress=True] /template/ Path#_icon">
+                <Setter Property="IsVisible" Value="False" />
+            </Style>
+            <Style Selector="^[ShowProgress=True] /template/ Grid#_progress">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+        </ControlTheme>
+
+        <!--  The add-track tips are rich panels (ve:TrackTip) rather than a line of text, and they
+              draw their own dark chrome, so the ToolTip around them is a bare presenter: no
+              theme padding, background or border to double up on the panel's.  -->
+        <ControlTheme x:Key="TrackTipToolTipTheme" TargetType="ToolTip">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter
+                        Padding="{TemplateBinding Padding}"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}" />
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Grid x:Name="rootGrid" Background="#535353">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <controls:DockAndWrapPanel
+            x:Name="TopBar"
+            HorizontalAlignment="Stretch"
+            ItemHeight="30"
+            Orientation="Horizontal">
+            <controls:DockAndWrapPanel.Styles>
+                <Style Selector="StackPanel">
+                    <Setter Property="Margin" Value="4,0,4,0" />
+                    <Setter Property="Height" Value="30" />
+                    <Setter Property="Orientation" Value="Horizontal" />
+                </Style>
+            </controls:DockAndWrapPanel.Styles>
+
+            <StackPanel>
+                <TextBlock
+                    x:Name="txtSessionName"
+                    VerticalAlignment="Center"
+                    FontWeight="Bold" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Resolution:" />
+                <controls:DropDownButton
+                    x:Name="ddResolution"
+                    MinWidth="104"
+                    VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Fps:" />
+                <controls:DropDownButton
+                    x:Name="ddFrameRate"
+                    MinWidth="76"
+                    VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock VerticalAlignment="Center" Text="Zoom:" />
+                <TextBlock
+                    x:Name="txtZoom"
+                    Margin="4,0,0,0"
+                    MinWidth="34"
+                    VerticalAlignment="Center"
+                    Foreground="#CCCCCC" />
+                <controls:CaptionedCheckBox
+                    x:Name="chkFit"
+                    Margin="2,0,8,0"
+                    Caption="Fit"
+                    IsChecked="{Binding ElementName=preview, Path=FitToWindow, Mode=TwoWay}"
+                    ToolTip.Tip="Scale the preview to fill the window; off caps it at 100%" />
+            </StackPanel>
+
+            <controls:ToolButton
+                x:Name="btnInspector"
+                Padding="6"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
+                IconPath="{StaticResource IconProperties}"
+                IsChecked="{Binding SidebarVisible, Mode=TwoWay}"
+                ToolTip.Tip="Properties panel" />
+
+            <controls:ToolButton
+                Padding="6"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                CanToggle="True"
+                IconPath="{StaticResource IconPinned}"
+                IsChecked="{Binding Topmost, Mode=TwoWay}"
+                ToolTip.Tip="Always on top" />
+
+            <controls:ToolButton
+                x:Name="btnRender"
+                Margin="6,0,0,0"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Command="{Binding CommandRender}"
+                Content="Render"
+                IconPath="{StaticResource IconProcess}"
+                Theme="{StaticResource RenderButtonTheme}"
+                ToolTip.Tip="Render edited video" />
+
+        </controls:DockAndWrapPanel>
+
+        <Grid x:Name="contentGrid" Grid.Row="1">
+            <Grid.Styles>
+                <!--  The splitter is an invisible 8px grab zone straddling the sidebar's edge (its
+                      column is 2px wide; negative margins overlap the neighbors) drawing only the
+                      2px edge line — resizing should feel like grabbing the panel edge, not a
+                      separate handle. Hover/drag brighten the line.  -->
+                <Style Selector="GridSplitter#sidebarSplitter /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#666666" />
+                </Style>
+                <Style Selector="GridSplitter#sidebarSplitter:pointerover /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#999999" />
+                </Style>
+                <Style Selector="GridSplitter#sidebarSplitter:pressed /template/ Rectangle#splitterLine">
+                    <Setter Property="Fill" Value="#B8B8B8" />
+                </Style>
+            </Grid.Styles>
+
+            <!--  Column 3 is the resizable property sidebar (reached in code as SidebarColumn); its
+                  pixel Width/MinWidth are driven by ApplySidebarVisible, MaxWidth bounds the drag.  -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition
+                    Width="250"
+                    MinWidth="250"
+                    MaxWidth="600" />
+            </Grid.ColumnDefinitions>
+
+            <Rectangle
+                Grid.Column="0"
+                Height="1"
+                Margin="4,0,4,0"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Top"
+                Fill="#666666" />
+
+            <!--  the same left tool strip as the image editor: ItemWidth is required for DockToEnd
+                  to work in a vertical panel (see DockAndWrapPanel.canDock), and ToolButton is a
+                  fixed 30x30.  -->
+            <controls:DockAndWrapPanel
+                x:Name="ToolBar"
+                Grid.Column="0"
+                Margin="0,4,0,0"
+                ItemWidth="30"
+                Orientation="Vertical"
+                UseLayoutRounding="True">
+
+                <!--  Each add button carries a rich tip (ve:TrackTip: header, description, demo
+                      GIF, and a reason when the button is disabled) in place of a line of text.
+                      The Tip is a ToolTip instance, which the tooltip service uses as-is, so it can
+                      wear the bare TrackTipToolTipTheme. Placed to the right of the strip, and
+                      shown on disabled buttons too: the speed and input-overlay buttons set the
+                      tip's DisabledReason from code-behind (RefreshAddSpeedButton,
+                      RefreshInputOverlayButtons) to say why.  -->
+                <controls:ToolButton
+                    x:Name="btnImportMedia"
+                    Padding="6"
+                    Command="{Binding CommandImportMedia}"
+                    IconPath="{StaticResource IconVideoClip}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipImportMedia"
+                                DemoName="video"
+                                Description="Imports a video file, including its audio, and places it on a new track at the playhead. The clip plays over your recording and can be moved, trimmed and resized like any other item."
+                                Header="Add Video Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnImportAudio"
+                    Padding="6"
+                    Command="{Binding CommandImportAudio}"
+                    IconPath="{StaticResource IconMusicNote}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipImportAudio"
+                                DemoName="audio"
+                                Description="Imports an audio file and places it on a new track at the playhead. Use it for music, narration or sound effects layered under your recording."
+                                Header="Add Audio Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddImage"
+                    Padding="6"
+                    Command="{Binding CommandAddImage}"
+                    IconPath="{StaticResource IconImage}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddImage"
+                                DemoName="image"
+                                Description="Places an image on a new track at the playhead. Handy for logos, screenshots or callouts, which you can then move and resize in the preview."
+                                Header="Add Image Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddText"
+                    Padding="7"
+                    Command="{Binding CommandAddText}"
+                    IconPath="{StaticResource IconToolText}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddText"
+                                DemoName="text"
+                                Description="Adds a text card at the playhead and opens it for editing. Type a title or caption, then style and position it in the preview."
+                                Header="Add Text Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddZoom"
+                    Padding="6"
+                    Command="{Binding CommandAddZoomEffect}"
+                    IconPath="{StaticResource IconZoomEffect}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddZoom"
+                                DemoName="zoom"
+                                Description="Zooms in on part of the frame for a stretch of the timeline, easing in and out so attention lands where you want it. Drag the focus point in the preview to choose what gets magnified."
+                                Header="Add Zoom Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddSpeed"
+                    Padding="6"
+                    Command="{Binding CommandAddSpeedEffect}"
+                    IconPath="{StaticResource IconSpeedEffect}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddSpeed"
+                                DemoName="speed"
+                                Description="Speeds up or slows down the stretch of the recording under the item. Great for skipping past waiting and loading, or slowing down a moment that matters."
+                                Header="Add Speed Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddCursor"
+                    Padding="6"
+                    Command="{Binding CommandAddCursorTrack}"
+                    IconPath="{StaticResource IconCursorArrow}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddCursor"
+                                DemoName="cursor"
+                                Description="Draws the recorded mouse cursor over the video, with click highlights and a pointer style of your choosing. Available when the recording captured input."
+                                Header="Add Cursor Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <controls:ToolButton
+                    x:Name="btnAddKeyboard"
+                    Padding="6"
+                    Command="{Binding CommandAddKeyboardTrack}"
+                    IconPath="{StaticResource IconKeyboard}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddKeyboard"
+                                DemoName="keyboard"
+                                Description="Shows the keys you pressed as an overlay while the recording plays, so shortcuts are easy to follow. Available when the recording captured input."
+                                Header="Add Keyboard Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
+                <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
+                <controls:ToolButton
+                    Padding="6"
+                    controls:DockAndWrapPanel.DockToEnd="True"
+                    Command="{Binding CommandUndo}"
+                    IconPath="{StaticResource IconUndo}"
+                    ToolTip.Tip="Undo (Ctrl+Z)" />
+
+                <controls:ToolButton
+                    Padding="6"
+                    controls:DockAndWrapPanel.DockToEnd="True"
+                    Command="{Binding CommandRedo}"
+                    IconPath="{StaticResource IconRedo}"
+                    ToolTip.Tip="Redo (Ctrl+Y)" />
+
+            </controls:DockAndWrapPanel>
+
+            <Border
+                Grid.Column="1"
+                Background="#1e1e1e"
+                ClipToBounds="True">
+                <Panel>
+                    <!--  the same checker the image editor draws behind the artwork; the preview
+                          sits on top of it and the letterbox shows it through  -->
+                    <Panel Background="{x:Static util:CheckerBrushes.Canvas}" IsHitTestVisible="False" />
+                    <ve:VideoPreviewControl x:Name="preview" />
+                    <Border
+                        x:Name="statusOverlay"
+                        Padding="14,10"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Background="#B0000000"
+                        CornerRadius="6"
+                        IsVisible="False">
+                        <TextBlock
+                            x:Name="txtStatus"
+                            MaxWidth="420"
+                            Foreground="#E0FFFFFF"
+                            TextWrapping="Wrap" />
+                    </Border>
+                </Panel>
+            </Border>
+
+            <GridSplitter
+                x:Name="sidebarSplitter"
+                Grid.Column="2"
+                Width="8"
+                Margin="-3,0"
+                ZIndex="1"
+                Background="Transparent"
+                DragCompleted="sidebarSplitter_DragCompleted"
+                IsVisible="False"
+                ResizeBehavior="PreviousAndNext"
+                ResizeDirection="Columns">
+                <GridSplitter.Template>
+                    <ControlTemplate>
+                        <Panel Name="splitterZone" Background="{TemplateBinding Background}">
+                            <Rectangle
+                                Name="splitterLine"
+                                Width="2"
+                                HorizontalAlignment="Center" />
+                        </Panel>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
+
+            <Border
+                x:Name="sidebarBorder"
+                Grid.Column="3"
+                Background="#454545"
+                IsVisible="False">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Border
+                        Grid.Row="0"
+                        Padding="10,6"
+                        Background="#3d3d3d">
+                        <TextBlock
+                            FontSize="11"
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="PROPERTIES" />
+                    </Border>
+
+                    <insp:InspectorPanel
+                        x:Name="inspectorPanel"
+                        Grid.Row="1"
+                        DataContext="{Binding Inspector}" />
+                </Grid>
+            </Border>
+
+        </Grid>
+
+        <!--  transport bar  -->
+        <Border
+            Grid.Row="2"
+            Background="#454545"
+            BorderBrush="#666666"
+            BorderThickness="0,1,0,0">
+            <DockPanel
+                Height="30"
+                Margin="8,4"
+                LastChildFill="True">
+
+                <StackPanel
+                    DockPanel.Dock="Left"
+                    Orientation="Horizontal"
+                    Spacing="2">
+                    <!--  the four secondary transport buttons carry a dimmed icon (Foreground alpha,
+                          not Opacity, so the hover veil stays full strength) — play/pause is the
+                          one the eye should land on.  -->
+                    <controls:ToolButton
+                        x:Name="btnJumpStart"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandJumpStart}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconJumpStart}"
+                        ToolTip.Tip="Jump to start (Home)" />
+                    <controls:ToolButton
+                        x:Name="btnStepBack"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandStepBack}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconFramePrev}"
+                        ToolTip.Tip="Previous frame (Left)" />
+                    <controls:ToolButton
+                        x:Name="btnPlayPause"
+                        Width="30"
+                        Height="30"
+                        Padding="6"
+                        Command="{Binding CommandPlayPause}"
+                        IconPath="{StaticResource IconPlay}"
+                        ToolTip.Tip="Play (Space)" />
+                    <controls:ToolButton
+                        x:Name="btnStepForward"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandStepForward}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconFrameNext}"
+                        ToolTip.Tip="Next frame (Right)" />
+                    <controls:ToolButton
+                        x:Name="btnJumpEnd"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Command="{Binding CommandJumpEnd}"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconJumpEnd}"
+                        ToolTip.Tip="Jump to end (End)" />
+
+                    <!--  the extra top margin is an optical centering nudge: digits have no
+                          descenders, so centering the font's full line box (ascent + a descent
+                          nothing here uses) leaves the readout visibly riding high next to the
+                          30x30 buttons.  -->
+                    <TextBlock
+                        x:Name="txtPosition"
+                        Margin="10,2,6,0"
+                        VerticalAlignment="Center"
+                        FontFamily="Consolas,Cascadia Mono,monospace"
+                        Text="00:00.0 / 00:00.0" />
+
+                    <Button
+                        x:Name="btnSpeed"
+                        Content="1x"
+                        Theme="{StaticResource SpeedButtonTheme}"
+                        ToolTip.Tip="Playback speed" />
+
+                </StackPanel>
+
+                <StackPanel
+                    HorizontalAlignment="Right"
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="4">
+                    <!--  icon + tooltip swap in code-behind with the mute state  -->
+                    <controls:ToolButton
+                        x:Name="btnMute"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconSpeakerEnabled}"
+                        ToolTip.Tip="Mute" />
+                    <Slider
+                        x:Name="volumeSlider"
+                        Width="100"
+                        VerticalAlignment="Center"
+                        Maximum="1"
+                        Minimum="0" />
+                    <!--  icon + tooltip swap in code-behind with the timeline's shown state  -->
+                    <controls:ToolButton
+                        x:Name="btnTimelineCollapse"
+                        Width="30"
+                        Height="30"
+                        Padding="8"
+                        Foreground="#BFFFFFFF"
+                        IconPath="{StaticResource IconChevronDown}"
+                        ToolTip.Tip="Hide the timeline" />
+                </StackPanel>
+
+                <Panel />
+            </DockPanel>
+        </Border>
+
+        <!--  timeline: sized to its rows (ruler + one row per track + scrollbar), capped so a
+              project with many rows scrolls vertically instead of eating the preview. The
+              transport bar's collapse button hides this whole border (the preview takes the
+              space).  -->
+        <Border
+            x:Name="timelineBorder"
+            Grid.Row="3"
+            Background="#3a3a3a"
+            BorderBrush="#666666"
+            BorderThickness="0,1,0,0">
+            <tl:TimelineControl
+                x:Name="timeline"
+                MaxHeight="320"
+                Margin="0,2,0,0" />
+        </Border>
+
+    </Grid>
+</local:SystemThemedWindow>

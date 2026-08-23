@@ -268,7 +268,7 @@ pub fn describe_window_at(point: ScreenPoint) -> String {
 }
 
 /// Is this window still on screen? A window that has closed — or been
-/// minimised, or sent to another Space, neither of which can be photographed
+/// minimized, or sent to another Space, neither of which can be photographed
 /// either — drops out of the on-screen list, and the driver stops.
 pub fn is_window(target: Target) -> bool {
     on_screen_windows()
@@ -336,7 +336,7 @@ pub fn escape_pressed() -> bool {
 /// about where the cursor is at the instant of the post.
 ///
 /// One event per notch rather than one carrying `n * LINES_PER_NOTCH`: that
-/// is the stream a real wheel produces, and apps that quantise per event —
+/// is the stream a real wheel produces, and apps that quantize per event —
 /// or start one smooth-scroll animation per event — behave the same way for
 /// us as for a person.
 pub fn wheel_burst(point: ScreenPoint, ticks: u32, dir: WheelDir) {
@@ -554,7 +554,7 @@ mod tests {
     }
 
     #[test]
-    fn a_marker_is_only_honoured_while_it_still_covers_the_point() {
+    fn a_marker_is_only_honored_while_it_still_covers_the_point() {
         let windows = [entry(7, 70, ScreenRect::from_xy_size(0, 0, 100, 100))];
         assert_eq!(validated_marker(&windows, 7, ScreenPoint::new(10, 10)), Some(target(7, 70)));
         // Moved off the point since the overlay ran.

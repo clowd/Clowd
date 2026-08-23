@@ -15,7 +15,7 @@ namespace Clowd.UI.Controls
     /// <summary>
     /// A right-aligned strip of icon buttons that collapses into a single ⋮ button when the space it
     /// is given cannot hold them all. The ⋮ button opens a menu listing the same actions: each item
-    /// takes its label from the button's ToolTip.Tip (falling back to its automation name), clones
+    /// takes its label from the button's automation name (falling back to its ToolTip.Tip), clones
     /// the button's icon, tracks its IsVisible/IsEnabled, and on click re-raises Click on the button
     /// it came from — so a caller declares its buttons once and the overflow menu follows.
     /// </summary>
@@ -23,7 +23,7 @@ namespace Clowd.UI.Controls
     /// The collapse decision is made in arrange rather than measure, because the usual host is a
     /// Grid Auto column, and a Grid measures those with an infinite width — the width the bar
     /// actually gets is only known once the row has been arranged. A finite measure constraint is
-    /// honoured too, for hosts that do pass one.
+    /// honored too, for hosts that do pass one.
     ///
     /// Collapsed buttons keep their place in the tree (they are the overflow menu's source of truth)
     /// and are hidden with opacity instead of IsVisible: IsVisible belongs to the caller, which
@@ -145,7 +145,7 @@ namespace Clowd.UI.Controls
             // no Stretch (so: None) and the canvas size stated, exactly as the row icons this stands
             // beside do it. The dots only span 4px of the 24px canvas, so stretching them would scale
             // that sliver to the full width and leave the glyph jammed against the left edge instead
-            // of centred where the canvas puts it.
+            // of centered where the canvas puts it.
             var path = new Path
             {
                 Width = 24,
@@ -307,12 +307,15 @@ namespace Clowd.UI.Controls
             _flyout.ItemsSource = items;
         }
 
+        /// <summary>The menu item's text. The automation name comes first because it is always the
+        /// short action label; a tooltip is free to be a sentence explaining why the button is
+        /// disabled, which is no kind of menu item.</summary>
         private static string LabelOf(Control action)
         {
-            if (ToolTip.GetTip(action) is string tip && !String.IsNullOrEmpty(tip))
-                return tip;
+            if (AutomationProperties.GetName(action) is { Length: > 0 } name)
+                return name;
 
-            return AutomationProperties.GetName(action) ?? "";
+            return ToolTip.GetTip(action) as string ?? "";
         }
 
         /// <summary>A fresh copy of the button's glyph for its menu item — a Path can only live in

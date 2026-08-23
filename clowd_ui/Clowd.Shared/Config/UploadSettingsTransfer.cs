@@ -18,7 +18,7 @@ namespace Clowd.Config
         public bool IsEnabled { get; set; }
 
         /// <summary>Comma-separated <see cref="SupportedUploadType"/> names rather than the enum
-        /// itself — an unrecognised name is dropped instead of failing the whole import.</summary>
+        /// itself — an unrecognized name is dropped instead of failing the whole import.</summary>
         public string DefaultFor { get; set; }
 
         /// <summary>The provider's flattened settings, same shape as

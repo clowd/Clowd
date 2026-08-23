@@ -9,7 +9,7 @@
 //! it wholesale.)
 //!
 //! Styling is deliberately the hint pills' (`super::hints`): same fill,
-//! border, text colour, corner radius and padding proportions, imported
+//! border, text color, corner radius and padding proportions, imported
 //! from the shared constants rather than re-derived, so the two families
 //! cannot drift apart.
 //!
@@ -342,7 +342,7 @@ impl OcrBubblesRenderer {
             // Not yet revealed but revealing SOON: no pill, but the TEXT
             // is staged at its resting spot with alpha 0 — the look-ahead
             // pre-rasterization pass the module docs describe. Glyphon
-            // rasterizes staged glyphs regardless of colour, so by the
+            // rasterizes staged glyphs regardless of color, so by the
             // time the wave reaches this line its glyphs are guaranteed
             // atlas-resident (and re-staging every frame until reveal
             // keeps them pinned there). Lines beyond the look-ahead don't
@@ -358,7 +358,7 @@ impl OcrBubblesRenderer {
             // call): the pill already sits on a darkened, desaturated
             // page — its own bright fill IS the separation, and a shadow
             // on that ground reads as smudge. No scale animation either —
-            // glyphs re-rasterise per fractional scale and would churn
+            // glyphs re-rasterize per fractional scale and would churn
             // the atlas every frame.
             let dy = -e * anim::LIFT_PX * dpi;
 
@@ -507,8 +507,8 @@ fn at_rest(t: f32) -> bool {
 /// * Width: bounded by chars × 1.5 em — the widest real advances are
 ///   ~1 em (full-width CJK; Latin is ~0.6 em), and the extra half em
 ///   absorbs any exotic fallback face. Fit-shrink only ever narrows.
-/// * Vertically: a pill is centred on its line and its height is padding
-///   plus one line box, so a full bubble-height past the line's centre
+/// * Vertically: a pill is centered on its line and its height is padding
+///   plus one line box, so a full bubble-height past the line's center
 ///   covers both directions; the lift rise only ever moves bubbles UP.
 fn estimated_bubble_bounds(lines: &[crate::ocr::OcrLine], region: [f32; 4], dpi: f32) -> [f32; 4] {
     let mut right = region[2];
@@ -586,8 +586,8 @@ fn layout_bubble(ts: &mut TextStack, text: &str, line: [f32; 4], region: [f32; 4
     let bubble_w = pad_h * 2.0 + text_w;
     let bubble_h = pad_v * 2.0 + text_line_h;
 
-    // Anchor: text left edge over the line's left edge, pill centred on
-    // the line's vertical centre. Horizontally clamped into the selection
+    // Anchor: text left edge over the line's left edge, pill centered on
+    // the line's vertical center. Horizontally clamped into the selection
     // (with the MIN_FIT_SHRINK overhang exception); vertically NOT clamped
     // — a bubble belongs to its line even when the padding pokes past the
     // region edge by a couple of px.

@@ -33,7 +33,7 @@ pub fn extract_selection_rgba(selection: ScreenRect, buffer: &CapturedDesktop) -
     // silently slide the crop right/down, appending up to `overhang` px of
     // desktop the user never selected (and, via the OCR path, recognizing
     // and copying text from it). Losing the off-screen strip instead is the
-    // intended behaviour change for Save/Copy too: those pixels were never
+    // intended behavior change for Save/Copy too: those pixels were never
     // captured in the first place.
     let off_x = selection.left() - buffer.bounds.left();
     let off_y = selection.top() - buffer.bounds.top();
@@ -706,7 +706,7 @@ mod tests {
 
     /// The RGBA extractor feeds the shipped Save/Copy/Edit/Upload paths and
     /// had the identical overhang slide; producing the smaller, genuinely
-    /// selected crop instead is the intended behaviour change (the
+    /// selected crop instead is the intended behavior change (the
     /// off-screen strip was never captured to begin with).
     #[test]
     fn extract_selection_rgba_left_overhang_keeps_only_selected_columns() {

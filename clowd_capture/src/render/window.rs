@@ -9,6 +9,7 @@ use winit::window::{CursorIcon, Window, WindowId};
 use crate::capture_output::{save_to_file_with_peek, ActionResult};
 use crate::render::protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput};
 use crate::render::worker::WorkerSetup;
+use crate::settings::CapturerSettings;
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
 use crate::ui::shared::UiSharedState;
 use clowd_rust_core::geometry::{ScreenPointF, ScreenRect};
@@ -203,6 +204,7 @@ impl WindowHandle {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn save_to_file_with_peek(
         &self,
         selection: ScreenRect,
@@ -211,8 +213,18 @@ impl WindowHandle {
         peek: Option<&WindowPeekImage>,
         cursor: Option<&CapturedCursor>,
         cursor_visible: bool,
+        settings: &CapturerSettings,
     ) -> ActionResult {
-        save_to_file_with_peek(selection, corner_radius, buffer, peek, cursor, cursor_visible, &self.window)
+        save_to_file_with_peek(
+            selection,
+            corner_radius,
+            buffer,
+            peek,
+            cursor,
+            cursor_visible,
+            settings,
+            &self.window,
+        )
     }
 
     pub fn update_mouse_state(

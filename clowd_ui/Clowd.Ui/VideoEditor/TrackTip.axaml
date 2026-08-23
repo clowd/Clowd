@@ -1,0 +1,76 @@
+<UserControl
+    x:Class="Clowd.UI.VideoEditor.TrackTip"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls">
+
+    <!--  Dark chrome on purpose, whatever the app theme: the editor's own chrome is always dark
+          (the #535353 root, the #1e1e1e preview), so a tip that followed the system theme would
+          read as a light island next to the strip it explains.  -->
+    <Border
+        Width="280"
+        Background="#2A2A2D"
+        BorderBrush="#3C3C40"
+        BorderThickness="1"
+        CornerRadius="8">
+        <StackPanel>
+            <TextBlock
+                x:Name="txtHeader"
+                Margin="14,12,14,4"
+                FontSize="14"
+                FontWeight="SemiBold"
+                Foreground="#F0F0F0"
+                TextWrapping="Wrap" />
+            <TextBlock
+                x:Name="txtDescription"
+                Margin="14,0,14,10"
+                FontSize="12"
+                Foreground="#B8B8BC"
+                LineHeight="17"
+                TextWrapping="Wrap" />
+
+            <!--  the demo. The player measures to nothing when its asset is missing, and the
+                  border wraps it, so a tip without a GIF collapses to header + description
+                  instead of showing an empty frame.  -->
+            <Border
+                x:Name="demoFrame"
+                Margin="14,0,14,12"
+                HorizontalAlignment="Left"
+                ClipToBounds="True"
+                CornerRadius="6">
+                <controls:AnimatedGifImage
+                    x:Name="demo"
+                    Width="252"
+                    Height="144" />
+            </Border>
+
+            <!--  why the button is disabled right now; only present when it is  -->
+            <Border
+                x:Name="disabledFooter"
+                Padding="14,8"
+                Background="#33F05252"
+                BorderBrush="#55F05252"
+                BorderThickness="0,1,0,0"
+                CornerRadius="0,0,8,8"
+                IsVisible="False">
+                <DockPanel>
+                    <Path
+                        Width="12"
+                        Height="12"
+                        Margin="0,2,8,0"
+                        VerticalAlignment="Top"
+                        DockPanel.Dock="Left"
+                        Data="F0 M8,1 L15,14 L1,14 Z M7.25,6 L8.75,6 L8.75,10.5 L7.25,10.5 Z M7.25,11.5 L8.75,11.5 L8.75,13 L7.25,13 Z"
+                        Fill="#FFB4B4"
+                        Stretch="Uniform" />
+                    <TextBlock
+                        x:Name="txtDisabled"
+                        FontSize="12"
+                        Foreground="#FFC8C8"
+                        LineHeight="17"
+                        TextWrapping="Wrap" />
+                </DockPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

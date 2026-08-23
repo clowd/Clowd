@@ -3,12 +3,12 @@ use crate::interaction::OcrState;
 use crate::ocr::anim;
 use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
 
-/// Duration of the colour to grayscale fade after the window first becomes
-/// visible — and of the OCR selection's own colour→grayscale ramp, which
+/// Duration of the color to grayscale fade after the window first becomes
+/// visible — and of the OCR selection's own color→grayscale ramp, which
 /// deliberately reuses the same curve (see [`grayscale_fade`]).
 const FADE_DURATION_SECS: f32 = 0.3;
 
-/// The colour→grayscale easing: quartic ease-out over
+/// The color→grayscale easing: quartic ease-out over
 /// [`FADE_DURATION_SECS`]. ONE function on purpose — the overlay's opening
 /// fade (outside the selection) and the OCR mode's selection desaturation
 /// (inside it) must feel like the same effect, so they share the curve
@@ -351,7 +351,7 @@ fn scanning_dim(t: f32) -> f32 {
     anim::dim_amount(t)
 }
 
-/// The selection's colour→grayscale ramp on OCR entry: the same curve and
+/// The selection's color→grayscale ramp on OCR entry: the same curve and
 /// duration as the overlay's opening fade outside the selection, so the
 /// interior joining the monochrome page reads as one continuous treatment,
 /// not a second effect.

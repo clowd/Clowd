@@ -85,7 +85,7 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
 /// breaks when adjacent monitors have different scales — the physical
 /// rectangles gap or overlap. Instead we walk the topology: the primary
 /// gets physical origin (0, 0), and every other monitor's origin is
-/// derived from a neighbour whose origin is already known, ensuring
+/// derived from a neighbor whose origin is already known, ensuring
 /// shared edges in CG space become shared edges in physical space.
 fn compute_physical_origins(raw: &[RawMonitor]) -> Vec<(i32, i32)> {
     let n = raw.len();

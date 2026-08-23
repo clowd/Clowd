@@ -190,7 +190,7 @@ namespace Clowd.UI.Converters
         /// <c>hsl(h, s%, l%)</c>/<c>hsla(h, s%, l%, a)</c> — independently of the currently
         /// selected format, so pasting a value in any notation works. HSL is returned as an
         /// <see cref="HslRgbColor"/> directly rather than round-tripped through RGB, which would
-        /// quantize the hue and lose it entirely for greys.
+        /// quantize the hue and lose it entirely for grays.
         /// </summary>
         /// <param name="detected">Which notation the text was recognized as. Callers use this to
         /// decide how to compare the result against the color they already hold: only an HSL input

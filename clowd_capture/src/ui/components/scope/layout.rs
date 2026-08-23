@@ -2,7 +2,7 @@
 //!
 //! The reticle replaces the OS pointer while [`crate::ui::shared::UiSharedState::scroll_pick_mode`]
 //! is set: a ring around the cursor, four thin hairs inside it, four thick
-//! ticks outside it, and a centre dot marking the exact point the wheel
+//! ticks outside it, and a center dot marking the exact point the wheel
 //! will be aimed at. Every dimension is in DIPs and scaled by the
 //! monitor's DPI at compute time, so the reticle is the same physical size
 //! on every display.
@@ -14,7 +14,7 @@ const RING_STROKE: f32 = 2.0;
 /// Dark outline drawn one step outside every bright element so the reticle
 /// reads against both light and dark backgrounds.
 const HALO: f32 = 1.0;
-/// Radius kept clear at the centre so the pixel under the cursor stays
+/// Radius kept clear at the center so the pixel under the cursor stays
 /// visible around the dot.
 const CENTER_GAP: f32 = 4.0;
 /// Thickness of the hairs inside the ring.
@@ -25,7 +25,7 @@ const TICK_GAP: f32 = 3.0;
 const TICK_LEN: f32 = 9.0;
 /// Thickness of the outer ticks.
 const TICK_THICKNESS: f32 = 3.0;
-/// Radius of the centre dot.
+/// Radius of the center dot.
 const DOT_RADIUS: f32 = 1.5;
 
 /// Distance from the cursor to the furthest pixel the reticle touches, in
@@ -40,7 +40,7 @@ pub struct ScopeLayout {
     pub ring_radius: f32,
     pub ring_stroke: f32,
     pub halo: f32,
-    /// Hairs run from `hair_inner` to `hair_outer` out from the centre
+    /// Hairs run from `hair_inner` to `hair_outer` out from the center
     /// along each axis.
     pub hair_inner: f32,
     pub hair_outer: f32,
@@ -53,7 +53,7 @@ pub struct ScopeLayout {
 }
 
 impl ScopeLayout {
-    /// Build the reticle centred on `(center_x, center_y)`, given in
+    /// Build the reticle centered on `(center_x, center_y)`, given in
     /// window-local physical pixels.
     pub fn compute(center_x: f32, center_y: f32, dpi: f32) -> Self {
         let dpi = dpi.max(0.1);
@@ -85,7 +85,7 @@ impl ScopeLayout {
     }
 }
 
-/// Pixel span of a `thickness`-wide line centred on `center`. Snapped so a
+/// Pixel span of a `thickness`-wide line centered on `center`. Snapped so a
 /// 1-px hair covers the cursor's own pixel exactly rather than straddling
 /// two at half intensity — the rect pipeline's axis-aligned path has no
 /// anti-aliasing.
@@ -118,8 +118,8 @@ mod tests {
 
     #[test]
     fn the_reticle_survives_a_negative_local_origin() {
-        // At a monitor seam the neighbouring window draws the same reticle
-        // with a centre outside its own bounds, so every rect it emits is
+        // At a monitor seam the neighboring window draws the same reticle
+        // with a center outside its own bounds, so every rect it emits is
         // negative or off-window. That must stay well-formed (min < max)
         // rather than degenerate — the GPU clips it, the layout must not
         // invert it.

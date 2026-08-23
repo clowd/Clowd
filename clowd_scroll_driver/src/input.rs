@@ -63,7 +63,7 @@ pub use win::*;
 /// How long [`raise_over_point`] keeps re-checking after asking for the
 /// target to come forward. A raise is asynchronous on both platforms — the
 /// window has to process the activation and the compositor has to restack —
-/// and an app restoring from a minimised or background state can take a beat
+/// and an app restoring from a minimized or background state can take a beat
 /// longer than one that was already visible.
 pub(crate) const RAISE_TIMEOUT: Duration = Duration::from_millis(1_200);
 

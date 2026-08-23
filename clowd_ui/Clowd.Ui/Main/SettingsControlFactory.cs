@@ -152,23 +152,33 @@ namespace Clowd.UI.Config
             var editor = GetRowForProperty(pd);
 
             // [DisabledWhen] rows stay visible but stop responding (and dim) while the bool they
-            // defer to holds the disabling value — e.g. the manual accent colour while the OS
+            // defer to holds the disabling value — e.g. the manual accent color while the OS
             // accent is followed, or the scroll rewind while scrolling capture is switched off.
+            // The whole row dims, label and caption included: a grayed control beside a bright
+            // label reads as a broken control rather than as a switched-off option, and a run of
+            // gated rows (the composition section) makes that especially obvious.
             var disabledWhen = GetFirstAttributeOrDefault<DisabledWhenAttribute>(pd);
-            if (disabledWhen != null)
+
+            // enabledOpacity is what the target would have shown anyway — the caption is already
+            // dimmed to 0.65, and binding Opacity replaces that local value rather than scaling it.
+            void ApplyDisabledWhen(Control target, double enabledOpacity = 1.0)
             {
+                if (disabledWhen == null)
+                    return;
+
                 var disablingValue = disabledWhen.DisablingValue;
-                editor.Bind(InputElement.IsEnabledProperty, new Binding(disabledWhen.PropertyName)
+                target.Bind(InputElement.IsEnabledProperty, new Binding(disabledWhen.PropertyName)
                 {
                     Source = _obj,
                     Mode = BindingMode.OneWay,
                     Converter = new FuncValueConverter<bool, bool>(v => v != disablingValue),
                 });
-                editor.Bind(Visual.OpacityProperty, new Binding(disabledWhen.PropertyName)
+                target.Bind(Visual.OpacityProperty, new Binding(disabledWhen.PropertyName)
                 {
                     Source = _obj,
                     Mode = BindingMode.OneWay,
-                    Converter = new FuncValueConverter<bool, double>(v => v == disablingValue ? 0.4 : 1.0),
+                    Converter = new FuncValueConverter<bool, double>(
+                        v => v == disablingValue ? enabledOpacity * 0.4 : enabledOpacity),
                 });
             }
 
@@ -200,6 +210,10 @@ namespace Clowd.UI.Config
             grid.Children.Add(rowLabel);
             grid.Children.Add(rowContent);
 
+            // the Border carries the gate for the editor inside it, so IsEnabled cascades.
+            ApplyDisabledWhen(rowLabel);
+            ApplyDisabledWhen(rowContent);
+
             row++;
 
             if (!String.IsNullOrEmpty(description))
@@ -218,6 +232,7 @@ namespace Clowd.UI.Config
                 Grid.SetRow(caption, row);
                 Grid.SetColumnSpan(caption, 2);
                 grid.Children.Add(caption);
+                ApplyDisabledWhen(caption, enabledOpacity: 0.65);
                 row++;
             }
         }
@@ -232,6 +247,10 @@ namespace Clowd.UI.Config
             var audioSelector = GetFirstAttributeOrDefault<AudioDeviceSelectorAttribute>(pd);
             if (audioSelector != null && Is(pd, typeof(string)))
                 return AudioDeviceComboBinding(audioSelector.DeviceType, pd);
+
+            // …and the same for camera ids, which the recorder enumerates for us.
+            if (GetFirstAttributeOrDefault<CameraDeviceSelectorAttribute>(pd) != null && Is(pd, typeof(string)))
+                return CameraDeviceComboBinding(pd);
 
             if (Is(pd, typeof(string)))
             {
@@ -453,7 +472,7 @@ namespace Clowd.UI.Config
             try
             {
                 if (String.IsNullOrWhiteSpace(pattern))
-                    pattern = "yyyy-MM-dd HH-mm-ss";
+                    pattern = SettingsCapture.DefaultFilenamePattern;
 
                 var name = DateTime.Now.ToString(System.IO.Path.GetFileNameWithoutExtension(pattern));
                 if (name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)
@@ -573,6 +592,83 @@ namespace Clowd.UI.Config
             combo.SelectionChanged += (s, e) =>
             {
                 if (combo.SelectedItem is AudioDeviceInfo info && (pd.GetValue(_obj) as string) != info.DeviceId)
+                    pd.SetValue(_obj, info.DeviceId);
+            };
+
+            return combo;
+        }
+
+        /// <summary>A dropdown of cameras for a string device-id property, the camera counterpart of
+        /// <see cref="AudioDeviceComboBinding"/>. Two differences, both forced by the enumeration
+        /// costing a process spawn rather than a COM call: the list is filled asynchronously (the
+        /// combo shows the stored device until it lands, so building the settings page never blocks
+        /// on a camera driver), and it is not rebuilt every time the dropdown opens — the trailing
+        /// refresh row is how a hot-plugged camera is picked up. A leading "(none)" row keeps
+        /// "no camera" expressible, which audio does not need (it always has a default device).</summary>
+        Control CameraDeviceComboBinding(PropertyDescriptor pd)
+        {
+            const string NoneId = "";
+            const string RefreshId = "__clowd_refresh__"; // not a device id any platform can produce
+
+            var combo = new ComboBox { MinWidth = 280 };
+            combo.ItemTemplate = new FuncDataTemplate<CameraDeviceInfo>((o, ns) => new TextBlock { Text = o?.FriendlyName });
+
+            List<CameraDeviceInfo> BuildItems(List<CameraDeviceInfo> cameras)
+            {
+                var items = new List<CameraDeviceInfo> { new CameraDeviceInfo(NoneId, "(none)") };
+                items.AddRange(cameras);
+
+                var current = pd.GetValue(_obj) as string;
+                if (!String.IsNullOrEmpty(current) && !items.Any(d => d.DeviceId == current))
+                    items.Add(new CameraDeviceInfo(current, current));
+
+                items.Add(new CameraDeviceInfo(RefreshId, "Refresh camera list…"));
+                return items;
+            }
+
+            void Apply(List<CameraDeviceInfo> cameras)
+            {
+                var items = BuildItems(cameras);
+                var current = pd.GetValue(_obj) as string ?? NoneId;
+                combo.ItemsSource = items;
+                combo.SelectedItem = items.FirstOrDefault(d => d.DeviceId == current) ?? items[0];
+            }
+
+            // show the stored value immediately; the real list replaces it when it arrives.
+            Apply(new List<CameraDeviceInfo>());
+            _ = FillAsync(CameraDeviceManager.GetCamerasAsync());
+
+            async System.Threading.Tasks.Task FillAsync(System.Threading.Tasks.Task<List<CameraDeviceInfo>> pending)
+            {
+                try
+                {
+                    var cameras = await pending;
+                    // the settings page may already be gone; assigning to a detached combo is harmless.
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(() => Apply(cameras));
+                }
+                catch (Exception ex)
+                {
+                    // CameraDeviceManager never throws, so this is a dispatcher failure only.
+                    System.Diagnostics.Debug.WriteLine("Failed to fill the camera list: " + ex);
+                }
+            }
+
+            combo.SelectionChanged += (s, e) =>
+            {
+                if (combo.SelectedItem is not CameraDeviceInfo info)
+                    return;
+
+                if (info.DeviceId == RefreshId)
+                {
+                    // the refresh row is an action, not a value: put the selection back on the
+                    // stored device and re-enumerate underneath it.
+                    var stored = pd.GetValue(_obj) as string ?? NoneId;
+                    combo.SelectedItem = (combo.ItemsSource as List<CameraDeviceInfo>)?.FirstOrDefault(d => d.DeviceId == stored);
+                    _ = FillAsync(CameraDeviceManager.RefreshAsync());
+                    return;
+                }
+
+                if ((pd.GetValue(_obj) as string ?? NoneId) != info.DeviceId)
                     pd.SetValue(_obj, info.DeviceId);
             };
 

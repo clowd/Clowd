@@ -18,6 +18,28 @@ namespace Clowd.UI
     /// in CLI order, always finite, floored at -100.</summary>
     public sealed record ObsLevels(double[] Speaker, double[] Mic);
 
+    /// <summary>One video track inside the recorded mp4: its stream index and the frame size it
+    /// was encoded at.</summary>
+    public sealed record ObsTrackInfo(int Index, int Width, int Height);
+
+    /// <summary>One audio track inside the recorded mp4: its index among the audio streams, and
+    /// what the recorder put on it — <c>"speaker"</c> (the system mix), <c>"microphone"</c>, or
+    /// <c>"mixed"</c> when a single-track recording carried every device on one track. Only the
+    /// recorder knows this; the file itself does not say, which is the whole point of keeping it.
+    /// <see cref="Kind"/> is null when the report did not name one.</summary>
+    public sealed record ObsAudioTrackInfo(int Index, string Kind);
+
+    /// <summary>The tracks the recorder wrote, reported on <c>started_recording</c> and again on
+    /// <c>stopped_recording</c> as an optional <c>tracks</c> object. The video editor needs it to
+    /// place the webcam overlay (which stream, and what aspect ratio) and to label the audio rows.
+    /// Null on a recorder too old to send it; <see cref="Webcam"/> is null whenever no camera was
+    /// captured, and <see cref="Audio"/> is empty when the report named no audio tracks.
+    /// <see cref="InputCapturePath"/> is the recorder's echo of the jsonl path it wrote — a
+    /// top-level field beside <c>tracks</c> on the wire, kept here because the two describe the
+    /// same recording and are read together; null on older recorders.</summary>
+    public sealed record ObsTracks(ObsTrackInfo Screen, ObsTrackInfo Webcam, IReadOnlyList<ObsAudioTrackInfo> Audio,
+        string InputCapturePath = null);
+
 /// <summary>The recorder's answer to a <c>configure</c> command (DESIGN §1.3): either
 /// <c>configure_applied</c>, whose <see cref="IgnoredKeys"/> names the settings the recorder
 /// refused to change in its current phase (empty before recording starts), or
@@ -64,6 +86,13 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         /// <summary>Raised on the UI thread for every <c>levels</c> message (10 Hz from
         /// <c>initialized</c> onward, only when audio sources exist).</summary>
         public event EventHandler<ObsLevels> LevelsReceived;
+
+        /// <summary>The video tracks the recorder last reported (<c>started_recording</c>, then
+        /// <c>stopped_recording</c>), or null when it did not report any — the field is optional,
+        /// so an older recorder simply leaves this null and the video editor falls back to probing
+        /// the file. Written from the stdout pump and read from the UI thread after a lifecycle
+        /// ack has resolved, which is what orders the two.</summary>
+        public ObsTracks LastTracks { get; private set; }
 
         /// <summary>Raised on the UI thread when the recording fails: a nonzero
         /// <c>stopped_recording</c> code (possibly spontaneous) or a process exit without a
@@ -296,7 +325,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
         /// <summary>Shuts the process down (best-effort quit → 5 s wait → kill) on the thread
         /// pool. The quit sits unread while OBS is still initializing, so the wait can consume
-        /// the full 5 s — synchronous disposal froze the UI thread for that long when cancelling
+        /// the full 5 s — synchronous disposal froze the UI thread for that long when canceling
         /// during WAIT. Idempotent; every caller gets the same task.</summary>
         public Task DisposeAsync()
         {
@@ -426,7 +455,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                 RaiseCriticalError("The recording process has exited unexpectedly.");
         }
 
-        /// <summary>Faults a lifecycle TCS whose task may never be awaited — cancelling during WAIT
+        /// <summary>Faults a lifecycle TCS whose task may never be awaited — canceling during WAIT
         /// leaves <c>_startTcs</c> untouched, and a caller whose <c>WaitAsync</c> already timed out
         /// has walked away from the original task. Reading <see cref="Task.Exception"/> marks it
         /// observed so it cannot resurface as an <c>UnobservedTaskException</c> at GC time.</summary>
@@ -458,6 +487,9 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
                         break;
 
                     case "started_recording":
+                        // the tracks are read before the ack resolves, so a caller that awaits
+                        // StartAsync can read LastTracks straight afterwards.
+                        ReadTracks(root);
                         _startTcs.TrySetResult(true);
                         break;
 
@@ -526,6 +558,92 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             return values;
         }
 
+        /// <summary>Reads the optional <c>tracks</c> object into <see cref="LastTracks"/>. An absent
+        /// field leaves the previous value alone rather than clearing it: <c>stopped_recording</c> is
+        /// the second report, and a recorder that sends tracks on start but not on stop must not
+        /// lose them.</summary>
+        private void ReadTracks(JsonElement root) => LastTracks = ParseTracks(root, LastTracks);
+
+        /// <summary>
+        /// The pure half of <see cref="ReadTracks"/>: the tracks a protocol message describes, or
+        /// <paramref name="previous"/> when it describes none.
+        ///
+        /// <code>
+        /// {"screen": {"index":0,"width":W,"height":H},
+        ///  "webcam": {"index":1,"width":W,"height":H},          // absent, not null, without one
+        ///  "audio":  [{"index":0,"kind":"speaker","device":"default","name":"Speaker 1"}, …]}
+        /// </code>
+        ///
+        /// Every part of it is optional as far as this reader is concerned: an older recorder sends
+        /// no <c>audio</c> array at all (single mixed track, nothing to say about it), and the
+        /// editor's rows come from probing the file either way — the report only decorates them.
+        /// So anything unparseable is dropped, never thrown on. The message may also carry a
+        /// top-level <c>"input_capture":"path"</c> beside <c>tracks</c> — the jsonl sidecar the
+        /// recorder wrote — read into the same record for the same reason.
+        /// </summary>
+        internal static ObsTracks ParseTracks(JsonElement root, ObsTracks previous)
+        {
+            if (!root.TryGetProperty("tracks", out var tracksEl) || tracksEl.ValueKind != JsonValueKind.Object)
+                return previous;
+
+            var screen = ReadTrack(tracksEl, "screen");
+            if (screen == null)
+                return previous; // a tracks object without a screen track is not one we can use
+
+            var inputCapture = root.TryGetProperty("input_capture", out var pathEl)
+                               && pathEl.ValueKind == JsonValueKind.String
+                               && !String.IsNullOrEmpty(pathEl.GetString())
+                ? pathEl.GetString()
+                : null;
+
+            return new ObsTracks(screen, ReadTrack(tracksEl, "webcam"), ReadAudioTracks(tracksEl), inputCapture);
+        }
+
+        /// <summary>The <c>audio</c> array of a tracks report, in the order it was written. An entry
+        /// without a numeric index says nothing about a stream and is skipped; a missing
+        /// <c>kind</c> leaves the label to the editor's own fallback.</summary>
+        private static IReadOnlyList<ObsAudioTrackInfo> ReadAudioTracks(JsonElement tracks)
+        {
+            if (!tracks.TryGetProperty("audio", out var el) || el.ValueKind != JsonValueKind.Array)
+                return Array.Empty<ObsAudioTrackInfo>();
+
+            var list = new List<ObsAudioTrackInfo>(el.GetArrayLength());
+            foreach (var entry in el.EnumerateArray())
+            {
+                if (entry.ValueKind != JsonValueKind.Object
+                    || !entry.TryGetProperty("index", out var indexEl)
+                    || indexEl.ValueKind != JsonValueKind.Number
+                    || !indexEl.TryGetInt32(out var index)
+                    || index < 0)
+                    continue;
+
+                var kind = entry.TryGetProperty("kind", out var kindEl) && kindEl.ValueKind == JsonValueKind.String
+                    ? kindEl.GetString()
+                    : null;
+
+                list.Add(new ObsAudioTrackInfo(index, kind));
+            }
+
+            return list;
+        }
+
+        private static ObsTrackInfo ReadTrack(JsonElement tracks, string name)
+        {
+            // "webcam": null is the documented way of saying "no camera was captured".
+            if (!tracks.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Object)
+                return null;
+
+            return new ObsTrackInfo(
+                ReadInt(el, "index"),
+                ReadInt(el, "width"),
+                ReadInt(el, "height"));
+        }
+
+        private static int ReadInt(JsonElement obj, string name) =>
+            obj.TryGetProperty(name, out var el) && el.ValueKind == JsonValueKind.Number && el.TryGetInt32(out var value)
+                ? value
+                : 0;
+
         private static string[] ReadStringArray(JsonElement root, string name)
         {
             if (!root.TryGetProperty(name, out var el) || el.ValueKind != JsonValueKind.Array)
@@ -549,6 +667,9 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
         private void HandleStoppedRecording(JsonElement root)
         {
+            // the final word on what was written; the page reads it once the stop has resolved.
+            ReadTracks(root);
+
             var code = root.GetProperty("code").GetInt64();
             var message = root.GetProperty("message").GetString();
             string error = null;

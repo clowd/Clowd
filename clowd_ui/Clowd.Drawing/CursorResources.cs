@@ -27,7 +27,7 @@ namespace Clowd.Drawing
     //     the 32px frame and let the OS scale it (slight blur accepted).
     // Cursors are cached keyed on (file, scaling bucket) and the cache is flushed when any attached
     // TopLevel raises ScalingChanged.
-    internal partial class CursorResources : EmbeddedResource
+    public partial class CursorResources : EmbeddedResource
     {
         private const string RSX_NS = "Clowd.Drawing.Cursors";
         private const int BASE_CURSOR_SIZE = 32;

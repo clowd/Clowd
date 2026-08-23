@@ -13,7 +13,7 @@
 //!    batch, and nothing else would ever surface them. Level `fatal`.
 //! 2. Failures the Worker handles itself but which mean a broken upload:
 //!    destination commit failure, a chunk relay that failed or exhausted its
-//!    queue retries into the DLQ, a session that could not be initialised.
+//!    queue retries into the DLQ, a session that could not be initialized.
 //!    Level `error`.
 //!
 //! One incident should produce one event, so each failure is reported at the
@@ -54,7 +54,7 @@ const DEFAULT_DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.inge
 const DSN_VAR: &str = "SENTRY_DSN";
 
 /// Set to any non-empty value to turn reporting off. Same variable name the
-/// desktop app and the capturer honour, and it is set in `.dev.vars` so
+/// desktop app and the capturer honor, and it is set in `.dev.vars` so
 /// `wrangler dev` never reports — the Worker's equivalent of their
 /// debug-build rule.
 const OPT_OUT_VAR: &str = "CLOWD_DISABLE_TELEMETRY";
@@ -115,7 +115,7 @@ impl Report {
         }
     }
 
-    /// Normalised route name — build it with `telemetry_core::worker_transaction`
+    /// Normalized route name — build it with `telemetry_core::worker_transaction`
     /// or `session_transaction`, never from a raw path (it is half the
     /// fingerprint, so unbounded values would fragment the issue list).
     pub fn transaction(mut self, transaction: String) -> Self {

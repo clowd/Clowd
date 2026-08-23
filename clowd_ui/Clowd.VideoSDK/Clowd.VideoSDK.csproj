@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Clowd.VideoSDK</RootNamespace>
+    <!-- The whole playback engine is a thin managed layer over the FFmpeg C API. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- for DemuxBudget: the read-ahead rule is testable without the native FFmpeg plumbing
+         the rest of the demuxer needs. -->
+    <InternalsVisibleTo Include="Clowd.VideoSDK.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The ful1e5 cursor packs' own SVG sources, read by CursorPackLoader. The logical name is
+         spelled out because the default one mangles the hyphen in a folder like `bibata-r` into an
+         underscore, and the loader addresses a pack by the name it has on disk. Both separators are
+         folded: MSBuild fills %(RecursiveDir) with the host OS's separator, so on macOS/Linux a
+         backslash-only replace would leave `bibata-r/appstarting/000.svg` in the name and every
+         pack would silently fail to load. -->
+    <EmbeddedResource Include="Composition\CursorPacks\**\*.svg">
+      <LogicalName>Clowd.VideoSDK.Composition.CursorPacks.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.').Replace('/','.'))%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 7.1.1 is the FFmpeg.AutoGen series generated against FFmpeg 7.1
+         (avcodec 61 / avformat 61 / avutil 59 / swscale 8 / swresample 5) — the exact
+         majors of the DLLs shipped in the obs-express folder. FFmpegLoader asserts the
+         runtime majors match at initialize time. -->
+    <PackageReference Include="FFmpeg.AutoGen.Abstractions" Version="7.1.1" />
+    <PackageReference Include="FFmpeg.AutoGen.Bindings.DynamicallyLoaded" Version="7.1.1" />
+    <!-- WASAPI output for the audio master clock; all call sites are Windows-only today. -->
+    <PackageReference Include="NAudio.Wasapi" Version="2.3.0" />
+    <!-- Pinned (via Directory.Build.props) to the exact version Avalonia resolves — a mismatch
+         would mean the SDK compiles against a different Skia than the one Avalonia loads in
+         the Clowd.Ui process. Clowd.Ui's VerifySkiaSharpMatchesAvalonia target enforces it. -->
+    <PackageReference Include="SkiaSharp" Version="$(SkiaSharpVersion)" />
+  </ItemGroup>
+</Project>

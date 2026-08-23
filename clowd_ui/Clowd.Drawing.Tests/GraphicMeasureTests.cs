@@ -63,7 +63,7 @@ namespace Clowd.Drawing.Tests
             var g = Make(0, 0, 100, 0);
             var bounds = g.Bounds;
 
-            // ticks: 8px total (4 x LineWidth clamped up to the 8px floor) centred on each endpoint
+            // ticks: 8px total (4 x LineWidth clamped up to the 8px floor) centered on each endpoint
             Assert.Equal(4, bounds.Bottom, 6);
             // the shaft's own render bounds only reach ±1 (half the 2px stroke)
             Assert.Equal(-1, bounds.Left, 6);

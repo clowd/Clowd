@@ -1,5 +1,5 @@
 //! Pure half of the Sentry reporter: DSN parsing, event/envelope construction,
-//! and route normalisation. No `worker` dependency, so it unit-tests natively
+//! and route normalization. No `worker` dependency, so it unit-tests natively
 //! (same split as `paste_core` / `paste`).
 //!
 //! The Workers-side transport lives in `telemetry.rs`.
@@ -126,7 +126,7 @@ pub struct EventInput<'a> {
     /// Human-readable detail — becomes the exception `value`. May contain ids;
     /// grouping never uses it (see `fingerprint` below).
     pub message: &'a str,
-    /// Normalised route, e.g. `PUT /api/v1/uploads/{id}/chunks/{n}`.
+    /// Normalized route, e.g. `PUT /api/v1/uploads/{id}/chunks/{n}`.
     pub transaction: Option<&'a str>,
     /// `(method, url)` of the inbound request, if this event has one.
     pub request: Option<(&'a str, &'a str)>,
@@ -141,7 +141,7 @@ pub struct EventInput<'a> {
 ///
 /// `fingerprint` is set explicitly to `[op, transaction]`. Default grouping keys
 /// off the exception value, which embeds upload ids and chunk numbers — that
-/// would mint a fresh issue per upload. Pinning it to the two normalised fields
+/// would mint a fresh issue per upload. Pinning it to the two normalized fields
 /// keeps one issue per (failure kind, route).
 pub fn event_json(input: &EventInput) -> Value {
     let transaction = input.transaction.unwrap_or("<none>");
@@ -233,7 +233,7 @@ pub fn hex(bytes: &[u8]) -> String {
 
 /// Drop the query and fragment from a URL before it is reported.
 ///
-/// The analogue of the desktop side's `send_default_pii: false`: nothing
+/// The analog of the desktop side's `send_default_pii: false`: nothing
 /// user-supplied should ride along in `request.url`. Our own routes only carry
 /// `?final=1`, but a presigned destination URL reaching this function by mistake
 /// must not leak its signature.
@@ -242,13 +242,13 @@ pub fn strip_query(url: &str) -> String {
     url[..end].to_string()
 }
 
-/// Normalised transaction name for a public route, mirroring the match in
+/// Normalized transaction name for a public route, mirroring the match in
 /// `router::route`.
 ///
 /// Deliberately a closed table rather than a heuristic over segment shapes:
 /// upload ids and paste keys are indistinguishable from literal path segments
 /// (`documents` is a valid id; a paste key is ten lowercase letters), and an
-/// open-ended normaliser would let an attacker mint unbounded transaction names
+/// open-ended normalizer would let an attacker mint unbounded transaction names
 /// by requesting junk paths. Unknown paths collapse to `<other>`.
 pub fn worker_transaction(method: &str, segments: &[&str]) -> String {
     let route = match segments {
@@ -273,7 +273,7 @@ pub fn worker_transaction(method: &str, segments: &[&str]) -> String {
 
 /// The upload id (or paste key) a request path addresses, for the `upload_id`
 /// extra on a report. Same closed table as [`worker_transaction`], so an
-/// unrecognised path yields nothing rather than an arbitrary segment.
+/// unrecognized path yields nothing rather than an arbitrary segment.
 pub fn path_id<'a>(segments: &[&'a str]) -> Option<&'a str> {
     match segments {
         ["api", "v1", "uploads", id, ..] => Some(id),
@@ -283,7 +283,7 @@ pub fn path_id<'a>(segments: &[&'a str]) -> Option<&'a str> {
     }
 }
 
-/// Normalised transaction name for an internal Durable Object route, mirroring
+/// Normalized transaction name for an internal Durable Object route, mirroring
 /// the match in `UploadSession::dispatch`. Prefixed `DO` so these never collide
 /// with the public routes above in the Sentry issue list.
 pub fn session_transaction(method: &str, segments: &[&str]) -> String {
@@ -440,7 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn worker_transactions_normalise_ids() {
+    fn worker_transactions_normalize_ids() {
         let t = |m: &str, p: &str| {
             let seg: Vec<&str> = p
                 .split('/')
