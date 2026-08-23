@@ -188,6 +188,20 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Waveform body on an audio item.</summary>
         public IBrush WaveformBrush { get; private init; }
 
+        /// <summary>The pointer-speed envelope on a cursor item: the waveform's treatment (pale
+        /// on the dark theme, deep on the light), but quieter — the click marks sit on top of it
+        /// and are the part that has to read.</summary>
+        public IBrush CursorMotionBrush { get; private init; }
+
+        /// <summary>A button press on a cursor item. Solid white in both themes: the cursor fill
+        /// is saturated enough that white is the one thing guaranteed to pop from both it and the
+        /// envelope, and it is what the label already uses.</summary>
+        public IBrush CursorClickBrush { get; private init; }
+
+        /// <summary>A keystroke-run blip on a keys item — the waveform's treatment, over the
+        /// olive fill.</summary>
+        public IBrush KeyBlipBrush { get; private init; }
+
         private IBrush _edgeFadeLeftEven;
         private IBrush _edgeFadeLeftOdd;
         private IBrush _edgeFadeRightEven;
@@ -338,6 +352,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 ItemLabelBrush = new SolidColorBrush(dark ? Color.FromRgb(240, 240, 240) : Colors.White),
                 FilmstripPlaceholderFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.12),
                 WaveformBrush = new SolidColorBrush(dark ? Color.FromRgb(226, 244, 236) : Color.FromRgb(28, 62, 48), 0.8),
+                CursorMotionBrush = new SolidColorBrush(dark ? Color.FromRgb(246, 228, 246) : Color.FromRgb(72, 24, 72), dark ? 0.5 : 0.6),
+                CursorClickBrush = new SolidColorBrush(Colors.White, 0.95),
+                KeyBlipBrush = new SolidColorBrush(dark ? Color.FromRgb(246, 248, 226) : Color.FromRgb(44, 50, 12), 0.85),
                 _edgeFadeLeftEven = EdgeFadeBrush(rowEven, fromLeft: true),
                 _edgeFadeLeftOdd = EdgeFadeBrush(rowOdd, fromLeft: true),
                 _edgeFadeRightEven = EdgeFadeBrush(rowEven, fromLeft: false),

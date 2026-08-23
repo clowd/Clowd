@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Avalonia.Media.Imaging;
+using Clowd.VideoSDK.Model;
 
 namespace Clowd.UI.VideoEditor.Timeline
 {
@@ -132,9 +133,100 @@ namespace Clowd.UI.VideoEditor.Timeline
         }
     }
 
+    /// <summary>A cursor-activity request for one recording's input capture (the source's
+    /// <c>InputCapturePath</c>), in <b>source</b> ticks and bucketed like
+    /// <see cref="AudioPeaksRequest"/>: one bucket is roughly one pixel.</summary>
+    public readonly record struct CursorActivityRequest(Guid SourceId, long SourceInTicks,
+        long DurationTicks, long TicksPerBucket);
+
+    /// <summary>One button press in source ticks: the down and the matching up (equal for a
+    /// release the capture never saw).</summary>
+    public readonly record struct CursorClickSpan(long DownTicks, long UpTicks);
+
     /// <summary>
-    /// Where the timeline gets item visuals it cannot compute itself: video filmstrips and audio
-    /// waveforms. Every call is non-blocking and returns what is ready <i>now</i>; misses are queued
+    /// The pointer's activity over a span of one recording, for the cursor row: per-bucket peak
+    /// speed in <c>[0, 1]</c> (see <c>CursorMotion.Normalize</c> — the UI multiplies straight by
+    /// half the row height, like a waveform) and every click whose press lands in the span.
+    /// </summary>
+    public sealed class CursorActivity
+    {
+        public CursorActivity(long startTicks, long ticksPerBucket, IReadOnlyList<float> motion,
+            IReadOnlyList<CursorClickSpan> clicks, bool isComplete)
+        {
+            StartTicks = startTicks;
+            TicksPerBucket = ticksPerBucket;
+            Motion = motion ?? Array.Empty<float>();
+            Clicks = clicks ?? Array.Empty<CursorClickSpan>();
+            IsComplete = isComplete;
+        }
+
+        /// <summary>A still pointer and no clicks over the request — what a source without
+        /// capture data gets. Complete: nothing will arrive.</summary>
+        public static CursorActivity None(in CursorActivityRequest request) => Flat(request, true);
+
+        /// <summary>Nothing yet: the capture is still loading and
+        /// <see cref="ITimelinePreviewProvider.PreviewReady"/> will fire.</summary>
+        public static CursorActivity Pending(in CursorActivityRequest request) => Flat(request, false);
+
+        private static CursorActivity Flat(in CursorActivityRequest request, bool complete)
+        {
+            var perBucket = Math.Max(1, request.TicksPerBucket);
+            var buckets = (int)Math.Clamp((request.DurationTicks + perBucket - 1) / perBucket, 0, Int32.MaxValue / 2);
+            return new CursorActivity(request.SourceInTicks, perBucket, new float[buckets], null, complete);
+        }
+
+        /// <summary>Source time of bucket 0.</summary>
+        public long StartTicks { get; }
+
+        public long TicksPerBucket { get; }
+
+        /// <summary>Peak normalized speed per bucket.</summary>
+        public IReadOnlyList<float> Motion { get; }
+
+        /// <summary>Presses whose down lies in the span, ascending.</summary>
+        public IReadOnlyList<CursorClickSpan> Clicks { get; }
+
+        public int BucketCount => Motion.Count;
+
+        /// <summary>False while the capture is still being read.</summary>
+        public bool IsComplete { get; }
+    }
+
+    /// <summary>A keystroke-run request for one recording's input capture, in <b>source</b>
+    /// ticks. The pause-break and filter are the item's own: runs are segmented exactly as the
+    /// overlay will show them, so each one here is one row on the output.</summary>
+    public readonly record struct KeyRunsRequest(Guid SourceId, long SourceInTicks, long DurationTicks,
+        int PauseBreakMs, KeystrokeFilter Filter);
+
+    /// <summary>One keystroke run in source ticks: from its first key-down to its last, and how
+    /// many keys it carries.</summary>
+    public readonly record struct TimelineKeyRun(long StartTicks, long EndTicks, int KeyCount);
+
+    /// <summary>The keystroke runs intersecting a span of one recording, ascending.</summary>
+    public sealed class KeyRuns
+    {
+        public static readonly KeyRuns None = new KeyRuns(Array.Empty<TimelineKeyRun>(), true);
+
+        /// <summary>Nothing yet: the capture is still loading and
+        /// <see cref="ITimelinePreviewProvider.PreviewReady"/> will fire.</summary>
+        public static readonly KeyRuns Pending = new KeyRuns(Array.Empty<TimelineKeyRun>(), false);
+
+        public KeyRuns(IReadOnlyList<TimelineKeyRun> runs, bool isComplete)
+        {
+            Runs = runs ?? Array.Empty<TimelineKeyRun>();
+            IsComplete = isComplete;
+        }
+
+        public IReadOnlyList<TimelineKeyRun> Runs { get; }
+
+        /// <summary>False while the capture is still being read.</summary>
+        public bool IsComplete { get; }
+    }
+
+    /// <summary>
+    /// Where the timeline gets item visuals it cannot compute itself: video filmstrips, audio
+    /// waveforms, and the input-capture activity the cursor and keys rows preview. Every call is
+    /// non-blocking and returns what is ready <i>now</i>; misses are queued
     /// on the provider's own background workers and announced through <see cref="PreviewReady"/>.
     /// The timeline never learns how the pixels are produced — which is what lets it ship (and be
     /// driven manually) against <see cref="NullTimelinePreviewProvider"/> before the SDK's decoding
@@ -158,6 +250,14 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// analysis when it has not run yet.</summary>
         AudioPeaks GetAudioPeaks(in AudioPeaksRequest request);
 
+        /// <summary>The pointer activity that is ready for <paramref name="request"/>; starts
+        /// reading the capture when it has not been read yet.</summary>
+        CursorActivity GetCursorActivity(in CursorActivityRequest request);
+
+        /// <summary>The keystroke runs that are ready for <paramref name="request"/>; starts
+        /// reading the capture when it has not been read yet.</summary>
+        KeyRuns GetKeyRuns(in KeyRunsRequest request);
+
         /// <summary>Tells the provider which timeline span is on screen so it can prioritize (and
         /// abandon) decoding work as the user scrolls and zooms. Advisory: a provider is free to
         /// ignore it.</summary>
@@ -165,7 +265,7 @@ namespace Clowd.UI.VideoEditor.Timeline
     }
 
     /// <summary>
-    /// The do-nothing provider: empty filmstrips, silent waveforms, no events. The timeline's
+    /// The do-nothing provider: empty filmstrips, silent waveforms, a still pointer, no events. The timeline's
     /// default, so it is never null-checked, and the placeholder until the SDK's thumbnail and
     /// waveform services land.
     /// </summary>
@@ -184,6 +284,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         public ThumbnailStrip GetThumbnails(in ThumbnailRequest request) => ThumbnailStrip.Empty;
 
         public AudioPeaks GetAudioPeaks(in AudioPeaksRequest request) => AudioPeaks.Silent(request);
+
+        public CursorActivity GetCursorActivity(in CursorActivityRequest request) => CursorActivity.None(request);
+
+        public KeyRuns GetKeyRuns(in KeyRunsRequest request) => KeyRuns.None;
 
         public void SetViewport(long startTicks, long endTicks)
         {

@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Thumbs;
@@ -19,7 +21,10 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// resolved from the session's <see cref="Project"/> (items reference a source by id, the
     /// decoders want a path) and adapted to the shapes <see cref="ITimelinePreviewProvider"/>
     /// promises: Avalonia bitmaps instead of BGRA buffers, peaks re-bucketed to whatever the
-    /// current zoom asked for, and <see cref="PreviewReady"/> on the UI thread.
+    /// current zoom asked for, and <see cref="PreviewReady"/> on the UI thread. The input
+    /// overlays' previews ride along: the recording's capture sidecar is read once on a pool
+    /// thread (through the SDK's own process-wide <see cref="InputActivity"/> cache, which the
+    /// composer shares) and announced the same way.
     ///
     /// <para>
     /// Both SDK providers announce progress on their own threads; this class coalesces those into
@@ -55,6 +60,11 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private readonly Dictionary<(Guid SourceId, int StreamIndex), PeaksCache> _peaks =
             new Dictionary<(Guid, int), PeaksCache>();
+
+        /// <summary>One per capture file in use, by path: its background read and the cursor/keys
+        /// projections built from it.</summary>
+        private readonly Dictionary<string, CaptureEntry> _captures =
+            new Dictionary<string, CaptureEntry>(StringComparer.OrdinalIgnoreCase);
 
         private long _viewStartTicks;
         private long _viewEndTicks;
@@ -137,6 +147,37 @@ namespace Clowd.UI.VideoEditor.Timeline
             return cache.Project(request, snapshot);
         }
 
+        public CursorActivity GetCursorActivity(in CursorActivityRequest request)
+        {
+            if (_disposed)
+                return CursorActivity.None(request);
+
+            var entry = CaptureFor(request.SourceId);
+            if (entry == null)
+                return CursorActivity.None(request);
+
+            var motion = entry.Motion;
+            return motion == null ? CursorActivity.Pending(request) : entry.Cursor.Project(request, motion);
+        }
+
+        public KeyRuns GetKeyRuns(in KeyRunsRequest request)
+        {
+            if (_disposed)
+                return KeyRuns.None;
+
+            var entry = CaptureFor(request.SourceId);
+            if (entry == null)
+                return KeyRuns.None;
+
+            // segmentation itself is cheap once the capture is in memory (and cached per setting
+            // by the SDK); only the read is deferred, so a run request waits on the same load the
+            // cursor row started.
+            if (entry.Motion == null)
+                return KeyRuns.Pending;
+
+            return entry.Keys.Project(request, entry.Path);
+        }
+
         /// <summary>
         /// Queues waveform analysis for every audio stream the project references, ahead of the
         /// first paint. Rows are painted top-down (video above audio), so without this the
@@ -154,6 +195,21 @@ namespace Clowd.UI.VideoEditor.Timeline
             var project = _session.Project;
             if (project?.Tracks == null || project.Items == null)
                 return;
+
+            // the overlay rows' captures too: the read is a file parse on a pool thread, and
+            // starting it here rather than at first paint is what lets the rows draw full on the
+            // first frame of a reopened project
+            foreach (var item in project.Items)
+            {
+                var sourceId = item.Content switch
+                {
+                    CursorContent cursor => cursor.SourceId,
+                    KeyboardContent keyboard => keyboard.SourceId,
+                    _ => Guid.Empty,
+                };
+                if (sourceId != Guid.Empty)
+                    CaptureFor(sourceId);
+            }
 
             var seen = new HashSet<(Guid SourceId, int StreamIndex)>();
             foreach (var track in project.Tracks)
@@ -214,6 +270,22 @@ namespace Clowd.UI.VideoEditor.Timeline
                 }
             }
 
+            if (_captures.Count > 0)
+            {
+                List<string> deadCaptures = null;
+                foreach (var pair in _captures)
+                {
+                    if (ResolveCapturePath(pair.Value.SourceId) == null)
+                        (deadCaptures ??= new List<string>()).Add(pair.Key);
+                }
+
+                if (deadCaptures != null)
+                {
+                    foreach (var key in deadCaptures)
+                        _captures.Remove(key);
+                }
+            }
+
             if (_peaks.Count > 0)
             {
                 List<(Guid SourceId, int StreamIndex)> deadPeaks = null;
@@ -246,6 +318,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 strip.Dispose();
             _strips.Clear();
             _peaks.Clear();
+            _captures.Clear();
         }
 
         private string ResolvePath(Guid sourceId)
@@ -253,6 +326,39 @@ namespace Clowd.UI.VideoEditor.Timeline
             var project = _session.Project;
             var source = project?.Sources?.FirstOrDefault(s => s.Id == sourceId);
             return String.IsNullOrEmpty(source?.Path) ? null : source.Path;
+        }
+
+        private string ResolveCapturePath(Guid sourceId)
+        {
+            var project = _session.Project;
+            var source = project?.Sources?.FirstOrDefault(s => s.Id == sourceId);
+            return String.IsNullOrEmpty(source?.InputCapturePath) ? null : source.InputCapturePath;
+        }
+
+        /// <summary>The capture entry for a source, starting its read on first sight. Null for a
+        /// source with no capture sidecar (the rows then draw nothing, completely).</summary>
+        private CaptureEntry CaptureFor(Guid sourceId)
+        {
+            var path = ResolveCapturePath(sourceId);
+            if (path == null)
+                return null;
+
+            if (_captures.TryGetValue(path, out var entry))
+                return entry;
+
+            entry = new CaptureEntry(sourceId, path);
+            _captures[path] = entry;
+
+            // the SDK's InputCapture.Get blocks for the parse and is what the composer reads
+            // through too; running it here means whichever of the two asks first pays, and the
+            // timeline never pays on its thread.
+            Task.Run(() =>
+            {
+                var motion = InputActivity.GetCursorMotion(path);
+                Volatile.Write(ref entry.Motion, motion);
+                OnProviderChanged(this, EventArgs.Empty);
+            });
+            return entry;
         }
 
         /// <summary>Aims one strip's refinement at the parts of it that are on screen — one span
@@ -546,6 +652,135 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _request = request;
                 _peaks = new AudioPeaks(request.SourceInTicks, perBucket, minMax, analyzed);
                 return _peaks;
+            }
+        }
+
+        /// <summary>One capture file: its background read, and the projections built from it.</summary>
+        private sealed class CaptureEntry
+        {
+            public CaptureEntry(Guid sourceId, string path)
+            {
+                SourceId = sourceId;
+                Path = path;
+            }
+
+            public Guid SourceId { get; }
+
+            public string Path { get; }
+
+            /// <summary>Set once by the pool thread when the read finishes; null until then.</summary>
+            public CursorMotion Motion;
+
+            public CursorCache Cursor { get; } = new CursorCache();
+
+            public KeyRunsCache Keys { get; } = new KeyRunsCache();
+        }
+
+        /// <summary>
+        /// Re-buckets one recording's per-frame pointer speed to the bucket size the current zoom
+        /// asked for — the peaks' <see cref="PeaksCache"/> for the cursor row. Each output bucket
+        /// takes the fastest frame it covers (a flick must survive being zoomed out, just as a
+        /// transient survives in a waveform), and the clicks whose press lands in the span are
+        /// carried over in source ticks. The last result is kept for the unchanged-request case.
+        /// </summary>
+        internal sealed class CursorCache
+        {
+            private CursorMotion _motion;
+            private CursorActivityRequest _request;
+            private CursorActivity _activity;
+
+            public CursorActivity Project(in CursorActivityRequest request, CursorMotion motion)
+            {
+                if (_activity != null && ReferenceEquals(motion, _motion) && _request == request)
+                    return _activity;
+
+                _motion = motion;
+                _request = request;
+                _activity = Build(request, motion);
+                return _activity;
+            }
+
+            /// <summary>The uncached projection, for tests.</summary>
+            internal static CursorActivity Build(in CursorActivityRequest request, CursorMotion motion)
+            {
+                var perBucket = Math.Max(1, request.TicksPerBucket);
+                var count = (int)Math.Clamp((request.DurationTicks + perBucket - 1) / perBucket, 0, Int32.MaxValue / 2);
+                var buckets = new float[count];
+
+                const double ticksPerMs = TimeSpan.TicksPerMillisecond;
+                var startMs = request.SourceInTicks / ticksPerMs;
+                var endMs = (request.SourceInTicks + (long)count * perBucket) / ticksPerMs;
+
+                // one forward walk over the frames in range: frame times and bucket edges are both
+                // ascending, so each frame lands in exactly one bucket without a search per bucket
+                var times = motion.TimesMs;
+                var speed = motion.Speed;
+                var bucket = 0;
+                for (var f = motion.FirstFrameAtOrAfter(startMs); f < times.Count && times[f] < endMs; f++)
+                {
+                    var ticks = (long)Math.Round(times[f] * ticksPerMs) - request.SourceInTicks;
+                    var index = (int)Math.Clamp(ticks / perBucket, 0, count - 1);
+                    if (index > bucket)
+                        bucket = index;
+                    if (speed[f] > buckets[bucket])
+                        buckets[bucket] = speed[f];
+                }
+
+                List<CursorClickSpan> clicks = null;
+                var all = motion.Clicks;
+                for (var c = motion.FirstClickAtOrAfter(startMs); c < all.Count && all[c].DownMs < endMs; c++)
+                {
+                    (clicks ??= new List<CursorClickSpan>()).Add(new CursorClickSpan(
+                        (long)Math.Round(all[c].DownMs * ticksPerMs), (long)Math.Round(all[c].UpMs * ticksPerMs)));
+                }
+
+                return new CursorActivity(request.SourceInTicks, perBucket, buckets, clicks, true);
+            }
+        }
+
+        /// <summary>The keystroke runs intersecting a requested span, in source ticks, segmented
+        /// by the request's own pause-break and filter. Last result kept for the unchanged case.</summary>
+        internal sealed class KeyRunsCache
+        {
+            private KeyRunsRequest _request;
+            private IReadOnlyList<KeyRunSpan> _spans;
+            private KeyRuns _runs;
+
+            public KeyRuns Project(in KeyRunsRequest request, string capturePath)
+            {
+                var spans = InputActivity.GetKeyRuns(capturePath, Math.Max(0, request.PauseBreakMs), request.Filter);
+                if (_runs != null && ReferenceEquals(spans, _spans) && _request == request)
+                    return _runs;
+
+                _spans = spans;
+                _request = request;
+                _runs = Build(request, spans);
+                return _runs;
+            }
+
+            /// <summary>The uncached projection, for tests.</summary>
+            internal static KeyRuns Build(in KeyRunsRequest request, IReadOnlyList<KeyRunSpan> spans)
+            {
+                const double ticksPerMs = TimeSpan.TicksPerMillisecond;
+                var startMs = request.SourceInTicks / ticksPerMs;
+                var endMs = (request.SourceInTicks + request.DurationTicks) / ticksPerMs;
+
+                List<TimelineKeyRun> runs = null;
+                foreach (var span in spans)
+                {
+                    // runs never overlap and both bounds are monotonic, so the first one starting
+                    // past the span ends the walk
+                    if (span.StartMs >= endMs)
+                        break;
+                    if (span.EndMs < startMs)
+                        continue;
+
+                    (runs ??= new List<TimelineKeyRun>()).Add(new TimelineKeyRun(
+                        (long)Math.Round(span.StartMs * ticksPerMs), (long)Math.Round(span.EndMs * ticksPerMs),
+                        span.KeyCount));
+                }
+
+                return runs == null ? KeyRuns.None : new KeyRuns(runs, true);
             }
         }
     }
