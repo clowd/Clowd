@@ -54,6 +54,9 @@ pub struct MouseInfo {
 /// frame rows) — the editor keys its themed cursor assets off them, so the
 /// list is append-only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// The variant list is the full wire contract; only the Windows classifier
+// maps every stock cursor to one, so off Windows several are never built.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub enum CursorKind {
     Arrow,
     IBeam,
@@ -116,6 +119,7 @@ pub struct CursorState {
     /// consumed by `take_cursor_sprite` so sprite pixels always match the
     /// sampled position. Windows: the live `HCURSOR`; macOS: 0 (identity is
     /// the cursor seed inside the classifier, not a handle).
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     pub handle: isize,
 }
 

@@ -32,7 +32,7 @@ fn test_dir(name: &str) -> PathBuf {
 fn write_y4m(path: &Path, w: usize, h: usize, fps: u32, seconds: u32) {
     use std::io::BufWriter;
     let mut f = BufWriter::new(std::fs::File::create(path).unwrap());
-    write!(f, "YUV4MPEG2 W{w} H{h} F{fps}:1 Ip A1:1 C420mpeg2\n").unwrap();
+    writeln!(f, "YUV4MPEG2 W{w} H{h} F{fps}:1 Ip A1:1 C420mpeg2").unwrap();
     let (cw, ch) = (w / 2, h / 2);
     let mut y_plane = vec![0u8; w * h];
     let mut u_plane = vec![0u8; cw * ch];

@@ -301,7 +301,6 @@ mod cursor_shape {
     type Msg0Ptr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
     type Msg0Len = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
     type Msg1Isize = unsafe extern "C" fn(*mut c_void, *mut c_void, isize) -> bool;
-    type Msg1Ptr = unsafe extern "C" fn(*mut c_void, *mut c_void, *mut c_void) -> *mut c_void;
     type Msg1Usize = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
     type Msg2UsizePtr =
         unsafe extern "C" fn(*mut c_void, *mut c_void, usize, *mut c_void) -> *mut c_void;
@@ -352,15 +351,6 @@ mod cursor_shape {
         }
         let f: Msg0Len = std::mem::transmute(objc_msgSend as *const ());
         f(obj, selector(sel))
-    }
-
-    /// `[obj sel:arg]` with an object argument, returning an object pointer.
-    unsafe fn msg1(obj: *mut c_void, sel: &str, arg: *mut c_void) -> *mut c_void {
-        if obj.is_null() {
-            return std::ptr::null_mut();
-        }
-        let f: Msg1Ptr = std::mem::transmute(objc_msgSend as *const ());
-        f(obj, selector(sel), arg)
     }
 
     /// `[obj sel:index]`, returning an object pointer.

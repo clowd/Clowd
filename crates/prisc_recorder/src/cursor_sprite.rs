@@ -49,6 +49,7 @@ pub struct RawSprite {
 /// change), so re-encoding it would only add cost and a decode dependency.
 pub enum SpritePixels {
     /// Raw BGRA, straight alpha, `w * h * 4` bytes.
+    #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
     Bgra(Vec<u8>),
     /// An already-encoded PNG.
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -124,14 +125,20 @@ pub fn fnv1a64(state: u64, bytes: &[u8]) -> u64 {
 // straight in here)
 // ---------------------------------------------------------------------------
 
+// Only the Windows rasterizer calls into this section (the tests below cover
+// it on every host), so off Windows each item here is dead but deliberately
+// kept — hence the `cfg_attr`s.
+
 /// Scanline stride in bytes of a 1bpp DIB: rows are DWORD-aligned.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn mono_stride(w: u32) -> usize {
-    ((w as usize + 31) / 32) * 4
+    (w as usize).div_ceil(32) * 4
 }
 
 /// Splits a mono cursor's double-height mask bitmap (AND plane stacked on top
 /// of the XOR plane) into its two planes. `h` is the cursor height, i.e. half
 /// the bitmap height; `None` if the buffer is too short.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn split_mono_planes(data: &[u8], h: u32, stride: usize) -> Option<(&[u8], &[u8])> {
     let half = h as usize * stride;
     if data.len() < half * 2 {
@@ -150,6 +157,7 @@ pub fn split_mono_planes(data: &[u8], h: u32, stride: usize) -> Option<(&[u8], &
 /// | 0   | 1   | bmp opaque white, mask transparent                      |
 /// | 1   | 0   | bmp transparent, mask opaque black (no-op, fidelity)    |
 /// | 1   | 1   | bmp transparent, mask opaque white (screen invert)      |
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn decompose_mono(and: &[u8], xor: &[u8], w: u32, h: u32, stride: usize) -> (Vec<u8>, Vec<u8>) {
     let px = (w as usize) * (h as usize) * 4;
     let mut bmp = vec![0u8; px];
@@ -182,6 +190,7 @@ pub fn decompose_mono(and: &[u8], xor: &[u8], w: u32, h: u32, stride: usize) -> 
 /// 0xC0 — is a screen invert (mask white), anything else is approximated as
 /// an opaque `bmp` pixel (see the module docs). The mask is `None` when no
 /// pixel needed it.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn decompose_masked_color(
     color: &[u8],
     and: &[u8],
@@ -217,6 +226,7 @@ pub fn decompose_masked_color(
 /// Whether a BGRA buffer carries any alpha at all — distinguishes a modern
 /// alpha cursor (whose AND mask is vestigial) from a legacy masked one whose
 /// 32bpp plane leaves the alpha channel at zero everywhere.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 pub fn has_alpha(bgra: &[u8]) -> bool {
     bgra.chunks_exact(4).any(|p| p[3] != 0)
 }

@@ -465,14 +465,13 @@ impl Recorder {
             Err(AudioBuildError::Args(e)) => fail_args(e),
             Err(AudioBuildError::Create(e)) => fail(e),
         };
-        let mut channel: u32 = 1;
-        for source in speakers_built
-            .sources
-            .iter()
-            .chain(mics_built.sources.iter())
-        {
+        for (channel, source) in (1_u32..).zip(
+            speakers_built
+                .sources
+                .iter()
+                .chain(mics_built.sources.iter()),
+        ) {
             context.set_output_source(channel, Some(source));
-            channel += 1;
         }
         // Output channels carry the sources; the mixer masks decide which
         // audio *track* each one lands in.
