@@ -204,6 +204,7 @@ impl WindowHandle {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn save_to_file_with_peek(
         &self,
         selection: ScreenRect,

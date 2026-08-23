@@ -200,6 +200,7 @@ where
 /// The dialog opens on the shell's last save path with the shell's filename
 /// pattern already rendered into the name box, so saving here and saving from
 /// the editor put identically named files in the same folder (`filename_pattern`).
+#[allow(clippy::too_many_arguments)]
 pub fn save_to_file_with_peek(
     selection: ScreenRect,
     corner_radius: f32,

@@ -184,12 +184,14 @@ fn claim_payload_stdout() -> anyhow::Result<std::fs::File> {
     #[cfg(unix)]
     let payload = {
         use std::os::fd::AsFd;
-        std::fs::File::from(std::io::stdout().as_fd().try_clone_to_owned()?)
+        let stdout = std::io::stdout();
+        std::fs::File::from(stdout.as_fd().try_clone_to_owned()?)
     };
     #[cfg(windows)]
     let payload = {
         use std::os::windows::io::AsHandle;
-        std::fs::File::from(std::io::stdout().as_handle().try_clone_to_owned()?)
+        let stdout = std::io::stdout();
+        std::fs::File::from(stdout.as_handle().try_clone_to_owned()?)
     };
 
     // SAFETY: a plain descriptor-table edit. `dup2` closes the old fd 1 — the
