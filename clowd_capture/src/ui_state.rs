@@ -11,6 +11,7 @@ pub struct UiStateBuildInput<'a> {
     /// Invariant for the whole session — build once and clone the Arc.
     pub monitors: Arc<[UiMonitor]>,
     pub selection: Option<ScreenRect>,
+    pub selection_radius: f32,
     pub captured: bool,
     pub mouse_down: bool,
     pub dragging: bool,
@@ -73,6 +74,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
     UiSharedState {
         monitors: input.monitors,
         selection: input.selection,
+        selection_radius: input.selection_radius,
         captured: input.captured,
         mouse_down: input.mouse_down,
         dragging: input.dragging,

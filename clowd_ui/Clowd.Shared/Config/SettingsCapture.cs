@@ -109,6 +109,25 @@ namespace Clowd.Config
             set => Set(ref _tipsMode, value);
         }
 
+        /// <summary>
+        /// Whether a selection made by picking a window (hover and click, <c>W</c>, the
+        /// capture-window hotkey) takes on that window's OS corner radius — rounded dashed
+        /// border in the overlay, transparent corners in the copied / saved / uploaded image
+        /// — instead of a sharp rectangle that ships a few pixels of whatever sat behind the
+        /// window. Dragged selections stay square either way (clowd_capture
+        /// <c>--no-rounded-corners</c>). On by default: it is what the screen actually shows.
+        /// </summary>
+        [Category("Behavior")]
+        [DisplayName("Rounded window corners")]
+        [Description("When a window is selected, match its rounded corners: the selection border " +
+                     "follows the window's corner radius and the corners are transparent in the " +
+                     "copied or saved image. Dragged selections are always square.")]
+        public bool RoundedWindowCorners
+        {
+            get => _roundedWindowCorners;
+            set => Set(ref _roundedWindowCorners, value);
+        }
+
         [Category("Behavior")]
         [DisplayName("Obscured window peek")]
         [Description("Capture obstructed windows and show a peek-through composite when hovering them")]
@@ -193,6 +212,7 @@ namespace Clowd.Config
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
+        private bool _roundedWindowCorners = true;
         private bool _uploadButtonEnabled = true;
         private bool _scrollingCaptureEnabled = true;
         private bool _scrollCaptureRewindToTop = true;

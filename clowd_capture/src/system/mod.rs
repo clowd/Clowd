@@ -1,5 +1,10 @@
+pub(crate) mod corners;
+
 #[cfg(windows)]
 mod win_browser;
+
+#[cfg(windows)]
+mod win_corners;
 
 #[cfg(windows)]
 pub(crate) mod win_capture;
@@ -26,6 +31,9 @@ pub use win_walker::WindowWalker;
 mod mac_browser;
 
 #[cfg(target_os = "macos")]
+mod mac_corners;
+
+#[cfg(target_os = "macos")]
 pub(crate) mod mac_capture;
 
 #[cfg(target_os = "macos")]
@@ -43,6 +51,18 @@ mod mac_walker;
 #[cfg(target_os = "macos")]
 use clowd_rust_core::geometry::{LogicalPoint, LogicalSize};
 use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenPointF, ScreenRect, WindowPoint};
+
+/// What the walker suggests capturing for a point: the rect, plus the
+/// corner radius (physical px, 0 = square) the OS composites that window
+/// with. The radius is non-zero only when `rect` IS a top-level window's
+/// own bounds — a child-window region on Windows has square corners
+/// however round its parent is — and only when the walker was told to
+/// look (`rounded_corners` in [`WindowWalker::snapshot`]).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct WindowTarget {
+    pub rect: ScreenRect,
+    pub corner_radius: f32,
+}
 
 /// Full hit-test result including peek metadata.
 #[derive(Debug, Clone)]
@@ -374,8 +394,10 @@ impl SystemInterop {
     /// before overlay windows are created.
     /// `visibility_threshold`: minimum visible fraction (0.0–1.0) for a
     /// window to be included. Windows with less visible area are dropped.
-    pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32) -> WindowWalker {
-        WindowWalker::snapshot(monitors, visibility_threshold)
+    /// `rounded_corners`: whether to resolve each window's corner radius
+    /// (see [`WindowTarget`]); off = every target is square.
+    pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32, rounded_corners: bool) -> WindowWalker {
+        WindowWalker::snapshot(monitors, visibility_threshold, rounded_corners)
     }
 
     pub fn capture_peek_image(window: &ObstructedWindow) -> Option<(Vec<u8>, u32, u32)> {
@@ -462,8 +484,8 @@ impl SystemInterop {
         mac_monitor::all_monitors().expect("Unable to enumerate monitors")
     }
 
-    pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32) -> WindowWalker {
-        WindowWalker::snapshot(monitors, visibility_threshold)
+    pub fn snapshot_windows(monitors: &[MonitorInfo], visibility_threshold: f32, rounded_corners: bool) -> WindowWalker {
+        WindowWalker::snapshot(monitors, visibility_threshold, rounded_corners)
     }
 
     pub fn capture_peek_image(window: &ObstructedWindow) -> Option<(Vec<u8>, u32, u32)> {

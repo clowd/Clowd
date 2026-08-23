@@ -40,6 +40,7 @@ namespace Clowd.Shared.Tests
             Assert.Equal(new SimpleKeyGesture(Key.Snapshot), loaded.Hotkeys.CaptureRegionShortcut);
             Assert.Equal(Colors.Transparent, loaded.Editor.CanvasBackground);
             Assert.Equal(0.80, loaded.Capture.ObscuredWindowDetectionThreshold);
+            Assert.True(loaded.Capture.RoundedWindowCorners);
             Assert.Empty(loaded.Editor.Tools);
         }
 
@@ -52,6 +53,7 @@ namespace Clowd.Shared.Tests
             original.General.LastSavePath = @"C:\Users\test\Pictures";
             original.General.ConfirmClose = false;
             original.Capture.ScreenshotWithCursor = false;
+            original.Capture.RoundedWindowCorners = false;
             original.Capture.TipsMode = CapturerTipsMode.Off; // enum by name (non-default)
             original.Capture.ObscuredWindowDetectionThreshold = 0.55; // invariant double
             original.Editor.StartupPadding = 42;
@@ -90,6 +92,7 @@ namespace Clowd.Shared.Tests
             Assert.Equal(@"C:\Users\test\Pictures", loaded.General.LastSavePath);
             Assert.False(loaded.General.ConfirmClose);
             Assert.False(loaded.Capture.ScreenshotWithCursor);
+            Assert.False(loaded.Capture.RoundedWindowCorners);
             Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
             Assert.Equal(0.55, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.Equal(42, loaded.Editor.StartupPadding);

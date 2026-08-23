@@ -88,6 +88,7 @@ impl CaptureSession {
             render_msg_txs,
             settings.obscured_window_peek_enabled,
             settings.obscured_window_detection_threshold,
+            settings.rounded_window_corners,
             timings.clone(),
         );
 
@@ -310,6 +311,7 @@ fn spawn_walker_job(
     render_msg_txs: Vec<mpsc::Sender<RenderMsg>>,
     peek_enabled: bool,
     visibility_threshold: f32,
+    rounded_corners: bool,
     timings: Arc<StartupTimings>,
 ) -> (WalkerLatch, PeekImagesLatch) {
     let walker_latch = Arc::new(Latch::new());
@@ -325,13 +327,21 @@ fn spawn_walker_job(
                 .background
                 .walker_start
                 .set_once(timings.t_start.elapsed());
-            let walker = SystemInterop::snapshot_windows(&monitors, visibility_threshold);
+            let walker = Arc::new(SystemInterop::snapshot_windows(&monitors, visibility_threshold, rounded_corners));
             let obstructed = if peek_enabled { walker.obstructed_windows() } else { Vec::new() };
-            latch.set(Arc::new(walker));
+            latch.set(walker.clone());
             timings
                 .background
                 .walker
                 .set_once(timings.t_start.elapsed());
+
+            // Only now, with hover hit-testing already live off the
+            // published snapshot: ask the OS for each window's real corner
+            // radius where that is a per-window round-trip (macOS; a no-op
+            // on Windows, which resolved it during the snapshot). Ahead of
+            // the peek captures because it touches every hover, not only
+            // the obstructed windows.
+            walker.probe_corner_radii(&monitors);
 
             if !peek_enabled {
                 return;
