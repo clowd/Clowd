@@ -174,6 +174,23 @@
                 <Setter Property="IsVisible" Value="True" />
             </Style>
         </ControlTheme>
+
+        <!--  The add-track tips are rich panels (ve:TrackTip) rather than a line of text, and they
+              draw their own dark chrome, so the ToolTip around them is a bare presenter: no
+              theme padding, background or border to double up on the panel's.  -->
+        <ControlTheme x:Key="TrackTipToolTipTheme" TargetType="ToolTip">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter
+                        Padding="{TemplateBinding Padding}"
+                        Content="{TemplateBinding Content}"
+                        ContentTemplate="{TemplateBinding ContentTemplate}" />
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
     </Window.Resources>
 
     <Grid x:Name="rootGrid" Background="#535353">
@@ -225,12 +242,12 @@
                 <TextBlock
                     x:Name="txtZoom"
                     Margin="4,0,0,0"
-                    MinWidth="38"
+                    MinWidth="34"
                     VerticalAlignment="Center"
                     Foreground="#CCCCCC" />
                 <controls:CaptionedCheckBox
                     x:Name="chkFit"
-                    Margin="8,0,0,0"
+                    Margin="2,0,8,0"
                     Caption="Fit"
                     IsChecked="{Binding ElementName=preview, Path=FitToWindow, Mode=TwoWay}"
                     ToolTip.Tip="Scale the preview to fill the window; off caps it at 100%" />
@@ -313,69 +330,164 @@
                 Orientation="Vertical"
                 UseLayoutRounding="True">
 
+                <!--  Each add button carries a rich tip (ve:TrackTip: header, description, demo
+                      GIF, and a reason when the button is disabled) in place of a line of text.
+                      The Tip is a ToolTip instance, which the tooltip service uses as-is, so it can
+                      wear the bare TrackTipToolTipTheme. Placed to the right of the strip, and
+                      shown on disabled buttons too: the speed and input-overlay buttons set the
+                      tip's DisabledReason from code-behind (RefreshAddSpeedButton,
+                      RefreshInputOverlayButtons) to say why.  -->
                 <controls:ToolButton
                     x:Name="btnImportMedia"
                     Padding="6"
                     Command="{Binding CommandImportMedia}"
                     IconPath="{StaticResource IconVideoClip}"
-                    ToolTip.Tip="Import video or audio at the playhead" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipImportMedia"
+                                DemoName="video"
+                                Description="Imports a video file, including its audio, and places it on a new track at the playhead. The clip plays over your recording and can be moved, trimmed and resized like any other item."
+                                Header="Add Video Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
                 <controls:ToolButton
                     x:Name="btnImportAudio"
                     Padding="6"
                     Command="{Binding CommandImportAudio}"
                     IconPath="{StaticResource IconMusicNote}"
-                    ToolTip.Tip="Import an audio track at the playhead" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipImportAudio"
+                                DemoName="audio"
+                                Description="Imports an audio file and places it on a new track at the playhead. Use it for music, narration or sound effects layered under your recording."
+                                Header="Add Audio Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
                 <controls:ToolButton
                     x:Name="btnAddImage"
                     Padding="6"
                     Command="{Binding CommandAddImage}"
                     IconPath="{StaticResource IconImage}"
-                    ToolTip.Tip="Add an image at the playhead" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddImage"
+                                DemoName="image"
+                                Description="Places an image on a new track at the playhead. Handy for logos, screenshots or callouts, which you can then move and resize in the preview."
+                                Header="Add Image Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
                 <controls:ToolButton
                     x:Name="btnAddText"
                     Padding="7"
                     Command="{Binding CommandAddText}"
                     IconPath="{StaticResource IconToolText}"
-                    ToolTip.Tip="Add text at the playhead" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddText"
+                                DemoName="text"
+                                Description="Adds a text card at the playhead and opens it for editing. Type a title or caption, then style and position it in the preview."
+                                Header="Add Text Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
                 <controls:ToolButton
                     x:Name="btnAddZoom"
                     Padding="6"
                     Command="{Binding CommandAddZoomEffect}"
                     IconPath="{StaticResource IconZoomEffect}"
-                    ToolTip.Tip="Add zoom" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddZoom"
+                                DemoName="zoom"
+                                Description="Zooms in on part of the frame for a stretch of the timeline, easing in and out so attention lands where you want it. Drag the focus point in the preview to choose what gets magnified."
+                                Header="Add Zoom Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
-                <!--  tooltip swaps in code-behind with where the playhead stands (the disabled
-                      state explains itself), so it shows on the disabled button too  -->
                 <controls:ToolButton
                     x:Name="btnAddSpeed"
                     Padding="6"
                     Command="{Binding CommandAddSpeedEffect}"
                     IconPath="{StaticResource IconSpeedEffect}"
-                    ToolTip.ShowOnDisabled="True"
-                    ToolTip.Tip="Add speed change" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddSpeed"
+                                DemoName="speed"
+                                Description="Speeds up or slows down the stretch of the recording under the item. Great for skipping past waiting and loading, or slowing down a moment that matters."
+                                Header="Add Speed Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
-                <!--  the two input-overlay rows: one each per project, and only for a recording
-                      that carries input-capture data — so both tooltips swap in code-behind
-                      (RefreshInputOverlayButtons) to say which of the two reasons disabled them  -->
                 <controls:ToolButton
                     x:Name="btnAddCursor"
                     Padding="6"
                     Command="{Binding CommandAddCursorTrack}"
                     IconPath="{StaticResource IconCursorArrow}"
-                    ToolTip.ShowOnDisabled="True"
-                    ToolTip.Tip="Add Cursor Track" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddCursor"
+                                DemoName="cursor"
+                                Description="Draws the recorded mouse cursor over the video, with click highlights and a pointer style of your choosing. Available when the recording captured input."
+                                Header="Add Cursor Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
                 <controls:ToolButton
                     x:Name="btnAddKeyboard"
                     Padding="6"
                     Command="{Binding CommandAddKeyboardTrack}"
                     IconPath="{StaticResource IconKeyboard}"
-                    ToolTip.ShowOnDisabled="True"
-                    ToolTip.Tip="Add Keyboard Track" />
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddKeyboard"
+                                DemoName="keyboard"
+                                Description="Shows the keys you pressed as an overlay while the recording plays, so shortcuts are easy to follow. Available when the recording captured input."
+                                Header="Add Keyboard Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
 
                 <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton

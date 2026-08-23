@@ -61,6 +61,11 @@ namespace Clowd.UI.VideoEditor.Timeline
         private readonly Border _spacer;
         private readonly Border _scrollHost;
 
+        /// <summary>Holds a two-finger gesture to one axis for its whole length — see
+        /// <see cref="TimelineScrollAxisLatch"/>. Per-control rather than static: two timelines are
+        /// two independent gestures.</summary>
+        private readonly TimelineScrollAxisLatch _scrollAxis = new TimelineScrollAxisLatch();
+
         private EditorSession _session;
         private ITimelinePreviewProvider _previewProvider = NullTimelinePreviewProvider.Instance;
         private bool _scrubbing;
@@ -482,9 +487,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         private void OnTunnelPointerWheel(object sender, PointerWheelEventArgs e)
         {
             // what the gesture means is decided by TimelineScrollInput (pure, and unit-tested for
-            // both platforms); this method only carries it out.
+            // both platforms); this method only carries it out. The latch is fed every event so its
+            // idle timer keeps running, and it is what stops a swipe that is mostly sideways from
+            // zooming on the events where the fingers happen to drift up or down.
+            var axis = _scrollAxis.Resolve(e.Delta.X, e.Delta.Y, e.Timestamp);
             var decision = TimelineScrollInput.DecideWheel(e.Delta.X, e.Delta.Y,
-                ToScrollModifiers(e.KeyModifiers), OperatingSystem.IsMacOS());
+                ToScrollModifiers(e.KeyModifiers), OperatingSystem.IsMacOS(), axis);
 
             switch (decision.Action)
             {
@@ -521,6 +529,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// </summary>
         private void OnTouchPadMagnify(object sender, PointerDeltaEventArgs e)
         {
+            // a pinch is a different gesture from the scroll that may have preceded it; end that one
+            // here so its axis cannot outlive it and colour the swipe that follows the pinch.
+            _scrollAxis.Reset();
+
             var factor = TimelineScrollInput.ZoomFactorForMagnification(e.Delta.Y);
             if (factor == 1)
                 return;

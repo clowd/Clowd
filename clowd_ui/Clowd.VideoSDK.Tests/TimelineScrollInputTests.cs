@@ -184,6 +184,225 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(TimelineScrollAction.Zoom, Wheel(1, 0, Win).Action);
         }
 
+        // ------------------------------------------------- the axis latch: one swipe, one meaning
+
+        // A swipe as the trackpad actually reports it: mostly the intended axis, with drift, a
+        // couple of frames that lean the other way, and a decaying momentum tail.
+        private static TimelineScrollDecision[] Swipe(TimelineScrollAxisLatch latch,
+            (double x, double y)[] events, double startMs = 1000, double frameMs = 8)
+        {
+            var result = new TimelineScrollDecision[events.Length];
+            for (var i = 0; i < events.Length; i++)
+            {
+                var (x, y) = events[i];
+                var axis = latch.Resolve(x, y, startMs + i * frameMs);
+                result[i] = TimelineScrollInput.DecideWheel(x, y, TimelineScrollModifiers.None, Mac, axis);
+            }
+
+            return result;
+        }
+
+        [Fact]
+        public void A_horizontal_swipe_never_zooms_even_on_the_frames_that_drift_vertically()
+        {
+            // this is the bug: without the latch, events 3 and 6 are "dominantly vertical" on their
+            // own and each one jolted the zoom in the middle of a pan.
+            var decisions = Swipe(new TimelineScrollAxisLatch(), new[]
+            {
+                (-0.20, 0.01), (-0.42, -0.02), (-0.55, 0.03), (-0.04, 0.06),
+                (-0.50, 0.01), (-0.38, -0.01), (0.01, -0.05), (-0.22, 0.02),
+            });
+
+            Assert.DoesNotContain(decisions, d => d.Action == TimelineScrollAction.Zoom);
+            Assert.Contains(decisions, d => d.Action == TimelineScrollAction.PanHorizontal);
+        }
+
+        [Fact]
+        public void A_vertical_swipe_never_pans_even_on_the_frames_that_drift_sideways()
+        {
+            var decisions = Swipe(new TimelineScrollAxisLatch(), new[]
+            {
+                (0.01, -0.18), (-0.02, -0.40), (0.03, -0.52), (0.07, -0.03),
+                (0.01, -0.44), (-0.06, 0.02), (0.02, -0.30),
+            });
+
+            Assert.DoesNotContain(decisions, d => d.Action == TimelineScrollAction.PanHorizontal);
+            Assert.Contains(decisions, d => d.Action == TimelineScrollAction.Zoom);
+        }
+
+        [Fact]
+        public void The_axis_is_committed_within_the_first_few_pixels_of_travel()
+        {
+            // the commitment must not cost a visible amount of the gesture: at a typical opening
+            // delta it lands on the very first event, and by 6 px of travel it is always made.
+            var latch = new TimelineScrollAxisLatch();
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.2, 0.01, 1000));
+
+            // 0.2 * 50 px is past the threshold, so the drift on the frames that follow cannot
+            // change its mind — only movement worth SwitchTravelPx can.
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(0.0, -0.06, 1008));
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.3, -0.05, 1016));
+        }
+
+        [Fact]
+        public void A_gesture_that_opens_below_the_threshold_can_still_settle_on_the_other_axis()
+        {
+            // the first event of a swipe is often a 1 px twitch in a direction the user did not
+            // mean; nothing is latched until there is enough travel to be sure.
+            var latch = new TimelineScrollAxisLatch();
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.02, 0.0, 1000));
+            Assert.Equal(TimelineScrollAxis.Vertical, latch.Resolve(0.0, -0.30, 1008));
+
+            // and once it has settled there, the twitch it opened with is no longer competing
+            Assert.Equal(TimelineScrollAxis.Vertical, latch.Resolve(-0.02, -0.30, 1016));
+        }
+
+        [Fact]
+        public void Lifting_the_fingers_ends_the_gesture_so_the_next_one_decides_afresh()
+        {
+            // the same drift-sized event either way, so what is under test is the gesture boundary
+            // and not the size of the delta: inside the gesture it is drift and the axis holds,
+            // across the boundary it is the opening of a new swipe and decides that swipe's axis.
+            var latch = new TimelineScrollAxisLatch();
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.5, 0.0, 1000));
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(0.0, -0.06, 1100));
+
+            Assert.Equal(TimelineScrollAxis.Vertical,
+                latch.Resolve(0.0, -0.06, 1100 + TimelineScrollAxisLatch.IdleResetMs + 1));
+        }
+
+        // Replays a stream of identical events 8 ms apart — the cadence of a real trackpad — and
+        // returns the axis after each one.
+        private static TimelineScrollAxis[] Hold(TimelineScrollAxisLatch latch, double dx, double dy,
+            int count, ref double clockMs)
+        {
+            var axes = new TimelineScrollAxis[count];
+            for (var i = 0; i < count; i++)
+            {
+                axes[i] = latch.Resolve(dx, dy, clockMs);
+                clockMs += 8;
+            }
+
+            return axes;
+        }
+
+        [Fact]
+        public void A_deliberate_turn_changes_axis_without_lifting_the_fingers()
+        {
+            // the complaint the switch logic exists for: holding the axis against drift must not
+            // also mean that turning a pan into a zoom costs a lift and a wait.
+            var latch = new TimelineScrollAxisLatch();
+            var clock = 1000.0;
+
+            Assert.All(Hold(latch, -0.45, 0.01, 15, ref clock),
+                a => Assert.Equal(TimelineScrollAxis.Horizontal, a));
+
+            var turn = Hold(latch, 0.01, -0.45, 15, ref clock);
+            var flipped = Array.IndexOf(turn, TimelineScrollAxis.Vertical);
+
+            // within half a dozen events — around 50 ms, faster than a hand can lift and return
+            Assert.InRange(flipped, 0, 7);
+            Assert.All(turn[flipped..], a => Assert.Equal(TimelineScrollAxis.Vertical, a));
+
+            // and back again, so neither direction is the privileged one
+            var back = Hold(latch, -0.45, 0.01, 15, ref clock);
+            Assert.InRange(Array.IndexOf(back, TimelineScrollAxis.Horizontal), 0, 7);
+        }
+
+        [Fact]
+        public void Cross_axis_drift_never_turns_a_sustained_swipe()
+        {
+            // the other half of the bargain: the axis has to survive a long, wandering swipe with
+            // near-stalled frames in it, or the switch logic has simply reintroduced the bug.
+            var latch = new TimelineScrollAxisLatch();
+            var rng = new Random(7);
+            var clock = 1000.0;
+
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.45, 0.01, clock));
+            for (var i = 1; i < 400; i++)
+            {
+                clock += 8;
+
+                // 0.2-0.6 sideways with up to 0.08 of vertical wander, and every so often a frame
+                // where the fingers have all but stopped and the drift is all there is
+                var dx = i % 17 == 0 ? -0.02 : -(0.2 + rng.NextDouble() * 0.4);
+                var dy = (rng.NextDouble() - 0.5) * 0.16;
+                Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(dx, dy, clock));
+            }
+        }
+
+        [Fact]
+        public void A_committed_swipe_takes_more_to_overturn_than_a_barely_started_one()
+        {
+            // the hold is proportional to conviction, which is what keeps the same rule from being
+            // either too sticky mid-pan or too stubborn the instant after it commits.
+            var barely = new TimelineScrollAxisLatch();
+            var clock = 1000.0;
+            Hold(barely, -0.15, 0, 1, ref clock);
+            var barelyTurn = Array.IndexOf(Hold(barely, 0, -0.45, 12, ref clock), TimelineScrollAxis.Vertical);
+
+            var committed = new TimelineScrollAxisLatch();
+            clock = 1000.0;
+            Hold(committed, -0.45, 0, 20, ref clock);
+            var committedTurn = Array.IndexOf(Hold(committed, 0, -0.45, 12, ref clock), TimelineScrollAxis.Vertical);
+
+            Assert.InRange(barelyTurn, 0, committedTurn);
+            Assert.InRange(committedTurn, 0, 7);
+        }
+
+        [Fact]
+        public void Resetting_the_latch_starts_the_next_event_over()
+        {
+            // what the pinch handler does, so a magnify cannot leave a stale axis behind it.
+            var latch = new TimelineScrollAxisLatch();
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.5, 0.0, 1000));
+            latch.Reset();
+            Assert.Equal(TimelineScrollAxis.Vertical, latch.Resolve(0.0, -0.5, 1008));
+        }
+
+        [Fact]
+        public void A_latched_axis_only_governs_the_plain_two_finger_gesture()
+        {
+            // the modified gestures mean one thing regardless of direction, so a latch left over
+            // from a swipe must not reach them — nor Windows, which has no such gesture at all.
+            Assert.Equal(TimelineScrollAction.Zoom,
+                TimelineScrollInput.DecideWheel(0, 0.2, TimelineScrollModifiers.Meta, Mac,
+                    TimelineScrollAxis.Horizontal).Action);
+
+            Assert.Equal(TimelineScrollAction.PanHorizontal,
+                TimelineScrollInput.DecideWheel(-0.4, 0, TimelineScrollModifiers.Shift, Mac,
+                    TimelineScrollAxis.Vertical).Action);
+
+            Assert.Equal(TimelineScrollAction.ScrollRows,
+                TimelineScrollInput.DecideWheel(-0.4, 0, TimelineScrollModifiers.Alt, Mac,
+                    TimelineScrollAxis.Horizontal).Action);
+
+            Assert.Equal(TimelineScrollAction.Zoom,
+                TimelineScrollInput.DecideWheel(1, 0, TimelineScrollModifiers.None, Win,
+                    TimelineScrollAxis.Horizontal).Action);
+        }
+
+        [Fact]
+        public void A_dead_frame_inside_a_gesture_does_nothing_rather_than_the_wrong_thing()
+        {
+            // a latched horizontal gesture whose event carries only a vertical delta must come out
+            // as None: dropping the cross-axis component is the point, and Pan(0) is not a pan.
+            var latch = new TimelineScrollAxisLatch();
+            var decisions = Swipe(latch, new[] { (-0.5, 0.0), (0.0, -0.4) });
+
+            Assert.Equal(TimelineScrollAction.PanHorizontal, decisions[0].Action);
+            Assert.Equal(TimelineScrollAction.None, decisions[1].Action);
+        }
+
+        [Fact]
+        public void A_non_finite_delta_cannot_poison_the_latch()
+        {
+            var latch = new TimelineScrollAxisLatch();
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.5, 0.0, 1000));
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(Double.NaN, 0.0, 1008));
+            Assert.Equal(TimelineScrollAxis.Horizontal, latch.Resolve(-0.5, 0.0, 1016));
+        }
+
         // ------------------------------------------------------------------------ pinch (magnify)
 
         [Fact]

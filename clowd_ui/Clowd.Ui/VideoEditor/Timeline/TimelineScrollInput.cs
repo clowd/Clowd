@@ -36,6 +36,141 @@ namespace Clowd.UI.VideoEditor.Timeline
         Meta = 8,
     }
 
+    /// <summary>Which axis a two-finger gesture has been committed to. <see cref="Undecided"/> is
+    /// the state before enough travel has accumulated to tell (and what a caller passes when it has
+    /// no latch at all, e.g. the unit tests for a single isolated event).</summary>
+    internal enum TimelineScrollAxis
+    {
+        Undecided,
+        Horizontal,
+        Vertical,
+    }
+
+    /// <summary>
+    /// Remembers which axis the two-finger gesture <i>currently in progress</i> committed to, so a
+    /// single swipe is a pan or a zoom for its whole length and never both.
+    ///
+    /// Picking the dominant axis per event is not enough on its own: a real horizontal swipe is not
+    /// a straight line, and the stream it produces is mostly <c>(-0.4, 0.01)</c> with the occasional
+    /// <c>(0.02, -0.05)</c> as the fingers settle or lift. Deciding each of those on its own merits
+    /// zooms the view a notch in the middle of a pan. So the axis is decided once, from the travel
+    /// accumulated over the opening few pixels of the gesture, and then held.
+    ///
+    /// The gesture's end has to be inferred: Avalonia surfaces no phase for a macOS scroll (AppKit's
+    /// began/ended/momentum phases are not carried on <c>PointerWheelEventArgs</c>), and momentum
+    /// events keep arriving after the fingers lift. A gap of <see cref="IdleResetMs"/> with no
+    /// scroll is therefore what ends one — comfortably longer than the ~8 ms cadence of a live
+    /// gesture or its momentum tail, and far shorter than the pause between two deliberate swipes.
+    ///
+    /// That gap must not be the <i>only</i> way out, though, or turning a pan into a zoom means
+    /// lifting the fingers and waiting — which is exactly what a latch that only ever unlatches on
+    /// idle feels like. So the axis is held against drift, not against intent: the accumulators
+    /// forget at a <see cref="MemoryMs"/> time constant, and when the off-axis travel <i>recently</i>
+    /// outweighs the held axis by <see cref="SwitchRatio"/> (and is worth
+    /// <see cref="SwitchTravelPx"/> on its own) the gesture changes axis without ever leaving the
+    /// glass. Turning a firm swipe through 90° re-latches in about 50 ms — under half a dozen
+    /// events, quicker than a hand can lift — while the drift the latch exists for never comes near
+    /// either bar. The hold is proportional to conviction: a swipe the user has committed to needs
+    /// a correspondingly firm shove to overturn, a barely-started one turns almost freely.
+    /// </summary>
+    internal sealed class TimelineScrollAxisLatch
+    {
+        /// <summary>A quiet gap this long (milliseconds) means the fingers have left the glass and
+        /// the next event starts a fresh gesture.</summary>
+        public const double IdleResetMs = 200;
+
+        /// <summary>How much recent finger travel (in the pixels
+        /// <see cref="TimelineScrollInput.MacScrollPxPerDelta"/> converts to) first decides the
+        /// axis. Small enough that the commitment happens within the first frame or two — before
+        /// the eye can see the view do the wrong thing — and large enough that the decision is made
+        /// from a real direction rather than from one 0.01 jitter event.</summary>
+        public const double DecisionTravelPx = 6;
+
+        /// <summary>The time constant (milliseconds) over which travel is forgotten. Each
+        /// accumulator therefore reads as "how far this axis has moved just now" rather than "over
+        /// the whole gesture", which is what lets a change of direction overtake the held axis while
+        /// the fingers stay down. At ~50 ms it spans roughly six trackpad events: long enough that
+        /// one stray frame cannot swing it, short enough that a deliberate turn registers at once.</summary>
+        public const double MemoryMs = 50;
+
+        /// <summary>How much recent travel the challenging axis must be worth before it can take the
+        /// gesture over. Comfortably above the ~20 px of recent travel that steady cross-axis drift
+        /// sustains, so a wandering finger never trips it — only actual movement does.</summary>
+        public const double SwitchTravelPx = 25;
+
+        /// <summary>How far the challenging axis must out-travel the held one to take over. Bare
+        /// dominance is not enough — the two axes cross briefly whenever a gesture turns — but 1.5x
+        /// is reached within a few events of a genuine change of direction.</summary>
+        public const double SwitchRatio = 1.5;
+
+        private TimelineScrollAxis _axis;
+        private double _recentX;
+        private double _recentY;
+        private double _lastTimestampMs;
+        private bool _started;
+
+        /// <summary>The axis this event belongs to. Before the latch commits, the answer tracks the
+        /// recent travel, so the opening pixels of a swipe already do the right thing; after it
+        /// commits, only a decisive turn (or the gesture ending) changes it.</summary>
+        public TimelineScrollAxis Resolve(double deltaX, double deltaY, double timestampMs)
+        {
+            if (!double.IsFinite(deltaX) || !double.IsFinite(deltaY) || !double.IsFinite(timestampMs))
+                return _axis;
+
+            // a backwards timestamp can only be a wrap or a different clock; treat it as a new
+            // gesture rather than letting the elapsed test go negative and hold the old axis.
+            var elapsed = timestampMs - _lastTimestampMs;
+            if (!_started || elapsed < 0 || elapsed > IdleResetMs)
+                Reset();
+            else
+            {
+                var decay = Math.Exp(-elapsed / MemoryMs);
+                _recentX *= decay;
+                _recentY *= decay;
+            }
+
+            _started = true;
+            _lastTimestampMs = timestampMs;
+            _recentX += Math.Abs(deltaX) * TimelineScrollInput.MacScrollPxPerDelta;
+            _recentY += Math.Abs(deltaY) * TimelineScrollInput.MacScrollPxPerDelta;
+
+            if (_axis == TimelineScrollAxis.Undecided)
+            {
+                if (_recentX == 0 && _recentY == 0)
+                    return TimelineScrollAxis.Undecided;
+
+                var dominant = _recentX > _recentY
+                    ? TimelineScrollAxis.Horizontal
+                    : TimelineScrollAxis.Vertical;
+
+                if (Math.Max(_recentX, _recentY) >= DecisionTravelPx)
+                    _axis = dominant;
+
+                return dominant;
+            }
+
+            var held = _axis == TimelineScrollAxis.Horizontal ? _recentX : _recentY;
+            var challenger = _axis == TimelineScrollAxis.Horizontal ? _recentY : _recentX;
+
+            if (challenger >= SwitchTravelPx && challenger > held * SwitchRatio)
+                _axis = _axis == TimelineScrollAxis.Horizontal
+                    ? TimelineScrollAxis.Vertical
+                    : TimelineScrollAxis.Horizontal;
+
+            return _axis;
+        }
+
+        /// <summary>Forgets the gesture in progress, so the next event decides its axis afresh.</summary>
+        public void Reset()
+        {
+            _axis = TimelineScrollAxis.Undecided;
+            _recentX = 0;
+            _recentY = 0;
+            _started = false;
+            _lastTimestampMs = 0;
+        }
+    }
+
     /// <summary>A decoded scroll gesture. <see cref="ZoomFactor"/> multiplies the viewport's
     /// ticks-per-pixel (so &gt; 1 zooms out) and <see cref="PanPixels"/> is a signed pixel offset in
     /// the direction the <i>view</i> moves; both are 0/1 for the actions that do not use them.</summary>
@@ -106,8 +241,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// convention: a positive delta moves the view <i>towards</i> the origin (which is why every
         /// pan below negates it, exactly as <c>ScrollContentPresenter</c> does).
         /// </summary>
+        /// <paramref name="axis"/> is the axis the gesture in progress has committed to, from the
+        /// caller's <see cref="TimelineScrollAxisLatch"/>; it is consulted only by the plain macOS
+        /// two-finger branch, the one gesture whose meaning depends on direction.
         public static TimelineScrollDecision DecideWheel(double deltaX, double deltaY,
-            TimelineScrollModifiers modifiers, bool isMacOS)
+            TimelineScrollModifiers modifiers, bool isMacOS,
+            TimelineScrollAxis axis = TimelineScrollAxis.Undecided)
         {
             // a non-finite delta would ride Math.Pow straight into the viewport's zoom and stick
             // there — nothing downstream clamps a NaN back to a legal zoom.
@@ -161,12 +300,23 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
 
             // Plain two-finger scroll: sideways pans, up/down zooms — the same two meanings the
-            // Windows wheel carries, on the axis the finger actually moved. The dominant axis takes
-            // the whole gesture rather than both acting at once: a trackpad reports a little
-            // cross-axis drift on every swipe, and honouring it would zoom the view a hair on every
-            // horizontal pan (and slide it sideways on every zoom). The rows' vertical scroll is
+            // Windows wheel carries, on the axis the finger actually moved. One axis takes the whole
+            // gesture rather than both acting at once: a trackpad reports cross-axis drift on every
+            // swipe, and honouring it would zoom the view a hair on every horizontal pan (and slide
+            // it sideways on every zoom). Which axis that is comes from the caller's latch, which
+            // holds it steady for the length of the swipe; falling back to this event's own dominant
+            // axis when there is no latch keeps a lone event decidable on its own. Once the axis is
+            // settled the other component is simply dropped — a horizontal gesture's stray dy does
+            // not zoom, and a vertical one's stray dx does not pan. The rows' vertical scroll is
             // Alt+scroll and the scroll bar, as on Windows.
-            if (Math.Abs(deltaX) > Math.Abs(deltaY))
+            var isHorizontal = axis switch
+            {
+                TimelineScrollAxis.Horizontal => true,
+                TimelineScrollAxis.Vertical => false,
+                _ => Math.Abs(deltaX) > Math.Abs(deltaY),
+            };
+
+            if (isHorizontal)
                 return TimelineScrollDecision.Pan(-deltaX * MacScrollPxPerDelta);
 
             return deltaY != 0
