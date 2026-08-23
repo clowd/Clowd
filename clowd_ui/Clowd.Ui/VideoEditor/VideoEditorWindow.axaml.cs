@@ -79,7 +79,6 @@ namespace Clowd.UI.VideoEditor
         private bool _scrubbing;
         private bool _wasPlayingBeforeScrub;
         private bool _sidebarVisible;
-        private bool _sidebarUserClosed; // the user closed the properties panel — stop auto-showing it
         private bool _playerFailedShown; // the status overlay currently shows a player failure
         private bool _playerUpdatePending; // an edit arrived while the player was Opening — re-applied on Ready
         private bool _emptyEditShown; // the status overlay currently shows the empty-edit notice
@@ -1298,9 +1297,10 @@ namespace Clowd.UI.VideoEditor
         // ====================================================================
 
         /// <summary>Toggles the right-hand properties sidebar. Per-window and transient like the
-        /// image editor's layers sidebar — only its width is remembered. The toolbar toggle is the
-        /// only writer; the auto-show path goes through <see cref="AutoShowSidebar"/>, which must
-        /// not count as the user closing it.</summary>
+        /// image editor's layers sidebar — only its width is remembered. The panel is where a
+        /// selection becomes editable, so the two are tied together: selecting anything opens it
+        /// (<see cref="AutoShowSidebar"/>), and closing it from the toolbar drops the selection
+        /// rather than leaving a selected item with no way to edit it.</summary>
         public bool SidebarVisible
         {
             get => _sidebarVisible;
@@ -1309,23 +1309,25 @@ namespace Clowd.UI.VideoEditor
                 if (_sidebarVisible == value)
                     return;
 
-                if (!value)
-                    _sidebarUserClosed = true;
-
                 _sidebarVisible = value;
                 ApplySidebarVisible(value);
+
+                // clearing re-enters through Editor_SelectionChanged, which sees an empty
+                // selection and leaves the now-hidden panel alone.
+                if (!value)
+                    _editor?.ClearSelection();
             }
         }
 
-        /// <summary>Opens the properties panel the first time something is selected — the panel is
-        /// where a selection becomes editable, so a user who has never dismissed it should not
-        /// have to find the toggle. Once they close it, it stays closed for this window.</summary>
+        /// <summary>Opens the properties panel whenever something is selected — the panel is where
+        /// a selection becomes editable, so a selected item always has its properties in reach.
+        /// Deselecting leaves the panel as it is (it says "Nothing selected"); only the toolbar
+        /// toggle closes it, and that clears the selection with it.</summary>
         private void Editor_SelectionChanged(object sender, EventArgs e) => AutoShowSidebar();
 
         private void AutoShowSidebar()
         {
-            if (_sidebarVisible || _sidebarUserClosed || _closing ||
-                _editor is not { SelectedItemIds.Count: > 0 })
+            if (_sidebarVisible || _closing || _editor is not { SelectedItemIds.Count: > 0 })
                 return;
 
             _sidebarVisible = true;
