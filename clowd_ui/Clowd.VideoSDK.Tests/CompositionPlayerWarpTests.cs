@@ -496,12 +496,21 @@ namespace Clowd.VideoSDK.Tests
                 $"position only reached {player.Position} inside the 2x span");
             int repositions = player.AudioRepositionCount;
 
-            var tolerance = new TimeSpan(Second / 4); // audio-master attach jitter, never a real rewind
+            // The clock carries the sink's played-time forward by wall time between renderer
+            // updates and gives that lead back when a stalled sink reports again — a machine busy
+            // enough to underrun the ring is all it takes. PlaybackClock caps the lead at 500ms of
+            // heard time, and inside the 2x span heard time counts double against the project
+            // clock, so the give-back is bounded by a second of project time. That is interpolation
+            // jitter, not a rewind. The structural failure this test is actually about — a timing
+            // rebase at a warp boundary — cannot happen without repositioning the mix sources, so
+            // assert that exactly, every iteration, rather than inferring it from a tolerance.
+            var tolerance = new TimeSpan(Second);
             var last = TimeSpan.Zero;
             var sw = Stopwatch.StartNew();
             while (player.State == PlayerState.Playing && sw.ElapsedMilliseconds < 25000)
             {
                 var pos = player.Position;
+                Assert.Equal(repositions, player.AudioRepositionCount);
                 Assert.True(pos >= last - tolerance,
                     $"clock rewound across a warp boundary: {last} -> {pos}");
                 if (pos > last)
