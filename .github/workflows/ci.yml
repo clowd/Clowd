@@ -69,8 +69,31 @@ jobs:
           cargo test -p clowd_shell_ext
         shell: bash
 
+      # The video editor's suite needs FFmpeg 7.1 natives to run its decode/encode/render tests;
+      # without them ~100 of them skip. A shipped build takes those from the obs-express payload,
+      # which is not downloaded in this job, so the tests get Homebrew's instead — a test-only
+      # dependency, never a shipped one (that build is GPL; see FFmpegLoader).
+      #
+      # Deliberately non-fatal: if the formula or the tap is having a bad day, CLOWD_FFMPEG_PATH
+      # stays unset, those tests skip exactly as they do today, and the other ~3300 still run. A
+      # convenience dependency should not be able to take the gate down.
+      - name: FFmpeg for the video editor tests (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install ffmpeg@7 || echo "::warning::ffmpeg@7 unavailable; the FFmpeg-backed tests will skip"
+          LIB="$(brew --prefix ffmpeg@7 2>/dev/null)/lib"
+          if [ -d "$LIB" ]; then
+            echo "CLOWD_FFMPEG_PATH=$LIB" >> "$GITHUB_ENV"
+          fi
+        shell: bash
+
+      # Clowd.VideoSDK.Tests is the video editor's suite — the playback engine, the compositor,
+      # the render/encode path, the audio clock and the editor model. It used to run nowhere, which
+      # left the whole editor with no CI at all. Tests that need something the runner has not got
+      # (FFmpeg on Windows, the clowd_ai binary, another platform) skip rather than fail.
       - name: "UI gate: dotnet tests"
         run: |
+          dotnet test clowd_ui/Clowd.VideoSDK.Tests/Clowd.VideoSDK.Tests.csproj -c Release --nologo
           dotnet test clowd_ui/Clowd.Shared.Tests/Clowd.Shared.Tests.csproj -c Release --nologo
           dotnet test clowd_ui/Clowd.Drawing.Tests/Clowd.Drawing.Tests.csproj -c Release --nologo
         shell: bash
@@ -321,7 +344,9 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           unzip -q obs-express.zip -d publish/obs-express
-          chmod +x publish/obs-express/obs-express publish/obs-express/obs-ffmpeg-mux 2>/dev/null || true
+          # vid2gif belongs in this list too: the zip carries mode 644 on all three, and without
+          # the bit GIF export dies at Process.Start with "permission denied".
+          chmod +x publish/obs-express/obs-express publish/obs-express/obs-ffmpeg-mux publish/obs-express/vid2gif 2>/dev/null || true
 
           # The zip materializes the framework symlinks as full copies, which codesign rejects as "bundle format is ambiguous".
           FW=publish/obs-express/Frameworks/libobs.framework
