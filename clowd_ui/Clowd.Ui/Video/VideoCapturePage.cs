@@ -936,11 +936,14 @@ namespace Clowd.UI
         private SessionInfo CreateSession()
         {
             var session = SessionManager.Current.CreateSessionInDirectory(_sessionDir);
-            session.Name = "Screen Recording";
+            // a composition capture is an editable project ("Screen Recording"); one captured with
+            // composition off is already the finished, playable thing ("Screen Video").
+            session.Name = _appliedMultiTrack ? "Screen Recording" : "Screen Video";
             session.CreatedUtc = DateTime.UtcNow;
             session.ContentKind = "video"; // IsUploadOnly=true → no *image* editor affordance (correct); the video editor is offered through CanEditVideo
-            // usually outside the session dir now (issue #50), so the recording survives the
-            // session being deleted here or expiring out of Recents — the user's file is theirs.
+            // outside the session dir for a "Screen Video" (issue #50), so the recording survives
+            // the session being deleted here or expiring out of Recents — the user's file is
+            // theirs. A composition recording stays put; see MoveToOutputFolderAsync.
             session.VideoPath = _savedPath;
             session.DurationMs = (long)_lastStatusElapsed.TotalMilliseconds;
             session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
@@ -1068,6 +1071,13 @@ namespace Clowd.UI
             try
             {
                 if (!File.Exists(_outputMp4))
+                    return null;
+
+                // a composition recording is a project, not a video: its mp4 carries one stream per
+                // track and nothing can play it back as the user recorded it. It stays in the
+                // session directory (which owns it, and which the render output is keyed to), and
+                // the file that reaches the user's output folder is the render.
+                if (_appliedMultiTrack)
                     return null;
 
                 var target = RecordingOutputPath.GetSavePath(_settings);

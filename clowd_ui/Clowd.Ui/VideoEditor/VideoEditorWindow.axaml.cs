@@ -326,21 +326,22 @@ namespace Clowd.UI.VideoEditor
         /// video player with a notice when in-process playback is unavailable.</summary>
         public static void ShowSession(SessionInfo session)
         {
-            if (session == null || !session.CanEditVideo)
+            if (session == null)
                 return;
 
             // a rendered entry is an *output* — editing it means reopening the project it was
             // rendered from (the recording session and its videoedit.json), not starting a fresh
-            // edit over the flattened mp4. With the source gone the entry edits as itself, which
-            // is all that is left.
+            // edit over the flattened mp4. Resolved before the check below, because the output
+            // itself is never editable: only the project behind it is.
             if (!String.IsNullOrEmpty(session.EditSourceVideoPath))
             {
-                var source = SessionManager.Current.Sessions.FirstOrDefault(s =>
+                session = SessionManager.Current.Sessions.FirstOrDefault(s =>
                     String.IsNullOrEmpty(s.EditSourceVideoPath) && s.CanEditVideo &&
                     String.Equals(s.RenderSourceKey, session.EditSourceVideoPath, StringComparison.OrdinalIgnoreCase));
-                if (source != null)
-                    session = source;
             }
+
+            if (session == null || !session.CanEditVideo)
+                return;
 
             // check if there is already a window open with this session in it
             var openWnd = GetOpenEditors().FirstOrDefault(w => ReferenceEquals(w._session, session));

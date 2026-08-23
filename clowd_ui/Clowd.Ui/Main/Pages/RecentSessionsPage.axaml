@@ -137,13 +137,23 @@
     <UserControl.Styles>
         <Style Selector="ListBox.sessions">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Padding" Value="0" />
+            <!-- the left gutter the link brackets are drawn in. It has to be the ListBox's own
+                 padding rather than a margin on anything outside it: the ListBox clips at its
+                 bounds, so a bracket drawn in space the ListBox does not own is cut off. The group
+                 header carries the same indent so headers and cards stay flush with each other. -->
+            <Setter Property="Padding" Value="12,0,0,0" />
         </Style>
         <Style Selector="ListBox.sessions ListBoxItem">
             <Setter Property="Padding" Value="4" />
             <Setter Property="Margin" Value="0,1" />
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <!-- a ListBoxItem clips its content to its own bounds (TemplatedControl flips
+                 Avalonia's usual ClipToBounds=false default). The link bracket is drawn in the
+                 gutter to the left of this padding, and its chain-link glyph hangs above the row
+                 onto the one before it, so that clip has to come off. Nothing else in the template
+                 reaches outside the row: the pulse overlay's -4 margin only cancels this padding. -->
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
         <!-- row actions appear on hover / selection; hidden but layout-stable otherwise. Applies to
              both the card's own action bar and the per-upload buttons on the link rows. -->
@@ -212,7 +222,7 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
                         <StackPanel>
-                            <TextBlock Margin="0,8" Classes="H6" Text="{Binding Name}" />
+                            <TextBlock Margin="12,8,0,8" Classes="H6" Text="{Binding Name}" />
                             <ListBox Classes="sessions"
                                      SelectionMode="Single"
                                      KeyDown="SessionListKeyDown"
@@ -233,23 +243,16 @@
                                                     <MenuItem Header="Copy" Click="CopyItemClicked" IsVisible="{Binding CanCopy}"
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Edit video" Click="EditVideoClicked" IsVisible="{Binding ShowEditVideo}"
-                                                              ToolTip.Tip="{Binding EditVideoTooltip}" ToolTip.ShowOnDisabled="True">
-                                                        <!-- idle like every other item, AND actually editable: a single-track
-                                                             capture has no tracks to compose. -->
-                                                        <MenuItem.IsEnabled>
-                                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                                                <Binding Path="IsIdle" />
-                                                                <Binding Path="CanEditVideo" />
-                                                            </MultiBinding>
-                                                        </MenuItem.IsEnabled>
-                                                    </MenuItem>
-                                                    <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding IsVideo}"
+                                                              IsEnabled="{Binding IsIdle}" />
+                                                    <MenuItem Header="Render video" Click="RenderVideoClicked" IsVisible="{Binding ShowRender}"
+                                                              IsEnabled="{Binding IsIdle}" />
+                                                    <MenuItem Header="Play" Click="PlayItemClicked" IsVisible="{Binding CanPlay}"
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Create GIF" Click="CreateGifClicked" IsVisible="{Binding CanCreateGif}"
                                                               IsEnabled="{Binding IsIdle}" />
-                                                    <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding IsVideo}"
+                                                    <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding CanPlay}"
                                                               IsEnabled="{Binding IsIdle}" />
-                                                    <MenuItem Header="Open" Click="OpenItemClicked" IsVisible="{Binding !IsUploadOnly}"
+                                                    <MenuItem Header="Open" Click="OpenItemClicked" IsVisible="{Binding ShowOpen}"
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Upload" Click="UploadItemClicked" IsVisible="{Binding CanUpload}" />
                                                     <MenuItem Header="Delete" Click="DeleteItemClicked" />
@@ -266,6 +269,94 @@
                                                     Opacity="0"
                                                     IsHitTestVisible="False"
                                                     Background="{DynamicResource SemiColorWarning}" />
+                                            <!--  The bracket joining an entry to the one it was made from: out of the
+                                                  left edge of one preview, round into the gutter, down past a chain-link
+                                                  glyph, and back into the left edge of the preview below. A render sits
+                                                  above the project it came from, a GIF above the video it came from.
+
+                                                  Each row draws only its own half — the lower half when this row was
+                                                  made from the row below (LinkedToNext), the upper half when the row
+                                                  above was made from this one (LinkedToPrevious) — and the two halves
+                                                  meet in the channel between the cards. That is what keeps the arms on
+                                                  the previews' centre line whatever either row's height turns out to
+                                                  be: the two star rows below split THIS row at its own centre, which is
+                                                  where its (vertically centred) preview's centre is, and neither half
+                                                  has to know anything about the other row.
+
+                                                  Geometry, in this container's own space: it is 10px wide and starts
+                                                  6px left of the card's content, so its right edge lands exactly on the
+                                                  preview's left edge (the preview's own 4px margin) and its left edge —
+                                                  where the vertical run sits — is 2px outside the card, in the gutter
+                                                  the ListBox's padding reserves. The corner pieces are 10x10 with a 6px
+                                                  arc, and each straight run stops 7px short of the row boundary, which
+                                                  is what leaves the glyph (20px tall, centred on the 10px channel) 2px
+                                                  of air at each end. The runs are set back further than the glyph so the
+                                                  bracket reads as guide work and the join reads as the mark.  -->
+                                            <Grid Width="10"
+                                                  Margin="-6,0,0,0"
+                                                  HorizontalAlignment="Left"
+                                                  RowDefinitions="*,*">
+                                                <!--  upper half: down from the channel above, then round into this
+                                                      row's preview  -->
+                                                <Rectangle Grid.Row="0"
+                                                           Width="1.5"
+                                                           Margin="0,7,0,10"
+                                                           HorizontalAlignment="Left"
+                                                           Opacity="0.28"
+                                                           Fill="{DynamicResource SemiColorText1}"
+                                                           IsVisible="{Binding LinkedToPrevious}" />
+                                                <Path Grid.Row="0"
+                                                      Width="10"
+                                                      Height="10"
+                                                      VerticalAlignment="Bottom"
+                                                      Stretch="None"
+                                                      Stroke="{DynamicResource SemiColorText1}"
+                                                      StrokeThickness="1.5"
+                                                      Opacity="0.28"
+                                                      IsVisible="{Binding LinkedToPrevious}"
+                                                      Data="M0.75,0 V4 A6,6 0 0 0 6.75,10 H10" />
+                                                <!--  lower half: out of this row's preview, then down to the channel
+                                                      below  -->
+                                                <Rectangle Grid.Row="1"
+                                                           Width="1.5"
+                                                           Margin="0,10,0,7"
+                                                           HorizontalAlignment="Left"
+                                                           Opacity="0.28"
+                                                           Fill="{DynamicResource SemiColorText1}"
+                                                           IsVisible="{Binding LinkedToNext}" />
+                                                <Path Grid.Row="1"
+                                                      Width="10"
+                                                      Height="10"
+                                                      VerticalAlignment="Top"
+                                                      Stretch="None"
+                                                      Stroke="{DynamicResource SemiColorText1}"
+                                                      StrokeThickness="1.5"
+                                                      Opacity="0.28"
+                                                      IsVisible="{Binding LinkedToNext}"
+                                                      Data="M10,0 H6.75 A6,6 0 0 0 0.75,6 V10" />
+                                                <!--  the glyph on the join, drawn by the lower of the two rows. Its
+                                                      20x10 box is rotated a quarter turn about its own centre, so it
+                                                      reads as 10 wide by 20 tall on the vertical run; the rotation is
+                                                      a render transform and costs no layout, and the negative margins
+                                                      put that centre on the channel above this row.  -->
+                                                <Viewbox Grid.Row="0"
+                                                         Width="20"
+                                                         Height="10"
+                                                         Margin="-9.25,-10,0,0"
+                                                         Opacity="0.45"
+                                                         HorizontalAlignment="Left"
+                                                         VerticalAlignment="Top"
+                                                         IsVisible="{Binding LinkedToPrevious}">
+                                                    <Viewbox.RenderTransform>
+                                                        <RotateTransform Angle="90" />
+                                                    </Viewbox.RenderTransform>
+                                                    <Path Width="20"
+                                                          Height="10"
+                                                          Fill="{DynamicResource SemiColorText1}"
+                                                          Data="{StaticResource IconLinkTight}"
+                                                          ToolTip.Tip="The item above was made from this one" />
+                                                </Viewbox>
+                                            </Grid>
                                             <Border Width="110"
                                                     Height="75"
                                                     Margin="4"
@@ -326,26 +417,33 @@
                                                                 <Path Width="172" Height="172" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconCopySmall}" />
                                                             </Viewbox>
                                                         </Button>
-                                                        <!-- leads the video actions because it is also what double-click and
-                                                             Enter do: editing is the default thing to do with a recording,
-                                                             playing it is the secondary one. -->
-                                                        <!-- shown but disabled for a single-track capture, with the tooltip
-                                                             saying why (ShowOnDisabled — Avalonia hides tooltips on disabled
-                                                             controls otherwise, and the explanation is the whole point). -->
+                                                        <!-- leads the project actions because it is also what double-click
+                                                             and Enter do: editing is the default thing to do with a
+                                                             project, rendering it is the deliberate one. -->
                                                         <Button Classes="rowAction"
                                                                 Click="EditVideoClicked"
                                                                 IsVisible="{Binding ShowEditVideo}"
-                                                                IsEnabled="{Binding CanEditVideo}"
-                                                                ToolTip.Tip="{Binding EditVideoTooltip}"
-                                                                ToolTip.ShowOnDisabled="True"
+                                                                ToolTip.Tip="Edit video"
                                                                 AutomationProperties.Name="Edit video">
                                                             <Viewbox>
                                                                 <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconNavEditor}" />
                                                             </Viewbox>
                                                         </Button>
+                                                        <!-- the same action (and the same glyph) as the video editor's own
+                                                             Render button, for a project the user does not need to open. -->
+                                                        <Button Classes="rowAction"
+                                                                Click="RenderVideoClicked"
+                                                                IsVisible="{Binding ShowRender}"
+                                                                ToolTip.Tip="Render into a video"
+                                                                AutomationProperties.Name="Render into a video">
+                                                            <Viewbox>
+                                                                <!-- IconExport is drawn on a 48px canvas (AppStyles icon table) -->
+                                                                <Path Width="48" Height="48" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconExport}" />
+                                                            </Viewbox>
+                                                        </Button>
                                                         <Button Classes="rowAction"
                                                                 Click="PlayItemClicked"
-                                                                IsVisible="{Binding IsVideo}"
+                                                                IsVisible="{Binding CanPlay}"
                                                                 ToolTip.Tip="Play video"
                                                                 AutomationProperties.Name="Play video">
                                                             <Viewbox>
@@ -371,7 +469,7 @@
                                                         </Button>
                                                         <Button Classes="rowAction"
                                                                 Click="ShowInFolderClicked"
-                                                                IsVisible="{Binding IsVideo}"
+                                                                IsVisible="{Binding CanPlay}"
                                                                 ToolTip.Tip="Show in folder"
                                                                 AutomationProperties.Name="Show in folder">
                                                             <Viewbox>
@@ -380,7 +478,7 @@
                                                         </Button>
                                                         <Button Classes="rowAction"
                                                                 Click="OpenItemClicked"
-                                                                IsVisible="{Binding !IsUploadOnly}"
+                                                                IsVisible="{Binding ShowOpen}"
                                                                 ToolTip.Tip="Open in editor"
                                                                 AutomationProperties.Name="Open in editor">
                                                             <Viewbox>
@@ -409,11 +507,26 @@
                                                     </controls:CollapsingButtonBar>
 
                                                     <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                        <TextBlock Classes="Base"
-                                                                   TextTrimming="CharacterEllipsis"
-                                                                   TextWrapping="NoWrap"
-                                                                   ToolTip.Tip="{Binding Name}"
-                                                                   Text="{Binding Name}" />
+                                                        <!-- the marker sits immediately after the name rather than at the far
+                                                             right of the row, so the name has to give up the width for it —
+                                                             which is what ShrinkingRowPanel is for (a StackPanel would measure
+                                                             the name against infinity and never trim it). -->
+                                                        <controls:ShrinkingRowPanel Spacing="6">
+                                                            <TextBlock Classes="Base"
+                                                                       controls:ShrinkingRowPanel.Shrink="True"
+                                                                       VerticalAlignment="Center"
+                                                                       TextTrimming="CharacterEllipsis"
+                                                                       TextWrapping="NoWrap"
+                                                                       ToolTip.Tip="{Binding Name}"
+                                                                       Text="{Binding Name}" />
+                                                            <Viewbox Width="15"
+                                                                     Height="15"
+                                                                     VerticalAlignment="Center"
+                                                                     IsVisible="{Binding IsProject}"
+                                                                     ToolTip.Tip="{Binding ProjectTooltip}">
+                                                                <Path Width="24" Height="24" Fill="{StaticResource ClowdAccentBrush}" Data="{StaticResource IconVideoProject}" />
+                                                            </Viewbox>
+                                                        </controls:ShrinkingRowPanel>
                                                         <TextBlock Classes="Body"
                                                                    Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
                                                     </StackPanel>
@@ -427,6 +540,10 @@
                                                 <TextBlock Opacity="0.6"
                                                            Text="Not uploaded"
                                                            IsVisible="{Binding ShowNotUploaded}" />
+                                                <!-- a project is never uploaded; what it is waiting for is a render -->
+                                                <TextBlock Opacity="0.6"
+                                                           Text="{Binding RenderStatusText}"
+                                                           IsVisible="{Binding ShowRenderStatus}" />
                                                 <ItemsControl ItemsSource="{Binding AllUploads}"
                                                               ItemTemplate="{StaticResource UploadRecordTemplate}" />
                                                 <ContentControl Content="{Binding ActiveUpload}"

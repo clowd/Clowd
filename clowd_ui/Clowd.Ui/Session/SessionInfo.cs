@@ -155,7 +155,11 @@ namespace Clowd
         public string ContentKind
         {
             get => Get<string>();
-            set => Set(value);
+            set
+            {
+                if (Set(value))
+                    RaiseRowAffordances();
+            }
         }
 
         [JsonIgnore] public bool IsUploadOnly => !String.IsNullOrEmpty(ContentKind);
@@ -168,12 +172,7 @@ namespace Clowd
             set
             {
                 if (Set(value))
-                {
-                    OnPropertyChanged(nameof(CanUpload));
-                    OnPropertyChanged(nameof(CanEditVideo));
-                    OnPropertyChanged(nameof(ShowEditVideo));
-                    OnPropertyChanged(nameof(EditVideoTooltip));
-                }
+                    RaiseRowAffordances();
             }
         }
 
@@ -235,26 +234,24 @@ namespace Clowd
             set
             {
                 if (Set(value))
-                {
-                    OnPropertyChanged(nameof(CanEditVideo));
-                    OnPropertyChanged(nameof(ShowEditVideo));
-                    OnPropertyChanged(nameof(EditVideoTooltip));
-                }
+                    RaiseRowAffordances();
             }
         }
 
         // a recording (and a converted GIF) carries a poster frame in PreviewImgPath, but putting
         // that single still on the clipboard is never what the user meant by copying a video, so
         // video entries offer no Copy at all.
-        [JsonIgnore] public bool CanCopy => !IsVideo && !String.IsNullOrEmpty(PreviewImgPath);
+        [JsonIgnore] public bool CanCopy => !IsVideo && !IsProject && !String.IsNullOrEmpty(PreviewImgPath);
 
         // every entry can be (re-)uploaded as long as it isn't busy and owns some content to send.
+        // A project owns no finished file — its render does — so it is never uploadable.
         // Whether the file is still on disk is settled by UploadSourcePath at the point of use —
         // this one is evaluated by a binding on every row.
         [JsonIgnore]
         public bool CanUpload => ActiveUpload == null
                                  && ActiveGifConversion == null
                                  && ActiveRender == null
+                                 && !IsProject
                                  && (!String.IsNullOrEmpty(VideoPath) || !String.IsNullOrEmpty(PreviewImgPath) || IsUploadOnly);
 
         /// <summary>The file an upload of this session sends: the recording itself for a video entry
@@ -303,17 +300,14 @@ namespace Clowd
             set
             {
                 if (Set(value))
-                {
-                    OnPropertyChanged(nameof(CanCreateGif));
-                    OnPropertyChanged(nameof(CanEditVideo));
-                    OnPropertyChanged(nameof(ShowEditVideo));
-                    OnPropertyChanged(nameof(EditVideoTooltip));
-                }
+                    RaiseRowAffordances();
             }
         }
 
-        // a GIF can be made from any video recording except one that is itself a GIF.
-        [JsonIgnore] public bool CanCreateGif => IsVideo && String.IsNullOrEmpty(SourceVideoPath);
+        // a GIF can be made from any playable video entry except one that is itself a GIF — so
+        // from a Screen Video or a Rendered Video, but never from a project (there is no flattened
+        // picture to convert until it has been rendered).
+        [JsonIgnore] public bool CanCreateGif => CanPlay && String.IsNullOrEmpty(SourceVideoPath);
 
         // set only on "Edited" sessions: the recording this session's video was rendered from. It
         // ties the edited entry back to its source, so re-rendering the same recording replaces
@@ -322,7 +316,11 @@ namespace Clowd
         public string EditSourceVideoPath
         {
             get => Get<string>();
-            set => Set(value);
+            set
+            {
+                if (Set(value))
+                    RaiseRowAffordances();
+            }
         }
 
         // set on recordings captured with composition turned off: obs-express was run without
@@ -336,27 +334,49 @@ namespace Clowd
             set
             {
                 if (Set(value))
-                {
-                    OnPropertyChanged(nameof(CanEditVideo));
-                    OnPropertyChanged(nameof(EditVideoTooltip));
-                }
+                    RaiseRowAffordances();
             }
         }
 
-        // whether the Recent page offers an Edit button at all: any video recording that is not a
-        // GIF (nothing to trim, no audio, and the render tool would not read it back as a video).
-        // Not gated on the OS — the editor and the render tool run on every desktop platform; when
-        // one of them cannot start, VideoEditorWindow says why. A recording it cannot actually open
-        // still gets the button, disabled, so the user is told why instead of hunting for a control
-        // that silently is not there.
+        /// <summary>
+        /// Whether this entry is a video <b>project</b> rather than a finished video: a blank edit
+        /// started from the Video button, or a recording captured with composition on. The latter's
+        /// mp4 holds one stream per track and is kept in the session directory — nothing can play
+        /// it as a video, so the row offers Edit and Render instead of Play, GIF and Upload, and
+        /// the rendered output is a separate entry linked back to this one.
+        /// </summary>
         [JsonIgnore]
-        public bool ShowEditVideo => IsVideoProject
-                                     || (IsVideo && String.IsNullOrEmpty(SourceVideoPath)
-                                         && !String.IsNullOrEmpty(VideoPath));
+        public bool IsProject => IsVideoProject
+                                 || (IsVideo && !SingleTrack
+                                     && String.IsNullOrEmpty(SourceVideoPath)
+                                     && String.IsNullOrEmpty(EditSourceVideoPath)
+                                     && !String.IsNullOrEmpty(VideoPath));
 
-        // …and whether that button does anything: a single-track capture has nothing to compose.
+        /// <summary>A video entry with a flat picture behind it: a Screen Video, a Rendered Video,
+        /// a GIF, or a video someone uploaded. What Play, Show in folder and Create GIF need.</summary>
         [JsonIgnore]
-        public bool CanEditVideo => ShowEditVideo && !SingleTrack;
+        public bool CanPlay => IsVideo && !IsProject && !String.IsNullOrEmpty(VideoPath);
+
+        // whether the Recent page offers an Edit button at all. Not gated on the OS — the editor
+        // and the render tool run on every desktop platform; when one of them cannot start,
+        // VideoEditorWindow says why.
+        [JsonIgnore]
+        public bool ShowEditVideo => IsProject;
+
+        // kept as its own name because a good deal of code asks "can this be opened in the video
+        // editor?" rather than "does the row show the button?" — for a project they are the same.
+        [JsonIgnore]
+        public bool CanEditVideo => ShowEditVideo;
+
+        /// <summary>Whether the row offers a Render button: a project is rendered into a video, and
+        /// nothing else is.</summary>
+        [JsonIgnore]
+        public bool ShowRender => IsProject;
+
+        /// <summary>Whether the row offers "Open in editor" — the <i>image</i> editor, which a
+        /// project has no business opening in.</summary>
+        [JsonIgnore]
+        public bool ShowOpen => !IsUploadOnly && !IsProject;
 
         /// <summary>What a render of this session keys its output entry to: the recording for a
         /// capture, the session file itself for a project that has no recording behind it. Only
@@ -364,11 +384,10 @@ namespace Clowd
         [JsonIgnore]
         public string RenderSourceKey => String.IsNullOrEmpty(VideoPath) ? FilePath : VideoPath;
 
+        /// <summary>What the project marker beside a project's name explains when hovered.</summary>
         [JsonIgnore]
-        public string EditVideoTooltip => CanEditVideo
-            ? "Edit video"
-            : "This recording was captured with composition turned off, so it has no separate tracks to edit. "
-              + "Turn on \"Enable composition and editing\" in recording settings before your next capture.";
+        public string ProjectTooltip =>
+            "This is a video project, not a finished video — open it in the editor, or render it into a video.";
 
         public string UploadFileKey
         {
@@ -473,12 +492,119 @@ namespace Clowd
         }
 
         // a session still being written into has nothing to upload yet, so it says nothing rather
-        // than "Not uploaded" over the top of its own progress row.
+        // than "Not uploaded" over the top of its own progress row. A project is never uploaded —
+        // that line is where its render status goes instead (see RenderStatusText).
         [JsonIgnore]
-        public bool ShowNotUploaded => ActiveGifConversion == null && ActiveRender == null && ActiveUpload == null && AllUploads.Length == 0;
+        public bool ShowNotUploaded => !IsProject && ActiveGifConversion == null && ActiveRender == null
+                                       && ActiveUpload == null && AllUploads.Length == 0;
+
+        /// <summary>
+        /// Not persisted — what a project row says where every other row says "Not uploaded":
+        /// "Not rendered", or "Rendered on …" once its render has landed. Null on anything that is
+        /// not a project, and while a render of it is in flight (the render's own row, chained
+        /// directly above this one, is already showing the progress bar).
+        /// Written by the Recent page as it lays the list out, which is the only place that knows
+        /// which entry was rendered from which.
+        /// </summary>
+        [JsonIgnore]
+        public string RenderStatusText
+        {
+            get => _renderStatusText;
+            set
+            {
+                if (_renderStatusText == value)
+                    return; // the page recomputes this on every rebuild, and a rebuild is what a
+                            // property change here triggers — only a real change may be announced
+                _renderStatusText = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowRenderStatus));
+            }
+        }
+
+        [JsonIgnore] public bool ShowRenderStatus => !String.IsNullOrEmpty(RenderStatusText);
+
+        /// <summary>
+        /// Not persisted — whether the row directly above this one on the Recent page was made
+        /// <i>from</i> this one (a render above its project, a GIF above the video it was converted
+        /// from). Such a row draws the upper half of the bracket joining the two in the list's left
+        /// gutter, plus the chain-link glyph that sits on the join. Written by the Recent page for
+        /// the same reason as <see cref="RenderStatusText"/>.
+        /// </summary>
+        [JsonIgnore]
+        public bool LinkedToPrevious
+        {
+            get => _linkedToPrevious;
+            set
+            {
+                if (_linkedToPrevious == value)
+                    return; // see RenderStatusText
+                _linkedToPrevious = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Not persisted — the other end of <see cref="LinkedToPrevious"/>: whether this row was
+        /// made from the row directly below it. Such a row draws the lower half of the bracket.
+        /// Each row owning its own half is what lets the bracket meet both previews dead centre
+        /// however tall either row happens to be — neither half needs to know the other's height.
+        /// </summary>
+        [JsonIgnore]
+        public bool LinkedToNext
+        {
+            get => _linkedToNext;
+            set
+            {
+                if (_linkedToNext == value)
+                    return; // see RenderStatusText
+                _linkedToNext = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>True when <paramref name="path"/> lives inside this session's own directory —
+        /// what tells a recording kept with its session apart from one saved to the user's output
+        /// folder. An unreadable path counts as inside: the cautious answer everywhere this is
+        /// asked.</summary>
+        public bool IsInsideSessionDirectory(string path)
+        {
+            try
+            {
+                var dir = Path.GetDirectoryName(FilePath);
+                return String.IsNullOrEmpty(path)
+                       || (!String.IsNullOrEmpty(dir)
+                           && Path.GetFullPath(path).StartsWith(Path.GetFullPath(dir), StringComparison.OrdinalIgnoreCase));
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        /// <summary>Announces every derived flag the Recent row's buttons, marker and status line
+        /// are bound to. Raised by each of the few persisted fields that classify an entry — which
+        /// of them changed is never interesting, and missing one silently leaves a stale row.</summary>
+        private void RaiseRowAffordances()
+        {
+            OnPropertyChanged(nameof(IsVideo));
+            OnPropertyChanged(nameof(IsUploadOnly));
+            OnPropertyChanged(nameof(IsProject));
+            OnPropertyChanged(nameof(CanPlay));
+            OnPropertyChanged(nameof(CanCopy));
+            OnPropertyChanged(nameof(CanUpload));
+            OnPropertyChanged(nameof(CanCreateGif));
+            OnPropertyChanged(nameof(ShowEditVideo));
+            OnPropertyChanged(nameof(CanEditVideo));
+            OnPropertyChanged(nameof(ShowRender));
+            OnPropertyChanged(nameof(ShowOpen));
+            OnPropertyChanged(nameof(ShowNotUploaded));
+        }
 
         private Clowd.UI.ActiveUpload _activeUpload;
         private Clowd.UI.Services.GifConversion _activeGifConversion;
         private Clowd.UI.Services.VideoRender _activeRender;
+        private string _renderStatusText;
+        private bool _linkedToPrevious;
+        private bool _linkedToNext;
     }
 }
