@@ -162,7 +162,7 @@ fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
                 continue;
             }
             let _ = fs::remove_file(&dst);
-            if let Err(e) = std::os::unix::fs::symlink(&target, &dst) {
+            if let Err(e) = symlink(&target, &dst) {
                 println!(
                     "cargo:warning=obs-express: failed to symlink {} -> {}: {e}",
                     dst.display(),
@@ -208,6 +208,22 @@ fn stage_macos_dylibs(deps_lib: &Path, profile_dir: &Path) {
         );
         run_checked("codesign", &["--force", "--sign", "-", dst_s], &[]);
     }
+}
+
+// build.rs selects the platform at run time (CARGO_CFG_TARGET_OS), so the whole
+// file compiles on every host; std::os::unix does not exist on Windows.
+#[cfg(unix)]
+fn symlink(target: &Path, dst: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, dst)
+}
+
+#[cfg(not(unix))]
+fn symlink(_target: &Path, _dst: &Path) -> std::io::Result<()> {
+    // Only reachable when cross-building for macOS from a non-unix host,
+    // which the rest of build_macos() cannot do either.
+    Err(std::io::Error::other(
+        "symlinks are only staged on unix hosts",
+    ))
 }
 
 fn run(cmd: &str, args: &[&str]) {
