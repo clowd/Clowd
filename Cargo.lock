@@ -765,6 +765,7 @@ dependencies = [
  "clap",
  "clowd_rust_core",
  "image",
+ "libc",
  "log",
  "ort",
  "realfft",

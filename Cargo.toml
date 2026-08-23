@@ -29,6 +29,7 @@ clap = "4.6"
 image = { version = "0.25", default-features = false }
 libblur = "0.24"
 euclid = "0.22"
+libc = "0.2"
 log = "0.4"
 simplelog = "0.12"
 winit = "0.30"

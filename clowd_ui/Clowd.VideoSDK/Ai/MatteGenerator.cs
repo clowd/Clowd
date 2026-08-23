@@ -115,7 +115,7 @@ namespace Clowd.VideoSDK.Ai
                 var bgra = new byte[width * height * 4];
                 long framesReceived = 0;
                 long lastPtsUs = long.MinValue;
-                while (ReadMatteFrame(client.Output, gray))
+                while (ReadMatteFrame(client, gray))
                 {
                     if (!ptsQueue.TryDequeue(out long ptsTicks))
                     {
@@ -320,19 +320,21 @@ namespace Clowd.VideoSDK.Ai
         }
 
         /// <summary>Reads one gray8 matte frame from stdout into <paramref name="gray"/>. False on
-        /// a clean end of stream; a torn frame (EOF mid-frame — the process died) throws.</summary>
-        private static bool ReadMatteFrame(Stream output, byte[] gray)
+        /// a clean end of stream; a torn frame (EOF mid-frame — the process died, or something in
+        /// it printed to the payload pipe) throws, with the stderr tail that says which.</summary>
+        private static bool ReadMatteFrame(AiClient client, byte[] gray)
         {
             int offset = 0;
             while (offset < gray.Length)
             {
-                int read = output.Read(gray, offset, gray.Length - offset);
+                int read = client.Output.Read(gray, offset, gray.Length - offset);
                 if (read <= 0)
                 {
                     if (offset == 0)
                         return false;
                     throw new InvalidOperationException(
-                        $"clowd_ai's output ended {gray.Length - offset} bytes into a matte frame.");
+                        $"clowd_ai's output ended mid-frame: {offset} of {gray.Length} bytes."
+                        + StderrSuffix(client));
                 }
                 offset += read;
             }

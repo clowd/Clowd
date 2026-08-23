@@ -5,7 +5,9 @@
 //! with either its gray8 alpha matte or a straight (non-premultiplied)
 //! RGBA8 foreground where RGB is the model's predicted foreground and A its
 //! alpha. The C# side encodes the alpha stream into a luma-only H.264
-//! sidecar it composites from later.
+//! sidecar it composites from later. Frames go to the `payload` writer rather
+//! than to `stdout`, which by then points at stderr — see
+//! `main::claim_payload_stdout` for whose stray printing made that necessary.
 //!
 //! RVM is recurrent: four state tensors (`r1i..r4i`) carry temporal context
 //! between frames, seeded as `[1,1,1,1]` zeros (validated bit-exact against
@@ -113,8 +115,10 @@ impl RvmSession {
     }
 }
 
-/// The `matte` subcommand: pump stdin frames through the model until EOF.
-pub fn run(width: u32, height: u32, format: MatteFormat) -> anyhow::Result<()> {
+/// The `matte` subcommand: pump stdin frames through the model until EOF,
+/// answering each on `payload` (this process's real stdout, claimed by
+/// `main::claim_payload_stdout`).
+pub fn run(width: u32, height: u32, format: MatteFormat, mut payload: impl Write) -> anyhow::Result<()> {
     ensure!(width > 0 && height > 0, "--width and --height must be positive");
     let mut rvm = RvmSession::new()?;
 
@@ -132,7 +136,6 @@ pub fn run(width: u32, height: u32, format: MatteFormat) -> anyhow::Result<()> {
         }
     ];
     let mut stdin = std::io::stdin().lock();
-    let mut stdout = std::io::stdout().lock();
 
     let started = Instant::now();
     let mut frames = 0u64;
@@ -175,10 +178,10 @@ pub fn run(width: u32, height: u32, format: MatteFormat) -> anyhow::Result<()> {
 
         // Flushed per frame: the C# side streams results as they arrive, and
         // a frame parked in a BufWriter would stall its pipeline.
-        stdout
+        payload
             .write_all(&out)
             .context("writing a matte frame to stdout")?;
-        stdout.flush()?;
+        payload.flush()?;
         frames += 1;
     }
     let elapsed = started.elapsed();
