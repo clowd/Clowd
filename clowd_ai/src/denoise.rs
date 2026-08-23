@@ -32,8 +32,11 @@
 //! Everything streams: samples are consumed in hop-sized chunks and emitted
 //! as soon as every frame covering them has been overlap-added, so memory
 //! stays flat regardless of clip length. The model itself measured
-//! 2 ms/frame on the dev box — ~5× realtime per channel is DSP-bound
-//! headroom, not a budget to spend.
+//! ~1.5 ms/frame on the dev box — ~6.8× realtime per channel is DSP-bound
+//! headroom, not a budget to spend. It runs on ONNX Runtime's own CPU
+//! provider on macOS and single-threaded everywhere; both are measured
+//! choices rather than defaults, and [`crate::CoreMl::Declined`] and the
+//! session build below say why.
 
 use std::collections::VecDeque;
 use std::io::Write;
@@ -321,7 +324,20 @@ struct DpdfModel {
 impl DpdfModel {
     fn new(channels: usize) -> anyhow::Result<Self> {
         let t = Instant::now();
-        let session = crate::ep_session_builder()?
+        // One intra-op thread, deliberately. This graph is ~670 tiny nodes run
+        // once per 10 ms frame, and the thread pool's per-node barriers cost
+        // more than the work they split: on the dev box 10 s of mono measured
+        // 1.49 s single-threaded against 1.66 s at two threads, 1.80 s at four
+        // and 2.08 s at the default (one per core, 12 here) — monotonically
+        // worse the wider it spreads, which is the signature of a graph too
+        // small to parallelize rather than anything about this machine.
+        // Windows is unmeasured — DirectML has the model there and only the
+        // nodes it declines land on the CPU at all — but the same argument
+        // covers whatever those turn out to be: they are a subset of a graph
+        // that is already too small to be worth splitting.
+        let session = crate::ep_session_builder(crate::CoreMl::Declined)?
+            .with_intra_threads(1)
+            .map_err(|e| anyhow::anyhow!("pinning the DPDFNet session to one thread: {e}"))?
             .commit_from_memory(DPDF_MODEL)
             .context("creating the DPDFNet session")?;
         let state0 = initial_state(&session)?;
@@ -410,8 +426,11 @@ pub fn run(channels: usize) -> anyhow::Result<()> {
             n % (4 * channels) == 0,
             "stdin ended mid-sample: {n} bytes is not whole {channels}-channel f32 frames"
         );
-        for (i, s) in bytes[..n].chunks_exact(4).enumerate() {
-            chans[i % channels].push(f32::from_le_bytes([s[0], s[1], s[2], s[3]]));
+        // The discarded remainder is always empty: the `ensure!` above already
+        // proved `n` is a whole number of f32s.
+        let (samples, _) = bytes[..n].as_chunks::<4>();
+        for (i, s) in samples.iter().enumerate() {
+            chans[i % channels].push(f32::from_le_bytes(*s));
         }
         total_samples += (n as u64) / 4;
         for ch in 0..channels {
@@ -561,9 +580,17 @@ mod tests {
 
     fn read_f32(path: &std::path::Path) -> Vec<f32> {
         let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        bytes
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        // The one reader here whose length is not ours to guarantee — it takes
+        // whatever file CLOWD_AI_REF_DIR points at. `chunks_exact` dropped a
+        // partial trailing float silently, which would have left the parity
+        // assertions comparing against a misaligned fixture and blaming the
+        // model; `as_chunks` hands the tail back, so a truncated fixture fails
+        // as itself.
+        let (floats, rest) = bytes.as_chunks::<4>();
+        assert!(rest.is_empty(), "{} is not whole f32s", path.display());
+        floats
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
             .collect()
     }
 

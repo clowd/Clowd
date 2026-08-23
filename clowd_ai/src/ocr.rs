@@ -657,7 +657,9 @@ fn detect(session: &mut Session, img: &Bgra<'_>) -> anyhow::Result<Vec<DetBox>> 
         for y in 0..sh {
             let row = &scaled[y * sw * 4..(y + 1) * sw * 4];
             let dst = y * pw;
-            for (x, px) in row.chunks_exact(4).enumerate() {
+            // `row` is sliced to exactly `sw` BGRA pixels, so `as_chunks`
+            // never has a remainder to drop.
+            for (x, px) in row.as_chunks::<4>().0.iter().enumerate() {
                 bp[dst + x] = px[0] as f32 * DET_NORM[0].0 + DET_NORM[0].1;
                 gp[dst + x] = px[1] as f32 * DET_NORM[1].0 + DET_NORM[1].1;
                 rp[dst + x] = px[2] as f32 * DET_NORM[2].0 + DET_NORM[2].1;
@@ -970,7 +972,9 @@ fn infer_batch(rec: &mut Recognizer, crops: &[&RgbaImage]) -> anyhow::Result<Vec
         for y in 0..h {
             let row = &raw[y * w * 4..(y + 1) * w * 4];
             let dst = y * wmax;
-            for (x, px) in row.chunks_exact(4).enumerate() {
+            // `row` is sliced to exactly `w` BGRA pixels, so `as_chunks`
+            // never has a remainder to drop.
+            for (x, px) in row.as_chunks::<4>().0.iter().enumerate() {
                 bp[dst + x] = px[0] as f32 / 127.5 - 1.0;
                 gp[dst + x] = px[1] as f32 / 127.5 - 1.0;
                 rp[dst + x] = px[2] as f32 / 127.5 - 1.0;

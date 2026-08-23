@@ -64,7 +64,7 @@ struct RvmSession {
 impl RvmSession {
     fn new() -> anyhow::Result<Self> {
         let t = Instant::now();
-        let session = crate::ep_session_builder()?
+        let session = crate::ep_session_builder(crate::CoreMl::Allowed)?
             .commit_from_memory(RVM_MODEL)
             .context("creating the RVM session")?;
         log::info!("RVM session ready in {:?}", t.elapsed());
@@ -149,7 +149,8 @@ pub fn run(width: u32, height: u32, format: MatteFormat) -> anyhow::Result<()> {
         {
             let (rp, rest) = src.split_at_mut(px);
             let (gp, bp) = rest.split_at_mut(px);
-            for (i, p) in rgb.chunks_exact(3).enumerate() {
+            // `rgb` is exactly `px * 3` bytes, so `as_chunks` leaves no remainder.
+            for (i, p) in rgb.as_chunks::<3>().0.iter().enumerate() {
                 rp[i] = p[0] as f32 / 255.0;
                 gp[i] = p[1] as f32 / 255.0;
                 bp[i] = p[2] as f32 / 255.0;
@@ -217,9 +218,17 @@ mod tests {
 
     fn read_f32(path: &std::path::Path) -> Vec<f32> {
         let bytes = std::fs::read(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
-        bytes
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        // The one reader here whose length is not ours to guarantee — it takes
+        // whatever file CLOWD_AI_REF_DIR points at. `chunks_exact` dropped a
+        // partial trailing float silently, which would have left the parity
+        // assertions comparing against a misaligned fixture and blaming the
+        // model; `as_chunks` hands the tail back, so a truncated fixture fails
+        // as itself.
+        let (floats, rest) = bytes.as_chunks::<4>();
+        assert!(rest.is_empty(), "{} is not whole f32s", path.display());
+        floats
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
             .collect()
     }
 
