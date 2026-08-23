@@ -1279,48 +1279,174 @@ namespace Clowd.VideoSDK.Tests
                 KeyboardLayout.GetRuns(WriteCapture(ModDown, KeyDown, ModUp), 1000)).FullText);
         }
 
-        /// <summary>The x extents of each matching run along row <paramref name="y"/> — where
-        /// <see cref="RunsAcross"/> only counts them.</summary>
-        private static List<(int Left, int Right)> ColorRuns(byte[] px, int y,
-            Func<byte, byte, byte, bool> match)
+        /// <summary>
+        /// Per-column first and last row of <i>solid</i> keycap face — the geometry every cap
+        /// measurement below is taken against.
+        ///
+        /// Not a sampled scanline, and the distinction is the bug: a cap's face height, seat depth
+        /// and corner radius all fall out of <see cref="FrameComposer.KeyboardMetrics"/>, whose
+        /// row height is the measured typeface's line spacing — Helvetica on macOS, Arial/Segoe UI
+        /// on Windows — so the same fixed row offset sits inside the black seat on one platform
+        /// and past the whole cap on the other. A projection has no row to be wrong about.
+        ///
+        /// Solid face only, never the anti-aliased edges: the fringe where the black seat fades
+        /// into the white sheet passes through the very grays the face is painted in, which is how
+        /// a bounding box taken with <see cref="IsFace"/>'s tolerant window reads a cap as ending
+        /// two rows below its own seat.
+        /// </summary>
+        private static (int[] First, int[] Last) FaceSpans(byte[] px)
         {
-            var runs = new List<(int, int)>();
+            var first = new int[BigW];
+            var last = new int[BigW];
+            Array.Fill(first, -1);
+            Array.Fill(last, -1);
+            for (int x = 0; x < BigW; x++)
+            {
+                for (int y = 0; y < BigH; y++)
+                {
+                    int i = (y * BigW + x) * 4;
+                    if (px[i] != 0x3D || px[i + 1] != 0x3D || px[i + 2] != 0x3D)
+                        continue;
+                    if (first[x] < 0)
+                        first[x] = y;
+                    last[x] = y;
+                }
+            }
+            return (first, last);
+        }
+
+        /// <summary>The x extents of every drawn keycap, by column projection over
+        /// <see cref="FaceSpans"/>: a column belongs to a cap when any face was painted in it at
+        /// all, and the caps are what is left between the columns where none was.</summary>
+        private static List<(int Left, int Right)> CapColumns(int[] faceFirst)
+        {
+            var caps = new List<(int, int)>();
             int start = -1;
             for (int x = 0; x < BigW; x++)
             {
-                int i = (y * BigW + x) * 4;
-                bool hit = match(px[i], px[i + 1], px[i + 2]);
-                if (hit && start < 0)
+                if (faceFirst[x] >= 0 && start < 0)
                     start = x;
-                else if (!hit && start >= 0)
+                else if (faceFirst[x] < 0 && start >= 0)
                 {
-                    runs.Add((start, x - 1));
+                    caps.Add((start, x - 1));
                     start = -1;
                 }
             }
             if (start >= 0)
-                runs.Add((start, BigW - 1));
-            return runs;
-        }
-
-        private static bool AnyWhite(byte[] px, int x0, int x1, int y0, int y1)
-        {
-            for (int y = Math.Max(0, y0); y <= Math.Min(BigH - 1, y1); y++)
-            {
-                for (int x = Math.Max(0, x0); x <= Math.Min(BigW - 1, x1); x++)
-                {
-                    int i = (y * BigW + x) * 4;
-                    if (px[i] > 180 && px[i + 1] > 180 && px[i + 2] > 180)
-                        return true;
-                }
-            }
-            return false;
+                caps.Add((start, BigW - 1));
+            return caps;
         }
 
         /// <summary>
-        /// A Mac chord draws in real pixels the way a Mac keyboard is molded: Cmd is a wide cap
-        /// wearing its legend bottom-left and the ⌘ vector icon top-right (the glyph itself is
-        /// exactly what a default typeface will not have), with the plain C cap beside it.
+        /// Whether the pixel is a cap's legend/icon ink: white, and painted <b>on</b> the face
+        /// rather than being the white sheet showing through. The sheet is the same white, and a
+        /// cap's rounded corners leave it visible inside the cap's own bounding box, so what tells
+        /// the two apart is the face enclosing the pixel in its own column.
+        ///
+        /// <paramref name="above"/>/<paramref name="below"/> pick which half of that enclosure to
+        /// insist on. The topmost ink only needs face above it — sheet showing over a top corner
+        /// has none, and sheet under a bottom corner can never be the topmost anything — and the
+        /// bottommost ink mirrors it. Demanding both is what classifies an entire column.
+        /// </summary>
+        private static bool IsCapInk(byte[] px, int[] faceFirst, int[] faceLast, int x, int y,
+            bool above, bool below)
+        {
+            int i = (y * BigW + x) * 4;
+            // half-covered ink over the 0x3D face still lands around 0xA0, and nothing on a cap
+            // is between the face and that
+            if (px[i] <= 150 || px[i + 1] <= 150 || px[i + 2] <= 150)
+                return false;
+            return (!above || (faceFirst[x] >= 0 && faceFirst[x] < y))
+                && (!below || (faceLast[x] >= 0 && faceLast[x] > y));
+        }
+
+        /// <summary>The row of the topmost ink in columns <paramref name="left"/>..<paramref
+        /// name="right"/>, or -1 when the range carries none.</summary>
+        private static int TopInk(byte[] px, int[] faceFirst, int[] faceLast, int left, int right)
+        {
+            for (int y = 0; y < BigH; y++)
+            {
+                for (int x = left; x <= right; x++)
+                {
+                    if (IsCapInk(px, faceFirst, faceLast, x, y, above: true, below: false))
+                        return y;
+                }
+            }
+            return -1;
+        }
+
+        /// <summary>The row of the bottommost ink in columns <paramref name="left"/>..<paramref
+        /// name="right"/>, or -1.</summary>
+        private static int BottomInk(byte[] px, int[] faceFirst, int[] faceLast, int left, int right)
+        {
+            for (int y = BigH - 1; y >= 0; y--)
+            {
+                for (int x = left; x <= right; x++)
+                {
+                    if (IsCapInk(px, faceFirst, faceLast, x, y, above: false, below: true))
+                        return y;
+                }
+            }
+            return -1;
+        }
+
+        /// <summary>Which columns of a cap carry ink, indexed from <paramref name="left"/>.</summary>
+        private static bool[] InkedColumns(byte[] px, int[] faceFirst, int[] faceLast,
+            int left, int right)
+        {
+            var inked = new bool[right - left + 1];
+            for (int x = left; x <= right; x++)
+            {
+                for (int y = 0; y < BigH; y++)
+                {
+                    if (!IsCapInk(px, faceFirst, faceLast, x, y, above: true, below: true))
+                        continue;
+                    inked[x - left] = true;
+                    break;
+                }
+            }
+            return inked;
+        }
+
+        /// <summary>The widest ink-free stretch strictly between a cap's first and last inked
+        /// column, as (start, length). Length 0 when the ink is one unbroken block.</summary>
+        private static (int Start, int Length) WidestInkGap(bool[] inked)
+        {
+            int first = Array.IndexOf(inked, true);
+            int last = Array.LastIndexOf(inked, true);
+            int bestStart = 0, bestLength = 0, runStart = -1;
+            for (int i = first; i >= 0 && i <= last; i++)
+            {
+                if (!inked[i])
+                {
+                    if (runStart < 0)
+                        runStart = i;
+                    if (i - runStart + 1 > bestLength)
+                    {
+                        bestStart = runStart;
+                        bestLength = i - runStart + 1;
+                    }
+                }
+                else
+                {
+                    runStart = -1;
+                }
+            }
+            return (bestStart, bestLength);
+        }
+
+        /// <summary>
+        /// A Mac chord draws in real pixels the way a Mac keyboard is molded: two separate caps,
+        /// Cmd the wide one, wearing its legend bottom-left and the ⌘ vector icon top-right (that
+        /// glyph being exactly what a default typeface will not have).
+        ///
+        /// Every claim is measured off the render rather than off an offset, because the cap
+        /// geometry is derived from the measured typeface and the runners do not share one — see
+        /// <see cref="FaceSpans"/>. The legend and the icon are told apart by the widest ink-free
+        /// column stretch inside the cap: <see cref="Keycap.Width"/> reserves 3 · PadX for a wide
+        /// key, one of which always falls between the legend's right edge and the icon's left, and
+        /// that stretch is wider than any gap between two letters of the legend. Which of the two
+        /// groups is which is then not assumed — it is what the assertions state.
         /// </summary>
         [Fact]
         public void The_cmd_keycap_draws_wide_with_its_own_icon()
@@ -1333,33 +1459,35 @@ namespace Clowd.VideoSDK.Tests
             var p = BigKeyboardProject(capture, out _, out _, white: true);
 
             var px = RenderAt(p, (long)(0.1 * Sec), BigW, BigH);
-            // the face color exactly, not IsFace's window: the anti-aliased edge where the black
-            // seat meets the white sheet passes through that same gray, which would put the
-            // "face" bottom a couple of rows below the whole cap
-            var face = Bounds(px, BigW, BigH, (b, g, r) => b == 0x3D && g == 0x3D && r == 0x3D);
-            Assert.NotNull(face);
+            var (faceFirst, faceLast) = FaceSpans(px);
 
-            // measured off the black seat that peeks out under the faces, not off the faces
-            // themselves: a cap's face is broken up by its own white legend and icon, while the
-            // seat is the one band of a cap that carries no ink at all, so its runs are the caps
-            var caps = ColorRuns(px, face.Value.Bottom + 2, (b, g, r) => b < 0x10 && g < 0x10 && r < 0x10);
+            // the chord drew as two caps, not one run-on cap
+            var caps = CapColumns(faceFirst);
             Assert.Equal(2, caps.Count);
 
             var cmd = caps[0];
-            int cmdWidth = cmd.Right - cmd.Left;
-            Assert.True(cmdWidth > caps[1].Right - caps[1].Left,
+            Assert.True(cmd.Right - cmd.Left > caps[1].Right - caps[1].Left,
                 "the Cmd cap is not the wide one");
 
-            // legend bottom-left, icon top-right — the molded layout, not a centered word
-            int height = face.Value.Bottom - face.Value.Top;
-            Assert.True(
-                AnyWhite(px, cmd.Left, cmd.Left + cmdWidth / 2,
-                    face.Value.Top + height / 2, face.Value.Bottom),
-                "no 'Cmd' legend in the cap's lower-left");
-            Assert.True(
-                AnyWhite(px, cmd.Right - cmdWidth / 3, cmd.Right,
-                    face.Value.Top, face.Value.Top + height / 2),
-                "no command icon in the cap's upper-right");
+            // legend and icon are two marks with clear air between them, not one centered word
+            var inked = InkedColumns(px, faceFirst, faceLast, cmd.Left, cmd.Right);
+            var (gapStart, gapLength) = WidestInkGap(inked);
+            Assert.True(gapLength > 0, "the Cmd cap's ink is one block: no icon beside the legend");
+
+            int legendRight = cmd.Left + gapStart - 1;
+            int iconLeft = cmd.Left + gapStart + gapLength;
+            int legendTop = TopInk(px, faceFirst, faceLast, cmd.Left, legendRight);
+            int legendBottom = BottomInk(px, faceFirst, faceLast, cmd.Left, legendRight);
+            int iconTop = TopInk(px, faceFirst, faceLast, iconLeft, cmd.Right);
+            int iconBottom = BottomInk(px, faceFirst, faceLast, iconLeft, cmd.Right);
+
+            Assert.True(iconTop >= 0 && legendTop >= 0, "one side of the gap carries no ink");
+            Assert.True(iconTop < legendTop,
+                $"the right-hand mark does not ride above the left ({iconTop} vs {legendTop}): " +
+                "the icon is not sitting at the top of the cap");
+            Assert.True(legendBottom > iconBottom,
+                $"the left-hand mark does not sit below the right ({legendBottom} vs {iconBottom}): " +
+                "the legend is not sitting at the foot of the cap");
         }
     }
 }
