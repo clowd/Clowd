@@ -70,20 +70,27 @@ jobs:
         shell: bash
 
       # The video editor's suite needs FFmpeg 7.1 natives to run its decode/encode/render tests;
-      # without them ~100 of them skip. A shipped build takes those from the obs-express payload,
-      # which is not downloaded in this job, so the tests get Homebrew's instead — a test-only
-      # dependency, never a shipped one (that build is GPL; see FFmpegLoader).
+      # without them ~100 of them skip. Take them from the same obs-express payload a shipped
+      # build uses, so what CI exercises is what users get — including ObsBinaryLocator's own
+      # resolution of it, which is why this points CLOWD_OBS_EXPRESS_PATH at the binary rather
+      # than CLOWD_FFMPEG_PATH at a directory: the layout differs per platform (beside the exe on
+      # Windows, Frameworks/ on macOS) and working that out is the thing under test.
       #
-      # Deliberately non-fatal: if the formula or the tap is having a bad day, CLOWD_FFMPEG_PATH
-      # stays unset, those tests skip exactly as they do today, and the other ~3300 still run. A
-      # convenience dependency should not be able to take the gate down.
-      - name: FFmpeg for the video editor tests (macOS)
-        if: runner.os == 'macOS'
+      # Deliberately non-fatal: if the download fails, the variable stays unset, those tests skip
+      # as they always did, and the other ~3300 still run. A convenience dependency should not be
+      # able to take the gate down.
+      - name: obs-express payload for the video editor tests
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          brew install ffmpeg@7 || echo "::warning::ffmpeg@7 unavailable; the FFmpeg-backed tests will skip"
-          LIB="$(brew --prefix ffmpeg@7 2>/dev/null)/lib"
-          if [ -d "$LIB" ]; then
-            echo "CLOWD_FFMPEG_PATH=$LIB" >> "$GITHUB_ENV"
+          asset=$([ "$RUNNER_OS" = "Windows" ] && echo obs-express-windows-x64.zip || echo obs-express-macos-arm64.zip)
+          if gh release download --repo clowd/obs-express-rs --pattern "$asset" --output obs-express.zip; then
+            mkdir -p obs-express
+            unzip -q obs-express.zip -d obs-express
+            exe=$([ "$RUNNER_OS" = "Windows" ] && echo obs-express.exe || echo obs-express)
+            echo "CLOWD_OBS_EXPRESS_PATH=$(pwd)/obs-express/$exe" >> "$GITHUB_ENV"
+          else
+            echo "::warning::obs-express payload unavailable; the FFmpeg-backed tests will skip"
           fi
         shell: bash
 
@@ -340,23 +347,12 @@ jobs:
         run: Expand-Archive obs-express.zip -DestinationPath publish/obs-express
         shell: pwsh
 
+      # No repair pass: since obs-express-rs v0.7.0 the archive is built with ditto in its own
+      # build job rather than round-tripped through upload-artifact, so it carries the execute
+      # bits and the framework symlinks itself (clowd/obs-express-rs#5). unzip restores both.
       - name: Extract obs-express into package (macOS)
         if: runner.os == 'macOS'
-        run: |
-          unzip -q obs-express.zip -d publish/obs-express
-          # vid2gif belongs in this list too: the zip carries mode 644 on all three, and without
-          # the bit GIF export dies at Process.Start with "permission denied".
-          chmod +x publish/obs-express/obs-express publish/obs-express/obs-ffmpeg-mux publish/obs-express/vid2gif 2>/dev/null || true
-
-          # The zip materializes the framework symlinks as full copies, which codesign rejects as "bundle format is ambiguous".
-          FW=publish/obs-express/Frameworks/libobs.framework
-          if [ -d "$FW" ] && [ ! -L "$FW/Versions/Current" ]; then
-            rm -rf "$FW/Versions/Current" "$FW/libobs" "$FW/Headers" "$FW/Resources"
-            ln -s A "$FW/Versions/Current"
-            ln -s Versions/Current/libobs "$FW/libobs"
-            ln -s Versions/Current/Headers "$FW/Headers"
-            ln -s Versions/Current/Resources "$FW/Resources"
-          fi
+        run: unzip -q obs-express.zip -d publish/obs-express
 
       # upload-artifact does not preserve unix file modes, but a zip does.
       - name: Zip package (macOS)
