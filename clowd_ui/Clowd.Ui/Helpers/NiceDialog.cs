@@ -67,6 +67,20 @@ namespace Clowd.UI.Helpers
             return result == true;
         }
 
+        /// <summary>
+        /// A prompt with two ways to say yes and one to back out: the affirmative button (which is
+        /// the default-focused one, so it should be the safer of the two), an alternate beside it,
+        /// and a cancel. Escape and Cmd+W resolve to <see cref="MessageDialogChoice.Cancel"/>.
+        /// </summary>
+        public static async Task<MessageDialogChoice> ShowThreeWayPromptAsync(
+            Visual parent, NiceDialogIcon icon, string content, string mainInstruction,
+            string primaryTxt, string alternateTxt, string cancelTxt = "Cancel")
+        {
+            var dialog = new MessageDialog(icon, content, mainInstruction, primaryTxt, cancelTxt, altTxt: alternateTxt);
+            await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.Result);
+            return dialog.Choice;
+        }
+
         public static async Task<Color> ShowColorPromptAsync(Visual parent, Color initial)
         {
             var dialog = new ColorDialog(HslRgbColor.FromColor(initial), true);
