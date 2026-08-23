@@ -16,9 +16,11 @@
 //! radius ([`estimate_radius_from_alpha`]). The Win32 / CoreGraphics glue
 //! lives next to each walker.
 
-// The Windows policy half is only called from the Win32 walker; it is
-// compiled (and its tests run) everywhere so a mac-hosted build still checks it.
-#![cfg_attr(not(windows), allow(dead_code))]
+// Each half is only called from its own platform's walker glue — the
+// Windows policy from `win_corners`, the macOS table + alpha estimator from
+// `mac_corners` — but the whole module is compiled (and its tests run) on
+// every host so either build still checks the other platform's logic.
+#![allow(dead_code)]
 
 /// First Windows 11 build. Windows 10 never rounds.
 pub const WINDOWS_11_FIRST_BUILD: u32 = 22000;
