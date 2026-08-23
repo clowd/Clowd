@@ -60,13 +60,34 @@ namespace Clowd.UI.VideoEditor
         public SessionVideoTrack Webcam { get; set; }
         public string InputCapturePath { get; set; }
 
+        /// <summary>The rounded corners the recorded window was composited with, as a fraction of
+        /// the region's height — the units <see cref="Mask.CornerRadius"/> is in. 0 = square, which
+        /// is every dragged region and every recording made before the capturer reported one.
+        /// A fraction rather than pixels because the recording's own frame size need not match the
+        /// region's (a Retina region is recorded at 2x), and a ratio is the same in either space.
+        /// </summary>
+        public double ScreenCornerRadius { get; set; }
+
         public static RecordingTrackHints From(SessionInfo session) => session == null
             ? null
             : new RecordingTrackHints
             {
                 Webcam = session.WebcamTrack,
                 InputCapturePath = session.InputCapturePath,
+                ScreenCornerRadius = ScreenCornerRadiusOf(session),
             };
+
+        /// <summary>The session's capture-space corner radius as a fraction of the region's
+        /// height, clamped to the half that is a fully rounded end. A session with no region to
+        /// measure against (an imported file, a project) has no radius to express.</summary>
+        private static double ScreenCornerRadiusOf(SessionInfo session)
+        {
+            var bounds = session.OriginalBounds;
+            if (session.CornerRadius <= 0 || bounds == null || bounds.Height <= 0)
+                return 0;
+
+            return Math.Min(session.CornerRadius / bounds.Height, 0.5);
+        }
     }
 
     [JsonSourceGenerationOptions(WriteIndented = true)]
@@ -327,6 +348,13 @@ namespace Clowd.UI.VideoEditor
                     ? Surround.Create(SurroundKind.Shadow, cursor: false)
                     : null,
                 WebcamHidden = !document.Webcam.Enabled,
+                // the picked window's rounded corners: the recorder captured the raw region, so
+                // the curve travels as metadata and the composition puts it back. Fresh edits
+                // only — a saved project carries whatever shape the user settled on, including a
+                // deliberately square one.
+                ScreenMask = freshEdit && hints?.ScreenCornerRadius > 0
+                    ? new Mask { Shape = MaskShape.RoundedRect, CornerRadius = hints.ScreenCornerRadius }
+                    : null,
                 Ids = RecordingIds.New(audioStreams.Count),
             });
         }

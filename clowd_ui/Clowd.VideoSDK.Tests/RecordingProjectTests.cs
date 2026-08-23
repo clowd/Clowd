@@ -228,6 +228,42 @@ namespace Clowd.VideoSDK.Tests
             Assert.Single(after.Items.Select(i => i.LinkGroupId).Distinct());
         }
 
+        // ------------------------------------------------------------------------ screen mask
+
+        /// <summary>A recording of a window the OS rounds: every screen item is clipped to the
+        /// rounded rect, and each carries its own mask instance so editing one item's radius does
+        /// not silently move the others.</summary>
+        [Fact]
+        public void A_screen_mask_is_applied_to_every_screen_item()
+        {
+            var spec = Spec(segments: new[] { new KeepSegment(0, 4 * Second), new KeepSegment(6 * Second, 9 * Second) });
+            spec.ScreenMask = new Mask { Shape = MaskShape.RoundedRect, CornerRadius = 0.02 };
+
+            var project = RecordingProject.Build(spec);
+
+            Assert.Empty(project.Validate());
+            var items = ItemsOn(project, "Screen");
+            Assert.Equal(2, items.Count);
+            foreach (var item in items)
+            {
+                Assert.Equal(MaskShape.RoundedRect, item.Transform.Mask.Shape);
+                Assert.Equal(0.02, item.Transform.Mask.CornerRadius);
+            }
+
+            Assert.NotSame(spec.ScreenMask, items[0].Transform.Mask);
+            Assert.NotSame(items[0].Transform.Mask, items[1].Transform.Mask);
+        }
+
+        /// <summary>The default: a dragged region has square corners, and the screen items keep the
+        /// plain rectangle they always had.</summary>
+        [Fact]
+        public void No_screen_mask_leaves_the_screen_items_unmasked()
+        {
+            var project = RecordingProject.Build(Spec());
+
+            Assert.Null(Assert.Single(ItemsOn(project, "Screen")).Transform.Mask);
+        }
+
         // -------------------------------------------------------------------------- v1 shim
 
         /// <summary>v1 render-args know exactly one audio row, so a v1 file must keep producing one

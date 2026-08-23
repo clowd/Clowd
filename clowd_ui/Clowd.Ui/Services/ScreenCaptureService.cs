@@ -289,7 +289,8 @@ namespace Clowd.UI
                         // the capture-active interlock is released in `finally` before the video
                         // page runs its own lifetime — correct: the screenshot overlay is done and
                         // VideoCapturePage has its own single-instance guard.
-                        PageManager.Current.GetVideoCapturePage().Open(result.Region, result.SessionDir);
+                        PageManager.Current.GetVideoCapturePage()
+                            .Open(result.Region, result.CornerRadius, result.SessionDir);
                         break;
                     case CaptureAction.Scroll:
                         // same hand-off as Video: the overlay is gone, and the scroll page runs its
@@ -513,6 +514,11 @@ namespace Clowd.UI
         public ScreenRect Region { get; init; }
         public string SessionDir { get; init; }
 
+        /// <summary>Corner radius of the recording region, in the same space as
+        /// <see cref="Region"/>; 0 = square (Video only). The OS corner radius of the window the
+        /// user picked — the video counterpart of <see cref="SessionInfo.CornerRadius"/>.</summary>
+        public double CornerRadius { get; init; }
+
         /// <summary>The recognized text read out of the session dir's ocr.txt sidecar before that
         /// directory was deleted (OcrUpload only) — the whole payload of an OCR upload.</summary>
         public string Text { get; init; }
@@ -575,13 +581,14 @@ namespace Clowd.UI
                 return null;
             }
 
-            // a "video x,y,w,h" marker means the overlay confirmed a recording region: the dir
+            // a "video x,y,w,h [r]" marker means the overlay confirmed a recording region: the dir
             // holds cropped.png (the poster frame, DESIGN §4.1) and must NOT be deleted — only
             // the consumed action.txt marker is removed (§4.3).
             const string videoPrefix = "video";
             if (action != null && action.StartsWith(videoPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                var region = ParseRegion(action.Substring(videoPrefix.Length).Trim());
+                var payload = action.Substring(videoPrefix.Length).Trim();
+                var region = ParseVideoRegion(payload, out var cornerRadius);
                 if (region != null)
                 {
                     try
@@ -594,7 +601,13 @@ namespace Clowd.UI
                         SentryConfig.CaptureHandled(ex, "capture.delete-action-file");
                     }
 
-                    return new CaptureResult { Action = CaptureAction.Video, Region = region, SessionDir = sessionDir };
+                    return new CaptureResult
+                    {
+                        Action = CaptureAction.Video,
+                        Region = region,
+                        CornerRadius = cornerRadius,
+                        SessionDir = sessionDir,
+                    };
                 }
 
                 Debug.WriteLine("Unparseable video action: " + action);
@@ -676,6 +689,37 @@ namespace Clowd.UI
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Parses the "x,y,w,h [r]" payload of a video action: the recording region, plus the
+        /// optional corner radius the capturer measured on the picked window (in the same
+        /// coordinate space as the rect, so a fraction of the region's height is unit-free —
+        /// CAPTURE_PROTOCOL.md §1.2). An absent radius — every dragged selection, and every
+        /// capturer that predates the field — is 0, i.e. square. A malformed radius is dropped
+        /// rather than failing the whole marker: the recording is the payload, the radius is
+        /// decoration.
+        /// </summary>
+        private static ScreenRect ParseVideoRegion(string payload, out double cornerRadius)
+        {
+            cornerRadius = 0;
+
+            var parts = payload.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length is < 1 or > 2)
+                return null;
+
+            var region = ParseRegion(parts[0]);
+            if (region == null)
+                return null;
+
+            if (parts.Length == 2 &&
+                Double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) &&
+                Double.IsFinite(radius) && radius > 0)
+            {
+                cornerRadius = radius;
+            }
+
+            return region;
         }
 
         /// <summary>Parses the "x,y,w,h" rect of a video or scroll action (invariant ints, x/y may

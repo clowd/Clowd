@@ -63,7 +63,7 @@ namespace Clowd.UI.VideoEditor
         private const long AddedItemDurationTicks = 5 * TimeSpan.TicksPerSecond;
 
         /// <summary>The name a blank video project carries in Recents, to tell it apart from the
-        /// "Screen Capture Session" rows a recording makes.</summary>
+        /// "Screen Recording" rows a recording makes.</summary>
         public const string BlankProjectName = "Video Project";
 
         private readonly SessionInfo _session; // null in --video-edit dev mode

@@ -1416,7 +1416,9 @@ impl App {
                 };
                 hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => write_video_action(&session_dir, sel, buf, cursor_visible, &self.monitors),
+                    (Some(sel), Some(buf)) => {
+                        write_video_action(&session_dir, sel, cycle.input.selection_radius, buf, cursor_visible, &self.monitors)
+                    }
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
