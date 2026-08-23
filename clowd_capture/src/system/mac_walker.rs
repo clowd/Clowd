@@ -5,6 +5,7 @@
 //! no child-window walking.
 
 use std::ffi::c_void;
+use std::sync::Mutex;
 
 use core_foundation::base::TCFType;
 use core_foundation::dictionary::{CFDictionary, CFDictionaryRef};
@@ -14,7 +15,8 @@ use core_graphics::display::CGDisplay;
 use core_graphics::geometry::CGRect;
 use core_graphics::window::{self, kCGNullWindowID, kCGWindowListExcludeDesktopElements, kCGWindowListOptionOnScreenOnly};
 
-use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
+use super::mac_corners::{self, CgBounds};
+use super::{HitTestResult, ObstructedWindow, WindowCaptureRef, WindowTarget};
 use crate::system::MonitorInfo;
 use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
@@ -24,6 +26,12 @@ const MIN_WINDOW_SIZE: i32 = 25;
 struct WindowEntry {
     window_id: u32,
     rect: ScreenRect,
+    /// `kCGWindowBounds` as reported — CG points — kept for the corner probe,
+    /// which photographs the window in that space.
+    cg_bounds: CgBounds,
+    /// Backing scale of the display the window was placed on (points →
+    /// physical px), for the lookup-table radius.
+    scale: f32,
     /// Window title text.
     title: String,
     obstructed: bool,
@@ -31,9 +39,17 @@ struct WindowEntry {
 }
 
 /// Snapshot of the top-level window list in Z-order. Created once at capture
-/// startup; queried per cursor-move via [`hit_test`].
+/// startup; queried per cursor-move via [`hit_test_target`].
 pub struct WindowWalker {
     windows: Vec<WindowEntry>,
+    /// Corner radius per entry, physical px, 0 = square. Seeded from the OS
+    /// lookup table at snapshot, then overwritten by [`probe_corner_radii`]
+    /// as the window server answers — behind a mutex because the walker is
+    /// already shared (`Arc`) with the main thread by then. All zero when
+    /// the walker was built with rounded corners off.
+    corner_radii: Mutex<Vec<f32>>,
+    /// Whether the corner probe should run at all.
+    rounded_corners: bool,
 }
 
 impl WindowWalker {
@@ -41,7 +57,7 @@ impl WindowWalker {
     ///
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
-    pub fn snapshot(monitors: &[MonitorInfo], visibility_threshold: f32) -> Self {
+    pub fn snapshot(monitors: &[MonitorInfo], visibility_threshold: f32, rounded_corners: bool) -> Self {
         let options = kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements;
         let window_list = match window::copy_window_info(options, kCGNullWindowID) {
             Some(list) => list,
@@ -49,6 +65,8 @@ impl WindowWalker {
                 warn!("CGWindowListCopyWindowInfo returned null");
                 return WindowWalker {
                     windows: Vec::new(),
+                    corner_radii: Mutex::new(Vec::new()),
+                    rounded_corners,
                 };
             }
         };
@@ -64,20 +82,76 @@ impl WindowWalker {
         }
 
         info!("WindowWalker: captured {} top-level windows", windows.len());
+        // Seed every entry with the lookup-table radius for this OS; the
+        // probe replaces these one by one once the snapshot is published.
+        let fallback_pts = if rounded_corners {
+            mac_corners::fallback_radius_points()
+        } else {
+            0.0
+        };
+        let corner_radii = windows
+            .iter()
+            .map(|w| fallback_pts * w.scale)
+            .collect();
         WindowWalker {
             windows,
+            corner_radii: Mutex::new(corner_radii),
+            rounded_corners,
         }
     }
 
+    /// Ask the window server for each window's real corner radius and
+    /// replace the lookup-table seed with it. Front-to-back, so the windows
+    /// the user is most likely aiming at settle first. Run on the walker
+    /// thread AFTER the snapshot has been published: it is a ~10 ms
+    /// round-trip per window, and hover hit-testing must not wait on it.
+    pub fn probe_corner_radii(&self, monitors: &[MonitorInfo]) {
+        if !self.rounded_corners {
+            return;
+        }
+        let mut probed = 0usize;
+        for (i, w) in self.windows.iter().enumerate() {
+            let Some(r) = mac_corners::probe_corner_radius(w.window_id, w.cg_bounds, monitors) else {
+                continue;
+            };
+            debug!(
+                "WindowWalker: window {i} {:?} corner radius {r:.1} px (seed {:.1})",
+                w.title,
+                self.corner_radius(i)
+            );
+            if let Ok(mut radii) = self.corner_radii.lock() {
+                if let Some(slot) = radii.get_mut(i) {
+                    *slot = r;
+                    probed += 1;
+                }
+            }
+        }
+        info!("WindowWalker: measured corner radius of {probed}/{} windows", self.windows.len());
+    }
+
+    fn corner_radius(&self, index: usize) -> f32 {
+        self.corner_radii
+            .lock()
+            .ok()
+            .and_then(|r| r.get(index).copied())
+            .unwrap_or(0.0)
+    }
+
     /// Given a cursor position in virtual-desktop physical pixels, return the
-    /// suggested capture rectangle — the topmost window under the cursor.
+    /// suggested capture target — the topmost window under the cursor, with
+    /// the corner radius to draw and crop it with.
     ///
     /// Returns `None` if the cursor is over the desktop background.
-    pub fn hit_test(&self, point: ScreenPoint) -> Option<ScreenRect> {
-        self.windows
+    pub fn hit_test_target(&self, point: ScreenPoint) -> Option<WindowTarget> {
+        let (idx, w) = self
+            .windows
             .iter()
-            .find(|w| w.rect.contains(point))
-            .map(|w| w.rect)
+            .enumerate()
+            .find(|(_, w)| w.rect.contains(point))?;
+        Some(WindowTarget {
+            rect: w.rect,
+            corner_radius: self.corner_radius(idx),
+        })
     }
 
     /// The scrolling-capture target under `point`: the topmost enumerated
@@ -149,8 +223,12 @@ impl WindowWalker {
     /// taken as the topmost enumerated window (CGWindowList is front-to-back
     /// Z-order). `None` if no windows were captured, so the caller falls back
     /// to the active screen.
-    pub fn foreground_capture_rect(&self) -> Option<ScreenRect> {
-        self.windows.first().map(|w| w.rect)
+    pub fn foreground_capture_target(&self) -> Option<WindowTarget> {
+        let w = self.windows.first()?;
+        Some(WindowTarget {
+            rect: w.rect,
+            corner_radius: self.corner_radius(0),
+        })
     }
 }
 
@@ -188,7 +266,7 @@ fn evaluate_window(
     let center_x = cg_rect.origin.x + cg_rect.size.width / 2.0;
     let center_y = cg_rect.origin.y + cg_rect.size.height / 2.0;
 
-    let (phys_x, phys_y, phys_w, phys_h) = if let Some(m) = find_monitor_for_cg_point(center_x, center_y, monitors) {
+    let (phys_x, phys_y, phys_w, phys_h, scale) = if let Some(m) = find_monitor_for_cg_point(center_x, center_y, monitors) {
         let ox = m.logical_origin.x;
         let oy = m.logical_origin.y;
         let s = m.scale_factor as f64;
@@ -197,14 +275,17 @@ fn evaluate_window(
             m.bounds.min_y() + ((cg_rect.origin.y - oy) * s).round() as i32,
             (cg_rect.size.width * s).round() as i32,
             (cg_rect.size.height * s).round() as i32,
+            m.scale_factor,
         )
     } else {
-        let scale = display_scale_at_logical_point(center_x, center_y) as f64;
+        let scale = display_scale_at_logical_point(center_x, center_y);
+        let s = scale as f64;
         (
-            (cg_rect.origin.x * scale).round() as i32,
-            (cg_rect.origin.y * scale).round() as i32,
-            (cg_rect.size.width * scale).round() as i32,
-            (cg_rect.size.height * scale).round() as i32,
+            (cg_rect.origin.x * s).round() as i32,
+            (cg_rect.origin.y * s).round() as i32,
+            (cg_rect.size.width * s).round() as i32,
+            (cg_rect.size.height * s).round() as i32,
+            scale,
         )
     };
 
@@ -249,6 +330,13 @@ fn evaluate_window(
     Some(WindowEntry {
         window_id,
         rect,
+        cg_bounds: CgBounds {
+            x: cg_rect.origin.x,
+            y: cg_rect.origin.y,
+            w: cg_rect.size.width,
+            h: cg_rect.size.height,
+        },
+        scale,
         title,
         obstructed,
         obstruction_rects,

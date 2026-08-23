@@ -449,6 +449,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             cursor_params: [0.0, 0.0, 0.0, 0.0],
             ocr_rect: [0.0, 0.0, -1.0, -1.0],
             ocr_params: [0.0, 0.0, 0.0, 0.0],
+            selection_shape: [0.0, 0.0, 0.0, 0.0],
         };
 
         let ubo = bundle
@@ -586,6 +587,8 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let mut mouse_pos: ScreenPointF = cycle.initial_mouse;
     let mut zoom: f32 = 1.0;
     let mut selection: Option<ScreenRect> = None;
+    let mut selection_radius: f32 = 0.0;
+    let mut selection_dragging: bool = false;
     let mut captured: bool = false;
     let mut overlays_visible: bool = true;
     let mut cursor_overlay_visible: bool = true;
@@ -637,11 +640,15 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     pos,
                     zoom: z,
                     selection: sel,
+                    selection_radius: radius,
+                    selection_dragging: dragging,
                     captured: cap,
                 }) => {
                     mouse_pos = pos;
                     zoom = z;
                     selection = sel;
+                    selection_radius = radius;
+                    selection_dragging = dragging;
                     captured = cap;
                 }
                 Ok(RenderMsg::UiState(state)) => {
@@ -778,6 +785,8 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     mouse_pos,
                     zoom,
                     selection,
+                    selection_radius,
+                    selection_dragging,
                     captured,
                     overlays_visible,
                     cursor_overlay_visible,
@@ -843,6 +852,10 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
             let mut peek_uniforms = PeekUniforms::zeroed();
             peek_uniforms.selection_rect = [sl, st, sr, sb];
+            // Same window-local scaling as the desktop pass's
+            // selection_shape: the radius rides the magnifier zoom with
+            // the rect it belongs to.
+            peek_uniforms.selection_shape = [selection_radius * zoom.max(1.0), 0.0, 0.0, 0.0];
             peek_uniforms.window_uv = window_uv;
             peek_uniforms.desktop_uv = desktop_uv;
 

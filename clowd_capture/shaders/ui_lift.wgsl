@@ -25,12 +25,14 @@ struct Uniforms {
 struct Instance {
     // min_x, min_y, max_x, max_y in window-local physical pixels.
     @location(0) dest_px: vec4<f32>,
-    // (alpha, band_centre, sweep σ, unused). Band centre is in quad-space
-    // v (0 = top, 1 = bottom); it travels top → bottom and deliberately
-    // OVERSHOOTS both edges — see anim::sweep_band — so the looping wrap
-    // happens with the band fully invisible. σ is supplied by the CPU
-    // (anim::SWEEP_SIGMA) so the falloff and the overshoot can never
-    // disagree.
+    // (alpha, band_centre, sweep σ, corner_radius). Band centre is in
+    // quad-space v (0 = top, 1 = bottom); it travels top → bottom and
+    // deliberately OVERSHOOTS both edges — see anim::sweep_band — so the
+    // looping wrap happens with the band fully invisible. σ is supplied by
+    // the CPU (anim::SWEEP_SIGMA) so the falloff and the overshoot can
+    // never disagree. corner_radius is the selection's (window-local px,
+    // 0 = square): the band is clipped to that rounded rect so it stays
+    // inside the curved border a picked window is drawn with.
     @location(1) params: vec4<f32>,
     // Band colour (straight alpha 1.0; the fragment premultiplies).
     @location(2) tint: vec4<f32>,
@@ -41,6 +43,8 @@ struct VsOut {
     @location(0) corner: vec2<f32>,
     @location(1) params: vec4<f32>,
     @location(2) tint: vec4<f32>,
+    // The instance rect, carried to the fragment for the rounded clip.
+    @location(3) dest_px: vec4<f32>,
 };
 
 @vertex
@@ -65,6 +69,7 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
     out.corner = c;
     out.params = inst.params;
     out.tint = inst.tint;
+    out.dest_px = inst.dest_px;
     return out;
 }
 
@@ -79,6 +84,20 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let dv = in.corner.y - band;
     let sigma = max(in.params.z, 1e-3);
     let fall = exp(-(dv * dv) / (2.0 * sigma * sigma));
-    let a = alpha * fall;
+    var a = alpha * fall;
+
+    // Rounded selection: clip to the curve (same rounded-box SDF as
+    // desktop.wgsl, 1 px anti-aliased at pixel centres). Square selections
+    // (radius 0) skip this and keep the full quad.
+    let radius = in.params.w;
+    if (radius > 0.0) {
+        let rmin = in.dest_px.xy;
+        let rmax = in.dest_px.zw;
+        let half_size = (rmax - rmin) * 0.5;
+        let r = min(radius, min(half_size.x, half_size.y));
+        let q = abs(in.pos.xy - (rmin + half_size)) - (half_size - vec2<f32>(r, r));
+        let d = length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+        a = a * clamp(0.5 - d, 0.0, 1.0);
+    }
     return vec4<f32>(in.tint.rgb * a, a);
 }

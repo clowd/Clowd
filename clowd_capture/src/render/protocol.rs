@@ -14,6 +14,12 @@ pub enum RenderMsg {
         pos: ScreenPointF,
         zoom: f32,
         selection: Option<ScreenRect>,
+        /// Corner radius of `selection` in physical (virtual-desktop) px,
+        /// 0 = square — see `InteractionState::selection_radius`.
+        selection_radius: f32,
+        /// A mouse button is down — the selection is being dragged out,
+        /// moved or resized and its geometry changes every frame.
+        selection_dragging: bool,
         captured: bool,
     },
     UiState(Arc<UiSharedState>),

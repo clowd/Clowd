@@ -11,7 +11,7 @@ using Clowd.Drawing.Rendering;
 
 namespace Clowd.Drawing.Graphics
 {
-    [GraphicDesc("Image", Skills = Skill.Angle | Skill.Crop | Skill.Cursor)]
+    [GraphicDesc("Image", Skills = Skill.Angle | Skill.Crop | Skill.Cursor | Skill.Radius)]
     public class GraphicImage : GraphicRectangle
     {
         public bool Editing => !_editingAnchor.IsEmptyRect();
@@ -94,6 +94,31 @@ namespace Clowd.Drawing.Graphics
         {
             get => _crop;
             set => Set(ref _crop, value);
+        }
+
+        /// <summary>
+        /// For an image the inherited <see cref="GraphicRectangle.CornerRadius"/> is read in
+        /// <b>bitmap (crop) pixels</b>, not canvas units: it is seeded from the capturer's
+        /// <c>CornerRadius</c> (the OS corner radius of the picked window, in pixels of the crop —
+        /// CAPTURE_PROTOCOL.md §1.3), and a corner radius that is a property of the photographed
+        /// window should keep rounding the same pixels however the graphic is stretched on the
+        /// canvas. At draw time it is scaled by the render scale (drawn width ÷ crop width) and
+        /// clamped like a rectangle's, then applied as a rounded clip around the drawn crop, so the
+        /// corners are transparent on screen and in every export. The properties bar edits it
+        /// through the same "Radius" spinner rectangles use; at the 1:1 scale a capture opens at
+        /// the number shown is exactly the pixels being cut.
+        /// </summary>
+        /// <remarks>Returns the clip radius in canvas units for <paramref name="drawn"/>, or 0 when
+        /// there is nothing to round.</remarks>
+        internal double DrawnCornerRadius(Rect drawn, Rect crop)
+        {
+            if (CornerRadius <= 0 || crop.Width <= 0 || drawn.Width <= 0)
+                return 0;
+            // the horizontal scale is the one the width-based radius travels with; the crop's
+            // aspect is preserved on load and a user stretch changes both axes the same way in
+            // the common (corner-handle) case — the clamp below covers the rest
+            var scaled = CornerRadius * (drawn.Width / crop.Width);
+            return Math.Max(0, Math.Min(scaled, Math.Min(drawn.Width, drawn.Height) / 2));
         }
 
         public int FlipX
@@ -268,6 +293,26 @@ namespace Clowd.Drawing.Graphics
             // decision #21: CroppedBitmap → DrawImage with the crop as the source rect.
             Rect r = UnrotatedBounds;
             Rect src = Crop.IsEmptyRect() ? new Rect(_imageSource.Size) : Crop.ToRect();
+
+            // A rounded image (a picked window's corner radius, or one the user set) is the same
+            // blit under a rounded clip — the corners stay transparent rather than showing the
+            // pixels that sat behind the window, on screen and in DrawObject's export alike. The
+            // clip is pushed inside the rotate/flip transforms the body runs under, so it follows
+            // them for free. No clip at all for 0: the plain path stays byte-identical.
+            var radius = DrawnCornerRadius(r, src);
+            if (radius > 0)
+            {
+                using (ctx.PushClip(new RoundedRect(r, radius)))
+                    DrawImagePixels(ctx, src, r);
+            }
+            else
+            {
+                DrawImagePixels(ctx, src, r);
+            }
+        }
+
+        private void DrawImagePixels(DrawingContext ctx, Rect src, Rect r)
+        {
             ctx.DrawImage(_imageSource, src, r);
             if (_imageObscured != null || UpdateObscureCache())
             {

@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use crate::ocr::OcrOutcome;
 use crate::selection::{dpi_at_point, hit_test, DragMode, Hittest};
 use crate::settings::TipsMode;
-use crate::system::MonitorInfo;
+use crate::system::{MonitorInfo, WindowTarget};
 use clowd_rust_core::geometry::{ScreenPoint, ScreenPointF, ScreenRect};
 use winit::window::CursorIcon;
 
@@ -273,6 +273,15 @@ pub(crate) struct InteractionState {
     pub mouse_down_dpi: f32,
     pub dragging: bool,
     pub selection: Option<ScreenRect>,
+    /// Corner radius of `selection` in physical px; 0 = square. Non-zero
+    /// only while the selection IS a window the user picked (hover, click
+    /// without drag, `W`, `--capture-mode window`) — it is the radius the
+    /// OS composites that window with. Every other way a rect comes to be
+    /// (drag-select, F / A, moving or resizing a captured window selection)
+    /// sets it back to 0: the rect no longer describes a window's shape.
+    /// Rides along to the render workers with the selection and into the
+    /// copy / save / preview crop.
+    pub selection_radius: f32,
     pub captured: bool,
     pub hittest: Hittest,
     pub drag_mode: Option<DragMode>,
@@ -314,6 +323,16 @@ pub(crate) struct InteractionEffects {
     pub update_cursor_visibility: bool,
     pub restore_mouse: Option<ScreenPoint>,
     pub set_cursor: Option<CursorIcon>,
+}
+
+impl InteractionState {
+    /// Point the un-captured selection at whatever the walker found under
+    /// the cursor — rect and corner radius together, or neither. The only
+    /// path by which `selection_radius` becomes non-zero.
+    pub fn set_hover_target(&mut self, target: Option<WindowTarget>) {
+        self.selection = target.map(|t| t.rect);
+        self.selection_radius = target.map_or(0.0, |t| t.corner_radius);
+    }
 }
 
 pub(crate) struct InteractionController;
@@ -359,8 +378,14 @@ impl InteractionController {
         }
     }
 
-    pub fn finalize_selection(input: &mut InteractionState, rect: ScreenRect, monitors: &[MonitorInfo]) -> InteractionEffects {
+    pub fn finalize_selection(
+        input: &mut InteractionState,
+        rect: ScreenRect,
+        corner_radius: f32,
+        monitors: &[MonitorInfo],
+    ) -> InteractionEffects {
         input.selection = Some(rect);
+        input.selection_radius = corner_radius;
         input.mouse_down = false;
         input.mouse_down_pt = None;
         input.dragging = false;
@@ -396,6 +421,7 @@ impl InteractionController {
 
     pub fn reset(input: &mut InteractionState) -> InteractionEffects {
         input.selection = None;
+        input.selection_radius = 0.0;
         input.captured = false;
         // Pick mode only means anything while a captured selection exists
         // to click inside; dropping the selection must drop the mode too,
@@ -451,6 +477,7 @@ mod tests {
             mouse_down_dpi: 1.0,
             dragging: true,
             selection: None,
+            selection_radius: 0.0,
             captured: false,
             hittest: Hittest::Outside,
             drag_mode: None,
@@ -488,9 +515,10 @@ mod tests {
         let mut input = state();
         let rect = ScreenRect::from_xy_size(20, 20, 40, 30);
 
-        let effects = InteractionController::finalize_selection(&mut input, rect, &[monitor()]);
+        let effects = InteractionController::finalize_selection(&mut input, rect, 12.0, &[monitor()]);
 
         assert_eq!(input.selection, Some(rect));
+        assert_eq!(input.selection_radius, 12.0);
         assert!(input.captured);
         assert!(!input.mouse_down);
         assert_eq!(input.zoom, 1.0);
@@ -519,6 +547,7 @@ mod tests {
         let mut input = state();
         input.captured = true;
         input.selection = Some(ScreenRect::from_xy_size(1, 1, 10, 10));
+        input.selection_radius = 16.0;
         input.scroll_pick_mode = true;
         input.ocr = OcrState::Lifted {
             anchor: Instant::now(),
@@ -536,6 +565,7 @@ mod tests {
 
         assert!(!input.captured);
         assert_eq!(input.selection, None);
+        assert_eq!(input.selection_radius, 0.0);
         assert!(!input.scroll_pick_mode);
         // The lifted lines were positioned against the selection that just
         // disappeared; leaving the mode up would draw them over nothing.

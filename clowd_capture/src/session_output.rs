@@ -20,7 +20,9 @@ use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 use clowd_rust_core::session::{absolute_path, created_utc_now, save_png, SessionJson};
 
 use crate::capture_output::ActionResult;
-use crate::image_extract::{composite_cursor_rgba, extract_selection_rgba, extract_selection_rgba_with_peek};
+use crate::image_extract::{
+    apply_rounded_corners, composite_cursor_rgba, corners_to_round, extract_selection_rgba, extract_selection_rgba_with_peek,
+};
 use crate::system::{virtual_desktop_bounds, CapturedDesktop, CursorImage, MonitorInfo, WindowPeekImage};
 
 /// Name of the sidecar file the shell reads to route the finished
@@ -47,12 +49,13 @@ pub enum SessionAction {
 pub fn write_session(
     session_dir: &Path,
     selection: ScreenRect,
+    corner_radius: f32,
     buffer: &CapturedDesktop,
     peek: Option<&WindowPeekImage>,
     cursor_visible: bool,
     action: SessionAction,
 ) -> ActionResult {
-    match write_session_inner(session_dir, selection, buffer, peek, cursor_visible, action) {
+    match write_session_inner(session_dir, selection, corner_radius, buffer, peek, cursor_visible, action) {
         Ok(json_path) => {
             log::info!("session written to {:?}", json_path);
             ActionResult::Success
@@ -390,6 +393,7 @@ fn write_ocr_upload_action_inner(session_dir: &Path, text: &str) -> anyhow::Resu
 fn write_session_inner(
     session_dir: &Path,
     selection: ScreenRect,
+    corner_radius: f32,
     buffer: &CapturedDesktop,
     peek: Option<&WindowPeekImage>,
     cursor_visible: bool,
@@ -400,9 +404,19 @@ fn write_session_inner(
 
     // Selection clamped to the desktop bitmap; this is the region the
     // preview contains and what CroppedRect must describe.
+    let requested = selection;
     let selection = selection
         .intersection(&buffer.bounds)
         .ok_or_else(|| anyhow!("selection {:?} does not intersect desktop bounds {:?}", selection, buffer.bounds))?;
+    // A picked window's corners go transparent in the PREVIEW only (the
+    // image UPLOAD ships and the editor shows first). desktop.png stays a
+    // plain bitmap — the editor crops it by CroppedRect itself — and a
+    // corner the clamp cut off is not a corner.
+    let preview_corners = if corner_radius > 0.0 {
+        corners_to_round(requested, selection)
+    } else {
+        [false; 4]
+    };
 
     // The three image extract+encode jobs are independent; run them on
     // scoped threads so the wall time is the largest single encode
@@ -462,6 +476,7 @@ fn write_session_inner(
                     composite_cursor_rgba(&mut rgba, w, h, selection, cur);
                 }
             }
+            apply_rounded_corners(&mut rgba, w, h, corner_radius, preview_corners);
             save_png(&preview_path, rgba, w, h)
         });
 
@@ -512,6 +527,7 @@ fn write_session_inner(
         }),
         cropped_rect: cropped_rect.into(),
         original_bounds: selection.into(),
+        corner_radius,
     };
 
     let json_path = session_dir.join("session.json");
