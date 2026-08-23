@@ -129,9 +129,50 @@ namespace Clowd.VideoSDK.Tests
         public void AddSpeedEffect_refuses_a_gap_below_the_minimum_segment()
         {
             var session = NewSession(out _, out _, out _);
+            session.AddSpeedEffect(0, Ms(5_000));
+            session.AddSpeedEffect(Ms(5_050), Ms(5_000));
+
+            // 50ms of free row between the two items — nothing can live there
+            Assert.False(session.CanAddSpeedEffect(Ms(5_000)));
+            Assert.Null(session.AddSpeedEffect(Ms(5_000), Ms(5_000)));
+        }
+
+        [Fact]
+        public void AddSpeedEffect_backs_off_the_end_of_a_gap_too_short_to_grow_forward()
+        {
+            var session = NewSession(out _, out _, out _);
             session.AddSpeedEffect(Ms(1_050), Ms(5_000));
 
-            Assert.Null(session.AddSpeedEffect(Ms(1_000), Ms(5_000)));
+            // only 50ms in front of the playhead, but the gap behind it holds a grabbable item
+            var item = session.AddSpeedEffect(Ms(1_000), Ms(5_000));
+
+            Assert.NotNull(item);
+            Assert.Equal(0, item.TimelineStartTicks);
+            Assert.Equal(Ms(1_050), item.TimelineEndTicks);
+            Assert.Empty(session.Project.Validate());
+        }
+
+        [Fact]
+        public void CanAddSpeedEffect_follows_the_playhead_not_the_row()
+        {
+            var session = NewSession(out _, out _, out _);
+            Assert.True(session.CanAddSpeedEffect(Ms(1_000)));
+
+            session.AddSpeedEffect(Ms(1_000), Ms(5_000));
+
+            // the row exists now, but a second item is welcome anywhere it is not covered
+            Assert.True(session.HasSpeedTrack);
+            Assert.False(session.CanAddSpeedEffect(Ms(3_000)));
+            Assert.True(session.CanAddSpeedEffect(Ms(8_000)));
+            Assert.NotNull(session.AddSpeedEffect(Ms(8_000), Ms(5_000)));
+        }
+
+        [Fact]
+        public void CanAddSpeedEffect_is_false_on_an_empty_project()
+        {
+            var session = new EditorSession(new Project(), null, save => save());
+
+            Assert.False(session.CanAddSpeedEffect(0));
         }
 
         // ------------------------------------------------------------------------------- add zoom

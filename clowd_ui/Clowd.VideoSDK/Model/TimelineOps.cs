@@ -28,6 +28,14 @@ public static class TimelineOps
     /// not an edit.</summary>
     public const long MinSegmentTicks = 1_000_000;
 
+    /// <summary>Shortest item an <i>insert</i> may produce, in 100ns ticks: 1s. A new clip is
+    /// something the user is about to grab — drag it, trim it, open its properties — and
+    /// <see cref="MinSegmentTicks"/> of it lands under 6px at the default zoom, narrower than the
+    /// trim handles on its own edges. So an insert with no room left in front of it (the playhead
+    /// parked at the end of the recording) is backed off the end rather than squeezed; only a free
+    /// stretch shorter than this is taken whole.</summary>
+    public const long MinInsertTicks = TimeSpan.TicksPerSecond;
+
     /// <summary>The items an operation on <paramref name="itemId"/> applies to: every item
     /// sharing its non-null <see cref="Item.LinkGroupId"/>, or just the item itself when
     /// unlinked. Throws when the id is not in the project.</summary>

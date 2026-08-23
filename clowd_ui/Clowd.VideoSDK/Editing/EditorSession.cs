@@ -1168,60 +1168,114 @@ namespace Clowd.VideoSDK.Editing
 
         /// <summary>
         /// Adds a speed effect item on <b>the</b> speed row — found by content, created above
-        /// everything when the project has none. The duration is clamped into the gap before the
-        /// next speed item; the add is refused — returning null — when an existing speed item
-        /// already covers <paramref name="startTicks"/> or the gap is shorter than
-        /// <see cref="TimelineOps.MinSegmentTicks"/>. Returns the live item.
+        /// everything when the project has none, and shared by every later speed change: a second
+        /// one goes in the gap between the existing items, not on a second row. The item is placed
+        /// in the free stretch the playhead sits in (see <see cref="PlaceInsert"/>), so a playhead
+        /// parked at the end of the recording backs the clip off the end instead of leaving a
+        /// sliver nobody can grab. Refused — returning null — exactly when
+        /// <see cref="CanAddSpeedEffect"/> is false: the playhead is inside an existing speed item,
+        /// or the free stretch around it is shorter than <see cref="TimelineOps.MinSegmentTicks"/>.
         /// </summary>
         public Item AddSpeedEffect(long startTicks, long durationTicks, object origin = null)
         {
             Item created = null;
             var committed = Mutate("Add Speed", ProjectChangeKind.Structural, null, origin, p =>
             {
-                // effect items don't extend the project, so an item past the content end would be
-                // unreachable on the timeline — clamp into the content span, refuse when there is
-                // no room.
-                var contentEnd = p.GetDurationTicks();
-                if (contentEnd < TimelineOps.MinSegmentTicks)
+                if (!TryFindSpeedGap(p, startTicks, out var gapStart, out var gapEnd, out var at)
+                    || !PlaceInsert(at, durationTicks, gapStart, gapEnd, out var start, out var duration))
                     return;
-                var start = Math.Clamp(startTicks, 0, contentEnd - TimelineOps.MinSegmentTicks);
-                var duration = Math.Min(durationTicks, contentEnd - start);
 
-                var track = FindSpeedTrack(p);
-                if (track != null)
-                {
-                    var next = long.MaxValue;
-                    foreach (var other in p.Items)
-                    {
-                        if (other.TrackId != track.Id)
-                            continue;
-                        if (other.TimelineStartTicks <= start && start < other.TimelineEndTicks)
-                            return;
-                        if (other.TimelineStartTicks > start)
-                            next = Math.Min(next, other.TimelineStartTicks);
-                    }
-
-                    if (next != long.MaxValue)
-                    {
-                        var gap = next - start;
-                        if (gap < TimelineOps.MinSegmentTicks)
-                            return;
-                        duration = Math.Min(duration, gap);
-                    }
-                }
-
-                track ??= InsertSpeedTrack(p);
                 created = new Item
                 {
                     Id = Guid.NewGuid(),
-                    TrackId = track.Id,
+                    TrackId = (FindSpeedTrack(p) ?? InsertSpeedTrack(p)).Id,
                     TimelineStartTicks = start,
-                    DurationTicks = Math.Max(duration, TimelineOps.MinSegmentTicks),
+                    DurationTicks = duration,
                     Content = new SpeedContent(),
                 };
                 p.Items.Add(created);
             });
             return committed ? created : null;
+        }
+
+        /// <summary>Whether <see cref="AddSpeedEffect"/> would place an item at
+        /// <paramref name="startTicks"/> — the add-speed command's CanExecute. Unlike the other
+        /// add-a-row buttons this is not single-use: the speed row is unique, but a project may
+        /// carry any number of speed items on it, so what decides the button is whether the
+        /// playhead is standing in a gap wide enough to hold one.</summary>
+        public bool CanAddSpeedEffect(long startTicks) =>
+            TryFindSpeedGap(Project, startTicks, out _, out _, out _);
+
+        /// <summary>The free stretch of the speed row that <paramref name="startTicks"/> falls in:
+        /// <paramref name="gapStart"/>/<paramref name="gapEnd"/> are the neighbouring speed items'
+        /// edges (0 and the content end where there is no neighbour) and <paramref name="at"/> is
+        /// the requested instant clamped into the project. False when the instant is inside an
+        /// existing speed item, or the project has no content to hang an effect on — effect items
+        /// do not extend the project, so anything past the content end would be unreachable on the
+        /// timeline.</summary>
+        private static bool TryFindSpeedGap(Project project, long startTicks, out long gapStart,
+            out long gapEnd, out long at)
+        {
+            gapStart = 0;
+            gapEnd = project?.GetDurationTicks() ?? 0;
+            at = 0;
+            if (gapEnd < TimelineOps.MinSegmentTicks)
+                return false;
+
+            at = Math.Clamp(startTicks, 0, gapEnd - TimelineOps.MinSegmentTicks);
+
+            var track = FindSpeedTrack(project);
+            if (track == null)
+                return true;
+
+            foreach (var other in project.Items)
+            {
+                if (other.TrackId != track.Id)
+                    continue;
+                if (other.TimelineStartTicks <= at && at < other.TimelineEndTicks)
+                    return false;
+                if (other.TimelineEndTicks <= at)
+                    gapStart = Math.Max(gapStart, other.TimelineEndTicks);
+                else
+                    gapEnd = Math.Min(gapEnd, other.TimelineStartTicks);
+            }
+
+            return gapEnd - gapStart >= TimelineOps.MinSegmentTicks;
+        }
+
+        /// <summary>
+        /// Places an inserted item of <paramref name="durationTicks"/> inside the free stretch
+        /// <c>[windowStart, windowEnd)</c>, preferring <paramref name="preferredStart"/> (the
+        /// playhead). The item grows forward from there as far as the window allows, exactly as it
+        /// always did — but once less than <see cref="TimelineOps.MinInsertTicks"/> is left in
+        /// front of the playhead the item is <i>backed off the end</i> of the window instead of
+        /// being squeezed into what remains, because a clip narrower than its own trim handles
+        /// cannot be grabbed, dragged or trimmed back out to a useful size. A window shorter than
+        /// that minimum is taken whole; one shorter than <see cref="TimelineOps.MinSegmentTicks"/>
+        /// holds nothing and returns false.
+        /// </summary>
+        private static bool PlaceInsert(long preferredStart, long durationTicks, long windowStart,
+            long windowEnd, out long start, out long duration)
+        {
+            start = windowStart;
+            duration = 0;
+
+            var window = windowEnd - windowStart;
+            if (window < TimelineOps.MinSegmentTicks)
+                return false;
+
+            var minimum = Math.Min(TimelineOps.MinInsertTicks, window);
+            start = Math.Clamp(preferredStart, windowStart, windowEnd);
+
+            if (windowEnd - start >= minimum)
+            {
+                duration = Math.Clamp(durationTicks, minimum, windowEnd - start);
+                return true;
+            }
+
+            duration = Math.Clamp(durationTicks, minimum, window);
+            start = windowEnd - duration;
+            return true;
         }
 
         /// <summary>Adds a zoom effect item on a <b>new</b> zoom row composited above the whole
@@ -1233,12 +1287,14 @@ namespace Clowd.VideoSDK.Editing
             Item created = null;
             var committed = Mutate("Add Zoom", ProjectChangeKind.Structural, null, origin, p =>
             {
-                // clamp into the content span, exactly as AddSpeedEffect does: effect items don't
-                // extend the project, so anything past the content end would be unreachable.
-                var contentEnd = p.GetDurationTicks();
-                if (contentEnd < TimelineOps.MinSegmentTicks)
+                // placed exactly as AddSpeedEffect does, over the whole content span (a zoom always
+                // lands on a row of its own, so it has no neighbours to fit between): effect items
+                // don't extend the project, so anything past the content end would be unreachable,
+                // and a playhead at the very end backs the item off it rather than shaving it down
+                // to something unclickable.
+                if (!PlaceInsert(startTicks, durationTicks, 0, p.GetDurationTicks(),
+                        out var start, out var duration))
                     return;
-                var start = Math.Clamp(startTicks, 0, contentEnd - TimelineOps.MinSegmentTicks);
 
                 var track = InsertEffectTrackOnTop(p, "Zoom");
                 created = new Item
@@ -1246,7 +1302,7 @@ namespace Clowd.VideoSDK.Editing
                     Id = Guid.NewGuid(),
                     TrackId = track.Id,
                     TimelineStartTicks = start,
-                    DurationTicks = Math.Min(durationTicks, contentEnd - start),
+                    DurationTicks = duration,
                     Content = new ZoomContent(),
                 };
                 p.Items.Add(created);
@@ -1254,8 +1310,9 @@ namespace Clowd.VideoSDK.Editing
             return committed ? created : null;
         }
 
-        /// <summary>Whether the project already carries the (single) speed row — the add-speed
-        /// command's CanExecute.</summary>
+        /// <summary>Whether the project already carries the (single) speed row. Not what gates the
+        /// add-speed command — the row holds any number of items, so that is
+        /// <see cref="CanAddSpeedEffect"/>.</summary>
         public bool HasSpeedTrack => FindSpeedTrack(Project) != null;
 
         // ------------------------------------------------------------------- input overlay rows

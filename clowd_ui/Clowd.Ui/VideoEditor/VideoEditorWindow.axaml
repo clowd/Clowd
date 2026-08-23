@@ -348,8 +348,8 @@
                     IconPath="{StaticResource IconZoomEffect}"
                     ToolTip.Tip="Add zoom" />
 
-                <!--  tooltip swaps in code-behind with HasSpeedTrack (the disabled state explains
-                      itself), so it shows on the disabled button too  -->
+                <!--  tooltip swaps in code-behind with where the playhead stands (the disabled
+                      state explains itself), so it shows on the disabled button too  -->
                 <controls:ToolButton
                     x:Name="btnAddSpeed"
                     Padding="6"

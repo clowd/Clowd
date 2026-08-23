@@ -54,26 +54,54 @@ namespace Clowd.VideoSDK.Tests
         };
 
         [Fact]
-        public void AddZoomEffect_at_the_content_end_clamps_into_the_content_span()
+        public void AddZoomEffect_at_the_content_end_backs_the_item_off_the_end()
         {
             var session = NewSession();
 
             var item = session.AddZoomEffect(session.DurationTicks, Ms(5_000));
 
+            // no room in front of the playhead, so the item takes its full length behind it
+            // rather than becoming a sliver at the end of the recording.
             Assert.NotNull(item);
-            Assert.Equal(session.DurationTicks - TimelineOps.MinSegmentTicks, item.TimelineStartTicks);
+            Assert.Equal(session.DurationTicks - Ms(5_000), item.TimelineStartTicks);
             Assert.Equal(session.DurationTicks, item.TimelineEndTicks);
         }
 
         [Fact]
-        public void AddSpeedEffect_at_the_content_end_clamps_into_the_content_span()
+        public void AddSpeedEffect_at_the_content_end_backs_the_item_off_the_end()
         {
             var session = NewSession();
 
             var item = session.AddSpeedEffect(session.DurationTicks, Ms(5_000));
 
             Assert.NotNull(item);
-            Assert.Equal(session.DurationTicks - TimelineOps.MinSegmentTicks, item.TimelineStartTicks);
+            Assert.Equal(session.DurationTicks - Ms(5_000), item.TimelineStartTicks);
+            Assert.Equal(session.DurationTicks, item.TimelineEndTicks);
+        }
+
+        [Fact]
+        public void Effect_adds_at_the_end_keep_at_least_the_insert_minimum()
+        {
+            var session = NewSession();
+
+            // an add asking for less than the minimum still gets it — the point of the floor is
+            // that a fresh clip can be grabbed, not that it is 5 seconds long.
+            var item = session.AddSpeedEffect(session.DurationTicks, TimelineOps.MinSegmentTicks);
+
+            Assert.NotNull(item);
+            Assert.Equal(TimelineOps.MinInsertTicks, item.DurationTicks);
+            Assert.Equal(session.DurationTicks, item.TimelineEndTicks);
+        }
+
+        [Fact]
+        public void Effect_adds_take_a_content_span_shorter_than_the_insert_minimum_whole()
+        {
+            var session = NewSession(contentMs: 400);
+
+            var item = session.AddSpeedEffect(session.DurationTicks, Ms(5_000));
+
+            Assert.NotNull(item);
+            Assert.Equal(0, item.TimelineStartTicks);
             Assert.Equal(session.DurationTicks, item.TimelineEndTicks);
         }
 

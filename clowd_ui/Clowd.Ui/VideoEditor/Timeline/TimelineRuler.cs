@@ -29,6 +29,13 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// the top of the strip.</summary>
         private const double HeadCornerRadius = 4;
 
+        /// <summary>Clear space kept between two ruler labels; a label that cannot have it is
+        /// dropped (its notch stays).</summary>
+        private const double LabelGapPx = 8;
+
+        /// <summary>Gap between the total and the end-of-project rule it is pinned against.</summary>
+        private const double EndLabelPadPx = 4;
+
         private readonly TimelineViewport _viewport;
         private long _positionTicks;
         private bool _scrubbing;
@@ -173,40 +180,71 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (duration <= 0 || !(tpp > 0) || Bounds.Width <= 0)
                 return;
 
-            var step = TimelineViewMath.PickTickStepTicks(tpp);
-            if (step > 0)
+            RenderSpeedBands(context, palette, tpp, duration);
+
+            // past the end of the project: the strip stops with the rows under it, and gets the
+            // same gutter texture the surface paints there — one dead zone, ruler to bottom row.
+            var endX = _viewport.TickToX(duration);
+            var endVisible = endX < Bounds.Width;
+            if (endVisible)
+                palette.DrawBlockGap(context,
+                    new Rect(Math.Max(0, endX), 0, Bounds.Width - Math.Max(0, endX), RulerHeight));
+
+            var typeface = new Typeface(FontFamily.Default);
+
+            // the notches step through OUTPUT time and land where the warp puts each instant on
+            // the project axis (see TimelineViewMath.BuildRulerMarks); unwarped, this is the plain
+            // even ladder it always was.
+            var ruler = TimelineViewMath.BuildRulerMarks(_viewport.ScrollTicks, tpp, Bounds.Width,
+                duration, _viewport.Warp);
+
+            // the total, pinned against the end rule — the last thing the ruler says, and the one
+            // label that never scrolls off while the end is on screen. Laid out first so the
+            // regular labels can yield to it rather than overprint it.
+            FormattedText endText = null;
+            var endLabelLeft = 0.0;
+            if (endVisible && endX > 0 && ruler.StepTicks > 0)
             {
-                // minor ticks at a fifth of the step, drawn only when they get breathing room —
-                // the same 5px rule the single-track ruler used.
-                var minorStep = step / 5;
-                var drawMinor = minorStep > 0 && minorStep / tpp >= 5;
-                var inc = drawMinor ? minorStep : step;
+                endText = Label(typeface, palette, EndTicks(duration), ruler.StepTicks);
+                endLabelLeft = Math.Max(0, endX - endText.Width - EndLabelPadPx);
+            }
 
-                var typeface = new Typeface(FontFamily.Default);
-                var start = Math.Max(0, _viewport.ScrollTicks);
-                start -= start % inc;
-                var end = Math.Min(duration, _viewport.ScrollEndTicks);
+            if (ruler.StepTicks > 0)
+            {
+                var lastLabelRight = Double.NegativeInfinity;
 
-                for (var t = start; t <= end; t += inc)
+                foreach (var mark in ruler.Marks)
                 {
-                    var x = _viewport.TickToX(t);
-                    var isMajor = t % step == 0;
                     // notches hang from the top edge; the labels sit on the bottom, under the
                     // band the playhead head occupies.
-                    var tickHeight = isMajor ? 11.0 : 6.0;
-                    context.DrawLine(isMajor ? palette.RulerTickPen : palette.RulerMinorTickPen,
-                        new Point(x, 0), new Point(x, tickHeight));
+                    var tickHeight = mark.IsMajor ? 11.0 : 6.0;
+                    context.DrawLine(mark.IsMajor ? palette.RulerTickPen : palette.RulerMinorTickPen,
+                        new Point(mark.X, 0), new Point(mark.X, tickHeight));
 
-                    if (!isMajor)
+                    if (!mark.IsMajor)
                         continue;
 
-                    var text = new FormattedText(TimelineViewMath.FormatTick(t, step),
-                        CultureInfo.InvariantCulture, FlowDirection.LeftToRight, typeface, 12,
-                        palette.RulerLabelBrush);
-                    // centered on the tick; edge labels scroll off naturally (clamping them like
-                    // the fixed-width ruler did would make them slide against the ticks here).
-                    context.DrawText(text, new Point(x - text.Width / 2, RulerHeight - text.Height - 2));
+                    var text = Label(typeface, palette, mark.OutputTicks, ruler.StepTicks);
+                    // centered on the tick, except at the left edge: the ruler opens on 0:00 and
+                    // half a label hanging off the timeline is worse than one sitting a few pixels
+                    // right of its own notch.
+                    var left = Math.Max(0, mark.X - text.Width / 2);
+                    // inside a slowed span the notches can close faster than the text they carry,
+                    // and the total owns the right end: the notch still lands on its instant, the
+                    // label that cannot fit is dropped.
+                    if (left < lastLabelRight + LabelGapPx
+                        || (endText != null && left + text.Width + LabelGapPx > endLabelLeft))
+                        continue;
+
+                    context.DrawText(text, new Point(left, RulerHeight - text.Height - 2));
+                    lastLabelRight = left + text.Width;
                 }
+            }
+
+            if (endText != null)
+            {
+                context.DrawLine(palette.ProjectEndPen, new Point(endX, 0), new Point(endX, RulerHeight));
+                context.DrawText(endText, new Point(endLabelLeft, RulerHeight - endText.Height - 2));
             }
 
             // the ghost first, so the playhead stays legible when the two overlap
@@ -215,6 +253,49 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             var px = _viewport.TickToX(Math.Clamp(_positionTicks, 0, duration));
             RenderHead(context, px, palette.PlayheadPen.Brush, palette.PlayheadPen);
+        }
+
+        /// <summary>The end of the project on the ruler's own clock: the total the transport
+        /// readout shows, so the two cannot disagree.</summary>
+        private long EndTicks(long durationTicks) =>
+            _viewport.Warp is { IsIdentity: false } warp ? warp.ToOutput(durationTicks) : durationTicks;
+
+        private static FormattedText Label(Typeface typeface, TimelinePalette palette, long ticks, long stepTicks) =>
+            new FormattedText(TimelineViewMath.FormatTick(ticks, stepTicks), CultureInfo.InvariantCulture,
+                FlowDirection.LeftToRight, typeface, 12, palette.RulerLabelBrush);
+
+        /// <summary>
+        /// The wash over each warped stretch: warm where the video runs faster than the footage,
+        /// cool where it runs slower, and nothing at all over unwarped time. A constant-factor span
+        /// is one flat color between hard edges; a transition ramp is a gradient between the speeds
+        /// at its two ends, so a speed change eased in over half a second looks eased and one cut
+        /// straight in looks cut.
+        /// </summary>
+        private void RenderSpeedBands(DrawingContext context, TimelinePalette palette, double ticksPerPixel,
+            long durationTicks)
+        {
+            var bands = TimelineViewMath.BuildSpeedBands(_viewport.ScrollTicks, ticksPerPixel,
+                Bounds.Width, durationTicks, _viewport.Warp);
+
+            foreach (var band in bands)
+            {
+                var rect = new Rect(band.X0, 0, Math.Max(0, band.X1 - band.X0), RulerHeight);
+                var from = palette.SpeedTint(band.SpeedStart);
+                var to = palette.SpeedTint(band.SpeedEnd);
+
+                context.FillRectangle(from == to
+                    ? new SolidColorBrush(from)
+                    : new LinearGradientBrush
+                    {
+                        StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
+                        EndPoint = new RelativePoint(1, 0, RelativeUnit.Relative),
+                        GradientStops =
+                        {
+                            new GradientStop(from, 0),
+                            new GradientStop(to, 1),
+                        },
+                    }, rect);
+            }
         }
 
         /// <summary>The playhead marker: a <see cref="HeadWidth"/> x <see cref="HeadHeight"/> block

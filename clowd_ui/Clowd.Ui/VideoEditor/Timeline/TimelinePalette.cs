@@ -259,6 +259,39 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Vertical guide shown while a drag is snapped to a target.</summary>
         public Pen SnapGuidePen { get; private init; }
 
+        /// <summary>The rule at the end of the project — the right edge of the last frame. The
+        /// view scrolls a little past it (so the last item's edge stays grabbable), and without a
+        /// mark there the row bands read as content running on into the overscroll.</summary>
+        public Pen ProjectEndPen { get; private init; }
+
+        // ---------------------------------------------------------------------------- speed tint
+
+        private Color _speedFastTint;
+        private Color _speedSlowTint;
+
+        /// <summary>How opaque the tint gets at the extremes of the speed range (0.1x / 10x). Low
+        /// enough that notches and timestamps stay fully legible over it — this is a wash behind
+        /// the ruler, not a highlight.</summary>
+        private const double SpeedTintMaxOpacity = 0.30;
+
+        /// <summary>
+        /// The wash the ruler lays over a warped stretch: warm going faster, cool going slower,
+        /// fading to nothing at 1x so an unwarped stretch is left exactly as it was. Opacity rides
+        /// <c>|log(speed)|</c>, so it is symmetric — 2x and 0.5x read equally strong — and
+        /// continuous, which is what lets a transition ramp be drawn as a gradient between the
+        /// speeds at its two ends while a hard cut stays a hard edge.
+        /// </summary>
+        public Color SpeedTint(double speed)
+        {
+            if (!(speed > 0) || Double.IsInfinity(speed))
+                return Colors.Transparent;
+
+            var t = Math.Clamp(Math.Log(speed) / Math.Log(10), -1, 1);
+            var color = t >= 0 ? _speedFastTint : _speedSlowTint;
+            return Color.FromArgb((byte)Math.Round(Math.Abs(t) * SpeedTintMaxOpacity * 255),
+                color.R, color.G, color.B);
+        }
+
         /// <summary>The line the track headers lay across a row boundary to show where a row being
         /// dragged by its grip would land.</summary>
         public IBrush DropIndicatorBrush { get; private init; }
@@ -373,6 +406,12 @@ namespace Clowd.UI.VideoEditor.Timeline
                 TransitionFill = new SolidColorBrush(dark ? Colors.Black : Colors.White, 0.45),
                 TransitionEdgePen = new Pen(new SolidColorBrush(dark ? Colors.White : Colors.Black, 0.55), 1),
                 SnapGuidePen = new Pen(new SolidColorBrush(accent), 1, new DashStyle(new double[] { 3, 3 }, 0)),
+                ProjectEndPen = new Pen(new SolidColorBrush(text3, 0.9), 1),
+
+                // amber up, ice down — the two ends of "speed" everywhere, and neither collides
+                // with the playhead's red or the accent the recording rows carry.
+                _speedFastTint = dark ? Color.FromRgb(255, 176, 64) : Color.FromRgb(230, 138, 20),
+                _speedSlowTint = dark ? Color.FromRgb(96, 186, 255) : Color.FromRgb(38, 132, 214),
                 DropIndicatorBrush = new SolidColorBrush(accent),
 
                 // fully opaque, and an even whole-pixel width so the snapped center puts both
