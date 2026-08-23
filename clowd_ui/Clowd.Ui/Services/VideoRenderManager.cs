@@ -117,7 +117,7 @@ namespace Clowd.UI.Services
     public static class VideoRenderManager
     {
         /// <summary>The name every rendered entry carries in Recents, to tell it apart from the
-        /// multi-track "Screen Capture Session" it was rendered from.</summary>
+        /// multi-track "Screen Recording" it was rendered from.</summary>
         public const string EditedSessionName = "Rendered Video";
 
         /// <summary>Name of the render-args file written into the session directory. Unchanged

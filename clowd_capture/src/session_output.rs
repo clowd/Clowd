@@ -86,27 +86,32 @@ pub fn write_color_action(session_dir: &Path, r: u8, g: u8, b: u8) -> ActionResu
 }
 
 /// Write a VIDEO action payload: `cropped.png` (the recording's poster
-/// frame) plus an `action.txt` = `video X,Y,W,H` marker written LAST so
-/// its appearance is the completion signal. No `desktop.png` and no
+/// frame) plus an `action.txt` = `video X,Y,W,H [R]` marker written LAST
+/// so its appearance is the completion signal. No `desktop.png` and no
 /// `session.json` — the session is created by Clowd.Ui when recording
 /// finishes (DESIGN §3.2).
 ///
 /// Unlike the screenshot path this **never composites peeked windows**:
 /// obs-express records the real screen (obstructions included), so a
-/// peek-composited poster would show content the video does not.
+/// peek-composited poster would show content the video does not. Nor is
+/// anything rounded: the recorder captures the raw region, and `R` is
+/// metadata the video editor turns into a rounded-rect mask on the
+/// screen track — the counterpart of `session.json`'s `CornerRadius`.
 ///
 /// The rect in `action.txt` is emitted in the platform capture
 /// coordinate space (DESIGN §1.1): physical pixels (virtual-desktop,
 /// NOT origin-shifted) on Windows, CG points on macOS — so Clowd.Ui
-/// passes it through verbatim to obs-express `--region`.
+/// passes it through verbatim to obs-express `--region`. `R` rides in
+/// that same space, and is omitted entirely for a square selection.
 pub fn write_video_action(
     session_dir: &Path,
     selection: ScreenRect,
+    corner_radius: f32,
     buffer: &CapturedDesktop,
     cursor_visible: bool,
     monitors: &[MonitorInfo],
 ) -> ActionResult {
-    match write_video_action_inner(session_dir, selection, buffer, cursor_visible, monitors) {
+    match write_video_action_inner(session_dir, selection, corner_radius, buffer, cursor_visible, monitors) {
         Ok(action_path) => {
             log::info!("video action written to {:?}", action_path);
             ActionResult::Success
@@ -121,6 +126,7 @@ pub fn write_video_action(
 fn write_video_action_inner(
     session_dir: &Path,
     selection: ScreenRect,
+    corner_radius: f32,
     buffer: &CapturedDesktop,
     cursor_visible: bool,
     monitors: &[MonitorInfo],
@@ -152,9 +158,30 @@ fn write_video_action_inner(
 
     // action.txt — written LAST so its presence is the completion signal.
     let (x, y, w, h) = video_action_rect(selection, monitors);
+    let radius = video_action_radius(corner_radius, selection, w, h);
     let action_path = session_dir.join(ACTION_FILE);
-    std::fs::write(&action_path, format!("video {x},{y},{w},{h}\n"))?;
+    let marker = if radius > 0.0 {
+        format!("video {x},{y},{w},{h} {radius:.2}\n")
+    } else {
+        format!("video {x},{y},{w},{h}\n")
+    };
+    std::fs::write(&action_path, marker)?;
     Ok(action_path)
+}
+
+/// The picked window's corner radius in the marker's coordinate space, or 0
+/// for a square selection. The rect was converted into that space by
+/// [`video_action_rect`] (a no-op on Windows, physical px → CG points on
+/// macOS); the radius follows by the same factor rather than repeating the
+/// conversion, so the two can never disagree about which space they are in.
+/// Capped at half the shorter side — the largest radius the region has room
+/// for — so a tiny recording region cannot carry a nonsense curve.
+fn video_action_radius(corner_radius: f32, selection: ScreenRect, w: i32, h: i32) -> f32 {
+    if corner_radius <= 0.0 || selection.width() <= 0 {
+        return 0.0;
+    }
+    let scaled = corner_radius * (w as f32 / selection.width() as f32);
+    scaled.min(w.min(h) as f32 / 2.0).max(0.0)
 }
 
 /// Grow a clamped selection to the §1.1 contract minimum of 2×2 (a drag only
@@ -563,6 +590,33 @@ mod tests {
         let sel = ScreenRect::from_xy_size(10, 10, 300, 1);
         let grown = ensure_min_video_size(sel, bounds).unwrap();
         assert_eq!((grown.min_x(), grown.min_y(), grown.width(), grown.height()), (10, 10, 300, 2));
+    }
+
+    #[test]
+    fn video_action_radius_passes_through_unscaled_rect() {
+        // Windows: the marker rect IS the selection, so the radius is untouched.
+        let sel = ScreenRect::from_xy_size(0, 0, 800, 600);
+        assert_eq!(video_action_radius(8.0, sel, 800, 600), 8.0);
+    }
+
+    #[test]
+    fn video_action_radius_follows_the_rect_conversion() {
+        // macOS Retina: a 1600x1200 physical selection emits an 800x600 point
+        // rect, so a 24 px radius has to travel as 12 pt.
+        let sel = ScreenRect::from_xy_size(0, 0, 1600, 1200);
+        assert_eq!(video_action_radius(24.0, sel, 800, 600), 12.0);
+    }
+
+    #[test]
+    fn video_action_radius_caps_at_half_the_shorter_side() {
+        let sel = ScreenRect::from_xy_size(0, 0, 10, 4);
+        assert_eq!(video_action_radius(16.0, sel, 10, 4), 2.0);
+    }
+
+    #[test]
+    fn video_action_radius_zero_for_square_selection() {
+        let sel = ScreenRect::from_xy_size(0, 0, 800, 600);
+        assert_eq!(video_action_radius(0.0, sel, 800, 600), 0.0);
     }
 
     #[test]

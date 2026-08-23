@@ -67,6 +67,11 @@ namespace Clowd.UI
         private FloatingToolbarWindow _toolbar;
         private SettingsRecording _settings;
         private ScreenRect _region;
+        // corner radius of _region, in _region's own space (0 = square): what the capturer
+        // measured on the picked window. Nothing here rounds anything — the recorder captures the
+        // raw region — it travels to the session so the video editor can seed the screen track's
+        // rounded-rect mask from it, exactly as the image editor seeds its image graphic.
+        private double _cornerRadius;
         private string _binaryPath;
         private string _sessionDir;
         private string _outputMp4;
@@ -77,7 +82,7 @@ namespace Clowd.UI
         private TimeSpan _lastStatusElapsed;
         private int _statusCount;
 
-        public async void Open(ScreenRect region, string sessionDir)
+        public async void Open(ScreenRect region, double cornerRadius, string sessionDir)
         {
             try
             {
@@ -95,6 +100,7 @@ namespace Clowd.UI
 
                 ActiveInstance = this;
                 _region = region;
+                _cornerRadius = cornerRadius;
                 _settings = SettingsRoot.Current.Recording;
                 _sessionDir = sessionDir;
                 _outputMp4 = Path.Combine(sessionDir, "video.mp4");
@@ -930,7 +936,7 @@ namespace Clowd.UI
         private SessionInfo CreateSession()
         {
             var session = SessionManager.Current.CreateSessionInDirectory(_sessionDir);
-            session.Name = "Screen Capture Session";
+            session.Name = "Screen Recording";
             session.CreatedUtc = DateTime.UtcNow;
             session.ContentKind = "video"; // IsUploadOnly=true → no *image* editor affordance (correct); the video editor is offered through CanEditVideo
             // usually outside the session dir now (issue #50), so the recording survives the
@@ -939,6 +945,7 @@ namespace Clowd.UI
             session.DurationMs = (long)_lastStatusElapsed.TotalMilliseconds;
             session.PreviewImgPath = Path.Combine(_sessionDir, "cropped.png");
             session.OriginalBounds = _region;
+            session.CornerRadius = _cornerRadius;
             session.WebcamTrack = ResolveWebcamTrack();
             session.InputCapturePath = ResolveInputCapturePath();
             session.AudioTracks = ResolveAudioTracks();

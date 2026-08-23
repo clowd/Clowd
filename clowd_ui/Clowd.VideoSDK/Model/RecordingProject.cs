@@ -89,6 +89,12 @@ public sealed class RecordingProjectSpec
     /// <summary>The kept slices, in source order, placed back to back on the timeline.</summary>
     public IReadOnlyList<KeepSegment> Segments { get; set; }
 
+    /// <summary>Shape the screen items are clipped to, or null — the default — for the plain
+    /// rectangle. Set when the recording region was a window the OS composites with rounded
+    /// corners: the recorder captured the raw region, so the curve the user saw only exists if the
+    /// composition puts it back.</summary>
+    public Mask ScreenMask { get; set; }
+
     /// <summary>Placement of the webcam items on the canvas; null = the default (full frame).</summary>
     public Transform WebcamTransform { get; set; }
 
@@ -230,6 +236,7 @@ public static class RecordingProject
         }
 
         var camTransform = spec.WebcamTransform;
+        var screenMask = spec.ScreenMask;
 
         long timelineStart = 0;
         foreach (var segment in spec.Segments)
@@ -240,7 +247,8 @@ public static class RecordingProject
                 continue;
 
             AddItem(project, screenTrack, source.Id, screen.StreamIndex, timelineStart, durationTicks,
-                startTicks, ids.LinkGroupId, null);
+                startTicks, ids.LinkGroupId,
+                screenMask == null ? null : new Transform { Mask = screenMask.Clone() });
 
             if (camTrack != null)
                 AddItem(project, camTrack, source.Id, cam.StreamIndex, timelineStart, durationTicks,

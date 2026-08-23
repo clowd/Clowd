@@ -64,7 +64,7 @@ The shell pre-creates the session directory and passes it via
 | EDIT | `desktop.png`, `cropped.png`, [`cursor.png`], `session.json` | none (any stale marker from a failed retry is deleted) |
 | UPLOAD | same as EDIT + `action.txt` | `upload` |
 | SELECT-COLOR | `action.txt` only | `select-color #RRGGBB` |
-| VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H` |
+| VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H [R]` |
 | SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
 | OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
@@ -104,6 +104,15 @@ these files:
 The VIDEO rect is emitted in the platform capture coordinate space: physical
 pixels (virtual-desktop, possibly negative origin) on Windows, CG points on
 macOS — passed verbatim to obs-express `--region`. W and H are always >= 2.
+
+`R` is the optional corner radius of the recording region, in that same space
+and separated from the rect by a space: the OS corner radius of the window the
+user picked (see `--no-rounded-corners`), capped at half the shorter side.
+Present only when non-zero; absent = square. Nothing on the video path is
+actually rounded — the recorder captures the raw region and `cropped.png` is
+its poster — so `R` is metadata only, the video counterpart of `session.json`'s
+`CornerRadius`: the shell stores it on the recording's session and the video
+editor seeds the screen track's rounded-rect mask from it.
 
 The SCROLL marker uses the same rect space and adds two fields: `PX,PY` is
 the point the scrolling capture driver parks the cursor at and aims wheel

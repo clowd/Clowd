@@ -52,7 +52,7 @@ namespace Clowd
 
     public interface IVideoCapturePage : IPage
     {
-        void Open(ScreenRect region, string sessionDir);
+        void Open(ScreenRect region, double cornerRadius, string sessionDir);
     }
 }
 
