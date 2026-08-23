@@ -69,7 +69,8 @@ namespace Clowd.VideoSDK.Playback
         private long _exactDiscardTicks = long.MinValue; // decode thread; loaded on serial adoption
         private long _pendingSeekTargetTicks = long.MinValue;
         private int _pendingSeekExact;               // 1 = exact
-        private int _presentImmediateOnce;           // present next valid frame regardless of clock
+        private int _presentImmediateOnce;           // 0 = none; else the token of the seek requesting it
+        private int _immediateRequestId;             // token source for _presentImmediateOnce (never reused)
         private int _immediateMinSerial;             // guards immediate-present against stale frames
         private int _stepOnce;
         private TaskCompletionSource _stepTcs;
@@ -267,7 +268,15 @@ namespace Clowd.VideoSDK.Playback
             Interlocked.Exchange(ref _pendingSeekTargetTicks, target.Ticks);
             Interlocked.Exchange(ref _pendingSeekExact, mode == SeekMode.Exact ? 1 : 0);
             Interlocked.Exchange(ref _immediateMinSerial, _packets.Serial + 1);
-            Interlocked.Exchange(ref _presentImmediateOnce, 1);
+
+            // The request is a fresh token, never a plain 1: the present thread reads the flag,
+            // runs Present() (sws_scale + sink), and only then clears it — and a back-to-back
+            // seek can run this PrepareSeek inside that window. With a 0/1 flag the deferred
+            // clear belonging to the PREVIOUS seek's frame erased the new request, and the new
+            // seek's frame then sat in the queue forever: not immediate, and paused, so nothing
+            // was ever delivered (the seek-lands-nothing hang). The token lets the present
+            // thread clear only the request it actually served (CompareExchange below).
+            Interlocked.Exchange(ref _presentImmediateOnce, Interlocked.Increment(ref _immediateRequestId));
         }
 
         /// <summary>Called by the controller *after* the demux flush: unblocks the pipeline and
@@ -511,7 +520,8 @@ namespace Clowd.VideoSDK.Playback
                     continue;
                 }
 
-                bool immediate = Volatile.Read(ref _presentImmediateOnce) == 1
+                int immediateReq = Volatile.Read(ref _presentImmediateOnce);
+                bool immediate = immediateReq != 0
                                  && serial >= Volatile.Read(ref _immediateMinSerial);
                 bool step = Volatile.Read(ref _stepOnce) == 1;
 
@@ -550,8 +560,13 @@ namespace Clowd.VideoSDK.Playback
 
                 if (immediate)
                 {
-                    Interlocked.Exchange(ref _presentImmediateOnce, 0);
-                    _immediatePresented?.Invoke(this, pts);
+                    // consume only the request this frame served: a newer PrepareSeek may have
+                    // replaced the token while Present() ran, and its request must survive for
+                    // its own frame (see PrepareSeek). When it did, this frame is pre-new-seek
+                    // content by definition, so it must not report as a seek landing either —
+                    // the callback would drag the paused position back to the old target.
+                    if (Interlocked.CompareExchange(ref _presentImmediateOnce, 0, immediateReq) == immediateReq)
+                        _immediatePresented?.Invoke(this, pts);
                 }
 
                 if (step)
