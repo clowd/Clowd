@@ -392,14 +392,21 @@ half4 main(float2 p) {
         /// <see cref="ClickHighlight.PressAmount"/>); a quick click dips in and out. Draws over
         /// the already-composed screen pixels through the same <paramref name="map"/> they were
         /// placed by, so the warped patch lands source-exactly on top of the unwarped one; the
-        /// caller has already applied the screen item's clips. <c>ClickSize</c> scales the reach,
-        /// <c>AnimationSpeed</c> the clock. No-op when nothing is pressed.
+        /// caller has already applied the screen item's clips. <paramref name="sourceWidth"/> ×
+        /// <paramref name="sourceHeight"/> are the stream dimensions <paramref name="map"/> was
+        /// resolved against; <paramref name="screenImage"/> may be smaller (playback presents
+        /// frames under a height cap) and is rescaled to fit the same mapping. <c>ClickSize</c>
+        /// scales the reach, <c>AnimationSpeed</c> the clock. No-op when nothing is pressed.
         /// </summary>
         internal static void DrawPressWarp(SKCanvas target, InputCapture capture,
-            in PictureMapping map, in InputFrame row, double sourceMs, double speed,
-            CursorContent cursor, double monitorScale, double opacity, SKImage screenImage)
+            in PictureMapping map, double sourceWidth, double sourceHeight, in InputFrame row,
+            double sourceMs, double speed, CursorContent cursor, double monitorScale,
+            double opacity, SKImage screenImage)
         {
             if (cursor == null || screenImage == null || opacity <= 0)
+                return;
+            if (screenImage.Width <= 0 || screenImage.Height <= 0
+                || sourceWidth <= 0 || sourceHeight <= 0)
                 return;
             if (speed <= 0)
                 speed = 1.0;
@@ -419,9 +426,15 @@ half4 main(float2 p) {
             if (radius <= 0)
                 return;
 
-            // the screen frame as a shader in canvas coordinates: image px → source-region px is
-            // the mapping's crop inset, then its px→canvas scale and dest offset.
-            var local = SKMatrix.CreateTranslation(-map.Source.Left, -map.Source.Top);
+            // the screen frame as a shader in canvas coordinates: image px → source px is the
+            // ratio of the stream's dimensions (what the mapping was resolved against) to the
+            // image's own — they differ whenever playback presents a downscaled frame (a Retina
+            // recording under the preview's height cap) — then source px → canvas is the
+            // mapping's crop inset, px→canvas scale and dest offset. Skipping the first step
+            // samples the wrong patch of the picture the moment the two disagree.
+            var local = SKMatrix.CreateScale(
+                (float)(sourceWidth / screenImage.Width), (float)(sourceHeight / screenImage.Height));
+            local = local.PostConcat(SKMatrix.CreateTranslation(-map.Source.Left, -map.Source.Top));
             local = local.PostConcat(SKMatrix.CreateScale((float)map.ScaleX, (float)map.ScaleY));
             local = local.PostConcat(SKMatrix.CreateTranslation(map.Dest.Left, map.Dest.Top));
 

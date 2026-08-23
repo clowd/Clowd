@@ -1096,6 +1096,38 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Press_samples_a_downscaled_frame_through_the_stream_mapping()
+        {
+            // playback presents frames under a height cap (a Retina recording in the editor), so
+            // the composed screen image can be smaller than the stream the cursor mapping is
+            // resolved against. The warp must rescale its sampler to the image it is handed:
+            // a 32px frame split at x=20 is the same picture as the 64px one split at 40, and
+            // the held press must compose identically — not sample the frame as if it were
+            // stream-sized (which reads the wrong patch entirely: the pointer at stream (24,32)
+            // would land on image (24,32), across the split, and show red where blue belongs).
+            string capture = WriteCapture(Header,
+                Frame(0, 24, 32, buttons: 1),
+                MouseEvent("md", 0, 24, 32));
+            var (p, _, cursor) = CursorProject(capture, "none");
+            ((CursorContent)cursor.Content).ClickAnimation = "pressure";
+
+            using var small = new MultiStreamSource().SetSplit(0, 32, splitX: 20);
+            using var full = new MultiStreamSource().SetSplit(0, 64, splitX: 40);
+            var held = Render(p, 5 * Sec, small);
+            var reference = Render(p, 5 * Sec, full);
+
+            Assert.True(Px(held, 24, 32).B > 150, "the pointer's own pixel should still be blue");
+            Assert.True(Px(held, 39, 32).R > 100, "the held press did not pull the split inward");
+            foreach (int x in new[] { 10, 24, 30, 39, 45 })
+            {
+                var a = Px(held, x, 32);
+                var b = Px(reference, x, 32);
+                Assert.True(Math.Abs(a.R - b.R) <= 3 && Math.Abs(a.B - b.B) <= 3,
+                    $"downscaled frame composed differently at x={x}: ({a.R},{a.B}) vs ({b.R},{b.B})");
+            }
+        }
+
+        [Fact]
         public void Press_relaxes_back_out_after_the_release()
         {
             string capture = WriteCapture(Header,
