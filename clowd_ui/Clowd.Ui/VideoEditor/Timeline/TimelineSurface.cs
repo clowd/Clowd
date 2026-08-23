@@ -47,6 +47,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// and is invisible at that width anyway.</summary>
         private const int MaxWaveformBuckets = 8192;
 
+        /// <summary>A click mark on the cursor row: a rounded bar this tall, centered on the
+        /// body's midline (shorter on a body that cannot fit it, see RenderCursorActivity).</summary>
+        private const double ClickMarkHeight = 10;
+
         private enum DragMode
         {
             None,
@@ -58,6 +62,8 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private readonly TimelineViewport _viewport;
         private readonly Dictionary<Guid, WaveformCache> _waveforms = new Dictionary<Guid, WaveformCache>();
+        private readonly Dictionary<Guid, CursorActivityCache> _cursorActivity = new Dictionary<Guid, CursorActivityCache>();
+        private readonly Dictionary<Guid, KeyBlipCache> _keyBlips = new Dictionary<Guid, KeyBlipCache>();
 
         private EditorSession _session;
         private ITimelinePreviewProvider _previewProvider = NullTimelinePreviewProvider.Instance;
@@ -139,7 +145,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
                 _session = value;
                 _hoverItemId = Guid.Empty;
-                _waveforms.Clear();
+                ClearPreviewCaches();
                 RebuildRows();
             }
         }
@@ -158,7 +164,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _previewProvider.PreviewReady -= OnPreviewReady;
                 _previewProvider = value;
                 _previewProvider.PreviewReady += OnPreviewReady;
-                _waveforms.Clear();
+                ClearPreviewCaches();
                 InvalidateVisual();
             }
         }
@@ -207,17 +213,33 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             if (project == null)
             {
-                _waveforms.Clear();
+                ClearPreviewCaches();
             }
-            else if (_waveforms.Count > 0)
+            else if (_waveforms.Count > 0 || _cursorActivity.Count > 0 || _keyBlips.Count > 0)
             {
                 var live = project.Items.Select(i => i.Id).ToHashSet();
-                foreach (var stale in _waveforms.Keys.Where(id => !live.Contains(id)).ToList())
-                    _waveforms.Remove(stale);
+                Prune(_waveforms, live);
+                Prune(_cursorActivity, live);
+                Prune(_keyBlips, live);
             }
 
             InvalidateMeasure();
             InvalidateVisual();
+        }
+
+        private void ClearPreviewCaches()
+        {
+            _waveforms.Clear();
+            _cursorActivity.Clear();
+            _keyBlips.Clear();
+        }
+
+        private static void Prune<T>(Dictionary<Guid, T> cache, HashSet<Guid> live)
+        {
+            if (cache.Count == 0)
+                return;
+            foreach (var stale in cache.Keys.Where(id => !live.Contains(id)).ToList())
+                cache.Remove(stale);
         }
 
         /// <summary>PreviewReady arrives in bursts while the decoders catch up; one repaint every
@@ -976,6 +998,12 @@ namespace Clowd.UI.VideoEditor.Timeline
                 case MediaContent media:
                     RenderFilmstrip(context, palette, project, item, media, body);
                     break;
+                case CursorContent cursor:
+                    RenderCursorActivity(context, palette, project, item, cursor, body);
+                    break;
+                case KeyboardContent keyboard:
+                    RenderKeyBlips(context, palette, project, item, keyboard, body);
+                    break;
             }
 
             // Media content sits UNDER the transition ramps (the ramp shows what the picture/audio
@@ -1007,7 +1035,8 @@ namespace Clowd.UI.VideoEditor.Timeline
                     break;
                 // the input overlays name themselves and nothing else: their content is the
                 // recording's captured input, which has no one number to put on the card (the
-                // style and the timings live in the properties panel).
+                // style and the timings live in the properties panel) — the activity preview
+                // under the label is what says what the capture holds.
                 case CursorContent:
                     (glyph, label) = (TimelineIcons.CursorArrowGeometry, "Cursor");
                     break;
@@ -1336,6 +1365,114 @@ namespace Clowd.UI.VideoEditor.Timeline
                 context.DrawGeometry(palette.WaveformBrush, null, cache.Geometry);
         }
 
+        /// <summary>
+        /// The cursor row's preview: the pointer's speed as a mirrored envelope (the waveform's
+        /// shape, so the two read as one language — "activity") with every press over it as a
+        /// short bar, stretched to cover a drag. Time runs through the hard-synced screen item,
+        /// exactly as the composer places the cursor; with no screen item covering the span the
+        /// composer draws no cursor, and neither does this.
+        /// </summary>
+        private void RenderCursorActivity(DrawingContext context, TimelinePalette palette, Project project,
+            Item item, CursorContent cursor, Rect body)
+        {
+            if (!OverlayTiming.TryResolve(project, item, cursor.SourceId, out var sourceIn, out var speed))
+                return;
+
+            var tpp = _viewport.TicksPerPixel;
+            var perBucket = Math.Max((long)Math.Round(tpp), Math.Max(1, item.DurationTicks / MaxWaveformBuckets));
+            var bucketCount = (int)Math.Min((item.DurationTicks + perBucket - 1) / perBucket, Int32.MaxValue / 2);
+            if (bucketCount <= 0)
+                return;
+
+            // cached per item like the waveform: scrolling only moves the translate, a zoom or a
+            // trim rebuilds, and a still-loading capture rebuilds on each (throttled) repaint.
+            if (!_cursorActivity.TryGetValue(item.Id, out var cache) ||
+                !cache.Matches(tpp, sourceIn, speed, item.DurationTicks, bucketCount) ||
+                !cache.Complete)
+            {
+                var srcDuration = speed == 1.0 ? item.DurationTicks : (long)Math.Round(item.DurationTicks * speed);
+                var srcPerBucket = speed == 1.0 ? perBucket : Math.Max(1L, (long)Math.Round(perBucket * speed));
+                var activity = _previewProvider.GetCursorActivity(new CursorActivityRequest(cursor.SourceId,
+                    sourceIn, srcDuration, srcPerBucket));
+                cache = CursorActivityCache.Build(activity, tpp, sourceIn, speed, item.DurationTicks,
+                    bucketCount, perBucket, body.Height);
+                _cursorActivity[item.Id] = cache;
+            }
+
+            var markHeight = Math.Min(ClickMarkHeight, Math.Max(2, body.Height - 6));
+            var markY = Math.Round(body.Height / 2 - markHeight / 2);
+            var radius = Math.Min(2, markHeight / 2);
+
+            using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
+            using (context.PushTransform(Matrix.CreateTranslation(body.X, body.Y)))
+            {
+                if (cache.Motion != null)
+                    context.DrawGeometry(palette.CursorMotionBrush, null, cache.Motion);
+
+                // only the marks on screen: zoomed far in, an item can be wider than any screen
+                // and the marks are nearly all off it
+                var visLeft = -body.X - 2;
+                var visRight = Bounds.Width - body.X + 2;
+                foreach (var mark in cache.Clicks)
+                {
+                    if (mark.X + mark.Width < visLeft || mark.X > visRight)
+                        continue;
+                    context.DrawRectangle(palette.CursorClickBrush, null,
+                        new Rect(mark.X, markY, mark.Width, markHeight), radius, radius);
+                }
+            }
+        }
+
+        /// <summary>
+        /// The keys row's preview: one blip per keystroke run (the row the overlay will show),
+        /// spanning its first key to its last, with runs that crowd together at the current zoom
+        /// folded into one blip that grows with the count. Time runs through the hard-synced
+        /// screen item; with none the keys fall back to item-relative time, the composer's own
+        /// degrade, so the blips still line up with what plays.
+        /// </summary>
+        private void RenderKeyBlips(DrawingContext context, TimelinePalette palette, Project project,
+            Item item, KeyboardContent keyboard, Rect body)
+        {
+            OverlayTiming.TryResolve(project, item, keyboard.SourceId, out var sourceIn, out var speed);
+
+            var tpp = _viewport.TicksPerPixel;
+            if (!(tpp > 0))
+                return;
+
+            if (!_keyBlips.TryGetValue(item.Id, out var cache) ||
+                !cache.Matches(tpp, sourceIn, speed, item.DurationTicks, keyboard.PauseBreakMs, keyboard.Filter) ||
+                !cache.Complete)
+            {
+                var srcDuration = speed == 1.0 ? item.DurationTicks : (long)Math.Round(item.DurationTicks * speed);
+                var runs = _previewProvider.GetKeyRuns(new KeyRunsRequest(keyboard.SourceId, sourceIn, srcDuration,
+                    keyboard.PauseBreakMs, keyboard.Filter));
+                cache = KeyBlipCache.Build(runs, tpp, sourceIn, speed, item.DurationTicks,
+                    keyboard.PauseBreakMs, keyboard.Filter);
+                _keyBlips[item.Id] = cache;
+            }
+
+            if (cache.Blips.Count == 0)
+                return;
+
+            var mid = body.Height / 2;
+            using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
+            using (context.PushTransform(Matrix.CreateTranslation(body.X, body.Y)))
+            {
+                var visLeft = -body.X - 2;
+                var visRight = Bounds.Width - body.X + 2;
+                foreach (var blip in cache.Blips)
+                {
+                    if (blip.X + blip.Width < visLeft || blip.X > visRight)
+                        continue;
+
+                    var height = InputPreviewMath.KeyBlipHeight(blip.Count, body.Height);
+                    var radius = Math.Min(blip.Width, height) / 2;
+                    context.DrawRectangle(palette.KeyBlipBrush, null,
+                        new Rect(blip.X, Math.Round(mid - height / 2), blip.Width, height), radius, radius);
+                }
+            }
+        }
+
         private static readonly char[] NewlineChars = { '\r', '\n' };
 
         private void RenderGlyphLabel(DrawingContext context, TimelinePalette palette, Rect body,
@@ -1556,6 +1693,96 @@ namespace Clowd.UI.VideoEditor.Timeline
                     Geometry = geometry,
                 };
             }
+        }
+
+        /// <summary>One cursor item's cached preview, in item-local coordinates: the speed
+        /// envelope as geometry and the click marks as pixel spans.</summary>
+        private sealed class CursorActivityCache
+        {
+            public double Tpp;
+            public long SourceIn;
+            public double Speed;
+            public long Duration;
+            public int BucketCount;
+            public bool Complete;
+            public StreamGeometry Motion;
+            public List<InputMark> Clicks;
+
+            public bool Matches(double tpp, long sourceIn, double speed, long duration, int bucketCount) =>
+                Tpp == tpp && SourceIn == sourceIn && Speed == speed && Duration == duration && BucketCount == bucketCount;
+
+            public static CursorActivityCache Build(CursorActivity activity, double tpp, long sourceIn, double speed,
+                long duration, int bucketCount, long perBucket, double height)
+            {
+                var mid = height / 2;
+                var half = Math.Max(1, mid - 1);
+                var bucketPx = perBucket / tpp;
+                var motion = activity.Motion;
+
+                // speed is [0,1]; the ±0.5px floor keeps a still pointer visible as a hairline,
+                // like silence on a waveform
+                var geometry = new StreamGeometry();
+                using (var gc = geometry.Open())
+                {
+                    gc.BeginFigure(new Point(0, mid - 0.5), true);
+                    for (var i = 0; i < bucketCount; i++)
+                    {
+                        var v = i < motion.Count ? motion[i] : 0;
+                        gc.LineTo(new Point(i * bucketPx, mid - Math.Max(0.5, v * half)));
+                    }
+
+                    for (var i = bucketCount - 1; i >= 0; i--)
+                    {
+                        var v = i < motion.Count ? motion[i] : 0;
+                        gc.LineTo(new Point(i * bucketPx, mid + Math.Max(0.5, v * half)));
+                    }
+
+                    gc.EndFigure(true);
+                }
+
+                return new CursorActivityCache
+                {
+                    Tpp = tpp,
+                    SourceIn = sourceIn,
+                    Speed = speed,
+                    Duration = duration,
+                    BucketCount = bucketCount,
+                    Complete = activity.IsComplete,
+                    Motion = geometry,
+                    Clicks = InputPreviewMath.ClickMarks(activity.Clicks, sourceIn, speed, tpp),
+                };
+            }
+        }
+
+        /// <summary>One keys item's cached blips, in item-local pixels.</summary>
+        private sealed class KeyBlipCache
+        {
+            public double Tpp;
+            public long SourceIn;
+            public double Speed;
+            public long Duration;
+            public int PauseBreakMs;
+            public KeystrokeFilter Filter;
+            public bool Complete;
+            public List<InputMark> Blips;
+
+            public bool Matches(double tpp, long sourceIn, double speed, long duration, int pauseBreakMs,
+                KeystrokeFilter filter) =>
+                Tpp == tpp && SourceIn == sourceIn && Speed == speed && Duration == duration &&
+                PauseBreakMs == pauseBreakMs && Filter == filter;
+
+            public static KeyBlipCache Build(KeyRuns runs, double tpp, long sourceIn, double speed, long duration,
+                int pauseBreakMs, KeystrokeFilter filter) => new KeyBlipCache
+            {
+                Tpp = tpp,
+                SourceIn = sourceIn,
+                Speed = speed,
+                Duration = duration,
+                PauseBreakMs = pauseBreakMs,
+                Filter = filter,
+                Complete = runs.IsComplete,
+                Blips = InputPreviewMath.KeyBlips(runs.Runs, sourceIn, speed, tpp),
+            };
         }
     }
 }
