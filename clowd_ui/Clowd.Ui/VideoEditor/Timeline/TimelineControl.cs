@@ -28,8 +28,10 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// for it. What each one means is per-platform and lives in <see cref="TimelineScrollInput"/>:
     /// on Windows plain (and Ctrl) wheel = anchored zoom around the pointer, Shift+wheel =
     /// horizontal scroll, Alt+wheel = the ScrollViewer's vertical scroll; on macOS a two-finger
-    /// scroll pans (vertically via that same ScrollViewer), Cmd/Ctrl+scroll zooms, and the pinch —
-    /// a bubbling <c>PointerTouchPadGestureMagnify</c>, not a wheel — is the primary zoom.
+    /// scroll takes its meaning from the axis it moved along — up/down zooms around the pointer
+    /// like the Windows wheel, sideways pans — Cmd/Ctrl+scroll zooms, Alt+scroll goes to that same
+    /// ScrollViewer, and the pinch — a bubbling <c>PointerTouchPadGestureMagnify</c>, not a wheel —
+    /// is the primary zoom.
     /// Everything the timeline edits goes through
     /// <see cref="Session"/>; the control re-reads <c>Session.Project</c> on every
     /// <c>ProjectChanged</c> and rebuilds rows/headers only on Structural changes.

@@ -82,20 +82,24 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
-        // ------------------------------------------------------------- macOS: a scroll is a scroll
+        // ------------------------------------------------------- macOS: the axis is the gesture
 
         [Fact]
-        public void Mac_two_finger_vertical_scroll_scrolls_the_rows_and_never_zooms()
+        public void Mac_two_finger_vertical_scroll_zooms_proportionally()
         {
-            // The bug this whole file exists for: on a Mac the plain wheel path used to zoom, so a
-            // two-finger scroll — the most ordinary gesture there is — flew the timeline through
-            // several orders of magnitude of zoom before the user's fingers left the glass.
+            // up/down is the wheel gesture, and a trackpad delivers it in fractions of a notch: the
+            // zoom has to be proportional to the delta, not stepped, or twenty of these fly the
+            // timeline through several orders of magnitude before the fingers leave the glass.
+            var factor = 1.0;
             for (var i = 0; i < 20; i++)
             {
-                var d = Wheel(0.0, -0.06, Mac); // a trackpad's fractions, scrolling down the stack
-                Assert.Equal(TimelineScrollAction.ScrollRows, d.Action);
-                Assert.Equal(1, d.ZoomFactor);
+                var d = Wheel(0.0, -0.06, Mac);
+                Assert.Equal(TimelineScrollAction.Zoom, d.Action);
+                factor *= d.ZoomFactor;
             }
+
+            // twenty sixth-of-a-notch flicks land exactly where 1.2 notches of a wheel would
+            Assert.Equal(Math.Pow(TimelineScrollInput.ZoomStepPerNotch, 20 * 0.06), factor, 12);
         }
 
         [Fact]
@@ -115,8 +119,8 @@ namespace Clowd.VideoSDK.Tests
         public void Mac_a_diagonal_scroll_goes_to_whichever_axis_dominates()
         {
             // a trackpad reports cross-axis drift on every swipe; the smaller axis is dropped so a
-            // vertical scroll cannot also creep sideways.
-            Assert.Equal(TimelineScrollAction.ScrollRows, Wheel(0.02, -0.30, Mac).Action);
+            // pan cannot also zoom the view a hair, nor a zoom slide it sideways.
+            Assert.Equal(TimelineScrollAction.Zoom, Wheel(0.02, -0.30, Mac).Action);
             Assert.Equal(TimelineScrollAction.PanHorizontal, Wheel(-0.30, 0.02, Mac).Action);
         }
 
@@ -166,12 +170,18 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void The_same_event_means_different_things_on_the_two_platforms()
+        public void An_unmodified_vertical_scroll_zooms_on_both_platforms()
         {
-            // the one assertion that states the platform split outright: an unmodified vertical
-            // scroll zooms on Windows and scrolls on a Mac.
+            // what is left of the platform split: the gesture means the same thing on both, only
+            // the gain differs — a Mac's deltas are accelerated fractions, a wheel's are notches.
             Assert.Equal(TimelineScrollAction.Zoom, Wheel(0, 1, Win).Action);
-            Assert.Equal(TimelineScrollAction.ScrollRows, Wheel(0, 1, Mac).Action);
+            Assert.Equal(TimelineScrollAction.Zoom, Wheel(0, 1, Mac).Action);
+            Assert.Equal(Wheel(0, 1, Win).ZoomFactor, Wheel(0, 1, Mac).ZoomFactor, 12);
+
+            // the horizontal half is where they still differ: a Mac pans on the bare gesture, a
+            // wheel needs Shift for it.
+            Assert.Equal(TimelineScrollAction.PanHorizontal, Wheel(1, 0, Mac).Action);
+            Assert.Equal(TimelineScrollAction.Zoom, Wheel(1, 0, Win).Action);
         }
 
         // ------------------------------------------------------------------------ pinch (magnify)

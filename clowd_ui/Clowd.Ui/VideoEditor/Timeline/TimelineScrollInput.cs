@@ -72,10 +72,13 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// <item>Windows — unchanged: a wheel over a timeline zooms around the pointer (the rows are
     /// rarely tall enough to have anywhere to scroll to), Shift+wheel pans, Alt+wheel goes to the
     /// rows' scroller.</item>
-    /// <item>macOS — a two-finger scroll is the system-wide "move the content", so it pans (the
-    /// dominant axis wins: horizontal here, vertical to the rows' scroller), Cmd/Ctrl+scroll zooms,
-    /// and the trackpad's own zoom gesture is the pinch, which arrives as a separate magnify event
-    /// (<see cref="ZoomFactorForMagnification"/>) rather than as a scroll.</item>
+    /// <item>macOS — a two-finger scroll splits by its dominant axis, so the timeline reads it the
+    /// way the Windows wheel reads its two: sideways pans, up/down zooms around the pointer
+    /// (proportionally, since the deltas arrive as fractions of a notch rather than as whole
+    /// clicks). Cmd/Ctrl+scroll zooms too — the Mac affordance, and harmless now that the plain
+    /// gesture agrees with it — and the pinch stays the primary zoom, arriving as a separate
+    /// magnify event (<see cref="ZoomFactorForMagnification"/>) rather than as a scroll. The rows'
+    /// own vertical scroll is Alt+scroll and the scroll bar, exactly as on Windows.</item>
     /// </list>
     /// </summary>
     internal static class TimelineScrollInput
@@ -157,15 +160,18 @@ namespace Clowd.UI.VideoEditor.Timeline
                 return TimelineScrollDecision.Pan(-horizontal * MacScrollPxPerDelta);
             }
 
-            // Plain two-finger scroll: pan. The dominant axis takes the whole gesture rather than
-            // both moving at once — a trackpad reports a little cross-axis drift on every swipe,
-            // and honouring it would slide the timeline sideways whenever the user meant to scroll
-            // the track stack. Vertical is left unhandled on purpose: the rows' ScrollViewer is the
-            // one that owns it, and it is directly beneath this handler.
+            // Plain two-finger scroll: sideways pans, up/down zooms — the same two meanings the
+            // Windows wheel carries, on the axis the finger actually moved. The dominant axis takes
+            // the whole gesture rather than both acting at once: a trackpad reports a little
+            // cross-axis drift on every swipe, and honouring it would zoom the view a hair on every
+            // horizontal pan (and slide it sideways on every zoom). The rows' vertical scroll is
+            // Alt+scroll and the scroll bar, as on Windows.
             if (Math.Abs(deltaX) > Math.Abs(deltaY))
                 return TimelineScrollDecision.Pan(-deltaX * MacScrollPxPerDelta);
 
-            return deltaY != 0 ? TimelineScrollDecision.ScrollRows : TimelineScrollDecision.None;
+            return deltaY != 0
+                ? TimelineScrollDecision.Zoom(Math.Pow(ZoomStepPerNotch, -deltaY))
+                : TimelineScrollDecision.None;
         }
 
         /// <summary>
