@@ -173,17 +173,7 @@ namespace Clowd.UI.Services
             Project project;
             try
             {
-                var probe = await Task.Run(() => MediaProbe.ProbeDetailed(videoPath));
-                if (probe.VideoStreams == null || probe.VideoStreams.Count == 0)
-                    return null;
-
-                var sessionDir = Path.GetDirectoryName(source.FilePath);
-                var editDocPath = String.IsNullOrEmpty(sessionDir)
-                    ? null
-                    : Path.Combine(sessionDir, VideoEditPersistence.FileName);
-
-                project = VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe,
-                    AudioTrackLabels.From(source.AudioTracks), RecordingTrackHints.From(source));
+                project = await BuildProjectAsync(source);
             }
             catch (Exception ex)
             {
@@ -192,7 +182,83 @@ namespace Clowd.UI.Services
                 return null;
             }
 
+            if (project == null)
+                return null;
+
             return await StartRenderAsync(source, project);
+        }
+
+        /// <summary>
+        /// Renders <paramref name="source"/> from its saved edit without opening the editor — the
+        /// Recent page's Render button. Same project the editor would open the entry with, so the
+        /// output is what pressing Render in there would have produced; unlike
+        /// <see cref="StartAutoRenderAsync"/> the user is standing right in front of this one, so
+        /// the reasons it cannot start are said out loud rather than logged. Must be called on the
+        /// UI thread.
+        /// </summary>
+        public static async Task<SessionInfo> StartRenderFromSessionAsync(SessionInfo source)
+        {
+            if (source == null || !source.IsProject)
+                return null;
+
+            if (!FFmpegLoader.TryInitialize(FFmpegDirectory))
+            {
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                    "FFmpeg could not be loaded, so this project cannot be rendered." +
+                    (String.IsNullOrEmpty(FFmpegLoader.FailureReason)
+                        ? ""
+                        : Environment.NewLine + Environment.NewLine + FFmpegLoader.FailureReason),
+                    "Can't render the video");
+                return null;
+            }
+
+            Project project;
+            try
+            {
+                project = await BuildProjectAsync(source);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Render could not build a project: " + ex);
+                SentryConfig.CaptureHandled(ex, "render.build");
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.Message, "Can't render the video");
+                return null;
+            }
+
+            if (project == null)
+            {
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Warning,
+                    "This project has nothing in it to render yet.", "Can't render the video");
+                return null;
+            }
+
+            // reports the rest of the reasons a render cannot start (an empty edit, a missing
+            // source file, a project the model rejects) itself.
+            return await StartRenderAsync(source, project);
+        }
+
+        /// <summary>The project <paramref name="source"/> would open in the editor with: the saved
+        /// <c>videoedit.json</c> beside it, or the identity edit of its recording when there is no
+        /// saved one yet. Null when the recording carries no video stream to build one from. The
+        /// caller has already initialized FFmpeg — the probe needs it.</summary>
+        private static async Task<Project> BuildProjectAsync(SessionInfo source)
+        {
+            var sessionDir = Path.GetDirectoryName(source.FilePath);
+            var editDocPath = String.IsNullOrEmpty(sessionDir)
+                ? null
+                : Path.Combine(sessionDir, VideoEditPersistence.FileName);
+
+            // a blank project owns nothing but its edit document — there is no recording to probe.
+            if (source.IsVideoProject)
+                return VideoEditPersistence.LoadOrCreateBlank(editDocPath);
+
+            var videoPath = source.VideoPath;
+            var probe = await Task.Run(() => MediaProbe.ProbeDetailed(videoPath));
+            if (probe.VideoStreams == null || probe.VideoStreams.Count == 0)
+                return null;
+
+            return VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe,
+                AudioTrackLabels.From(source.AudioTracks), RecordingTrackHints.From(source));
         }
 
         /// <summary>Where the FFmpeg natives live; see
@@ -368,25 +434,28 @@ namespace Clowd.UI.Services
             return null;
         }
 
-        /// <summary>"<c>name</c>-edited.mp4" beside the source, uniquified with a counter when that
-        /// is taken (an earlier render the user kept, or a file they made themselves).</summary>
-        /// <summary>Where <paramref name="source"/>'s render is written: beside the recording it
-        /// edits, or — for a project with no recording behind it — in the configured recording
-        /// folder, named like any other recording. The session directory is the last resort, for
-        /// when that folder cannot be written to at all.</summary>
+        /// <summary>Where <paramref name="source"/>'s render is written. The render <i>is</i> the
+        /// video the user set out to make, so it follows their recording settings like a capture
+        /// does: their output folder, named with their filename pattern. Only when no writable
+        /// output folder can be resolved at all does it fall back to sitting beside whatever it was
+        /// rendered from (the session directory, for a project with no recording behind it).</summary>
         private static string GetOutputPath(SessionInfo source)
         {
-            if (!String.IsNullOrEmpty(source.VideoPath))
-                return GetOutputPath(source.VideoPath);
-
             var configured = RecordingOutputPath.GetSavePath(SettingsRoot.Current?.Recording);
             if (!String.IsNullOrEmpty(configured))
                 return configured;
+
+            if (!String.IsNullOrEmpty(source.VideoPath))
+                return GetOutputPath(source.VideoPath);
 
             var dir = Path.GetDirectoryName(source.FilePath);
             return GetOutputPath(Path.Combine(dir, "project.mp4"));
         }
 
+        /// <summary>"<c>name</c>-edited.mp4" beside the source, uniquified with a counter when that
+        /// is taken (an earlier render the user kept, or a file they made themselves). The fallback
+        /// for when the configured output folder cannot be written to, and what the dev harness —
+        /// which has a file but no session and so no settings to follow — renders to.</summary>
         internal static string GetOutputPath(string sourceVideoPath)
         {
             var dir = Path.GetDirectoryName(sourceVideoPath);

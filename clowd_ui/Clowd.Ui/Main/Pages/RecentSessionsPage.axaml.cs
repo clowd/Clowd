@@ -175,7 +175,7 @@ namespace Clowd.UI
             {
                 // a capture or editor session carries no ContentKind at all; an entry the upload
                 // path created names what it holds, and only "image" is one.
-                RecentFilter.Image => !session.IsVideo
+                RecentFilter.Image => !session.IsVideo && !session.IsProject
                                       && (!session.IsUploadOnly
                                           || String.Equals(session.ContentKind, "image", StringComparison.OrdinalIgnoreCase)),
                 RecentFilter.Recording => IsRecording(session),
@@ -188,12 +188,13 @@ namespace Clowd.UI
             };
         }
 
-        /// <summary>A recording Clowd made — or the GIF converted from one. Both are "video" entries
-        /// carrying the file they wrote; a video *file* someone uploaded is one too, but has no
-        /// VideoPath of its own, which is what tells the two apart.</summary>
+        /// <summary>A recording Clowd made — or the project, render or GIF that came out of one.
+        /// All of them are "video" entries carrying the file they wrote; a video *file* someone
+        /// uploaded is one too, but has no VideoPath of its own, which is what tells the two apart.
+        /// A blank video project has no file at all and is caught by IsProject.</summary>
         private static bool IsRecording(SessionInfo session)
         {
-            return session.IsVideo && !String.IsNullOrEmpty(session.VideoPath);
+            return session.IsProject || (session.IsVideo && !String.IsNullOrEmpty(session.VideoPath));
         }
 
         /// <summary>An entry started by uploading something rather than by capturing it: the upload
@@ -268,20 +269,24 @@ namespace Clowd.UI
                                          .OrderByDescending(s => s.CreatedUtc)
                                          .ToArray();
 
+            var rows = OrderWithLinkedEntries(sessions);
+
             Groups.Clear();
-            UpdateEmptyState(sessions.Length);
+            UpdateEmptyState(rows.Count);
 
             SessionGroupVm current = null;
-            foreach (var session in sessions)
+            foreach (var row in rows)
             {
-                var key = GetTimeAgoGroupName(session.CreatedUtc);
+                // the whole chain is grouped by the entry it grew from, not by its own timestamp —
+                // a render made this morning belongs with the recording it came from.
+                var key = GetTimeAgoGroupName(row.GroupTime);
                 if (current == null || current.Name != key)
                 {
                     current = new SessionGroupVm(key);
                     Groups.Add(current);
                 }
 
-                current.Items.Add(session);
+                current.Items.Add(row.Session);
             }
 
             // every group (and so every ListBox, and so every selection) is thrown away here, and
@@ -289,6 +294,148 @@ namespace Clowd.UI
             // the selected row silently deselects itself moments after the user picked it.
             if (_focusedSession != null)
                 Dispatcher.UIThread.Post(() => TrySelectSession(_focusedSession, scrollIntoView: false), DispatcherPriority.Loaded);
+        }
+
+        /// <summary>One row of the list: the entry, and the timestamp its whole chain is grouped
+        /// by (its own, or the entry it was made from).</summary>
+        private readonly record struct SessionRow(SessionInfo Session, DateTime GroupTime);
+
+        /// <summary>
+        /// Lays <paramref name="newestFirst"/> out so that an entry made <i>from</i> another one —
+        /// a render from its project, a GIF from the video it was converted from — sits directly
+        /// above it, whatever the two were created at, and travels with it into its time group.
+        /// A chain of them (project → render → GIF) reads top to bottom as output first, origin
+        /// last. Also refreshes the two row properties only this layout knows: the chain-link
+        /// marker, and a project's render status line.
+        /// </summary>
+        private static List<SessionRow> OrderWithLinkedEntries(IReadOnlyList<SessionInfo> newestFirst)
+        {
+            // an entry's source is matched by path, so both maps prefer the newest of any
+            // duplicates — which is the same rule the ordering itself follows.
+            var byVideoPath = new Dictionary<string, SessionInfo>(StringComparer.OrdinalIgnoreCase);
+            var byRenderKey = new Dictionary<string, SessionInfo>(StringComparer.OrdinalIgnoreCase);
+            foreach (var session in newestFirst)
+            {
+                if (!String.IsNullOrEmpty(session.VideoPath))
+                    byVideoPath.TryAdd(session.VideoPath, session);
+
+                // a render output is never itself the source of a render, so it cannot be a parent
+                // by this key — without that a re-render of an entry could point at itself.
+                if (String.IsNullOrEmpty(session.EditSourceVideoPath) && !String.IsNullOrEmpty(session.RenderSourceKey))
+                    byRenderKey.TryAdd(session.RenderSourceKey, session);
+            }
+
+            var parents = new Dictionary<SessionInfo, SessionInfo>();
+            var children = new Dictionary<SessionInfo, List<SessionInfo>>();
+            foreach (var session in newestFirst)
+            {
+                var parent = FindLinkedSource(session, byVideoPath, byRenderKey);
+                if (parent == null || ReferenceEquals(parent, session))
+                    continue;
+
+                parents[session] = parent;
+                if (!children.TryGetValue(parent, out var siblings))
+                    children[parent] = siblings = new List<SessionInfo>();
+                siblings.Add(session);
+            }
+
+            var rows = new List<SessionRow>(newestFirst.Count);
+            var placed = new HashSet<SessionInfo>();
+
+            void Emit(SessionInfo session, DateTime groupTime)
+            {
+                if (!placed.Add(session))
+                    return; // already placed, or a cycle of source paths pointing at each other
+
+                if (children.TryGetValue(session, out var siblings))
+                {
+                    foreach (var child in siblings)
+                        Emit(child, groupTime);
+                }
+
+                rows.Add(new SessionRow(session, groupTime));
+            }
+
+            foreach (var session in newestFirst)
+            {
+                if (!parents.ContainsKey(session))
+                    Emit(session, session.CreatedUtc);
+            }
+
+            // only a cycle can leave anything behind; it keeps its own place rather than vanishing.
+            foreach (var session in newestFirst)
+            {
+                if (placed.Add(session))
+                    rows.Add(new SessionRow(session, session.CreatedUtc));
+            }
+
+            ApplyRowLinks(rows, parents);
+            return rows;
+        }
+
+        /// <summary>The entry <paramref name="session"/> was made from, when it is on the list too:
+        /// the video a GIF was converted from, or the project a render came out of.</summary>
+        private static SessionInfo FindLinkedSource(SessionInfo session,
+            Dictionary<string, SessionInfo> byVideoPath, Dictionary<string, SessionInfo> byRenderKey)
+        {
+            if (!String.IsNullOrEmpty(session.SourceVideoPath))
+                return byVideoPath.GetValueOrDefault(session.SourceVideoPath);
+
+            if (!String.IsNullOrEmpty(session.EditSourceVideoPath))
+                return byRenderKey.GetValueOrDefault(session.EditSourceVideoPath);
+
+            return null;
+        }
+
+        /// <summary>Points each row's chain-link marker and render status line at what the layout
+        /// just decided. Every session is written, including the ones this filter hides, so nothing
+        /// carries a marker from a list it is no longer part of.</summary>
+        /// <remarks>Each session is assigned exactly once, from a value worked out first: writing
+        /// these properties announces a change, and an announced change is what schedules the next
+        /// rebuild — a clear-then-set pass would toggle every linked row on every rebuild and never
+        /// settle.</remarks>
+        private static void ApplyRowLinks(List<SessionRow> rows, Dictionary<SessionInfo, SessionInfo> parents)
+        {
+            var marks = new Dictionary<SessionInfo, (bool Previous, bool Next, string RenderStatus)>();
+
+            foreach (var row in rows)
+                marks[row.Session] = (false, false, row.Session.IsProject ? DescribeRender(row.Session) : null);
+
+            for (var i = 0; i + 1 < rows.Count; i++)
+            {
+                // the bracket joins two adjacent rows, and each of them draws its own half of it
+                // (see SessionInfo.LinkedToPrevious). It belongs there only when the upper row was
+                // made from the lower one — never across a group boundary, nor between two siblings.
+                if (!parents.TryGetValue(rows[i].Session, out var parent) || !ReferenceEquals(parent, rows[i + 1].Session))
+                    continue;
+
+                var upper = rows[i].Session;
+                var lower = rows[i + 1].Session;
+                marks[upper] = (marks[upper].Previous, true, marks[upper].RenderStatus);
+                marks[lower] = (true, marks[lower].Next, marks[lower].RenderStatus);
+            }
+
+            foreach (var session in SessionManager.Current.Sessions)
+            {
+                var mark = marks.GetValueOrDefault(session);
+                session.LinkedToPrevious = mark.Previous;
+                session.LinkedToNext = mark.Next;
+                session.RenderStatusText = mark.RenderStatus;
+            }
+        }
+
+        /// <summary>What a project row says in place of "Not uploaded". It is only rendered once
+        /// the output entry has actually landed — while the render is still running that entry,
+        /// chained directly above, is the one showing the progress bar. The date is the output
+        /// entry's own, so the two rows agree on when it was made.</summary>
+        private static string DescribeRender(SessionInfo project)
+        {
+            var output = VideoRenderManager.FindExisting(project);
+            if (output == null || output.ActiveRender != null)
+                return "Not rendered";
+
+            return "Rendered on " + ToLocalTime(output.CreatedUtc)
+                                    .ToString(AppStyles.UiDateTimePattern, CultureInfo.CurrentCulture);
         }
 
         /// <summary>Words the zero state for whichever kind of empty this is: nothing captured yet
@@ -599,7 +746,7 @@ namespace Clowd.UI
             // session directory this deletes — saying it "cannot be recovered" would be a lie.
             var videoKept = session.IsVideo
                             && !String.IsNullOrEmpty(session.VideoPath)
-                            && !IsInsideSessionDirectory(session, session.VideoPath);
+                            && !session.IsInsideSessionDirectory(session.VideoPath);
 
             // a converted gif is written next to the recording it came from, so it takes the same
             // "kept on disk" wording — just not the word "video".
@@ -617,20 +764,6 @@ namespace Clowd.UI
             if (await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning, prompt))
             {
                 SessionManager.Current.DeleteSession(session);
-            }
-        }
-
-        private static bool IsInsideSessionDirectory(SessionInfo session, string path)
-        {
-            try
-            {
-                var dir = Path.GetDirectoryName(session.FilePath);
-                return !String.IsNullOrEmpty(dir)
-                       && Path.GetFullPath(path).StartsWith(Path.GetFullPath(dir), StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return true; // unreadable path: fall back to the original, more cautious wording
             }
         }
 
@@ -735,6 +868,27 @@ namespace Clowd.UI
             {
                 System.Diagnostics.Debug.WriteLine("Create gif failed: " + ex);
                 SentryConfig.CaptureHandled(ex, "recents.create-gif");
+            }
+        }
+
+        private async void RenderVideoClicked(object sender, RoutedEventArgs e)
+        {
+            var session = GetSessionFromEvent(sender);
+            if (session == null || !session.IsIdle || !session.ShowRender)
+                return;
+
+            try
+            {
+                // a render already running for this project owns its output entry; StartRender
+                // hands that same entry back, so either way this walks the user to the row.
+                var created = await VideoRenderManager.StartRenderFromSessionAsync(session);
+                if (created != null)
+                    FocusSession(created);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("Render video failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "recents.render-video");
             }
         }
 

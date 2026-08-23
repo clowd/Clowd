@@ -151,6 +151,17 @@
     <!-- chain-link (material "link"): the synced-object banner + any future link affordances -->
     <StreamGeometry x:Key="IconLink">M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z</StreamGeometry>
 
+    <!-- icons8 "video editing" (24x24): a screen with sprocket holes breaking apart into two
+         linked nodes. Marks a Recents row that is a video *project* — a recording captured
+         with composition on, or a blank edit — rather than a finished video. -->
+    <StreamGeometry x:Key="IconVideoProject">M 4 3 C 2.895 3 2 3.895 2 5 L 2 19 C 2 20.105 2.895 21 4 21 L 10.037109 21 C 10.220109 19.287 11.317422 17.885828 12.857422 17.298828 L 11.318359 15.867188 C 11.114359 15.678188 11 15.412766 11 15.134766 L 11 11 C 11 10.448 11.448 10 12 10 L 13.400391 10 C 13.657391 10 13.903844 10.098391 14.089844 10.275391 L 18.011719 14.015625 L 21.615234 10.556641 L 22 10.1875 L 22 5 C 22 3.895 21.105 3 20 3 L 4 3 z M 4.0019531 5 L 6 5 L 6 7 L 4.0019531 7 L 4.0019531 5 z M 18 5 L 20 5 L 20 7 L 18 7 L 18 5 z M 4 9 L 6 9 L 6 11 L 4 11 L 4 9 z M 18 9 L 20 9 L 20 11 L 18 11 L 18 9 z M 13 12 L 13 14.699219 L 15.900391 17.400391 L 17.300781 16.099609 L 13 12 z M 23 12 L 15.5 19.199219 C 15.2 19.099219 14.8 19 14.5 19 C 13.1 19 12 20.1 12 21.5 C 12 22.9 13.1 24 14.5 24 C 15.9 24 17 22.9 17 21.5 C 17 21.2 16.900781 20.899609 16.800781 20.599609 L 18 19.400391 L 19.199219 20.599609 C 19.099219 20.899609 19 21.2 19 21.5 C 19 22.9 20.1 24 21.5 24 C 22.9 24 24 22.9 24 21.5 C 24 20.1 22.9 19 21.5 19 C 21.2 19 20.8 19.099219 20.5 19.199219 L 19.400391 18.099609 L 23 14.699219 L 23 12 z M 4 13 L 6 13 L 6 15 L 4 15 L 4 13 z M 4 17 L 6 17 L 6 19 L 4 19 L 4 17 z M 18 17.880859 C 18.173 17.880859 18.3125 18.019406 18.3125 18.191406 C 18.3125 18.364406 18.173 18.505859 18 18.505859 C 17.827 18.505859 17.6885 18.365359 17.6875 18.193359 C 17.6875 18.020359 17.827 17.880859 18 17.880859 z</StreamGeometry>
+
+    <!-- IconLink translated by (-2,-7) so the ink starts at the origin: bounds 20x10 exactly,
+         with none of the 24x24 canvas's transparent padding. A Viewbox scales this to pure
+         glyph, which is what the Recent page's chain-link marker needs to sit centred in the
+         gap between two rows without the padding pushing the rows apart. -->
+    <StreamGeometry x:Key="IconLinkTight">M1.9 5c0-1.71 1.39-3.1 3.1-3.1h4V0H5c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H5c-1.71 0-3.1-1.39-3.1-3.1zM6 6h8v-2H6v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V10h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z</StreamGeometry>
+
     <StreamGeometry x:Key="IconLockOpen">M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6h1.9c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm0 12H6V10h12v10z</StreamGeometry>
 
     <StreamGeometry x:Key="IconChevronUp">M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z</StreamGeometry>

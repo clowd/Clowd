@@ -147,7 +147,11 @@ namespace Clowd.UI.Services
             if (existing != null)
                 return existing;
 
-            var gifPath = Path.ChangeExtension(videoPath, ".gif");
+            // a GIF is an output like the recording itself, so it follows the same recording
+            // settings: the user's output folder, named with their filename pattern. Beside the
+            // video it came from only when no writable output folder can be resolved at all.
+            var gifPath = RecordingOutputPath.GetSavePath(SettingsRoot.Current?.Recording, ".gif")
+                          ?? Path.ChangeExtension(videoPath, ".gif");
 
             SessionInfo session;
             try
