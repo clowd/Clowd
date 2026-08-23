@@ -128,10 +128,16 @@ namespace Clowd.VideoSDK.Tests
             // soon a System.Threading.Timer callback actually gets a thread is the scheduler's
             // business, and on a machine running the rest of this suite in parallel it can fall a
             // long way behind — so sample the pair repeatedly rather than latching once.
+            //
+            // Thirty seconds, not the five this used to allow: a hosted CI runner starved the pool
+            // badly enough that a 10 ms timer had not fired once inside five, and the run failed on
+            // "never pulled" — which measures the machine, not the output. Nothing here waits the
+            // full budget on a healthy box; it exists so that the one hard assertion left below
+            // means "the pump is broken" rather than "the box was busy".
             long frames = 0, expected = 0;
             TimeSpan position = TimeSpan.Zero;
             bool caughtUp = false;
-            var deadline = DateTime.UtcNow.AddSeconds(5);
+            var deadline = DateTime.UtcNow.AddSeconds(30);
             while (true)
             {
                 // frames first: the position read after it can only be the same or later, so a pull
@@ -177,8 +183,9 @@ namespace Clowd.VideoSDK.Tests
             // wait for the first pull rather than sleeping a fixed slice: the pump is a
             // System.Threading.Timer, so its callback queues to the thread pool, and with the rest
             // of the suite running in parallel that queue can take far longer than one 10ms tick
-            // to drain. What this test is about starts after the Pause.
-            var deadline = DateTime.UtcNow.AddSeconds(5);
+            // to drain — a CI runner was seen not draining it inside five seconds. What this test
+            // is about starts after the Pause, so wait as long as it takes to get there.
+            var deadline = DateTime.UtcNow.AddSeconds(30);
             while (counter.Frames == 0 && DateTime.UtcNow < deadline)
                 Thread.Sleep(10);
             Assert.True(counter.Frames > 0, "expected the callback to have been pulled while playing");
