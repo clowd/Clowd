@@ -71,7 +71,23 @@ struct Uniforms {
     //                the monochrome page when OCR starts and colour
     //                returns with the retract.
     ocr_params:       vec4<f32>,
+    // selection_shape.x = corner radius of the selection in window-local
+    //                px (through the same zoom transform as
+    //                selection_rect). 0 = square: the border takes the
+    //                original pixel-exact integer-slab path below. > 0
+    //                only for a picked window, whose OS corner radius it
+    //                is; the border is then drawn as an anti-aliased
+    //                rounded rect whose dashes run along the curved
+    //                perimeter, and the rect's own corners — outside the
+    //                curve — get the faded "outside" treatment, matching
+    //                the transparent corners of the copied / saved image.
+    // selection_shape.y = dash period in physical px for this frame, or 0
+    //                for the nominal 32 × DPI-step. See dash_period().
+    selection_shape:  vec4<f32>,
 };
+
+const PI: f32 = 3.14159265;
+const HALF_PI: f32 = 1.57079633;
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var desktop_tex: texture_2d<f32>;
@@ -117,6 +133,106 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
 
 fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
     return sqrt(c);
+}
+
+// The colour of a pixel OUTSIDE the selection: the desktop crushed to
+// darkened grayscale by `fade`. Bit-exact passthrough at fade = 0 (see
+// the comment at the end of fs_main — this is that code, shared with the
+// rounded-corner border path, which needs it mid-function).
+fn fade_outside(base: vec4<f32>, fade: f32) -> vec4<f32> {
+    if (fade == 0.0) {
+        return base;
+    }
+    let linear = srgb_to_linear(base.rgb);
+    let luma = dot(linear, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.42;
+    let gray_linear = vec3<f32>(luma);
+    let out_linear = mix(linear, gray_linear, fade);
+    return vec4<f32>(linear_to_srgb(out_linear), 1.0);
+}
+
+// The colour of a pixel INSIDE the selection: the desktop untouched, or
+// desaturated + dimmed while OCR mode is active (see the in_fill comment
+// below for the reasoning; this is that code, shared the same way).
+fn selection_fill(base: vec4<f32>) -> vec4<f32> {
+    let dim = clamp(u.ocr_params.x, 0.0, 1.0);
+    let gray = clamp(u.ocr_params.z, 0.0, 1.0);
+    if (dim <= 0.0 && gray <= 0.0) {
+        return base;
+    }
+    let lin = srgb_to_linear(base.rgb);
+    let luma = vec3<f32>(dot(lin, vec3<f32>(0.2126, 0.7152, 0.0722)));
+    let desat = linear_to_srgb(mix(lin, luma, gray));
+    return vec4<f32>(desat * (1.0 - dim), 1.0);
+}
+
+// The marching-ants dash period for this frame: the CPU's (render/
+// desktop.rs `dash_period`) when it sent one — nominal 32 px × DPI step,
+// snapped to the border's perimeter so the pattern wraps seamlessly,
+// except mid-drag — else the nominal period.
+fn dash_period(sel_step: i32) -> f32 {
+    let sent = u.selection_shape.y;
+    return select(32.0 * f32(sel_step), sent, sent > 0.0);
+}
+
+// Signed distance from pixel centre `p` to the rounded rect
+// [rmin, rmax] with corner radius `r`: negative inside, zero on the
+// curve, positive outside. The classic Inigo Quilez rounded-box SDF.
+fn rounded_rect_sdf(p: vec2<f32>, rmin: vec2<f32>, rmax: vec2<f32>, r: f32) -> f32 {
+    let half_size = (rmax - rmin) * 0.5;
+    let centre = rmin + half_size;
+    let q = abs(p - centre) - (half_size - vec2<f32>(r, r));
+    return length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+// Arc length of the clockwise walk around a rounded rect [rmin, rmax]
+// with radius `r`, starting at the top of the LEFT edge — where the
+// straight left side meets the top-left curve — so the seam where the
+// dash pattern wraps (the perimeter is never a whole number of periods)
+// sits just before that curve rather than breaking the curve itself:
+// TL arc → top → TR arc → right → BR arc → bottom → BL arc → left.
+// Evaluated for a pixel by which straight edge or corner quadrant it
+// falls in, so every pixel across the border's thickness gets (near) the
+// same value and a dash reads as a solid stripe across the stroke — the
+// same property the integer path's `arc` has.
+fn rounded_rect_arc(p: vec2<f32>, rmin: vec2<f32>, rmax: vec2<f32>, r: f32) -> f32 {
+    let lt = (rmax.x - rmin.x) - 2.0 * r;   // straight top / bottom length
+    let ls = (rmax.y - rmin.y) - 2.0 * r;   // straight left / right length
+    let qa = HALF_PI * r;                   // one quarter arc
+    let near_left   = p.x < rmin.x + r;
+    let near_right  = p.x > rmax.x - r;
+    let near_top    = p.y < rmin.y + r;
+    let near_bottom = p.y > rmax.y - r;
+    if (near_top && near_left) {
+        // phi in (-PI, -PI/2): from the left edge's end round to the top's start.
+        let phi = atan2(p.y - (rmin.y + r), p.x - (rmin.x + r));
+        return (phi + PI) * r;
+    }
+    if (near_top && near_right) {
+        // phi in (-PI/2, 0).
+        let phi = atan2(p.y - (rmin.y + r), p.x - (rmax.x - r));
+        return qa + lt + (phi + HALF_PI) * r;
+    }
+    if (near_bottom && near_right) {
+        // phi in (0, PI/2).
+        let phi = atan2(p.y - (rmax.y - r), p.x - (rmax.x - r));
+        return 2.0 * qa + lt + ls + phi * r;
+    }
+    if (near_bottom && near_left) {
+        // phi in (PI/2, PI).
+        let phi = atan2(p.y - (rmax.y - r), p.x - (rmin.x + r));
+        return 3.0 * qa + 2.0 * lt + ls + (phi - HALF_PI) * r;
+    }
+    if (near_top) {
+        return qa + (p.x - (rmin.x + r));
+    }
+    if (near_right) {
+        return 2.0 * qa + lt + (p.y - (rmin.y + r));
+    }
+    if (near_bottom) {
+        return 3.0 * qa + lt + ls + ((rmax.x - r) - p.x);
+    }
+    // left
+    return 4.0 * qa + 2.0 * lt + ls + ((rmax.y - r) - p.y);
 }
 
 @fragment
@@ -335,6 +451,42 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             }
         }
 
+        // Rounded selection (a picked window): the border is the same
+        // 2*half stroke straddling the rect's edge, but run around a
+        // rounded rect and anti-aliased over one pixel, with the dash
+        // phase measured along the curved perimeter. The rect's square
+        // corners lie OUTSIDE the curve and take the faded treatment —
+        // exactly the pixels the copied image leaves transparent. The
+        // integer path below stays byte-for-byte for radius 0.
+        let radius = u.selection_shape.x;
+        if (radius > 0.0) {
+            let fpos = in.pos.xy;
+            let rmin = vec2<f32>(f32(sx), f32(sy));
+            let rmax = vec2<f32>(f32(sz), f32(sw));
+            // A radius past half the shorter side would invert the SDF;
+            // the window server clamps the same way (stadium / circle).
+            let r = min(radius, min(rmax.x - rmin.x, rmax.y - rmin.y) * 0.5);
+            let d = rounded_rect_sdf(fpos, rmin, rmax, r);
+            let half_f = f32(half);
+            // Straight edges at integer coordinates land pixel centres at
+            // half-integer distances, so these two coverages are exactly
+            // 0 or 1 there and reproduce the integer path's classification;
+            // only the curves see fractional values.
+            let border_a = clamp(half_f + 0.5 - abs(d), 0.0, 1.0);
+            let inside_a = clamp(-(d + half_f) + 0.5, 0.0, 1.0);
+            var col = mix(fade_outside(base, fade), selection_fill(base), inside_a);
+            if (border_a > 0.0) {
+                let period = dash_period(sel_step);
+                let half_period = period * 0.5;
+                let t_offset = u.selection_params.x * period;
+                let raw = rounded_rect_arc(fpos, rmin, rmax, r) - t_offset;
+                let phase = raw - period * floor(raw / period);
+                let dash = select(vec4<f32>(1.0, 1.0, 1.0, 1.0), u.accent_color, phase < half_period);
+                col = mix(col, dash, border_a * fade);
+            }
+            return col;
+        }
+
         // Classify the pixel into one of the four border slabs.
         // Each slab is 2*half px thick. Top/bottom claim the
         // (2*half)×(2*half) corner squares so the left/right slabs
@@ -389,8 +541,11 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             // units × 2 DIPs stroke width at
             // DxScreenCapture.cpp:638-645. The animation completes
             // one full cycle per second. WGSL has no f32 `%`, so
-            // fold with floor() instead.
-            let period = 32.0 * f32(sel_step);
+            // fold with floor() instead. The period comes from the
+            // CPU — snapped to the perimeter so the pattern wraps
+            // without a seam, nominal only while a drag is in progress
+            // (see render/desktop.rs).
+            let period = dash_period(sel_step);
             let half_period = period * 0.5;
             let t_offset = u.selection_params.x * period;
             let raw = f32(arc) - t_offset;

@@ -459,6 +459,9 @@ namespace Clowd.UI
             if (!settings.ScreenshotWithCursor)
                 args.Add("--no-cursor");
 
+            if (!settings.RoundedWindowCorners)
+                args.Add("--no-rounded-corners");
+
             // The overlay's optional buttons (SettingsCapture "Optional features"). All on by
             // default, so these only ever appear when the user has switched something off.
             if (!settings.UploadButtonEnabled)

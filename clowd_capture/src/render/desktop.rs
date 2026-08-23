@@ -31,6 +31,11 @@ pub(crate) struct FrameState {
     pub mouse_pos: ScreenPointF,
     pub zoom: f32,
     pub selection: Option<ScreenRect>,
+    /// Corner radius of `selection` in virtual-desktop px (0 = square).
+    pub selection_radius: f32,
+    /// The selection is mid-drag (button down): its rect changes every
+    /// frame, so the dash period must not re-snap to it.
+    pub selection_dragging: bool,
     pub captured: bool,
     pub overlays_visible: bool,
     pub cursor_overlay_visible: bool,
@@ -64,6 +69,8 @@ impl SnapshotState {
             mouse_pos,
             zoom,
             selection,
+            selection_radius,
+            selection_dragging,
             captured,
             overlays_visible,
             cursor_overlay_visible,
@@ -138,6 +145,7 @@ impl SnapshotState {
                 ];
             }
             self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
+            self.uniforms.selection_shape = [0.0; 4];
             self.uniforms.selection_params[0] = elapsed;
             self.uniforms.selection_params[1] = 0.0;
             self.uniforms.selection_params[2] = zoom;
@@ -179,8 +187,27 @@ impl SnapshotState {
             let (l, t) = to_local(sel_f.left(), sel_f.top());
             let (r, b) = to_local(sel_f.right(), sel_f.bottom());
             self.uniforms.selection_rect = [l, t, r, b];
+            // The radius is a length in the same space as the rect, so it
+            // scales with the magnifier like the rect's edges do.
+            let radius_local = selection_radius.max(0.0) * zoom.max(1.0);
+            // Dash period: snapped to the border's perimeter (same DPI
+            // step rule the shader uses for the stroke) so the pattern
+            // wraps without a cut dash — square or rounded — except
+            // while a drag is in progress: the rect changes every frame
+            // then, and a period that tracked it would re-phase every
+            // dash along the walk under the cursor. Nominal mid-drag;
+            // re-snapped once on release.
+            let dpi_step = self.uniforms.params[3].max(1.0).floor();
+            let nominal = NOMINAL_DASH_PERIOD * dpi_step;
+            let period = if selection_dragging {
+                nominal
+            } else {
+                dash_period(nominal, border_perimeter(r - l, b - t, radius_local))
+            };
+            self.uniforms.selection_shape = [radius_local, period, 0.0, 0.0];
         } else {
             self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
+            self.uniforms.selection_shape = [0.0; 4];
         }
 
         self.uniforms.selection_params[0] = elapsed;
@@ -224,6 +251,45 @@ impl SnapshotState {
         self.uniforms.cursor_rect = [l, t, r, b];
         self.uniforms.cursor_params = [ct.cursor_type as f32, 0.0, 0.0, 0.0];
     }
+}
+
+// ── Selection border dashes ─────────────────────────────────────────
+
+/// Marching-ants dash period at 100 % DPI, physical px: 16 on + 16 off.
+/// Matches the C++ D2D stroke style of {8, 8} × 2 DIPs
+/// (DxScreenCapture.cpp:638-645) and the shader's own constant.
+pub(crate) const NOMINAL_DASH_PERIOD: f32 = 32.0;
+
+/// Length of the path the dashes walk: the selection border's perimeter
+/// in px for a `w`×`h` rect with corner radius `r` (0 = square). For the
+/// square border this is the integer path's `2 * top_len + 2 * side_len`
+/// (the stroke's extra `half` on the top/bottom runs cancels the `half`
+/// the sides give up); the rounded path swaps four corners for one
+/// circle's worth of arc. `r` is clamped like the shader clamps it.
+pub(crate) fn border_perimeter(w: f32, h: f32, r: f32) -> f32 {
+    let w = w.max(0.0);
+    let h = h.max(0.0);
+    let r = r.clamp(0.0, w.min(h) * 0.5);
+    2.0 * (w + h) - 8.0 * r + 2.0 * std::f32::consts::PI * r
+}
+
+/// The dash period that divides `perimeter` a whole number of times,
+/// nearest to `nominal`. Without it the pattern wraps at a fractional
+/// period and the walk's start shows a seam where one dash is cut short;
+/// with it the ants march as one continuous loop, at the cost of dashes
+/// up to half a period longer or shorter than nominal — a few percent on
+/// anything bigger than a button. NOT applied while the selection is
+/// being dragged: the perimeter then changes every frame and the snapped
+/// period with it, which re-phases every dash along the walk and reads
+/// as the far end jittering.
+pub(crate) fn dash_period(nominal: f32, perimeter: f32) -> f32 {
+    // Degenerate or NaN inputs: hand back the nominal period untouched
+    // rather than a 0 / inf / NaN the shader would have to guard against.
+    if nominal <= 0.0 || perimeter <= 0.0 || nominal.is_nan() || perimeter.is_nan() {
+        return nominal;
+    }
+    let n = (perimeter / nominal).round().max(1.0);
+    perimeter / n
 }
 
 // ── OCR dim + desaturation ──────────────────────────────────────────
@@ -366,6 +432,37 @@ mod tests {
         let mid_g = retracting_gray(anim::RETRACT_DURATION_SECS * 0.5);
         assert!((0.0..=anim::DIM_MAX).contains(&mid_d));
         assert!((0.0..=1.0).contains(&mid_g));
+    }
+
+    /// A snapped period divides the perimeter exactly and never strays more
+    /// than half a nominal period from nominal.
+    #[test]
+    fn dash_period_divides_perimeter_and_stays_near_nominal() {
+        for perimeter in [100.0f32, 333.0, 1000.0, 4097.5, 20_000.0] {
+            let p = dash_period(32.0, perimeter);
+            let n = perimeter / p;
+            assert!((n - n.round()).abs() < 1e-3, "perimeter {perimeter}: {n} periods");
+            assert!((p - 32.0).abs() <= 16.0 + 1e-3, "perimeter {perimeter}: period {p}");
+        }
+        // Exactly divisible: untouched.
+        assert_eq!(dash_period(32.0, 320.0), 32.0);
+        // Tiny selection: one dash round the whole thing, never zero.
+        assert_eq!(dash_period(32.0, 10.0), 10.0);
+        // Degenerate inputs fall back to nominal rather than NaN/inf.
+        assert_eq!(dash_period(32.0, 0.0), 32.0);
+        assert_eq!(dash_period(32.0, -5.0), 32.0);
+        assert_eq!(dash_period(0.0, 100.0), 0.0);
+    }
+
+    /// The square perimeter is 2(w+h); rounding trades 8r of corners for a
+    /// full circle of arc, and a radius past half the short side clamps.
+    #[test]
+    fn border_perimeter_square_and_rounded() {
+        assert_eq!(border_perimeter(100.0, 50.0, 0.0), 300.0);
+        let rounded = border_perimeter(100.0, 50.0, 10.0);
+        assert!((rounded - (300.0 - 80.0 + 2.0 * std::f32::consts::PI * 10.0)).abs() < 1e-3);
+        // Radius clamps to 25 (half of 50): a stadium.
+        assert_eq!(border_perimeter(100.0, 50.0, 1000.0), border_perimeter(100.0, 50.0, 25.0));
     }
 
     /// The shared curve's endpoints: byte-exact passthrough at t=0 (the

@@ -27,7 +27,7 @@ use windows::{
     },
 };
 
-use super::{HitTestResult, ObstructedWindow, WindowCaptureRef};
+use super::{HitTestResult, MonitorInfo, ObstructedWindow, WindowCaptureRef, WindowTarget};
 use clowd_rust_core::geometry::{RectExt, ScreenPoint, ScreenRect};
 
 /// Minimum top-level window dimension (px) to be considered capturable.
@@ -85,6 +85,10 @@ struct WindowEntry {
     obstructed: bool,
     /// Regions of this window covered by higher-Z windows, in virtual-desktop coords.
     obstruction_rects: Vec<ScreenRect>,
+    /// Corner radius DWM composites this window with, in physical px
+    /// (0 = square; always 0 when the walker was built with rounded
+    /// corners off). See `win_corners`.
+    corner_radius: f32,
 }
 
 // ---------------------------------------------------------------------------
@@ -92,13 +96,13 @@ struct WindowEntry {
 // ---------------------------------------------------------------------------
 
 /// Snapshot of the top-level window list in Z-order. Created once at capture
-/// startup; queried per cursor-move via [`hit_test`].
+/// startup; queried per cursor-move via [`hit_test_target`].
 pub struct WindowWalker {
     windows: Vec<WindowEntry>,
-    /// True bounds of the foreground window at snapshot time, if it survived
-    /// the enumeration filters. Used by `--capture-mode window` to pre-select
-    /// the active window (see [`foreground_capture_rect`]).
-    foreground_rect: Option<ScreenRect>,
+    /// Index into `windows` of the foreground window at snapshot time, if it
+    /// survived the enumeration filters. Used by `--capture-mode window` to
+    /// pre-select the active window (see [`foreground_capture_target`]).
+    foreground_index: Option<usize>,
 }
 
 // SAFETY: WindowWalker holds HWND values which are plain integer handles.
@@ -111,7 +115,7 @@ impl WindowWalker {
     ///
     /// Call once at capture startup — after the desktop bitmap is grabbed but
     /// before overlay windows are created, so our own windows are excluded.
-    pub fn snapshot(_monitors: &[super::MonitorInfo], visibility_threshold: f32) -> Self {
+    pub fn snapshot(_monitors: &[MonitorInfo], visibility_threshold: f32, rounded_corners: bool) -> Self {
         // Grab the foreground window first — before overlay windows exist —
         // so `--capture-mode window` can pre-select the truly active window
         // regardless of where the cursor is. Matched to an enumerated entry
@@ -148,7 +152,7 @@ impl WindowWalker {
         let mut windows: Vec<WindowEntry> = Vec::new();
 
         for hwnd in hwnds {
-            if let Some(entry) = evaluate_window(hwnd, &vdm, &windows, visibility_threshold) {
+            if let Some(entry) = evaluate_window(hwnd, &vdm, &windows, visibility_threshold, rounded_corners) {
                 windows.push(entry);
             }
         }
@@ -156,37 +160,51 @@ impl WindowWalker {
         // Resolve the foreground window to a capture rect. Only accept it if it
         // survived enumeration (a normal, on-screen app window); otherwise leave
         // it None so the caller can fall back to the active screen.
-        let foreground_rect = if foreground_hwnd.0.is_null() {
+        let foreground_index = if foreground_hwnd.0.is_null() {
             None
         } else {
             windows
                 .iter()
-                .find(|w| w.hwnd == foreground_hwnd)
-                .map(|w| w.rect)
+                .position(|w| w.hwnd == foreground_hwnd)
         };
 
         info!("WindowWalker: captured {} top-level windows", windows.len());
         WindowWalker {
             windows,
-            foreground_rect,
+            foreground_index,
         }
     }
+
+    /// Corner radii on Windows are resolved synchronously during
+    /// [`snapshot`] (a handful of user32/DWM calls per window), so there is
+    /// nothing to refine afterwards. Exists so the walker thread can call
+    /// it on both platforms; macOS does the expensive window-server probe
+    /// here.
+    pub fn probe_corner_radii(&self, _monitors: &[MonitorInfo]) {}
 
     /// Capture rect for `--capture-mode window`: the true bounds of the window
     /// that was in the foreground when the capture began, or `None` if that
     /// window is not a valid capture target (the caller should fall back to the
     /// active screen).
-    pub fn foreground_capture_rect(&self) -> Option<ScreenRect> {
-        self.foreground_rect
+    pub fn foreground_capture_target(&self) -> Option<WindowTarget> {
+        let w = self.windows.get(self.foreground_index?)?;
+        Some(WindowTarget {
+            rect: w.rect,
+            corner_radius: w.corner_radius,
+        })
     }
 
     /// Given a cursor position in virtual-desktop physical pixels, return the
-    /// suggested capture rectangle — the deepest meaningful child window
-    /// region under the cursor, clipped to the top-level window bounds.
+    /// suggested capture target — the deepest meaningful child window
+    /// region under the cursor, clipped to the top-level window bounds —
+    /// with the corner radius to draw and crop it with. The radius is the
+    /// top-level window's only when the suggested rect IS the whole window;
+    /// a child region (a browser viewport, a pane) has square corners
+    /// regardless.
     ///
     /// Returns `None` if the cursor is over the desktop background (no
     /// captured window contains the point).
-    pub fn hit_test(&self, point: ScreenPoint) -> Option<ScreenRect> {
+    pub fn hit_test_target(&self, point: ScreenPoint) -> Option<WindowTarget> {
         // Find the topmost (first in Z-order) window containing the point.
         let top = self
             .windows
@@ -259,13 +277,17 @@ impl WindowWalker {
         // Clip to the top-level window bounds.
         let clipped = ideal_rect.intersection(&top_rect)?;
         if clipped.width() > 0 && clipped.height() > 0 {
-            Some(clipped)
+            let corner_radius = if clipped == top_rect { top.corner_radius } else { 0.0 };
+            Some(WindowTarget {
+                rect: clipped,
+                corner_radius,
+            })
         } else {
             None
         }
     }
 
-    /// Handle of the top-level window [`hit_test`] would pick for `point`
+    /// Handle of the top-level window [`hit_test_target`] would pick for `point`
     /// — the first entry in Z-order whose true bounds contain it — as a
     /// plain integer, or `None` over the desktop background.
     ///
@@ -325,7 +347,7 @@ impl WindowWalker {
             .collect()
     }
 
-    /// Same as [`hit_test`] but also returns the title of the top-level window
+    /// Same as [`hit_test_target`] but also returns the title of the top-level window
     /// that contains the point.
     pub fn hit_test_with_title(&self, point: ScreenPoint) -> Option<(ScreenRect, String)> {
         // Find the topmost (first in Z-order) window containing the point.
@@ -431,6 +453,7 @@ fn evaluate_window(
     vdm: &Option<IVirtualDesktopManager>,
     accepted: &[WindowEntry],
     visibility_threshold: f32,
+    rounded_corners: bool,
 ) -> Option<WindowEntry> {
     unsafe {
         // 1. Basic visibility.
@@ -528,6 +551,14 @@ fn evaluate_window(
         let obstructed = !obstruction_rects.is_empty();
 
         let title = get_window_text(hwnd);
+        // Last, once the window is known to be a capture target: a few more
+        // user32/DWM round-trips per window, skipped entirely when the
+        // feature is off.
+        let corner_radius = if rounded_corners {
+            super::win_corners::window_corner_radius(hwnd, style)
+        } else {
+            0.0
+        };
         Some(WindowEntry {
             hwnd,
             rect,
@@ -535,6 +566,7 @@ fn evaluate_window(
             title,
             obstructed,
             obstruction_rects,
+            corner_radius,
         })
     }
 }

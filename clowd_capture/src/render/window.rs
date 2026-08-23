@@ -206,19 +206,30 @@ impl WindowHandle {
     pub fn save_to_file_with_peek(
         &self,
         selection: ScreenRect,
+        corner_radius: f32,
         buffer: &CapturedDesktop,
         peek: Option<&WindowPeekImage>,
         cursor: Option<&CapturedCursor>,
         cursor_visible: bool,
     ) -> ActionResult {
-        save_to_file_with_peek(selection, buffer, peek, cursor, cursor_visible, &self.window)
+        save_to_file_with_peek(selection, corner_radius, buffer, peek, cursor, cursor_visible, &self.window)
     }
 
-    pub fn update_mouse_state(&self, pos: ScreenPointF, zoom: f32, selection: Option<ScreenRect>, captured: bool) {
+    pub fn update_mouse_state(
+        &self,
+        pos: ScreenPointF,
+        zoom: f32,
+        selection: Option<ScreenRect>,
+        selection_radius: f32,
+        selection_dragging: bool,
+        captured: bool,
+    ) {
         let _ = self.tx.send(RenderMsg::MouseState {
             pos,
             zoom,
             selection,
+            selection_radius,
+            selection_dragging,
             captured,
         });
     }

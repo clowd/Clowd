@@ -16,6 +16,12 @@ struct PeekUniforms {
     // desktop snapshot instead would show the OBSCURING window (the
     // snapshot has no peek composite). All zero outside OCR mode.
     ocr_params:     vec4<f32>,
+    // (corner_radius, 0, 0, 0) — the selection's corner radius in
+    // monitor-local pixels, same value as the desktop pass's
+    // selection_shape.x. 0 = square. When > 0 the quad stops at the same
+    // rounded inner edge the desktop pass draws its border around, so the
+    // peeked window never paints over the corner the border curves past.
+    selection_shape: vec4<f32>,
     // Up to 16 obstruction rects in monitor-local pixels.
     obstruction_rects: array<vec4<f32>, 16>,
 };
@@ -104,6 +110,23 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     if (px.x < inner_left || px.x > inner_right ||
         px.y < inner_top  || px.y > inner_bottom) {
         discard;
+    }
+
+    // Rounded selection: also stop at the curve. Same SDF and the same
+    // "inside" threshold as desktop.wgsl's inside_a >= 0.5, so the peek
+    // and the border agree on every pixel of the corner.
+    let radius = u.selection_shape.x;
+    if (radius > 0.0) {
+        let rmin = vec2<f32>(sr.x, sr.y);
+        let rmax = vec2<f32>(sr.z, sr.w);
+        let r = min(radius, min(rmax.x - rmin.x, rmax.y - rmin.y) * 0.5);
+        let half_size = (rmax - rmin) * 0.5;
+        let centre = rmin + half_size;
+        let q = abs(in.pos.xy - centre) - (half_size - vec2<f32>(r, r));
+        let d = length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+        if (d > -f32(half)) {
+            discard;
+        }
     }
 
     // ── Preserve resize handles (drawn by desktop shader) ─────────

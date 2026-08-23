@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Clowd.Drawing.Graphics;
@@ -97,6 +98,113 @@ namespace Clowd.Drawing.Tests
                 using var scaled = graphic.ImageSource.CreateScaledBitmap(new PixelSize(5, 4));
                 Assert.Equal(5, scaled.PixelSize.Width);
                 Assert.Equal(4, scaled.PixelSize.Height);
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        // ====================================================================
+        // Corner radius: a picked window's rounded corners (seeded from session.json) and any
+        // radius the user sets afterwards are a rounded clip around the drawn crop — the corners
+        // must come out transparent in the export bitmap, the straight edges and interior must not.
+        // ====================================================================
+
+        private static (byte B, byte G, byte R, byte A) ExportPixel(Bitmap bmp, int x, int y)
+        {
+            var buffer = new byte[4];
+            var handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+            try
+            {
+                bmp.CopyPixels(new PixelRect(x, y, 1, 1), handle.AddrOfPinnedObject(), buffer.Length, 4);
+            }
+            finally
+            {
+                handle.Free();
+            }
+
+            return (buffer[0], buffer[1], buffer[2], buffer[3]);
+        }
+
+        [AvaloniaFact]
+        public void CornerRadius_ExportsTransparentCorners()
+        {
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var imgPath = Path.Combine(dir.FullName, "img.png");
+                // opaque everywhere (white/black seam at x=30 — any opaque content does)
+                WriteSeamPng(imgPath, 60, 40, 30);
+
+                var canvas = new DrawingCanvas { Tool = ToolType.None };
+                var img = new GraphicImage(imgPath, new Rect(0, 0, 60, 40), default) { CornerRadius = 12 };
+                canvas.GraphicsList.Add(img);
+
+                using var bmp = canvas.GraphicsList.DrawGraphicsToBitmap(Brushes.Transparent);
+                Assert.NotNull(bmp);
+                Assert.Equal(60, bmp.PixelSize.Width);
+                Assert.Equal(40, bmp.PixelSize.Height);
+
+                // the four corner pixels sit well outside a 12px arc → fully transparent
+                foreach (var (x, y) in new[] { (0, 0), (59, 0), (0, 39), (59, 39) })
+                    Assert.Equal(0, ExportPixel(bmp, x, y).A);
+
+                // the straight edges between the arcs, and the interior, stay opaque
+                Assert.Equal(255, ExportPixel(bmp, 30, 0).A);
+                Assert.Equal(255, ExportPixel(bmp, 0, 20).A);
+                Assert.Equal(255, ExportPixel(bmp, 59, 20).A);
+                Assert.Equal(255, ExportPixel(bmp, 30, 20).A);
+                // and the inner corner of the 12px square (inside the arc) is opaque too
+                Assert.Equal(255, ExportPixel(bmp, 11, 11).A);
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        [AvaloniaFact]
+        public void CornerRadius_ZeroIsSquare()
+        {
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var imgPath = Path.Combine(dir.FullName, "img.png");
+                WriteSeamPng(imgPath, 20, 16, 10);
+
+                var canvas = new DrawingCanvas { Tool = ToolType.None };
+                canvas.GraphicsList.Add(new GraphicImage(imgPath, new Rect(0, 0, 20, 16), default));
+
+                using var bmp = canvas.GraphicsList.DrawGraphicsToBitmap(Brushes.Transparent);
+                foreach (var (x, y) in new[] { (0, 0), (19, 0), (0, 15), (19, 15) })
+                    Assert.Equal(255, ExportPixel(bmp, x, y).A);
+            }
+            finally
+            {
+                dir.Delete(true);
+            }
+        }
+
+        [AvaloniaFact]
+        public void CornerRadius_ScalesWithTheDrawnSize()
+        {
+            // the radius is in bitmap pixels: drawn at 2× the crop, a 4px radius rounds an 8px
+            // corner, so the pixel at (5,5) — inside a 4px arc, outside an 8px one — is cut
+            var dir = Directory.CreateTempSubdirectory();
+            try
+            {
+                var imgPath = Path.Combine(dir.FullName, "img.png");
+                WriteSeamPng(imgPath, 20, 20, 10);
+
+                var canvas = new DrawingCanvas { Tool = ToolType.None };
+                canvas.GraphicsList.Add(new GraphicImage(imgPath, new Rect(0, 0, 40, 40), default) { CornerRadius = 4 });
+
+                using var bmp = canvas.GraphicsList.DrawGraphicsToBitmap(Brushes.Transparent);
+                Assert.Equal(40, bmp.PixelSize.Width);
+                Assert.Equal(0, ExportPixel(bmp, 0, 0).A);
+                Assert.True(ExportPixel(bmp, 1, 1).A < 255, "an 8px arc leaves (1,1) outside");
+                Assert.Equal(255, ExportPixel(bmp, 8, 8).A);
             }
             finally
             {

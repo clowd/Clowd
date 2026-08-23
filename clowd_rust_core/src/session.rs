@@ -36,6 +36,17 @@ pub struct SessionJson {
     pub cursor_position: Option<RectJson>,
     pub cropped_rect: RectJson,
     pub original_bounds: RectJson,
+    /// Corner radius, in physical pixels of `cropped_rect`, that the
+    /// capture's corners are rounded with — the OS corner radius of a
+    /// picked window (CAPTURE_PROTOCOL.md §1.3). Omitted when square
+    /// (0), which is every dragged selection and every scrolling capture,
+    /// so an older shell reading the file sees exactly what it always did.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub corner_radius: f32,
+}
+
+fn is_zero(v: &f32) -> bool {
+    *v <= 0.0
 }
 
 /// Serialized shape of `Clowd.PlatformUtil.ScreenRect` (exact key
@@ -147,10 +158,36 @@ mod tests {
             cursor_position: None,
             cropped_rect: ScreenRect::from_xy_size(0, 0, 10, 10).into(),
             original_bounds: ScreenRect::from_xy_size(5, 5, 10, 10).into(),
+            corner_radius: 0.0,
         };
         let json = serde_json::to_string(&info).unwrap();
         assert!(!json.contains("CursorImgPath"));
         assert!(!json.contains("CursorPosition"));
         assert!(json.contains(r#""DesktopImgPath":"C:\\s\\desktop.png""#));
+    }
+
+    /// A square capture writes no `CornerRadius` at all — the file is
+    /// byte-identical to what it was before the key existed — and a
+    /// rounded one carries the radius in the crop's pixel units.
+    #[test]
+    fn session_json_writes_corner_radius_only_when_rounded() {
+        let mut info = SessionJson {
+            created_utc: "2026-01-01T00:00:00Z".to_string(),
+            name: "Screenshot",
+            desktop_img_path: "d.png".to_string(),
+            preview_img_path: "c.png".to_string(),
+            cursor_img_path: None,
+            cursor_position: None,
+            cropped_rect: ScreenRect::from_xy_size(0, 0, 10, 10).into(),
+            original_bounds: ScreenRect::from_xy_size(5, 5, 10, 10).into(),
+            corner_radius: 0.0,
+        };
+        assert!(!serde_json::to_string(&info)
+            .unwrap()
+            .contains("CornerRadius"));
+        info.corner_radius = 16.0;
+        assert!(serde_json::to_string(&info)
+            .unwrap()
+            .contains(r#""CornerRadius":16.0"#));
     }
 }

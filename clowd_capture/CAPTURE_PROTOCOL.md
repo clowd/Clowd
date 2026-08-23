@@ -42,6 +42,7 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-peek` | flag | peek on | Disable obstructed-window peek-through capture. |
 | `--peek-threshold` | 0.0–1.0 | `0.80` | Max obstructed fraction before a window is dropped from hit-testing. |
 | `--no-cursor` | flag | cursor on | Start with the captured cursor hidden (user toggles with `M`). |
+| `--no-rounded-corners` | flag | rounded on | Keep window selections square. By default a selection made by picking a window (hover + click, `W`, `--capture-mode window`) takes on that window's OS corner radius: the dashed border is drawn rounded and the corner pixels are transparent in the copied / saved image and in `cropped.png`. Dragged, moved or resized selections are always square. The radius is asked of the OS where possible (DWM on Windows 11; the window server's own corner mask on macOS) with a per-version table as fallback — `src/system/corners.rs`. `desktop.png` is never rounded. |
 | `--no-upload` | flag | UPLOAD shown | Hide the UPLOAD button — in the capture strip *and* the OCR strip — and drop its `U` accelerator. |
 | `--no-scroll-capture` | flag | SCROLL shown | Hide the SCROLL button and drop its `L` accelerator. Windows-only button; the flag parses everywhere. |
 | `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
@@ -72,7 +73,7 @@ File contents:
 | File | Contents |
 |---|---|
 | `desktop.png` | Full virtual-desktop bitmap, locked peek window composited, never the cursor (the editor toggles cursor visibility itself). |
-| `cropped.png` | Preview of the selection, peek composited; cursor composited only if visible to the user. For VIDEO: no peek compositing (the recording shows real obstructions). |
+| `cropped.png` | Preview of the selection, peek composited; cursor composited only if visible to the user; corners transparent when the selection is a picked window and rounded corners are on (`--no-rounded-corners`). For VIDEO: no peek compositing (the recording shows real obstructions) and never rounded. |
 | `cursor.png` | Desktop crop at the cursor rect with the cursor composited. Absent when no cursor was captured or the OS reported it hidden. |
 | `session.json` | Session metadata (§1.3). |
 | `ocr.txt` | The text recognized in the selection, UTF-8 without BOM, lines separated by `\n`. Present only with the `ocr-upload` marker; the shell reads it, uploads it as a text paste, and deletes the directory. |
@@ -134,6 +135,7 @@ Rects serialize as `{ "X": …, "Y": …, "Width": …, "Height": … }`
 | `CursorPosition` | rect, optional | Cursor rect relative to the desktop bitmap origin |
 | `CroppedRect` | rect | Selection relative to the desktop bitmap origin |
 | `OriginalBounds` | rect | Selection in virtual-desktop coordinates |
+| `CornerRadius` | number, optional | Corner radius in pixels of `CroppedRect` that the capture's corners are rounded with — the OS corner radius of the window the user picked (see `--no-rounded-corners`). Present only when non-zero; absent = square. `cropped.png` already has these corners transparent; `desktop.png` does not, so the editor applies the radius itself when it crops (its image graphic's `CornerRadius`, which the user can then edit). |
 
 ### 1.4 Exit codes
 

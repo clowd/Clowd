@@ -3,7 +3,9 @@ use std::time::Duration;
 
 use winit::window::Window;
 
-use crate::image_extract::{composite_cursor_rgba, extract_selection_rgba, extract_selection_rgba_with_peek};
+use crate::image_extract::{
+    apply_rounded_corners, composite_cursor_rgba, corners_to_round, extract_selection_rgba, extract_selection_rgba_with_peek,
+};
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
 use clowd_rust_core::geometry::ScreenRect;
 
@@ -17,27 +19,52 @@ pub enum ActionResult {
     Failed(String),
 }
 
-/// Copy the selected region to the clipboard.
-pub fn copy_to_clipboard_with_peek(
+/// Extract the selection as straight-alpha RGBA with the peek composited,
+/// the cursor drawn if visible, and — for a picked window — its OS corner
+/// radius cut into the alpha (`corner_radius` > 0, see
+/// `InteractionState::selection_radius`). Shared by copy and save so the
+/// two can never disagree about what "the image" is.
+pub fn extract_output_image(
     selection: ScreenRect,
+    corner_radius: f32,
     buffer: &CapturedDesktop,
     peek: Option<&WindowPeekImage>,
     cursor: Option<&CapturedCursor>,
     cursor_visible: bool,
-) -> ActionResult {
-    let extracted = match peek {
+) -> Option<(Vec<u8>, u32, u32)> {
+    let (mut rgba, width, height) = match peek {
         Some(p) => extract_selection_rgba_with_peek(selection, buffer, p),
         None => extract_selection_rgba(selection, buffer),
-    };
-    let Some((mut rgba, width, height)) = extracted else {
-        log::warn!("copy: no selection or failed to extract");
-        return ActionResult::Failed("No selection to copy".to_string());
-    };
+    }?;
     if cursor_visible {
         if let Some(cur) = cursor {
             composite_cursor_rgba(&mut rgba, width, height, selection, cur);
         }
     }
+    if corner_radius > 0.0 {
+        // The extract clamps to the desktop bitmap; a corner that was cut
+        // off by that clamp is not a window corner and stays square.
+        let clamped = selection
+            .intersection(&buffer.bounds)
+            .unwrap_or(selection);
+        apply_rounded_corners(&mut rgba, width, height, corner_radius, corners_to_round(selection, clamped));
+    }
+    Some((rgba, width, height))
+}
+
+/// Copy the selected region to the clipboard.
+pub fn copy_to_clipboard_with_peek(
+    selection: ScreenRect,
+    corner_radius: f32,
+    buffer: &CapturedDesktop,
+    peek: Option<&WindowPeekImage>,
+    cursor: Option<&CapturedCursor>,
+    cursor_visible: bool,
+) -> ActionResult {
+    let Some((rgba, width, height)) = extract_output_image(selection, corner_radius, buffer, peek, cursor, cursor_visible) else {
+        log::warn!("copy: no selection or failed to extract");
+        return ActionResult::Failed("No selection to copy".to_string());
+    };
 
     match set_clipboard_image(&rgba, width as usize, height as usize) {
         Ok(()) => {
@@ -169,25 +196,17 @@ where
 /// Save the selected region to a file via save dialog.
 pub fn save_to_file_with_peek(
     selection: ScreenRect,
+    corner_radius: f32,
     buffer: &CapturedDesktop,
     peek: Option<&WindowPeekImage>,
     cursor: Option<&CapturedCursor>,
     cursor_visible: bool,
     window: &Window,
 ) -> ActionResult {
-    let extracted = match peek {
-        Some(p) => extract_selection_rgba_with_peek(selection, buffer, p),
-        None => extract_selection_rgba(selection, buffer),
-    };
-    let Some((mut rgba, width, height)) = extracted else {
+    let Some((rgba, width, height)) = extract_output_image(selection, corner_radius, buffer, peek, cursor, cursor_visible) else {
         log::warn!("save: no selection or failed to extract");
         return ActionResult::Failed("No selection to save".to_string());
     };
-    if cursor_visible {
-        if let Some(cur) = cursor {
-            composite_cursor_rgba(&mut rgba, width, height, selection, cur);
-        }
-    }
 
     let path = rfd::FileDialog::new()
         .add_filter("PNG Image", &["png"])

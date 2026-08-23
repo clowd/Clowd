@@ -26,7 +26,7 @@ use crate::session_output::{
 };
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
-use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
+use crate::system::{CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowTarget, WindowWalker};
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::command::Command;
 use crate::ui::components::panel;
@@ -187,7 +187,14 @@ pub enum CycleAction {
 
 fn broadcast_mouse_state(windows: &WindowSet, input: &InteractionState) {
     for h in windows.values() {
-        h.update_mouse_state(input.virtual_cursor, input.zoom, input.selection, input.captured);
+        h.update_mouse_state(
+            input.virtual_cursor,
+            input.zoom,
+            input.selection,
+            input.selection_radius,
+            input.mouse_down,
+            input.captured,
+        );
     }
 }
 
@@ -467,6 +474,7 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
     let state = Arc::new(build_ui_shared_state(UiStateBuildInput {
         monitors: ui_monitors.clone(),
         selection: cycle.input.selection,
+        selection_radius: cycle.input.selection_radius,
         captured: cycle.input.captured,
         mouse_down: cycle.input.mouse_down,
         dragging: cycle.input.dragging,
@@ -608,6 +616,7 @@ impl App {
                 mouse_down_dpi: 1.0,
                 dragging: false,
                 selection: None,
+                selection_radius: 0.0,
                 captured: false,
                 hittest: Hittest::Outside,
                 drag_mode: None,
@@ -733,7 +742,9 @@ impl App {
                     cycle.input.virtual_cursor.x.round() as i32,
                     cycle.input.virtual_cursor.y.round() as i32,
                 );
-                cycle.input.selection = w.hit_test(pt);
+                cycle
+                    .input
+                    .set_hover_target(w.hit_test_target(pt));
                 cycle.walker = Some(w);
             }
         }
@@ -1006,15 +1017,25 @@ impl App {
         broadcast_ui_state(&self.windows, &self.monitors, &self.ui_monitors, cycle);
     }
 
+    /// Capture a plain rect — a monitor, the whole desktop: square corners.
     fn finalise_selection(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId) {
-        self.finalise_selection_inner(rect, event_loop, window_id, false);
+        self.finalise_selection_inner(rect, 0.0, event_loop, window_id, false);
     }
 
-    fn finalise_selection_with_peek(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId) {
-        self.finalise_selection_inner(rect, event_loop, window_id, true);
+    /// Capture a walker window: its rect AND its corner radius, with the
+    /// hovered peek (if any) locked in.
+    fn finalise_window_selection_with_peek(&mut self, target: WindowTarget, event_loop: &ActiveEventLoop, window_id: WindowId) {
+        self.finalise_selection_inner(target.rect, target.corner_radius, event_loop, window_id, true);
     }
 
-    fn finalise_selection_inner(&mut self, rect: ScreenRect, event_loop: &ActiveEventLoop, window_id: WindowId, lock_peek: bool) {
+    fn finalise_selection_inner(
+        &mut self,
+        rect: ScreenRect,
+        corner_radius: f32,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        lock_peek: bool,
+    ) {
         let Some(cycle) = self.cycle.as_mut() else {
             return;
         };
@@ -1032,7 +1053,7 @@ impl App {
         }
         cycle.input.peek_suspended = true;
 
-        let effects = InteractionController::finalize_selection(&mut cycle.input, rect, &self.monitors);
+        let effects = InteractionController::finalize_selection(&mut cycle.input, rect, corner_radius, &self.monitors);
         self.apply_interaction_effects(effects, Some(window_id));
 
         // Keyboard / preselect captured-transition site (DESIGN §3.3).
@@ -1054,18 +1075,21 @@ impl App {
         }
     }
 
-    /// Target rect for a `--capture-mode screen|window` pre-selection.
-    /// `Screen` is the monitor under the cursor; `Window` is the foreground
-    /// window, falling back to the active screen when no foreground window is
-    /// available. `Region` never pre-selects.
-    fn preselect_rect(&self, mode: CaptureMode) -> Option<ScreenRect> {
+    /// Target for a `--capture-mode screen|window` pre-selection. `Screen`
+    /// is the monitor under the cursor (square); `Window` is the foreground
+    /// window with its corner radius, falling back to the active screen when
+    /// no foreground window is available. `Region` never pre-selects.
+    fn preselect_target(&self, mode: CaptureMode) -> Option<WindowTarget> {
         let cycle = self.cycle.as_ref()?;
         let active_screen = || {
             let pt = to_screen_point(cycle.input.virtual_cursor);
             self.monitors
                 .iter()
                 .find(|m| m.bounds.contains(pt))
-                .map(|m| m.bounds)
+                .map(|m| WindowTarget {
+                    rect: m.bounds,
+                    corner_radius: 0.0,
+                })
         };
         match mode {
             CaptureMode::Region => None,
@@ -1073,7 +1097,7 @@ impl App {
             CaptureMode::Window => cycle
                 .walker
                 .as_ref()
-                .and_then(|w| w.foreground_capture_rect())
+                .and_then(|w| w.foreground_capture_target())
                 .or_else(active_screen),
         }
     }
@@ -1101,10 +1125,10 @@ impl App {
             return;
         };
 
-        match self.preselect_rect(mode) {
-            Some(rect) => {
-                log::info!("--capture-mode {:?}: pre-selecting {:?}", mode, rect);
-                self.finalise_selection(rect, event_loop, window_id);
+        match self.preselect_target(mode) {
+            Some(target) => {
+                log::info!("--capture-mode {:?}: pre-selecting {:?}", mode, target);
+                self.finalise_selection_inner(target.rect, target.corner_radius, event_loop, window_id, false);
             }
             None => log::info!("--capture-mode {:?}: no target found; leaving free selection", mode),
         }
@@ -1130,10 +1154,11 @@ impl App {
             cycle.input.virtual_cursor.x.round() as i32,
             cycle.input.virtual_cursor.y.round() as i32,
         );
-        cycle.input.selection = cycle
+        let hover = cycle
             .walker
             .as_ref()
-            .and_then(|w| w.hit_test(pt));
+            .and_then(|w| w.hit_test_target(pt));
+        cycle.input.set_hover_target(hover);
 
         broadcast_mouse_state(&self.windows, &cycle.input);
 
@@ -1264,7 +1289,9 @@ impl App {
             Command::Copy => {
                 hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => copy_to_clipboard_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
+                    (Some(sel), Some(buf)) => {
+                        copy_to_clipboard_with_peek(sel, cycle.input.selection_radius, buf, active_peek_image, cursor, cursor_visible)
+                    }
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -1284,7 +1311,9 @@ impl App {
                 hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
                     (Some(sel), Some(buf)) => match self.windows.get(&window_id) {
-                        Some(handle) => handle.save_to_file_with_peek(sel, buf, active_peek_image, cursor, cursor_visible),
+                        Some(handle) => {
+                            handle.save_to_file_with_peek(sel, cycle.input.selection_radius, buf, active_peek_image, cursor, cursor_visible)
+                        }
                         None => ActionResult::Failed("No active window".into()),
                     },
                     _ => ActionResult::Failed("No selection or buffer".into()),
@@ -1318,7 +1347,15 @@ impl App {
                 };
                 hide_overlay_for_action(&self.windows);
                 let result = match (cycle.input.selection, cycle.desktop_buffer.as_deref()) {
-                    (Some(sel), Some(buf)) => write_session(&session_dir, sel, buf, active_peek_image, cursor_visible, action),
+                    (Some(sel), Some(buf)) => write_session(
+                        &session_dir,
+                        sel,
+                        cycle.input.selection_radius,
+                        buf,
+                        active_peek_image,
+                        cursor_visible,
+                        action,
+                    ),
                     _ => ActionResult::Failed("No selection or buffer".into()),
                 };
                 match result {
@@ -2045,12 +2082,12 @@ impl ApplicationHandler for App {
                                     cycle.input.virtual_cursor.x.round() as i32,
                                     cycle.input.virtual_cursor.y.round() as i32,
                                 );
-                                if let Some(rect) = cycle
+                                if let Some(target) = cycle
                                     .walker
                                     .as_ref()
-                                    .and_then(|w| w.hit_test(pt))
+                                    .and_then(|w| w.hit_test_target(pt))
                                 {
-                                    self.finalise_selection_with_peek(rect, event_loop, id);
+                                    self.finalise_window_selection_with_peek(target, event_loop, id);
                                 }
                             }
                             'f' => {
@@ -2117,10 +2154,11 @@ impl ApplicationHandler for App {
                         cycle.input.virtual_cursor.x.round() as i32,
                         cycle.input.virtual_cursor.y.round() as i32,
                     );
-                    cycle.input.selection = cycle
+                    let hover = cycle
                         .walker
                         .as_ref()
-                        .and_then(|w| w.hit_test(pt));
+                        .and_then(|w| w.hit_test_target(pt));
+                    cycle.input.set_hover_target(hover);
                 }
 
                 if cycle.input.mouse_down && !cycle.input.captured {
@@ -2139,7 +2177,11 @@ impl ApplicationHandler for App {
                             }
                         }
                         if cycle.input.dragging {
+                            // A dragged rect is the user's own shape, not a
+                            // window's: square however round the window the
+                            // drag started over.
                             cycle.input.selection = psel;
+                            cycle.input.selection_radius = 0.0;
                         }
                     }
                 }
@@ -2159,6 +2201,9 @@ impl ApplicationHandler for App {
                             DragMode::Resize(handle) => Some(resize_with_clamp(anchor, handle, cur_x, cur_y, self.vd_bounds)),
                         };
                         cycle.input.selection = new_sel;
+                        // Moved or resized, the rect no longer outlines the
+                        // window it came from; its corners go square.
+                        cycle.input.selection_radius = 0.0;
                         // No broadcast here — the unconditional
                         // broadcast_ui_state at the end of CursorMoved
                         // covers this path.
@@ -2462,6 +2507,7 @@ mod tests {
             mouse_down_dpi: 1.0,
             dragging: false,
             selection: None,
+            selection_radius: 0.0,
             captured: false,
             hittest: Hittest::Outside,
             drag_mode: None,
