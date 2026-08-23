@@ -41,6 +41,10 @@ clowd_rust_core.workspace = true
 anyhow.workspace = true
 clap = { workspace = true, features = ["derive"] }
 log.workspace = true
+# `dup2` for the payload-channel guard in main.rs — the one thing std has no
+# API for. Windows included: the libc crate maps it onto the CRT's `_dup2`,
+# and it is the CRT's fd 1 that a native library's `printf` writes to.
+libc.workspace = true
 serde_json.workspace = true
 simplelog.workspace = true
 # Crop/resize for the OCR recognition crops (src/ocr.rs). Decoders are not

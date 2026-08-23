@@ -24,7 +24,10 @@
 //! **stdout carries only the binary payload** of `matte`/`denoise`, one output
 //! frame per input frame, flushed per frame so the C# side can stream results
 //! as they arrive; `ocr` writes nothing to it. Everything human-readable goes
-//! to stderr, which every spawner pumps into its own diagnostics.
+//! to stderr, which every spawner pumps into its own diagnostics. That rule
+//! binds the native libraries too, and they do not honour it on their own, so
+//! [`claim_payload_stdout`] takes the pipe away from them before any model is
+//! built (see there).
 //!
 //! Inference runs on ONNX Runtime, statically linked by the `ort` crate
 //! (pyke's prebuilt binaries, per target). The video/audio effects register the
@@ -127,6 +130,9 @@ fn main() -> anyhow::Result<()> {
     // `error!` into Sentry, and we have no Sentry client to bridge into.
     let _ = simplelog::CombinedLogger::init(loggers);
 
+    // The payload subcommands take the pipe for themselves first; `ocr` has no
+    // payload stream, and leaving stdout alone keeps its diagnostics where a
+    // developer running it by hand expects them.
     let result = match args.command {
         Command::Ocr {
             out,
@@ -135,10 +141,10 @@ fn main() -> anyhow::Result<()> {
             width,
             height,
             format,
-        } => matte::run(width, height, format),
+        } => claim_payload_stdout().and_then(|payload| matte::run(width, height, format, payload)),
         Command::Denoise {
             channels,
-        } => denoise::run(channels as usize),
+        } => claim_payload_stdout().and_then(|payload| denoise::run(channels as usize, payload)),
     };
     if let Err(err) = &result {
         // Logged rather than reported: the spawner sees the non-zero exit and
@@ -146,6 +152,61 @@ fn main() -> anyhow::Result<()> {
         log::error!("{err:#}");
     }
     result
+}
+
+/// Hands the caller a private duplicate of stdout and points this process's
+/// stdout at stderr, so `matte`/`denoise` own their pipe outright.
+///
+/// The rule that stdout carries payload bytes and nothing else is one our own
+/// code keeps easily and the native inference stack does not keep at all.
+/// CoreML's runtime writes its model-compilation complaints straight to fd 1
+/// ("E5RT encountered an STL exception. msg = ..."), a kilobyte and a half of
+/// them for RVM on macOS 26, and they land in the C runtime's block buffer to
+/// be flushed at some arbitrary later point — which is to say, spliced into
+/// the middle of a matte frame. The C# reader counts bytes, so every frame
+/// after the splice is torn: it reports "clowd_ai's output ended N bytes into
+/// a matte frame" and the whole analysis fails, however healthy the inference
+/// was. A log line is not worth a failed job, and there is no way to ask a
+/// native library to stop, so the pipe simply stops being reachable by fd 1.
+///
+/// Duplicate first, redirect second, and the returned [`File`] writes to the
+/// original pipe by its own descriptor while everything reaching fd 1 — ours,
+/// ONNX Runtime's, CoreML's, DirectML's — goes to stderr, which the spawner
+/// already pumps into its diagnostic ring. Must run before the session is
+/// built: CoreML writes while it compiles the model, not while it infers.
+///
+/// The descriptor is what matters rather than the std handle: native code
+/// prints through the C runtime, whose fd 1 was bound at its own start-up, so
+/// only `dup2` moves it (on Windows the CRT's `_dup2`, for the same reason —
+/// and the duplicate there is a handle rather than a CRT fd, so the payload
+/// never passes through text-mode newline translation).
+fn claim_payload_stdout() -> anyhow::Result<std::fs::File> {
+    #[cfg(unix)]
+    let payload = {
+        use std::os::fd::AsFd;
+        std::fs::File::from(std::io::stdout().as_fd().try_clone_to_owned()?)
+    };
+    #[cfg(windows)]
+    let payload = {
+        use std::os::windows::io::AsHandle;
+        std::fs::File::from(std::io::stdout().as_handle().try_clone_to_owned()?)
+    };
+
+    // SAFETY: a plain descriptor-table edit. `dup2` closes the old fd 1 — the
+    // pipe — but the duplicate above already holds it open, so nothing the
+    // spawner reads from is released here.
+    //
+    // A failure is logged rather than raised: fd 1 then still points at the
+    // pipe, which is exactly where it pointed before this function existed, so
+    // the job runs as it always did, merely unguarded.
+    if unsafe { libc::dup2(2, 1) } < 0 {
+        log::warn!(
+            "could not point stdout at stderr ({}) — a native library printing to stdout \
+             would corrupt the payload stream",
+            std::io::Error::last_os_error()
+        );
+    }
+    Ok(payload)
 }
 
 /// Whether CoreML may take a model.

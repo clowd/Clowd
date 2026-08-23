@@ -1,8 +1,9 @@
 //! Speech denoising via DPDFNet2 (48 kHz high-resolution variant).
 //!
 //! The protocol is a sample pump: f32le interleaved N-channel PCM at 48 kHz
-//! arrives on stdin until EOF and leaves on stdout in the same layout with
-//! the same total sample count. Each channel runs through its own
+//! arrives on stdin until EOF and leaves on the `payload` writer — this
+//! process's real stdout, claimed by `main::claim_payload_stdout` — in the
+//! same layout with the same total sample count. Each channel runs through its own
 //! independent model state — DPDFNet is single-channel, and tying a stereo
 //! pair through one state would smear the channels together.
 //!
@@ -396,8 +397,10 @@ fn initial_state(session: &Session) -> anyhow::Result<Vec<f32>> {
     Ok(state)
 }
 
-/// The `denoise` subcommand: pump stdin PCM through the model until EOF.
-pub fn run(channels: usize) -> anyhow::Result<()> {
+/// The `denoise` subcommand: pump stdin PCM through the model until EOF,
+/// writing the enhanced samples to `payload` (this process's real stdout,
+/// claimed by `main::claim_payload_stdout`).
+pub fn run(channels: usize, mut payload: impl Write) -> anyhow::Result<()> {
     ensure!(channels >= 1, "--channels must be at least 1");
     let mut model = DpdfModel::new(channels)?;
     let mut pipes: Vec<ChannelPipeline> = (0..channels)
@@ -405,7 +408,6 @@ pub fn run(channels: usize) -> anyhow::Result<()> {
         .collect();
 
     let mut stdin = std::io::stdin().lock();
-    let mut stdout = std::io::stdout().lock();
 
     // One hop per channel per iteration: the smallest read that can advance
     // every pipeline by a frame, so output flushes once per frame's worth of
@@ -441,7 +443,7 @@ pub fn run(channels: usize) -> anyhow::Result<()> {
             input.clear();
             chans[ch] = input;
         }
-        write_interleaved(&mut stdout, &mut outs, &mut write_buf)?;
+        write_interleaved(&mut payload, &mut outs, &mut write_buf)?;
         if n < bytes.len() {
             break; // EOF mid-chunk
         }
@@ -449,7 +451,7 @@ pub fn run(channels: usize) -> anyhow::Result<()> {
     for ch in 0..channels {
         pipes[ch].finish(&mut |spec| model.process(ch, spec), &mut outs[ch])?;
     }
-    write_interleaved(&mut stdout, &mut outs, &mut write_buf)?;
+    write_interleaved(&mut payload, &mut outs, &mut write_buf)?;
 
     let elapsed = started.elapsed();
     log::info!(
@@ -462,7 +464,7 @@ pub fn run(channels: usize) -> anyhow::Result<()> {
 /// Interleave whatever every channel has finalized and flush it. The
 /// pipelines advance in lockstep (same input lengths, same state machine),
 /// so equal lengths are an invariant, not a hope.
-fn write_interleaved(stdout: &mut impl Write, outs: &mut [Vec<f32>], buf: &mut Vec<u8>) -> anyhow::Result<()> {
+fn write_interleaved(payload: &mut impl Write, outs: &mut [Vec<f32>], buf: &mut Vec<u8>) -> anyhow::Result<()> {
     let len = outs[0].len();
     ensure!(outs.iter().all(|o| o.len() == len), "channel pipelines desynced");
     if len == 0 {
@@ -474,10 +476,10 @@ fn write_interleaved(stdout: &mut impl Write, outs: &mut [Vec<f32>], buf: &mut V
             buf.extend_from_slice(&o[i].to_le_bytes());
         }
     }
-    stdout
+    payload
         .write_all(buf)
         .context("writing PCM to stdout")?;
-    stdout.flush()?;
+    payload.flush()?;
     for o in outs.iter_mut() {
         o.clear();
     }
