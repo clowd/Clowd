@@ -12,7 +12,11 @@ namespace Clowd.VideoSDK.Playback
     /// </summary>
     internal sealed class NAudioSink : IDisposable, IAudioClockSource
     {
-        private const int LatencyMs = 100;
+        /// <summary>What we ask the device for. What we actually get back — and correct the
+        /// clock by — is <see cref="IAudioOutput.ActualLatencyMs"/>, read live rather than cached:
+        /// a backend that binds its device lazily (CoreAudio does, on the first Play) does not know
+        /// the real figure until after this sink was constructed.</summary>
+        private const int RequestedLatencyMs = 100;
 
         private readonly AudioRingBuffer _ring;
         private readonly int _sampleRate;
@@ -36,7 +40,7 @@ namespace Clowd.VideoSDK.Playback
             _channels = channels;
             _ring = ring;
             _out = output ?? AudioOutputFactory.Create();
-            _out.Initialize(sampleRate, channels, LatencyMs, RenderRead);
+            _out.Initialize(sampleRate, channels, RequestedLatencyMs, RenderRead);
         }
 
         public AudioRingBuffer Ring => _ring;
@@ -55,7 +59,7 @@ namespace Clowd.VideoSDK.Playback
                 double speed = Volatile.Read(ref _speed);
                 long ticks = baseTicks
                              + (long)(frames * speed * TimeSpan.TicksPerSecond / _sampleRate)
-                             - (long)(LatencyMs * TimeSpan.TicksPerMillisecond * speed);
+                             - (long)(_out.ActualLatencyMs * TimeSpan.TicksPerMillisecond * speed);
                 if (ticks < baseTicks)
                     ticks = baseTicks;
                 return new TimeSpan(ticks);

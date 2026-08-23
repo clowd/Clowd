@@ -27,24 +27,8 @@ namespace Clowd.VideoSDK.Tests
     {
         private const int W = 64, H = 64, Fps = 16, Frames = 16;
 
-        private static bool FFmpegAvailable => FFmpegLoader.TryInitialize(FindFFmpegDirectory);
+        private static bool FFmpegAvailable => TestFFmpeg.Available;
 
-        private static string FindFFmpegDirectory()
-        {
-            string probeFile = OperatingSystem.IsWindows() ? "avcodec-61.dll" : "libavcodec.so.61";
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null)
-            {
-                foreach (var cfg in new[] { "release", "debug" })
-                {
-                    var candidate = Path.Combine(dir.FullName, "obs-express-rs", "target", cfg);
-                    if (File.Exists(Path.Combine(candidate, probeFile)))
-                        return candidate;
-                }
-                dir = dir.Parent;
-            }
-            return null;
-        }
 
         /// <summary>The repo's own build of the inference binary. The ONNX Runtime is statically
         /// linked into it, so any built exe runs inference as-is.</summary>
@@ -216,7 +200,7 @@ namespace Clowd.VideoSDK.Tests
         public void Generation_writes_a_contract_shaped_sidecar_the_validator_accepts()
         {
             Assert.SkipUnless(FFmpegAvailable,
-                $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
+                TestFFmpeg.SkipReason);
             var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
                 "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");
@@ -258,7 +242,7 @@ namespace Clowd.VideoSDK.Tests
         public void A_canceled_generation_throws_and_leaves_no_sidecar_behind()
         {
             Assert.SkipUnless(FFmpegAvailable,
-                $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
+                TestFFmpeg.SkipReason);
             var exe = FindUsableAi();
             Assert.SkipWhen(exe == null,
                 "clowd_ai.exe with a resolvable ONNX Runtime not found (cargo build -p clowd_ai --release, see BUILDING.md).");

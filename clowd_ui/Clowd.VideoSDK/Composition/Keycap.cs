@@ -58,9 +58,13 @@ namespace Clowd.VideoSDK.Composition
         private float IconSize { get; }
 
         /// <summary>Wide keys wear their legend bottom-left with an icon top-right, the way the
-        /// real keys are molded; everything else centers its legend.</summary>
+        /// real keys are molded; everything else centers its legend. Both boards' names are
+        /// listed: the label already carries which keyboard it came off (Bksp is a PC, Delete a
+        /// Mac; Alt a PC, Option a Mac), and the two vocabularies do not collide, so one set
+        /// covers both without a platform being threaded down into the drawing.</summary>
         private static bool IsWide(string label) => label is
-            "Ctrl" or "Shift" or "Alt" or "Win" or "Enter" or "Tab" or "Space" or "Bksp" or "Caps";
+            "Ctrl" or "Shift" or "Alt" or "Win" or "Enter" or "Tab" or "Space" or "Bksp" or "Caps"
+            or "Cmd" or "Option" or "Return" or "Delete";
 
         /// <summary>Arrow keys are the one cap drawn as an icon alone — the glyph <i>is</i> the
         /// legend, and spelling "Left" on a square cap reads worse than the arrow does.</summary>
@@ -124,12 +128,20 @@ namespace Clowd.VideoSDK.Composition
                 SKTextAlign.Center, _centered, paint);
         }
 
-        /// <summary>The baseline that centers a line's ink on <paramref name="centerY"/>, from the
-        /// font's real ascent/descent rather than a guess at the cap height — the fix for text
-        /// riding high in its pill.</summary>
+        /// <summary>The baseline that centers a keycap's ink on <paramref name="centerY"/>, off the
+        /// font's own cap height — the labels are capitals and capital-shaped words ("H", "Ctrl",
+        /// "Shift"), so the box their ink actually fills is the cap box.
+        ///
+        /// Not the ascent/descent em box: how much headroom a font reserves above its capitals for
+        /// accents is the font's own business and varies wildly between families, which centered
+        /// the text on Windows (Segoe UI) and left it riding ~9% of the font size high on macOS
+        /// (Helvetica). Cap height is measured from the capitals themselves, so it agrees across
+        /// families. Fonts that do not report one fall back to the em box.</summary>
         public static float Baseline(SKFont font, float centerY)
         {
             var metrics = font.Metrics;
+            if (metrics.CapHeight > 0)
+                return centerY + metrics.CapHeight / 2;
             return centerY - (metrics.Ascent + metrics.Descent) / 2;
         }
 
@@ -177,7 +189,9 @@ namespace Clowd.VideoSDK.Composition
                 case "Right":
                     Arrow(fill, 0.06f, 0.94f, 90);
                     break;
+                // ↩ — Windows legends this key Enter, macOS Return; same molded arrow
                 case "Enter":
+                case "Return":
                     stroke.MoveTo(0.92f, 0.10f);
                     stroke.LineTo(0.92f, 0.62f);
                     stroke.LineTo(0.30f, 0.62f);
@@ -186,7 +200,10 @@ namespace Clowd.VideoSDK.Composition
                     fill.LineTo(0.04f, 0.62f);
                     fill.Close();
                     break;
+                // ⌫ — "Bksp" on a PC, "Delete" on a Mac (whose forward delete is spelled out
+                // as "Fwd Del" and deliberately carries no icon, so the two cannot be mistaken)
                 case "Bksp":
+                case "Delete":
                     stroke.MoveTo(0.34f, 0.14f);
                     stroke.LineTo(0.97f, 0.14f);
                     stroke.LineTo(0.97f, 0.86f);
@@ -217,7 +234,10 @@ namespace Clowd.VideoSDK.Composition
                     stroke.LineTo(0.50f, 0.28f);
                     stroke.LineTo(0.88f, 0.68f);
                     break;
+                // ⌥ — the PC's Alt key wears the option glyph already, so the Mac name that
+                // means the same key joins the same case rather than repeating the path
                 case "Alt":
+                case "Option":
                     stroke.MoveTo(0.04f, 0.24f);
                     stroke.LineTo(0.38f, 0.24f);
                     stroke.LineTo(0.88f, 0.80f);
@@ -229,6 +249,28 @@ namespace Clowd.VideoSDK.Composition
                     stroke.LineTo(0.08f, 0.70f);
                     stroke.LineTo(0.92f, 0.70f);
                     stroke.LineTo(0.92f, 0.34f);
+                    break;
+                case "Cmd":
+                    // ⌘ is the St John's Arms: a square whose four corners each open into a loop.
+                    // Built as the four three-quarter arcs plus the straight runs between their
+                    // endpoints, so the corners of the square ARE the loop centres (0.19 in from
+                    // each edge) — draw full circles instead and the inner quarters cross the
+                    // square, which reads as a flower rather than the command glyph. Thinner
+                    // stroke than the rest: at icon size the loops are only ~4px across, and the
+                    // default weight closes them into blobs.
+                    stroke.AddArc(new SKRect(0.00f, 0.00f, 0.38f, 0.38f), 90, 270);
+                    stroke.AddArc(new SKRect(0.62f, 0.00f, 1.00f, 0.38f), 180, 270);
+                    stroke.AddArc(new SKRect(0.00f, 0.62f, 0.38f, 1.00f), 0, 270);
+                    stroke.AddArc(new SKRect(0.62f, 0.62f, 1.00f, 1.00f), 270, 270);
+                    stroke.MoveTo(0.38f, 0.19f);
+                    stroke.LineTo(0.62f, 0.19f);
+                    stroke.MoveTo(0.38f, 0.81f);
+                    stroke.LineTo(0.62f, 0.81f);
+                    stroke.MoveTo(0.19f, 0.38f);
+                    stroke.LineTo(0.19f, 0.62f);
+                    stroke.MoveTo(0.81f, 0.38f);
+                    stroke.LineTo(0.81f, 0.62f);
+                    strokeWidth = 0.08f;
                     break;
             }
 

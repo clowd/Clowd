@@ -654,24 +654,8 @@ namespace Clowd.VideoSDK.Tests
 
         // ------------------------------------------------------------------- exe protocol smoke
 
-        private static bool FFmpegAvailable => FFmpegLoader.TryInitialize(FindFFmpegDirectory);
+        private static bool FFmpegAvailable => TestFFmpeg.Available;
 
-        private static string FindFFmpegDirectory()
-        {
-            string probeFile = OperatingSystem.IsWindows() ? "avcodec-61.dll" : "libavcodec.so.61";
-            var dir = new DirectoryInfo(AppContext.BaseDirectory);
-            while (dir != null)
-            {
-                foreach (var cfg in new[] { "release", "debug" })
-                {
-                    var candidate = Path.Combine(dir.FullName, "obs-express-rs", "target", cfg);
-                    if (File.Exists(Path.Combine(candidate, probeFile)))
-                        return candidate;
-                }
-                dir = dir.Parent;
-            }
-            return null;
-        }
 
         /// <summary>The built Clowd.VideoRender.dll (run through <c>dotnet exec</c>, which needs no
         /// apphost and works on every RID). The exe project is a build-only reference of this test
@@ -792,7 +776,7 @@ namespace Clowd.VideoSDK.Tests
         public void The_tool_renders_a_v1_args_file_and_speaks_the_protocol()
         {
             Assert.SkipUnless(FFmpegAvailable,
-                $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
+                TestFFmpeg.SkipReason);
 
             const int Fps = 30, Rate = 48000;
             string input = WriteFixtureMp4(64, 64, Fps, seconds: 2, sampleRate: Rate);
@@ -803,7 +787,7 @@ namespace Clowd.VideoSDK.Tests
                 segments: "[{\"start_ms\":0,\"end_ms\":500},{\"start_ms\":1000,\"end_ms\":1500}]",
                 crf: "30"));
 
-            var run = RunTool(argsPath, FindFFmpegDirectory());
+            var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(0, run.ExitCode);
             Assert.NotEmpty(run.Stdout);
@@ -841,12 +825,12 @@ namespace Clowd.VideoSDK.Tests
         {
             // the tool initializes FFmpeg before it reads the job, so without natives the error
             // line would be the loader's, not the args file's.
-            Assert.SkipUnless(FFmpegAvailable, "FFmpeg natives not found: " + FFmpegLoader.FailureReason);
+            Assert.SkipUnless(FFmpegAvailable, TestFFmpeg.SkipReason);
 
             string argsPath = TempPath(".json");
             File.WriteAllText(argsPath, "{\"version\":1,\"input\":\"\",\"output\":\"x.mp4\"}");
 
-            var run = RunTool(argsPath, FindFFmpegDirectory());
+            var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(1, run.ExitCode);
             string line = Assert.Single(run.Stdout);
@@ -862,7 +846,7 @@ namespace Clowd.VideoSDK.Tests
         public void The_tool_renders_a_v2_project_file()
         {
             Assert.SkipUnless(FFmpegAvailable,
-                $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or build obs-express-rs): {FFmpegLoader.FailureReason}");
+                TestFFmpeg.SkipReason);
 
             const int Fps = 30, Rate = 48000;
             string input = WriteFixtureMp4(64, 64, Fps, seconds: 2, sampleRate: Rate);
@@ -882,7 +866,7 @@ namespace Clowd.VideoSDK.Tests
             });
             File.WriteAllBytes(argsPath, ProjectFileWriter.Serialize(project, output, 30));
 
-            var run = RunTool(argsPath, FindFFmpegDirectory());
+            var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
 
             Assert.Equal(0, run.ExitCode);
             string terminal = run.Stdout[^1];

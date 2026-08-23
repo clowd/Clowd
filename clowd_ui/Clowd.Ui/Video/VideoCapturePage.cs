@@ -992,7 +992,7 @@ namespace Clowd.UI
                         };
                 }
 
-                if (!OperatingSystem.IsWindows() || !FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
+                if (!FFmpegLoader.TryInitialize(ResolveFFmpegDirectory))
                     return null;
 
                 var info = MediaProbe.Probe(_savedPath);
@@ -1045,11 +1045,7 @@ namespace Clowd.UI
 
         /// <summary>Production layout: the FFmpeg DLLs sit next to obs-express; dev machines set
         /// CLOWD_FFMPEG_PATH, which FFmpegLoader checks before consulting this.</summary>
-        private static string ResolveFFmpegDirectory()
-        {
-            var obs = ObsBinaryLocator.Resolve();
-            return obs != null ? Path.GetDirectoryName(obs) : null;
-        }
+        private static string ResolveFFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         /// <summary>
         /// Moves the finished mp4 out of the session directory into the folder the user chose,

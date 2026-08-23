@@ -21,6 +21,7 @@ namespace Clowd.VideoSDK
         private static bool _available;
         private static string _failureReason;
         private static string _librariesDirectory;
+        private static string _attemptedDirectory;
 
         /// <summary>True once <see cref="TryInitialize"/> has succeeded.</summary>
         public static bool IsAvailable
@@ -64,11 +65,18 @@ namespace Clowd.VideoSDK
                     }
 
                     if (String.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+                        dir = FindSystemLibraries();
+
+                    if (String.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
                     {
                         _failureReason = $"No FFmpeg directory found (set {EnvVarName} or install obs-express).";
                         return false;
                     }
 
+                    // recorded before GetFullPath, and as it was given rather than as resolved: a
+                    // path malformed enough to throw there is still named in the failure message,
+                    // and it is named in the shape whoever set it would recognize.
+                    _attemptedDirectory = dir;
                     dir = Path.GetFullPath(dir);
 
                     // The FFmpeg DLLs link against siblings that live in the same folder
@@ -77,6 +85,13 @@ namespace Clowd.VideoSDK
                     // does not include the DLL's own directory — add it explicitly.
                     if (OperatingSystem.IsWindows())
                         SetDllDirectoryW(dir);
+
+                    // The macOS counterpart of the same problem, and it needs the opposite trick:
+                    // the payload's dylibs reference each other by @rpath and carry no LC_RPATH of
+                    // their own, so there is no directory to point dyld at — the libraries have to
+                    // already be in the process. See MacDylibPreloader.
+                    else if (OperatingSystem.IsMacOS())
+                        MacDylibPreloader.Preload(dir);
 
                     DynamicallyLoadedBindings.LibrariesPath = dir;
                     DynamicallyLoadedBindings.Initialize();
@@ -103,11 +118,63 @@ namespace Clowd.VideoSDK
                 }
                 catch (Exception ex)
                 {
-                    _failureReason = "Failed to load FFmpeg: " + ex.Message;
+                    // FFmpeg.AutoGen reports every macOS load failure as "Specified method is not
+                    // supported", which names neither the library nor the reason. Say where we
+                    // were looking, since that is the part anyone debugging this needs.
+                    _failureReason = OperatingSystem.IsMacOS()
+                        ? $"Failed to load FFmpeg from '{_attemptedDirectory}': {ex.Message}"
+                        : "Failed to load FFmpeg: " + ex.Message;
                     return false;
                 }
             }
         }
+
+        /// <summary>
+        /// A system-installed FFmpeg of the right major, as a last resort — <b>debug builds
+        /// only</b>. A Homebrew build is GPL, so nothing shipped may ever link one; this exists so
+        /// a fresh macOS checkout with no obs-express payload can open the editor and run the full
+        /// test suite off `brew install ffmpeg@7`. Returns null in release, and on every OS but
+        /// macOS, where a system FFmpeg is not a thing we can count on.
+        /// </summary>
+        private static string FindSystemLibraries()
+        {
+#if DEBUG
+            if (!OperatingSystem.IsMacOS())
+                return null;
+
+            foreach (var candidate in SystemLibraryCandidates())
+            {
+                // the exact soname the bindings will go on to open, not merely "a libavcodec".
+                var probe = Path.Combine(candidate,
+                    $"libavcodec.{ffmpeg.LIBAVCODEC_VERSION_MAJOR}.dylib");
+                if (File.Exists(probe))
+                    return candidate;
+            }
+#endif
+            return null;
+        }
+
+#if DEBUG
+        private static System.Collections.Generic.IEnumerable<string> SystemLibraryCandidates()
+        {
+            // versioned kegs first: ffmpeg@7 is the series these bindings match, and a keg is not
+            // symlinked into the prefix, so it has to be named rather than found.
+            foreach (var prefix in new[] { "/opt/homebrew/opt", "/usr/local/opt" })
+            {
+                string[] kegs;
+                try { kegs = Directory.Exists(prefix) ? Directory.GetDirectories(prefix, "ffmpeg*") : Array.Empty<string>(); }
+                catch { continue; }
+
+                Array.Sort(kegs, StringComparer.Ordinal);
+                Array.Reverse(kegs); // ffmpeg@7 ahead of ffmpeg@6, both ahead of plain ffmpeg
+                foreach (var keg in kegs)
+                    yield return Path.Combine(keg, "lib");
+            }
+
+            yield return "/opt/homebrew/lib";
+            yield return "/usr/local/lib";
+        }
+#endif
 
         /// <summary>Throws when the bindings are not initialized; call before any FFmpeg use.</summary>
         public static void EnsureInitialized()

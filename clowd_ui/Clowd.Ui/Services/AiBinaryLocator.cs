@@ -20,8 +20,11 @@ namespace Clowd.UI
         public static string BinaryFileName =>
             OperatingSystem.IsWindows() ? "clowd_ai.exe" : "clowd_ai";
 
+        /// <summary>The binary, ready to spawn — see <see cref="HelperBinary.EnsureExecutable"/>.
+        /// The overload below stays a pure path lookup.</summary>
         public static string Resolve() =>
-            Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory);
+            HelperBinary.EnsureExecutable(
+                Resolve(Environment.GetEnvironmentVariable(EnvVarName), AppContext.BaseDirectory));
 
         /// <summary>Testable overload. Returns null when the binary cannot be found.</summary>
         public static string Resolve(string envVarValue, string baseDirectory)

@@ -342,15 +342,15 @@ namespace Clowd
         }
 
         // whether the Recent page offers an Edit button at all: any video recording that is not a
-        // GIF (nothing to trim, no audio, and the render tool would not read it back as a video),
-        // on Windows — the editor and render tool only ship there. A recording it cannot actually
-        // open still gets the button, disabled, so the user is told why instead of hunting for a
-        // control that silently is not there.
+        // GIF (nothing to trim, no audio, and the render tool would not read it back as a video).
+        // Not gated on the OS — the editor and the render tool run on every desktop platform; when
+        // one of them cannot start, VideoEditorWindow says why. A recording it cannot actually open
+        // still gets the button, disabled, so the user is told why instead of hunting for a control
+        // that silently is not there.
         [JsonIgnore]
-        public bool ShowEditVideo => OperatingSystem.IsWindows()
-                                     && (IsVideoProject
-                                         || (IsVideo && String.IsNullOrEmpty(SourceVideoPath)
-                                             && !String.IsNullOrEmpty(VideoPath)));
+        public bool ShowEditVideo => IsVideoProject
+                                     || (IsVideo && String.IsNullOrEmpty(SourceVideoPath)
+                                         && !String.IsNullOrEmpty(VideoPath));
 
         // …and whether that button does anything: a single-track capture has nothing to compose.
         [JsonIgnore]

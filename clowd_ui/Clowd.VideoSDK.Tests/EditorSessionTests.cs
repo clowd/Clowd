@@ -51,7 +51,7 @@ namespace Clowd.VideoSDK.Tests
                     new Source
                     {
                         Id = sourceId,
-                        Path = @"C:\rec\input.mp4",
+                        Path = TestPath.Native(@"C:\rec\input.mp4"),
                         Streams =
                         {
                             new SourceStream { Index = 0, Kind = StreamKind.Video, Width = 1920, Height = 1080, AvgFrameRateNum = 30, AvgFrameRateDen = 1, DurationTicks = Ms(60_000) },
@@ -92,7 +92,7 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>A 1280x720 clip with one video and one audio stream, for import tests.</summary>
         private static MediaProbeResult ClipProbe(bool withAudio = true) => new MediaProbeResult
         {
-            Path = @"C:\media\clip.mp4",
+            Path = TestPath.Native(@"C:\media\clip.mp4"),
             DurationTicks = Ms(8_000),
             VideoStreams = new[]
             {
@@ -153,10 +153,10 @@ namespace Clowd.VideoSDK.Tests
                 ("RenameTrack", null, (s, sc, wc, au) => s.RenameTrack(au.TrackId, "Microphone")),
                 ("EditItem", null, (s, sc, wc, au) => s.EditItem(wc.Id, i => i.Transform.X = 0.8)),
                 ("AddText", null, (s, sc, wc, au) => Assert.NotNull(s.AddText(Ms(12_000), Ms(5_000)))),
-                ("AddImage", null, (s, sc, wc, au) => Assert.NotNull(s.AddImage(@"C:\media\logo.png", Ms(12_000), Ms(5_000)))),
-                ("ImportMedia", null, (s, sc, wc, au) => Assert.NotEmpty(s.ImportMedia(@"C:\media\clip.mp4", ClipProbe(), 0))),
+                ("AddImage", null, (s, sc, wc, au) => Assert.NotNull(s.AddImage(TestPath.Native(@"C:\media\logo.png"), Ms(12_000), Ms(5_000)))),
+                ("ImportMedia", null, (s, sc, wc, au) => Assert.NotEmpty(s.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), 0))),
                 ("RelinkSource", null, (s, sc, wc, au) => s.RelinkSource(
-                    ((MediaContent)sc.Content).SourceId, @"C:\rec\moved.mp4", RecordingReprobe(@"C:\rec\moved.mp4"))),
+                    ((MediaContent)sc.Content).SourceId, TestPath.Native(@"C:\rec\moved.mp4"), RecordingReprobe(TestPath.Native(@"C:\rec\moved.mp4")))),
                 ("RemoveSource", null, (s, sc, wc, au) =>
                     Assert.True(s.RemoveSource(((MediaContent)sc.Content).SourceId))),
             };
@@ -847,7 +847,7 @@ namespace Clowd.VideoSDK.Tests
             var session = NewSession(out _, out _, out _, out _);
 
             // both video rows are occupied over [0, 5s), so the image gets a fresh track.
-            var image = session.AddImage(@"C:\media\logo.png", 0, Ms(5_000));
+            var image = session.AddImage(TestPath.Native(@"C:\media\logo.png"), 0, Ms(5_000));
             Assert.Equal(4, session.Project.Tracks.Count);
             var afterAdd = session.Project.ToJson();
 
@@ -931,10 +931,10 @@ namespace Clowd.VideoSDK.Tests
         {
             var session = NewSession(out _, out var webcam, out _, out _);
 
-            var image = session.AddImage(@"C:\media\logo.png", Ms(12_000), Ms(5_000));
+            var image = session.AddImage(TestPath.Native(@"C:\media\logo.png"), Ms(12_000), Ms(5_000));
 
             Assert.Equal(webcam.TrackId, image.TrackId);
-            Assert.Equal(@"C:\media\logo.png", Assert.IsType<ImageContent>(image.Content).Path);
+            Assert.Equal(TestPath.Native(@"C:\media\logo.png"), Assert.IsType<ImageContent>(image.Content).Path);
             Assert.Equal(0.5, image.Transform.X);
             Assert.Equal(0.5, image.Transform.Y);
             Assert.Equal(0.5, image.Transform.Scale);
@@ -948,13 +948,13 @@ namespace Clowd.VideoSDK.Tests
             var recordingGroup = screen.LinkGroupId;
             var before = session.Project.ToJson();
 
-            var created = session.ImportMedia(@"C:\media\clip.mp4", ClipProbe(), Ms(2_000));
+            var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), Ms(2_000));
 
             Assert.Equal(2, created.Count);
             Assert.Empty(session.Project.Validate());
 
             // the source is mapped exactly as a recording's streams are.
-            var source = session.Project.Sources.Single(s => s.Path == @"C:\media\clip.mp4");
+            var source = session.Project.Sources.Single(s => s.Path == TestPath.Native(@"C:\media\clip.mp4"));
             Assert.Equal(new[] { 0, 1 }, source.Streams.Select(s => s.Index).ToArray());
             Assert.Equal(1280, source.Streams[0].Width);
             Assert.Equal(StreamKind.Audio, source.Streams[1].Kind);
@@ -990,7 +990,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var session = NewSession(out _, out _, out _, out _);
 
-            var created = session.ImportMedia(@"C:\media\clip.mp4", ClipProbe(withAudio: false), 0);
+            var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(withAudio: false), 0);
 
             var item = Assert.Single(created);
             Assert.Null(item.LinkGroupId);
@@ -1003,7 +1003,7 @@ namespace Clowd.VideoSDK.Tests
         public void IsRippleGroup_is_true_for_recording_segments_and_false_for_imports()
         {
             var session = NewSession(out var screen, out _, out _, out _);
-            var created = session.ImportMedia(@"C:\media\clip.mp4", ClipProbe(), Ms(2_000));
+            var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), Ms(2_000));
             var text = session.AddText(Ms(15_000), Ms(5_000));
 
             Assert.True(session.IsRippleGroup(screen.Id));
@@ -1019,7 +1019,7 @@ namespace Clowd.VideoSDK.Tests
         public void DeleteGroup_lifts_the_whole_group_in_place_without_rippling()
         {
             var session = NewSession(out var screen, out _, out _, out _);
-            var created = session.ImportMedia(@"C:\media\clip.mp4", ClipProbe(), Ms(2_000));
+            var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), Ms(2_000));
             var text = session.AddText(Ms(15_000), Ms(5_000)); // starts after the import's span
             var before = session.Project.ToJson();
 
@@ -1047,15 +1047,15 @@ namespace Clowd.VideoSDK.Tests
             var sourceId = ((MediaContent)screen.Content).SourceId;
 
             // a clean reprobe: path and stream data replaced, nothing to note.
-            var notes = session.RelinkSource(sourceId, @"C:\rec\moved.mp4", RecordingReprobe(@"C:\rec\moved.mp4"));
+            var notes = session.RelinkSource(sourceId, TestPath.Native(@"C:\rec\moved.mp4"), RecordingReprobe(TestPath.Native(@"C:\rec\moved.mp4")));
             Assert.Empty(notes);
-            Assert.Equal(@"C:\rec\moved.mp4", session.Project.Sources[0].Path);
+            Assert.Equal(TestPath.Native(@"C:\rec\moved.mp4"), session.Project.Sources[0].Path);
             Assert.Empty(session.Project.Validate());
 
             // a file missing the webcam stream: the old description is kept so the webcam items
             // stay resolvable, and the mismatch is reported.
-            notes = session.RelinkSource(sourceId, @"C:\rec\other.mp4",
-                RecordingReprobe(@"C:\rec\other.mp4", includeWebcamStream: false));
+            notes = session.RelinkSource(sourceId, TestPath.Native(@"C:\rec\other.mp4"),
+                RecordingReprobe(TestPath.Native(@"C:\rec\other.mp4"), includeWebcamStream: false));
             var note = Assert.Single(notes);
             Assert.Contains("index 1", note);
             Assert.Contains(session.Project.Sources[0].Streams, s => s.Index == 1 && s.Kind == StreamKind.Video);
@@ -1083,7 +1083,7 @@ namespace Clowd.VideoSDK.Tests
 
             // the relink flow's other half: pointing the source at its new home and re-enabling
             // leaves no row hidden or muted behind the "found" file.
-            session.RelinkSource(sourceId, @"C:\rec\moved.mp4", RecordingReprobe(@"C:\rec\moved.mp4"));
+            session.RelinkSource(sourceId, TestPath.Native(@"C:\rec\moved.mp4"), RecordingReprobe(TestPath.Native(@"C:\rec\moved.mp4")));
             session.SetSourceRowsEnabled(sourceId, true);
             Assert.All(session.Project.Tracks, t => Assert.False(t.Hidden || t.Muted));
 
@@ -1108,9 +1108,9 @@ namespace Clowd.VideoSDK.Tests
         public void GetMissingSources_ignores_a_source_nothing_plays()
         {
             var session = NewSession(out _, out _, out _, out _);
-            var created = session.ImportMedia(@"C:\media\clip.mp4", ClipProbe(), 0);
+            var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), 0);
 
-            Assert.Contains(session.GetMissingSources(), s => s.Path == @"C:\media\clip.mp4");
+            Assert.Contains(session.GetMissingSources(), s => s.Path == TestPath.Native(@"C:\media\clip.mp4"));
             var clipId = ((MediaContent)created[0].Content).SourceId;
             Assert.True(EditorSession.IsSourceReferenced(session.Project, clipId));
 
@@ -1118,8 +1118,8 @@ namespace Clowd.VideoSDK.Tests
                 session.DeleteItem(item.Id);
 
             // the source outlives its items (nothing prunes it); it just stops mattering.
-            Assert.Contains(session.Project.Sources, s => s.Path == @"C:\media\clip.mp4");
-            Assert.DoesNotContain(session.GetMissingSources(), s => s.Path == @"C:\media\clip.mp4");
+            Assert.Contains(session.Project.Sources, s => s.Path == TestPath.Native(@"C:\media\clip.mp4"));
+            Assert.DoesNotContain(session.GetMissingSources(), s => s.Path == TestPath.Native(@"C:\media\clip.mp4"));
             Assert.False(EditorSession.IsSourceReferenced(session.Project, clipId));
         }
 
@@ -1127,7 +1127,7 @@ namespace Clowd.VideoSDK.Tests
         public void RemoveSource_drops_its_items_and_the_rows_they_emptied_in_one_undo_entry()
         {
             var session = NewSession(out var screen, out _, out _, out _);
-            var created = session.ImportMedia(@"C:\media\clip.mp4", ClipProbe(), Ms(2_000));
+            var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), Ms(2_000));
             var clipId = ((MediaContent)created[0].Content).SourceId;
             var before = session.Project.ToJson();
 
@@ -1369,7 +1369,7 @@ namespace Clowd.VideoSDK.Tests
             session.Project.Sources.Insert(0, new Source
             {
                 Id = Guid.NewGuid(),
-                Path = @"C:\media\unused.mp4",
+                Path = TestPath.Native(@"C:\media\unused.mp4"),
                 Streams =
                 {
                     new SourceStream { Index = 0, Kind = StreamKind.Video, Width = 1280, Height = 720, AvgFrameRateNum = 24, AvgFrameRateDen = 1 },

@@ -10,8 +10,9 @@ namespace Clowd.VideoSDK.Playback
     /// <summary>
     /// Decode + present pipeline for one video track.
     ///
-    /// Decode thread: packets → avcodec (d3d11va first, automatic software fallback) →
-    /// GPU→CPU NV12 download for hw frames → bounded <see cref="FrameQueue"/> (decode-ahead ~4).
+    /// Decode thread: packets → avcodec (the platform's hardware decoder first — D3D11VA on
+    /// Windows, VideoToolbox on macOS — with automatic software fallback) → GPU→CPU download for
+    /// hw frames → bounded <see cref="FrameQueue"/> (decode-ahead ~4).
     /// Present thread: takes frames in pts order, paces against the shared
     /// <see cref="PlaybackClock"/>, drops late frames, and sws_scales BGRA *directly into the
     /// sink's locked target* at presented size (<see cref="VideoOpenOptions.MaxPresentHeight"/>).
@@ -160,10 +161,10 @@ namespace Clowd.VideoSDK.Playback
             SourceHeight = st->codecpar->height;
 
             bool hwReady = false;
-            if (tryHardware)
+            if (tryHardware && HardwareDeviceType != AVHWDeviceType.AV_HWDEVICE_TYPE_NONE)
             {
                 AVBufferRef* device = null;
-                err = ffmpeg.av_hwdevice_ctx_create(&device, AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA, null, null, 0);
+                err = ffmpeg.av_hwdevice_ctx_create(&device, HardwareDeviceType, null, null, 0);
                 if (err >= 0)
                 {
                     _hwDeviceRef = device;
@@ -199,11 +200,28 @@ namespace Clowd.VideoSDK.Playback
             _isHw = hwReady;
         }
 
+        /// <summary>The hardware decoder to try on this OS, or NONE where there is not one we
+        /// use. VideoToolbox is to macOS what D3D11VA is to Windows: always present, no driver or
+        /// SDK for the user to install, and it decodes H.264/HEVC on the media engine rather than
+        /// the CPU.</summary>
+        private static AVHWDeviceType HardwareDeviceType =>
+            OperatingSystem.IsWindows() ? AVHWDeviceType.AV_HWDEVICE_TYPE_D3D11VA
+            : OperatingSystem.IsMacOS() ? AVHWDeviceType.AV_HWDEVICE_TYPE_VIDEOTOOLBOX
+            : AVHWDeviceType.AV_HWDEVICE_TYPE_NONE;
+
+        /// <summary>The opaque pixel format frames arrive in on <see cref="HardwareDeviceType"/> —
+        /// the one <c>get_format</c> must pick and the download path must recognize.</summary>
+        private static AVPixelFormat HardwarePixelFormat =>
+            OperatingSystem.IsWindows() ? AVPixelFormat.AV_PIX_FMT_D3D11
+            : OperatingSystem.IsMacOS() ? AVPixelFormat.AV_PIX_FMT_VIDEOTOOLBOX
+            : AVPixelFormat.AV_PIX_FMT_NONE;
+
         private AVPixelFormat GetFormatCallback(AVCodecContext* s, AVPixelFormat* fmts)
         {
+            var wanted = HardwarePixelFormat;
             for (AVPixelFormat* p = fmts; *p != AVPixelFormat.AV_PIX_FMT_NONE; p++)
             {
-                if (*p == AVPixelFormat.AV_PIX_FMT_D3D11)
+                if (*p == wanted)
                     return *p;
             }
 
@@ -388,9 +406,11 @@ namespace Clowd.VideoSDK.Playback
                 _consecutiveErrors = 0;
 
                 AVFrame* src = _decFrame;
-                if (_decFrame->format == (int)AVPixelFormat.AV_PIX_FMT_D3D11)
+                if (_decFrame->format == (int)HardwarePixelFormat)
                 {
                     // GPU→CPU download (NV12). ~1-2ms at 1440p on PCIe; measured as "transfer".
+                    // On Apple Silicon the surface is already in shared memory, so this is a
+                    // format-conversion copy rather than a bus transfer, and cheaper still.
                     long tx0 = Stopwatch.GetTimestamp();
                     int terr = ffmpeg.av_hwframe_transfer_data(_swFrame, _decFrame, 0);
                     Interlocked.Add(ref _transferTicks, Stopwatch.GetTimestamp() - tx0);

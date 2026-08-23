@@ -152,9 +152,9 @@ namespace Clowd.UI.Services
             // the release layout the DLLs live in the obs-express/ subdirectory — hand it the
             // exact directory we already resolved obs-express from so the layouts can never
             // disagree. Harmless when obs-express is missing (the tool's own probing runs).
-            var obs = ObsBinaryLocator.Resolve();
-            if (!String.IsNullOrEmpty(obs))
-                psi.Environment["CLOWD_FFMPEG_PATH"] = Path.GetDirectoryName(Path.GetFullPath(obs));
+            var ffmpegDir = ObsBinaryLocator.ResolveFFmpegDirectory();
+            if (!String.IsNullOrEmpty(ffmpegDir))
+                psi.Environment["CLOWD_FFMPEG_PATH"] = ffmpegDir;
 
             // the whole job description is the file; nothing else is on the command line.
             psi.ArgumentList.Add(renderArgsPath);

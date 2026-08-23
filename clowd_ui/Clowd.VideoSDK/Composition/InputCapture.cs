@@ -242,6 +242,11 @@ namespace Clowd.VideoSDK.Composition
 
         public int FpsDen { get; init; }
 
+        /// <summary>The OS the recording was made on: <c>"windows"</c> or <c>"macos"</c>, null on
+        /// a v1 file or a lost header. Not decoration — the event rows' <c>vk</c> codes are the
+        /// platform's own numbering (Win32 virtual keys vs. <c>CGKeyCode</c>s) and the two spaces
+        /// share nothing, so this is the only thing that says which table reads them. See
+        /// <c>KeyboardLayout.PlatformOf</c>.</summary>
         public string Platform { get; init; }
 
         public IReadOnlyList<InputCaptureMonitor> Monitors { get; init; } = Array.Empty<InputCaptureMonitor>();

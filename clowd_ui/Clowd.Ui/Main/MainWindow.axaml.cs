@@ -30,14 +30,6 @@ namespace Clowd.UI
             NavList.SelectionChanged += OnNavSelectionChanged;
             NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
 
-            // the video editor only ships on Windows; elsewhere the image button takes the row
-            // rather than sitting beside a button that can only report itself unavailable.
-            if (!OperatingSystem.IsWindows())
-            {
-                NewVideoButton.IsVisible = false;
-                Grid.SetColumnSpan(NewImageButton, 3);
-            }
-
             RestoreWindowBounds();
         }
 

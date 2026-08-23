@@ -262,6 +262,28 @@ namespace Clowd.UI.VideoEditor.Timeline
                 return;
             }
 
+            if (OperatingSystem.IsMacOS() && properties.IsLeftButtonPressed &&
+                e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            {
+                // Ctrl+click IS the secondary click on macOS — the gesture a trackpad user reaches
+                // for, and the only one a one-button mouse has. It arrives as an ordinary LEFT
+                // press with the Control flag (AppKit does not synthesise a right button, and
+                // Avalonia's macOS backend maps only a real rightMouseDown), so without this branch
+                // it fell straight into the scrub/select path below and the row menu was
+                // unreachable from a Mac trackpad.
+                //
+                // The menu has to be asked for by hand as well: Avalonia raises ContextRequested
+                // only for a real right button (Control.OnPointerReleased), and raising it here is
+                // what routes through ContextMenu's own handler — Opening still builds the entries
+                // and still cancels the popup when the press landed on nothing. Doing it from the
+                // press rather than the release is the AppKit convention, where a contextual menu
+                // appears the moment the button goes down.
+                PrepareContextMenu(e.GetPosition(this));
+                RaiseEvent(new ContextRequestedEventArgs(e));
+                e.Handled = true;
+                return;
+            }
+
             if (!properties.IsLeftButtonPressed || _session == null || _dragMode != DragMode.None)
                 return;
 

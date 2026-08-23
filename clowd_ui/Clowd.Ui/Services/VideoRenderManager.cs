@@ -195,13 +195,10 @@ namespace Clowd.UI.Services
             return await StartRenderAsync(source, project);
         }
 
-        /// <summary>Where the FFmpeg natives live in a shipped build: beside the obs-express binary.
-        /// Dev machines set CLOWD_FFMPEG_PATH, which FFmpegLoader checks before calling this.</summary>
-        private static string FFmpegDirectory()
-        {
-            var obs = ObsBinaryLocator.Resolve();
-            return obs != null ? Path.GetDirectoryName(obs) : null;
-        }
+        /// <summary>Where the FFmpeg natives live; see
+        /// <see cref="ObsBinaryLocator.ResolveFFmpegDirectory"/>. Dev machines set
+        /// CLOWD_FFMPEG_PATH, which FFmpegLoader checks before calling this.</summary>
+        private static string FFmpegDirectory() => ObsBinaryLocator.ResolveFFmpegDirectory();
 
         /// <summary>
         /// Creates the edited entry for <paramref name="source"/> and returns it immediately — the

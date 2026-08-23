@@ -87,6 +87,10 @@ namespace Clowd.UI.Controls
         private Button _spinUp;
         private Button _spinDown;
 
+        /// <summary>Pools fractional wheel deltas into whole notches — see
+        /// <see cref="OnTunnelPointerWheelChanged"/>.</summary>
+        private WheelNotchAccumulator _wheelNotches;
+
         static SpinnerTextBox()
         {
             ControlThemes.EnsureRegistered();
@@ -152,11 +156,23 @@ namespace Clowd.UI.Controls
 
         private void OnTunnelPointerWheelChanged(object sender, PointerWheelEventArgs e)
         {
+            // Swallowed either way, notch or not: the properties bar scrolls under the pointer, and
+            // a wheel that spun the field *and* scrolled it out from under the pointer would be
+            // worse than one that occasionally does nothing.
             e.Handled = true;
-            if (e.Delta.Y > 0)
-                Spin(1);
-            else
-                Spin(-1);
+
+            // One event is not one step. A Windows detent arrives as a whole ±1 and still spins
+            // immediately (multiple notches in a single event spin once each, like the image
+            // editor's zoom stops), but a Mac trackpad sends a stream of ~0.05 fractions and the
+            // old "anything non-zero is a notch" reading turned a light two-finger scroll over a
+            // field into dozens of steps.
+            //
+            // The horizontal axis is ignored rather than folded in: a two-finger scroll sideways
+            // across the properties bar must not rewrite the value it happens to pass over, and the
+            // old code's `else` branch decremented on exactly those events.
+            var notches = _wheelNotches.Accumulate(e.Delta.Y);
+            for (var i = Math.Abs(notches); i > 0; i--)
+                Spin(Math.Sign(notches));
         }
 
         private void Spin(int direction)

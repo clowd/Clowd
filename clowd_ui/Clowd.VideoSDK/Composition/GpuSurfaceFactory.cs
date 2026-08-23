@@ -108,11 +108,23 @@ namespace Clowd.VideoSDK.Composition
             if (!MetalBackend.TryCreateDevice(out var device, out var queue, out failureReason))
                 return null;
 
-            var backend = new GRMtlBackendContext { DeviceHandle = device, QueueHandle = queue };
-            var context = GRContext.CreateMetal(backend);
+            GRContext context = null;
+            try
+            {
+                var backend = new GRMtlBackendContext { DeviceHandle = device, QueueHandle = queue };
+                context = GRContext.CreateMetal(backend);
+            }
+            catch (Exception ex) when (ex is DllNotFoundException or EntryPointNotFoundException)
+            {
+                // libSkiaSharp without the Metal backend export — the same shape of failure the
+                // Direct3D branch above guards, and the same answer: fall back to the CPU rather
+                // than taking the composer down.
+                failureReason = "SkiaSharp native library lacks the Metal backend: " + ex.Message;
+            }
+
             if (context == null)
             {
-                failureReason = "GRContext.CreateMetal returned null.";
+                failureReason ??= "GRContext.CreateMetal returned null.";
                 MetalBackend.Release(queue);
                 MetalBackend.Release(device);
                 return null;
