@@ -27,6 +27,18 @@ pub struct WindowUniforms {
     /// y = OCR-mode-active flag (suppresses the resize handles: they must
     /// not draw over lifted text), z/w spare.
     pub ocr_params: [f32; 4],
+    /// x = the selection's corner radius in window-local physical px
+    /// (already through the magnifier zoom, like `selection_rect`); 0 =
+    /// square, which keeps the shader on its original integer-slab border
+    /// path. Non-zero only for a picked window — see
+    /// `InteractionState::selection_radius`.
+    /// y = the marching-ants dash period in physical px for this frame —
+    /// see `render::desktop::dash_period`: the nominal 32 px × DPI step,
+    /// snapped so the border's perimeter holds a whole number of dashes
+    /// (no seam where the pattern wraps) except while the selection is
+    /// being dragged, when the snap would re-phase every frame. 0 = let
+    /// the shader use the nominal period. z/w spare.
+    pub selection_shape: [f32; 4],
 }
 
 pub const WINDOW_UNIFORMS_SIZE: u64 = std::mem::size_of::<WindowUniforms>() as u64;

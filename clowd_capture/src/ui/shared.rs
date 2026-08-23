@@ -38,6 +38,11 @@ pub struct UiMonitor {
 pub struct UiSharedState {
     pub monitors: Arc<[UiMonitor]>,
     pub selection: Option<ScreenRect>,
+    /// Corner radius of `selection` in physical px, 0 = square — see
+    /// `InteractionState::selection_radius`. Read by overlays that paint
+    /// INSIDE the selection (the OCR sweep) so they stop at the same curve
+    /// the desktop pass draws the border around.
+    pub selection_radius: f32,
     pub captured: bool,
     pub mouse_down: bool,
     pub dragging: bool,
@@ -314,6 +319,7 @@ mod tests {
         UiSharedState {
             monitors: Arc::from([monitor()]),
             selection: Some(ScreenRect::from_xy_size(20, 20, 80, 40)),
+            selection_radius: 0.0,
             captured: false,
             mouse_down: false,
             dragging: false,

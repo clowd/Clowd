@@ -85,6 +85,17 @@ namespace Clowd
             set => Set(value);
         }
 
+        // corner radius (in pixels of CroppedRect) the capture's corners are rounded with — the OS
+        // corner radius of the window the user picked in the capturer. 0 / absent = square, which
+        // is every dragged selection, every scrolling capture and every session written before the
+        // key existed (CAPTURE_PROTOCOL.md §1.3). The editor seeds its image graphic's CornerRadius
+        // from it; after that the graphic's own (user-editable) value is the one that matters.
+        public double CornerRadius
+        {
+            get => Get<double>();
+            set => Set(value);
+        }
+
         public SessionOpenEditor OpenEditor
         {
             get => Get<SessionOpenEditor>();

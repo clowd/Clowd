@@ -93,6 +93,16 @@ pub struct CapturerSettings {
     /// regardless; this only controls visibility. Toggled at runtime
     /// with the `M` key.
     pub cursor_visible_at_startup: bool,
+    /// When enabled, a selection made by picking a window (hover + click,
+    /// `W`, `--capture-mode window`) takes on that window's OS corner
+    /// radius: the dashed border is drawn rounded and the copied / saved /
+    /// previewed image has transparent corners instead of a few pixels of
+    /// whatever sat behind the window. Dragged selections — and a window
+    /// selection once it has been moved or resized — stay square. The
+    /// radius comes from the OS where it can be asked (DWM on Windows 11,
+    /// the window server's own corner mask on macOS) and from a per-version
+    /// table otherwise; see `system::corners`.
+    pub rounded_window_corners: bool,
     /// Directory to write the session payload into, supplied by the
     /// shell via `--session-dir <path>`. When set, the EDIT/UPLOAD
     /// actions write desktop/cursor/preview PNGs plus `session.json`
@@ -135,6 +145,7 @@ impl Default for CapturerSettings {
             obscured_window_peek_enabled: true,
             obscured_window_detection_threshold: 0.80,
             cursor_visible_at_startup: true,
+            rounded_window_corners: true,
             session_dir: None,
             capture_mode: CaptureMode::default(),
             video_mode: false,
@@ -181,6 +192,12 @@ pub struct CliArgs {
     /// Start with the captured cursor hidden (toggled at runtime with M).
     #[arg(long)]
     pub no_cursor: bool,
+
+    /// Keep window selections square: do not round the selection border to
+    /// the window's OS corner radius, and do not leave those corner pixels
+    /// transparent in the copied / saved image.
+    #[arg(long)]
+    pub no_rounded_corners: bool,
 
     /// What to have selected when the capturer opens. `region` (default)
     /// starts the free-selection crosshair; `screen` pre-selects the
@@ -249,6 +266,7 @@ impl CliArgs {
             obscured_window_peek_enabled: !self.no_peek,
             obscured_window_detection_threshold: self.peek_threshold,
             cursor_visible_at_startup: !self.no_cursor,
+            rounded_window_corners: !self.no_rounded_corners,
             session_dir: self.session_dir,
             capture_mode: self.capture_mode,
             video_mode: self.video,
@@ -300,6 +318,7 @@ mod tests {
             default.obscured_window_detection_threshold
         );
         assert_eq!(from_cli.cursor_visible_at_startup, default.cursor_visible_at_startup);
+        assert_eq!(from_cli.rounded_window_corners, default.rounded_window_corners);
         assert_eq!(from_cli.session_dir, default.session_dir);
         assert_eq!(from_cli.capture_mode, default.capture_mode);
         assert_eq!(from_cli.video_mode, default.video_mode);
@@ -327,6 +346,22 @@ mod tests {
         let no_ocr = CliArgs::parse_from(["clowd_capture_wgpu", "--no-ocr"]).into_settings();
         assert!(!no_ocr.panel_features.ocr);
         assert!(no_ocr.panel_features.upload && no_ocr.panel_features.scroll_capture);
+    }
+
+    /// Rounded corners are on by a bare command line and `--no-rounded-corners`
+    /// is the only way off — opt-out like the rest of the behaviour flags.
+    #[test]
+    fn rounded_corners_flag_is_opt_out() {
+        assert!(
+            CliArgs::parse_from(["clowd_capture_wgpu"])
+                .into_settings()
+                .rounded_window_corners
+        );
+        assert!(
+            !CliArgs::parse_from(["clowd_capture_wgpu", "--no-rounded-corners"])
+                .into_settings()
+                .rounded_window_corners
+        );
     }
 
     #[test]

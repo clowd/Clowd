@@ -28,7 +28,10 @@ use clowd_rust_core::geometry::RectExt;
 struct LiftInstance {
     /// min_x, min_y, max_x, max_y in window-local physical pixels.
     dest_px: [f32; 4],
-    /// (alpha, band_centre, sweep σ, unused).
+    /// (alpha, band_centre, sweep σ, corner radius). The radius is the
+    /// selection's, in window-local px (0 = square); the fragment clips the
+    /// band to that rounded rect so it cannot spill into the faded corners
+    /// outside a picked window's curved border.
     params: [f32; 4],
     /// Band colour (straight alpha 1.0; the fragment premultiplies).
     tint: [f32; 4],
@@ -263,7 +266,10 @@ impl LiftPipeline {
                 dest[2] - mon_f.left(),
                 dest[3] - mon_f.top(),
             ],
-            params: [SWEEP_ALPHA, band, anim::SWEEP_SIGMA, 0.0],
+            // The OCR region IS the (frozen) selection, so the selection's
+            // radius is the region's. Zoom is 1 once captured, so physical
+            // px need no scaling here.
+            params: [SWEEP_ALPHA, band, anim::SWEEP_SIGMA, state.selection_radius.max(0.0)],
             tint: [1.0, 1.0, 1.0, 1.0],
         });
 

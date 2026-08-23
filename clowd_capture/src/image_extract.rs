@@ -251,6 +251,84 @@ pub fn extract_selection_bgra_with_peek(
     Some(result)
 }
 
+/// Which corners of the extracted image are real corners of the window
+/// the user picked — i.e. may be rounded. A selection that ran off the
+/// desktop bitmap was clamped (`clamped = selection ∩ bounds`); any corner
+/// touching a clamped edge is a cut, not a corner, and must stay square or
+/// the crop would bite into window content. Order: TL, TR, BL, BR.
+pub fn corners_to_round(selection: ScreenRect, clamped: ScreenRect) -> [bool; 4] {
+    let left = clamped.left() == selection.left();
+    let top = clamped.top() == selection.top();
+    let right = clamped.right() == selection.right();
+    let bottom = clamped.bottom() == selection.bottom();
+    [left && top, right && top, left && bottom, right && bottom]
+}
+
+/// Make the pixels outside a rounded-rect of radius `radius` (px)
+/// transparent in a straight-alpha RGBA buffer, so a window copied or saved
+/// from the capture has the same corner shape the OS drew it with instead
+/// of a few pixels of whatever sat behind it. `corners` (TL, TR, BL, BR)
+/// says which corners to round — see [`corners_to_round`]. The same 1-px
+/// anti-aliased signed-distance coverage the overlay draws the rounded
+/// border with; fully transparent pixels also have their colour zeroed so
+/// nothing leaks through viewers that ignore alpha.
+pub fn apply_rounded_corners(rgba: &mut [u8], width: u32, height: u32, radius: f32, corners: [bool; 4]) {
+    let (w, h) = (width as usize, height as usize);
+    if radius <= 0.0 || w == 0 || h == 0 || rgba.len() < w * h * 4 || !corners.iter().any(|c| *c) {
+        return;
+    }
+    // Clamp like the overlay does: a radius larger than half the shorter
+    // side degenerates into a stadium / circle rather than inverting.
+    let r = radius
+        .min(w as f32 * 0.5)
+        .min(h as f32 * 0.5);
+    let span = r.ceil() as usize;
+    // Only the `span`×`span` squares at the corners can change; every row
+    // and column between them is skipped untouched.
+    let in_corner_band = |i: usize, len: usize| i < span || i + span >= len;
+    for y in (0..h).filter(|&y| in_corner_band(y, h)) {
+        for x in (0..w).filter(|&x| in_corner_band(x, w)) {
+            shade_corner_pixel(rgba, w, h, x, y, r, corners);
+        }
+    }
+}
+
+/// Coverage of pixel (`x`, `y`) under the rounded rect, applied to its
+/// alpha. Pixels not in a rounded corner's quadrant are left alone.
+fn shade_corner_pixel(rgba: &mut [u8], w: usize, h: usize, x: usize, y: usize, r: f32, corners: [bool; 4]) {
+    let px = x as f32 + 0.5;
+    let py = y as f32 + 0.5;
+    let (wf, hf) = (w as f32, h as f32);
+    // Which corner's circle centre applies to this pixel, if any.
+    let centre = if px < r && py < r {
+        corners[0].then_some((r, r))
+    } else if px > wf - r && py < r {
+        corners[1].then_some((wf - r, r))
+    } else if px < r && py > hf - r {
+        corners[2].then_some((r, hf - r))
+    } else if px > wf - r && py > hf - r {
+        corners[3].then_some((wf - r, hf - r))
+    } else {
+        None
+    };
+    let Some((cx, cy)) = centre else {
+        return;
+    };
+    let d = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt() - r;
+    let coverage = (0.5 - d).clamp(0.0, 1.0);
+    if coverage >= 1.0 {
+        return;
+    }
+    let i = (y * w + x) * 4;
+    let a = (rgba[i + 3] as f32 * coverage).round() as u8;
+    if a == 0 {
+        rgba[i] = 0;
+        rgba[i + 1] = 0;
+        rgba[i + 2] = 0;
+    }
+    rgba[i + 3] = a;
+}
+
 /// Composite the captured cursor onto an already-extracted RGBA buffer.
 /// `selection` is the region in virtual-desktop coords that `rgba` covers.
 ///
@@ -796,5 +874,92 @@ mod tests {
         composite_cursor_rgba(&mut rgba, 1, 1, selection, &cursor);
 
         assert_eq!(rgba, vec![100, 150, 200, 255]);
+    }
+
+    #[test]
+    fn corners_to_round_only_where_the_selection_was_not_clamped() {
+        let sel = ScreenRect::from_xy_size(0, 0, 100, 100);
+        assert_eq!(corners_to_round(sel, sel), [true, true, true, true]);
+        // Clamped on the right: the two right-hand corners are cuts.
+        let clamped_right = ScreenRect::from_exact(0, 0, 80, 100);
+        assert_eq!(corners_to_round(sel, clamped_right), [true, false, true, false]);
+        // Clamped top and left: only bottom-right survives.
+        let clamped_tl = ScreenRect::from_exact(10, 10, 100, 100);
+        assert_eq!(corners_to_round(sel, clamped_tl), [false, false, false, true]);
+    }
+
+    fn opaque(w: u32, h: u32) -> Vec<u8> {
+        let mut v = vec![0u8; (w * h * 4) as usize];
+        for px in v.chunks_exact_mut(4) {
+            px.copy_from_slice(&[10, 20, 30, 255]);
+        }
+        v
+    }
+
+    fn alpha_at(buf: &[u8], w: u32, x: u32, y: u32) -> u8 {
+        buf[((y * w + x) * 4 + 3) as usize]
+    }
+
+    #[test]
+    fn rounded_corners_clear_the_corner_pixels_and_leave_the_rest() {
+        let (w, h) = (40u32, 30u32);
+        let mut buf = opaque(w, h);
+        apply_rounded_corners(&mut buf, w, h, 8.0, [true; 4]);
+        // The very corner pixels are fully transparent, colour zeroed.
+        for (x, y) in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)] {
+            let i = ((y * w + x) * 4) as usize;
+            assert_eq!(&buf[i..i + 4], &[0, 0, 0, 0], "corner ({x},{y})");
+        }
+        // Straight edges away from the corners are untouched.
+        assert_eq!(alpha_at(&buf, w, 20, 0), 255);
+        assert_eq!(alpha_at(&buf, w, 0, 15), 255);
+        assert_eq!(alpha_at(&buf, w, w - 1, 15), 255);
+        // So is the interior, including the inner edge of the corner squares.
+        assert_eq!(alpha_at(&buf, w, 8, 8), 255);
+        assert_eq!(alpha_at(&buf, w, 20, 15), 255);
+        // And the curve is anti-aliased: somewhere along it a partial alpha.
+        let partial = (0..8)
+            .flat_map(|y| (0..8).map(move |x| (x, y)))
+            .any(|(x, y)| {
+                let a = alpha_at(&buf, w, x, y);
+                a > 0 && a < 255
+            });
+        assert!(partial, "expected an anti-aliased fringe on the arc");
+    }
+
+    #[test]
+    fn rounded_corners_respect_the_per_corner_mask() {
+        let (w, h) = (40u32, 30u32);
+        let mut buf = opaque(w, h);
+        apply_rounded_corners(&mut buf, w, h, 8.0, [true, false, false, false]);
+        assert_eq!(alpha_at(&buf, w, 0, 0), 0);
+        assert_eq!(alpha_at(&buf, w, w - 1, 0), 255);
+        assert_eq!(alpha_at(&buf, w, 0, h - 1), 255);
+        assert_eq!(alpha_at(&buf, w, w - 1, h - 1), 255);
+    }
+
+    #[test]
+    fn rounded_corners_zero_radius_is_a_no_op() {
+        let (w, h) = (12u32, 9u32);
+        let before = opaque(w, h);
+        let mut buf = before.clone();
+        apply_rounded_corners(&mut buf, w, h, 0.0, [true; 4]);
+        assert_eq!(buf, before);
+        apply_rounded_corners(&mut buf, w, h, 5.0, [false; 4]);
+        assert_eq!(buf, before);
+    }
+
+    #[test]
+    fn rounded_corners_survive_a_radius_larger_than_the_image() {
+        // A small window with a huge radius must not panic or invert: the
+        // radius clamps to half the shorter side (8 here), a stadium.
+        let (w, h) = (20u32, 16u32);
+        let mut buf = opaque(w, h);
+        apply_rounded_corners(&mut buf, w, h, 50.0, [true; 4]);
+        assert_eq!(alpha_at(&buf, w, 0, 0), 0);
+        assert_eq!(alpha_at(&buf, w, w - 1, h - 1), 0);
+        // The centre stays opaque, as does the middle of the long edge.
+        assert_eq!(alpha_at(&buf, w, 10, 8), 255);
+        assert_eq!(alpha_at(&buf, w, 10, 0), 255);
     }
 }
