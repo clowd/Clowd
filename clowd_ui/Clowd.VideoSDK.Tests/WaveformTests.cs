@@ -149,6 +149,15 @@ namespace Clowd.VideoSDK.Tests
             return true;
         }
 
+        /// <summary>The provider publishes the completed snapshot before it writes the cache file,
+        /// so waiting for completion is not waiting for the write — poll for the file rather than
+        /// racing the scheduler thread that saves it.</summary>
+        private static void AssertCached(string dir, string path)
+        {
+            string file = Path.Combine(dir, WaveformCache.FileNameFor(path, AudioStream));
+            Assert.True(WaitFor(() => File.Exists(file), 5000), $"the provider never wrote {file}");
+        }
+
         private static void AssertToneAmplitude(WaveformSnapshot snapshot)
         {
             // 1 s .. 3 s: past the aac priming at either end, every bucket is pure tone
@@ -322,7 +331,7 @@ namespace Clowd.VideoSDK.Tests
                 AssertToneAmplitude(snapshot);
                 Assert.Equal(1, provider.BuildCount);
                 Assert.Equal(0, provider.CacheHitCount);
-                Assert.True(File.Exists(Path.Combine(dir, WaveformCache.FileNameFor(path, AudioStream))));
+                AssertCached(dir, path);
                 // the event is throttled and raised on a thread-pool thread — give it its window
                 Assert.True(WaitFor(() => Volatile.Read(ref changed) > 0, 5000),
                     "the provider never announced its progress");
@@ -379,8 +388,11 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Equal(1, provider.BuildCount);
             AssertToneAmplitude(snapshot);
-            // the bad file was replaced, not left to fail on every open
-            Assert.NotNull(WaveformCache.TryLoad(dir, path, AudioStream, WaveformProvider.BucketsPerSecond));
+            // the bad file was replaced, not left to fail on every open (the replacement lands
+            // just after the snapshot the wait above returned, so poll for it)
+            Assert.True(WaitFor(() => WaveformCache.TryLoad(dir, path, AudioStream,
+                                                           WaveformProvider.BucketsPerSecond) != null, 5000),
+                        "the corrupt cache file was never replaced");
         }
 
         /// <summary>Stream indices are container-relative, so a recording plus an imported mp4
@@ -407,8 +419,8 @@ namespace Clowd.VideoSDK.Tests
                 Assert.Equal(2, provider.BuildCount);
             }
 
-            Assert.True(File.Exists(Path.Combine(dir, WaveformCache.FileNameFor(first, AudioStream))));
-            Assert.True(File.Exists(Path.Combine(dir, WaveformCache.FileNameFor(second, AudioStream))));
+            AssertCached(dir, first);
+            AssertCached(dir, second);
 
             // the reopen both caches exist for: neither source rebuilds, neither overwrote the other
             using (var provider = new WaveformProvider())
