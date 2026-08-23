@@ -52,6 +52,8 @@ flags that differ (`CaptureArguments.Build`).
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
 | `--memory-hints` | `max-performance` \| `lower-memory-usage` | `max-performance` | GPU allocator strategy, read once at device creation. `max-performance` is wgpu's large-block allocator, trading memory for start-up latency — the right trade for a process that exits after one capture. `lower-memory-usage` keeps the retained heap blocks small. The shell never passes this; it exists for standalone runs and experiments. |
+| `--filename-pattern` | .NET date-format string | `yyyy-MM-dd HH-mm-ss` | Name the SAVE dialog opens with, rendered against the local clock at the moment SAVE is pressed and uniquified against `--save-dir` (`name`, `name (1)`, …). Mirrors the shell's "Filename pattern" setting, so a capture saved from the overlay is named exactly as one saved from the editor (`src/filename_pattern.rs`, matching `PathConstants.GetFreePatternFileName`). Month/day names render in English and the timezone specifiers (`z`, `K`) are passed through as literals — neither can appear in a pattern that names a file. A pattern that renders to nothing, or to something the OS cannot spell, falls back to `yyyyMMdd_HHmmss_fff`; an extension typed into it is stripped. |
+| `--save-dir` | path | none | Folder the SAVE dialog opens in and uniquifies the suggested name against. The shell passes `General.LastSavePath` when it exists. Omit = the dialog opens wherever the OS last left it and the name is not uniquified. |
 | `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as the cycle ends (§2.5). Process-level: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
 
 ### 1.2 Session-directory file protocol
@@ -67,7 +69,7 @@ The shell pre-creates the session directory and passes it via
 | VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H [R]` |
 | SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
 | OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
-| COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
+| COPY / SAVE | none — handled inside the capturer (clipboard / save dialog, named per `--filename-pattern`) | — |
 | OCR-COPY / OCR-SEARCH | none — handled inside the capturer (clipboard / browser launch) | — |
 | Canceled (Escape / close) | none | — |
 

@@ -46,6 +46,11 @@ windows = { workspace = true, features = [
     "Win32_System_SystemInformation",
 ] }
 
+# `localtime_r` for the save dialog's filename pattern — the Windows build gets
+# the same from `GetLocalTime` (Win32_System_SystemInformation, above).
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
 [target.'cfg(target_os = "macos")'.dependencies]
 foreign-types.workspace = true
 objc2-core-graphics = { workspace = true, features = ["objc2", "CGImage"] }

@@ -472,7 +472,7 @@ namespace Clowd.UI.Config
             try
             {
                 if (String.IsNullOrWhiteSpace(pattern))
-                    pattern = "yyyy-MM-dd HH-mm-ss";
+                    pattern = SettingsCapture.DefaultFilenamePattern;
 
                 var name = DateTime.Now.ToString(System.IO.Path.GetFileNameWithoutExtension(pattern));
                 if (name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0)

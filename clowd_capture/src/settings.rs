@@ -10,6 +10,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
+use crate::filename_pattern::DEFAULT_FILENAME_PATTERN;
 use crate::ui::components::panel::model::PanelFeatures;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -130,6 +131,16 @@ pub struct CapturerSettings {
     /// is written and no window is left up — the run exists only to produce
     /// that one log record.
     pub bench_startup: bool,
+    /// .NET custom date-format string the SAVE dialog's suggested file name is
+    /// rendered from, mirrored from the shell's "Filename pattern" setting so
+    /// that saving straight from the overlay names the file the same way saving
+    /// from the editor does. See `filename_pattern`.
+    pub filename_pattern: String,
+    /// Folder the SAVE dialog opens in, and the one the suggested name is
+    /// uniquified against — the shell's last save path. `None` = let the dialog
+    /// open wherever the OS last left it (standalone runs, and a shell that has
+    /// no last save path yet).
+    pub save_directory: Option<PathBuf>,
 }
 
 impl Default for CapturerSettings {
@@ -151,6 +162,8 @@ impl Default for CapturerSettings {
             video_mode: false,
             panel_features: PanelFeatures::ALL,
             bench_startup: false,
+            filename_pattern: DEFAULT_FILENAME_PATTERN.to_string(),
+            save_directory: None,
         }
     }
 }
@@ -250,6 +263,22 @@ pub struct CliArgs {
     #[arg(long)]
     pub bench_startup: bool,
 
+    /// Date format the SAVE dialog's suggested file name is built from — a
+    /// .NET custom date-format string, the same one the shell's "Filename
+    /// pattern" setting holds and the editor's save dialog uses, so a capture
+    /// saved from the overlay and one saved from the editor get the same name.
+    /// English month/day names, and the timezone specifiers are not rendered
+    /// (see `filename_pattern`).
+    #[arg(long, value_name = "FORMAT", default_value = DEFAULT_FILENAME_PATTERN)]
+    pub filename_pattern: String,
+
+    /// Folder the SAVE dialog opens in, and the one the suggested name is
+    /// checked against for collisions ("name (1)", "name (2)", …). The shell
+    /// passes its last save path. Omit to let the dialog open wherever the OS
+    /// last left it.
+    #[arg(long, value_name = "PATH")]
+    pub save_dir: Option<PathBuf>,
+
     /// Collect per-pass GPU timings for the debug panel. Off by default: it
     /// requests `Features::TIMESTAMP_QUERY` at device creation and builds a
     /// query set plus four buffers per worker before the first frame, none
@@ -276,6 +305,8 @@ impl CliArgs {
                 ocr: !self.no_ocr,
             },
             bench_startup: self.bench_startup,
+            filename_pattern: self.filename_pattern,
+            save_directory: self.save_dir,
         }
     }
 }
@@ -324,6 +355,8 @@ mod tests {
         assert_eq!(from_cli.video_mode, default.video_mode);
         assert_eq!(from_cli.panel_features, default.panel_features);
         assert_eq!(from_cli.bench_startup, default.bench_startup);
+        assert_eq!(from_cli.filename_pattern, default.filename_pattern);
+        assert_eq!(from_cli.save_directory, default.save_directory);
     }
 
     /// The optional-button flags are opt-OUT: a bare command line shows
@@ -379,6 +412,26 @@ mod tests {
             CliArgs::parse_from(["clowd_capture_wgpu", "--shell-pid=4321"]).shell_pid,
             Some(4321)
         );
+    }
+
+    /// The save-dialog naming flags: a bare command line keeps the shell's own
+    /// default pattern and lets the dialog pick its folder.
+    #[test]
+    fn filename_pattern_and_save_dir_parse() {
+        let bare = CliArgs::parse_from(["clowd_capture_wgpu"]).into_settings();
+        assert_eq!(bare.filename_pattern, DEFAULT_FILENAME_PATTERN);
+        assert_eq!(bare.save_directory, None);
+
+        let set = CliArgs::parse_from([
+            "clowd_capture_wgpu",
+            "--filename-pattern",
+            "'clowd' yyyy-MM-dd",
+            "--save-dir",
+            "/tmp/shots",
+        ])
+        .into_settings();
+        assert_eq!(set.filename_pattern, "'clowd' yyyy-MM-dd");
+        assert_eq!(set.save_directory, Some(PathBuf::from("/tmp/shots")));
     }
 
     #[test]

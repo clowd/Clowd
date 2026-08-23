@@ -3,9 +3,11 @@ use std::time::Duration;
 
 use winit::window::Window;
 
+use crate::filename_pattern::suggested_file_name;
 use crate::image_extract::{
     apply_rounded_corners, composite_cursor_rgba, corners_to_round, extract_selection_rgba, extract_selection_rgba_with_peek,
 };
+use crate::settings::CapturerSettings;
 use crate::system::{CapturedCursor, CapturedDesktop, WindowPeekImage};
 use clowd_rust_core::geometry::ScreenRect;
 
@@ -194,6 +196,10 @@ where
 }
 
 /// Save the selected region to a file via save dialog.
+///
+/// The dialog opens on the shell's last save path with the shell's filename
+/// pattern already rendered into the name box, so saving here and saving from
+/// the editor put identically named files in the same folder (`filename_pattern`).
 pub fn save_to_file_with_peek(
     selection: ScreenRect,
     corner_radius: f32,
@@ -201,6 +207,7 @@ pub fn save_to_file_with_peek(
     peek: Option<&WindowPeekImage>,
     cursor: Option<&CapturedCursor>,
     cursor_visible: bool,
+    settings: &CapturerSettings,
     window: &Window,
 ) -> ActionResult {
     let Some((rgba, width, height)) = extract_output_image(selection, corner_radius, buffer, peek, cursor, cursor_visible) else {
@@ -208,12 +215,26 @@ pub fn save_to_file_with_peek(
         return ActionResult::Failed("No selection to save".to_string());
     };
 
-    let path = rfd::FileDialog::new()
+    let suggested = suggested_file_name(settings.save_directory.as_deref(), &settings.filename_pattern);
+
+    let mut dialog = rfd::FileDialog::new()
         .add_filter("PNG Image", &["png"])
         .add_filter("JPEG Image", &["jpg", "jpeg"])
-        .set_file_name("screenshot.png")
-        .set_parent(window)
-        .save_file();
+        .set_file_name(format!("{suggested}.png"))
+        .set_parent(window);
+
+    // only when the folder is actually there: rfd hands the path straight to the
+    // platform dialog, and a stale one (an unplugged drive, a deleted folder)
+    // opens it somewhere arbitrary instead of where the OS last left it.
+    if let Some(dir) = settings
+        .save_directory
+        .as_deref()
+        .filter(|d| d.is_dir())
+    {
+        dialog = dialog.set_directory(dir);
+    }
+
+    let path = dialog.save_file();
 
     let Some(mut path) = path else {
         log::info!("save: dialog canceled");

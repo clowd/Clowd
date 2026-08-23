@@ -210,7 +210,8 @@ namespace Clowd.UI
                     RedirectStandardError = true,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video))
+                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video,
+                                                          SettingsRoot.Current.General.LastSavePath))
                     psi.ArgumentList.Add(arg);
 
                 using var process = Process.Start(psi);
@@ -417,7 +418,7 @@ namespace Clowd.UI
     public static class CaptureArguments
     {
         public static IReadOnlyList<string> Build(string sessionDir, SettingsCapture settings, CaptureMode mode,
-                                                  bool video = false)
+                                                  bool video = false, string lastSavePath = null)
         {
             // the overlay accent follows the OS (or the user's pick) and is contrast-corrected for
             // the white text drawn on it — see SettingsCapture.GetEffectiveAccentColor, issue #48.
@@ -479,6 +480,23 @@ namespace Clowd.UI
                 || RuntimeInformation.OSArchitecture == Architecture.Arm64;
             if (!settings.OcrEnabled || !ocrAvailable)
                 args.Add("--no-ocr");
+
+            // The SAVE button writes the file inside the capturer, so the naming the editor's
+            // save dialog does — the user's filename pattern, rendered and uniquified against
+            // the folder they last saved into — has to travel with it. Both are omitted when
+            // they match what the capturer would do anyway.
+            var pattern = settings.FilenamePattern;
+            if (!String.IsNullOrWhiteSpace(pattern) && pattern != SettingsCapture.DefaultFilenamePattern)
+            {
+                args.Add("--filename-pattern");
+                args.Add(pattern);
+            }
+
+            if (!String.IsNullOrWhiteSpace(lastSavePath) && Directory.Exists(lastSavePath))
+            {
+                args.Add("--save-dir");
+                args.Add(lastSavePath);
+            }
 
             // the overlay was launched specifically to pick a recording region: a confirmed
             // selection immediately dispatches the video action (DESIGN §3.1).
