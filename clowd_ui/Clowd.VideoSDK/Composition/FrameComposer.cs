@@ -535,7 +535,7 @@ namespace Clowd.VideoSDK.Composition
                     && frames.TryGetFrame(media.SourceId, media.StreamIndex, sourceTicks, out var screenFrame)
                     && screenFrame.Image != null)
                 {
-                    CursorCompose.DrawPressWarp(target, capture, map, row, sourceMs,
+                    CursorCompose.DrawPressWarp(target, capture, map, imgW, imgH, row, sourceMs,
                         TimelineOps.SpeedOf(media), cursor, monitorScale, opacity, screenFrame.Image);
                 }
 
