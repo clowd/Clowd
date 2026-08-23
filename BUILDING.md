@@ -23,13 +23,15 @@ goes through, probing in order:
 
 1. `CLOWD_FFMPEG_PATH`, if set — always wins,
 2. the obs-express binary's own directory (the Windows layout),
-3. its `Frameworks/` subdirectory (the macOS bundle layout),
-4. **debug builds only**, a Homebrew keg: `brew install ffmpeg@7`. That build is GPL, so it is
-   never a candidate in a release configuration — it exists so a fresh macOS checkout with no
-   obs-express build can still open the editor and run the full test suite.
+3. its `Frameworks/` subdirectory (the macOS bundle layout).
 
-Which means on macOS `brew install ffmpeg@7` is all a dev checkout needs; on Windows, build the
-sibling `obs-express-rs` (the locator finds its `target/{debug,release}`) or set the env var.
+The obs-express binary itself is found via `CLOWD_OBS_EXPRESS_PATH`, an `obs-express/` directory
+beside the app (the release layout), or a sibling `obs-express-rs` checkout's
+`target/{debug,release}` (the dev layout). Building that sibling is therefore all a dev checkout
+needs on either platform: its `build.rs` stages the FFmpeg libraries into the profile dir beside
+the binary, on macOS as of obs-express-rs v0.7.0. Failing that, point `CLOWD_OBS_EXPRESS_PATH` at
+an unpacked release payload.
+
 Roughly a hundred tests — every encode, render, composition-player, filmstrip, waveform and AI
 sidecar test — skip rather than fail when FFmpeg is missing, so check for `Skipped: 0` before
 believing a green run.

@@ -65,9 +65,6 @@ namespace Clowd.VideoSDK
                     }
 
                     if (String.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
-                        dir = FindSystemLibraries();
-
-                    if (String.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
                     {
                         _failureReason = $"No FFmpeg directory found (set {EnvVarName} or install obs-express).";
                         return false;
@@ -128,53 +125,6 @@ namespace Clowd.VideoSDK
                 }
             }
         }
-
-        /// <summary>
-        /// A system-installed FFmpeg of the right major, as a last resort — <b>debug builds
-        /// only</b>. A Homebrew build is GPL, so nothing shipped may ever link one; this exists so
-        /// a fresh macOS checkout with no obs-express payload can open the editor and run the full
-        /// test suite off `brew install ffmpeg@7`. Returns null in release, and on every OS but
-        /// macOS, where a system FFmpeg is not a thing we can count on.
-        /// </summary>
-        private static string FindSystemLibraries()
-        {
-#if DEBUG
-            if (!OperatingSystem.IsMacOS())
-                return null;
-
-            foreach (var candidate in SystemLibraryCandidates())
-            {
-                // the exact soname the bindings will go on to open, not merely "a libavcodec".
-                var probe = Path.Combine(candidate,
-                    $"libavcodec.{ffmpeg.LIBAVCODEC_VERSION_MAJOR}.dylib");
-                if (File.Exists(probe))
-                    return candidate;
-            }
-#endif
-            return null;
-        }
-
-#if DEBUG
-        private static System.Collections.Generic.IEnumerable<string> SystemLibraryCandidates()
-        {
-            // versioned kegs first: ffmpeg@7 is the series these bindings match, and a keg is not
-            // symlinked into the prefix, so it has to be named rather than found.
-            foreach (var prefix in new[] { "/opt/homebrew/opt", "/usr/local/opt" })
-            {
-                string[] kegs;
-                try { kegs = Directory.Exists(prefix) ? Directory.GetDirectories(prefix, "ffmpeg*") : Array.Empty<string>(); }
-                catch { continue; }
-
-                Array.Sort(kegs, StringComparer.Ordinal);
-                Array.Reverse(kegs); // ffmpeg@7 ahead of ffmpeg@6, both ahead of plain ffmpeg
-                foreach (var keg in kegs)
-                    yield return Path.Combine(keg, "lib");
-            }
-
-            yield return "/opt/homebrew/lib";
-            yield return "/usr/local/lib";
-        }
-#endif
 
         /// <summary>Throws when the bindings are not initialized; call before any FFmpeg use.</summary>
         public static void EnsureInitialized()

@@ -46,7 +46,7 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The message a skipped test explains itself with.</summary>
         public static string SkipReason =>
-            $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName}, install ffmpeg@7, or build " +
-            $"obs-express-rs): {FFmpegLoader.FailureReason}";
+            $"FFmpeg natives not found (set {FFmpegLoader.EnvVarName} or " +
+            $"{ObsBinaryLocator.EnvVarName}, or build obs-express-rs): {FFmpegLoader.FailureReason}";
     }
 }
