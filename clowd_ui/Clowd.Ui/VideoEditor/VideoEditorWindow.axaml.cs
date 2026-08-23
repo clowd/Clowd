@@ -1103,9 +1103,9 @@ namespace Clowd.UI.VideoEditor
 
             _canAddSpeed = can;
             CommandAddSpeedEffect.RaiseCanExecuteChanged();
-            ToolTip.SetTip(btnAddSpeed, can
-                ? "Add speed change"
-                : "The playhead is inside an existing speed change — move it to a free stretch of the Speed row to add another.");
+            tipAddSpeed.DisabledReason = can
+                ? null
+                : "The playhead is inside an existing speed change. Move it to a free stretch of the Speed row to add another.";
         }
 
         /// <summary>Adds the cursor overlay row — one per project, mirroring the recording's screen
@@ -1134,25 +1134,25 @@ namespace Clowd.UI.VideoEditor
 
         /// <summary>The two input-overlay buttons on the same terms as
         /// <see cref="RefreshAddSpeedButton"/>: single-use per project, and only offered at all for
-        /// a recording that captured input — so the tooltip says which of the two reasons the
-        /// button is disabled for. Called from the same project/history change sites (an undo can
-        /// create or remove either row).</summary>
+        /// a recording that captured input, so the tip's footer says which of the two reasons the
+        /// button is disabled for (and clears when it is enabled). Called from the same
+        /// project/history change sites (an undo can create or remove either row).</summary>
         private void RefreshInputOverlayButtons()
         {
             CommandAddCursorTrack.RaiseCanExecuteChanged();
             CommandAddKeyboardTrack.RaiseCanExecuteChanged();
 
             var hasCapture = _editor is { HasInputCapture: true };
-            ToolTip.SetTip(btnAddCursor, !hasCapture
-                ? "This recording has no input capture data — the cursor overlay needs it."
+            tipAddCursor.DisabledReason = !hasCapture
+                ? "This recording has no input capture data, which the cursor overlay needs."
                 : _editor is { HasCursorTrack: true }
-                    ? "A Cursor row already exists — modify the existing Cursor row instead."
-                    : "Add Cursor Track");
-            ToolTip.SetTip(btnAddKeyboard, !hasCapture
-                ? "This recording has no input capture data — the keystroke overlay needs it."
+                    ? "A Cursor row already exists. Edit the existing Cursor row instead."
+                    : null;
+            tipAddKeyboard.DisabledReason = !hasCapture
+                ? "This recording has no input capture data, which the keystroke overlay needs."
                 : _editor is { HasKeyboardTrack: true }
-                    ? "A Keys row already exists — modify the existing Keys row instead."
-                    : "Add Keyboard Track");
+                    ? "A Keys row already exists. Edit the existing Keys row instead."
+                    : null;
         }
 
         /// <summary>Imports an external file as an overlay: probed off the UI thread (the same
