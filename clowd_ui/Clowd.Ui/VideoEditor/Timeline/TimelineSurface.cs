@@ -42,6 +42,12 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// away with the real answer.</summary>
         private const string AiFeaturesTip = "This track has AI features enabled";
 
+        /// <summary>The input overlay cards' labels — named here because the activity previews
+        /// measure them to know where to fade out (see PushLabelFade).</summary>
+        private const string CursorLabel = "Cursor";
+
+        private const string KeyboardLabel = "Keys";
+
         /// <summary>Caps the cached waveform geometry per item; past this a bucket covers more
         /// than a pixel, which only happens when a single item spans thousands of on-screen pixels
         /// and is invisible at that width anyway.</summary>
@@ -50,6 +56,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>A click mark on the cursor row: a rounded bar this tall, centered on the
         /// body's midline (shorter on a body that cannot fit it, see RenderCursorActivity).</summary>
         private const double ClickMarkHeight = 10;
+
+        /// <summary>How far past the card label an activity preview takes to come back to full
+        /// strength — the label sits on a clean stretch of body, then the preview fades in.</summary>
+        private const double LabelFadeWidth = 14;
 
         private enum DragMode
         {
@@ -1038,10 +1048,10 @@ namespace Clowd.UI.VideoEditor.Timeline
                 // style and the timings live in the properties panel) — the activity preview
                 // under the label is what says what the capture holds.
                 case CursorContent:
-                    (glyph, label) = (TimelineIcons.CursorArrowGeometry, "Cursor");
+                    (glyph, label) = (TimelineIcons.CursorArrowGeometry, CursorLabel);
                     break;
                 case KeyboardContent:
-                    (glyph, label) = (TimelineIcons.KeyboardGeometry, "Keys");
+                    (glyph, label) = (TimelineIcons.KeyboardGeometry, KeyboardLabel);
                     break;
             }
 
@@ -1405,6 +1415,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
             using (context.PushTransform(Matrix.CreateTranslation(body.X, body.Y)))
+            using (PushLabelFade(context, body, CursorLabel))
             {
                 if (cache.Motion != null)
                     context.DrawGeometry(palette.CursorMotionBrush, null, cache.Motion);
@@ -1457,6 +1468,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             var mid = body.Height / 2;
             using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
             using (context.PushTransform(Matrix.CreateTranslation(body.X, body.Y)))
+            using (PushLabelFade(context, body, KeyboardLabel))
             {
                 var visLeft = -body.X - 2;
                 var visRight = Bounds.Width - body.X + 2;
@@ -1475,6 +1487,55 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private static readonly char[] NewlineChars = { '\r', '\n' };
 
+        /// <summary>Where a card's label starts (see <see cref="RenderGlyphLabel"/>): inset past
+        /// the trim handle, gliding to a pin past the edge fade as the item's start scrolls out.</summary>
+        private double LabelStartX(Rect body)
+        {
+            var cutLeft = EdgeCutAmount(-body.X);
+            var naturalX = body.X + TrimHandleWidth + 3;
+            return naturalX + (EdgeFadeWidth + 3 - naturalX) * cutLeft;
+        }
+
+        private static readonly Dictionary<string, double> LabelTextWidths = new Dictionary<string, double>();
+
+        /// <summary>The width <see cref="RenderGlyphLabel"/> lays a (single-line) label out at,
+        /// measured once per distinct string — the overlay cards reuse two.</summary>
+        private static double LabelTextWidth(string label)
+        {
+            if (String.IsNullOrEmpty(label))
+                return 0;
+            if (!LabelTextWidths.TryGetValue(label, out var width))
+            {
+                width = new FormattedText(label, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                    new Typeface(FontFamily.Default), 11, Brushes.Black).Width;
+                LabelTextWidths[label] = width;
+            }
+            return width;
+        }
+
+        /// <summary>
+        /// Fades an activity preview out under the card's glyph-and-text label, so the label sits
+        /// on clean body and the preview comes back over <see cref="LabelFadeWidth"/> past it.
+        /// White text over a pale envelope or blip is unreadable, and a shadow only half fixes
+        /// that; a clean stretch fixes it. Pushed <b>after</b> the item-local translate: the mask
+        /// is in item-local pixels and follows the label when it pins during a scroll.
+        /// </summary>
+        private DrawingContext.PushedState PushLabelFade(DrawingContext context, Rect body, string label)
+        {
+            var labelRight = LabelStartX(body) - body.X + GlyphSize + 5 + LabelTextWidth(label);
+            var mask = new LinearGradientBrush
+            {
+                StartPoint = new RelativePoint(labelRight, 0, RelativeUnit.Absolute),
+                EndPoint = new RelativePoint(labelRight + LabelFadeWidth, 0, RelativeUnit.Absolute),
+                GradientStops =
+                {
+                    new GradientStop(Colors.Transparent, 0),
+                    new GradientStop(Colors.Black, 1),
+                },
+            };
+            return context.PushOpacityMask(mask, new Rect(0, 0, body.Width, body.Height));
+        }
+
         private void RenderGlyphLabel(DrawingContext context, TimelinePalette palette, Rect body,
             bool ai, Geometry glyph, string label)
         {
@@ -1483,9 +1544,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             // item's start scrolls out of view the label glides to a pin past the edge fade
             // (still-solid body), at the same rate the fade eases in — no jump the frame the edge
             // crosses the viewport.
-            var cutLeft = EdgeCutAmount(-body.X);
-            var naturalX = body.X + TrimHandleWidth + 3;
-            var startX = naturalX + (EdgeFadeWidth + 3 - naturalX) * cutLeft;
+            var startX = LabelStartX(body);
 
             // the star rides a pale chip: blue-on-blue would be invisible over a recording row,
             // whose fill IS the accent. Drawn OUTSIDE the body clip the rest of the label lives
