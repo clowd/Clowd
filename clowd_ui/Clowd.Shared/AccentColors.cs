@@ -6,7 +6,7 @@ using Microsoft.Win32;
 namespace Clowd
 {
     /// <summary>
-    /// The accent colour of the capture overlay (issue #48): either the colour Windows itself is
+    /// The accent color of the capture overlay (issue #48): either the color Windows itself is
     /// themed with, or one the user picked in the Capture settings page. Whichever it is, it is
     /// darkened until it has enough contrast with white — the overlay draws white labels and icons
     /// on top of accent-filled buttons, and a light accent leaves them unreadable.
@@ -24,17 +24,17 @@ namespace Clowd
         public const double MinimumContrastWithWhite = 4.5;
 
         /// <summary>Clowd blue taken down to <see cref="MinimumContrastWithWhite"/> (#2F7CAE). The
-        /// default for the accent colour setting, and mirrored by the capturer's own
+        /// default for the accent color setting, and mirrored by the capturer's own
         /// <c>--accent-color</c> default (clowd_capture/src/settings.rs).</summary>
         public static readonly Color Default = EnsureContrastWithWhite(ClowdBlue);
 
-        /// <summary>Whether this OS exposes an accent colour we can follow. Windows only: macOS has
+        /// <summary>Whether this OS exposes an accent color we can follow. Windows only: macOS has
         /// no equivalent we can read without AppKit interop, so the "use system accent" option is
-        /// hidden there and the user's own colour is always used.</summary>
+        /// hidden there and the user's own color is always used.</summary>
         public static bool SystemAccentSupported => OperatingSystem.IsWindows();
 
         /// <summary>
-        /// The accent colour currently configured in Windows' personalisation settings, or null
+        /// The accent color currently configured in Windows' personalization settings, or null
         /// when there is none to read (non-Windows, or the registry values are missing).
         /// Not contrast-adjusted — callers pass the result through
         /// <see cref="EnsureContrastWithWhite"/>.
@@ -48,7 +48,7 @@ namespace Clowd
             {
                 // AccentPalette holds 8 RGBA entries ordered light -> dark; index 3 is the one the
                 // WinRT UISettings API reports as UIColorType.Accent, i.e. the swatch shown in the
-                // Windows personalisation page. Reading the registry avoids taking a WinRT
+                // Windows personalization page. Reading the registry avoids taking a WinRT
                 // dependency in this net8.0 (RID-agnostic) assembly.
                 using (var explorerAccent = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\Accent"))
                 {
@@ -66,7 +66,7 @@ namespace Clowd
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("Failed to read the system accent colour: " + ex.Message);
+                Debug.WriteLine("Failed to read the system accent color: " + ex.Message);
             }
 
             return null;
@@ -78,7 +78,7 @@ namespace Clowd
             return 0.2126 * ToLinear(color.R) + 0.7152 * ToLinear(color.G) + 0.0722 * ToLinear(color.B);
         }
 
-        /// <summary>WCAG contrast ratio between this colour and white: 1 for white itself, 21 for
+        /// <summary>WCAG contrast ratio between this color and white: 1 for white itself, 21 for
         /// black.</summary>
         public static double ContrastWithWhite(Color color)
         {
@@ -113,8 +113,8 @@ namespace Clowd
             return v <= 0.04045 ? v / 12.92 : Math.Pow((v + 0.055) / 1.055, 2.4);
         }
 
-        // Rounds *down* to the nearest 8-bit channel: quantisation must never push the result back
-        // above the target luminance, or a colour "fixed" for contrast could still fail the check
+        // Rounds *down* to the nearest 8-bit channel: quantization must never push the result back
+        // above the target luminance, or a color "fixed" for contrast could still fail the check
         // it was just adjusted for.
         private static byte Encode(double linear)
         {

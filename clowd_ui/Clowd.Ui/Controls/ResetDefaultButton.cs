@@ -18,7 +18,19 @@ namespace Clowd.UI.Controls
             set => SetValue(CurrentValueProperty, value);
         }
 
-        public object DefaultValue { get; set; }
+        /// <summary>The value the dot resets to, and the value it compares against to decide
+        /// whether to show at all. A styled property rather than a plain one so a row whose default
+        /// depends on the selection (the effect dials, whose meaning changes with the effect style)
+        /// can bind it — and so the dot re-evaluates when it moves, which a CLR property could not
+        /// tell it.</summary>
+        public static readonly StyledProperty<object> DefaultValueProperty =
+            AvaloniaProperty.Register<ResetDefaultButton, object>(nameof(DefaultValue));
+
+        public object DefaultValue
+        {
+            get => GetValue(DefaultValueProperty);
+            set => SetValue(DefaultValueProperty, value);
+        }
 
         public ResetDefaultButton()
         {
@@ -35,17 +47,20 @@ namespace Clowd.UI.Controls
         {
             base.OnPropertyChanged(change);
 
-            if (change.Property == CurrentValueProperty)
+            if (change.Property == CurrentValueProperty || change.Property == DefaultValueProperty)
                 EvaluateIsDefault();
         }
 
-        // The WPF equality cascade kept verbatim: reference equality, then string equality,
-        // then Convert.ToDouble equality (swallowing conversion failures).
+        // The WPF equality cascade, with the first step upgraded from reference equality to
+        // Equals so a boxed value set from code compares by value: then string equality, then
+        // Convert.ToDouble equality (swallowing conversion failures). The string step only runs
+        // when a string is actually involved — two non-string values would both cast to null and
+        // compare "equal", permanently hiding the dot (bit every enum-valued binding).
         private void EvaluateIsDefault()
         {
-            bool isDefault = CurrentValue == DefaultValue;
+            bool isDefault = Equals(CurrentValue, DefaultValue);
 
-            if (!isDefault)
+            if (!isDefault && (CurrentValue is string || DefaultValue is string))
             {
                 isDefault = (CurrentValue as string) == (DefaultValue as string);
             }

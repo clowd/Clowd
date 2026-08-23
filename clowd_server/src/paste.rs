@@ -126,7 +126,7 @@ pub async fn create(mut req: Request, env: &Env) -> Result<Response> {
 
 /// Read the POST body chunk by chunk, buffering at most `MAX_LENGTH` bytes.
 ///
-/// `req.bytes()` would materialise the entire body in the isolate before any
+/// `req.bytes()` would materialize the entire body in the isolate before any
 /// size check, and this endpoint is unauthenticated with a platform request cap
 /// far above the paste limit — so an oversized body has to be discarded as it
 /// arrives, not after. The stream is still drained to EOF even once rejected:

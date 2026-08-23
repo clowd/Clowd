@@ -1,0 +1,57 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- The properties-bar checkbox: the platform CheckBox scaled into a 10x10 Viewbox (its own
+         label would be the wrong size for the bar) with the caption below it. The whole control is
+         one click target, caption included. -->
+    <ControlTheme x:Key="{x:Type controls:CaptionedCheckBox}" TargetType="controls:CaptionedCheckBox">
+        <!-- The control fills the bar's 30px row (so the whole height is clickable) and centers the
+             box+caption stack inside it; a fixed Height shorter than the stack clipped it. -->
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <ControlTemplate>
+                <!-- the filled Panel makes the control's whole area (caption and the space around
+                     it) the click target; the box itself takes no pointer input, so
+                     CaptionedCheckBox.cs owns the one toggle. -->
+                <Panel Name="PART_Root" Background="Transparent">
+                    <!-- a Grid, not a StackPanel: both editor bars style bare StackPanel (30px tall,
+                         horizontal) and those styles reach template children too, which pinned this
+                         stack to the top of the row.
+
+                         The 3px top margin is optical centring: the caption's line box carries ~3px
+                         of descent space under the glyphs, so centring the measured box leaves the
+                         ink sitting high (3px above the box, 6px under the text). Half that gap,
+                         paid at the top, evens the two out. -->
+                    <Grid VerticalAlignment="Center"
+                          Margin="0,3,0,0"
+                          RowDefinitions="Auto,Auto">
+                        <Viewbox Grid.Row="0"
+                                 Width="10"
+                                 Height="10"
+                                 Margin="0,0,0,1">
+                            <!-- CornerRadius 0: the editor bars are all sharp edges, and the Semi
+                                 template rounds the box by default -->
+                            <CheckBox Name="PART_CheckBox"
+                                      Margin="0"
+                                      Padding="0"
+                                      MinWidth="0"
+                                      MinHeight="0"
+                                      CornerRadius="0"
+                                      HorizontalAlignment="Center"
+                                      IsHitTestVisible="False"
+                                      IsChecked="{TemplateBinding IsChecked, Mode=TwoWay}" />
+                        </Viewbox>
+                        <TextBlock Name="PART_Caption"
+                                   Grid.Row="1"
+                                   HorizontalAlignment="Center"
+                                   FontSize="10"
+                                   Text="{TemplateBinding Caption}" />
+                    </Grid>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+    </ControlTheme>
+
+</ResourceDictionary>

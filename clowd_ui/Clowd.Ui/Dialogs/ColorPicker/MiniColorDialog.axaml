@@ -6,7 +6,7 @@
              x:Class="Clowd.UI.Dialogs.ColorPicker.MiniColorDialog">
 
     <UserControl.Styles>
-        <!-- one component of the colour readout: a value box with its channel letter beneath,
+        <!-- one component of the color readout: a value box with its channel letter beneath,
              the way devtools lays out its rgba/hsla fields -->
         <Style Selector="TextBox.comp">
             <Setter Property="Height" Value="24" />
@@ -114,7 +114,7 @@
                                    ValueMax="1" />
             </Border>
 
-            <!-- Colour readout. HEX is a single full-width box; RGB and HSL split into one box
+            <!-- Color readout. HEX is a single full-width box; RGB and HSL split into one box
                  per channel (the notation cycler lives in the bottom row). Slot 0 is reused as
                  the hex box, spanning all four columns — see UpdateComponentLayout. -->
             <Grid x:Name="grdComponents"

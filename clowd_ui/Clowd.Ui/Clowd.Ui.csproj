@@ -13,7 +13,7 @@
     <NoWarn>$(NoWarn);CA2007</NoWarn>
     <!-- Avalonia 12 turns compiled bindings on by default. Our views bind against
          runtime-assigned DataContexts and untyped DataTemplate items, none of which carry
-         an x:DataType, so keep the 11.x reflection binding behaviour. Annotating the views
+         an x:DataType, so keep the 11.x reflection binding behavior. Annotating the views
          with x:DataType and flipping this back on is a worthwhile follow-up. -->
     <AvaloniaUseCompiledBindingsByDefault>false</AvaloniaUseCompiledBindingsByDefault>
   </PropertyGroup>
@@ -34,6 +34,7 @@
     <ProjectReference Include="..\Clowd.Drawing\Clowd.Drawing.csproj" />
     <ProjectReference Include="..\Clowd.Shared\Clowd.Shared.csproj" />
     <ProjectReference Include="..\Clowd.Upload\Clowd.Upload.csproj" />
+    <ProjectReference Include="..\Clowd.VideoSDK\Clowd.VideoSDK.csproj" />
   </ItemGroup>
   <ItemGroup>
     <AvaloniaResource Include="Assets\**" />
@@ -41,4 +42,16 @@
          runtime, so keep it out of the embedded Avalonia resources. -->
     <AvaloniaResource Remove="Assets\clowd-default.icns" />
   </ItemGroup>
+  <!-- Clowd.VideoSDK pins SkiaSharp to $(SkiaSharpVersion) (Directory.Build.props) so the
+       SDK and Avalonia share one native Skia in this process. NuGet silently unifies to the
+       highest requested version, so an Avalonia upgrade that bumps SkiaSharp would otherwise
+       drift past the pin unnoticed - fail the build instead and update the pin. -->
+  <Target Name="VerifySkiaSharpMatchesAvalonia" AfterTargets="ResolvePackageAssets">
+    <ItemGroup>
+      <_ResolvedSkiaSharp Include="@(RuntimeCopyLocalItems)"
+                          Condition="'%(RuntimeCopyLocalItems.NuGetPackageId)' == 'SkiaSharp'" />
+    </ItemGroup>
+    <Error Condition="'@(_ResolvedSkiaSharp)' != '' AND '%(_ResolvedSkiaSharp.NuGetPackageVersion)' != '$(SkiaSharpVersion)'"
+           Text="Clowd.Ui resolved SkiaSharp %(_ResolvedSkiaSharp.NuGetPackageVersion) but clowd_ui/Directory.Build.props pins SkiaSharpVersion=$(SkiaSharpVersion). Update the pin to the version Avalonia resolves." />
+  </Target>
 </Project>

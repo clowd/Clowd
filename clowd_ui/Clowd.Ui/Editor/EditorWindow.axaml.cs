@@ -100,6 +100,18 @@ namespace Clowd.UI
 
             InitializeComponent();
 
+            // the browsers' col-resize (bars + arrows), not the plain SizeWestEast — which
+            // GridSplitter assigns to its own Cursor on attach, so the custom cursor has to sit
+            // on the template's panel, where the innermost non-null cursor wins
+            sidebarSplitter.TemplateApplied += (_, e) =>
+            {
+                if (e.NameScope.Find("splitterZone") is InputElement zone)
+                    zone.Cursor = DragCursors.ColResize;
+            };
+            // …and on the splitter itself (after its own attach-time assignment), because a drag
+            // in progress captures the pointer and shows the captured control's cursor
+            sidebarSplitter.AttachedToVisualTree += (_, _) => sidebarSplitter.Cursor = DragCursors.ColResize;
+
             drawingCanvas.ArtworkBackground = _settings.Editor.CanvasBackground;
             drawingCanvas.HandleColor = AppStyles.AccentColor;
             drawingCanvas.StateUpdated += drawingCanvas_StateUpdated;
@@ -138,7 +150,7 @@ namespace Clowd.UI
             AddHandler(KeyUpEvent, OnTunnelKeyUp, RoutingStrategies.Tunnel);
 
             // feeds the "has this editor been touched lately" test that gates background update
-            // restarts (IdleMonitor). Tunnelling handlers so they see the input regardless of
+            // restarts (IdleMonitor). Tunneling handlers so they see the input regardless of
             // which child control ends up handling it.
             AddHandler(KeyDownEvent, (object s, KeyEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
             AddHandler(PointerPressedEvent, (object s, PointerPressedEventArgs e) => IdleMonitor.NotifyInteraction(), RoutingStrategies.Tunnel);
@@ -171,7 +183,7 @@ namespace Clowd.UI
             btnUpload.AddHandler(PointerPressedEvent, btnUpload_RightMouseDown, RoutingStrategies.Tunnel);
 
             miniColor.ParentWindow = this;
-            miniColor.Cancelled += (_, _) => miniColorPopup.IsOpen = false;
+            miniColor.Canceled += (_, _) => miniColorPopup.IsOpen = false;
 
             // opt-in editor features (customizable toolbar / layers sidebar). The sidebar is
             // per-window and always starts closed, so the strip renders exactly as before plus the
@@ -473,10 +485,9 @@ namespace Clowd.UI
             KeyBindings.Add(kb);
 
             // macOS: every Ctrl gesture is also registered with Meta (§2.4)
-            if (OperatingSystem.IsMacOS() && (command.Gesture.Modifiers & KeyModifiers.Control) != 0) {
-                var metaMods = (command.Gesture.Modifiers & ~KeyModifiers.Control) | KeyModifiers.Meta;
-                KeyBindings.Add(new KeyBinding { Command = command, Gesture = new KeyGesture(command.Gesture.Key, metaMods) });
-            }
+            var meta = command.CreateMacMetaKeyBinding();
+            if (meta != null)
+                KeyBindings.Add(meta);
         }
 
         private void AddKeyBinding(System.Windows.Input.ICommand command, Key key, object parameter = null)
@@ -509,7 +520,7 @@ namespace Clowd.UI
             // pressed-set repeat tracker (decision table #37)
             bool isRepeat = !_pressedKeys.Add(e.Key);
 
-            // An open mini colour picker owns Escape and Enter, and neither may reach the canvas
+            // An open mini color picker owns Escape and Enter, and neither may reach the canvas
             // underneath (Escape cancels the in-progress drawing operation). Checked ahead of the
             // TextBox bail-out so the keys still work from the hex field. The picker hooks its own
             // popup root as well — that path handles the usual case where the popup holds focus.

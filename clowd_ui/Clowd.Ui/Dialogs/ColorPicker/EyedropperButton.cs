@@ -12,7 +12,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     /// Press-and-drag eyedropper. Holding the button and dragging samples whatever is under the
     /// pointer — anywhere on the desktop, not just over Clowd — raising <see cref="Preview"/> as
     /// it moves and <see cref="Picked"/> on release. Releasing without ever leaving the button
-    /// (a plain click) is treated as a cancelled drag, since the pixel under the button is the
+    /// (a plain click) is treated as a canceled drag, since the pixel under the button is the
     /// button itself.
     /// </summary>
     /// <remarks>
@@ -27,7 +27,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
     public class EyedropperButton : ToolButton
     {
         /// <summary>Fires when a drag begins, before any sample — the caller's cue to snapshot
-        /// whatever <see cref="Cancelled"/> would have to restore.</summary>
+        /// whatever <see cref="Canceled"/> would have to restore.</summary>
         public event Action Started;
 
         /// <summary>Fires continuously while dragging, for live preview. The argument is the
@@ -39,7 +39,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         /// <summary>Fires when a drag ends without a pick (released on the button, or off-screen),
         /// so the caller can undo whatever <see cref="Preview"/> applied.</summary>
-        public event Action Cancelled;
+        public event Action Canceled;
 
         private bool _dragging;
 
@@ -62,7 +62,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             ApplyPermissionState();
         }
 
-        /// <summary>Greys the button out, with the reason as its tooltip, while macOS Screen
+        /// <summary>Grays the button out, with the reason as its tooltip, while macOS Screen
         /// Recording is missing.</summary>
         private void ApplyPermissionState()
         {
@@ -73,7 +73,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             IsEnabled = permitted;
 
             // ShowOnDisabled is off by default, and the tooltip is the only thing explaining why the
-            // button is greyed out — without this the disabled state has no explanation at all.
+            // button is grayed out — without this the disabled state has no explanation at all.
             ToolTip.SetShowOnDisabled(this, true);
             ToolTip.SetTip(this, permitted
                 ? null
@@ -139,7 +139,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (color.HasValue)
                 Picked?.Invoke(color.Value);
             else
-                Cancelled?.Invoke();
+                Canceled?.Invoke();
         }
 
         protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
@@ -150,7 +150,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 return;
 
             _dragging = false;
-            Cancelled?.Invoke();
+            Canceled?.Invoke();
         }
 
         private Color? Sample(PointerEventArgs e)

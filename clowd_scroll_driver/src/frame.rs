@@ -16,7 +16,7 @@
 //! `capture_region` takes a rect in the platform capture space
 //! ([`crate::input`]) and returns pixels, and on macOS those are not the same
 //! unit: a 400×800 point region on a Retina display comes back 800×1600.
-//! That is deliberate — the composite is the artefact the user keeps, and
+//! That is deliberate — the composite is the artifact the user keeps, and
 //! throwing away half its resolution to make two numbers match would be a
 //! poor trade — but it means the *frame's* dimensions, never the region's,
 //! are what may be compared against a displacement measured by the stitcher.

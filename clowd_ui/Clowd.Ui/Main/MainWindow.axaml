@@ -31,16 +31,8 @@
         <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*">
 
             <StackPanel Grid.Row="0" Margin="0,0,0,12" Spacing="8">
-                <Button x:Name="NewEditorButton"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Click="NewEditor_Click">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavEditor}" />
-                        <TextBlock Text="New Editor" />
-                    </StackPanel>
-                </Button>
-
+                <!-- Capture leads: it is what the app is for, and the two editors below it are the
+                     ways in without one. -->
                 <Button x:Name="NewCaptureButton"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
@@ -50,6 +42,35 @@
                         <TextBlock Text="Screen Capture" />
                     </StackPanel>
                 </Button>
+
+                <!-- "New Editor" split in two: the image editor and the video editor open blank
+                     documents of their own, and nothing about one implies the other. The video
+                     half is hidden where the video editor does not ship (non-Windows), and the
+                     image half then takes the whole row. -->
+                <Grid x:Name="NewDocumentRow" ColumnDefinitions="*,8,*">
+                    <Button x:Name="NewImageButton"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            ToolTip.Tip="New image editor"
+                            Click="NewImage_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Width="16" Height="16" Data="{StaticResource IconImage}" />
+                            <TextBlock Text="Image" />
+                        </StackPanel>
+                    </Button>
+
+                    <Button x:Name="NewVideoButton"
+                            Grid.Column="2"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            ToolTip.Tip="New video editor"
+                            Click="NewVideo_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Width="16" Height="16" Data="{StaticResource IconVideoClip}" />
+                            <TextBlock Text="Video" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
             </StackPanel>
 
             <u:NavMenu x:Name="NavList"

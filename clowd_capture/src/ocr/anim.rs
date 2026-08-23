@@ -14,14 +14,14 @@
 pub const MIN_SCAN_SECS: f32 = 0.3;
 /// One full sweep of the scanning band.
 pub const SCAN_PERIOD_SECS: f32 = 1.2;
-/// How long the region's dim/desaturation take to fade back to colour on
+/// How long the region's dim/desaturation take to fade back to color on
 /// exit. The TEXT does not animate out at all — every bubble vanishes on
 /// the first Retracting frame (a reverse cascade reads as the overlay
 /// stalling on the way out; disappearance should be instant) — so this
 /// fade is the only thing the Retracting phase exists to play.
 pub const RETRACT_DURATION_SECS: f32 = 0.18;
 /// How long one line/bubble takes to rise and fade in once the sweep's
-/// band centre has passed its top edge.
+/// band center has passed its top edge.
 pub const LIFT_DURATION_SECS: f32 = 0.28;
 /// Vertical lift distance in physical px at dpi 1.0 — callers multiply by
 /// the mode's single dpi_scale.
@@ -40,11 +40,11 @@ pub const DIM_MAX: f32 = 0.35;
 /// rides to the GPU per instance (`params.w`, see the shader header).
 pub const SWEEP_SIGMA: f32 = 0.10;
 
-/// How far past the region's top/bottom edges the band CENTRE travels, in
+/// How far past the region's top/bottom edges the band CENTER travels, in
 /// region-height units. At 3.5σ the gaussian is under 0.3% of peak —
 /// visually nothing — so the band has fully exited the bottom when the
 /// phase wraps and re-enters from above the top after it: back-to-back
-/// passes loop with no visible jump. (The old band travelled exactly
+/// passes loop with no visible jump. (The old band traveled exactly
 /// [0, 1], which popped a half-band at every wrap.)
 const SWEEP_OVERSHOOT: f32 = 3.5 * SWEEP_SIGMA;
 
@@ -57,7 +57,7 @@ pub fn ease_out(t: f32) -> f32 {
 }
 
 /// Exit fade, 1 -> 0 over [`RETRACT_DURATION_SECS`]: the dim and
-/// desaturation ride this back to colour together while the (already
+/// desaturation ride this back to color together while the (already
 /// vanished) text is gone. Exactly 0 at the duration, which is when the
 /// app thread flips Retracting -> Idle — a mismatch would pop the region
 /// bright or leave it stuck dark.
@@ -79,7 +79,7 @@ pub fn scan_phase(t: f32) -> f32 {
     (t.max(0.0) / SCAN_PERIOD_SECS).fract()
 }
 
-/// Band centre for a phase in [0, 1): sweeps TOP → BOTTOM of the region,
+/// Band center for a phase in [0, 1): sweeps TOP → BOTTOM of the region,
 /// overshooting both edges by [`SWEEP_OVERSHOOT`] so the loop wrap happens
 /// entirely off-screen (see the constant's comment).
 pub fn sweep_band(phase: f32) -> f32 {
@@ -96,7 +96,7 @@ pub fn line_rel_top(line_top: f32, region_top: f32, region_height: f32) -> f32 {
     ((line_top - region_top) / region_height).clamp(0.0, 1.0)
 }
 
-/// Seconds into the reveal pass at which the band centre crosses
+/// Seconds into the reveal pass at which the band center crosses
 /// `rel_top` — the exact inverse of [`sweep_band`] over one
 /// [`SCAN_PERIOD_SECS`] pass. This is what keys each line's appearance to
 /// the wave instead of to its index: a bubble starts rising the moment the
@@ -106,7 +106,7 @@ pub fn reveal_start_secs(rel_top: f32) -> f32 {
 }
 
 /// Reveal progress of a line whose top edge sits at `rel_top`: 0 until the
-/// band centre reaches it, then eased to 1 over [`LIFT_DURATION_SECS`].
+/// band center reaches it, then eased to 1 over [`LIFT_DURATION_SECS`].
 pub fn reveal_progress(t: f32, rel_top: f32) -> f32 {
     ease_out((t - reveal_start_secs(rel_top)) / LIFT_DURATION_SECS)
 }
@@ -125,7 +125,7 @@ pub fn reveal_pass_secs() -> f32 {
 /// until the moment the looping sweep wraps — the one instant the band is
 /// entirely off-screen at BOTH ends — so the Lifted phase's fresh anchor
 /// starts its reveal pass with no visible jump in the band. Worst case
-/// this costs one extra `SCAN_PERIOD_SECS` of theatre before the reveal;
+/// this costs one extra `SCAN_PERIOD_SECS` of theater before the reveal;
 /// deliberate — a band teleporting mid-region is exactly the pop the
 /// wrap-overshoot exists to kill. Failures skip the alignment (nothing is
 /// going to be revealed) and keep only the MIN_SCAN floor that stops a
@@ -165,7 +165,7 @@ mod tests {
 
     /// The exit fade starts fully applied, ends at exactly zero at the
     /// duration the app thread waits before flipping to Idle, and never
-    /// climbs back up — the region must settle to colour, once.
+    /// climbs back up — the region must settle to color, once.
     #[test]
     fn retract_fade_reverses_to_zero_monotonically() {
         assert_eq!(retract_fade(0.0), 1.0);
@@ -200,7 +200,7 @@ mod tests {
         assert_eq!(dim_amount(99.0), DIM_MAX);
     }
 
-    /// Direction pin: the band centre must INCREASE with phase (v grows
+    /// Direction pin: the band center must INCREASE with phase (v grows
     /// downward in quad space, so increasing = top → bottom), and must sit
     /// far enough off-screen at both ends of the pass that the wrap is
     /// invisible.
@@ -233,7 +233,7 @@ mod tests {
     }
 
     /// The reveal is KEYED to the wave: at a line's reveal start the band
-    /// centre is exactly at its top edge — the inverse relationship the
+    /// center is exactly at its top edge — the inverse relationship the
     /// whole effect rests on.
     #[test]
     fn reveal_start_matches_band_position() {

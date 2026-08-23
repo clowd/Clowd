@@ -34,7 +34,7 @@ pub type LogicalSize = Size2D<f64, LogicalUnit>;
 pub struct WindowUnit;
 pub type WindowPoint = Point2D<f32, WindowUnit>;
 
-// Initialise rounded ScreenRect
+// Initialize rounded ScreenRect
 const PIXEL_SELECTION_ROUNDING_THRESHOLD: f32 = 0.2;
 fn round_pixel(px: f32, prefer_down: bool) -> i32 {
     let pfloor = px.floor() as i32;

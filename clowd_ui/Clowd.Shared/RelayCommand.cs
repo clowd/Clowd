@@ -41,7 +41,7 @@ namespace Clowd.UI.Helpers
             set
             {
                 if (Set(ref _gesture, value))
-                    GestureText = value?.ToString();
+                    GestureText = value?.ForApp().ToString();
             }
         }
 
@@ -90,13 +90,29 @@ namespace Clowd.UI.Helpers
             return new KeyBinding { Command = this, Gesture = Gesture.ToKeyGesture() };
         }
 
+        /// <summary>
+        /// The ⌘ twin of <see cref="CreateKeyBinding"/> for macOS, or null when there is none to
+        /// make (not macOS, no gesture, a bare one, or one that does not use Control). Registered
+        /// <em>in addition to</em> the Ctrl binding rather than instead of it: a Mac user reaches
+        /// for ⌘Z, and someone on a Windows keyboard or muscle memory still gets Ctrl+Z.
+        /// </summary>
+        public KeyBinding CreateMacMetaKeyBinding()
+        {
+            if (!OperatingSystem.IsMacOS() || Gesture == null || IsBareGesture)
+                return null;
+            if ((Gesture.Modifiers & KeyModifiers.Control) == 0)
+                return null;
+
+            return new KeyBinding { Command = this, Gesture = Gesture.ForApp().ToKeyGesture() };
+        }
+
         public MenuItem CreateMenuItem()
         {
             var menu = new MenuItem();
             menu.Header = Text?.Replace("_", "");
 
             if (Gesture != null)
-                menu.InputGesture = Gesture.ToKeyGesture();
+                menu.InputGesture = Gesture.ForApp().ToKeyGesture();
 
             if (!string.IsNullOrEmpty(GestureText))
             {

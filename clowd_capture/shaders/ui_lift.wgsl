@@ -13,7 +13,7 @@
 struct Uniforms {
     viewport_px: vec2<f32>,
     // Seconds since the current OCR phase's anchor. Currently unread — the
-    // band centre travels per-instance (CPU-side, like all other
+    // band center travels per-instance (CPU-side, like all other
     // animation) — but kept in the block so a future shader-side effect
     // doesn't need a layout change.
     t: f32,
@@ -25,7 +25,7 @@ struct Uniforms {
 struct Instance {
     // min_x, min_y, max_x, max_y in window-local physical pixels.
     @location(0) dest_px: vec4<f32>,
-    // (alpha, band_centre, sweep σ, corner_radius). Band centre is in
+    // (alpha, band_center, sweep σ, corner_radius). Band center is in
     // quad-space v (0 = top, 1 = bottom); it travels top → bottom and
     // deliberately OVERSHOOTS both edges — see anim::sweep_band — so the
     // looping wrap happens with the band fully invisible. σ is supplied by
@@ -34,7 +34,7 @@ struct Instance {
     // 0 = square): the band is clipped to that rounded rect so it stays
     // inside the curved border a picked window is drawn with.
     @location(1) params: vec4<f32>,
-    // Band colour (straight alpha 1.0; the fragment premultiplies).
+    // Band color (straight alpha 1.0; the fragment premultiplies).
     @location(2) tint: vec4<f32>,
 };
 
@@ -87,7 +87,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var a = alpha * fall;
 
     // Rounded selection: clip to the curve (same rounded-box SDF as
-    // desktop.wgsl, 1 px anti-aliased at pixel centres). Square selections
+    // desktop.wgsl, 1 px anti-aliased at pixel centers). Square selections
     // (radius 0) skip this and keep the full quad.
     let radius = in.params.w;
     if (radius > 0.0) {

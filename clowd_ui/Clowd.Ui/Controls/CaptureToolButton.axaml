@@ -28,7 +28,7 @@
                     <Grid Name="contentGrid" RowDefinitions="*,26,*,Auto,*">
                         <!-- fixed 26px icon slot; the IconSize viewbox centers inside it so
                              per-icon canvas padding renders exactly like the overlay's
-                             26px-rasterised SVGs -->
+                             26px-rasterized SVGs -->
                         <Viewbox Grid.Row="1"
                                  Width="{TemplateBinding IconSize}"
                                  Height="{TemplateBinding IconSize}"

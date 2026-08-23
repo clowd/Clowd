@@ -1,4 +1,4 @@
-//! Button panel that appears after a selection is finalised.
+//! Button panel that appears after a selection is finalized.
 //!
 //! Mirrors the C++ `clowd_capture_dx` button panel: SVG action buttons
 //! plus a non-clickable area indicator that shows the selected
@@ -8,7 +8,7 @@
 //! [`model::PanelButtonSet`]:
 //!   * `Normal`, the capture strip (UPLOAD / EDIT / VIDEO / SCROLL / OCR
 //!     / COPY / SAVE / RESET / EXIT; SCROLL and OCR are Windows-only), and
-//!   * `Ocr`, the strip that replaces it while recognised text is lifted
+//!   * `Ocr`, the strip that replaces it while recognized text is lifted
 //!     off the selection (UPLOAD / SEARCH / COPY / BACK / EXIT).
 //!
 //! They have different lengths, so every entry point takes the set as a
@@ -16,7 +16,7 @@
 //! shell can switch UPLOAD / SCROLL / OCR off (SettingsCapture's "Optional
 //! features"), which narrows either strip further. Each strip is
 //! positioned by the same algorithm with its own width, so the shorter OCR
-//! strip re-centres under the selection on a swap — the re-click hazard
+//! strip re-centers under the selection on a swap — the re-click hazard
 //! that movement creates is `PanelSwapGuard`'s job (app.rs), not
 //! geometry's. See `layout::compute_layout`.
 //!

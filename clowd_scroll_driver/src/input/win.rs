@@ -50,17 +50,17 @@ const MAX_CHILD_DEPTH: usize = 10;
 /// Everything in this driver — the region rect, `SetCursorPos`, the BitBlt,
 /// the `WM_MOUSEWHEEL` lParam — is in physical virtual-desktop pixels, and
 /// that only holds while the process is per-monitor DPI aware. Otherwise
-/// Windows silently virtualises coordinates and every one of those lands on
+/// Windows silently virtualizes coordinates and every one of those lands on
 /// the wrong pixel on a scaled monitor. `app.manifest` declares PerMonitorV2;
 /// this reports if it somehow did not take.
 ///
 /// A warning rather than a refusal: the numbers are still self-consistent, so
-/// a virtualised run captures *something* on the primary monitor, and taking
+/// a virtualized run captures *something* on the primary monitor, and taking
 /// the capture away over it would be a worse trade than logging it.
 pub fn preflight() -> anyhow::Result<()> {
     let awareness = unsafe { GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()) };
     if awareness != DPI_AWARENESS_PER_MONITOR_AWARE {
-        warn!("process is not per-monitor DPI aware ({awareness:?}); coordinates may be virtualised");
+        warn!("process is not per-monitor DPI aware ({awareness:?}); coordinates may be virtualized");
     }
     Ok(())
 }
@@ -250,7 +250,7 @@ pub fn escape_pressed() -> bool {
 ///
 /// One `INPUT` record per notch rather than a single record carrying
 /// `n * WHEEL_DELTA`: that is the stream a real wheel produces, and apps
-/// that quantise per message — or start one smooth-scroll animation per
+/// that quantize per message — or start one smooth-scroll animation per
 /// event — behave the same way for us as for a person.
 pub fn wheel_burst(_point: ScreenPoint, ticks: u32, dir: WheelDir) {
     let delta = dir.sign() * WHEEL_DELTA;

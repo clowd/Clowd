@@ -1,0 +1,2054 @@
+<UserControl
+    x:Class="Clowd.UI.VideoEditor.Inspector.InspectorPanel"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:colors="clr-namespace:Clowd.UI.Dialogs.ColorPicker"
+    xmlns:controls="clr-namespace:Clowd.UI.Controls"
+    xmlns:insp="clr-namespace:Clowd.UI.VideoEditor.Inspector"
+    xmlns:ve="clr-namespace:Clowd.UI.VideoEditor">
+
+    <UserControl.Resources>
+        <!--  the render button's determinate progress arc (see ToolButton.axaml), reused by the
+              analysis status rows' little ring: 0-100 in, a 16x16 stroked arc out  -->
+        <controls:ProgressToArcGeometryConverter x:Key="progressToArc" />
+
+        <!--  Shape-picker icons. All four share a 100x100 box so Stretch="Uniform" renders them at
+              matching sizes; the squircle is traced from the same MaskGeometry the compositor
+              clips with, so the icon is the shape you get.  -->
+        <RectangleGeometry x:Key="MaskIconSquare" Rect="0,0,100,100" />
+        <EllipseGeometry x:Key="MaskIconCircle" Rect="0,0,100,100" />
+        <RectangleGeometry
+            x:Key="MaskIconRounded"
+            RadiusX="26"
+            RadiusY="26"
+            Rect="0,0,100,100" />
+
+        <!--  Fit-mode icons — Fill: an arrow pushing through the frame's bounds (user-supplied,
+              Icons8 width/24); Stretch: Icons8 fluent-systems-filled "fullscreen" diagonal spread.  -->
+        <StreamGeometry x:Key="FitIconFill">M 2 5 L 2 19 L 4 19 L 4 5 Z M 4 12 L 8 15 L 8 13 L 16 13 L 16 15 L 20 12 L 16 9 L 16 11 L 8 11 L 8 9 Z M 20 12 L 20 19 L 22 19 L 22 5 Z M 6 5 C 5.449219 5 5 5.449219 5 6 C 5 6.550781 5.449219 7 6 7 C 6.550781 7 7 6.550781 7 6 C 7 5.449219 6.550781 5 6 5 Z M 10 5 C 9.449219 5 9 5.449219 9 6 C 9 6.550781 9.449219 7 10 7 C 10.550781 7 11 6.550781 11 6 C 11 5.449219 10.550781 5 10 5 Z M 14 5 C 13.449219 5 13 5.449219 13 6 C 13 6.550781 13.449219 7 14 7 C 14.550781 7 15 6.550781 15 6 C 15 5.449219 14.550781 5 14 5 Z M 18 5 C 17.449219 5 17 5.449219 17 6 C 17 6.550781 17.449219 7 18 7 C 18.550781 7 19 6.550781 19 6 C 19 5.449219 18.550781 5 18 5 Z M 6 17 C 5.449219 17 5 17.449219 5 18 C 5 18.550781 5.449219 19 6 19 C 6.550781 19 7 18.550781 7 18 C 7 17.449219 6.550781 17 6 17 Z M 10 17 C 9.449219 17 9 17.449219 9 18 C 9 18.550781 9.449219 19 10 19 C 10.550781 19 11 18.550781 11 18 C 11 17.449219 10.550781 17 10 17 Z M 14 17 C 13.449219 17 13 17.449219 13 18 C 13 18.550781 13.449219 19 14 19 C 14.550781 19 15 18.550781 15 18 C 15 17.449219 14.550781 17 14 17 Z M 18 17 C 17.449219 17 17 17.449219 17 18 C 17 18.550781 17.449219 19 18 19 C 18.550781 19 19 18.550781 19 18 C 19 17.449219 18.550781 17 18 17 Z</StreamGeometry>
+        <StreamGeometry x:Key="FitIconStretch">M 39.960938 5.9804688 A 2.0002 2.0002 0 0 0 39.740234 6 L 31 6 A 2.0002 2.0002 0 1 0 31 10 L 35.171875 10 L 10 35.171875 L 10 31 A 2.0002 2.0002 0 1 0 6 31 L 6 39.753906 A 2.0002 2.0002 0 0 0 8.2597656 42 L 17 42 A 2.0002 2.0002 0 1 0 17 38 L 12.828125 38 L 38 12.828125 L 38 17 A 2.0002 2.0002 0 1 0 42 17 L 42 8.2460938 A 2.0002 2.0002 0 0 0 39.960938 5.9804688 z M 8 6 A 2.0002 2.0002 0 0 0 7.6171875 6.0371094 A 2.0002 2.0002 0 0 0 7.2734375 6.1386719 C 7.2615997 6.1432867 7.2500467 6.1474949 7.2382812 6.1523438 A 2.0002 2.0002 0 0 0 6.9140625 6.3222656 C 6.9069283 6.3268963 6.8996655 6.3312065 6.8925781 6.3359375 A 2.0002 2.0002 0 0 0 6.5976562 6.5761719 C 6.5939662 6.5798106 6.589606 6.5822643 6.5859375 6.5859375 C 6.5842493 6.5876257 6.5837121 6.5901042 6.5820312 6.5917969 A 2.0002 2.0002 0 0 0 6.3339844 6.8945312 C 6.3322166 6.8971884 6.3298787 6.89968 6.328125 6.9023438 A 2.0002 2.0002 0 0 0 6.1601562 7.2226562 C 6.1543298 7.2364493 6.148081 7.2497775 6.1425781 7.2636719 A 2.0002 2.0002 0 0 0 6.0429688 7.5957031 C 6.0405497 7.6074921 6.0373611 7.6190367 6.0351562 7.6308594 A 2.0002 2.0002 0 0 0 6 8 L 6 17 A 2.0002 2.0002 0 1 0 10 17 L 10 12.828125 L 19.757812 22.585938 L 22.585938 19.757812 L 12.828125 10 L 17 10 A 2.0002 2.0002 0 1 0 17 6 L 8 6 z M 28.242188 25.414062 L 25.414062 28.242188 L 35.171875 38 L 31 38 A 2.0002 2.0002 0 1 0 31 42 L 40 42 A 2.0002 2.0002 0 0 0 40.382812 41.962891 A 2.0002 2.0002 0 0 0 40.726562 41.861328 C 40.7384 41.856713 40.749953 41.852505 40.761719 41.847656 A 2.0002 2.0002 0 0 0 41.085938 41.677734 A 2.0002 2.0002 0 0 0 41.107422 41.664062 A 2.0002 2.0002 0 0 0 41.402344 41.423828 A 2.0002 2.0002 0 0 0 41.417969 41.408203 A 2.0002 2.0002 0 0 0 41.666016 41.105469 A 2.0002 2.0002 0 0 0 41.669922 41.099609 C 41.670413 41.098865 41.671385 41.098401 41.671875 41.097656 A 2.0002 2.0002 0 0 0 41.839844 40.777344 C 41.84567 40.763551 41.851919 40.750222 41.857422 40.736328 A 2.0002 2.0002 0 0 0 41.957031 40.404297 C 41.95945 40.392508 41.962639 40.380963 41.964844 40.369141 A 2.0002 2.0002 0 0 0 42 40 L 42 31 A 2.0002 2.0002 0 0 0 39.970703 28.972656 A 2.0002 2.0002 0 0 0 38 31 L 38 35.171875 L 28.242188 25.414062 z</StreamGeometry>
+
+        <!--  A shape-picker tile: icon beside its name in a rounded box that borrows the Semi
+              RadioButton's own brushes — gray ring unselected, a thicker accent ring selected. A
+              fixed height shared with the aspect tiles keeps the two grids reading as one family.  -->
+        <ControlTheme x:Key="MaskShapeTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <!--  Width only on the icon, never a fixed Height: a Uniform-stretched
+                              Path anchors its ink to the top of a taller box, so the height must
+                              come from the ink for VerticalAlignment to mean anything.  -->
+                        <StackPanel
+                            Margin="10,0,0,0"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="8">
+                            <Path
+                                Name="_icon"
+                                Width="22"
+                                VerticalAlignment="Center"
+                                Data="{TemplateBinding Tag}"
+                                Fill="#CCCCCC"
+                                Stretch="Uniform" />
+                            <TextBlock
+                                Name="_label"
+                                VerticalAlignment="Center"
+                                FontSize="12"
+                                Foreground="#CCCCCC"
+                                Text="{TemplateBinding Content}" />
+                        </StackPanel>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:checked /template/ Path#_icon">
+                <Setter Property="Fill" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+            </Style>
+            <Style Selector="^:checked /template/ TextBlock#_label">
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!--  An aspect tile: the same ring box, but the content is supplied per tile — a little
+              rectangle drawn AT the ratio it applies with the ratio's name inside it (the icon is
+              the label, so it can be big and obvious). Content coloring lives in the panel styles
+              below (Rectangle.ratio / TextBlock.ratioText / Path.ratioGlyph), because a template
+              style cannot reach into supplied content.  -->
+        <ControlTheme x:Key="RatioTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <ContentPresenter
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!--  The same ring box, left-aligned: for a radio whose "icon" is a live control rather than
+              a Path, so it cannot ride in MaskShapeTile's template. The content lays itself out on
+              the shape tiles' own metrics (10 in from the left edge, 8 to the label), which is why
+              the presenter stretches instead of centring like the ratio tiles' does.  -->
+        <ControlTheme x:Key="PreviewTile" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <ContentPresenter
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!--  The same ring box again, for the two pickers whose options come from a list rather
+              than from hand-written radios (the cursor styles, the click highlights). Content is
+              the item template's, so the theme only owns the box; the ink colors live in the
+              panel styles below, which is where a template style cannot reach.  -->
+        <ControlTheme x:Key="PickerTile" TargetType="ListBoxItem">
+            <Setter Property="Cursor" Value="Hand" />
+            <!--  the gutter between tiles, canceled at the grid's outer edge by the ListBox's own
+                  negative margin, so the tiles line up with the rows above and below  -->
+            <Setter Property="Margin" Value="0,0,4,4" />
+            <Setter Property="MinHeight" Value="40" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Background="Transparent"
+                        BorderBrush="{DynamicResource RadioButtonUncheckIconDefaultBorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4">
+                        <!--  stretched, not centered: the tile's content decides where it sits, so
+                              the style tiles can sit left like the shape tiles' do while the
+                              highlight tiles stay centered on their preview  -->
+                        <ContentPresenter
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:selected /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderThickness" Value="2" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+
+        <!--  The panel's own checkbox. The themed one is drawn from the app's tokens, which are
+              the light palette this fixed-dark sidebar deliberately does not use, so the box is
+              hand-colored from the same values as the text boxes (and takes the accent the
+              shape/ratio tiles take when it is on). Padding, not size: the box stays 16px while
+              the press target reaches the row's full height.  -->
+        <ControlTheme x:Key="InspectorCheckBox" TargetType="CheckBox">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <!--  no right padding: the box's right edge lines up with the dropdowns and
+                          spinners that end the other rows  -->
+                    <Border Padding="8,3,0,3" Background="Transparent">
+                        <Border
+                            Name="_box"
+                            Width="16"
+                            Height="16"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            CornerRadius="0">
+                            <Path
+                                Name="_check"
+                                Width="9"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Data="{DynamicResource IconCheckmark}"
+                                Fill="White"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Border>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonUncheckIconPointeroverBorderBrush}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="Background" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+            </Style>
+            <Style Selector="^:checked /template/ Path#_check">
+                <Setter Property="IsVisible" Value="True" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+    </UserControl.Resources>
+
+    <!--  The editor window's chrome is a fixed dark palette (NOT Semi tokens), so this panel is
+          hand-colored to match the sidebar it lives in — the same trade LayersPanel makes.  -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.section">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#9A9A9A" />
+        </Style>
+        <!--  the rule that runs from a section title to the panel edge  -->
+        <Style Selector="Rectangle.sectionRule">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Fill" Value="#5C5C5C" />
+            <Setter Property="Margin" Value="8,1,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <!--  MinWidth, not Width: the labels still line up as a column, but a long one grows
+              instead of being clipped now that the editor beside it is no longer packed against
+              it.  -->
+        <Style Selector="TextBlock.label">
+            <Setter Property="MinWidth" Value="60" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="#CCCCCC" />
+        </Style>
+        <!--  a label docked left and the editor filling the rest, so every row's editor can put
+              its right edge on the panel's — where the full-width text boxes and combo boxes
+              already end. A horizontal StackPanel cannot do that: it sizes to content.  -->
+        <Style Selector="DockPanel.row">
+            <Setter Property="LastChildFill" Value="True" />
+        </Style>
+        <!--  the reset-dot slot: fixed width whether or not a dot is showing, so the label column
+              cannot shift when a value leaves (or returns to) its default.  -->
+        <Style Selector="Panel.dot">
+            <Setter Property="Width" Value="14" />
+        </Style>
+        <Style Selector="controls|ResetDefaultButton">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+        </Style>
+        <Style Selector="StackPanel.section">
+            <Setter Property="Spacing" Value="6" />
+        </Style>
+        <!--  the editor's own dropdown (the top bar's picker) rather than the Semi ComboBox, so
+              every closed control in the panel wears the same chrome as the spinners  -->
+        <Style Selector="controls|DropDownButton">
+            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+        </Style>
+        <!--  wider than the 70px the shared spinner theme picks: this panel puts a spinner on
+              nearly every row, and 70px truncates the longer values (e.g. "-360 °"). Right-aligned
+              inside the row's fill column so it lines up with the text boxes below it; the theme's
+              4px left margin would otherwise push it off that edge.  -->
+        <Style Selector="controls|SpinnerTextBox">
+            <Setter Property="MinWidth" Value="120" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="Margin" Value="6,0,0,0" />
+        </Style>
+        <Style Selector="TextBox.field">
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#454545" />
+            <Setter Property="BorderBrush" Value="#666666" />
+            <Setter Property="MinHeight" Value="24" />
+            <Setter Property="Padding" Value="4,2" />
+        </Style>
+
+        <!--  the aspect tiles' inner visuals (see RatioTile). Ratio tiles are a FILLED block with
+              the ratio's name knocked out of it: the text wears the sidebar's own background
+              color, so it reads as cut from the block. The ratio-free tiles (Original / W:H /
+              Unlocked) draw no block — just their label or glyph.  -->
+        <Style Selector="RadioButton.ratioTile Rectangle.ratio">
+            <Setter Property="Fill" Value="#CCCCCC" />
+            <Setter Property="RadiusX" Value="3" />
+            <Setter Property="RadiusY" Value="3" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile:checked Rectangle.ratio">
+            <Setter Property="Fill" Value="{DynamicResource RadioButtonCheckIconDefaultBackground}" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile TextBlock.ratioText">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="#454545" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile TextBlock.plainText">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="#CCCCCC" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile:checked TextBlock.plainText">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile Path.ratioGlyph">
+            <Setter Property="Fill" Value="#CCCCCC" />
+        </Style>
+        <Style Selector="RadioButton.ratioTile:checked Path.ratioGlyph">
+            <Setter Property="Fill" Value="White" />
+        </Style>
+
+        <!--  the list-driven tiles' inner visuals (see PickerTile). The label brightens with the
+              selection exactly as the shape tiles' does; the style previews keep their artwork's
+              own colors — the point of them is that they are the real glyph — so only native's
+              outline follows the label.  -->
+        <Style Selector="TextBlock.tileText">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#CCCCCC" />
+        </Style>
+        <Style Selector="ListBoxItem:selected TextBlock.tileText">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <!--  the same label, on the hand-written radios that carry a live preview (the surround
+              tiles): a checked radio brightens its label exactly as a selected list tile does  -->
+        <Style Selector="RadioButton:checked TextBlock.tileText">
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+        <Style Selector="ListBoxItem:selected insp|CursorStylePreview">
+            <Setter Property="OutlineBrush" Value="White" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <TextBlock
+            Margin="10"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Foreground="#88FFFFFF"
+            IsVisible="{Binding !HasSelection}"
+            Text="Nothing selected"
+            TextAlignment="Center"
+            TextWrapping="Wrap" />
+
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasSelection}">
+            <StackPanel Margin="10" Spacing="14">
+
+                <!--  subject: which row/kind the numbers below belong to, with the row's own
+                      hide/mute switches beside it — they are about the track, not any one value,
+                      so they live in the title, not in a section.  -->
+                <DockPanel>
+                    <StackPanel
+                        DockPanel.Dock="Right"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="2">
+                        <controls:ToolButton
+                            x:Name="btnHide"
+                            Width="24"
+                            Height="24"
+                            Padding="4"
+                            CanToggle="True"
+                            IconPath="{StaticResource IconEye}"
+                            IsChecked="{Binding TrackHidden, Mode=TwoWay}"
+                            IsVisible="{Binding ShowTrackHidden}"
+                            ToolTip.Tip="Hide this track" />
+                        <controls:ToolButton
+                            x:Name="btnMute"
+                            Width="24"
+                            Height="24"
+                            Padding="4"
+                            CanToggle="True"
+                            IconPath="{StaticResource IconSpeakerEnabled}"
+                            IsChecked="{Binding TrackMuted, Mode=TwoWay}"
+                            IsVisible="{Binding ShowTrackMuted}"
+                            ToolTip.Tip="Mute this track" />
+                    </StackPanel>
+                    <StackPanel Spacing="2">
+                        <TextBlock
+                            FontWeight="Bold"
+                            Foreground="White"
+                            Text="{Binding SubjectName}"
+                            TextTrimming="CharacterEllipsis" />
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="#999999"
+                            Text="{Binding SubjectKind}" />
+                    </StackPanel>
+                </DockPanel>
+
+                <!--  playback speed: media rows only, and only once desynced — a linked segment
+                      keeps the recording's clock (see SelectedItemViewModel.ShowSpeed). Sits
+                      under the title because it re-times the whole clip, not one property.  -->
+                <DockPanel Classes="row" IsVisible="{Binding ShowSpeed}">
+                    <!--  the dot's default is the 1.0 option object, assigned in code-behind: an
+                          attribute would be a string, which neither the equality nor the reset
+                          write-back can hand to a SpeedOption binding  -->
+                    <Panel Classes="dot" DockPanel.Dock="Left">
+                        <controls:ResetDefaultButton x:Name="dotSpeed" CurrentValue="{Binding SpeedChoice, Mode=TwoWay}" />
+                    </Panel>
+                    <TextBlock Classes="label" Text="Speed" />
+                    <controls:DropDownButton x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
+                </DockPanel>
+
+                <!--  synced-object banner: shown only while the row still moves with its recording.
+                      An unsynced row shows nothing at all — "not linked" is the unremarkable state.  -->
+                <Border
+                    Padding="8"
+                    Background="#3d3d3d"
+                    CornerRadius="4"
+                    IsVisible="{Binding IsLinked}">
+                    <StackPanel Spacing="6">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                            <!--  the timeline's link-badge orange (TimelinePalette.LinkBadgeBrush,
+                                  dark) — the banner and the badge are the same mark. Width only:
+                                  a fixed Height would top-align the Uniform-stretched ink.  -->
+                            <Path
+                                Grid.Column="0"
+                                Width="14"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconLink}"
+                                Fill="#FF9F43"
+                                Stretch="Uniform" />
+                            <TextBlock
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                FontWeight="Bold"
+                                Foreground="White"
+                                Text="Synced object" />
+                        </Grid>
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="#BBBBBB"
+                            Text="This object's position in the timeline is locked to the original recording."
+                            TextWrapping="Wrap" />
+                        <Button
+                            x:Name="btnDesync"
+                            HorizontalAlignment="Left"
+                            Content="Desync…"
+                            IsVisible="{Binding CanDesync}" />
+                    </StackPanel>
+                </Border>
+
+                <!--  placement  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowTransform}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="PLACEMENT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding PositionX, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Center X" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding PositionX, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding PositionY, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Center Y" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding PositionY, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowScale}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Scale, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <!--  "Size" while the height follows the content; "Width" once the item
+                              carries a height of its own (the row below appears).  -->
+                        <TextBlock Classes="label" Text="{Binding ScaleLabel}" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.01"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding Scale, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowScaleHeight}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Height" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.01"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding ScaleHeight, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  hidden for the keystroke overlay: the composer draws its block upright
+                          whatever Transform.Rotation says, so the spinner would write a number
+                          nothing reads.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowRotation}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Rotation, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Rotation" />
+                        <controls:SpinnerTextBox
+                            Max="360"
+                            Min="-360"
+                            SnapToWholeNumber="True"
+                            SpinAmount="5"
+                            Suffix="°"
+                            Value="{Binding Rotation, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Opacity, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Opacity" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding Opacity, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  aspect ratio + crop  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowCrop}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ASPECT RATIO" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  Original is the way back (no reset dot needed); Unlocked frees both axes
+                          and puts the edge handles on the preview gizmo. Each tile's icon is a
+                          rectangle drawn at the very ratio it applies, named inside it.  -->
+                    <Grid
+                        ColumnDefinitions="*,*,*,*"
+                        ColumnSpacing="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="4">
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding AspectOriginal, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="The picture's own aspect ratio">
+                            <TextBlock Classes="plainText" Text="Original" />
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect169, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="16:9 — widescreen">
+                            <Panel>
+                                <Rectangle
+                                    Width="43"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="16:9" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="2"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect11, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="1:1 — square">
+                            <Panel>
+                                <Rectangle
+                                    Width="24"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="1:1" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="3"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect45, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="4:5 — portrait">
+                            <Panel>
+                                <Rectangle
+                                    Width="22"
+                                    Height="27"
+                                    Classes="ratio" />
+                                <TextBlock
+                                    Classes="ratioText"
+                                    FontSize="9"
+                                    Text="4:5" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect32, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="3:2 — classic photo">
+                            <Panel>
+                                <Rectangle
+                                    Width="36"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="3:2" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding Aspect43, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="4:3 — standard">
+                            <Panel>
+                                <Rectangle
+                                    Width="32"
+                                    Height="24"
+                                    Classes="ratio" />
+                                <TextBlock Classes="ratioText" Text="4:3" />
+                            </Panel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="2"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding AspectCustom, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="Custom ratio — type your own W:H below">
+                            <TextBlock Classes="plainText" Text="W:H" />
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="3"
+                            Classes="ratioTile"
+                            GroupName="ItemAspect"
+                            IsChecked="{Binding AspectUnlocked, Mode=TwoWay}"
+                            Theme="{StaticResource RatioTile}"
+                            ToolTip.Tip="Unlocked — size the width and height freely (adds edge handles on the preview)">
+                            <!--  Width only, height from the ink — a fixed Height would top-align
+                                  the Uniform-stretched glyph (see the shape-tile note)  -->
+                            <Path
+                                Width="15"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Classes="ratioGlyph"
+                                Data="{StaticResource IconLockOpen}"
+                                Stretch="Uniform" />
+                        </RadioButton>
+                    </Grid>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowCustomAspect}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Ratio" />
+                        <StackPanel
+                            HorizontalAlignment="Right"
+                            Orientation="Horizontal"
+                            Spacing="4">
+                            <!--  MinWidth 0: the panel's 120px minimum is for lone editors — two
+                                  spinners sharing one row at 120 each would overflow the sidebar  -->
+                            <controls:SpinnerTextBox
+                                Width="56"
+                                MinWidth="0"
+                                Margin="0"
+                                Max="1000"
+                                Min="0.1"
+                                SpinAmount="1"
+                                Value="{Binding CustomAspectW, Mode=TwoWay}" />
+                            <TextBlock VerticalAlignment="Center" Foreground="#CCCCCC" Text=":" />
+                            <controls:SpinnerTextBox
+                                Width="56"
+                                MinWidth="0"
+                                Margin="0"
+                                Max="1000"
+                                Min="0.1"
+                                SpinAmount="1"
+                                Value="{Binding CustomAspectH, Mode=TwoWay}" />
+                        </StackPanel>
+                    </DockPanel>
+
+                    <!--  fit mode: how the picture reaches the chosen box. Inert without a ratio.  -->
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="4"
+                        IsEnabled="{Binding AspectSelected}">
+                        <RadioButton
+                            Grid.Column="0"
+                            Content="Fill"
+                            GroupName="ItemFit"
+                            IsChecked="{Binding AspectFill, Mode=TwoWay}"
+                            Tag="{StaticResource FitIconFill}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Crop the edges so the picture covers the new shape" />
+                        <RadioButton
+                            Grid.Column="1"
+                            Content="Stretch"
+                            GroupName="ItemFit"
+                            IsChecked="{Binding AspectStretch, Mode=TwoWay}"
+                            Tag="{StaticResource FitIconStretch}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Distort the picture to fit the new shape exactly" />
+                    </Grid>
+
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBlock Classes="section" Text="CROP" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropLeft, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Left" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropLeft, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropTop, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Top" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropTop, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropRight, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Right" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropRight, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CropBottom, Mode=TwoWay}" DefaultValue="0" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Bottom" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.95"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding CropBottom, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  mask  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowMask}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="SHAPE" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  a 2x2 grid of tiles rather than a row of radios: the shape is the thing
+                          being chosen, so each option shows it. Stretches with the sidebar.  -->
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="4">
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Content="Square"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskSquare, Mode=TwoWay}"
+                            Tag="{StaticResource MaskIconSquare}"
+                            Theme="{StaticResource MaskShapeTile}" />
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            Content="Circle"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskCircle, Mode=TwoWay}"
+                            Tag="{StaticResource MaskIconCircle}"
+                            Theme="{StaticResource MaskShapeTile}" />
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Content="Rounded"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskRounded, Mode=TwoWay}"
+                            Tag="{StaticResource MaskIconRounded}"
+                            Theme="{StaticResource MaskShapeTile}" />
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Content="Squircle"
+                            GroupName="ItemMask"
+                            IsChecked="{Binding MaskSquircle, Mode=TwoWay}"
+                            Tag="{x:Static ve:MaskOutlines.SquircleIcon}"
+                            Theme="{StaticResource MaskShapeTile}" />
+                    </Grid>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowCornerRadius}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CornerRadius, Mode=TwoWay}" DefaultValue="0.25" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Corners" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.5"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CornerRadius, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  text  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowText}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="TEXT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <TextBox
+                        x:Name="txtText"
+                        Classes="field"
+                        AcceptsReturn="True"
+                        MaxHeight="120"
+                        Text="{Binding Text, Mode=TwoWay}"
+                        TextWrapping="Wrap"
+                        PlaceholderText="Text" />
+
+                    <!--  the button previews the face itself; clicking opens the font picker.
+                          Content is kept in step by the code-behind (this project binds at
+                          runtime, and a FontFamily needs converting anyway).  -->
+                    <Button
+                        x:Name="btnFont"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        ToolTip.Tip="Choose a font">
+                        <TextBlock x:Name="txtFontName" Text="Default font" />
+                    </Button>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding FontSize, Mode=TwoWay}" DefaultValue="48" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Size" />
+                        <controls:SpinnerTextBox
+                            Max="2000"
+                            Min="1"
+                            SnapToWholeNumber="True"
+                            SpinAmount="2"
+                            Suffix="px"
+                            Value="{Binding FontSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  swatch + hex, one click target: opens the mini color picker in place  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="colorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="colorSwatch" Fill="White" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#FFFFFFFF" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Align" />
+                        <controls:DropDownButton x:Name="comboAlign" SelectedItem="{Binding TextAlign, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  audio  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowAudio}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="AUDIO" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding Volume, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Volume" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="2"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding Volume, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  AI denoise, a property of the row like the mute it sits under: the mix
+                          plays the generated sidecar instead of the raw stream (and degrades to
+                          raw until the analysis below finishes). Grayed out on Intel Macs (the
+                          inference binary is Apple Silicon only) — the tooltip rides the row,
+                          which stays hittable while the disabled checkbox is not.  -->
+                    <DockPanel
+                        Classes="row"
+                        Background="Transparent"
+                        ToolTip.Tip="{Binding AiEffectsDisabledTip}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  bool default is assigned in code-behind for the same reason the
+                                  enum ones are: a XAML DefaultValue is a string  -->
+                            <controls:ResetDefaultButton x:Name="dotDenoise" CurrentValue="{Binding Denoise, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Speech Enhancer" />
+                        <CheckBox
+                            IsChecked="{Binding Denoise, Mode=TwoWay}"
+                            IsEnabled="{Binding AiEffectsSupported}"
+                            Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowDenoiseStrength}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding DenoiseStrength, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Strength" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding DenoiseStrength, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  the dot slot indents the note to the option rows' own label column; the
+                          percentage and the little arc ring (the render button's, at row scale)
+                          dock to the row's right edge — where every other row's editor ends — so
+                          the ring holds still while the numbers tick  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowDenoiseStatus}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <Grid
+                            Width="16"
+                            Height="16"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding DenoiseAnalyzing}">
+                            <Ellipse
+                                Width="14"
+                                Height="14"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Stroke="#44FFFFFF"
+                                StrokeThickness="2" />
+                            <Path
+                                Data="{Binding DenoiseProgress, Converter={StaticResource progressToArc}}"
+                                Stretch="None"
+                                Stroke="#CCCCCC"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2" />
+                        </Grid>
+                        <TextBlock
+                            Margin="0,0,8,0"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            Foreground="#CCCCCC"
+                            IsVisible="{Binding DenoiseAnalyzing}"
+                            Text="{Binding DenoisePercentText}" />
+                        <TextBlock Classes="label" Text="{Binding DenoiseStatusText}" ToolTip.Tip="{Binding DenoiseStatusDetail}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  speed effect: the whole output plays at this factor while the item is under
+                      the playhead, so the item has one property and it is this one  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowSpeedEffect}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="SPEED" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <!--  the dot's default is the 2x option object, assigned in code-behind
+                              for the same reason ddSpeed's is  -->
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotSpeedTarget" CurrentValue="{Binding SpeedTarget, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Target" />
+                        <controls:DropDownButton x:Name="ddSpeedTarget" SelectedItem="{Binding SpeedTarget, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  zoom effect: how far in, and what the picture zooms towards. The focal point
+                      is the same pair of numbers the preview's crosshair drags.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowZoomEffect}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ZOOM" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ZoomFactor, Mode=TwoWay}" DefaultValue="1.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Zoom" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="5"
+                            Min="1"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding ZoomFactor, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusX, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Focus X" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding ZoomFocusX, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ZoomFocusY, Mode=TwoWay}" DefaultValue="0.5" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Focus Y" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.01"
+                            Suffix="%"
+                            Value="{Binding ZoomFocusY, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  cursor overlay: where it is drawn is the recording's business (the capture
+                      file places it), so the whole section is about what it looks like. The size
+                      and shadow rows leave the panel entirely under the native style, which draws
+                      the recorded cursor box and carries both of its own.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowCursorTrack}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="PLACEMENT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  the size dial rides above the style picker because it applies to whatever
+                          the picker chooses — sprite and glyph alike scale by it. It stays put
+                          under "none" too: a leading section that blinked out with one tile below
+                          it would read as the panel breaking, not as a dial retiring.  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorSize, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Size" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="5"
+                            Min="0.5"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  Windows hides the cursor while typing and flashes it back on every pause;
+                          on (the default, and what a recording without a cursor track always gets)
+                          keeps it hidden until it actually moves or clicks again.  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  bool default is assigned in code-behind for the same reason the
+                                  enum ones are: a XAML DefaultValue is a string  -->
+                            <controls:ResetDefaultButton x:Name="dotCursorDebounce" CurrentValue="{Binding CursorDebounce, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Debounce Visibility" />
+                        <CheckBox IsChecked="{Binding CursorDebounce, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBlock Classes="section" Text="CURSOR" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  tiles, not a drop-down: the styles differ only in how the arrow looks, so
+                          a list of names would make the user try them one at a time. Each tile
+                          draws that style's own artwork (CursorStylePreview reads the compositor's
+                          asset table), and native — which has no artwork, it draws the cursor the
+                          recording captured — shows one of those recorded sprites. No label row
+                          above them: tiles showing the cursors themselves do not need to be told
+                          they are the style, and the shape picker sets the precedent.  -->
+                    <ListBox
+                        x:Name="listCursorStyle"
+                        Margin="0,0,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding CursorStyle, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <!--  the shape tiles' own inner metrics (MaskShapeTile): icon 22
+                                      wide, 8 to the label, 10 in from the tile's left edge  -->
+                                <StackPanel
+                                    Margin="10,0,4,0"
+                                    HorizontalAlignment="Left"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <insp:CursorStylePreview
+                                        Width="22"
+                                        Height="22"
+                                        VerticalAlignment="Center"
+                                        CapturePath="{Binding $parent[ListBox].DataContext.CursorCapturePath}"
+                                        StyleName="{Binding Value}" />
+                                    <TextBlock
+                                        Classes="tileText"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!--  the colorway row gets its own sub-header, like HIGHLIGHT below: which
+                          palette the pack draws in is its own subject, not one more style tile.
+                          Header and tiles show and hide together — only for a themed style that
+                          has more than one palette to choose between.  -->
+                    <DockPanel Margin="0,8,0,0" IsVisible="{Binding CursorVariantsVisible}">
+                        <TextBlock Classes="section" Text="THEME" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  the same tiles as the style row, one per colorway of the picked style —
+                          absent rather than single-tiled for a style with only one. Each tile
+                          draws the style's own arrow in the palette it names, which is the whole
+                          of what the choice does.  -->
+                    <ListBox
+                        Margin="0,4,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        IsVisible="{Binding CursorVariantsVisible}"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ItemsSource="{Binding CursorVariantOptions}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding CursorVariant, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    Margin="10,0,4,0"
+                                    HorizontalAlignment="Left"
+                                    Orientation="Horizontal"
+                                    Spacing="8"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <insp:CursorStylePreview
+                                        Width="22"
+                                        Height="22"
+                                        VerticalAlignment="Center"
+                                        CapturePath="{Binding $parent[ListBox].DataContext.CursorCapturePath}"
+                                        StyleName="{Binding $parent[ListBox].DataContext.CursorStyle.Value}"
+                                        VariantName="{Binding Value}" />
+                                    <TextBlock
+                                        Classes="tileText"
+                                        VerticalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!--  a sub-header, like CROP under ASPECT RATIO: what a click leaves behind is
+                          its own subject, not one more property of the pointer.  -->
+                    <DockPanel Margin="0,8,0,0">
+                        <TextBlock Classes="section" Text="HIGHLIGHT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  the highlight tiles play the animation they name, on the row's own color
+                          and dials and off the compositor's own constants: the press lands, holds,
+                          bursts, then a beat of nothing — which is what a click looks like in the
+                          finished video.  -->
+                    <ListBox
+                        x:Name="listCursorClick"
+                        Margin="0,0,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding CursorClickAnimation, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="3" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    Margin="0,6"
+                                    HorizontalAlignment="Center"
+                                    Orientation="Vertical"
+                                    Spacing="4"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <insp:ClickHighlightPreview
+                                        Width="30"
+                                        Height="30"
+                                        HorizontalAlignment="Center"
+                                        AnimationSpeed="{Binding $parent[ListBox].DataContext.CursorAnimationSpeed}"
+                                        Animation="{Binding Value}"
+                                        ClickSize="{Binding $parent[ListBox].DataContext.CursorClickSize}"
+                                        ColorArgb="{Binding $parent[ListBox].DataContext.CursorClickColor}"
+                                        FillOpacity="{Binding $parent[ListBox].DataContext.CursorFillOpacity}"
+                                        HoldSize="{Binding $parent[ListBox].DataContext.CursorHoldSize}" />
+                                    <TextBlock
+                                        Classes="tileText"
+                                        HorizontalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!--  the color well and the dials, gone entirely under "none" — there
+                          is no highlight to color, size or time then, and the tiles above
+                          already say so. Pressure hides the color too (it warps the pixels
+                          beneath rather than drawing anything), and only the ring shows the FILL
+                          dial.
+                          The well shares the text card's picker (code-behind).  -->
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightColorEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorClickColorHex, Mode=TwoWay}" DefaultValue="#FFFF0000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="cursorClickColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="cursorClickColorSwatch" Fill="Red" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtCursorClickColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#FFFF0000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding CursorRingFillEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorFillOpacity, Mode=TwoWay}" DefaultValue="0.15" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Fill opacity" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorFillOpacity, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHoldSizeEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorHoldSize, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Hold size" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.25"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorHoldSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorClickSize, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Effect size" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="4"
+                            Min="0.25"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding CursorClickSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding CursorHighlightEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding CursorAnimationSpeed, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Speed" />
+                        <controls:SpinnerTextBox
+                            Max="4"
+                            Min="0.25"
+                            SpinAmount="0.05"
+                            Suffix="x"
+                            Value="{Binding CursorAnimationSpeed, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  keystroke overlay: how big the keys read, how long a run stays, when the next
+                      row starts, and the typing pill's own colors (the keycaps a special key
+                      draws keep their fixed livery). How a row arrives and leaves is the ANIMATION
+                      section below; where the block sits and how wide it wraps is placement,
+                      above.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowKeyboardTrack}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="KEYSTROKES" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  which keystrokes show at all: everything, only the keys that draw as
+                          keycaps (Esc, F5, shortcuts…), or only shortcut chords. The dot's default
+                          is the None option object, assigned in code-behind for the same reason
+                          ddSpeedTarget's is.  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotKeyFilter" CurrentValue="{Binding KeyboardFilter, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Filter" />
+                        <controls:DropDownButton x:Name="ddKeyFilter" SelectedItem="{Binding KeyboardFilter, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardFontSize, Mode=TwoWay}" DefaultValue="40" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Size" />
+                        <controls:SpinnerTextBox
+                            Max="200"
+                            Min="8"
+                            SnapToWholeNumber="True"
+                            SpinAmount="2"
+                            Suffix="px"
+                            Value="{Binding KeyboardFontSize, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardLingerMs, Mode=TwoWay}" DefaultValue="1000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Linger" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding KeyboardLingerMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" DefaultValue="1000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="New row" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding KeyboardPauseBreakMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  the two color wells share the text card's picker (see the code-behind)  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardTextColorHex, Mode=TwoWay}" DefaultValue="#FFFFFFFF" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Text" />
+                        <Border
+                            x:Name="keyTextColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="keyTextColorSwatch" Fill="White" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtKeyTextColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#FFFFFFFF" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding KeyboardBackColorHex, Mode=TwoWay}" DefaultValue="#8C000000" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Fill" />
+                        <Border
+                            x:Name="keyBackColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="keyBackColorSwatch" Fill="Black" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtKeyBackColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#8C000000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  effect: what is applied to the item's OWN pixels — the name the SURROUND
+                      comment below reserved. Video items only: the effects run over decoded
+                      frames, and the background kinds read the stream's person matte (generated
+                      offline — the status line below narrates that analysis). Tiles like the
+                      shape picker's: four ways to treat the same frame, so each icon draws the
+                      treatment inside the same viewfinder.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowEffect}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="EFFECT" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="4">
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            Content="None"
+                            GroupName="ItemEffect"
+                            IsChecked="{Binding EffectNone, Mode=TwoWay}"
+                            Tag="{StaticResource IconEffectNone}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Draw the video untouched" />
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            Content="Blur"
+                            GroupName="ItemEffect"
+                            IsChecked="{Binding EffectBlur, Mode=TwoWay}"
+                            Tag="{StaticResource IconEffectBlur}"
+                            Theme="{StaticResource MaskShapeTile}"
+                            ToolTip.Tip="Blur the whole picture" />
+                        <!--  the AI-backed pair grays out on Intel Macs (the inference binary is
+                              Apple Silicon only); each tile's wrapping panel stays hittable so
+                              the why-tooltip still shows over the disabled tile  -->
+                        <Panel
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Background="Transparent"
+                            ToolTip.Tip="{Binding AiEffectsDisabledTip}">
+                            <RadioButton
+                                Content="Bg Blur"
+                                GroupName="ItemEffect"
+                                IsChecked="{Binding EffectBgBlur, Mode=TwoWay}"
+                                IsEnabled="{Binding AiEffectsSupported}"
+                                Tag="{StaticResource IconEffectBgBlur}"
+                                Theme="{StaticResource MaskShapeTile}"
+                                ToolTip.Tip="Blur everything behind the person" />
+                        </Panel>
+                        <Panel
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Background="Transparent"
+                            ToolTip.Tip="{Binding AiEffectsDisabledTip}">
+                            <RadioButton
+                                Content="Bg Remove"
+                                GroupName="ItemEffect"
+                                IsChecked="{Binding EffectBgRemove, Mode=TwoWay}"
+                                IsEnabled="{Binding AiEffectsSupported}"
+                                Tag="{StaticResource IconEffectBgRemove}"
+                                Theme="{StaticResource MaskShapeTile}"
+                                ToolTip.Tip="Remove everything behind the person" />
+                        </Panel>
+                    </Grid>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEffectAmount}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  the model's own default, assigned in code-behind so the dot and
+                                  the kind seeding can never disagree  -->
+                            <controls:ResetDefaultButton x:Name="dotEffectAmount" CurrentValue="{Binding EffectAmount, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Amount" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="1"
+                            Min="0"
+                            SpinAmount="0.05"
+                            Suffix="%"
+                            Value="{Binding EffectAmount, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  the AUDIO status row's EFFECT twin: dot-slot indent, note filling left,
+                          percentage + progress arc held at the row's right edge  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEffectStatus}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <Grid
+                            Width="16"
+                            Height="16"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding EffectAnalyzing}">
+                            <Ellipse
+                                Width="14"
+                                Height="14"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Stroke="#44FFFFFF"
+                                StrokeThickness="2" />
+                            <Path
+                                Data="{Binding EffectProgress, Converter={StaticResource progressToArc}}"
+                                Stretch="None"
+                                Stroke="#CCCCCC"
+                                StrokeLineCap="Round"
+                                StrokeThickness="2" />
+                        </Grid>
+                        <TextBlock
+                            Margin="0,0,8,0"
+                            DockPanel.Dock="Right"
+                            VerticalAlignment="Center"
+                            Foreground="#CCCCCC"
+                            IsVisible="{Binding EffectAnalyzing}"
+                            Text="{Binding EffectPercentText}" />
+                        <TextBlock Classes="label" Text="{Binding EffectStatusText}" ToolTip.Tip="{Binding EffectStatusDetail}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  surround: what the item's silhouette casts (a shadow, a glow) or wears (an
+                      outline). Shared by the pictures and the cursor glyph — the two things the
+                      compositor draws a silhouette for — which is why it is its own section after
+                      CURSOR rather than one more row inside it. Everything about it is measured in
+                      fractions of the item's drawn extent, so the rows read as percentages and the
+                      surround keeps its proportions at any canvas size. Deliberately NOT called an
+                      effect: that name is being kept for what may later be applied to the item's own
+                      pixels (a blur, a color grade) — inside the silhouette, not around it.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowSurround}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="SURROUND" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  a 2x2 grid of tiles: each draws the same chip in the same place on the same
+                          plate, so the only difference between them is what is drawn around it — the
+                          real thing, off the compositor's own numbers, at the settings the rows below
+                          hold (see SurroundPreview, which exaggerates so a tile-sized shadow is
+                          visible at all). Left-aligned like the shape tiles, and the 6px left margin
+                          is the gap the 30px plate already leaves above and below it in a 42px tile,
+                          so the plate is inset by the same amount on three sides.  -->
+                    <Grid
+                        ColumnDefinitions="*,*"
+                        ColumnSpacing="4"
+                        RowDefinitions="Auto,Auto"
+                        RowSpacing="4">
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="0"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundNone, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Draw the item with nothing around it">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview Width="30" Height="30" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="None" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="0"
+                            Grid.Column="1"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundShadow, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Drop a shadow behind the item, down and to the right">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview
+                                    Width="30"
+                                    Height="30"
+                                    Surround="{Binding SurroundPreviewShadow}" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="Shadow" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundGlow, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Surround the item with a soft halo of color">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview
+                                    Width="30"
+                                    Height="30"
+                                    Surround="{Binding SurroundPreviewGlow}" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="Glow" />
+                            </StackPanel>
+                        </RadioButton>
+                        <RadioButton
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            GroupName="ItemSurround"
+                            IsChecked="{Binding SurroundOutline, Mode=TwoWay}"
+                            Theme="{StaticResource PreviewTile}"
+                            ToolTip.Tip="Trace the item's edge with a solid ring of color">
+                            <StackPanel
+                                Margin="6,0,4,0"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <insp:SurroundPreview
+                                    Width="30"
+                                    Height="30"
+                                    Surround="{Binding SurroundPreviewOutline}" />
+                                <TextBlock
+                                    Classes="tileText"
+                                    VerticalAlignment="Center"
+                                    Text="Outline" />
+                            </StackPanel>
+                        </RadioButton>
+                    </Grid>
+
+                    <!--  the well shares the text card's picker (see the code-behind); its alpha is
+                          the surround's strength, exactly as the keystroke pill's fill works  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowSurroundColor}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding SurroundColorHex, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundColorHex}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="surroundColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="surroundColorSwatch" Fill="Black" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtSurroundColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#80000000" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
+
+                    <!--  a shadow's own row: how far it falls. The light direction is the
+                          compositor's and fixed, so there is no angle to set.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowSurroundDistance}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding SurroundDistance, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundDistance}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Distance" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.5"
+                            Min="0"
+                            SpinAmount="0.005"
+                            Suffix="%"
+                            Value="{Binding SurroundDistance, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <!--  one dial, three names (see SurroundSizeLabel): the number means how far a
+                          shadow or glow bleeds out, and how thick an outline is drawn.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowSurroundSize}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding SurroundSize, Mode=TwoWay}" DefaultValue="{Binding DefaultSurroundSize}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="{Binding SurroundSizeLabel}" />
+                        <controls:SpinnerTextBox
+                            DisplayScale="100"
+                            Max="0.5"
+                            Min="0"
+                            SpinAmount="0.005"
+                            Suffix="%"
+                            Value="{Binding SurroundSize, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  animation (entry/exit transitions). On a keystroke overlay these animate each
+                      keystroke ROW as it arrives and leaves, not the block — same kinds, same
+                      lengths, applied per row by the compositor.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowTransitions}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ANIMATION" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  enum defaults are assigned in code-behind: a XAML DefaultValue is
+                                  a string, and the reset dot's equality (and its reset write-back)
+                                  needs the real enum value  -->
+                            <controls:ResetDefaultButton x:Name="dotEntryKind" CurrentValue="{Binding EntryKind, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Entry" />
+                        <controls:DropDownButton x:Name="comboEntryKind" SelectedItem="{Binding EntryKind, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding EntryDurationMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding EntryDurationMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowEntryOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotEntryEasing" CurrentValue="{Binding EntryEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <controls:DropDownButton x:Name="comboEntryEasing" SelectedItem="{Binding EntryEasing, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" Margin="0,6,0,0">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotExitKind" CurrentValue="{Binding ExitKind, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Exit" />
+                        <controls:DropDownButton x:Name="comboExitKind" SelectedItem="{Binding ExitKind, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ExitDurationMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="0"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding ExitDurationMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding ShowExitOptions}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotExitEasing" CurrentValue="{Binding ExitEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <controls:DropDownButton x:Name="comboExitEasing" SelectedItem="{Binding ExitEasing, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+                <!--  animation (ramps): the same two ends, for the items whose animation is a ramp
+                      of their own value rather than a way of arriving on screen — an audio item's
+                      volume, a speed item's factor, a zoom item's magnification. No kind picker:
+                      a checkbox says whether the end ramps at all, and its length and shape are
+                      the questions underneath it, asked only once it is ticked.  -->
+                <StackPanel Classes="section" IsVisible="{Binding ShowRamp}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="ANIMATION" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  bool default is assigned in code-behind for the same reason the
+                                  enum ones are: a XAML DefaultValue is a string  -->
+                            <controls:ResetDefaultButton x:Name="dotRampEntryEnabled" CurrentValue="{Binding RampEntryEnabled, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Entry" />
+                        <CheckBox IsChecked="{Binding RampEntryEnabled, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampEntryEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding RampEntryMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="10"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding RampEntryMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampEntryEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotRampEntryEasing" CurrentValue="{Binding RampEntryEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <controls:DropDownButton x:Name="comboRampEntryEasing" SelectedItem="{Binding RampEntryEasing, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" Margin="0,6,0,0">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotRampExitEnabled" CurrentValue="{Binding RampExitEnabled, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Exit" />
+                        <CheckBox IsChecked="{Binding RampExitEnabled, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampExitEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding RampExitMs, Mode=TwoWay}" DefaultValue="300" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Length" />
+                        <controls:SpinnerTextBox
+                            Max="10000"
+                            Min="10"
+                            SnapToWholeNumber="True"
+                            SpinAmount="50"
+                            Suffix="ms"
+                            Value="{Binding RampExitMs, Mode=TwoWay}" />
+                    </DockPanel>
+
+                    <DockPanel Classes="row" IsVisible="{Binding RampExitEnabled}">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotRampExitEasing" CurrentValue="{Binding RampExitEasing, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Easing" />
+                        <controls:DropDownButton x:Name="comboRampExitEasing" SelectedItem="{Binding RampExitEasing, Mode=TwoWay}" />
+                    </DockPanel>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!--  the in-place color picker the Color row opens; light-dismiss like the image
+              editor's, realtime so the preview tracks every slider move  -->
+        <Popup
+            x:Name="colorPopup"
+            HorizontalOffset="-5"
+            IsLightDismissEnabled="True"
+            Placement="Pointer"
+            VerticalOffset="-5">
+            <colors:MiniColorDialog
+                x:Name="miniColor"
+                Margin="10"
+                Realtime="True" />
+        </Popup>
+    </Panel>
+
+</UserControl>

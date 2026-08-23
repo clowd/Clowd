@@ -96,7 +96,7 @@ namespace Clowd
                 : "avares://Clowd.Ui/Assets/clowd-default.png")));
 
         // Tray icon. The macOS menu bar wants the white glyph (it sits on a dark/translucent bar);
-        // the Windows notification area keeps the full-colour icon.
+        // the Windows notification area keeps the full-color icon.
         public static WindowIcon TrayIcon
             => _trayIcon ??= new WindowIcon(AssetLoader.Open(new Uri(OperatingSystem.IsWindows()
                 ? "avares://Clowd.Ui/Assets/clowd-default.ico"

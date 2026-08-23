@@ -526,14 +526,14 @@ namespace Clowd.Drawing
                 Executed = (obj) => ZoomPanAuto(),
                 CanExecute = (obj) => Count > 0,
                 Text = "Zoom to fit content",
-                GestureText = "Ctrl+0",
+                GestureText = OperatingSystem.IsMacOS() ? "Cmd+0" : "Ctrl+0",
             };
             CommandZoomPanActualSize = new RelayCommand()
             {
                 Executed = (obj) => ZoomPanActualSize(parseDoubleOrDefault(obj, 1)),
                 CanExecute = (obj) => Count > 0,
                 Text = "Zoom to actual size",
-                GestureText = "Ctrl+1",
+                GestureText = OperatingSystem.IsMacOS() ? "Cmd+1" : "Ctrl+1",
             };
             CommandUndo = new RelayCommand()
             {
@@ -716,7 +716,7 @@ namespace Clowd.Drawing
             // center the object in the current viewport. The viewport→canvas inverse is
             // (v - offset) / s with s = ContentScale/DpiZoom (UpdateScaleTransform) — dividing by
             // ContentScale alone lands the graphic at 1/DpiZoom of the intended spot, i.e. dragged
-            // toward the origin rather than centred, on any monitor above 100%.
+            // toward the origin rather than centered, on any monitor above 100%.
             var itemBounds = g.Bounds;
             var scale = ContentScale / DpiZoom;
             var transformX = (-itemBounds.Left - itemBounds.Width / 2) + ((Bounds.Width / 2 - ContentOffset.X) / scale);
@@ -1547,7 +1547,7 @@ namespace Clowd.Drawing
             // Only the transition matters: Windows key auto-repeat delivers OnKeyDown continuously
             // while Shift is held, and re-running a drag step is not idempotent for every tool
             // (aspect-ratio resize re-derives from the graphic's *current* bounds, and a rotated
-            // rectangle un-rotates the pointer about a centre that has just moved), so a held Shift
+            // rectangle un-rotates the pointer about a center that has just moved), so a held Shift
             // made the shape creep with the pointer completely stationary.
             // The flag latches on the first key-down whether or not a drag is in progress, so that
             // Shift held from BEFORE the drag started cannot land a replay part-way through it.

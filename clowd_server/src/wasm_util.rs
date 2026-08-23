@@ -37,7 +37,7 @@ pub async fn send(url: &str, method: Method, body: Option<Vec<u8>>, headers: &[(
 /// Responding while the client is still transmitting the body leaves workerd's
 /// body-proxy pump reading a stream whose response has already been sent — an
 /// uncaught "Can't read from request stream after response has been sent"
-/// TypeError that fails the whole invocation with a 503. Cancelling the stream
+/// TypeError that fails the whole invocation with a 503. Canceling the stream
 /// is NOT enough: the cancel propagates asynchronously through the DO channel
 /// and still loses the race intermittently (flaky 503s in CI). Draining to EOF
 /// is deterministic — once consumed, nothing is left to read post-response.

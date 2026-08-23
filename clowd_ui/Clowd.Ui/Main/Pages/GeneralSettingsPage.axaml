@@ -19,7 +19,7 @@
             <Setter Property="Orientation" Value="Horizontal" />
             <Setter Property="Spacing" Value="12" />
         </Style>
-        <!-- Permission status pill: the class is toggled from code-behind so the colours stay with
+        <!-- Permission status pill: the class is toggled from code-behind so the colors stay with
              the rest of the page's styling rather than being poked in as brushes. -->
         <Style Selector="TextBlock.PermissionStatus">
             <Setter Property="FontSize" Value="12" />
@@ -146,7 +146,7 @@
 
                     <StackPanel Classes="Setting">
                         <CheckBox IsChecked="{Binding StartMinimized}">
-                            <TextBlock Text="Start Clowd minimised" />
+                            <TextBlock Text="Start Clowd minimized" />
                         </CheckBox>
                         <TextBlock Classes="Caption"
                                    Text="Clowd starts in the notification area without opening this window." />

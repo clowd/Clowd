@@ -163,7 +163,7 @@ namespace Clowd.Config
         }
 
         /// <summary>Lazily creates the per-tool settings entry (replaces the old AutoDictionary
-        /// indexer behaviour).</summary>
+        /// indexer behavior).</summary>
         public SavedToolSettings GetToolSettings(ToolType tool)
         {
             if (!_tools.TryGetValue(tool, out var settings) || settings == null)

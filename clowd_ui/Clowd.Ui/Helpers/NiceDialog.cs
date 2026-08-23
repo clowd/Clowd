@@ -8,6 +8,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Clowd.Config;
 using Clowd.UI.Dialogs;
 using Clowd.UI.Dialogs.ColorPicker;
 using Clowd.Util;
@@ -66,6 +67,20 @@ namespace Clowd.UI.Helpers
             return result == true;
         }
 
+        /// <summary>
+        /// A prompt with two ways to say yes and one to back out: the affirmative button (which is
+        /// the default-focused one, so it should be the safer of the two), an alternate beside it,
+        /// and a cancel. Escape and Cmd+W resolve to <see cref="MessageDialogChoice.Cancel"/>.
+        /// </summary>
+        public static async Task<MessageDialogChoice> ShowThreeWayPromptAsync(
+            Visual parent, NiceDialogIcon icon, string content, string mainInstruction,
+            string primaryTxt, string alternateTxt, string cancelTxt = "Cancel")
+        {
+            var dialog = new MessageDialog(icon, content, mainInstruction, primaryTxt, cancelTxt, altTxt: alternateTxt);
+            await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.Result);
+            return dialog.Choice;
+        }
+
         public static async Task<Color> ShowColorPromptAsync(Visual parent, Color initial)
         {
             var dialog = new ColorDialog(HslRgbColor.FromColor(initial), true);
@@ -105,7 +120,8 @@ namespace Clowd.UI.Helpers
         }
 
         public static async Task<string[]> ShowSelectFilesDialog(Visual parent, string title = null, string initialDirectory = null,
-                                                                 bool multiSelect = false, FilePickerFileType[] filter = null)
+                                                                 bool multiSelect = false, FilePickerFileType[] filter = null,
+                                                                 string suggestedFileName = null)
         {
             var provider = GetStorageProvider(parent);
             if (provider == null)
@@ -115,6 +131,11 @@ namespace Clowd.UI.Helpers
 
             if (!String.IsNullOrWhiteSpace(title))
                 options.Title = title;
+
+            // pre-fills the name box — how the "locate a moved file" prompt says which file it is
+            // after (the shell still lets the user pick anything).
+            if (!String.IsNullOrWhiteSpace(suggestedFileName))
+                options.SuggestedFileName = suggestedFileName;
 
             if (filter != null)
                 options.FileTypeFilter = filter;
@@ -140,7 +161,7 @@ namespace Clowd.UI.Helpers
             if (String.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
                 directory = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
-            filePattern ??= "yyyy-MM-dd HH-mm-ss";
+            filePattern ??= SettingsCapture.DefaultFilenamePattern;
             filePattern = Path.GetFileNameWithoutExtension(filePattern);
 
             string fileName;
@@ -169,7 +190,7 @@ namespace Clowd.UI.Helpers
 
             var picked = await provider.SaveFilePickerAsync(options);
             if (picked == null)
-                return null; // cancelled
+                return null; // canceled
 
             var file = picked.TryGetLocalPath();
             if (String.IsNullOrEmpty(file))

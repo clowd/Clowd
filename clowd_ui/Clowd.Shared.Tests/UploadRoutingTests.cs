@@ -83,7 +83,7 @@ namespace Clowd.Shared.Tests
         public void DangerousFile_WithWrappingOff_FollowsNormalHeuristic()
         {
             // .exe maps to application/octet-stream (compressible: false), so even a large one
-            // goes direct when wrapping is off — exactly the pre-existing behaviour.
+            // goes direct when wrapping is off — exactly the pre-existing behavior.
             var small = Decide(new[] { @"C:\downloads\tool.exe" }, wrapDangerous: false);
             var large = Decide(new[] { @"C:\downloads\tool.exe" }, wrapDangerous: false, length: 50 * 1024 * 1024);
 

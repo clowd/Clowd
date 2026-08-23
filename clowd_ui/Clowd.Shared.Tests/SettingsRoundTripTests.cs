@@ -126,7 +126,7 @@ namespace Clowd.Shared.Tests
         public void StartupOptions_DefaultToAutoStart_AndRoundTrip()
         {
             // auto-start is registered by the Velopack install hook on Windows only, and
-            // start-minimised follows it so a manual launch on other platforms still shows a window.
+            // start-minimized follows it so a manual launch on other platforms still shows a window.
             var expected = SettingsGeneral.DefaultRegisterAutoStart;
             Assert.Equal(OperatingSystem.IsWindows() && !IsDebugBuild, expected);
 
@@ -250,7 +250,9 @@ namespace Clowd.Shared.Tests
 
             Assert.Equal(SettingsRecording.DefaultOutputDirectory, loaded.Recording.OutputDirectory);
             Assert.Equal("yyyy-MM-dd HH-mm-ss", loaded.Recording.FilenamePattern);
-            Assert.Equal(RecordingFinishAction.RecentsPage, loaded.Recording.OpenWhenFinished);
+            // a finished recording opens in the video editor by default — trimming it (and placing
+            // a webcam, when there is one) is the usual next step, not finding the file.
+            Assert.Equal(RecordingFinishAction.VideoEditor, loaded.Recording.OpenWhenFinished);
 
             var original = new SettingsRoot();
             original.Recording.OutputDirectory = @"C:\Users\test\Recordings";
@@ -263,6 +265,54 @@ namespace Clowd.Shared.Tests
             Assert.Equal(@"C:\Users\test\Recordings", loaded.Recording.OutputDirectory);
             Assert.Equal("'clowd' yyyy-MM-dd", loaded.Recording.FilenamePattern);
             Assert.Equal(RecordingFinishAction.OutputFolder, loaded.Recording.OpenWhenFinished);
+        }
+
+        [Fact]
+        public void WebcamOptions_DefaultToOff_AndRoundTrip()
+        {
+            // the webcam is a second video track, never composited into the recording, so it is
+            // off until the user has both ticked the box and picked a camera. There is no
+            // "default" camera pseudo-device the way there is for audio: empty means none.
+            var loaded = SettingsService.Load(_path);
+
+            Assert.False(loaded.Recording.CaptureWebcam);
+            Assert.Equal("", loaded.Recording.WebcamDeviceId);
+
+            var original = new SettingsRoot();
+            original.Recording.CaptureWebcam = true;
+            original.Recording.WebcamDeviceId = @"\\?\usb#vid_0000&pid_0000#global";
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.True(loaded.Recording.CaptureWebcam);
+            Assert.Equal(@"\\?\usb#vid_0000&pid_0000#global", loaded.Recording.WebcamDeviceId);
+        }
+
+        [Fact]
+        public void VideoEditorViewState_Defaults_WhenAbsentFromFile()
+        {
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(230d, loaded.VideoEditor.SidebarWidth);
+            Assert.Null(loaded.VideoEditor.WindowBounds);
+            Assert.False(loaded.VideoEditor.WindowMaximized);
+        }
+
+        [Fact]
+        public void VideoEditorViewState_RoundTrips()
+        {
+            var original = new SettingsRoot();
+            original.VideoEditor.SidebarWidth = 315; // invariant double
+            original.VideoEditor.WindowBounds = "10,20,1280,720";
+            original.VideoEditor.WindowMaximized = true;
+
+            SettingsService.Save(original, _path);
+            var loaded = SettingsService.Load(_path);
+
+            Assert.Equal(315d, loaded.VideoEditor.SidebarWidth);
+            Assert.Equal("10,20,1280,720", loaded.VideoEditor.WindowBounds);
+            Assert.True(loaded.VideoEditor.WindowMaximized);
         }
 
         [Fact]

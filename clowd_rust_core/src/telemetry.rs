@@ -29,7 +29,7 @@ use sentry::integrations::log::{LogFilter, SentryLogger};
 /// application and only grant permission to submit events.
 const DSN: &str = "https://b2be10cecdc152d0d1f53878b366e5cf@o118339.ingest.us.sentry.io/4511796263387136";
 
-/// Set to any non-empty value to turn reporting off. The shell honours the same
+/// Set to any non-empty value to turn reporting off. The shell honors the same
 /// variable, and every process it spawns inherits its environment, so opting
 /// out once covers all of them.
 const OPT_OUT_VAR: &str = "CLOWD_DISABLE_TELEMETRY";
@@ -85,10 +85,11 @@ const PANIC_TARGET: &str = "clowd_panic";
 /// the crate name of the binary (`clowd_capture`, `clowd_scroll_driver`). It is
 /// how one project's issues are told apart, so give each binary its own.
 ///
-/// Not every Rust binary calls this. `clowd_ocr` deliberately has no Sentry
-/// client of its own: it is spawned per OCR press, so release-health sessions
-/// would measure key presses rather than app runs, and it reports through the
-/// capturer instead (`clowd_capture/src/ocr/client.rs`).
+/// Not every Rust binary calls this. `clowd_ai` deliberately has no Sentry
+/// client of its own: it is spawned per OCR press / per effect job, so
+/// release-health sessions would measure key presses rather than app runs,
+/// and it reports through its spawner instead (`clowd_capture/src/ocr/client.rs`,
+/// `AiClient.cs`).
 pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
     if !reporting_compiled_in() {
         return None;
@@ -116,7 +117,7 @@ pub fn init(app: &'static str) -> Option<sentry::ClientInitGuard> {
     if !guard.is_enabled() {
         // can't warn!() through the bridge here — it would try to report the
         // failure to report
-        eprintln!("sentry client did not initialise; crash reporting is off");
+        eprintln!("sentry client did not initialize; crash reporting is off");
         return None;
     }
 

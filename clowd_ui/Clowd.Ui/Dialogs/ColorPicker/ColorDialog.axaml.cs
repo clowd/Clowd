@@ -121,7 +121,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private bool _initialized;
 
-        // colour to put back if an eyedropper drag ends without a pick
+        // color to put back if an eyedropper drag ends without a pick
         private HslRgbColor _eyedropperRestore;
 
         // the optional-parameter ctor is not parameterless in metadata, so without this the
@@ -219,7 +219,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 ApplyEyedropperSample(c);
                 _eyedropperRestore = null;
             };
-            btnEyedropper.Cancelled += () =>
+            btnEyedropper.Canceled += () =>
             {
                 if (_eyedropperRestore != null)
                     CurrentColor = _eyedropperRestore;
@@ -237,7 +237,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             UpdateBrushes();
         }
 
-        /// <summary>Applies a colour sampled off the screen. The sample is always fully opaque:
+        /// <summary>Applies a color sampled off the screen. The sample is always fully opaque:
         /// what you picked off the screen is what you saw, and a partially transparent brush would
         /// not reproduce it.</summary>
         private void ApplyEyedropperSample(Color sampled)
@@ -427,7 +427,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 Accept();
         }
 
-        /// <summary>Confirms the dialog, recording the chosen colour in the shared recent list.</summary>
+        /// <summary>Confirms the dialog, recording the chosen color in the shared recent list.</summary>
         private void Accept()
         {
             RecentColorHistory.Add(CurrentColor.ToColor());

@@ -1,0 +1,61 @@
+<Window
+    x:Class="Clowd.UI.VideoEditor.MissingMediaDialog"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Missing media"
+    Width="520"
+    MaxHeight="600"
+    Background="{DynamicResource ApplicationBackgroundBrush}"
+    CanResize="False"
+    ShowInTaskbar="False"
+    SizeToContent="Height"
+    WindowStartupLocation="CenterOwner">
+
+    <Window.Styles>
+        <Style Selector="TextBlock.path">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Opacity" Value="0.7" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.status">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+
+        <!--  button strip  -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource SemiColorFill0}">
+            <DockPanel Margin="16,10" LastChildFill="False">
+                <Button
+                    x:Name="CloseButton"
+                    MinWidth="80"
+                    HorizontalContentAlignment="Center"
+                    Classes="Primary"
+                    Content="Continue"
+                    DockPanel.Dock="Right"
+                    IsDefault="True"
+                    Theme="{StaticResource SolidButton}" />
+            </DockPanel>
+        </Border>
+
+        <StackPanel Margin="16,18,16,16" Spacing="12">
+            <TextBlock
+                Classes="H6"
+                Text="Some media used by this edit is missing"
+                TextWrapping="Wrap" />
+            <TextBlock
+                FontSize="13"
+                Text="These files have been moved, renamed or deleted. Locate each one, remove it from the edit, or skip it for now — a skipped file's rows are hidden so the rest of the edit still plays."
+                TextWrapping="Wrap" />
+
+            <ScrollViewer MaxHeight="360" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel x:Name="RowsPanel" Spacing="8" />
+            </ScrollViewer>
+        </StackPanel>
+
+    </DockPanel>
+
+</Window>

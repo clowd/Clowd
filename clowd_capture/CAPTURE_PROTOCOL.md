@@ -12,14 +12,17 @@ at all — no window, no event loop, no GPU — and shares the session format wi
 the capturer and nothing else. It is documented here because it speaks to the
 same shell across the same boundary.
 
-A second separate binary, `clowd_ocr` (§3), does text recognition. It is the
-odd one out: the shell never spawns it and never speaks to it — the *overlay*
-does, per OCR press. It is documented here because it is the third process in
-the same family and shares `clowd_rust_core` with the other two.
+A second separate binary, `clowd_ai` (§3, its `ocr` subcommand), does text
+recognition. It is the odd one out: the shell never spawns it for this and
+never speaks to it — the *overlay* does, per OCR press. (The same binary's
+`matte`/`denoise` subcommands serve the video editor's AI effects, over a
+different protocol owned by `Clowd.VideoSDK`'s `AiClient.cs`.) It is
+documented here because it is the third process in the same family and shares
+`clowd_rust_core` with the other two.
 
 Source of truth: `src/settings.rs` (CLI), `src/session_output.rs` (session
 files), `clowd_scroll_driver/src/drive.rs` (scrolling-capture driver),
-`src/ocr/client.rs` + `clowd_ocr/src/main.rs` (recognizer), and
+`src/ocr/client.rs` + `clowd_ai/src/ocr.rs` (recognizer), and
 `clowd_rust_core` for what the binaries must agree on — the `session.json`
 shape (`session.rs`), the recognition contract (`ocr.rs`), the coordinate space
 (`geometry.rs`) and the exit codes (`exit.rs`). C# counterparts:
@@ -49,6 +52,8 @@ flags that differ (`CaptureArguments.Build`).
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
 | `--memory-hints` | `max-performance` \| `lower-memory-usage` | `max-performance` | GPU allocator strategy, read once at device creation. `max-performance` is wgpu's large-block allocator, trading memory for start-up latency — the right trade for a process that exits after one capture. `lower-memory-usage` keeps the retained heap blocks small. The shell never passes this; it exists for standalone runs and experiments. |
+| `--filename-pattern` | .NET date-format string | `yyyy-MM-dd HH-mm-ss` | Name the SAVE dialog opens with, rendered against the local clock at the moment SAVE is pressed and uniquified against `--save-dir` (`name`, `name (1)`, …). Mirrors the shell's "Filename pattern" setting, so a capture saved from the overlay is named exactly as one saved from the editor (`src/filename_pattern.rs`, matching `PathConstants.GetFreePatternFileName`). Month/day names render in English and the timezone specifiers (`z`, `K`) are passed through as literals — neither can appear in a pattern that names a file. A pattern that renders to nothing, or to something the OS cannot spell, falls back to `yyyyMMdd_HHmmss_fff`; an extension typed into it is stripped. |
+| `--save-dir` | path | none | Folder the SAVE dialog opens in and uniquifies the suggested name against. The shell passes `General.LastSavePath` when it exists. Omit = the dialog opens wherever the OS last left it and the name is not uniquified. |
 | `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as the cycle ends (§2.5). Process-level: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
 
 ### 1.2 Session-directory file protocol
@@ -61,12 +66,12 @@ The shell pre-creates the session directory and passes it via
 | EDIT | `desktop.png`, `cropped.png`, [`cursor.png`], `session.json` | none (any stale marker from a failed retry is deleted) |
 | UPLOAD | same as EDIT + `action.txt` | `upload` |
 | SELECT-COLOR | `action.txt` only | `select-color #RRGGBB` |
-| VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H` |
+| VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H [R]` |
 | SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
 | OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
-| COPY / SAVE | none — handled inside the capturer (clipboard / save dialog) | — |
+| COPY / SAVE | none — handled inside the capturer (clipboard / save dialog, named per `--filename-pattern`) | — |
 | OCR-COPY / OCR-SEARCH | none — handled inside the capturer (clipboard / browser launch) | — |
-| Cancelled (Escape / close) | none | — |
+| Canceled (Escape / close) | none | — |
 
 File contents:
 
@@ -96,11 +101,20 @@ these files:
    is the entire payload, and the shell uploads it as a text paste.
 4. SELECT-COLOR / SCROLL: `action.txt` only.
 5. Neither `session.json` nor `action.txt` present = the capture was
-   cancelled; the shell deletes the pre-created directory.
+   canceled; the shell deletes the pre-created directory.
 
 The VIDEO rect is emitted in the platform capture coordinate space: physical
 pixels (virtual-desktop, possibly negative origin) on Windows, CG points on
 macOS — passed verbatim to obs-express `--region`. W and H are always >= 2.
+
+`R` is the optional corner radius of the recording region, in that same space
+and separated from the rect by a space: the OS corner radius of the window the
+user picked (see `--no-rounded-corners`), capped at half the shorter side.
+Present only when non-zero; absent = square. Nothing on the video path is
+actually rounded — the recorder captures the raw region and `cropped.png` is
+its poster — so `R` is metadata only, the video counterpart of `session.json`'s
+`CornerRadius`: the shell stores it on the recording's session and the video
+editor seeds the screen track's rounded-rect mask from it.
 
 The SCROLL marker uses the same rect space and adds two fields: `PX,PY` is
 the point the scrolling capture driver parks the cursor at and aims wheel
@@ -228,7 +242,7 @@ line starting `{` and ending `}` as an event.
 | `stopped` | Esc, a `stop` command, the target window closing/moving, the stitcher giving up, or a pause the user never came back from (§2.5). The partial capture is kept. | yes |
 | `max_reached` | A hard cap: 120 frames, 20,000 px of composite, or 120 s wall clock — the clock excludes time spent paused. | yes |
 | `no_movement` | Nothing the driver could inject ever moved the target — most often an elevated Windows target whose UIPI eats `SendInput`, or a surface that ignores a synthetic wheel. Reported whatever else ended the run, and a single-screen session is still written. | yes |
-| `failed` | Defined for completeness; the driver has no failure it can recognise *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
+| `failed` | Defined for completeness; the driver has no failure it can recognize *after* there is content worth keeping, so failures go out as `fatal_error` instead. The shell must still handle it. | no |
 
 ### 2.3 Commands (shell → driver)
 
@@ -252,7 +266,7 @@ what `SessionInfo.UploadSourcePath` shares from Recents, so it must not be a
 downscaled preview), then **`session.json` strictly last**, per §1.2's
 ordering invariant. `CroppedRect` is `0,0,W,H` and `OriginalBounds` is the
 empty rect: a 20,000 px composite has no meaningful place on the virtual
-desktop, and empty bounds make the editor centre its window instead of trying
+desktop, and empty bounds make the editor center its window instead of trying
 to open one taller than every monitor stacked. `Name` is `"Screenshot"` like
 every other session; the shell renames it to "Scrolling Capture".
 
@@ -315,56 +329,61 @@ discarded and retaken without an extra wheel burst. After 1 s of stillness
 the state switches to `resuming` and ticks `resume_in_s` down each second, so
 the cursor is never taken back without warning — any movement drops straight
 back to `paused`. `stop`, `cancel`, Esc and
-the target window going away are all honoured while paused. Paused time is
+the target window going away are all honored while paused. Paused time is
 excluded from the wall-clock cap. One pause may last 60 s — reachable only by
 a cursor that keeps *moving* that whole time — after which the run finalizes
 as `stopped` with everything captured so far.
 
-## 3. Text recognizer (`clowd_ocr`)
+## 3. Text recognizer (`clowd_ai ocr`)
 
 The only protocol here that the shell is not a party to. When the user presses
 OCR, the overlay extracts the selected region's pixels — compositing a
 click-locked peek if one is up, so what is recognized is what the user can
-actually see — spawns `clowd_ocr`, and waits for it on the detached `ocr`
+actually see — spawns `clowd_ai ocr`, and waits for it on the detached `ocr`
 worker thread. **One request, one process, one answer.**
 
-It is a **separate binary** because recognition runs on a static C++ engine
-(MNN, via `ocr-rs`). A Rust panic in it would unwind harmlessly, but an
-`abort`, a segfault or a refused allocation on a degenerate selection kills the
-process it is running in — which in-process meant the overlay, mid-capture,
-with the user's selection already framed. Out-of-process the same failure is an
-exit code the capturer turns into an "OCR failed" pill.
+It is a **separate binary** because recognition runs on a large native engine
+(PaddleOCR models on ONNX Runtime, via the `ort` crate). A Rust panic in it
+would unwind harmlessly, but an `abort`, a segfault or a refused allocation on
+a degenerate selection kills the process it is running in — which in-process
+meant the overlay, mid-capture, with the user's selection already framed.
+Out-of-process the same failure is an exit code the capturer turns into an
+"OCR failed" pill. It is also the license boundary: `clowd_ai` embeds GPL-3.0
+matting weights and is GPL-3.0 itself, which the process boundary keeps out of
+the MIT overlay.
 
 Two things follow from that split, both improvements rather than costs:
-cancelling (BACK) is killing a process rather than polling a flag between
+canceling (BACK) is killing a process rather than polling a flag between
 inference batches, so a superseded request can no longer hold the engine while
-the next one queues behind it; and the ~18 MB of embedded models plus the
-static MNN left the overlay, which is spawned fresh for every capture and
+the next one queues behind it; and the tens of MB of embedded models plus the
+static runtime left the overlay, which is spawned fresh for every capture and
 therefore pays for its own size in start-up latency.
 
-It ships beside `clowd_capture_wgpu` on **every** platform, which is where
-`src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
-`CLOWD_OCR_BINARY` environment variable overrides that, for tests and local
+It ships beside `clowd_capture_wgpu` on every platform that has an ONNX
+Runtime build — Windows x64/arm64 and Apple Silicon, **not** Intel macOS,
+where the spawn fails and the overlay shows OCR as unavailable — which is
+where `src/ocr/client.rs` looks for it (sibling of `current_exe()`; the
+`CLOWD_AI_BINARY` environment variable overrides that, for tests and local
 development). It needs no window, no event loop, no GPU, and — because it is
 handed pixels rather than taking them — no screen-recording permission.
 
 ### 3.1 Spawn
 
 ```
-clowd_ocr --out <path> [--log-file <path>]
+clowd_ai ocr --out <path> [--log-file <path>]
 ```
 
 | Flag | Required | Meaning |
 |---|---|---|
 | `--out` | yes | Where to write the response (§3.3). The capturer puts this in the capture's session directory as `ocr.json` when there is one, and in the temp directory otherwise — OCR has no `--session-dir` requirement, since COPY and SEARCH need no shell round-trip. It reads the file only after the process exits 0, and deletes it either way. |
-| `--log-file` | no | Mirrors the log (det/rec timings, the tier choice) to a file. The capturer passes `<session-dir>/ocr.log` when it has a session; that file is deliberately *not* cleaned up, because it is the artefact a "why was OCR slow" report is diagnosed from. |
+| `--log-file` | no | Mirrors the log (det/rec timings, the tier choice) to a file. The capturer passes `<session-dir>/ocr.log` when it has a session; that file is deliberately *not* cleaned up, because it is the artifact a "why was OCR slow" report is diagnosed from. |
 
 Stdio, all three of which the capturer sets deliberately:
 
 | Stream | Setting | Why |
 |---|---|---|
 | stdin | pipe | Carries the request (§3.2). |
-| stdout | **null** | MNN prints device capabilities to stdout on session creation, so stdout cannot carry a protocol here — hence the `--out` file. A pipe would work but one nobody drains can eventually block the child; null cannot. |
+| stdout | **null** | The `ocr` subcommand writes nothing to stdout — the answer is the `--out` file, which doubles as the session's `ocr.json` artifact, and a native runtime that printed to stdout (the original MNN engine did) could never corrupt a file. The overlay's own stdout is the NDJSON protocol of §1, so the child's is nulled rather than inherited; a pipe would work but one nobody drains can eventually block the child. |
 | stderr | inherited | Log chatter, by the same convention §2.2 follows. It lands in the overlay's stderr, which the shell already pumps into its diagnostics. |
 
 On Windows the child is spawned with `CREATE_NO_WINDOW` — the overlay is a
@@ -419,8 +438,11 @@ about 1.1 s end to end — but the `Scanning` phase has no other way out, and
 without it a child that hung instead of exiting would leave the user under the
 sweep animation indefinitely.
 
-The recognizer reports to Sentry under `app = clowd_ocr`, with release-health
-session tracking **off** (`telemetry::init_short_lived`): it runs once per OCR
-press rather than once per app run, so tracked sessions would bury the shell's
-and capturer's real ones — and the session envelope measured ~100 ms on a
-process that lives for about a second.
+The recognizer has **no Sentry client** of its own: it runs once per OCR
+press rather than once per app run, so release-health sessions would measure
+key presses rather than app runs — and the session envelope measured ~100 ms
+on a process that lives for about a second. The capturer reports on its
+behalf: an abnormal exit is logged at `error!` with the exit code, and a Rust
+panic in the child leaves its message (file and line) in the response file
+from a panic hook, which the capturer reads only for that message and appends
+to the report instead of a bare exit code.

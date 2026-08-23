@@ -15,7 +15,8 @@ namespace Clowd.UI.Controls
     /// reflection): the displayed text is $"{Math.Round(Value * DisplayScale, 2)} {Suffix}",
     /// edits commit on Enter/LostFocus (suffix stripped, divided by DisplayScale, reverted on
     /// parse failure), and spinning (buttons, wheel, Up/PageUp/Down/PageDown) snaps, steps by
-    /// SpinAmount, then wraps when BOTH Min and Max are set, otherwise clamps.
+    /// SpinAmount and clamps to Min/Max — spinning past an end stops there rather than wrapping
+    /// to the other end.
     /// </summary>
     public class SpinnerTextBox : TemplatedControl
     {
@@ -86,6 +87,10 @@ namespace Clowd.UI.Controls
         private Button _spinUp;
         private Button _spinDown;
 
+        /// <summary>Pools fractional wheel deltas into whole notches — see
+        /// <see cref="OnTunnelPointerWheelChanged"/>.</summary>
+        private WheelNotchAccumulator _wheelNotches;
+
         static SpinnerTextBox()
         {
             ControlThemes.EnsureRegistered();
@@ -151,11 +156,23 @@ namespace Clowd.UI.Controls
 
         private void OnTunnelPointerWheelChanged(object sender, PointerWheelEventArgs e)
         {
+            // Swallowed either way, notch or not: the properties bar scrolls under the pointer, and
+            // a wheel that spun the field *and* scrolled it out from under the pointer would be
+            // worse than one that occasionally does nothing.
             e.Handled = true;
-            if (e.Delta.Y > 0)
-                Spin(1);
-            else
-                Spin(-1);
+
+            // One event is not one step. A Windows detent arrives as a whole ±1 and still spins
+            // immediately (multiple notches in a single event spin once each, like the image
+            // editor's zoom stops), but a Mac trackpad sends a stream of ~0.05 fractions and the
+            // old "anything non-zero is a notch" reading turned a light two-finger scroll over a
+            // field into dozens of steps.
+            //
+            // The horizontal axis is ignored rather than folded in: a two-finger scroll sideways
+            // across the properties bar must not rewrite the value it happens to pass over, and the
+            // old code's `else` branch decremented on exactly those events.
+            var notches = _wheelNotches.Accumulate(e.Delta.Y);
+            for (var i = Math.Abs(notches); i > 0; i--)
+                Spin(Math.Sign(notches));
         }
 
         private void Spin(int direction)
@@ -167,22 +184,10 @@ namespace Clowd.UI.Controls
 
             currentValue += SpinAmount * direction;
 
-            if (Max.HasValue && Min.HasValue && direction > 0 && currentValue > Max.Value)
-            {
-                // if both min and max are set, lets let the spinner loop around
-                currentValue = Min.Value + (currentValue - Max.Value);
-            }
-            else if (Max.HasValue && Min.HasValue && direction < 0 && currentValue < Min.Value)
-            {
-                currentValue = Max.Value + (currentValue - Min.Value);
-            }
-            else
-            {
-                if (Max.HasValue)
-                    currentValue = Math.Min(Max.Value, currentValue);
-                if (Min.HasValue)
-                    currentValue = Math.Max(Min.Value, currentValue);
-            }
+            if (Max.HasValue)
+                currentValue = Math.Min(Max.Value, currentValue);
+            if (Min.HasValue)
+                currentValue = Math.Max(Min.Value, currentValue);
 
             SetCurrentValue(ValueProperty, currentValue);
         }
@@ -197,8 +202,25 @@ namespace Clowd.UI.Controls
             if (!string.IsNullOrEmpty(suffix) && text.EndsWith(suffix, StringComparison.Ordinal))
                 text = text.Substring(0, text.Length - suffix.Length).Trim();
 
-            if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsed))
-                SetCurrentValue(ValueProperty, parsed / GetDisplayScaleSafe());
+            // Commit only a real edit: the box shows a 2-decimal rounding of Value, so re-writing
+            // what it already displays (a focus-and-leave with no typing) would push a lossy value
+            // — and, through the binding, a phantom undo entry — for an edit the user never made.
+            // The tolerance compare (not ==) absorbs any last-bit disagreement between Math.Round
+            // and double.Parse of the formatted text; a NaN parse compares false and never commits.
+            var scale = GetDisplayScaleSafe();
+            if (double.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out var parsed) &&
+                Math.Abs(parsed - Math.Round(Value * scale, 2)) > 1e-9)
+            {
+                // clamp exactly as Spin does — without this a typed out-of-range number leaves the
+                // control's Value outside Min/Max while a clamping binding source silently absorbs
+                // it, and the box then displays a number the model does not hold.
+                var value = parsed / scale;
+                if (Max.HasValue)
+                    value = Math.Min(Max.Value, value);
+                if (Min.HasValue)
+                    value = Math.Max(Min.Value, value);
+                SetCurrentValue(ValueProperty, value);
+            }
 
             // refresh the text; this also reverts it when parsing failed or the value was unchanged
             UpdateDisplay();

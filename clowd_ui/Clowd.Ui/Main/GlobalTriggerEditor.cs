@@ -15,7 +15,7 @@ namespace Clowd.UI.Config
     /// <summary>
     /// Gesture editor row for a <see cref="HotkeyEntry"/>: a gesture button (click, then press
     /// the new combination), a clear button, and a live status indicator (colored dot + text,
-    /// with the registration error in a tooltip). Cancelling an edit (Esc / focus loss) restores
+    /// with the registration error in a tooltip). Canceling an edit (Esc / focus loss) restores
     /// the previous gesture.
     /// </summary>
     public class GlobalTriggerEditor : UserControl
@@ -214,13 +214,13 @@ namespace Clowd.UI.Config
                     }
                     catch
                     {
-                        // invalid keygesture — treat as a cancelled edit
+                        // invalid keygesture — treat as a canceled edit
                         Entry.Gesture = _gestureBeforeEdit;
                     }
                 }
                 else
                 {
-                    // cancelled (Esc / focus loss) — an aborted edit must not destroy the binding.
+                    // canceled (Esc / focus loss) — an aborted edit must not destroy the binding.
                     Entry.Gesture = _gestureBeforeEdit;
                 }
             }

@@ -12,12 +12,12 @@ namespace Clowd.UI.Services
     internal enum Vid2GifOutcome
     {
         Success,
-        Cancelled,
+        Canceled,
         Error,
     }
 
     /// <summary>The terminal state of a vid2gif run: exactly one of the tool's <c>done</c>,
-    /// <c>cancelled</c> or <c>error</c> messages (or a synthesized error when the process died
+    /// <c>canceled</c> or <c>error</c> messages (or a synthesized error when the process died
     /// without sending one). <see cref="Message"/> is user-facing; <see cref="Diagnostics"/> is the
     /// captured stderr / unrecognized-stdout tail, for the crash report only.</summary>
     internal sealed record Vid2GifResult(Vid2GifOutcome Outcome, string OutputPath, long Bytes, string Message, string Diagnostics)
@@ -25,8 +25,8 @@ namespace Clowd.UI.Services
         public static Vid2GifResult Success(string outputPath, long bytes) =>
             new(Vid2GifOutcome.Success, outputPath, bytes, null, null);
 
-        public static Vid2GifResult Cancelled() =>
-            new(Vid2GifOutcome.Cancelled, null, 0, null, null);
+        public static Vid2GifResult Canceled() =>
+            new(Vid2GifOutcome.Canceled, null, 0, null, null);
 
         public static Vid2GifResult Error(string message) =>
             new(Vid2GifOutcome.Error, null, 0, message, null);
@@ -35,7 +35,7 @@ namespace Clowd.UI.Services
     /// <summary>
     /// Hosts one vid2gif conversion and speaks its protocol: line-delimited plain text on stdout
     /// (<c>progress &lt;0-100&gt;</c> repeatedly, then exactly one of <c>done &lt;path&gt; &lt;bytes&gt;</c> /
-    /// <c>cancelled</c> / <c>error &lt;message&gt;</c>), free-form FFmpeg chatter on stderr, and
+    /// <c>canceled</c> / <c>error &lt;message&gt;</c>), free-form FFmpeg chatter on stderr, and
     /// <c>quit</c> on stdin to cancel. Unlike the recorder there is no init handshake — the process
     /// starts converting the moment it is spawned — so the whole lifecycle is one
     /// <see cref="RunAsync"/> call that resolves when the process has exited.
@@ -82,14 +82,14 @@ namespace Clowd.UI.Services
         {
             var env = Environment.GetEnvironmentVariable(EnvVarName);
             if (!String.IsNullOrWhiteSpace(env) && File.Exists(env))
-                return Path.GetFullPath(env);
+                return HelperBinary.EnsureExecutable(Path.GetFullPath(env));
 
             var obs = ObsBinaryLocator.Resolve();
             if (String.IsNullOrEmpty(obs))
                 return null;
 
             var candidate = Path.Combine(Path.GetDirectoryName(Path.GetFullPath(obs)), BinaryFileName);
-            return File.Exists(candidate) ? candidate : null;
+            return File.Exists(candidate) ? HelperBinary.EnsureExecutable(candidate) : null;
         }
 
         /// <summary>
@@ -160,7 +160,7 @@ namespace Clowd.UI.Services
 
         /// <summary>Asks the conversion to stop (stdin <c>quit</c>) and waits for the process to
         /// go away, killing it if it will not. The run itself still resolves through
-        /// <see cref="RunAsync"/>, normally with <see cref="Vid2GifOutcome.Cancelled"/>.</summary>
+        /// <see cref="RunAsync"/>, normally with <see cref="Vid2GifOutcome.Canceled"/>.</summary>
         public async Task CancelAsync()
         {
             _cancelRequested = true;
@@ -195,7 +195,7 @@ namespace Clowd.UI.Services
             catch (Exception ex)
             {
                 // the process was disposed out from under us — it is gone, which is what we wanted.
-                Debug.WriteLine("Waiting for the cancelled gif conversion to exit failed: " + ex.Message);
+                Debug.WriteLine("Waiting for the canceled gif conversion to exit failed: " + ex.Message);
             }
         }
 
@@ -324,7 +324,7 @@ namespace Clowd.UI.Services
                 // no terminal message: either we killed a wedged process (the user asked for that,
                 // so honor the cancel) or it died on its own, which is a failure however it exited.
                 result = _cancelRequested
-                    ? Vid2GifResult.Cancelled()
+                    ? Vid2GifResult.Canceled()
                     : Vid2GifResult.Error($"The GIF conversion process exited unexpectedly (exit code {exitCode}).");
             }
 
@@ -369,9 +369,9 @@ namespace Clowd.UI.Services
                 return;
             }
 
-            if (String.Equals(trimmed, "cancelled", StringComparison.Ordinal))
+            if (String.Equals(trimmed, "canceled", StringComparison.Ordinal))
             {
-                _terminal = Vid2GifResult.Cancelled();
+                _terminal = Vid2GifResult.Canceled();
                 return;
             }
 

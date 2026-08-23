@@ -2,38 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Clowd.UI.Controls.LayersPanel">
 
-    <UserControl.Resources>
-        <!-- Hand-styled dark theme: the editor window is a fixed dark palette (NOT Semi tokens),
-             so the row buttons get a minimal flat theme matching the ToolButton feedback colors
-             (#33FFFFFF hover veil, #55FFFFFF pressed/checked fill). -->
-        <ControlTheme x:Key="LayerRowButtonTheme" TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <Border Name="_bg"
-                            Background="{TemplateBinding Background}"
-                            CornerRadius="2">
-                        <ContentPresenter Name="PART_ContentPresenter"
-                                          HorizontalAlignment="Center"
-                                          VerticalAlignment="Center"
-                                          Content="{TemplateBinding Content}" />
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^:pointerover /template/ Border#_bg">
-                <Setter Property="Background" Value="#33FFFFFF" />
-            </Style>
-            <Style Selector="^:pressed /template/ Border#_bg">
-                <Setter Property="Background" Value="#55FFFFFF" />
-            </Style>
-            <Style Selector="^:disabled /template/ ContentPresenter#PART_ContentPresenter">
-                <Setter Property="Opacity" Value="0.35" />
-            </Style>
-        </ControlTheme>
-    </UserControl.Resources>
+    <!-- the row buttons use the shared RowIconButtonTheme (Controls/RowIconButton.axaml), which the
+         timeline track headers use too — see LayersPanel.axaml.cs -->
 
     <UserControl.Styles>
         <Style Selector="Border.layerRow">
@@ -58,7 +28,17 @@
                    Foreground="#88FFFFFF"
                    Text="No objects yet" />
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-            <StackPanel x:Name="rowsHost" />
+            <!-- the indicator is a sibling laid over the rows (not a Render call) so it paints on
+                 top of the row backgrounds, and lives inside the ScrollViewer so it scrolls with
+                 the rows it points into -->
+            <Panel>
+                <StackPanel x:Name="rowsHost" />
+                <Border x:Name="dropIndicator"
+                        Height="2"
+                        VerticalAlignment="Top"
+                        IsHitTestVisible="False"
+                        IsVisible="False" />
+            </Panel>
         </ScrollViewer>
     </Panel>
 

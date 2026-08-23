@@ -24,6 +24,19 @@ namespace Clowd.Config
     }
 
     /// <summary>
+    /// Marks a string settings property as a camera device id so the settings factory renders it
+    /// as a device dropdown (fed by CameraDeviceManager) instead of a free-text box. The stored
+    /// value stays a plain string (a platform device id, or empty for "no camera"), so persistence
+    /// and the obs-express settings mapping are unchanged. Unlike audio there is no device *type*
+    /// to distinguish and no "default" pseudo-device: a webcam is only ever captured when the user
+    /// has picked one.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Property)]
+    public class CameraDeviceSelectorAttribute : Attribute
+    {
+    }
+
+    /// <summary>
     /// Hides a settings row from the generated settings UI on macOS. The property still persists
     /// and is still applied where the platform honors it — used for the speaker device picker,
     /// which selects nothing on macOS: ScreenCaptureKit captures the whole system mix, so there
@@ -68,9 +81,15 @@ namespace Clowd.Config
         Fair,
     }
 
-    /// <summary>What Clowd shows the user once a recording has been saved.</summary>
+    /// <summary>What Clowd shows the user once a recording has been saved. Declaration order is
+    /// the order the settings dropdown offers them in, so the default comes first.</summary>
     public enum RecordingFinishAction
     {
+        /// <summary>Opens the recording in the video editor. Falls back to the Recents page where
+        /// the editor cannot run (non-Windows) or the entry is not editable (a GIF).</summary>
+        [Description("Video Editor")]
+        VideoEditor,
+
         [Description("Recent Page")]
         RecentsPage,
 
@@ -112,7 +131,7 @@ namespace Clowd.Config
 
         [Category("Output")]
         [DisplayName("Open when finished")]
-        [Description("What to show when a recording finishes: the Recents page (to play or upload it), the folder it was saved to, or nothing")]
+        [Description("What to show when a recording finishes: the video editor (to trim it and place the webcam), the Recents page (to play or upload it), the folder it was saved to, or nothing")]
         public RecordingFinishAction OpenWhenFinished
         {
             get => _openWhenFinished;
@@ -234,6 +253,55 @@ namespace Clowd.Config
             set => Set(ref _microphoneDeviceId, value);
         }
 
+        [Category("Composition")]
+        [DisplayName("Enable composition and editing")]
+        [Description("Splits recording into multiple tracks so it can be edited. Each audio device and the webcam get their own track, which the video editor can trim, place and mix independently. Turn it off to record a single flattened track — smaller and simpler, but the recording cannot be edited afterwards.")]
+        public bool EnableComposition
+        {
+            get => _enableComposition;
+            set => Set(ref _enableComposition, value);
+        }
+
+        [Category("Composition")]
+        [DisplayName("Capture webcam")]
+        [Description("Record a webcam alongside the screen as a second video track. Nothing is composited into the recording itself — the track is only shown once you open the recording in the video editor, where the overlay can be positioned, shaped or dropped entirely.")]
+        [DisabledWhen(nameof(EnableComposition), false)]
+        public bool CaptureWebcam
+        {
+            get => _captureWebcam;
+            set => Set(ref _captureWebcam, value);
+        }
+
+        [Category("Composition")]
+        [DisplayName("Webcam device")]
+        [Description("Camera to record. Empty means no camera, which is also what an unplugged one falls back to.")]
+        [CameraDeviceSelector]
+        [DisabledWhen(nameof(EnableComposition), false)]
+        public string WebcamDeviceId
+        {
+            get => _webcamDeviceId;
+            set => Set(ref _webcamDeviceId, value);
+        }
+
+        [Category("Composition")]
+        [DisplayName("Render automatically when capture finished")]
+        [Description("Flatten the recording to a single shareable video as soon as capture stops, without waiting for you to open the editor. The multi-track original is kept, so you can still edit and re-render it.")]
+        [DisabledWhen(nameof(EnableComposition), false)]
+        public bool RenderWhenFinished
+        {
+            get => _renderWhenFinished;
+            set => Set(ref _renderWhenFinished, value);
+        }
+
+        [Category("Composition")]
+        [DisplayName("Capture media keys in video editor")]
+        [Description("Let the keyboard's media keys drive the video editor while its window is focused: play/pause toggles playback, next track steps one frame forward and previous track one frame back. Those keys are swallowed while the editor is focused, so nothing else playing on the machine reacts to them; in every other window they keep doing what they always did.")]
+        public bool CaptureMediaKeys
+        {
+            get => _captureMediaKeys;
+            set => Set(ref _captureMediaKeys, value);
+        }
+
         [Category("GIF")]
         [DisplayName("Quality")]
         [Description("Quality preset used when converting a recording to a GIF — higher quality means a higher frame rate and finer dithering, and a much larger file")]
@@ -294,9 +362,14 @@ namespace Clowd.Config
         private bool _speakerVolumeCompensation = true;
         private bool _captureMicrophone = false;
         private string _microphoneDeviceId = "default";
+        private bool _enableComposition = true;
+        private bool _captureWebcam = false;
+        private string _webcamDeviceId = "";
+        private bool _renderWhenFinished = false;
+        private bool _captureMediaKeys = false;
         private string _outputDirectory = DefaultOutputDirectory;
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
-        private RecordingFinishAction _openWhenFinished = RecordingFinishAction.RecentsPage;
+        private RecordingFinishAction _openWhenFinished = RecordingFinishAction.VideoEditor;
         private GifQuality _gifQuality = GifQuality.Good;
         private int _gifMaxWidth = 0;
         private int _gifMaxHeight = 0;

@@ -78,7 +78,7 @@ pub fn save_png(path: &Path, rgba: Vec<u8>, width: u32, height: u32) -> anyhow::
     Ok(())
 }
 
-/// Best-effort absolute path without `std::path::absolute` (stabilised
+/// Best-effort absolute path without `std::path::absolute` (stabilized
 /// after our MSRV). The session dir is normally already absolute.
 pub fn absolute_path(p: &Path) -> PathBuf {
     if p.is_absolute() {
