@@ -29,6 +29,8 @@ Each release publishes a zipped, self-contained bundle for every supported targe
 
 Unzip and run `obs-express` in place — the bundled OBS runtime (plugins, data, and the FFmpeg/x264 libraries) lives alongside the executable and is fully relocatable.
 
+The bundled FFmpeg/x264 libraries are also usable on their own (e.g. by a host that uses the FFmpeg C API in-process): on Windows they are ordinary DLLs next to the executable, and on macOS the dylibs in `Frameworks/` carry an `@loader_path` rpath so they can be `dlopen`ed directly by any program as long as they stay together. On macOS, unzip with a tool that restores symlinks and modes (`unzip`, `ditto -x -k`, `tar`): the versioned aliases (`libavcodec.61.dylib`) are symlinks and the executables rely on their execute bits.
+
 On macOS the binaries are ad-hoc signed but not notarized, so the first launch may need:
 
 ```sh
@@ -264,10 +266,10 @@ git submodule update --init --recursive
 cargo build --release
 ```
 
-The build script assembles a complete, runnable tree next to the binary:
+The build script stages the runtime next to the binary:
 
 - **Windows** — `obs-express.exe` plus `obs.dll`, the graphics/plugin DLLs, the FFmpeg & x264 runtime DLLs, `obs-plugins/`, and `data/` are copied into `target/release/`.
-- **macOS** — `libobs.framework`, the Metal/OpenGL graphics modules, dependency dylibs, and the `.plugin` bundles are staged with `@executable_path`-relative rpaths into a relocatable bundle.
+- **macOS** — the binary links `libobs.framework`, the graphics modules, and the plugins straight out of the OBS build tree (absolute rpaths), and the FFmpeg/x264 dependency dylibs are copied into `target/release/` (symlinked aliases preserved, each given an `@loader_path` rpath and ad-hoc re-signed) so that, as on Windows, the profile dir holds a loadable FFmpeg runtime. The self-contained, relocatable bundle (framework + graphics modules + those dylibs + `.plugin` bundles, with `@executable_path/Frameworks` rpaths) is assembled by the CI Stage step in `.github/workflows/build.yml`.
 
 The resulting binary is `target/release/obs-express` (`.exe` on Windows).
 
@@ -296,7 +298,7 @@ The workspace is three crates:
 
 ## Releases & CI
 
-Every push and pull request builds all four variants (Windows x64/ARM64, macOS x64/arm64) through a reusable GitHub Actions workflow. The manually-dispatched release workflow bumps the version, rebuilds every variant, and publishes them as zipped assets on a GitHub Release.
+Every push and pull request builds all four variants (Windows x64/ARM64, macOS x64/arm64) through a reusable GitHub Actions workflow; each build job zips its bundle itself (macOS with `ditto`, so symlinks and execute bits survive — the artifact store would strip both) and uploads the zip as its artifact. The manually-dispatched release workflow bumps the version, rebuilds every variant, and attaches those zips unchanged as assets on a GitHub Release.
 
 ## License & credits
 
