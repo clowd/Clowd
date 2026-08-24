@@ -14,7 +14,8 @@ namespace Clowd.VideoSDK.Tests
 {
     // AudioMixWorker × TimeWarp: under a warp the worker's stream domain is output time — each
     // device frame's project position comes from the warp's spans and the mixed project frames
-    // are resampled per-sample onto the output grid, mirroring Render.WarpAudioResampler. The
+    // are bent onto the output grid (WSOLA time-stretched where the speed item pitch-corrects,
+    // resampled per-sample where it does not), mirroring Render.WarpAudioResampler. The
     // stakes: an identity warp must be an exact no-op, speed-1 spans of a warped timeline must
     // stay verbatim copies of the project mix (preview/render parity), a 2x span must halve the
     // produced sample count, a ramp must glide the pitch continuously, and a seek must re-base
@@ -127,8 +128,10 @@ namespace Clowd.VideoSDK.Tests
             });
         }
 
+        /// <summary>Adds a speed item; <paramref name="pitchCorrect"/> mirrors the editor's
+        /// default of true — tests pinning the plain resampling algorithm opt out.</summary>
         private static void AddSpeedItem(Project project, long start, long duration, double factor,
-            Transition entry = null, Transition exit = null)
+            Transition entry = null, Transition exit = null, bool pitchCorrect = true)
         {
             var track = new Track
             {
@@ -144,7 +147,7 @@ namespace Clowd.VideoSDK.Tests
                 TrackId = track.Id,
                 TimelineStartTicks = start,
                 DurationTicks = duration,
-                Content = new SpeedContent { Factor = factor },
+                Content = new SpeedContent { Factor = factor, PitchCorrect = pitchCorrect },
                 Entry = entry,
                 Exit = exit,
             });
@@ -315,7 +318,7 @@ namespace Clowd.VideoSDK.Tests
             var project = NewProject();
             var a = AddSource(project, SineFixture(440, 0.30f, 4));
             AddAudioItem(project, a, 0, 4 * Second);
-            AddSpeedItem(project, 0, 4 * Second, 2.0,
+            AddSpeedItem(project, 0, 4 * Second, 2.0, pitchCorrect: false,
                 entry: new Transition { Kind = TransitionKind.Ramp, DurationTicks = 2 * Second, Easing = TransitionEasing.Linear });
 
             var warp = TimeWarp.Build(project);
@@ -349,6 +352,42 @@ namespace Clowd.VideoSDK.Tests
 
                 Assert.True(last > first * 1.4,
                     $"pitch never rose through the ramp: first window {first} crossings, last {last}");
+                Assert.Null(worker.Error);
+            }
+        }
+
+        [Fact]
+        public void Pitch_corrected_span_keeps_the_tone_frequency()
+        {
+            RequireFFmpeg();
+
+            // a 440Hz sine at a pitch-corrected 2x: the output runs at double speed but the
+            // heard pitch must stay at ~440Hz (880 zero crossings per second), where the plain
+            // resample would double it to ~880Hz.
+            var project = NewProject();
+            var a = AddSource(project, SineFixture(440, 0.30f, 4));
+            AddAudioItem(project, a, 0, 4 * Second);
+            AddSpeedItem(project, 0, 4 * Second, 2.0);
+
+            var warp = TimeWarp.Build(project);
+            Assert.Equal(2 * Second, warp.OutputDurationTicks);
+
+            var (ring, sink) = NewSink();
+            using (sink)
+            using (var worker = new AudioMixWorker(project, ring, sink, Rate, warp))
+            {
+                worker.Start();
+                var mix = DrainToEof(ring, worker, 3 * Rate, out int frames);
+                Assert.InRange(frames, 2 * Rate - Chunk, 2 * Rate + Chunk);
+
+                Assert.InRange(ZeroCrossings(mix, Rate / 2, Rate), 800, 960);
+
+                // real audio at roughly the source's level, not clicks or silence
+                double sum = 0;
+                for (int o = Rate / 2; o < Rate * 3 / 2; o++)
+                    sum += (double)mix[o * 2] * mix[o * 2];
+                Assert.InRange(Math.Sqrt(sum / Rate), 0.18, 0.24);
+
                 Assert.Null(worker.Error);
             }
         }

@@ -382,6 +382,31 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void SetSpeedPitchCorrect_writes_and_undoes()
+        {
+            var session = NewSession(out _, out _, out _);
+            var item = session.AddSpeedEffect(Ms(1_000), Ms(5_000));
+            Assert.True(((SpeedContent)session.Project.Items.Single(i => i.Id == item.Id).Content).PitchCorrect);
+
+            session.SetSpeedPitchCorrect(item.Id, false);
+            Assert.False(((SpeedContent)session.Project.Items.Single(i => i.Id == item.Id).Content).PitchCorrect);
+
+            session.Undo();
+            Assert.True(((SpeedContent)session.Project.Items.Single(i => i.Id == item.Id).Content).PitchCorrect);
+        }
+
+        [Fact]
+        public void SetSpeedPitchCorrect_ignores_non_speed_content()
+        {
+            var session = NewSession(out _, out _, out _);
+            var clip = session.Project.Items.First(i => i.Content is SolidContent);
+            var json = session.Project.ToJson();
+
+            session.SetSpeedPitchCorrect(clip.Id, false);
+            Assert.Equal(json, session.Project.ToJson());
+        }
+
+        [Fact]
         public void Zoom_edits_ride_EditItem_and_coalesce()
         {
             var session = NewSession(out _, out _, out _);

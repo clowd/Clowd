@@ -625,6 +625,18 @@ namespace Clowd.VideoSDK.Editing
                 return factor;
             }, failureValue: 1.0);
 
+        /// <summary>Sets a speed item's pitch-correction flag: whether the audio under it is
+        /// time-stretched (pitch stays put) or plainly resampled (pitch rides with the speed).
+        /// A mapping change — no output instant moves.</summary>
+        public void SetSpeedPitchCorrect(Guid itemId, bool pitchCorrect, object origin = null) =>
+            Mutate(pitchCorrect ? "Enable Pitch Correction" : "Disable Pitch Correction",
+                ProjectChangeKind.Mapping, null, origin, p =>
+            {
+                var item = RequireItem(p, itemId);
+                if (item.Content is SpeedContent speed)
+                    speed.PitchCorrect = pitchCorrect;
+            });
+
         /// <summary>Wraps <see cref="TimelineOps.Split"/> (whole link group, all-or-nothing).</summary>
         public bool SplitAt(Guid itemId, long timelineTicks, object origin = null) =>
             Mutate("Split", ProjectChangeKind.Mapping, null, origin,

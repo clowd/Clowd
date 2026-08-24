@@ -66,8 +66,11 @@ namespace Clowd.VideoSDK.Tests
             });
         }
 
+        /// <summary>Adds a speed item. <paramref name="pitchCorrect"/> defaults to false here —
+        /// most of these tests pin the plain resampling algorithm (pitch riding with the speed);
+        /// the editor's default of true is exercised by the pitch-correction tests.</summary>
         private static Item AddSpeedItem(Project project, long startTicks, long durationTicks,
-            double factor, long entryRampTicks = 0, long exitRampTicks = 0)
+            double factor, long entryRampTicks = 0, long exitRampTicks = 0, bool pitchCorrect = false)
         {
             var track = new Track
             {
@@ -83,7 +86,7 @@ namespace Clowd.VideoSDK.Tests
                 TrackId = track.Id,
                 TimelineStartTicks = startTicks,
                 DurationTicks = durationTicks,
-                Content = new SpeedContent { Factor = factor },
+                Content = new SpeedContent { Factor = factor, PitchCorrect = pitchCorrect },
                 Entry = entryRampTicks > 0
                     ? new Transition { Kind = TransitionKind.Ramp, DurationTicks = entryRampTicks }
                     : null,
@@ -158,7 +161,7 @@ namespace Clowd.VideoSDK.Tests
             // [1.5s, 2.5s) the project's last second at a constant half-second offset.
             var project = NewProject();
             AddAudioItem(project, 0, 3 * Second);
-            AddSpeedItem(project, Second, Second, 2.0);
+            AddSpeedItem(project, Second, Second, 2.0, pitchCorrect: true);
 
             var warp = TimeWarp.Build(project);
             Assert.False(warp.IsIdentity);
@@ -245,6 +248,86 @@ namespace Clowd.VideoSDK.Tests
             var large = ReadAll(NewResampler(project, warp), total, 1601);
 
             Assert.Equal(small, large);
+        }
+
+        /// <summary>Left-channel sign changes over output frames [first, first + frames).</summary>
+        private static int ZeroCrossings(float[] interleaved, long first, int frames)
+        {
+            int crossings = 0;
+            for (long i = first + 1; i < first + frames; i++)
+            {
+                float a = interleaved[(i - 1) * 2];
+                float b = interleaved[i * 2];
+                if ((a < 0f && b >= 0f) || (a >= 0f && b < 0f))
+                    crossings++;
+            }
+            return crossings;
+        }
+
+        [Fact]
+        public void Pitch_correction_preserves_the_tone_frequency()
+        {
+            // a 440Hz sine at 2x: plain resampling doubles the heard frequency, the
+            // pitch-corrected stretch must keep it at ~440Hz over the same halved duration
+            var project = NewProject();
+            AddAudioItem(project, 0, 4 * Second);
+
+            Func<long, float> sine = pos => 0.3f * (float)Math.Sin(2 * Math.PI * 440 * pos / Rate);
+
+            var corrected = NewProject();
+            AddAudioItem(corrected, 0, 4 * Second);
+            AddSpeedItem(corrected, 0, 4 * Second, 2.0, pitchCorrect: true);
+            var correctedWarp = TimeWarp.Build(corrected);
+            var correctedMix = ReadAll(NewResampler(corrected, correctedWarp, sine), 2 * Rate, 1601);
+
+            AddSpeedItem(project, 0, 4 * Second, 2.0);
+            var plainWarp = TimeWarp.Build(project);
+            var plainMix = ReadAll(NewResampler(project, plainWarp, sine), 2 * Rate, 1601);
+
+            // measured over the middle second of output (a 440Hz sine crosses zero 880 times/s)
+            int correctedCrossings = ZeroCrossings(correctedMix, Rate / 2, Rate);
+            int plainCrossings = ZeroCrossings(plainMix, Rate / 2, Rate);
+            Assert.InRange(correctedCrossings, 800, 960);
+            Assert.InRange(plainCrossings, 1680, 1840);
+
+            // and it is real audio at roughly the source's level, not silence or clicks
+            double sum = 0;
+            for (long o = Rate / 2; o < Rate * 3 / 2; o++)
+                sum += (double)correctedMix[o * 2] * correctedMix[o * 2];
+            Assert.InRange(Math.Sqrt(sum / Rate), 0.15, 0.25); // sine RMS is 0.3/√2 ≈ 0.21
+        }
+
+        [Fact]
+        public void Pitch_corrected_chunk_boundaries_do_not_change_the_output()
+        {
+            var project = NewProject();
+            AddAudioItem(project, 0, 3 * Second);
+            AddSpeedItem(project, Second / 2, Second, 3.0,
+                entryRampTicks: Second / 4, exitRampTicks: Second / 4, pitchCorrect: true);
+
+            var warp = TimeWarp.Build(project);
+            long total = AudioTime.SamplesCeil(warp.ToOutput(3 * Second), Rate);
+
+            var small = ReadAll(NewResampler(project, warp), total, 480);
+            var large = ReadAll(NewResampler(project, warp), total, 1601);
+
+            Assert.Equal(small, large);
+        }
+
+        [Fact]
+        public void Pitch_corrected_slow_motion_keeps_the_tone_frequency()
+        {
+            // 0.5x doubles the duration; the tone must NOT drop an octave
+            var project = NewProject();
+            AddAudioItem(project, 0, 2 * Second);
+            AddSpeedItem(project, 0, 2 * Second, 0.5, pitchCorrect: true);
+
+            Func<long, float> sine = pos => 0.3f * (float)Math.Sin(2 * Math.PI * 440 * pos / Rate);
+            var warp = TimeWarp.Build(project);
+            Assert.Equal(4 * Second, warp.ToOutput(2 * Second));
+
+            var mix = ReadAll(NewResampler(project, warp, sine), 4 * Rate, 1601);
+            Assert.InRange(ZeroCrossings(mix, Rate, Rate), 800, 960);
         }
 
         [Fact]

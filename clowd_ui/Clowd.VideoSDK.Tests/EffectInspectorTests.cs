@@ -160,6 +160,33 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void SpeedPitchCorrect_ReadsAndWritesTheFlag()
+        {
+            var (session, vm) = NewInspector(out _, out _);
+            var speed = session.AddSpeedEffect(0, Ms(5_000));
+            session.Select(speed.Id);
+
+            Assert.True(vm.SpeedPitchCorrect);
+
+            vm.SpeedPitchCorrect = false;
+
+            Assert.False(((SpeedContent)Live(session, speed.Id).Content).PitchCorrect);
+            Assert.False(vm.SpeedPitchCorrect);
+        }
+
+        [Fact]
+        public void SpeedPitchCorrect_ReReadsAChangeFromElsewhere()
+        {
+            var (session, vm) = NewInspector(out _, out _);
+            var speed = session.AddSpeedEffect(0, Ms(5_000));
+            session.Select(speed.Id);
+
+            session.SetSpeedPitchCorrect(speed.Id, false, origin: new object());
+
+            Assert.False(vm.SpeedPitchCorrect);
+        }
+
+        [Fact]
         public void SpeedTargetOptions_AreTheSameObjectsTheDropdownOffers()
         {
             Assert.Contains(SelectedItemViewModel.DefaultSpeedTargetOption, SelectedItemViewModel.SpeedTargetOptions);

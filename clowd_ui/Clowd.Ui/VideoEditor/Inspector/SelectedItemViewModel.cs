@@ -445,6 +445,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private bool _showKeyboardTrack;
         private bool _showRamp;
         private double _speedFactor = 2.0;
+        private bool _speedPitchCorrect = true;
         private double _zoomFactor = DefaultZoom;
         private double _zoomFocusX = 0.5;
         private double _zoomFocusY = 0.5;
@@ -1551,6 +1552,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        /// <summary>Whether the speed item time-stretches the audio under it so pitch stays put
+        /// (the default), or plainly resamples it so pitch rides with the speed.</summary>
+        public bool SpeedPitchCorrect
+        {
+            get => _speedPitchCorrect;
+            set
+            {
+                if (!Set(ref _speedPitchCorrect, value) || _syncing)
+                    return;
+
+                var item = SelectedItem;
+                if (item?.Content is SpeedContent speed && speed.PitchCorrect != value)
+                    _session.SetSpeedPitchCorrect(item.Id, value, this);
+            }
+        }
+
         /// <summary>The zoom item's magnification (1 = untouched). Single-item like every other
         /// property of an effect item: effect items are never linked into a row.</summary>
         public double ZoomFactor
@@ -2397,7 +2414,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _speed, TimelineOps.SpeedOf(media), nameof(SpeedChoice));
 
                 if (item?.Content is SpeedContent speedEffect)
+                {
                     Set(ref _speedFactor, speedEffect.Factor, nameof(SpeedTarget));
+                    Set(ref _speedPitchCorrect, speedEffect.PitchCorrect, nameof(SpeedPitchCorrect));
+                }
 
                 if (item?.Content is ZoomContent zoom)
                 {
