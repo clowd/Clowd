@@ -6,6 +6,10 @@
             <!-- Clowd brand color — single source for the logo (and anything else brand-tinted). -->
             <Color x:Key="ClowdAccentColor">#00AFF0</Color>
             <SolidColorBrush x:Key="ClowdAccentBrush" Color="#00AFF0" />
+            <!-- the "starred" gold. Not theme-split: it has to read as the same mark on the light
+                 and the dark background, and this one carries enough contrast on both. -->
+            <Color x:Key="ClowdStarColor">#F5B31B</Color>
+            <SolidColorBrush x:Key="ClowdStarBrush" Color="#F5B31B" />
             <ResourceDictionary.ThemeDictionaries>
                 <!-- WPFUI exact theme colors replaced by hardcoded Light #FAFAFA / Dark #202020 (§6). -->
                 <ResourceDictionary x:Key="Light">

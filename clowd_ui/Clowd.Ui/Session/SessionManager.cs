@@ -78,8 +78,19 @@ namespace Clowd
                 return;
 
             var deleteSessionsAfter = deleteAfterOption.ToTimeSpan();
-            foreach (var s in Sessions.ToArray())
+            var sessions = Sessions.ToArray();
+
+            // a star means "keep this", and it keeps the whole chain the starred entry sits on:
+            // sweeping away the project a starred render came out of, or the recording a starred
+            // GIF was made from, would leave the thing the user actually starred stranded with its
+            // history gone. Computed over every session, before any of them is deleted.
+            var starred = SessionLinks.CollectStarredChains(sessions);
+
+            foreach (var s in sessions)
             {
+                if (starred.Contains(s))
+                    continue;
+
                 var sAge = DateTime.UtcNow - s.LastModifiedUtc;
                 if (sAge > deleteSessionsAfter && s.OpenEditor == null)
                     DeleteSession(s);

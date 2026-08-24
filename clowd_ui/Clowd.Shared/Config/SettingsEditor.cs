@@ -130,7 +130,7 @@ namespace Clowd.Config
 
         [Category("Sessions")]
         [DisplayName("Delete sessions after")]
-        [Description("Captures older than this are removed from Recent sessions automatically")]
+        [Description("Captures older than this are removed from Recent sessions automatically. Starred items — and anything linked to them — are kept forever, for as long as they stay starred")]
         public TimeOption DeleteSessionsAfter
         {
             get => _deleteSessionsAfter;

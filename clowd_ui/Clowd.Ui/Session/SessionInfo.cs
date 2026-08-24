@@ -149,6 +149,26 @@ namespace Clowd
             set => Set(value);
         }
 
+        /// <summary>Whether the user has starred this entry. Two things follow from it: the Recent
+        /// page's "Starred" filter, and — see SessionManager's cleanup timer — that the automatic
+        /// "delete sessions after" sweep leaves the entry alone for as long as it stays starred.</summary>
+        public bool Starred
+        {
+            get => Get<bool>();
+            set
+            {
+                if (Set(value))
+                    OnPropertyChanged(nameof(StarTooltip));
+            }
+        }
+
+        /// <summary>What the row's star explains when hovered — including the retention promise,
+        /// which is the half of this feature nothing else on the row says out loud.</summary>
+        [JsonIgnore]
+        public string StarTooltip => Starred
+            ? "Starred — kept until you remove the star. Click to unstar."
+            : "Star this item to keep it out of the automatic cleanup";
+
         // null/empty for capture/editor sessions; for upload-only sessions (clipboard / file / tray
         // uploads that do not open in the image editor) one of "image", "video", "text", "file".
         // NOTE: "upload-only" is about the *image* editor. A "video" session is IsUploadOnly and

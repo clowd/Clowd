@@ -50,6 +50,7 @@ namespace Clowd.UI
         Image,
         Recording,
         Upload,
+        Starred,
     }
 
     public partial class RecentSessionsPage : UserControl, IPageHeaderContent
@@ -126,6 +127,7 @@ namespace Clowd.UI
                     Segment("Images", RecentFilter.Image, "Screenshots and images"),
                     Segment("Recordings", RecentFilter.Recording, "Recordings and GIFs"),
                     Segment("Uploads", RecentFilter.Upload, "Anything uploaded, or waiting to be"),
+                    Segment("Starred", RecentFilter.Starred, "Items you starred — and whatever they are linked to"),
                 },
             };
 
@@ -185,6 +187,10 @@ namespace Clowd.UI
                 RecentFilter.Upload => session.ActiveUpload != null
                                        || session.AllUploads.Length > 0
                                        || IsUploadEntry(session),
+                // deliberately the narrow answer: the list itself widens this to the whole linked
+                // chain (see SessionLinks.CollectStarredChains), but callers here ask about one
+                // entry on its own — "is this row's own reason for being here still true?".
+                RecentFilter.Starred => session.Starred,
                 _ => true,
             };
         }
@@ -265,10 +271,18 @@ namespace Clowd.UI
 
         private void RebuildGroups()
         {
-            var sessions = SessionManager.Current.Sessions
-                                         .Where(MatchesFilter)
-                                         .OrderByDescending(s => s.CreatedUtc)
-                                         .ToArray();
+            var newestFirst = SessionManager.Current.Sessions
+                                            .OrderByDescending(s => s.CreatedUtc)
+                                            .ToArray();
+
+            // Starred is the one filter not decided one entry at a time: a star anywhere on a chain
+            // keeps the whole chain on the list, so it has to be resolved against every session
+            // before anything is dropped.
+            var starred = _filter == RecentFilter.Starred ? SessionLinks.CollectStarredChains(newestFirst) : null;
+
+            var sessions = starred != null
+                ? newestFirst.Where(starred.Contains).ToArray()
+                : newestFirst.Where(MatchesFilter).ToArray();
 
             var rows = OrderWithLinkedEntries(sessions);
 
@@ -311,34 +325,7 @@ namespace Clowd.UI
         /// </summary>
         private static List<SessionRow> OrderWithLinkedEntries(IReadOnlyList<SessionInfo> newestFirst)
         {
-            // an entry's source is matched by path, so both maps prefer the newest of any
-            // duplicates — which is the same rule the ordering itself follows.
-            var byVideoPath = new Dictionary<string, SessionInfo>(StringComparer.OrdinalIgnoreCase);
-            var byRenderKey = new Dictionary<string, SessionInfo>(StringComparer.OrdinalIgnoreCase);
-            foreach (var session in newestFirst)
-            {
-                if (!String.IsNullOrEmpty(session.VideoPath))
-                    byVideoPath.TryAdd(session.VideoPath, session);
-
-                // a render output is never itself the source of a render, so it cannot be a parent
-                // by this key — without that a re-render of an entry could point at itself.
-                if (String.IsNullOrEmpty(session.EditSourceVideoPath) && !String.IsNullOrEmpty(session.RenderSourceKey))
-                    byRenderKey.TryAdd(session.RenderSourceKey, session);
-            }
-
-            var parents = new Dictionary<SessionInfo, SessionInfo>();
-            var children = new Dictionary<SessionInfo, List<SessionInfo>>();
-            foreach (var session in newestFirst)
-            {
-                var parent = FindLinkedSource(session, byVideoPath, byRenderKey);
-                if (parent == null || ReferenceEquals(parent, session))
-                    continue;
-
-                parents[session] = parent;
-                if (!children.TryGetValue(parent, out var siblings))
-                    children[parent] = siblings = new List<SessionInfo>();
-                siblings.Add(session);
-            }
+            var (parents, children) = SessionLinks.BuildGraph(newestFirst);
 
             var rows = new List<SessionRow>(newestFirst.Count);
             var placed = new HashSet<SessionInfo>();
@@ -372,20 +359,6 @@ namespace Clowd.UI
 
             ApplyRowLinks(rows, parents);
             return rows;
-        }
-
-        /// <summary>The entry <paramref name="session"/> was made from, when it is on the list too:
-        /// the video a GIF was converted from, or the project a render came out of.</summary>
-        private static SessionInfo FindLinkedSource(SessionInfo session,
-            Dictionary<string, SessionInfo> byVideoPath, Dictionary<string, SessionInfo> byRenderKey)
-        {
-            if (!String.IsNullOrEmpty(session.SourceVideoPath))
-                return byVideoPath.GetValueOrDefault(session.SourceVideoPath);
-
-            if (!String.IsNullOrEmpty(session.EditSourceVideoPath))
-                return byRenderKey.GetValueOrDefault(session.EditSourceVideoPath);
-
-            return null;
         }
 
         /// <summary>Points each row's chain-link marker and render status line at what the layout
@@ -459,10 +432,15 @@ namespace Clowd.UI
                 RecentFilter.Image => "No images",
                 RecentFilter.Recording => "No recordings",
                 RecentFilter.Upload => "No uploads",
+                RecentFilter.Starred => "Nothing starred",
                 _ => "Nothing to show",
             };
 
-            EmptyDetail.Text = "Nothing in your recent captures matches this filter — choose \"All\" to see everything.";
+            // the starred list is the one an empty page can be *fixed* from, so it says how rather
+            // than pointing back at "All".
+            EmptyDetail.Text = _filter == RecentFilter.Starred
+                ? "Hover an item in Recent and click its star to keep it here — starred items are never removed by the automatic cleanup."
+                : "Nothing in your recent captures matches this filter — choose \"All\" to see everything.";
         }
 
         /// <summary>Selects a session's row and scrolls it into view — used to walk the user to the
@@ -683,6 +661,25 @@ namespace Clowd.UI
             var session = GetSessionFromEvent(sender);
             if (session != null)
                 SessionManager.Current.OpenSession(session);
+        }
+
+        private void ToggleStarClicked(object sender, RoutedEventArgs e)
+        {
+            var session = GetSessionFromEvent(sender);
+            if (session == null)
+                return;
+
+            session.Starred = !session.Starred;
+
+            // under the Starred filter the click changes which rows belong on the page, and that is
+            // the whole of its feedback — the throttled rebuild is too slow to read as a response.
+            if (_filter != RecentFilter.Starred)
+                return;
+
+            // the row keeps its place when the chain it sits on is still starred elsewhere, so this
+            // is a rebuild rather than a removal.
+            _regroupTimer.Stop();
+            RebuildGroups();
         }
 
         private void CopyItemClicked(object sender, RoutedEventArgs e)

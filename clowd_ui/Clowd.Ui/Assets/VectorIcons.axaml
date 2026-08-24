@@ -231,6 +231,14 @@
     <!-- Material "flash" bolt -->
     <StreamGeometry x:Key="IconLightning">M7,2V13H10V22L17,10H13L17,2H7Z</StreamGeometry>
 
+    <!-- icons8 "Star" outlined / filled (24x24), the two states of the Recent list's favourite
+         toggle. The outline is a single even-odd path (the inner star is the hole), so it takes a
+         Fill like every other icon here rather than a Stroke — which is what lets the two swap
+         without the glyph changing weight. -->
+    <StreamGeometry x:Key="IconStarOutline">M23.04,9.021L14.77,8.796L12,1L9.23,8.796L0.96,9.021l6.559,5.043L5.177,22L12,17.321L18.823,22l-2.342-7.935L23.04,9.021z M12,14.896l-3.312,2.271l1.137-3.851l-3.183-2.448l4.014-0.109L12,6.974l1.344,3.784l4.014,0.109l-3.183,2.448l1.137,3.851 L12,14.896z</StreamGeometry>
+
+    <StreamGeometry x:Key="IconStarFilled">M12,17.877L18.831,22l-1.813-7.77l6.035-5.228l-7.947-0.674L12,1L8.894,8.328L0.947,9.002l6.035,5.228L5.169,22L12,17.877z</StreamGeometry>
+
     <!-- Material "dots-vertical"; the overflow glyph CollapsingButtonBar collapses a row of
          actions into. 24x24 canvas like the other row-action icons. -->
     <StreamGeometry x:Key="IconDotsVertical">M12,16A2,2 0 0,1 14,18A2,2 0 0,1 12,20A2,2 0 0,1 10,18A2,2 0 0,1 12,16M12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10M12,4A2,2 0 0,1 14,6A2,2 0 0,1 12,8A2,2 0 0,1 10,6A2,2 0 0,1 12,4Z</StreamGeometry>
