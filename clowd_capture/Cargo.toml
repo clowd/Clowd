@@ -43,8 +43,12 @@ windows = { workspace = true, features = [
     "Win32_Graphics_Dxgi",
     "Win32_Storage_Xps",
     "Win32_System_Com",
-    # SetThreadPriority for background-work threads (src/system/mod.rs lower_thread_priority).
+    # SetThreadPriority / MMCSS / power throttling for the thread tiers
+    # (src/system/mod.rs lower_thread_priority and friends).
     "Win32_System_Threading",
+    # D3DKMTSetProcessSchedulingPriorityClass: GPU scheduler priority
+    # (src/system/mod.rs raise_process_priority_class).
+    "Wdk_Graphics_Direct3D",
     "Win32_System_SystemInformation",
 ] }
 
