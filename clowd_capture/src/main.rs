@@ -114,7 +114,6 @@ fn run(args: settings::CliArgs, t_start: Instant, mut prologue: Prologue) -> any
     // All the slow work — monitors, wgpu instance, render workers, the desktop
     // screenshot — happens before the event loop exists, so the overlay windows
     // can be created against state that is already warm.
-    let memory_hints = args.memory_hints;
     // Read before the workers exist: `Features::TIMESTAMP_QUERY` is a device
     // creation parameter, so this must be set before the first
     // `request_adapter_device`. Not on `CapturerSettings` — nothing after
@@ -124,7 +123,7 @@ fn run(args: settings::CliArgs, t_start: Instant, mut prologue: Prologue) -> any
     if let Some(dir) = &settings.session_dir {
         info!("session mode: payload will be written to {:?}", dir);
     }
-    let session = capture::session::CaptureSession::new(settings, memory_hints, t_start)?;
+    let session = capture::session::CaptureSession::new(settings, t_start)?;
     let timings = session.timings().clone();
     timings.apply_prologue(prologue);
 

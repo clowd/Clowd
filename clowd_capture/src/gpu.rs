@@ -3,7 +3,6 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::settings::MemoryHintsMode;
 use crate::telemetry::startup::WorkerTimings;
 
 pub mod desktop;
@@ -89,7 +88,6 @@ pub struct WindowGpu {
 pub fn stage_a_create_device(
     instance: Arc<wgpu::Instance>,
     adapter_hint: Option<(u32, u32)>,
-    memory_hints: MemoryHintsMode,
     t_start: Instant,
     timings: &WorkerTimings,
 ) -> Result<DeviceBundle> {
@@ -98,8 +96,7 @@ pub fn stage_a_create_device(
         .set_once(t_start.elapsed());
 
     pollster::block_on(async {
-        let (adapter, device, queue, adapter_name) =
-            device::request_adapter_device(&instance, adapter_hint, memory_hints, t_start, timings).await?;
+        let (adapter, device, queue, adapter_name) = device::request_adapter_device(&instance, adapter_hint, t_start, timings).await?;
 
         // Exactly what frame 0 draws and nothing more: one triangle
         // sampling the desktop snapshot. Every other pipeline in the

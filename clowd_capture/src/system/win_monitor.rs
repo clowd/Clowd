@@ -204,7 +204,9 @@ pub fn all() -> Result<Vec<ImplMonitor>> {
 /// (e.g. `\\.\DISPLAY1`) → `(vendor_id, device_id)`. This tells the GPU
 /// bootstrap which wgpu adapter to select for each monitor, matching the
 /// C++ version's per-monitor `display.AdapterIdx`.
-pub fn build_dxgi_adapter_map() -> HashMap<String, (u32, u32)> {
+/// Per-output adapter identity plus how much dedicated VRAM that adapter
+/// reports. `(vendor, device, dedicated_video_memory_bytes)`.
+pub fn build_dxgi_adapter_map() -> HashMap<String, (u32, u32, u64)> {
     let mut map = HashMap::new();
 
     let factory: IDXGIFactory1 = match unsafe { CreateDXGIFactory1() } {
@@ -229,6 +231,7 @@ pub fn build_dxgi_adapter_map() -> HashMap<String, (u32, u32)> {
         };
         let vendor_id = desc.VendorId;
         let device_id = desc.DeviceId;
+        let dedicated_vram = desc.DedicatedVideoMemory as u64;
 
         let mut output_idx: u32 = 0;
         loop {
@@ -247,10 +250,13 @@ pub fn build_dxgi_adapter_map() -> HashMap<String, (u32, u32)> {
             // MONITORINFOEXW::szDevice (e.g. `\\.\DISPLAY1`).
             if let Ok(name) = wide_string_to_string(&out_desc.DeviceName) {
                 info!(
-                    "DXGI output {:?} → adapter vendor=0x{:04X} device=0x{:04X}",
-                    name, vendor_id, device_id
+                    "DXGI output {:?} → adapter vendor=0x{:04X} device=0x{:04X} dedicated_vram={}MB",
+                    name,
+                    vendor_id,
+                    device_id,
+                    dedicated_vram / (1024 * 1024)
                 );
-                map.insert(name, (vendor_id, device_id));
+                map.insert(name, (vendor_id, device_id, dedicated_vram));
             }
         }
     }

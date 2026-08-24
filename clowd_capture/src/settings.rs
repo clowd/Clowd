@@ -39,17 +39,6 @@ impl TipsMode {
     }
 }
 
-/// GPU allocator sizing strategy, mirrored from the shell's capture
-/// settings. `MaxPerformance` (default) is wgpu's large-block allocator,
-/// trading memory for start-up latency; `LowerMemoryUsage` keeps
-/// gpu-allocator's retained heap blocks small at some cost in latency.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
-pub enum MemoryHintsMode {
-    #[default]
-    MaxPerformance,
-    LowerMemoryUsage,
-}
-
 /// What the capturer should have selected when it opens. `Region` is the
 /// default free-selection crosshair; `Screen` and `Window` pre-select the
 /// active monitor / foreground window and show the action panel so the
@@ -224,12 +213,6 @@ pub struct CliArgs {
     /// Requires `--session-dir`.
     #[arg(long)]
     pub video: bool,
-
-    /// GPU allocator strategy. `max-performance` (the default) is wgpu's
-    /// large-block allocator; `lower-memory-usage` keeps the retained heap
-    /// blocks small. Read once at GPU device creation.
-    #[arg(long, value_enum, default_value_t = MemoryHintsMode::MaxPerformance)]
-    pub memory_hints: MemoryHintsMode,
 
     /// Hide the UPLOAD button (both the capture strip's and the OCR
     /// strip's — a user who turned uploading off did not mean "except

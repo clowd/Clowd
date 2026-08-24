@@ -3,7 +3,6 @@ use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 
 use crate::render::protocol::{RenderMsg, WorkerInput};
-use crate::settings::MemoryHintsMode;
 use crate::system::MonitorInfo;
 use crate::telemetry::startup::StartupTimings;
 use clowd_rust_core::geometry::ScreenRect;
@@ -14,7 +13,6 @@ pub struct RenderWorkerParams {
     pub instance: Arc<wgpu::Instance>,
     pub startup: Arc<StartupTimings>,
     /// GPU allocator strategy for this worker's device (`--memory-hints`).
-    pub memory_hints: MemoryHintsMode,
     /// Incremented (once, via `ReadyGuard`) when this worker dies without a
     /// clean shutdown, so the app's show gate (`ready + failed >= expected`)
     /// can never deadlock on a dead worker.

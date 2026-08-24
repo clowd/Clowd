@@ -251,7 +251,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         monitor_index,
         instance,
         startup,
-        memory_hints,
         failed_count,
     } = params;
 
@@ -278,7 +277,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // ── Stage A: eager GPU prep (no window/surface/screenshot) ──────
 
     let worker_timings = &startup.background.workers[monitor_index];
-    let bundle = match gpu::stage_a_create_device(instance, adapter_hint, memory_hints, startup.t_start, worker_timings) {
+    let bundle = match gpu::stage_a_create_device(instance, adapter_hint, startup.t_start, worker_timings) {
         Ok(b) => b,
         Err(e) => {
             error!("render worker {monitor_index}: GPU init failed: {e:?}");
