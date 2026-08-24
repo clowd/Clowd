@@ -204,6 +204,53 @@
         <Style Selector="Button.rowActionSmall:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
         </Style>
+        <!-- the favourite toggle beside a row's name. It follows the row-action rule — invisible
+             but layout-stable until the row is hovered or selected — with one addition: a row that
+             is already starred shows its star whatever the pointer is doing, because the star is
+             the only thing on the row that says so. -->
+        <Style Selector="Button.starToggle">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="3" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Width" Value="21" />
+            <Setter Property="Height" Value="21" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="ListBox.sessions ListBoxItem:pointerover Button.starToggle,
+                         ListBox.sessions ListBoxItem:selected Button.starToggle">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <Style Selector="Button.starToggle.on">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <Style Selector="Button.starToggle:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+        </Style>
+        <!-- the glyph fills are set here rather than on the Path itself: a local value beats a
+             style setter in Avalonia, so a Fill written on the element would make the hover rule
+             below dead weight. -->
+        <Style Selector="Path.starGlyph">
+            <Setter Property="Fill" Value="{DynamicResource SemiColorText1}" />
+        </Style>
+        <Style Selector="Path.starGlyphOn">
+            <Setter Property="Fill" Value="{DynamicResource ClowdStarBrush}" />
+        </Style>
+        <!-- hovering the star itself (not just the row) turns it gold, so it reads as the control
+             it is rather than as a status mark that happens to sit there. -->
+        <Style Selector="Button.starToggle:pointerover Path.starGlyph">
+            <Setter Property="Fill" Value="{DynamicResource ClowdStarBrush}" />
+        </Style>
+        <Style Selector="Button.starToggle:pointerover Path.starGlyphOn">
+            <Setter Property="Opacity" Value="0.65" />
+        </Style>
     </UserControl.Styles>
 
     <controls:FadeEdgeScrollViewer>
@@ -526,6 +573,36 @@
                                                                      ToolTip.Tip="{Binding ProjectTooltip}">
                                                                 <Path Width="24" Height="24" Fill="{StaticResource ClowdAccentBrush}" Data="{StaticResource IconVideoProject}" />
                                                             </Viewbox>
+                                                            <!-- last on the line, so it sits to the right of the project marker on
+                                                                 the rows that carry one and immediately after the name on the rows
+                                                                 that do not. Not in the action bar: that bar collapses into a ⋮ menu
+                                                                 on a narrow row, and a mark showing state has to stay visible. The
+                                                                 "on" class is what keeps a starred row's star showing when the
+                                                                 pointer is elsewhere (see the styles above). -->
+                                                            <Button Classes="starToggle"
+                                                                    Classes.on="{Binding Starred}"
+                                                                    Click="ToggleStarClicked"
+                                                                    ToolTip.Tip="{Binding StarTooltip}"
+                                                                    AutomationProperties.Name="Star">
+                                                                <Viewbox>
+                                                                    <!-- the two states are separate glyphs rather than one path
+                                                                         changing fill: the filled star is a solid silhouette and the
+                                                                         outline is an even-odd ring, so neither can stand in for the
+                                                                         other. Only ever one of them is visible. -->
+                                                                    <Panel>
+                                                                        <Path Classes="starGlyph"
+                                                                              Width="24"
+                                                                              Height="24"
+                                                                              IsVisible="{Binding !Starred}"
+                                                                              Data="{StaticResource IconStarOutline}" />
+                                                                        <Path Classes="starGlyphOn"
+                                                                              Width="24"
+                                                                              Height="24"
+                                                                              IsVisible="{Binding Starred}"
+                                                                              Data="{StaticResource IconStarFilled}" />
+                                                                    </Panel>
+                                                                </Viewbox>
+                                                            </Button>
                                                         </controls:ShrinkingRowPanel>
                                                         <TextBlock Classes="Body"
                                                                    Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
