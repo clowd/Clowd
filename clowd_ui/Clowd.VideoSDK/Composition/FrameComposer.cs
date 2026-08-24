@@ -160,7 +160,7 @@ namespace Clowd.VideoSDK.Composition
                         return;
                     DrawPicture(target, frame.Image, frame.Mask, transform, item.Surround,
                         item.Effect, fx, opacity, canvasWidth, canvasHeight);
-                    DrawDefaultCursorOverlay(project, media, timeTicks, sourceTicks, frame.Image,
+                    DrawDefaultCursorOverlay(project, media, sourceTicks,
                         transform, fx, opacity, target, canvasWidth, canvasHeight);
                     break;
                 }
@@ -423,8 +423,7 @@ namespace Clowd.VideoSDK.Composition
         /// frames carrying no sprite (a v1 file or a degraded capture).
         /// </summary>
         private static void DrawDefaultCursorOverlay(Project project, MediaContent media,
-            long timeTicks, long sourceTicks, SKImage screenImage, Transform transform,
-            ItemEffects fx, double opacity, SKCanvas target, int canvasWidth, int canvasHeight)
+            long sourceTicks, Transform transform, ItemEffects fx, double opacity, SKCanvas target, int canvasWidth, int canvasHeight)
         {
             var source = FindSource(project, media.SourceId);
             if (source == null || string.IsNullOrEmpty(source.InputCapturePath))
@@ -448,7 +447,12 @@ namespace Clowd.VideoSDK.Composition
 
             if (row.SpriteId < 0 || !capture.TryGetSprite(row.SpriteId, out var sprite))
                 return;
-            if (!PictureMapping.TryMap(transform, fx, screenImage.Width, screenImage.Height,
+            // the stream's own dimensions, never the presented frame's: a preview presents
+            // frames under IVideoPlayer.MaxPresentHeight, and a mapping resolved against a
+            // downscaled image would place captured (physical-pixel) positions off by that
+            // downscale factor. DrawCursorItem resolves the same way.
+            var (imgW, imgH) = ScreenDims(source, media.StreamIndex, capture.Header);
+            if (!PictureMapping.TryMap(transform, fx, imgW, imgH,
                     canvasWidth, canvasHeight, out var map))
                 return;
 
