@@ -12,7 +12,7 @@ namespace Clowd.VideoSDK.Playback
     public readonly struct TimeWarpSegment
     {
         internal TimeWarpSegment(long projectStartTicks, long projectEndTicks,
-            long outputStartTicks, long outputEndTicks, bool isRamp, double speed)
+            long outputStartTicks, long outputEndTicks, bool isRamp, double speed, bool pitchCorrect)
         {
             ProjectStartTicks = projectStartTicks;
             ProjectEndTicks = projectEndTicks;
@@ -20,6 +20,7 @@ namespace Clowd.VideoSDK.Playback
             OutputEndTicks = outputEndTicks;
             IsRamp = isRamp;
             Speed = speed;
+            PitchCorrect = pitchCorrect;
         }
 
         public long ProjectStartTicks { get; }
@@ -37,6 +38,11 @@ namespace Clowd.VideoSDK.Playback
         /// <summary>The span's constant speed (1 outside speed items). For a ramp segment this is
         /// the item's target factor, not an instantaneous value.</summary>
         public double Speed { get; }
+
+        /// <summary>The owning item's <see cref="SpeedContent.PitchCorrect"/>: the audio under
+        /// this span is time-stretched rather than resampled. Meaningless (always false) on the
+        /// speed-1 gap spans between items.</summary>
+        public bool PitchCorrect { get; }
     }
 
     /// <summary>
@@ -71,6 +77,9 @@ namespace Clowd.VideoSDK.Playback
             /// <summary>Constant speed of the span; for ramps, the target factor.</summary>
             public double Speed = 1.0;
 
+            /// <summary>The owning item's pitch-correction flag (bent spans only).</summary>
+            public bool PitchCorrect;
+
             /// <summary>Ramps only: output offset at <see cref="RampSamples"/> + 1 uniform
             /// project offsets across the span. Strictly increasing, [0] = 0 and [^1] = the
             /// span's exact integer output length.</summary>
@@ -98,7 +107,7 @@ namespace Clowd.VideoSDK.Playback
             {
                 var seg = _segments[i];
                 list[i] = new TimeWarpSegment(seg.PStart, seg.PEnd, seg.OStart, seg.OEnd,
-                    seg.Lut != null, seg.Speed);
+                    seg.Lut != null, seg.Speed, seg.PitchCorrect);
             }
             Segments = list;
 
@@ -134,7 +143,8 @@ namespace Clowd.VideoSDK.Playback
                 if (end <= start)
                     continue;
 
-                double factor = ((SpeedContent)item.Content).Factor;
+                var content = (SpeedContent)item.Content;
+                double factor = content.Factor;
                 if (!(factor > 0) || Double.IsInfinity(factor))
                     continue;
                 factor = Math.Clamp(factor, MinFactor, MaxFactor);
@@ -155,11 +165,11 @@ namespace Clowd.VideoSDK.Playback
                 if (start > cursor)
                     segments.Add(new Seg { PStart = cursor, PEnd = start });
                 if (entry > 0)
-                    segments.Add(MakeRamp(start, start + entry, factor, item.Entry.Easing, isExit: false));
+                    segments.Add(MakeRamp(start, start + entry, factor, item.Entry.Easing, isExit: false, content.PitchCorrect));
                 if (end - exit > start + entry)
-                    segments.Add(new Seg { PStart = start + entry, PEnd = end - exit, Speed = factor });
+                    segments.Add(new Seg { PStart = start + entry, PEnd = end - exit, Speed = factor, PitchCorrect = content.PitchCorrect });
                 if (exit > 0)
-                    segments.Add(MakeRamp(end - exit, end, factor, item.Exit.Easing, isExit: true));
+                    segments.Add(MakeRamp(end - exit, end, factor, item.Exit.Easing, isExit: true, content.PitchCorrect));
 
                 cursor = end;
                 isIdentity = false;
@@ -377,7 +387,8 @@ namespace Clowd.VideoSDK.Playback
         /// 1/s over a uniform project-offset grid, then rescales interior samples so the final
         /// anchor is an exact integer tick — both segment ends stay exact while the interior
         /// interpolates.</summary>
-        private static Seg MakeRamp(long pStart, long pEnd, double factor, TransitionEasing easing, bool isExit)
+        private static Seg MakeRamp(long pStart, long pEnd, double factor, TransitionEasing easing, bool isExit,
+            bool pitchCorrect)
         {
             long span = pEnd - pStart;
             var lut = new double[RampSamples + 1];
@@ -405,7 +416,11 @@ namespace Clowd.VideoSDK.Playback
             }
             lut[RampSamples] = oSpan;
 
-            return new Seg { PStart = pStart, PEnd = pEnd, Speed = factor, Lut = lut, Easing = easing, IsExit = isExit };
+            return new Seg
+            {
+                PStart = pStart, PEnd = pEnd, Speed = factor, Lut = lut, Easing = easing, IsExit = isExit,
+                PitchCorrect = pitchCorrect,
+            };
         }
     }
 }

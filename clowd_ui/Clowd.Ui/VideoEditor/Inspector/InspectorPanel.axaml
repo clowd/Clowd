@@ -1089,6 +1089,16 @@
                         <TextBlock Classes="label" Text="Target" />
                         <controls:DropDownButton x:Name="ddSpeedTarget" SelectedItem="{Binding SpeedTarget, Mode=TwoWay}" />
                     </DockPanel>
+
+                    <!--  time-stretch the audio under the item so pitch stays put; off resamples
+                          and pitch rides with the speed  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton x:Name="dotSpeedPitch" CurrentValue="{Binding SpeedPitchCorrect, Mode=TwoWay}" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Pitch Correction" />
+                        <CheckBox IsChecked="{Binding SpeedPitchCorrect, Mode=TwoWay}" Theme="{StaticResource InspectorCheckBox}" />
+                    </DockPanel>
                 </StackPanel>
 
                 <!--  zoom effect: how far in, and what the picture zooms towards. The focal point

@@ -63,6 +63,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotEffectAmount.DefaultValue = VideoEffect.DefaultAmount;
             dotSpeed.DefaultValue = SelectedItemViewModel.DefaultSpeedOption;
             dotSpeedTarget.DefaultValue = SelectedItemViewModel.DefaultSpeedTargetOption;
+            dotSpeedPitch.DefaultValue = true;
             dotKeyFilter.DefaultValue = SelectedItemViewModel.DefaultKeystrokeFilterOption;
 
             btnFont.Click += async (_, _) => await PickFontAsync();

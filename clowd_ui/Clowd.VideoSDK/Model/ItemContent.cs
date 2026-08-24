@@ -106,15 +106,20 @@ public sealed class SolidContent : ItemContent
 }
 
 /// <summary>A playback-speed effect: while the item is active the whole output plays at
-/// <see cref="Factor"/> (audio pitch rides with it, like <see cref="MediaContent.Speed"/>).
-/// Lives only on the single pinned <see cref="TrackKind.Effect"/> speed row; the item's
-/// Entry/Exit hold <see cref="TransitionKind.Ramp"/> transitions easing 1 → factor → 1.</summary>
+/// <see cref="Factor"/>. Lives only on the single pinned <see cref="TrackKind.Effect"/> speed
+/// row; the item's Entry/Exit hold <see cref="TransitionKind.Ramp"/> transitions easing
+/// 1 → factor → 1.</summary>
 public sealed class SpeedContent : ItemContent
 {
     /// <summary>Target speed factor, validated to 0.1..10.</summary>
     public double Factor { get; set; } = 2.0;
 
-    public override ItemContent Clone() => new SpeedContent { Factor = Factor };
+    /// <summary>When true (the default) the audio under the item is time-stretched so its pitch
+    /// stays put; when false it is plainly resampled and pitch rides with the speed (like
+    /// <see cref="MediaContent.Speed"/>).</summary>
+    public bool PitchCorrect { get; set; } = true;
+
+    public override ItemContent Clone() => new SpeedContent { Factor = Factor, PitchCorrect = PitchCorrect };
 }
 
 /// <summary>A zoom effect: scales every video track composited beneath its row (lower

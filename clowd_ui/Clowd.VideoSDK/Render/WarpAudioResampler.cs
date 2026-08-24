@@ -9,10 +9,12 @@ namespace Clowd.VideoSDK.Render
     /// <summary>
     /// The render pipeline's warp-aware resampling stage: sits between <see cref="AudioMixer"/>
     /// (project-time sample frames) and the muxer (output-time sample frames), bending the mix
-    /// through a <see cref="TimeWarp"/> the way <c>AudioMixWorker.MixResampledChunk</c> bends the
-    /// preview mix through a constant rate — a per-sample project cursor advancing at the warp's
-    /// local slope, linearly interpolating between neighboring project frames so pitch rides
-    /// with the speed.
+    /// through a <see cref="TimeWarp"/>. A warped span is rendered one of two ways, chosen by its
+    /// speed item's <see cref="Model.SpeedContent.PitchCorrect"/>: pitch-corrected spans are
+    /// time-stretched through a <see cref="WsolaStretcher"/> (time bends, pitch stays put), plain
+    /// spans run a per-sample project cursor advancing at the warp's local slope, linearly
+    /// interpolating between neighboring project frames so pitch rides with the speed — the same
+    /// pair of algorithms <c>AudioMixWorker</c> plays in preview.
     ///
     /// <para>
     /// Where the warp does not bend time the stage gets out of the way <b>exactly</b>: an
@@ -24,9 +26,10 @@ namespace Clowd.VideoSDK.Render
     ///
     /// <para>
     /// Chunks must be requested in forward order (the mixer's sources are forward-only). Mixed
-    /// project frames are held in a carry window across chunk and span boundaries so the mixer is
-    /// asked for each project frame exactly once — the interpolation's right neighbor is needed
-    /// again by the next chunk, and re-requesting it would be a backwards read.
+    /// project frames are held in a shared <see cref="MixerWindow"/> across chunk and span
+    /// boundaries so the mixer is asked for each project frame exactly once — an interpolation's
+    /// right neighbor, or a stretcher's alignment look-behind, is needed again by the next hop
+    /// or chunk, and re-requesting it would be a backwards read.
     /// </para>
     /// </summary>
     public sealed class WarpAudioResampler
@@ -39,38 +42,39 @@ namespace Clowd.VideoSDK.Render
         /// readable instead of degrading to a clamped duplicate.</summary>
         private const int GuardFrames = 4;
 
-        private readonly AudioMixer _mixer;
         private readonly TimeWarp _warp;
         private readonly int _rate;
         private readonly SampleSpan[] _spans;
+        private readonly MixerWindow _window;
         private int _spanIndex;
+        private int _stretchSpanIndex = -1; // the span the stretcher's state belongs to
         private long _nextOutputFrame;
 
-        // project-frame carry window [_windowStart, _windowStart + _windowFrames)
-        private float[] _window = Array.Empty<float>();
-        private long _windowStart;
-        private int _windowFrames;
-        private float[] _scratch = Array.Empty<float>();
+        private WsolaStretcher _stretcher;
+        private Func<long, double> _targetOf;
         private double[] _positions = Array.Empty<double>();
         private double _lastPos = -1; // monotonic clamp across span joins
 
         /// <summary>One warp segment rendered into the output sample-frame domain. Direct spans
         /// (speed 1) copy project frame <c>output + OffsetFrames</c> verbatim; other spans map
-        /// each output sample's tick through <see cref="TimeWarp.ToProject"/>.</summary>
+        /// each output sample's tick through <see cref="TimeWarp.ToProject"/> — through the
+        /// stretcher when <see cref="Pitch"/>, through linear interpolation otherwise.</summary>
         private readonly struct SampleSpan
         {
-            public SampleSpan(long outStart, long outEnd, bool direct, long offsetFrames)
+            public SampleSpan(long outStart, long outEnd, bool direct, long offsetFrames, bool pitch)
             {
                 OutStart = outStart;
                 OutEnd = outEnd;
                 Direct = direct;
                 OffsetFrames = offsetFrames;
+                Pitch = pitch;
             }
 
             public long OutStart { get; }
             public long OutEnd { get; }      // exclusive; the trailing span is long.MaxValue
             public bool Direct { get; }
             public long OffsetFrames { get; }
+            public bool Pitch { get; }
         }
 
         public WarpAudioResampler(AudioMixer mixer, TimeWarp warp, int sampleRate)
@@ -79,9 +83,9 @@ namespace Clowd.VideoSDK.Render
             ArgumentNullException.ThrowIfNull(warp);
             ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(sampleRate, 0);
 
-            _mixer = mixer;
             _warp = warp;
             _rate = sampleRate;
+            _window = new MixerWindow(mixer, GuardFrames);
 
             if (warp.IsIdentity)
             {
@@ -105,12 +109,12 @@ namespace Clowd.VideoSDK.Render
                 bool direct = !seg.IsRamp && seg.Speed == 1.0;
                 spans.Add(new SampleSpan(outStart, outEnd, direct, direct
                     ? AudioTime.SamplesNearest(seg.ProjectStartTicks - seg.OutputStartTicks, sampleRate)
-                    : 0));
+                    : 0, !direct && seg.PitchCorrect));
             }
 
             // past the last segment the warp continues at speed 1 — a trailing direct span
             spans.Add(new SampleSpan(AudioTime.SamplesCeil(outputEndTicks, sampleRate), long.MaxValue,
-                true, AudioTime.SamplesNearest(projectEndTicks - outputEndTicks, sampleRate)));
+                true, AudioTime.SamplesNearest(projectEndTicks - outputEndTicks, sampleRate), false));
             _spans = spans.ToArray();
         }
 
@@ -134,7 +138,7 @@ namespace Clowd.VideoSDK.Render
 
             if (_warp.IsIdentity)
             {
-                _mixer.MixChunk(firstFrame, frames, dst);
+                _window.Mixer.MixChunk(firstFrame, frames, dst);
                 return;
             }
 
@@ -149,6 +153,8 @@ namespace Clowd.VideoSDK.Render
                 int run = (int)Math.Min(frames - done, span.OutEnd - o);
                 if (span.Direct)
                     CopyRun(o + span.OffsetFrames, run, dst, done * Channels);
+                else if (span.Pitch)
+                    StretchRun(span, o, run, dst, done * Channels);
                 else
                     ResampleRun(o, run, dst, done * Channels);
                 done += run;
@@ -159,18 +165,40 @@ namespace Clowd.VideoSDK.Render
         /// offset — no float math, so unwarped spans stay bit-exact against a straight mix.</summary>
         private void CopyRun(long firstProjectFrame, int run, float[] dst, int dstOffset)
         {
-            EnsureWindow(firstProjectFrame, firstProjectFrame + run);
+            _window.Ensure(firstProjectFrame, firstProjectFrame + run);
             for (int i = 0; i < run; i++)
             {
-                int src = (int)(ClampToWindow(firstProjectFrame + i) - _windowStart) * Channels;
+                int src = (int)(_window.Clamp(firstProjectFrame + i) - _window.StartFrame) * Channels;
                 int di = dstOffset + i * Channels;
-                dst[di] = _window[src];
-                dst[di + 1] = _window[src + 1];
+                dst[di] = _window.Buffer[src];
+                dst[di + 1] = _window.Buffer[src + 1];
             }
             _lastPos = Math.Max(_lastPos, firstProjectFrame + run - 1);
         }
 
-        /// <summary>The warped run: each output sample's tick maps through the warp to a
+        /// <summary>The pitch-corrected run: the stretcher synthesizes the span's output on its
+        /// own hop grid and this copies the requested frames out. Entering the span (or coming
+        /// back to it — there is one stretcher, reset between spans) re-anchors the synthesis
+        /// at the span's first output frame.</summary>
+        private void StretchRun(in SampleSpan span, long firstOutputFrame, int run, float[] dst, int dstOffset)
+        {
+            if (_stretchSpanIndex != _spanIndex)
+            {
+                _stretcher ??= new WsolaStretcher(_rate);
+                _targetOf ??= o => _warp.ToProject(AudioTime.TicksFloor(o, _rate)) * (double)_rate
+                    / TimeBase.TicksPerSecond;
+                _stretcher.Reset();
+                _stretchSpanIndex = _spanIndex;
+            }
+
+            _stretcher.EnsureOutput(span.OutStart, firstOutputFrame, firstOutputFrame + run, _targetOf, _window);
+            Array.Copy(_stretcher.OutputBuffer, (int)(firstOutputFrame - _stretcher.OutputStart) * Channels,
+                dst, dstOffset, run * Channels);
+            // the span's project cursor moved under the stretcher; keep the join clamp current
+            _lastPos = Math.Max(_lastPos, _targetOf(firstOutputFrame + run - 1));
+        }
+
+        /// <summary>The plain warped run: each output sample's tick maps through the warp to a
         /// fractional project frame, clamped monotone across span joins, and interpolates
         /// between its two neighbors in the window.</summary>
         private void ResampleRun(long firstOutputFrame, int run, float[] dst, int dstOffset)
@@ -192,13 +220,14 @@ namespace Clowd.VideoSDK.Render
 
             long firstNeeded = (long)Math.Floor(_positions[0]);
             long endNeeded = (long)Math.Floor(_positions[run - 1]) + 2; // right neighbor, exclusive
-            EnsureWindow(firstNeeded, endNeeded);
+            _window.Ensure(firstNeeded, endNeeded);
 
-            long windowLast = _windowStart + _windowFrames - 1;
+            long windowLast = _window.StartFrame + _window.Frames - 1;
+            var buffer = _window.Buffer;
             for (int i = 0; i < run; i++)
             {
                 double p = _positions[i];
-                long f0 = ClampToWindow((long)Math.Floor(p));
+                long f0 = _window.Clamp((long)Math.Floor(p));
                 long f1 = Math.Min(f0 + 1, windowLast);
                 float frac = (float)(p - f0);
                 if (frac < 0f)
@@ -206,64 +235,16 @@ namespace Clowd.VideoSDK.Render
                 else if (frac > 1f)
                     frac = 1f;
 
-                int b0 = (int)(f0 - _windowStart) * Channels;
-                int b1 = (int)(f1 - _windowStart) * Channels;
+                int b0 = (int)(f0 - _window.StartFrame) * Channels;
+                int b1 = (int)(f1 - _window.StartFrame) * Channels;
                 int di = dstOffset + i * Channels;
                 for (int ch = 0; ch < Channels; ch++)
                 {
-                    float a = _window[b0 + ch];
-                    float b = _window[b1 + ch];
+                    float a = buffer[b0 + ch];
+                    float b = buffer[b1 + ch];
                     dst[di + ch] = a + (b - a) * frac;
                 }
             }
-        }
-
-        /// <summary>Drops window frames the cursor has passed (keeping <see cref="GuardFrames"/>
-        /// of slack behind it) and mixes forward so the window covers
-        /// [<paramref name="firstNeeded"/>, <paramref name="endNeeded"/>).</summary>
-        private void EnsureWindow(long firstNeeded, long endNeeded)
-        {
-            if (firstNeeded < 0)
-                firstNeeded = 0;
-
-            long dropBelow = firstNeeded - GuardFrames;
-            if (_windowFrames > 0 && dropBelow > _windowStart)
-            {
-                int drop = (int)Math.Min(dropBelow - _windowStart, _windowFrames);
-                Array.Copy(_window, drop * Channels, _window, 0, (_windowFrames - drop) * Channels);
-                _windowStart += drop;
-                _windowFrames -= drop;
-            }
-            if (_windowFrames == 0 && firstNeeded > _windowStart)
-                _windowStart = firstNeeded;
-
-            long readStart = _windowStart + _windowFrames;
-            int readCount = (int)Math.Max(0, endNeeded - readStart);
-            if (readCount == 0)
-                return;
-
-            int haveFloats = _windowFrames * Channels;
-            int needFloats = haveFloats + readCount * Channels;
-            if (_window.Length < needFloats)
-            {
-                var grown = new float[Math.Max(needFloats, _window.Length * 2)];
-                Array.Copy(_window, grown, haveFloats);
-                _window = grown;
-            }
-
-            if (_scratch.Length < readCount * Channels)
-                _scratch = new float[readCount * Channels];
-            _mixer.MixChunk(readStart, readCount, _scratch);
-            Array.Copy(_scratch, 0, _window, haveFloats, readCount * Channels);
-            _windowFrames += readCount;
-        }
-
-        private long ClampToWindow(long frame)
-        {
-            if (frame < _windowStart)
-                return _windowStart; // unreachable beyond the guard: joins regress under a frame
-            long last = _windowStart + _windowFrames - 1;
-            return frame > last ? last : frame;
         }
     }
 }

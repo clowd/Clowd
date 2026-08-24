@@ -68,6 +68,26 @@ namespace Clowd.VideoSDK.Tests
         private static Transition Ramp(long ticks, TransitionEasing easing = TransitionEasing.Linear)
             => new Transition { Kind = TransitionKind.Ramp, DurationTicks = ticks, Easing = easing };
 
+        // ---------------------------------------------------------------------- pitch flag
+
+        [Fact]
+        public void Segments_carry_the_items_pitch_correction_flag()
+        {
+            var project = ProjectWithClip(10 * Sec);
+            var item = AddSpeedItem(project, 2 * Sec, 4 * Sec, 2.0, Ramp(Sec), Ramp(Sec));
+            ((SpeedContent)item.Content).PitchCorrect = false;
+            AddSpeedItem(project, 7 * Sec, 2 * Sec, 3.0); // default: pitch-corrected
+
+            var warp = TimeWarp.Build(project);
+
+            foreach (var seg in warp.Segments)
+            {
+                bool bent = seg.IsRamp || seg.Speed != 1.0;
+                bool insideFirst = seg.ProjectStartTicks >= 2 * Sec && seg.ProjectEndTicks <= 6 * Sec;
+                Assert.Equal(bent && !insideFirst, seg.PitchCorrect);
+            }
+        }
+
         // -------------------------------------------------------------------------- identity
 
         [Fact]
