@@ -417,6 +417,26 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void Default_overlay_places_the_sprite_by_stream_dimensions_not_the_presented_frame()
+        {
+            // playback presents frames under IVideoPlayer.MaxPresentHeight, so the screen image
+            // can be a uniform downscale of the stream while the capture's positions stay in the
+            // stream's (physical) pixels. Mapping against the image would place the sprite off by
+            // that factor — here at (64,64), off the canvas entirely.
+            var p = NewProject();
+            string capture = WriteCapture(Header,
+                CursorImage(1, 8, SpritePng(8, Red)),
+                Frame(0, 32, 32, ci: 1));
+            var source = AddCaptureSource(p, capture);
+            AddItem(p, AddVideoTrack(p), new MediaContent { SourceId = source.Id, StreamIndex = 0 });
+
+            using var frames = new MultiStreamSource().Set(0, Blue, W / 2);
+            var px = Render(p, 5 * Sec, frames);
+            AssertColor(Px(px, 34, 34), 0, 0, 255);   // sprite at the captured position
+            AssertColor(Px(px, 20, 20), 255, 0, 0);   // and nowhere near half of it
+        }
+
+        [Fact]
         public void Default_overlay_degrades_to_nothing_on_a_missing_capture_file()
         {
             var p = NewProject();
