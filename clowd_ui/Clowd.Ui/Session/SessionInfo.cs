@@ -83,6 +83,7 @@ namespace Clowd
                 {
                     OnPropertyChanged(nameof(CanCopy));
                     OnPropertyChanged(nameof(CanUpload));
+                    OnPropertyChanged(nameof(CanShowInFolder));
                 }
             }
         }
@@ -378,6 +379,14 @@ namespace Clowd
         [JsonIgnore]
         public bool ShowOpen => !IsUploadOnly && !IsProject;
 
+        /// <summary>Whether the row offers "Show in folder": exactly when there is a file for
+        /// ShowInFolderClicked to reveal — the recording for a video entry or a project, the image
+        /// for a capture. Deliberately NOT gated on IsUploadOnly, which is true of every video
+        /// session (ContentKind "video"); a text/file upload-only session is excluded anyway,
+        /// because its payload sits beside session.json under neither of these names.</summary>
+        [JsonIgnore]
+        public bool CanShowInFolder => !String.IsNullOrEmpty(VideoPath) || !String.IsNullOrEmpty(PreviewImgPath);
+
         /// <summary>What a render of this session keys its output entry to: the recording for a
         /// capture, the session file itself for a project that has no recording behind it. Only
         /// ever compared, never opened.</summary>
@@ -597,6 +606,7 @@ namespace Clowd
             OnPropertyChanged(nameof(CanEditVideo));
             OnPropertyChanged(nameof(ShowRender));
             OnPropertyChanged(nameof(ShowOpen));
+            OnPropertyChanged(nameof(CanShowInFolder));
             OnPropertyChanged(nameof(ShowNotUploaded));
         }
 

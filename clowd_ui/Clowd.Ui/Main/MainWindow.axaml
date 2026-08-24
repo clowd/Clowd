@@ -100,12 +100,12 @@
                 </u:NavMenuItem>
                 <u:NavMenuItem Header="Recording" Tag="SettingsRecording">
                     <u:NavMenuItem.Icon>
-                        <PathIcon Width="16" Height="16" Data="{StaticResource IconVideo}" />
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavRecording}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
                 <u:NavMenuItem Header="Editor" Tag="SettingsEditor">
                     <u:NavMenuItem.Icon>
-                        <PathIcon Width="16" Height="16" Data="{StaticResource IconNavEditor}" />
+                        <PathIcon Width="16" Height="16" Data="{StaticResource IconEditScreenshot}" />
                     </u:NavMenuItem.Icon>
                 </u:NavMenuItem>
                 <u:NavMenuItem Header="Uploads" Tag="SettingsUploads">

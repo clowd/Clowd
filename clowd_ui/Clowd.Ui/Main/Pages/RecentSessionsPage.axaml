@@ -240,6 +240,8 @@
                                                          DeleteWithConfirmation) is disabled until it lands — that is IsIdle. -->
                                                     <!-- same order as the row's action bar, so the ⋮ overflow menu (which is
                                                          generated from those buttons) and this one agree. -->
+                                                    <MenuItem Header="Edit image" Click="OpenItemClicked" IsVisible="{Binding ShowOpen}"
+                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Copy" Click="CopyItemClicked" IsVisible="{Binding CanCopy}"
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Edit video" Click="EditVideoClicked" IsVisible="{Binding ShowEditVideo}"
@@ -250,11 +252,9 @@
                                                               IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Create GIF" Click="CreateGifClicked" IsVisible="{Binding CanCreateGif}"
                                                               IsEnabled="{Binding IsIdle}" />
-                                                    <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding CanPlay}"
-                                                              IsEnabled="{Binding IsIdle}" />
-                                                    <MenuItem Header="Open" Click="OpenItemClicked" IsVisible="{Binding ShowOpen}"
-                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Upload" Click="UploadItemClicked" IsVisible="{Binding CanUpload}" />
+                                                    <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding CanShowInFolder}"
+                                                              IsEnabled="{Binding IsIdle}" />
                                                     <MenuItem Header="Delete" Click="DeleteItemClicked" />
                                                 </ContextMenu>
                                             </Grid.ContextMenu>
@@ -403,11 +403,20 @@
                                                                                   Margin="8,0,4,0"
                                                                                   Spacing="2"
                                                                                   VerticalAlignment="Center">
-                                                        <!-- Copy leads and Open sits last of the content actions so that the
-                                                             open-in-new glyph lands in the same slot — just left of upload and
-                                                             delete — as a recording's "Show in folder" does. -->
+                                                        <!-- Edit leads because it is what double-click does. "Show in folder" and
+                                                             Delete trail the bar in that order: they are the two actions every kind
+                                                             of entry offers, so they hold the same two slots on every row. -->
                                                         <!-- a recording or gif has a poster frame, but putting that still on the
                                                              clipboard is never what "copy" meant for a video — so it has no Copy. -->
+                                                        <Button Classes="rowAction"
+                                                                Click="OpenItemClicked"
+                                                                IsVisible="{Binding ShowOpen}"
+                                                                ToolTip.Tip="Edit image"
+                                                                AutomationProperties.Name="Edit image">
+                                                            <Viewbox>
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconEditScreenshot}" />
+                                                            </Viewbox>
+                                                        </Button>
                                                         <Button Classes="rowAction"
                                                                 Click="CopyItemClicked"
                                                                 IsVisible="{Binding CanCopy}"
@@ -426,7 +435,7 @@
                                                                 ToolTip.Tip="Edit video"
                                                                 AutomationProperties.Name="Edit video">
                                                             <Viewbox>
-                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconNavEditor}" />
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconEditRecording}" />
                                                             </Viewbox>
                                                         </Button>
                                                         <!-- the same action (and the same glyph) as the video editor's own
@@ -468,24 +477,6 @@
                                                             </Viewbox>
                                                         </Button>
                                                         <Button Classes="rowAction"
-                                                                Click="ShowInFolderClicked"
-                                                                IsVisible="{Binding CanPlay}"
-                                                                ToolTip.Tip="Show in folder"
-                                                                AutomationProperties.Name="Show in folder">
-                                                            <Viewbox>
-                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
-                                                            </Viewbox>
-                                                        </Button>
-                                                        <Button Classes="rowAction"
-                                                                Click="OpenItemClicked"
-                                                                IsVisible="{Binding ShowOpen}"
-                                                                ToolTip.Tip="Open in editor"
-                                                                AutomationProperties.Name="Open in editor">
-                                                            <Viewbox>
-                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconOpenInNew}" />
-                                                            </Viewbox>
-                                                        </Button>
-                                                        <Button Classes="rowAction"
                                                                 Click="UploadItemClicked"
                                                                 IsVisible="{Binding CanUpload}"
                                                                 ToolTip.Tip="Upload"
@@ -494,6 +485,15 @@
                                                                 <!-- the Clowd mark, the same "upload" affordance the editor's toolbar
                                                                      uses; a 16px canvas (AppStyles icon table). -->
                                                                 <Path Width="16" Height="16" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClowd}" />
+                                                            </Viewbox>
+                                                        </Button>
+                                                        <Button Classes="rowAction"
+                                                                Click="ShowInFolderClicked"
+                                                                IsVisible="{Binding CanShowInFolder}"
+                                                                ToolTip.Tip="Show in folder"
+                                                                AutomationProperties.Name="Show in folder">
+                                                            <Viewbox>
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconFolderOpen}" />
                                                             </Viewbox>
                                                         </Button>
                                                         <Button Classes="rowAction"
