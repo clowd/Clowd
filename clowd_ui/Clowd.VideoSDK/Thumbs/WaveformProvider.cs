@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
 
 namespace Clowd.VideoSDK.Thumbs
@@ -107,6 +108,28 @@ namespace Clowd.VideoSDK.Thumbs
             return entry.Snapshot;
         }
 
+        /// <summary>
+        /// Forgets one stream's peaks, so the next <see cref="GetOrStart"/> analyzes it again.
+        /// For files that are themselves generated — the AI denoise sidecars, which are rewritten
+        /// in place when their settings or their source change — where the (path, stream) key
+        /// stays the same but the audio behind it does not. A pass still running for the stream is
+        /// canceled and its result dropped; the disk cache is left alone (it validates itself
+        /// against the file's length and mtime, so a rewritten sidecar misses it anyway).
+        /// </summary>
+        public void Invalidate(string sourcePath, int streamIndex)
+        {
+            ArgumentNullException.ThrowIfNull(sourcePath);
+
+            Entry entry;
+            lock (_gate)
+            {
+                if (_disposed || !_entries.Remove((sourcePath, streamIndex), out entry))
+                    return;
+            }
+
+            entry.Handle?.Cancel();
+        }
+
         /// <summary>Scheduler thread: cache, else one forward pass, then cache it.</summary>
         private void Run(Entry entry, CancellationToken token)
         {
@@ -125,6 +148,11 @@ namespace Clowd.VideoSDK.Thumbs
                 var buffer = new WaveformBuffer(BucketsPerSecond);
                 Interlocked.Increment(ref _builds);
 
+                // a generated source (an AI denoise sidecar) can be rewritten while this pass
+                // reads it; the stamp taken here is re-checked before the peaks are cached, so a
+                // pass that raced a rewrite is never saved under the new file's identity.
+                var stamp = FileStamp(entry.SourcePath);
+
                 bool complete = WaveformBuilder.Build(entry.SourcePath, entry.StreamIndex, buffer,
                     () =>
                     {
@@ -138,8 +166,11 @@ namespace Clowd.VideoSDK.Thumbs
                     return; // canceled: keep the partial peaks, never cache them
 
                 RaiseChanged();
-                WaveformCache.TrySave(entry.CacheDir, entry.SourcePath, entry.StreamIndex, entry.Snapshot,
-                    entry.CacheKey);
+                if (FileStamp(entry.SourcePath) == stamp)
+                {
+                    WaveformCache.TrySave(entry.CacheDir, entry.SourcePath, entry.StreamIndex, entry.Snapshot,
+                        entry.CacheKey);
+                }
             }
             catch (Exception ex)
             {
@@ -148,6 +179,21 @@ namespace Clowd.VideoSDK.Thumbs
                 Interlocked.CompareExchange(ref _error, ex, null);
                 entry.Snapshot = new WaveformSnapshot(BucketsPerSecond, Array.Empty<sbyte>(), 0, isComplete: true);
                 RaiseChanged();
+            }
+        }
+
+        /// <summary>The file's length and mtime as one comparable value, or (0, 0) when it cannot
+        /// be read — the same identity <c>WaveformCache</c> validates against.</summary>
+        private static (long Length, long MTimeTicks) FileStamp(string path)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                return info.Exists ? (info.Length, info.LastWriteTimeUtc.Ticks) : (0, 0);
+            }
+            catch
+            {
+                return (0, 0);
             }
         }
 

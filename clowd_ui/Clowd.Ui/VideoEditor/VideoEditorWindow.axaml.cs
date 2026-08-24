@@ -834,8 +834,13 @@ namespace Clowd.UI.VideoEditor
         /// deferred update.</summary>
         private void Analysis_SidecarCompleted(object sender, EventArgs e)
         {
-            if (!_closing)
-                Editor_ProjectChanged(this, new ProjectChangedEventArgs(ProjectChangeKind.Structural, this));
+            if (_closing)
+                return;
+
+            // the timeline's audio rows draw the denoised peaks once a sidecar exists, so the
+            // waveforms it already analyzed for these streams are now stale too.
+            _preview?.InvalidateDenoise();
+            Editor_ProjectChanged(this, new ProjectChangedEventArgs(ProjectChangeKind.Structural, this));
         }
 
         /// <summary>A generation run threw. The status row only has room for "Analysis failed", so

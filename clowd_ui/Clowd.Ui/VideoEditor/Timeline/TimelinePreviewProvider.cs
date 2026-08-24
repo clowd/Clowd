@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -8,6 +9,8 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Clowd.VideoSDK.Ai;
+using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
@@ -61,10 +64,22 @@ namespace Clowd.UI.VideoEditor.Timeline
         private readonly Dictionary<(Guid SourceId, int StreamIndex), PeaksCache> _peaks =
             new Dictionary<(Guid, int), PeaksCache>();
 
+        /// <summary>The denoise sidecar each audio stream's peaks are read from, or null where
+        /// there is no usable one (raw passthrough). Probing the disk is what makes an entry, so
+        /// this is only rebuilt when a generation finishes — see <see cref="InvalidateDenoise"/> —
+        /// never on the strength edits that arrive a frame at a time while a slider drags.</summary>
+        private readonly Dictionary<(Guid SourceId, int StreamIndex), string> _denoisePaths =
+            new Dictionary<(Guid, int), string>();
+
         /// <summary>One per capture file in use, by path: its background read and the cursor/keys
         /// projections built from it.</summary>
         private readonly Dictionary<string, CaptureEntry> _captures =
             new Dictionary<string, CaptureEntry>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The project's denoise settings as the mixer reads them, rebuilt on the next
+        /// ask after any edit (null while stale). Cached because every audio row asks on every
+        /// repaint and the answer is a walk of the whole project.</summary>
+        private Dictionary<(Guid SourceId, int StreamIndex), double> _denoiseStrengths;
 
         private long _viewStartTicks;
         private long _viewEndTicks;
@@ -84,7 +99,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             _cacheDir = cacheDir;
             _filmstrip.Changed += OnProviderChanged;
             _waveform.Changed += OnProviderChanged;
+            _session.ProjectChanged += OnProjectChanged;
         }
+
+        /// <summary>Any edit can have moved a denoise toggle, a strength, a mute or an item
+        /// between tracks; the settings are re-read on the next row that asks.</summary>
+        private void OnProjectChanged(object sender, ProjectChangedEventArgs e) => _denoiseStrengths = null;
 
         public event EventHandler PreviewReady;
 
@@ -137,6 +157,23 @@ namespace Clowd.UI.VideoEditor.Timeline
             var snapshot = _waveform.GetOrStart(path, request.StreamIndex, _cacheDir,
                 request.SourceId.ToString("N"));
 
+            // the row must show what will be heard: a denoised stream's peaks come from its
+            // sidecar, blended with the raw ones at exactly the strength the mixer blends the
+            // samples at (see DenoisedAudioSource). Peaks of a blend are not the blend of peaks,
+            // but they agree at both ends and move monotonically between them — close enough for
+            // a row whose job is to show where the speech is.
+            var strength = DenoiseStrengthFor(request.SourceId, request.StreamIndex);
+            WaveformSnapshot denoised = null;
+            if (strength > 0)
+            {
+                var sidecar = DenoiseSidecarFor(request.SourceId, request.StreamIndex, path);
+                if (sidecar != null)
+                {
+                    denoised = _waveform.GetOrStart(sidecar, DenoiseStreamIndex, _cacheDir,
+                        DenoiseCacheKey(request.SourceId, request.StreamIndex));
+                }
+            }
+
             var key = (request.SourceId, request.StreamIndex);
             if (!_peaks.TryGetValue(key, out var cache))
             {
@@ -144,8 +181,68 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _peaks[key] = cache;
             }
 
-            return cache.Project(request, snapshot);
+            return cache.Project(request, snapshot, denoised, denoised == null ? 0 : strength);
         }
+
+        /// <summary>
+        /// Forgets which streams have usable denoise sidecars, and drops the peaks read from the
+        /// ones already found — called when a generation run finishes, which is both when a
+        /// sidecar first appears and when an existing one is rewritten under the same name. The
+        /// next paint re-probes the disk and re-analyzes whatever it finds.
+        /// </summary>
+        public void InvalidateDenoise()
+        {
+            if (_disposed)
+                return;
+
+            foreach (var sidecar in _denoisePaths.Values)
+            {
+                if (sidecar != null)
+                    _waveform.Invalidate(sidecar, DenoiseStreamIndex);
+            }
+
+            _denoisePaths.Clear();
+        }
+
+        /// <summary>How much of a stream's audio the mixer will take from its denoise sidecar,
+        /// read from the live project through the SDK's own rule so the row cannot disagree with
+        /// what is rendered. Zero for every stream when nothing is denoised, which is the usual
+        /// case and costs one walk of the project's tracks.</summary>
+        private double DenoiseStrengthFor(Guid sourceId, int streamIndex)
+        {
+            if (_denoiseStrengths == null)
+            {
+                var project = _session.Project;
+                _denoiseStrengths = project == null
+                    ? new Dictionary<(Guid, int), double>()
+                    : DenoisedAudioSource.CollectDenoisedStreams(project);
+            }
+
+            return _denoiseStrengths.TryGetValue((sourceId, streamIndex), out var strength) ? strength : 0;
+        }
+
+        /// <summary>The stream's denoise sidecar when one exists and still describes the source,
+        /// else null (the row stays raw). The answer is cached because it costs a stat and a small
+        /// json read; <see cref="InvalidateDenoise"/> is what expires it.</summary>
+        private string DenoiseSidecarFor(Guid sourceId, int streamIndex, string sourcePath)
+        {
+            var key = (sourceId, streamIndex);
+            if (_denoisePaths.TryGetValue(key, out var cached))
+                return cached;
+
+            var wavPath = AiSidecars.DenoisePath(_cacheDir, sourceId, streamIndex);
+            var sidecar = wavPath != null && AiSidecars.IsValid(wavPath, sourcePath) ? wavPath : null;
+            _denoisePaths[key] = sidecar;
+            return sidecar;
+        }
+
+        /// <summary>The sidecar wav holds one stream, and the mixer reads it as stream 0.</summary>
+        private const int DenoiseStreamIndex = 0;
+
+        /// <summary>Cache identity for a sidecar's peaks: the raw stream's key plus a suffix, so
+        /// the two waveforms of one stream cannot land in the same <c>.cwf</c>.</summary>
+        private static string DenoiseCacheKey(Guid sourceId, int streamIndex) =>
+            sourceId.ToString("N") + "denoise" + streamIndex.ToString(CultureInfo.InvariantCulture);
 
         public CursorActivity GetCursorActivity(in CursorActivityRequest request)
         {
@@ -224,8 +321,23 @@ namespace Clowd.UI.VideoEditor.Timeline
                         continue;
 
                     var path = ResolvePath(media.SourceId);
-                    if (path != null)
-                        _waveform.GetOrStart(path, media.StreamIndex, _cacheDir, media.SourceId.ToString("N"));
+                    if (path == null)
+                        continue;
+
+                    _waveform.GetOrStart(path, media.StreamIndex, _cacheDir, media.SourceId.ToString("N"));
+
+                    // a denoised row draws its sidecar's peaks, so that analysis needs the same
+                    // head start — without it the row would open showing the raw waveform and
+                    // visibly swap once the sidecar pass caught up.
+                    if (DenoiseStrengthFor(media.SourceId, media.StreamIndex) > 0)
+                    {
+                        var sidecar = DenoiseSidecarFor(media.SourceId, media.StreamIndex, path);
+                        if (sidecar != null)
+                        {
+                            _waveform.GetOrStart(sidecar, DenoiseStreamIndex, _cacheDir,
+                                DenoiseCacheKey(media.SourceId, media.StreamIndex));
+                        }
+                    }
                 }
             }
         }
@@ -311,6 +423,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             _filmstrip.Changed -= OnProviderChanged;
             _waveform.Changed -= OnProviderChanged;
+            _session.ProjectChanged -= OnProjectChanged;
             _filmstrip.Dispose();
             _waveform.Dispose();
 
@@ -318,6 +431,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 strip.Dispose();
             _strips.Clear();
             _peaks.Clear();
+            _denoisePaths.Clear();
             _captures.Clear();
         }
 
@@ -604,24 +718,69 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// Re-buckets one audio stream's peaks to the bucket size the current zoom asked for. The
         /// SDK analyzes at a fixed 200 buckets/s and the timeline draws roughly one bucket per
         /// pixel, so this is always a reduction: each output bucket takes the extremes of the SDK
-        /// buckets it covers. The last result is kept — an unchanged (request, snapshot) pair is
-        /// the common case while the user drags a playhead across a finished waveform.
+        /// buckets it covers. A denoised row blends the sidecar's peaks over the raw ones at the
+        /// track's strength, so the row shows what the mixer will play. The last result is kept —
+        /// an unchanged (request, snapshots, strength) tuple is the common case while the user
+        /// drags a playhead across a finished waveform, and the timeline reuses its geometry for
+        /// as long as the same instance comes back.
         /// </summary>
-        private sealed class PeaksCache
+        internal sealed class PeaksCache
         {
             private WaveformSnapshot _snapshot;
+            private WaveformSnapshot _denoised;
+            private double _strength;
             private AudioPeaksRequest _request;
             private AudioPeaks _peaks;
 
-            public AudioPeaks Project(in AudioPeaksRequest request, WaveformSnapshot snapshot)
+            /// <param name="snapshot">The raw stream's peaks.</param>
+            /// <param name="denoised">The denoise sidecar's peaks, or null when the row draws raw
+            /// audio (no sidecar yet, or the track's toggle is off).</param>
+            /// <param name="strength">How far towards <paramref name="denoised"/> to blend, in
+            /// [0, 1] — the track's denoise strength, the same number the mixer lerps samples
+            /// with.</param>
+            public AudioPeaks Project(in AudioPeaksRequest request, WaveformSnapshot snapshot,
+                WaveformSnapshot denoised = null, double strength = 0)
             {
-                if (_peaks != null && ReferenceEquals(snapshot, _snapshot) && _request == request)
+                if (_peaks != null && ReferenceEquals(snapshot, _snapshot) &&
+                    ReferenceEquals(denoised, _denoised) && _strength == strength && _request == request)
                     return _peaks;
 
                 var perBucket = Math.Max(1, request.TicksPerBucket);
                 var count = (int)Math.Clamp((request.DurationTicks + perBucket - 1) / perBucket, 0, Int32.MaxValue / 2);
                 var minMax = new float[count * 2];
 
+                // the sidecar's peaks are only used once they cover the whole item: half a
+                // denoised waveform growing over a row that already shows the raw one reads as a
+                // glitch, where one swap when the pass lands reads as the row catching up.
+                var wet = denoised != null && IsAnalyzed(denoised, request)
+                    ? Math.Clamp(strength, 0, 1)
+                    : 0;
+
+                Fill(minMax, request, perBucket, count, wet >= 1 ? denoised : snapshot);
+                if (wet > 0 && wet < 1)
+                {
+                    var wetMinMax = new float[count * 2];
+                    Fill(wetMinMax, request, perBucket, count, denoised);
+                    for (var i = 0; i < minMax.Length; i++)
+                        minMax[i] += (float)((wetMinMax[i] - minMax[i]) * wet);
+                }
+
+                // complete once the analysis has passed the end of this item, even when the rest of
+                // the stream is still being decoded: the row is final and stops rebuilding. A
+                // denoised row is not final until its sidecar's pass has covered the item too.
+                var analyzed = IsAnalyzed(snapshot, request) && (denoised == null || IsAnalyzed(denoised, request));
+
+                _snapshot = snapshot;
+                _denoised = denoised;
+                _strength = strength;
+                _request = request;
+                _peaks = new AudioPeaks(request.SourceInTicks, perBucket, minMax, analyzed);
+                return _peaks;
+            }
+
+            private static void Fill(float[] minMax, in AudioPeaksRequest request, long perBucket, int count,
+                WaveformSnapshot snapshot)
+            {
                 for (var i = 0; i < count; i++)
                 {
                     var from = request.SourceInTicks + (long)i * perBucket;
@@ -642,17 +801,11 @@ namespace Clowd.UI.VideoEditor.Timeline
                     minMax[i * 2] = min;
                     minMax[i * 2 + 1] = max;
                 }
-
-                // complete once the analysis has passed the end of this item, even when the rest of
-                // the stream is still being decoded: the row is final and stops rebuilding.
-                var analyzed = snapshot.IsComplete ||
-                    snapshot.ReadyTicks >= request.SourceInTicks + request.DurationTicks;
-
-                _snapshot = snapshot;
-                _request = request;
-                _peaks = new AudioPeaks(request.SourceInTicks, perBucket, minMax, analyzed);
-                return _peaks;
             }
+
+            private static bool IsAnalyzed(WaveformSnapshot snapshot, in AudioPeaksRequest request) =>
+                snapshot.IsComplete ||
+                snapshot.ReadyTicks >= request.SourceInTicks + request.DurationTicks;
         }
 
         /// <summary>One capture file: its background read, and the projections built from it.</summary>
