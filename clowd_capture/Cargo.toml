@@ -43,6 +43,8 @@ windows = { workspace = true, features = [
     "Win32_Graphics_Dxgi",
     "Win32_Storage_Xps",
     "Win32_System_Com",
+    # SetThreadPriority for background-work threads (src/system/mod.rs lower_thread_priority).
+    "Win32_System_Threading",
     "Win32_System_SystemInformation",
 ] }
 

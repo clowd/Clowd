@@ -544,3 +544,146 @@ impl PinchMonitor {
         0.0
     }
 }
+
+/// Raise the whole PROCESS to the high priority class.
+///
+/// Call once, early in main. The v3 C++ capturer shipped exactly this
+/// (`SetPriorityClass(HIGH_PRIORITY_CLASS)` in `DxScreenCapture`'s
+/// constructor) for years: a capture overlay is a short-lived, fullscreen,
+/// latency-critical process, and while it is on screen it IS the
+/// foreground experience. Base priority for our normal threads becomes 13
+/// (vs 8), so even un-tiered threads outrank every other app.
+///
+/// Consequence to keep in mind: `lower_thread_priority`'s BELOW_NORMAL
+/// inside the high class still lands ABOVE other processes' normal
+/// threads — deliberate; it only has to yield to OUR render and event
+/// threads. Work that must also yield to the rest of the system (and to
+/// the disk) uses `background_thread_priority`, which drops out of the
+/// class entirely.
+pub fn raise_process_priority_class() {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::Threading::{GetCurrentProcess, SetPriorityClass, HIGH_PRIORITY_CLASS};
+        // Best-effort: a failed raise just means default scheduling.
+        let _ = SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+    }
+}
+
+/// Drop the CALLING thread to the process's below-normal scheduling
+/// priority — the middle "utility" tier, for CPU-heavy deferred work
+/// (shader compiles, font shaping, SVG parses) that should lose contested
+/// cores to the render workers but must NOT crawl: on a cold start the UI
+/// chrome is waiting on it.
+///
+/// Windows does not inherit thread priority on spawn, so every spawned
+/// thread — scoped ones included — has to call this itself at the top of
+/// its closure. For disk-bound work see `background_thread_priority`,
+/// which also drops I/O and memory priority.
+pub fn lower_thread_priority() {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::Threading::{GetCurrentThread, SetThreadPriority, THREAD_PRIORITY_BELOW_NORMAL};
+        // Best-effort: a failed priority drop just means default scheduling.
+        let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+    }
+    #[cfg(target_os = "macos")]
+    unsafe {
+        // Utility, not Background: Background is E-core-jailed on Apple
+        // Silicon and would visibly delay the deferred UI build.
+        let _ = libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_UTILITY, 0);
+    }
+}
+
+/// Drop the CALLING thread to true background scheduling — the lowest
+/// tier, for disk-bound work nobody is waiting on (the system-font scan,
+/// peek captures). The cold-start freeze was as much disk contention
+/// (page-cache-evicted files, on-access AV scanning) as CPU, and plain
+/// priority drops do not touch I/O scheduling.
+///
+/// Windows: `THREAD_MODE_BACKGROUND_BEGIN` — lowest CPU priority AND very
+/// low I/O priority AND low memory priority, regardless of the process's
+/// priority class — plus opting the thread INTO power throttling (EcoQoS),
+/// which parks it on E-cores on hybrid CPUs. Never reverted: every caller
+/// is a thread that exits when its one job is done.
+///
+/// macOS: `QOS_CLASS_BACKGROUND` — the direct analog (E-cores + low I/O
+/// priority).
+pub fn background_thread_priority() {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::Threading::{
+            GetCurrentThread, SetThreadInformation, SetThreadPriority, ThreadPowerThrottling, THREAD_MODE_BACKGROUND_BEGIN,
+            THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE,
+        };
+        // Best-effort throughout: a failed drop just means default scheduling.
+        let _ = SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+        let throttle = THREAD_POWER_THROTTLING_STATE {
+            Version: THREAD_POWER_THROTTLING_CURRENT_VERSION,
+            ControlMask: THREAD_POWER_THROTTLING_EXECUTION_SPEED,
+            // Mask set in ControlMask + set in StateMask = throttling ON.
+            StateMask: THREAD_POWER_THROTTLING_EXECUTION_SPEED,
+        };
+        let _ = SetThreadInformation(
+            GetCurrentThread(),
+            ThreadPowerThrottling,
+            (&throttle as *const THREAD_POWER_THROTTLING_STATE).cast(),
+            std::mem::size_of::<THREAD_POWER_THROTTLING_STATE>() as u32,
+        );
+    }
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let _ = libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_BACKGROUND, 0);
+    }
+}
+
+/// Raise the CALLING thread to the render tier: it paints a monitor every
+/// vsync and must win every contested core, including against background
+/// work whose priority is out of our hands (libblur's pool).
+///
+/// Windows, all three levers (the v3 C++ capturer used TIME_CRITICAL and
+/// the high priority class; MMCSS and EcoQoS did not exist yet):
+/// * `THREAD_PRIORITY_TIME_CRITICAL` — base 15 in the normal class, and
+///   with `raise_process_priority_class` still bounded (this is priority
+///   saturation within the class, not the realtime class).
+/// * MMCSS registration as a "Games" task — the scheduler DWM and game
+///   engines use: periodic boosts into the realtime band (16-26) with
+///   MMCSS's own anti-starvation. The handle is deliberately never
+///   reverted; the registration is for the thread's whole life.
+/// * Power throttling OFF — the scheduler may never park this thread on
+///   an E-core or dial its clocks down (EcoQoS).
+///
+/// macOS: `QOS_CLASS_USER_INTERACTIVE`, the top QoS band (P-cores).
+pub fn raise_render_thread_priority() {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::System::Threading::{
+            AvSetMmThreadCharacteristicsW, GetCurrentThread, SetThreadInformation, SetThreadPriority, ThreadPowerThrottling,
+            THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE,
+            THREAD_PRIORITY_TIME_CRITICAL,
+        };
+        // Best-effort throughout: a failed raise just means default scheduling.
+        let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+        let mut task_index = 0u32;
+        if let Err(e) = AvSetMmThreadCharacteristicsW(windows::core::w!("Games"), &mut task_index) {
+            // Non-fatal (MMCSS service disabled, registry key missing) but
+            // worth a line: this thread runs without the multimedia boosts.
+            log::info!("MMCSS registration failed: {e}");
+        }
+        let throttle = THREAD_POWER_THROTTLING_STATE {
+            Version: THREAD_POWER_THROTTLING_CURRENT_VERSION,
+            ControlMask: THREAD_POWER_THROTTLING_EXECUTION_SPEED,
+            // Mask set in ControlMask + clear in StateMask = throttling OFF.
+            StateMask: 0,
+        };
+        let _ = SetThreadInformation(
+            GetCurrentThread(),
+            ThreadPowerThrottling,
+            (&throttle as *const THREAD_POWER_THROTTLING_STATE).cast(),
+            std::mem::size_of::<THREAD_POWER_THROTTLING_STATE>() as u32,
+        );
+    }
+    #[cfg(target_os = "macos")]
+    unsafe {
+        let _ = libc::pthread_set_qos_class_self_np(libc::qos_class_t::QOS_CLASS_USER_INTERACTIVE, 0);
+    }
+}

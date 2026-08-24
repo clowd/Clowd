@@ -1537,6 +1537,10 @@ impl App {
                 let req = cycle.ocr_req;
                 let latch: Arc<Latch<Result<OcrOutcome, OcrError>>> = Arc::new(Latch::new());
                 let cancel = Arc::new(AtomicBool::new(false));
+                // First OCR press starts the system-font scan, overlapping
+                // it with the recognizer child's own cold start. By
+                // decision, neither runs before OCR is actually used.
+                crate::ui::gpu::text::begin_system_font_scan();
                 // Where the recognizer leaves its response file and `ocr.log`
                 // (see ocr::recognize). None is normal: OCR has no session_dir
                 // requirement, and only UPLOAD needs one.
@@ -1566,6 +1570,14 @@ impl App {
                             if cancel.load(Ordering::Acquire) {
                                 return;
                             }
+                            // Hold the result until the fallback-font scan
+                            // lands: publishing sooner would let the reveal
+                            // shape non-ASCII lines against the embedded-only
+                            // DB (tofu, cached for the request's lifetime).
+                            // The scan started with this request and runs
+                            // beside the child, so warm it is long done; the
+                            // timeout covers a wedged cold scan.
+                            crate::ui::gpu::text::wait_for_system_font_scan(std::time::Duration::from_secs(10));
                             latch.set(result);
                         })
                 };
@@ -1895,31 +1907,13 @@ impl ApplicationHandler for App {
                     // ever existed inside the debug panel.
                     info!("{}", self.startup.report());
 
-                    // Warm the OCR backend off-thread so the first OCR press of
-                    // the process doesn't pay for the clowd_ai executable and its
-                    // embedded models coming off disk cold mid-scan.
-                    // Once per process, and only when the OCR button exists at
-                    // all. Deliberately behind the show gate: warming spawns a
-                    // child process, and its deadline is the user's first OCR
-                    // keypress — hundreds of ms away at the very best — so none of
-                    // that belongs on the path to the first frame.
-                    // `bench_startup` suppresses it entirely: the process exits
-                    // a few statements below, so the spawn would only orphan a
-                    // `clowd_ai` child (its kill-on-drop guard and temp-file
-                    // cleanup are destructors, which a process exit never runs).
-                    // That orphan would then burn cores through the NEXT launch
-                    // and perturb exactly what the benchmark is measuring.
-                    if cycle.settings.panel_features.ocr && !cycle.settings.bench_startup {
-                        static OCR_WARM: std::sync::Once = std::sync::Once::new();
-                        OCR_WARM.call_once(|| {
-                            if let Err(e) = std::thread::Builder::new()
-                                .name("ocr-warm".into())
-                                .spawn(ocr::warm)
-                            {
-                                log::warn!("failed to spawn the OCR warm-up thread: {e}");
-                            }
-                        });
-                    }
+                    // No OCR pre-warm here, by decision: the clowd_ai child
+                    // (84 MB executable + embedded models) and the system-font
+                    // scan load lazily at the first OCR press instead
+                    // (`Command::Ocr` above). A cold pre-warm at show competed
+                    // with the deferred UI builds, the desktop blur and the
+                    // render loop for disk and every core — the post-show
+                    // freeze — to pre-pay for a rarely-used feature.
 
                     bench_done = cycle.settings.bench_startup;
                 }

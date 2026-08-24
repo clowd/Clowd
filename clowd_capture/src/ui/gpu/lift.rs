@@ -4,7 +4,7 @@
 //! are ALWAYS drawn as text bubbles (`super::ocr_bubbles`) — the old
 //! pixel-crop fallback, which sampled the desktop snapshot texture for
 //! scripts the embedded fonts couldn't shape, is gone: the bubble path now
-//! loads system fonts for fallback (`TextStack::ensure_fallback_fonts`),
+//! merges system fonts for fallback (`TextStack::try_merge_system_fonts`),
 //! so every script renders as real glyphs. That also removed this pass's
 //! snapshot bind group and the VRAM bracket discipline it required.
 //!

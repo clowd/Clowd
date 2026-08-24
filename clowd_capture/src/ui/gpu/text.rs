@@ -33,7 +33,7 @@ pub struct TextStack {
     /// it does happen: the pipeline is shared via glyphon's `Cache`, so
     /// this is essentially a vertex-buffer allocation.
     bubble_renderer: Option<TextRenderer>,
-    /// Whether [`Self::ensure_fallback_fonts`] has run — see its docs.
+    /// Whether [`Self::try_merge_system_fonts`] merged the scan — see its docs.
     fallback_fonts_loaded: bool,
 }
 
@@ -72,32 +72,49 @@ impl TextStack {
         }
     }
 
-    /// Register the system's fonts with the font DB so cosmic-text's
-    /// per-script fallback can shape glyphs the embedded Cascadia faces
-    /// lack (CJK, Cyrillic, Greek, Arabic, …). The startup DB deliberately
-    /// contains ONLY the embedded faces — this overlay is startup-latency-
-    /// sensitive — so the scan runs on the first OCR Scanning frame
-    /// instead (`OcrBubblesRenderer::advance_warmup`), where its measured
-    /// ~11 ms (363 faces; fontdb parses name tables lazily) hides under
-    /// the sweep animation. Idempotent; every later call is a boolean
-    /// test.
+    /// Merge the background system-font scan's result into this stack's
+    /// font DB, so cosmic-text's per-script fallback can shape glyphs the
+    /// embedded Cascadia faces lack (CJK, Cyrillic, Greek, Arabic, …).
+    /// Returns whether the fallback faces are registered.
+    ///
+    /// The startup DB deliberately contains ONLY the embedded faces — this
+    /// overlay is startup-latency-sensitive, and the scan is ~11 ms warm
+    /// but SECONDS from a cold page cache (see the perf probe at the bottom
+    /// of this file) — so nothing font-related may ever run on a render
+    /// thread. The scan runs once per process on a low-priority background
+    /// thread that [`begin_system_font_scan`] starts at the first OCR
+    /// press; this method only copies the finished scan's `FaceInfo`
+    /// records (Arc'd file paths — fontdb parses face data lazily at
+    /// raster time) into the per-thread DB, a per-face metadata clone.
+    /// Idempotent; after the first successful merge it is a boolean test.
     ///
     /// Safe to do after shaping has already happened: the pre-load shaping
     /// (panel/hint labels) is ASCII the embedded faces fully cover, so no
     /// cached fallback list for those runs can be wrong — and bubble text
-    /// is only ever shaped after this ran.
-    pub fn ensure_fallback_fonts(&mut self) {
+    /// is only ever shaped after this returned true (`recognize`'s worker
+    /// waits out the scan before publishing a result, and the bubble
+    /// layout path calls this again as a belt-and-braces guard).
+    pub fn try_merge_system_fonts(&mut self) -> bool {
         if self.fallback_fonts_loaded {
-            return;
+            return true;
         }
+        // Defensive: normally the OCR press already started the scan.
+        begin_system_font_scan();
+        let Some(scanned) = system_font_scan_latch().try_get() else {
+            return false;
+        };
         let t0 = std::time::Instant::now();
-        self.font_system.db_mut().load_system_fonts();
+        let db = self.font_system.db_mut();
+        for info in scanned.faces() {
+            db.push_face_info(info.clone());
+        }
         log::info!(
-            "loaded system fonts for OCR glyph fallback: {} faces in {:?}",
+            "merged system fonts for OCR glyph fallback: {} faces in {:?}",
             self.font_system.db().faces().count(),
             t0.elapsed()
         );
         self.fallback_fonts_loaded = true;
+        true
     }
 
     pub fn update_viewport(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
@@ -188,12 +205,67 @@ impl TextStack {
     }
 }
 
+/// The one process-wide system-font scan. `Latch` (not `OnceLock`) because
+/// the OCR worker thread needs a blocking-with-timeout wait
+/// ([`wait_for_system_font_scan`]) while render threads need a non-blocking
+/// peek (`try_get`).
+fn system_font_scan_latch() -> &'static crate::sync::Latch<std::sync::Arc<glyphon::fontdb::Database>> {
+    static LATCH: std::sync::OnceLock<crate::sync::Latch<std::sync::Arc<glyphon::fontdb::Database>>> = std::sync::OnceLock::new();
+    LATCH.get_or_init(crate::sync::Latch::new)
+}
+
+/// Start the system-font scan on a background thread, once per process.
+///
+/// Called at the first OCR press (`app.rs`), overlapping the scan with the
+/// recognizer child's own cold start — by decision, NOTHING OCR-related
+/// (this scan, the `clowd_ai` child) loads before OCR is actually used, so
+/// capture startup never pays for a rarely-used feature. Low priority: on
+/// a cold page cache the scan is disk-bound for seconds (font files +
+/// on-access AV scanning) and must not contend with rendering.
+pub fn begin_system_font_scan() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        let spawned = std::thread::Builder::new()
+            .name("font-scan".into())
+            .spawn(|| {
+                // Background, not just below-normal: the scan is DISK-bound
+                // (cold page cache, on-access AV), and only the background
+                // tier lowers I/O priority too.
+                crate::system::background_thread_priority();
+                let t0 = std::time::Instant::now();
+                let mut db = glyphon::fontdb::Database::new();
+                db.load_system_fonts();
+                log::info!("system font scan: {} faces in {:?}", db.faces().count(), t0.elapsed());
+                system_font_scan_latch().set(std::sync::Arc::new(db));
+            });
+        if let Err(e) = spawned {
+            log::warn!("failed to spawn the font-scan thread: {e}");
+        }
+    });
+}
+
+/// Block until the system-font scan lands (or `timeout`). For the OCR
+/// worker thread only — it holds the recognition result back until the
+/// fallback faces are mergeable, so the reveal never shapes non-ASCII
+/// lines against an embedded-only DB (tofu that would stay cached for the
+/// life of the request). Render threads must never call this.
+pub fn wait_for_system_font_scan(timeout: std::time::Duration) {
+    if system_font_scan_latch()
+        .wait_timeout(timeout)
+        .is_none()
+    {
+        log::warn!("system font scan did not finish within {timeout:?}; OCR bubbles may lack non-ASCII glyphs");
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    /// Perf probe, kept because `ensure_fallback_fonts`'s frame-budget
-    /// claim rests on it: the system font scan must stay ~one-frame cheap
-    /// (measured 11 ms / 363 faces on the dev box — fontdb only parses
-    /// name tables). Prints with --nocapture; asserts only a sanity bound.
+    /// Perf probe, kept as the record of why the scan lives on a
+    /// background thread (`begin_system_font_scan`) and nothing on a
+    /// render thread may ever call `load_system_fonts`: ~11 ms / 363
+    /// faces warm on the dev box (fontdb only parses name tables), but
+    /// SECONDS from a cold page cache — see below. Prints with
+    /// --nocapture; asserts only a sanity bound.
     ///
     /// The bound is deliberately enormous relative to that measurement, and
     /// it has to be: a hosted Windows runner was seen taking 5.11 s over 176

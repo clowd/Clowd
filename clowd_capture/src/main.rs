@@ -37,6 +37,11 @@ fn main() -> anyhow::Result<()> {
     // of it. Anything moved above this line becomes invisible to the
     // benchmark.
     let t_start = Instant::now();
+    // High priority class for the whole process (as the v3 C++ capturer
+    // did): while the overlay is up it IS the foreground experience. The
+    // per-thread tiers in `system` refine this — render threads go higher
+    // still, disk-bound background work drops out of the class entirely.
+    system::raise_process_priority_class();
     let args = settings::CliArgs::parse();
 
     // Terminal output plus a mirror into the session dir: when the shell spawns us

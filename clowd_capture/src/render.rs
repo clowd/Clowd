@@ -87,6 +87,13 @@ fn spawn_deferred_stack(
     thread::Builder::new()
         .name(format!("ui-build-{monitor_index}"))
         .spawn(move || {
+            // Below normal, and so is every thread this build fans out to
+            // (spawns do not inherit priority on Windows): on a cold start
+            // this build is still compiling when the overlay shows, and it
+            // must lose every contested core to the render loop — the UI
+            // chrome arriving a beat later is invisible next to the frame
+            // cadence stuttering.
+            crate::system::lower_thread_priority();
             let mark = |field: fn(&WorkerTimings) -> &AtomicDuration| {
                 if let Some(t) = startup.background.workers.get(monitor_index) {
                     field(t).set_once(startup.t_start.elapsed());
@@ -99,8 +106,14 @@ fn spawn_deferred_stack(
             // pipeline compiles and the peek compile occupy their own
             // threads. `scope` lets all of them borrow the one device.
             let (peek, pipelines, text) = thread::scope(|s| {
-                let peek = s.spawn(|| gpu::create_peek_gpu(&device));
-                let pipelines = s.spawn(|| UiPipelines::build_parallel(&device, SURFACE_FORMAT));
+                let peek = s.spawn(|| {
+                    crate::system::lower_thread_priority();
+                    gpu::create_peek_gpu(&device)
+                });
+                let pipelines = s.spawn(|| {
+                    crate::system::lower_thread_priority();
+                    UiPipelines::build_parallel(&device, SURFACE_FORMAT)
+                });
                 let text_stack = TextStack::new(&device, &queue, SURFACE_FORMAT);
                 mark(|t| &t.prep_fonts);
                 let text = UiText::new(text_stack);
@@ -241,6 +254,11 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         memory_hints,
         failed_count,
     } = params;
+
+    // This thread paints a monitor every vsync; it outranks everything
+    // else in the process, including background work whose priority is
+    // out of our hands (libblur's pool). See the helper's docs.
+    crate::system::raise_render_thread_priority();
 
     // Armed for the worker's whole life: any exit that isn't a clean
     // shutdown bumps `failed_count`, so the app's show gate
@@ -615,6 +633,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     peek,
                     mut ui,
                 })) => {
+                    info!("render worker {monitor_index}: deferred UI stack folded in");
                     // No previous cycle's UI may composite into the first UI
                     // frames, and the animation clock (border trail) starts
                     // from the moment the chrome appears rather than from
@@ -926,6 +945,13 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         let now = Instant::now();
         let overall = now.duration_since(last_iter);
         last_iter = now;
+        // The cold-start freeze this loop must never reproduce is a
+        // multi-hundred-ms gap in the seconds right after show. The debug
+        // overlay only shows live sessions; this leaves the evidence in
+        // the log where a report can carry it.
+        if overall > Duration::from_millis(250) && startup.t_start.elapsed() < Duration::from_secs(12) {
+            warn!("render worker {monitor_index}: {overall:?} inter-frame gap during startup window");
+        }
 
         let mut sample: Option<PerfSample> = None;
         draw_once(
