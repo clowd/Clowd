@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Notifications;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -250,6 +251,12 @@ namespace Clowd.UI.VideoEditor
             if (OperatingSystem.IsMacOS())
                 KeyBindings.Add(new KeyBinding { Command = CommandRedo, Gesture = new KeyGesture(Key.Z, KeyModifiers.Meta | KeyModifiers.Shift) });
             AddHandler(KeyDownEvent, OnTunnelKeyDown, RoutingStrategies.Tunnel);
+
+            // dropping files in from Explorer/Finder (DragDrop.AllowDrop is set on the window in
+            // XAML and inherits down the tree). handledEventsToo: a child that consumed the drag
+            // for its own purposes — a TextBox offered text — did not consume the files in it.
+            AddHandler(DragDrop.DragOverEvent, OnDragOverFiles, RoutingStrategies.Bubble, handledEventsToo: true);
+            AddHandler(DragDrop.DropEvent, OnDropFiles, RoutingStrategies.Bubble, handledEventsToo: true);
 
             // media keys (opt-in, Settings ▸ Recording ▸ Composition) drive the transport only
             // while this window has focus — the hook behind them is global, so it is held no
@@ -1175,8 +1182,24 @@ namespace Clowd.UI.VideoEditor
             if (picked is not { Length: > 0 } || _closing)
                 return;
 
-            var path = picked[0];
+            var (created, error) = await TryImportMediaAsync(picked[0]);
+            if (error != null)
+            {
+                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning, error, "Can't import this file");
+                return;
+            }
 
+            if (created.Count > 0)
+                RevealNewItem(created[0]);
+        }
+
+        /// <summary>The probe-and-import half of <see cref="ImportMediaAsync"/>, shared with the
+        /// file-drop path: returns the created items, or a message saying why there are none — the
+        /// picker flow raises that as a modal, the drop flow as a toast. An empty result with no
+        /// message is a window that closed (or a gesture that started) mid-probe: the caller has
+        /// nothing to say about that.</summary>
+        private async Task<(IReadOnlyList<Item> created, string error)> TryImportMediaAsync(string path)
+        {
             MediaProbeResult probe;
             try
             {
@@ -1185,23 +1208,96 @@ namespace Clowd.UI.VideoEditor
             catch (Exception ex)
             {
                 Debug.WriteLine("Import probe failed: " + ex);
-                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
-                    "That file could not be read: " + ex.Message, "Can't import this file");
-                return;
+                return (Array.Empty<Item>(), "That file could not be read: " + ex.Message);
             }
 
             if (!CanAddToProject)
-                return;
+                return (Array.Empty<Item>(), null);
 
             var created = _editor.ImportMedia(path, probe, PlayheadTicks);
             if (created.Count == 0)
-            {
-                await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning,
-                    "That file has no video or audio track to import.", "Can't import this file");
+                return (created, "That file has no video or audio track to import.");
+
+            return (created, null);
+        }
+
+        // ====================================================================
+        // File drops (Explorer/Finder)
+        // ====================================================================
+
+        /// <summary>Any drag carrying files gets the copy cursor, including files this editor
+        /// cannot import: refusing the drop outright would leave the user dragging at a window that
+        /// says nothing about why. The drop itself sorts them out and says so.</summary>
+        private void OnDragOverFiles(object sender, DragEventArgs e)
+        {
+            if (FileDrop.GetLocalPaths(e).Count == 0)
                 return;
+
+            e.DragEffects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+
+        private void OnDropFiles(object sender, DragEventArgs e)
+        {
+            var paths = FileDrop.GetLocalPaths(e);
+            if (paths.Count == 0)
+                return;
+
+            e.Handled = true;
+            _ = AddDroppedFilesAsync(paths);
+        }
+
+        /// <summary>Adds dropped files at the playhead — images as image items, video and audio
+        /// through the same probe+import the Import button runs — one file at a time, in drop
+        /// order, so a multi-file drop stacks its rows the way importing them one after another
+        /// would (and leaves one undo entry per file, not one for the batch). Whatever the editor
+        /// can't take is reported in a single toast at the end rather than a modal per file.</summary>
+        private async Task AddDroppedFilesAsync(IReadOnlyList<string> paths)
+        {
+            Item revealed = null;
+            string firstError = null;
+            var failed = 0;
+
+            foreach (var path in paths)
+            {
+                if (!CanAddToProject)
+                    break;
+
+                if (MediaFileTypes.IsImage(path))
+                {
+                    var item = _editor.AddImage(path, PlayheadTicks, AddedItemDurationTicks);
+                    if (item != null)
+                        revealed = item;
+                    else
+                        failed++;
+                }
+                else if (MediaFileTypes.IsMedia(path))
+                {
+                    var (created, error) = await TryImportMediaAsync(path);
+                    if (created.Count > 0)
+                        revealed = created[0];
+                    else if (error != null)
+                    {
+                        firstError ??= error;
+                        failed++;
+                    }
+                }
+                else
+                {
+                    firstError ??= "That file could not be added. The editor takes images, video and audio files.";
+                    failed++;
+                }
             }
 
-            RevealNewItem(created[0]);
+            if (revealed != null && CanAddToProject)
+                RevealNewItem(revealed);
+
+            if (failed == 0)
+                return;
+
+            Toast.Show(this, failed == 1
+                ? firstError ?? "That file could not be added."
+                : failed + " files could not be added.", NotificationType.Error);
         }
 
         /// <summary>Selects what was just created and scrolls it into view — an add the user cannot

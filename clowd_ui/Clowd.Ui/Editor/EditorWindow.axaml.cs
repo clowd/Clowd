@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Notifications;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Input;
@@ -179,6 +180,12 @@ namespace Clowd.UI
             };
             SizeChanged += (_, _) => TrackNormalBounds();
             ScalingChanged += (_, _) => drawingCanvas.UpdateForScalingChange(); // decision table #56
+
+            // dropping files in from Explorer/Finder (DragDrop.AllowDrop is set on the window in
+            // XAML and inherits down the tree). handledEventsToo: a child that consumed the drag
+            // for its own purposes — a TextBox offered text — did not consume the files in it.
+            AddHandler(DragDrop.DragOverEvent, OnDragOverFiles, RoutingStrategies.Bubble, handledEventsToo: true);
+            AddHandler(DragDrop.DropEvent, OnDropFiles, RoutingStrategies.Bubble, handledEventsToo: true);
 
             btnUpload.AddHandler(PointerPressedEvent, btnUpload_RightMouseDown, RoutingStrategies.Tunnel);
 
@@ -1205,6 +1212,72 @@ namespace Clowd.UI
             }
 
             await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Error, "The clipboard does not contain an image.", "Failed to paste");
+        }
+
+        // ====================================================================
+        // File drops (Explorer/Finder)
+        // ====================================================================
+
+        /// <summary>Any drag carrying files gets the copy cursor, including files this editor
+        /// cannot open: refusing the drop outright would leave the user dragging at a window that
+        /// says nothing about why. The drop itself sorts them out and says so.</summary>
+        private void OnDragOverFiles(object sender, DragEventArgs e)
+        {
+            if (FileDrop.GetLocalPaths(e).Count == 0)
+                return;
+
+            e.DragEffects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+
+        /// <summary>Adds dropped image files to the canvas — the paste path, from a file rather
+        /// than the clipboard: each is copied into the session directory (the session owns its
+        /// artwork; the file the user dragged may be gone tomorrow) and added as a graphic.</summary>
+        private void OnDropFiles(object sender, DragEventArgs e)
+        {
+            var paths = FileDrop.GetLocalPaths(e);
+            if (paths.Count == 0 || _session == null)
+                return;
+
+            e.Handled = true;
+
+            var graphics = new List<GraphicBase>();
+            var rejected = 0;
+
+            foreach (var path in paths) {
+                if (!MediaFileTypes.IsImage(path)) {
+                    rejected++;
+                    continue;
+                }
+
+                try {
+                    var copied = CopyFileToSessionDir(path);
+                    // decoding is also the only real test that we can draw it — an image with the
+                    // right extension and a broken/unsupported body fails here, not on the canvas
+                    using var bmp = new Bitmap(copied);
+                    // AddGraphics centers the batch as one, so the cascade offset is what keeps a
+                    // multi-file drop from landing as a single stack with only the top one visible
+                    var offset = graphics.Count * 24;
+                    var size = new Size(bmp.PixelSize.Width, bmp.PixelSize.Height);
+                    graphics.Add(new GraphicImage(copied, new Rect(new Point(offset, offset), size), new PixelRect()));
+                } catch (Exception ex) {
+                    Debug.WriteLine("Dropped image could not be added: " + ex);
+                    rejected++;
+                }
+            }
+
+            if (graphics.Count > 0)
+                drawingCanvas.AddGraphics(graphics.ToArray());
+
+            if (rejected == 0)
+                return;
+
+            var message = graphics.Count > 0
+                ? rejected + (rejected == 1 ? " file could not be added." : " files could not be added.")
+                : paths.Count == 1
+                    ? "That file could not be added. The editor takes images (png, jpg, webp, bmp)."
+                    : "Those files could not be added. The editor takes images (png, jpg, webp, bmp).";
+            Toast.Show(this, message, NotificationType.Error);
         }
 
         private void UploadCommandExecuted(object parameter)
