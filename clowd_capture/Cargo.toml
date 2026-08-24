@@ -50,6 +50,8 @@ windows = { workspace = true, features = [
     # SetThreadPriority / MMCSS / power throttling for the thread tiers
     # (src/system/mod.rs lower_thread_priority and friends).
     "Win32_System_Threading",
+    # K32GetProcessMemoryInfo for the debug overlay process-RAM row.
+    "Win32_System_ProcessStatus",
     # D3DKMTSetProcessSchedulingPriorityClass: GPU scheduler priority
     # (src/system/mod.rs raise_process_priority_class).
     "Wdk_Graphics_Direct3D",

@@ -82,6 +82,7 @@ fn spawn_deferred_stack(
     monitor_index: usize,
     monitor_name: String,
     adapter_name: String,
+    adapter_id: Option<(u32, u32)>,
     startup: Arc<StartupTimings>,
 ) -> thread::JoinHandle<DeferredStack> {
     thread::Builder::new()
@@ -132,7 +133,16 @@ fn spawn_deferred_stack(
 
             DeferredStack {
                 peek,
-                ui: UiRenderer::from_parts(pipelines, text, this_monitor, monitor_index, monitor_name, adapter_name, startup),
+                ui: UiRenderer::from_parts(
+                    pipelines,
+                    text,
+                    this_monitor,
+                    monitor_index,
+                    monitor_name,
+                    adapter_name,
+                    adapter_id,
+                    startup,
+                ),
             }
         })
         .expect("spawn ui builder")
@@ -298,6 +308,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         monitor_index,
         monitor_name,
         adapter_name,
+        adapter_hint,
         startup.clone(),
     );
 

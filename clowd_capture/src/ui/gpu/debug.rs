@@ -10,6 +10,7 @@ use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBoun
 
 use crate::ui::components::debug::layout::{compute_layout, DebugPanelLayout, PanelAnchor, BODY_FONT_PX};
 use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
+use crate::ui::components::debug::resources::ResourcePoller;
 use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
 use crate::telemetry::perf::{PerfSample, PerfTracker};
@@ -108,15 +109,19 @@ pub struct DebugRenderer {
     /// `MonitorPanelData::write_lines` / `PrimaryPanelData::write_lines`
     /// hot path. Cleared before each write.
     line_buf: LineBuf,
+    /// RAM/VRAM readings, self-throttled to ~1 Hz; only consulted while a
+    /// panel is actually visible.
+    resources: ResourcePoller,
 }
 
 impl DebugRenderer {
-    pub fn new(monitor_index: usize) -> Self {
+    pub fn new(monitor_index: usize, adapter_id: Option<(u32, u32)>) -> Self {
         Self {
             lines: Vec::new(),
             positions: Vec::new(),
             monitor_index,
             line_buf: LineBuf::new(),
+            resources: ResourcePoller::new(adapter_id),
         }
     }
 
@@ -140,6 +145,7 @@ impl DebugRenderer {
 
         let dpi = this_monitor.dpi_scale.max(0.1);
         let font_px = (BODY_FONT_PX * dpi).floor();
+        let readings = self.resources.readings();
 
         // --- Monitor panel (every monitor when debug_visible) ---
         if debug_monitor_visibility(state, this_monitor) {
@@ -148,6 +154,7 @@ impl DebugRenderer {
                 name: monitor_name,
                 is_primary: this_monitor.is_primary,
                 adapter: adapter_name,
+                vram: readings.vram_adapter,
                 dpi: (dpi * 96.0).round() as u32,
                 bounds: this_monitor.bounds,
                 // Process-start-to-first-frame for THIS display.
@@ -192,6 +199,9 @@ impl DebugRenderer {
                 hovered_window_bounds: state.hovered_window_bounds,
                 hovered_window_index: state.hovered_window_index,
                 hovered_window_obstructed: state.hovered_window_obstructed,
+                ram: readings.ram,
+                vram_total: readings.vram_total,
+                precomp_shaders: crate::gpu::shaders::precompiled_in_use(),
             };
             data.write_lines(&mut self.line_buf);
             render_panel_inner(
