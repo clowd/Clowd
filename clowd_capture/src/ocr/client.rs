@@ -15,7 +15,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
-use clowd_rust_core::geometry::RectExt;
 use clowd_rust_core::ocr::{OcrError, OcrOutcome, OcrRequest, OcrResponse, RequestHeader, RESULT_FILE_NAME};
 
 /// Binary we spawn, expected beside our own executable — which is where CI
@@ -87,28 +86,6 @@ pub fn recognize(req: &OcrRequest, cancel: &AtomicBool, session_dir: Option<&Pat
         .and_then(|bytes| {
             serde_json::from_slice::<OcrResponse>(&bytes).map_err(|e| OcrError::Failed(format!("response file unparseable: {e}")))
         })?
-}
-
-/// Pre-warm: spawn the child once on a 1x1 image and let it run to
-/// completion, so the first real OCR press does not pay for a cold
-/// executable (tens of MB of embedded models) coming off disk. Blocking, best-effort,
-/// and silent about failures — a broken engine is reported at recognize
-/// time, where there is a user waiting for an answer to put it in.
-///
-/// Called once per process from a background thread at capture-cycle start
-/// (see `app.rs`), and only when the OCR button exists at all.
-pub fn warm() {
-    let req = OcrRequest {
-        bgra: vec![0xFF; 4],
-        width: 1,
-        height: 1,
-        origin: clowd_rust_core::geometry::ScreenRect::from_xy_size(0, 0, 1, 1),
-    };
-    let cancel = AtomicBool::new(false);
-    match recognize(&req, &cancel, None) {
-        Ok(_) => log::info!("OCR engine warmed"),
-        Err(e) => log::info!("OCR warm-up did not complete: {e:?}"),
-    }
 }
 
 /// Where this request's artifacts go. Deletes the response file when dropped,
@@ -309,7 +286,7 @@ impl Drop for ChildGuard {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use clowd_rust_core::geometry::ScreenRect;
+    use clowd_rust_core::geometry::{RectExt, ScreenRect};
 
     /// A capture with a session directory keeps both artifacts there; one
     /// without gets a collision-proof temp path and no log.

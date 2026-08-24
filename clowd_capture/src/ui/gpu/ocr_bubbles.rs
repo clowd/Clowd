@@ -3,8 +3,8 @@
 //! line by line as the sweep's band passes over the selection. Scripts the
 //! embedded Cascadia faces cannot shape (CJK, Cyrillic, …) come from
 //! system fonts via cosmic-text's per-script fallback —
-//! `TextStack::ensure_fallback_fonts` registers them on the first bubble
-//! layout. (There used to be a pixel-crop fallback pass for those lines,
+//! `TextStack::try_merge_system_fonts` folds a background scan's result
+//! in during the Scanning warmup. (There used to be a pixel-crop fallback pass for those lines,
 //! sampling the desktop snapshot texture; system-font fallback replaced
 //! it wholesale.)
 //!
@@ -20,15 +20,16 @@
 //! rule: no single frame ever carries more than a frame's slack of warmup
 //! work — the work is SLICED, never paused-for:
 //!
-//! * **Ordinary capture frames** (crosshair/selection — nothing latency-
-//!   critical animating): the fallback fonts load once (~11 ms, the one
-//!   deliberate over-budget step, taken a few frames after first paint),
-//!   then printable ASCII is shaped + staged as INVISIBLE (alpha-0) text
-//!   at the quantized bubble sizes, ~a dozen glyphs per frame (~1-2 ms).
-//!   By the time OCR is even pressed the atlas is usually fully warm and
-//!   the scanning wave has zero warmup work left. The slicing continues
-//!   under Scanning if OCR was pressed immediately; it PAUSES during
-//!   Lifted so the reveal never shares its frames with generic warmup.
+//! * **Scanning frames** (the sweep playing while recognition is in
+//!   flight): the system-font scan runs on a background thread the OCR
+//!   press started, and its result is folded into the DB the frame it
+//!   lands (a metadata copy, not a scan); then printable ASCII is shaped +
+//!   staged as INVISIBLE (alpha-0) text at the quantized bubble sizes, ~a
+//!   dozen glyphs per frame (~1-2 ms). The recognizer's round-trip is
+//!   dozens of frames even warm, so the atlas is usually fully warm by
+//!   Lifted. Nothing runs before the first OCR press — by decision, a
+//!   non-OCR session pays zero warmup — and slicing PAUSES during Lifted
+//!   so the reveal never shares its frames with generic warmup.
 //! * **The Scanning→Lifted transition frame** shapes every line at once.
 //!   That is deliberate: the app thread wrap-aligns the transition, so on
 //!   this exact frame the band is entirely off-screen — the one frame in
@@ -190,10 +191,11 @@ pub struct OcrBubblesRenderer {
     /// pressure in between, the Lifted look-ahead pre-stage (see module
     /// docs) re-rasterizes it before it can show.
     warm_step: usize,
-    /// Frames prepared so far, saturating — the warmup waits out the
-    /// first few so the one over-budget step (the font scan) can never
-    /// delay first paint.
-    frames_seen: u32,
+    /// Sticky: OCR has been engaged (any non-Idle state seen) at some
+    /// point this process. The warmup runs only after this flips — by
+    /// decision, NOTHING OCR-related (font scan, glyph warmup, the
+    /// `clowd_ai` child) runs before OCR is actually used.
+    ocr_engaged: bool,
     /// Window-local clip size for the warmup area, captured in `prepare`
     /// (glyphon culls out-of-bounds glyphs before rasterizing, so the
     /// warmup must be staged inside the real viewport).
@@ -208,7 +210,7 @@ impl OcrBubblesRenderer {
             drawn: Vec::new(),
             warm_buffer: None,
             warm_step: 0,
-            frames_seen: 0,
+            ocr_engaged: false,
             warm_bounds: [0, 0],
         }
     }
@@ -242,15 +244,17 @@ impl OcrBubblesRenderer {
         bubble_rects: &mut Vec<RectInstance>,
     ) -> bool {
         self.drawn.clear();
-        self.frames_seen = self.frames_seen.saturating_add(1);
+        self.ocr_engaged |= !matches!(state.ocr, OcrState::Idle);
 
-        // One sliced warmup step per frame, in EVERY state except Lifted
-        // (the reveal never shares its frames with generic warmup — its
-        // own look-ahead pre-stage below has priority) and except the
-        // first few frames of the process (first paint must not wait on
-        // the font scan). See the module docs for the staging story.
+        // One sliced warmup step per frame once OCR has been engaged, in
+        // EVERY state except Lifted (the reveal never shares its frames
+        // with generic warmup — its own look-ahead pre-stage below has
+        // priority). Warmup runs mostly under Scanning, hidden behind the
+        // recognizer's round-trip; before the first OCR press it never
+        // runs at all — non-OCR sessions pay nothing. See the module docs
+        // for the staging story.
         let lifted = matches!(state.ocr, OcrState::Lifted { .. });
-        if !lifted && self.frames_seen > 3 {
+        if self.ocr_engaged && !lifted {
             self.advance_warmup(ts, this_monitor);
         } else {
             self.warm_buffer = None;
@@ -305,11 +309,15 @@ impl OcrBubblesRenderer {
                 self.entries.clear();
                 return at_rest(anchor.elapsed().as_secs_f32());
             }
-            // Belt-and-braces: the Scanning warmup already did this, but
-            // bubble shaping must NEVER run without the fallback fonts in
-            // the DB (tofu otherwise), so re-assert the invariant where it
-            // matters. A boolean test when the warmup ran.
-            ts.ensure_fallback_fonts();
+            // Belt-and-braces: the Scanning warmup already merged the
+            // fallback fonts, but bubble shaping must NEVER run without
+            // them in the DB (tofu otherwise, cached for the life of the
+            // request), so re-assert the invariant where it matters. The
+            // scan itself is done by now — the OCR worker waits it out
+            // before publishing the outcome — so a false here is the
+            // scan-timeout case, where shaping embedded-only is the
+            // accepted fallback.
+            let _ = ts.try_merge_system_fonts();
             self.entries.clear();
             for line in outcome.lines.iter() {
                 // An all-whitespace line has no ink to lift; an empty pill
@@ -411,10 +419,13 @@ impl OcrBubblesRenderer {
         }
 
         if self.warm_step == 0 {
-            // The one over-budget step (~11 ms measured): a single early
-            // frame while nothing more than the crosshair is on screen.
-            ts.ensure_fallback_fonts();
-            self.warm_step = 1;
+            // Non-blocking: the scan itself runs on the background thread
+            // the OCR press started (`begin_system_font_scan`); this only
+            // folds its result in — a per-face metadata copy, ~ms — and
+            // retries next frame until the scan lands.
+            if ts.try_merge_system_fonts() {
+                self.warm_step = 1;
+            }
             return;
         }
 

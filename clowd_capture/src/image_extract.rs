@@ -7,13 +7,22 @@ use clowd_rust_core::geometry::{RectExt, ScreenRect};
 /// unavoidable; the blur then runs in place on that copy. No channel
 /// reordering: a gaussian blur is channel-independent, so blurring BGRA
 /// bytes directly yields the same result as RGBA round-tripping would.
+///
+/// `AdaptiveReserve(2)` — not `Adaptive` — leaves two cores untouched for
+/// the render workers and the winit thread: this runs the moment the
+/// overlay shows, and at full width it starved exactly the threads that
+/// keep the overlay feeling alive. Priority would be the better lever
+/// (blur finishes fastest when it may use every idle core), but libblur
+/// spawns its own scoped worker threads per call and offers no hook to
+/// lower them, and Windows does not inherit the caller's priority — so
+/// reserving cores is the strongest control the crate exposes.
 pub fn blur_desktop_bgra(bgra: &[u8], width: u32, height: u32, radius: u32) -> (Vec<u8>, u32, u32) {
     let mut out = bgra.to_vec();
     let mut img = libblur::BlurImageMut::borrow(&mut out, width, height, libblur::FastBlurChannels::Channels4);
     if let Err(e) = libblur::stack_blur(
         &mut img,
         libblur::AnisotropicRadius::new(radius),
-        libblur::ThreadingPolicy::Adaptive,
+        libblur::ThreadingPolicy::AdaptiveReserve(std::num::NonZeroUsize::new(2).unwrap()),
     ) {
         // Blur is cosmetic (peek ghost backdrop); fall back to the sharp
         // desktop rather than failing the capture.

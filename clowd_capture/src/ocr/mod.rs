@@ -43,10 +43,3 @@ use std::sync::atomic::AtomicBool;
 pub fn recognize(req: &OcrRequest, cancel: &AtomicBool, session_dir: Option<&Path>) -> Result<OcrOutcome, OcrError> {
     client::recognize(req, cancel, session_dir)
 }
-
-/// Pre-warm the recognizer so the first OCR press of the process doesn't pay
-/// for its executable and embedded models coming off a cold disk. Blocking;
-/// best-effort; failures are logged and surface properly at recognize time.
-pub fn warm() {
-    client::warm();
-}

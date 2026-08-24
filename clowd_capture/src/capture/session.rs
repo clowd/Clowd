@@ -272,13 +272,16 @@ fn spawn_screenshot_job(params: ScreenshotJobParams) -> (Arc<Latch<Arc<CapturedD
             }
 
             if peek_enabled {
-                // Gated on the overlay actually being on screen. `stack_blur` runs
-                // under `ThreadingPolicy::Adaptive`, i.e. `(w*h/65536).clamp(1, cores)`
-                // threads — every core on any real desktop — and nothing reads
-                // `BlurredDesktop` until the user hovers a peek-eligible window, which
-                // cannot happen before the overlay is visible. Ungated it competed with
-                // window creation, the snapshot upload and frame 0 for exactly those
-                // cores, on the one path where they are the critical path.
+                // Gated on the overlay actually being on screen. `stack_blur` fans out
+                // wide (`AdaptiveReserve(2)` — all but two cores; see
+                // `blur_desktop_bgra` for why cores, not priority, are the lever) and
+                // nothing reads `BlurredDesktop` until the user hovers a peek-eligible
+                // window, which cannot happen before the overlay is visible. Ungated it
+                // competed with window creation, the snapshot upload and frame 0 for
+                // exactly those cores, on the one path where they are the critical
+                // path. It still runs as soon as the gate opens — not later — so the
+                // blurred backdrop stays temporally close to the desktop capture and
+                // the peek images.
                 //
                 // Bounded rather than an unconditional wait: on the exit paths that
                 // never signal (every window failing to create) this thread would
@@ -288,6 +291,7 @@ fn spawn_screenshot_job(params: ScreenshotJobParams) -> (Arc<Latch<Arc<CapturedD
                     warn!("screenshot: overlay never became visible; blurring anyway");
                 }
                 // stack_blur radius 4 visually approximates the old sigma-2.0 gaussian.
+                let t_blur = std::time::Instant::now();
                 let (bgra, w, h) = image_extract::blur_desktop_bgra(&captured.bgra, captured.width, captured.height, 4);
                 let blurred = Arc::new(BlurredDesktopImage {
                     bgra,
@@ -297,7 +301,7 @@ fn spawn_screenshot_job(params: ScreenshotJobParams) -> (Arc<Latch<Arc<CapturedD
                 for tx in &channels.render_msg_txs {
                     let _ = tx.send(RenderMsg::BlurredDesktop(blurred.clone()));
                 }
-                info!("screenshot: desktop blur complete");
+                info!("screenshot: desktop blur complete in {:?}", t_blur.elapsed());
             }
         })
         .expect("spawn screenshot thread");
@@ -361,38 +365,54 @@ fn capture_peek_images(
     peek_latch: &Arc<Latch<Vec<Arc<WindowPeekImage>>>>,
 ) {
     info!("walker: capturing {} obstructed window images", obstructed.len());
-    let all_peeks: Vec<Arc<WindowPeekImage>> = std::thread::scope(|s| {
-        let handles: Vec<_> = obstructed
-            .iter()
-            .map(|ow| {
+    // A bounded low-priority pool, not a thread per window: these land in
+    // the seconds right after the overlay shows and must not gang up on the
+    // render loop. Four workers keeps the captures temporally close to each
+    // other and to the desktop snapshot on realistic window counts while
+    // capping the burst. Each capture still broadcasts the moment it lands,
+    // so a hovered window's peek is not held behind the batch.
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let all_peeks: Vec<Arc<WindowPeekImage>> = {
+        let workers = obstructed.len().min(4);
+        let peeks: std::sync::Mutex<Vec<Arc<WindowPeekImage>>> = std::sync::Mutex::new(Vec::new());
+        std::thread::scope(|s| {
+            for _ in 0..workers {
                 s.spawn(|| {
+                    // Background tier: PrintWindow-style captures churn DWM
+                    // and disk; nothing visible waits on the batch.
+                    crate::system::background_thread_priority();
                     use windows::Win32::System::Com::{CoInitializeEx, COINIT_APARTMENTTHREADED};
                     let _ = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
-                    let (bgra, w, h) = SystemInterop::capture_peek_image(ow)?;
-                    let crop_x = ow.rect.min_x() - ow.raw_rect.min_x();
-                    let crop_y = ow.rect.min_y() - ow.raw_rect.min_y();
-                    let peek = Arc::new(WindowPeekImage {
-                        window_index: ow.window_index,
-                        window_rect: ow.rect,
-                        bgra,
-                        width: w,
-                        height: h,
-                        crop_x,
-                        crop_y,
-                        obstruction_rects: ow.obstruction_rects.clone(),
-                    });
-                    for tx in peek_txs {
-                        let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(ow) = obstructed.get(i) else {
+                            return;
+                        };
+                        let Some((bgra, w, h)) = SystemInterop::capture_peek_image(ow) else {
+                            continue;
+                        };
+                        let crop_x = ow.rect.min_x() - ow.raw_rect.min_x();
+                        let crop_y = ow.rect.min_y() - ow.raw_rect.min_y();
+                        let peek = Arc::new(WindowPeekImage {
+                            window_index: ow.window_index,
+                            window_rect: ow.rect,
+                            bgra,
+                            width: w,
+                            height: h,
+                            crop_x,
+                            crop_y,
+                            obstruction_rects: ow.obstruction_rects.clone(),
+                        });
+                        for tx in peek_txs {
+                            let _ = tx.send(RenderMsg::PeekImage(peek.clone()));
+                        }
+                        peeks.lock().unwrap().push(peek);
                     }
-                    Some(peek)
-                })
-            })
-            .collect();
-        handles
-            .into_iter()
-            .filter_map(|h| h.join().ok().flatten())
-            .collect()
-    });
+                });
+            }
+        });
+        peeks.into_inner().unwrap()
+    };
     peek_latch.set(all_peeks);
     info!("walker: obstructed window capture complete");
 }

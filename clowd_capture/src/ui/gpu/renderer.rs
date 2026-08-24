@@ -113,8 +113,16 @@ impl UiPipelines {
     /// three threads and fanning out further would not be.
     pub fn build_parallel(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
         std::thread::scope(|s| {
-            let rect = s.spawn(|| RectPipeline::new(device, surface_format));
-            let icon = s.spawn(|| IconPipeline::new(device, surface_format));
+            // Deferred-build threads run below normal (the caller already
+            // is; spawns do not inherit priority on Windows).
+            let rect = s.spawn(|| {
+                crate::system::lower_thread_priority();
+                RectPipeline::new(device, surface_format)
+            });
+            let icon = s.spawn(|| {
+                crate::system::lower_thread_priority();
+                IconPipeline::new(device, surface_format)
+            });
             // The third compile rides the calling thread: spawning for it
             // would only add a join.
             let lift = LiftPipeline::new(device, surface_format);
