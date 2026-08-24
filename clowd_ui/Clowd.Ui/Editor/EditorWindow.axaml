@@ -8,6 +8,7 @@
     xmlns:draw="clr-namespace:Clowd.Drawing;assembly=Clowd.Drawing"
     xmlns:local="clr-namespace:Clowd.UI"
     xmlns:util="clr-namespace:Clowd.Util"
+    DragDrop.AllowDrop="True"
     Title="Edit - Clowd"
     Width="1050"
     Height="750"
