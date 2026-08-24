@@ -1363,20 +1363,22 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (bucketCount <= 0)
                 return;
 
-            // cached per item, keyed (tpp, sourceIn, duration, bucketCount): scrolling never
-            // rebuilds (the geometry is drawn under a translate), zooming and trimming do. An
-            // incomplete waveform rebuilds on each (throttled) repaint until the provider is done.
+            // the peaks are read in SOURCE time: a re-timed item's timeline bucket covers
+            // perBucket * speed of source, so bucket i lines up under the same x either way.
+            var speed = TimelineOps.SpeedOf(media);
+            var srcDuration = speed == 1.0 ? item.DurationTicks : (long)Math.Round(item.DurationTicks * speed);
+            var srcPerBucket = speed == 1.0 ? perBucket : Math.Max(1L, (long)Math.Round(perBucket * speed));
+            var peaks = _previewProvider.GetAudioPeaks(new AudioPeaksRequest(media.SourceId,
+                media.StreamIndex, media.SourceInTicks, srcDuration, srcPerBucket));
+
+            // cached per item, keyed (tpp, sourceIn, duration, bucketCount) plus the peaks object
+            // itself: scrolling never rebuilds (the geometry is drawn under a translate), zooming
+            // and trimming do, and so does anything that changes the samples behind the row — the
+            // provider hands back the same instance until the peaks actually differ, so an
+            // AI-denoise toggle or strength edit repaints while a settled row still costs nothing.
             if (!_waveforms.TryGetValue(item.Id, out var cache) ||
-                !cache.Matches(tpp, media.SourceInTicks, item.DurationTicks, bucketCount) ||
-                !cache.Complete)
+                !cache.Matches(tpp, media.SourceInTicks, item.DurationTicks, bucketCount, peaks))
             {
-                // the peaks are read in SOURCE time: a re-timed item's timeline bucket covers
-                // perBucket * speed of source, so bucket i lines up under the same x either way.
-                var speed = TimelineOps.SpeedOf(media);
-                var srcDuration = speed == 1.0 ? item.DurationTicks : (long)Math.Round(item.DurationTicks * speed);
-                var srcPerBucket = speed == 1.0 ? perBucket : Math.Max(1L, (long)Math.Round(perBucket * speed));
-                var peaks = _previewProvider.GetAudioPeaks(new AudioPeaksRequest(media.SourceId,
-                    media.StreamIndex, media.SourceInTicks, srcDuration, srcPerBucket));
                 cache = WaveformCache.Build(peaks, tpp, media.SourceInTicks, item.DurationTicks,
                     bucketCount, perBucket, body.Height);
                 _waveforms[item.Id] = cache;
@@ -1724,11 +1726,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             public long SourceIn;
             public long Duration;
             public int BucketCount;
-            public bool Complete;
+            public AudioPeaks Peaks;
             public StreamGeometry Geometry;
 
-            public bool Matches(double tpp, long sourceIn, long duration, int bucketCount) =>
-                Tpp == tpp && SourceIn == sourceIn && Duration == duration && BucketCount == bucketCount;
+            public bool Matches(double tpp, long sourceIn, long duration, int bucketCount, AudioPeaks peaks) =>
+                Tpp == tpp && SourceIn == sourceIn && Duration == duration && BucketCount == bucketCount &&
+                ReferenceEquals(Peaks, peaks);
 
             public static WaveformCache Build(AudioPeaks peaks, double tpp, long sourceIn,
                 long duration, int bucketCount, long perBucket, double height)
@@ -1763,7 +1766,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                     SourceIn = sourceIn,
                     Duration = duration,
                     BucketCount = bucketCount,
-                    Complete = peaks.IsComplete,
+                    Peaks = peaks,
                     Geometry = geometry,
                 };
             }

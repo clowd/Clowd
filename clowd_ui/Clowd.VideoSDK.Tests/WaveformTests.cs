@@ -374,6 +374,41 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
+        /// <summary>The denoise sidecars are rewritten under their own names, so a stream can
+        /// change behind a key the provider already answered — <c>Invalidate</c> is how the
+        /// timeline says so.</summary>
+        [Fact]
+        public void Invalidate_re_analyzes_a_rewritten_source()
+        {
+            RequireFFmpeg();
+            string path = SineFixture();
+            string dir = TempDir();
+
+            using var provider = new WaveformProvider();
+            WaitForComplete(provider, path, dir);
+            Assert.Equal(1, provider.BuildCount);
+
+            // asking again is a lookup, not a pass
+            provider.GetOrStart(path, AudioStream, dir);
+            Assert.Equal(1, provider.BuildCount);
+
+            // the file is rewritten in place (a fresh sidecar), so its cache no longer matches it
+            File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path).AddMinutes(1));
+            provider.Invalidate(path, AudioStream);
+
+            var snapshot = WaitForComplete(provider, path, dir);
+            Assert.Equal(2, provider.BuildCount);
+            AssertToneAmplitude(snapshot);
+        }
+
+        [Fact]
+        public void Invalidate_of_an_unknown_stream_does_nothing()
+        {
+            using var provider = new WaveformProvider();
+            provider.Invalidate(Path.Combine(TempDir(), "never-analyzed.wav"), AudioStream);
+            Assert.Equal(0, provider.BuildCount);
+        }
+
         [Fact]
         public void Provider_regenerates_over_a_corrupt_cache_file()
         {
