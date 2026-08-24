@@ -1067,6 +1067,19 @@ namespace Clowd.UI.VideoEditor
             if (picked is not { Length: > 0 } || !CanAddToProject)
                 return;
 
+            // the image picker takes GIFs (see MediaFileTypes), and an animated one added through
+            // it is still an animated one: it goes down the same probe-and-route path the import
+            // button uses, so it plays rather than freezing on frame one.
+            if (MediaFileTypes.IsGif(picked[0]))
+            {
+                var (created, error) = await TryAddFileAsync(picked[0]);
+                if (error != null)
+                    await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning, error, "Can't add this file");
+                else if (created.Count > 0)
+                    RevealNewItem(created[0]);
+                return;
+            }
+
             var item = _editor.AddImage(picked[0], PlayheadTicks, AddedItemDurationTicks);
             if (item != null)
                 RevealNewItem(item);
@@ -1182,7 +1195,7 @@ namespace Clowd.UI.VideoEditor
             if (picked is not { Length: > 0 } || _closing)
                 return;
 
-            var (created, error) = await TryImportMediaAsync(picked[0]);
+            var (created, error) = await TryAddFileAsync(picked[0]);
             if (error != null)
             {
                 await NiceDialog.ShowNoticeAsync(this, NiceDialogIcon.Warning, error, "Can't import this file");
@@ -1193,12 +1206,18 @@ namespace Clowd.UI.VideoEditor
                 RevealNewItem(created[0]);
         }
 
-        /// <summary>The probe-and-import half of <see cref="ImportMediaAsync"/>, shared with the
+        /// <summary>The probe-and-add half of <see cref="ImportMediaAsync"/>, shared with the
         /// file-drop path: returns the created items, or a message saying why there are none — the
         /// picker flow raises that as a modal, the drop flow as a toast. An empty result with no
         /// message is a window that closed (or a gesture that started) mid-probe: the caller has
-        /// nothing to say about that.</summary>
-        private async Task<(IReadOnlyList<Item> created, string error)> TryImportMediaAsync(string path)
+        /// nothing to say about that.
+        ///
+        /// <para>A GIF is routed by what the probe found rather than by its extension (see
+        /// <see cref="MediaFileTypes"/>): a single-frame one becomes an image item, because
+        /// importing it as media would leave a frame-long sliver on the timeline that nobody can
+        /// grab, while an animated one is imported as a source like any other video.</para>
+        /// </summary>
+        private async Task<(IReadOnlyList<Item> created, string error)> TryAddFileAsync(string path)
         {
             MediaProbeResult probe;
             try
@@ -1213,6 +1232,12 @@ namespace Clowd.UI.VideoEditor
 
             if (!CanAddToProject)
                 return (Array.Empty<Item>(), null);
+
+            if (MediaFileTypes.IsGif(path) && MediaFileTypes.IsSingleFrame(probe))
+            {
+                var still = _editor.AddImage(path, PlayheadTicks, AddedItemDurationTicks);
+                return (still != null ? new[] { still } : Array.Empty<Item>(), null);
+            }
 
             var created = _editor.ImportMedia(path, probe, PlayheadTicks);
             if (created.Count == 0)
@@ -1247,8 +1272,8 @@ namespace Clowd.UI.VideoEditor
             _ = AddDroppedFilesAsync(paths);
         }
 
-        /// <summary>Adds dropped files at the playhead — images as image items, video and audio
-        /// through the same probe+import the Import button runs — one file at a time, in drop
+        /// <summary>Adds dropped files at the playhead — images as image items, video, audio and
+        /// GIFs through the same probe+import the Import button runs — one file at a time, in drop
         /// order, so a multi-file drop stacks its rows the way importing them one after another
         /// would (and leaves one undo entry per file, not one for the batch). Whatever the editor
         /// can't take is reported in a single toast at the end rather than a modal per file.</summary>
@@ -1263,17 +1288,12 @@ namespace Clowd.UI.VideoEditor
                 if (!CanAddToProject)
                     break;
 
-                if (MediaFileTypes.IsImage(path))
+                // media first: a .gif answers to both tests (see MediaFileTypes), and the probe
+                // behind the media path is what tells an animated one from a still — the image
+                // path would freeze every GIF on its first frame.
+                if (MediaFileTypes.IsMedia(path))
                 {
-                    var item = _editor.AddImage(path, PlayheadTicks, AddedItemDurationTicks);
-                    if (item != null)
-                        revealed = item;
-                    else
-                        failed++;
-                }
-                else if (MediaFileTypes.IsMedia(path))
-                {
-                    var (created, error) = await TryImportMediaAsync(path);
+                    var (created, error) = await TryAddFileAsync(path);
                     if (created.Count > 0)
                         revealed = created[0];
                     else if (error != null)
@@ -1281,6 +1301,14 @@ namespace Clowd.UI.VideoEditor
                         firstError ??= error;
                         failed++;
                     }
+                }
+                else if (MediaFileTypes.IsImage(path))
+                {
+                    var item = _editor.AddImage(path, PlayheadTicks, AddedItemDurationTicks);
+                    if (item != null)
+                        revealed = item;
+                    else
+                        failed++;
                 }
                 else
                 {
