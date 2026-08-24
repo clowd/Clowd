@@ -113,6 +113,15 @@ pub(crate) async fn request_adapter_device(
     if crate::ui::gpu::gpu_timing::GPU_TIMING_ENABLED() && adapter_features.contains(wgpu::Features::TIMESTAMP_QUERY) {
         required_features |= wgpu::Features::TIMESTAMP_QUERY;
     }
+    // Windows ships precompiled DXBC shaders consumed via passthrough
+    // (gpu/shaders.rs); the dx12 backend exposes this feature
+    // unconditionally (wgpu-hal 30 dx12/adapter.rs baseline feature set,
+    // independent of the FXC/DXC compiler choice), so requiring it cannot
+    // fail device creation on any dx12 adapter.
+    #[cfg(windows)]
+    {
+        required_features |= wgpu::Features::PASSTHROUGH_SHADERS;
+    }
 
     // Split point for the wedge-diagnosis in issue #74: "selected adapter"
     // has printed by now, so a log that ends here says the hang is inside

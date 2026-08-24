@@ -87,13 +87,13 @@ pub(crate) fn create_desktop_pipeline(device: &wgpu::Device, desktop_bgl: &wgpu:
         label: Some("desktop pipeline"),
         layout: Some(&layout),
         vertex: wgpu::VertexState {
-            module: &shader,
+            module: shader.vs(),
             entry_point: Some("vs_main"),
             buffers: &[],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
-            module: &shader,
+            module: shader.fs(),
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
                 format: SURFACE_FORMAT,
@@ -174,13 +174,13 @@ pub(crate) fn create_peek_pipeline(device: &wgpu::Device, peek_bgl: &wgpu::BindG
         label: Some("peek pipeline"),
         layout: Some(&peek_layout),
         vertex: wgpu::VertexState {
-            module: &shader,
+            module: shader.vs(),
             entry_point: Some("vs_main"),
             buffers: &[],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
-            module: &shader,
+            module: shader.fs(),
             entry_point: Some("fs_main"),
             targets: &[Some(wgpu::ColorTargetState {
                 format: SURFACE_FORMAT,
