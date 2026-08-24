@@ -6,7 +6,7 @@ use crate::app::App;
 use crate::image_extract;
 use crate::render::protocol::{BlurredDesktopImage, CycleParams, RenderMsg, WorkerInput};
 use crate::render::worker::{self, RenderWorkerParams, WorkerSetup};
-use crate::settings::{CapturerSettings, MemoryHintsMode};
+use crate::settings::CapturerSettings;
 use crate::sync::{Latch, VisibleLatch};
 use crate::system::{CapturedCursor, CapturedDesktop, MonitorInfo, SystemInterop, WindowPeekImage, WindowWalker};
 use crate::telemetry::startup::StartupTimings;
@@ -25,7 +25,7 @@ impl CaptureSession {
     /// before this call (clap, the logger, sentry, the permission check) is
     /// startup latency too, and anchoring at the first line of this function
     /// would silently subtract it.
-    pub fn new(settings: Arc<CapturerSettings>, memory_hints: MemoryHintsMode, t_start: Instant) -> anyhow::Result<Self> {
+    pub fn new(settings: Arc<CapturerSettings>, t_start: Instant) -> anyhow::Result<Self> {
         let monitors = SystemInterop::all_monitors();
         if monitors.is_empty() {
             anyhow::bail!("no monitors detected; nothing to render to");
@@ -48,10 +48,26 @@ impl CaptureSession {
         let ready_count = Arc::new(AtomicUsize::new(0));
         let visible_latch = Arc::new(VisibleLatch::new());
 
+        // Peek is a cosmetic nicety with the biggest resource bill in the
+        // whole capturer: a second full-desktop texture per worker (the
+        // blur), a wide all-core blur burst at show, and a PrintWindow pass
+        // per obstructed window. On an integrated GPU (≤ 1 GB dedicated
+        // VRAM, see `MonitorInfo::low_vram_adapter` — never trips on Apple
+        // unified memory) that bill is the difference between fitting the
+        // carve-out and thrashing it, so the feature turns itself off there
+        // regardless of the setting.
+        let peek_enabled = settings.obscured_window_peek_enabled && {
+            let low_vram = monitors.iter().any(|m| m.low_vram_adapter);
+            if low_vram {
+                log::info!("peek disabled: integrated/low-VRAM adapter drives at least one monitor");
+            }
+            !low_vram
+        };
+
         let (screenshot_latch, worker_channels_latch) = spawn_screenshot_job(ScreenshotJobParams {
             monitors: monitors.clone(),
             cursor: captured_cursor,
-            peek_enabled: settings.obscured_window_peek_enabled,
+            peek_enabled,
             accent_color: settings.accent_color,
             initial_mouse: initial_mouse_f,
             ready_count: ready_count.clone(),
@@ -64,7 +80,7 @@ impl CaptureSession {
         timings.mark_initialize();
 
         let worker_failed = Arc::new(AtomicUsize::new(0));
-        let worker_setups = spawn_render_workers(&monitors, &instance, &timings, memory_hints, &worker_failed);
+        let worker_setups = spawn_render_workers(&monitors, &instance, &timings, &worker_failed);
         timings.mark_workers_spawned();
 
         let input_txs: Vec<_> = worker_setups
@@ -86,7 +102,7 @@ impl CaptureSession {
         let (walker_latch, peek_images_latch) = spawn_walker_job(
             monitors.clone(),
             render_msg_txs,
-            settings.obscured_window_peek_enabled,
+            peek_enabled,
             settings.obscured_window_detection_threshold,
             settings.rounded_window_corners,
             timings.clone(),
@@ -167,7 +183,6 @@ fn spawn_render_workers(
     monitors: &[MonitorInfo],
     instance: &Arc<wgpu::Instance>,
     startup: &Arc<StartupTimings>,
-    memory_hints: MemoryHintsMode,
     failed_count: &Arc<AtomicUsize>,
 ) -> Vec<WorkerSetup> {
     monitors
@@ -179,7 +194,6 @@ fn spawn_render_workers(
                 monitor_index: i,
                 instance: instance.clone(),
                 startup: startup.clone(),
-                memory_hints,
                 failed_count: failed_count.clone(),
             })
         })

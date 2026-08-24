@@ -3,13 +3,11 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::settings::MemoryHintsMode;
 use crate::telemetry::startup::WorkerTimings;
 
 pub(crate) async fn request_adapter_device(
     instance: &Arc<wgpu::Instance>,
     adapter_hint: Option<(u32, u32)>,
-    memory_hints: MemoryHintsMode,
     t_start: Instant,
     timings: &WorkerTimings,
 ) -> Result<(wgpu::Adapter, wgpu::Device, wgpu::Queue, String)> {
@@ -116,19 +114,26 @@ pub(crate) async fn request_adapter_device(
         required_features |= wgpu::Features::TIMESTAMP_QUERY;
     }
 
+    // Split point for the wedge-diagnosis in issue #74: "selected adapter"
+    // has printed by now, so a log that ends here says the hang is inside
+    // `request_device` (D3D12 device/queue + allocator init in the driver),
+    // not in shader or pipeline creation.
+    info!("requesting wgpu device");
+
     let (device, queue) = adapter
         .request_device(&wgpu::DeviceDescriptor {
             label: Some("clowd_capture_wgpu device"),
             required_features,
             required_limits,
-            // Performance (wgpu's large-block default) trades memory for
-            // start-up latency, which is the right trade for a process that
-            // exits after one capture. The setting stays for anyone who wants
-            // the smaller blocks.
-            memory_hints: match memory_hints {
-                MemoryHintsMode::LowerMemoryUsage => wgpu::MemoryHints::MemoryUsage,
-                MemoryHintsMode::MaxPerformance => wgpu::MemoryHints::Performance,
-            },
+            // MemoryUsage, unconditionally: it keeps gpu-allocator's
+            // retained blocks at 8/4 MB instead of Performance's 128/64 MB
+            // per device — which matters from a 128 MB iGPU carve-out up —
+            // and the measured startup difference is negligible (heap
+            // creation is lazy and sub-ms; the large snapshot texture takes
+            // the allocator's dedicated path either way). There used to be
+            // a `--memory-hints` switch for A/B-ing this; the A/B was
+            // settled and the switch removed.
+            memory_hints: wgpu::MemoryHints::MemoryUsage,
             trace: wgpu::Trace::Off,
             experimental_features: wgpu::ExperimentalFeatures::disabled(),
         })

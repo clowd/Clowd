@@ -157,6 +157,18 @@ pub struct MonitorInfo {
     /// per window, matching the C++ version's per-monitor `AdapterIdx`.
     /// `None` if DXGI enumeration failed (fallback to wgpu's default).
     pub adapter_id: Option<(u32, u32)>,
+    /// The adapter driving this monitor reports under 1 GB of dedicated
+    /// VRAM — the DXGI-enumeration-time stand-in for wgpu's
+    /// `DeviceType::IntegratedGpu`, chosen because it is known at ~40 ms
+    /// (before the peek/blur jobs spawn) while the wgpu adapter type is
+    /// only known once the render workers reach Stage A. iGPUs report a
+    /// small carve-out (Intel: typically 128 MB) regardless of shared
+    /// budget; the cosmetic peek feature is disabled on them
+    /// (`CaptureSession::new`). Windows-only signal — always `false` on
+    /// macOS, so Apple unified memory never trips it. An AMD APU with a
+    /// large BIOS carve-out passes as capable, which is fine: it has the
+    /// memory the carve-out claims.
+    pub low_vram_adapter: bool,
     /// CG-point origin for this display (macOS only). Used to convert
     /// between the CG logical coordinate space and physical pixels.
     #[cfg(target_os = "macos")]
@@ -367,14 +379,16 @@ impl SystemInterop {
             .expect("Unable to enumerate monitors")
             .into_iter()
             .map(|m| {
-                let adapter_id = dxgi_map.get(&m.name).copied();
+                const LOW_VRAM_BYTES: u64 = 1024 * 1024 * 1024;
+                let entry = dxgi_map.get(&m.name).copied();
                 MonitorInfo {
                     bounds: m.bounds(),
                     scale_factor: m.scale_factor,
                     is_primary: m.is_primary,
                     refresh_hz: m.frequency,
                     name: m.name,
-                    adapter_id,
+                    adapter_id: entry.map(|(v, d, _)| (v, d)),
+                    low_vram_adapter: entry.is_some_and(|(_, _, vram)| vram < LOW_VRAM_BYTES),
                 }
             })
             .collect()

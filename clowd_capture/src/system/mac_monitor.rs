@@ -70,6 +70,7 @@ pub fn all_monitors() -> Result<Vec<MonitorInfo>> {
             refresh_hz: m.refresh_hz,
             name: m.name.clone(),
             adapter_id: None,
+            low_vram_adapter: false,
             logical_origin: LogicalPoint::new(m.cg_x, m.cg_y),
         })
         .collect();

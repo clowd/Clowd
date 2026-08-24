@@ -460,6 +460,7 @@ mod tests {
             refresh_hz: 60.0,
             name: "test".to_string(),
             adapter_id: None,
+            low_vram_adapter: false,
             #[cfg(target_os = "macos")]
             logical_origin: clowd_rust_core::geometry::LogicalPoint::new(0.0, 0.0),
         }
