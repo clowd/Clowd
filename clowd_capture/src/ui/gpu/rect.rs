@@ -131,13 +131,13 @@ impl RectPipeline {
             label: Some("ui_rect pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                module: &shader,
+                module: shader.vs(),
                 entry_point: Some("vs_main"),
                 buffers: &[Some(instance_layout)],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: shader.fs(),
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: surface_format,

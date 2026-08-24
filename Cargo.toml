@@ -77,6 +77,10 @@ objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
 objc2-quartz-core = "0.3"
 block2 = "0.6"
+# build-time shader precompilation (clowd_capture/build.rs); naga version must
+# match what wgpu 30.0 uses internally so the generated HLSL binds identically
+naga = "30.0"
+libloading = "0.9"
 # rustls keeps every target off OpenSSL/schannel, and debug-images/log/anyhow are what make the reports symbolicated and readable.
 sentry = { version = "0.48", default-features = false, features = [
     "anyhow",
