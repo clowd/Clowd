@@ -157,6 +157,8 @@ pub struct MonitorPanelData<'a> {
     pub name: &'a str,
     pub is_primary: bool,
     pub adapter: &'a str,
+    /// `(process_usage_bytes, budget_bytes)` on this worker's adapter.
+    pub vram: Option<(u64, u64)>,
     pub dpi: u32,
     pub bounds: ScreenRect,
     pub time_to_first_render: Option<Duration>,
@@ -174,6 +176,10 @@ impl<'a> MonitorPanelData<'a> {
             out.push(format_args!("{}: {}", self.index, self.name));
         }
         out.push(format_args!("{}", self.adapter));
+        match self.vram {
+            Some((used, budget)) => out.push(format_args!("vram {}", super::resources::DisplayMb(used, budget))),
+            None => out.push(format_args!("vram n/a")),
+        }
         match self.target_period {
             Some(p) => {
                 let hz = 1.0 / p.as_secs_f64();
@@ -270,6 +276,15 @@ pub struct PrimaryPanelData<'a> {
     pub hovered_window_bounds: Option<ScreenRect>,
     pub hovered_window_index: Option<usize>,
     pub hovered_window_obstructed: bool,
+    /// System-wide `(used_bytes, total_bytes)`.
+    /// This process's working-set bytes.
+    pub ram: Option<u64>,
+    /// This process's video-memory usage across all adapters.
+    pub vram_total: Option<u64>,
+    /// Rendering actually runs on the precompiled passthrough shaders
+    /// (false whenever any shader fell back to runtime WGSL, and always
+    /// false off Windows) — usage, not presence.
+    pub precomp_shaders: bool,
 }
 
 impl<'a> PrimaryPanelData<'a> {
@@ -373,6 +388,15 @@ impl<'a> PrimaryPanelData<'a> {
         }
         out.push(format_args!("dragging: {}", self.dragging));
         out.push(format_args!("captured: {}", self.captured));
+        match self.ram {
+            Some(used) => out.push(format_args!("ram {}", super::resources::DisplayMbOne(used))),
+            None => out.push(format_args!("ram n/a")),
+        }
+        match self.vram_total {
+            Some(used) => out.push(format_args!("vram {}", super::resources::DisplayMbOne(used))),
+            None => out.push(format_args!("vram n/a")),
+        }
+        out.push(format_args!("precomp_shaders: {}", self.precomp_shaders));
         match self.selection {
             Some(s) => out.push(format_args!("select: {}", DisplayRect(s))),
             None => out.push(format_args!("select: (none)")),

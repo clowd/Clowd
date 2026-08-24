@@ -171,6 +171,7 @@ impl UiRenderer {
     /// `UiRenderer` is the proof that every pipeline it can draw with has
     /// been compiled, which is what keeps frame 0 — drawn before this type
     /// exists at all — from being able to reference one.
+    #[allow(clippy::too_many_arguments)]
     pub fn from_parts(
         pipelines: UiPipelines,
         text: UiText,
@@ -178,9 +179,10 @@ impl UiRenderer {
         monitor_index: usize,
         monitor_name: String,
         adapter_name: String,
+        adapter_id: Option<(u32, u32)>,
         startup: Arc<StartupTimings>,
     ) -> Self {
-        let debug = DebugRenderer::new(monitor_index);
+        let debug = DebugRenderer::new(monitor_index, adapter_id);
         Self {
             rect: pipelines.rect,
             icon: pipelines.icon,

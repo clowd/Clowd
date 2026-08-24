@@ -83,34 +83,36 @@ pub(crate) fn create_desktop_pipeline(device: &wgpu::Device, desktop_bgl: &wgpu:
         bind_group_layouts: &[Some(desktop_bgl)],
         immediate_size: 0,
     });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("desktop pipeline"),
-        layout: Some(&layout),
-        vertex: wgpu::VertexState {
-            module: shader.vs(),
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: shader.fs(),
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: SURFACE_FORMAT,
-                blend: Some(wgpu::BlendState::REPLACE),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState {
-            count: crate::render::MSAA_SAMPLES,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview_mask: None,
-        cache: None,
+    crate::gpu::shaders::build_pipeline(device, "desktop pipeline", &shader, |shader| {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("desktop pipeline"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: shader.vs(),
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: shader.fs(),
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: SURFACE_FORMAT,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: crate::render::MSAA_SAMPLES,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        })
     })
 }
 
@@ -170,33 +172,35 @@ pub(crate) fn create_peek_pipeline(device: &wgpu::Device, peek_bgl: &wgpu::BindG
         bind_group_layouts: &[Some(peek_bgl)],
         immediate_size: 0,
     });
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("peek pipeline"),
-        layout: Some(&peek_layout),
-        vertex: wgpu::VertexState {
-            module: shader.vs(),
-            entry_point: Some("vs_main"),
-            buffers: &[],
-            compilation_options: Default::default(),
-        },
-        fragment: Some(wgpu::FragmentState {
-            module: shader.fs(),
-            entry_point: Some("fs_main"),
-            targets: &[Some(wgpu::ColorTargetState {
-                format: SURFACE_FORMAT,
-                blend: Some(wgpu::BlendState::REPLACE),
-                write_mask: wgpu::ColorWrites::ALL,
-            })],
-            compilation_options: Default::default(),
-        }),
-        primitive: wgpu::PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState {
-            count: crate::render::MSAA_SAMPLES,
-            mask: !0,
-            alpha_to_coverage_enabled: false,
-        },
-        multiview_mask: None,
-        cache: None,
+    crate::gpu::shaders::build_pipeline(device, "peek pipeline", &shader, |shader| {
+        device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("peek pipeline"),
+            layout: Some(&peek_layout),
+            vertex: wgpu::VertexState {
+                module: shader.vs(),
+                entry_point: Some("vs_main"),
+                buffers: &[],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: shader.fs(),
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: SURFACE_FORMAT,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: crate::render::MSAA_SAMPLES,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        })
     })
 }
