@@ -216,6 +216,12 @@
           "url": "https://github.com/awxkee/libblur.git"
         },
         {
+          "name": "libc",
+          "version": "0.2.189",
+          "license": "MIT OR Apache-2.0",
+          "url": "https://github.com/rust-lang/libc"
+        },
+        {
           "name": "log",
           "version": "0.4.33",
           "license": "MIT OR Apache-2.0",
