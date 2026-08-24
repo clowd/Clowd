@@ -545,9 +545,11 @@ impl PinchMonitor {
     }
 }
 
-/// Raise the whole PROCESS to the high priority class.
-///
-/// Call once, early in main. The v3 C++ capturer shipped exactly this
+/// Process-wide scheduling posture, called once early in main: high
+/// priority class + high GPU scheduler class + MMCSS-scheduled DWM
+/// composition on Windows; a latency-critical activity assertion (no App
+/// Nap, no timer coalescing) on macOS.
+/// The v3 C++ capturer shipped exactly this
 /// (`SetPriorityClass(HIGH_PRIORITY_CLASS)` in `DxScreenCapture`'s
 /// constructor) for years: a capture overlay is a short-lived, fullscreen,
 /// latency-critical process, and while it is on screen it IS the
@@ -563,9 +565,36 @@ impl PinchMonitor {
 pub fn raise_process_priority_class() {
     #[cfg(windows)]
     unsafe {
+        use windows::Wdk::Graphics::Direct3D::{D3DKMTSetProcessSchedulingPriorityClass, D3DKMT_SCHEDULINGPRIORITYCLASS_HIGH};
+        use windows::Win32::Graphics::Dwm::DwmEnableMMCSS;
         use windows::Win32::System::Threading::{GetCurrentProcess, SetPriorityClass, HIGH_PRIORITY_CLASS};
-        // Best-effort: a failed raise just means default scheduling.
+        // Best-effort throughout: a failed raise just means default scheduling.
         let _ = SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
+        // The GPU node is scheduled separately from the CPU: this raises our
+        // command submissions over other processes' at the graphics
+        // scheduler (DWM itself runs there at REALTIME). Cold starts JIT
+        // shaders from the build threads on the same GPU our render workers
+        // are presenting on — exactly the contention this settles. HIGH is
+        // the strongest class that needs no privilege (REALTIME wants
+        // SeIncreaseBasePriorityPrivilege).
+        let _ = D3DKMTSetProcessSchedulingPriorityClass(GetCurrentProcess(), D3DKMT_SCHEDULINGPRIORITYCLASS_HIGH);
+        // Ask DWM to schedule its composition work for this process's
+        // windows through MMCSS — the acquire path (frame-latency waitable)
+        // is only as smooth as the compositor consuming our presents.
+        let _ = DwmEnableMMCSS(true);
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // Process-wide activity assertion: never App-Nap this process and
+        // never coalesce its timers (`UserInteractive` = UserInitiated +
+        // LatencyCritical; it also holds off idle system sleep, which is
+        // what a user mid-capture wants anyway). The token object ends the
+        // assertion when released, so it is deliberately leaked — the
+        // assertion's scope IS the process lifetime.
+        use objc2_foundation::{NSActivityOptions, NSProcessInfo, NSString};
+        let token = NSProcessInfo::processInfo()
+            .beginActivityWithOptions_reason(NSActivityOptions::UserInteractive, &NSString::from_str("screen capture overlay"));
+        std::mem::forget(token);
     }
 }
 
@@ -657,17 +686,23 @@ pub fn raise_render_thread_priority() {
     #[cfg(windows)]
     unsafe {
         use windows::Win32::System::Threading::{
-            AvSetMmThreadCharacteristicsW, GetCurrentThread, SetThreadInformation, SetThreadPriority, ThreadPowerThrottling,
-            THREAD_POWER_THROTTLING_CURRENT_VERSION, THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE,
-            THREAD_PRIORITY_TIME_CRITICAL,
+            AvSetMmThreadCharacteristicsW, AvSetMmThreadPriority, GetCurrentThread, SetThreadInformation, SetThreadPriority,
+            ThreadPowerThrottling, AVRT_PRIORITY_CRITICAL, THREAD_POWER_THROTTLING_CURRENT_VERSION,
+            THREAD_POWER_THROTTLING_EXECUTION_SPEED, THREAD_POWER_THROTTLING_STATE, THREAD_PRIORITY_TIME_CRITICAL,
         };
         // Best-effort throughout: a failed raise just means default scheduling.
         let _ = SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
         let mut task_index = 0u32;
-        if let Err(e) = AvSetMmThreadCharacteristicsW(windows::core::w!("Games"), &mut task_index) {
+        match AvSetMmThreadCharacteristicsW(windows::core::w!("Games"), &mut task_index) {
+            // CRITICAL within the task class = the top of the band MMCSS
+            // gives "Games" tasks. The handle is valid for the thread's
+            // whole life (never reverted), so it is not kept.
+            Ok(handle) => {
+                let _ = AvSetMmThreadPriority(handle, AVRT_PRIORITY_CRITICAL);
+            }
             // Non-fatal (MMCSS service disabled, registry key missing) but
             // worth a line: this thread runs without the multimedia boosts.
-            log::info!("MMCSS registration failed: {e}");
+            Err(e) => log::info!("MMCSS registration failed: {e}"),
         }
         let throttle = THREAD_POWER_THROTTLING_STATE {
             Version: THREAD_POWER_THROTTLING_CURRENT_VERSION,
