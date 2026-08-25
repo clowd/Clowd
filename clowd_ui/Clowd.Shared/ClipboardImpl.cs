@@ -16,19 +16,39 @@ namespace Clowd;
 public static class ClipboardImpl
 {
     // §2.11 glue invariants: custom clipboard format carries UTF-8 JSON bytes of GraphicBase[]
-    // (GraphicsSerializer); images travel as "image/png" PNG bytes (decision table #51).
-    private const string CANVAS_CLIPBOARD_FORMAT = "{65475a6c-9dde-41b1-946c-663ceb4d7b15}";
-    private const string PNG_CLIPBOARD_FORMAT = "image/png";
+    // (GraphicsSerializer); images travel as PNG bytes (decision table #51).
+    //
+    // Both identifiers must be spelled the way the target platform expects, because
+    // DataFormat.CreateBytesPlatformFormat passes them to the OS verbatim — macOS wants a UTI,
+    // everyone else wants a mime type. Getting this wrong is silent: writing "image/png" on macOS
+    // publishes an NSPasteboard type literally named "image/png" that no other app looks for,
+    // which is why copy appeared to do nothing there. The canvas identifier is a valid UTI on
+    // every platform (macOS rejects a pasteboard item carrying a malformed type), and clipboard
+    // contents are transient so there is no older-build wire format to preserve.
+    private const string CANVAS_CLIPBOARD_FORMAT = "com.clowd.canvas-graphics";
+    private static readonly string PNG_CLIPBOARD_FORMAT = OperatingSystem.IsMacOS() ? "public.png" : "image/png";
 
-    // Avalonia 12 replaced IDataObject/string formats with DataTransfer/DataFormat. "Platform"
-    // (rather than "Application") formats keep the identifier on the wire exactly as the 11.x
-    // DataObject.Set(string, ...) path wrote it — an Application format would prefix it with the
-    // app name and stop matching data written by older builds.
+    // These stay "Platform" (rather than "Application") formats so the identifier reaches the OS
+    // unprefixed — an Application format would prepend a per-backend app prefix and stop other
+    // applications from recognizing the data.
     private static readonly DataFormat<byte[]> canvasDataFormat =
         DataFormat.CreateBytesPlatformFormat(CANVAS_CLIPBOARD_FORMAT);
 
     private static readonly DataFormat<byte[]> pngDataFormat =
         DataFormat.CreateBytesPlatformFormat(PNG_CLIPBOARD_FORMAT);
+
+    // Deliberately not DataFormat.Bitmap on the write side, even though it maps to these same
+    // identifiers: that format is served lazily, so the backend re-encodes the Avalonia bitmap
+    // whenever the OS gets around to asking for the value. Anything that disposes the bitmap
+    // before then (every caller here does) yields a zero-byte image on the clipboard. Handing
+    // over bytes we encoded ourselves has no lifetime dependency. Reading is safe either way, so
+    // the read path does use DataFormat.Bitmap.
+    //
+    // Known gap vs the Rust capture overlay: arboard writes public.tiff on macOS (it builds an
+    // NSImage and calls writeObjects:), we write public.png. Every modern macOS app accepts PNG,
+    // but a legacy TIFF-only app will not see the image, and an app that publishes only
+    // public.tiff will not be readable here. Closing that would need native NSBitmapImageRep
+    // interop, since neither Avalonia nor SkiaSharp can encode TIFF.
 
     [SupportedOSPlatform("windows")]
     private static readonly ClipboardFormat<byte[]> canvasFormat;
@@ -97,24 +117,22 @@ public static class ClipboardImpl
                 return (null, null);
 
             byte[] clipGraphics = null;
-            byte[] clipImage = null;
+            AvaBitmap clipImage = null;
 
             try {
                 using var data = await clipboard.TryGetDataAsync().ConfigureAwait(false);
                 if (data != null) {
                     if (data.Contains(canvasDataFormat))
                         clipGraphics = await data.TryGetValueAsync(canvasDataFormat).ConfigureAwait(false);
-                    if (clipGraphics == null && data.Contains(pngDataFormat))
-                        clipImage = await data.TryGetValueAsync(pngDataFormat).ConfigureAwait(false);
+                    // DataFormat.Bitmap rather than pngDataFormat: it resolves to the same native
+                    // identifier but also decodes whatever the source app published, so images
+                    // copied from other applications paste correctly.
+                    if (clipGraphics == null && data.Contains(DataFormat.Bitmap))
+                        clipImage = await data.TryGetValueAsync(DataFormat.Bitmap).ConfigureAwait(false);
                 }
             } catch {; }
 
-            if (clipImage != null) {
-                using var ms = new MemoryStream(clipImage);
-                return (new AvaBitmap(ms), clipGraphics);
-            }
-
-            return (null, clipGraphics);
+            return (clipImage, clipGraphics);
         }
     }
 
