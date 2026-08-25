@@ -149,15 +149,18 @@ pub fn xbutton_bit(hiword: u16) -> Option<u32> {
 // macOS event decoding (pure; the tap callback in `imp` is the only caller)
 // ---------------------------------------------------------------------------
 
-/// `CGEventFlags` bits for the modifier keys we track.
+/// `CGEventFlags` bits for the modifier keys we track, as the bare `u64`s the
+/// `MODIFIER_KEYS` mask arithmetic runs on.
 #[cfg(target_os = "macos")]
 mod cg_flags {
-    pub const ALPHA_SHIFT: u64 = 0x0001_0000; // caps lock
-    pub const SHIFT: u64 = 0x0002_0000;
-    pub const CONTROL: u64 = 0x0004_0000;
-    pub const ALTERNATE: u64 = 0x0008_0000; // option
-    pub const COMMAND: u64 = 0x0010_0000;
-    pub const SECONDARY_FN: u64 = 0x0080_0000;
+    use objc2_core_graphics::CGEventFlags;
+
+    pub const ALPHA_SHIFT: u64 = CGEventFlags::MaskAlphaShift.bits(); // caps lock
+    pub const SHIFT: u64 = CGEventFlags::MaskShift.bits();
+    pub const CONTROL: u64 = CGEventFlags::MaskControl.bits();
+    pub const ALTERNATE: u64 = CGEventFlags::MaskAlternate.bits(); // option
+    pub const COMMAND: u64 = CGEventFlags::MaskCommand.bits();
+    pub const SECONDARY_FN: u64 = CGEventFlags::MaskSecondaryFn.bits();
 }
 
 /// `kCGMouseEventButtonNumber` → the `BTN_*` bit. macOS numbers buttons 0..31;
@@ -224,13 +227,13 @@ mod imp {
     use std::sync::mpsc;
     use std::sync::OnceLock;
 
-    use windows_sys::Win32::Foundation::{HINSTANCE, LPARAM, LRESULT, WPARAM};
-    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows::Win32::System::Threading::GetCurrentThreadId;
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
         GetAsyncKeyState, GetKeyState, GetKeyboardLayout, ToUnicodeEx, VK_CAPITAL, VK_CONTROL,
         VK_MENU, VK_SHIFT,
     };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
+    use windows::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW,
         GetWindowThreadProcessId, PeekMessageW, PostThreadMessageW, SetWindowsHookExW,
         UnhookWindowsHookEx, KBDLLHOOKSTRUCT, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE, WH_KEYBOARD_LL,
@@ -269,31 +272,22 @@ mod imp {
     fn translate_char(vk: u32, scan_code: u32) -> Option<char> {
         let mut key_state = [0u8; 256];
         for m in [VK_SHIFT, VK_CONTROL, VK_MENU] {
-            if unsafe { GetAsyncKeyState(m as i32) } as u16 & 0x8000 != 0 {
-                key_state[m as usize] = 0x80;
+            if unsafe { GetAsyncKeyState(m.0 as i32) } as u16 & 0x8000 != 0 {
+                key_state[m.0 as usize] = 0x80;
             }
         }
         // Toggle state (low bit) — capitalization.
-        if unsafe { GetKeyState(VK_CAPITAL as i32) } & 1 != 0 {
-            key_state[VK_CAPITAL as usize] = 1;
+        if unsafe { GetKeyState(VK_CAPITAL.0 as i32) } & 1 != 0 {
+            key_state[VK_CAPITAL.0 as usize] = 1;
         }
         let layout = unsafe {
             let fg = GetForegroundWindow();
-            let tid = GetWindowThreadProcessId(fg, std::ptr::null_mut());
+            let tid = GetWindowThreadProcessId(fg, None);
             GetKeyboardLayout(tid)
         };
+        // The crate derives cchBuff from the slice length.
         let mut buf = [0u16; 8];
-        let n = unsafe {
-            ToUnicodeEx(
-                vk,
-                scan_code,
-                key_state.as_ptr(),
-                buf.as_mut_ptr(),
-                buf.len() as i32,
-                0x4,
-                layout,
-            )
-        };
+        let n = unsafe { ToUnicodeEx(vk, scan_code, &key_state, &mut buf, 0x4, Some(layout)) };
         if n < 1 {
             return None;
         }
@@ -306,9 +300,9 @@ mod imp {
     unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         if code >= 0 {
             if let Some(ctx) = CTX.get() {
-                let kb = &*(lparam as *const KBDLLHOOKSTRUCT);
+                let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
                 let vk = kb.vkCode;
-                match wparam as u32 {
+                match wparam.0 as u32 {
                     WM_KEYDOWN | WM_SYSKEYDOWN => {
                         // A repeat finds the bit already set — state only.
                         if !ctx.state.key_down(vk) {
@@ -326,17 +320,17 @@ mod imp {
                 }
             }
         }
-        CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
+        CallNextHookEx(None, code, wparam, lparam)
     }
 
     unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
         if code >= 0 {
             if let Some(ctx) = CTX.get() {
-                let ms = &*(lparam as *const MSLLHOOKSTRUCT);
+                let ms = &*(lparam.0 as *const MSLLHOOKSTRUCT);
                 // Screen coords; physical px (the process is per-monitor-v2
                 // DPI aware) — the same space as frame-row x/y.
                 let (x, y) = (ms.pt.x, ms.pt.y);
-                let (btn, down) = match wparam as u32 {
+                let (btn, down) = match wparam.0 as u32 {
                     WM_LBUTTONDOWN => (Some(BTN_LEFT), true),
                     WM_LBUTTONUP => (Some(BTN_LEFT), false),
                     WM_RBUTTONDOWN => (Some(BTN_RIGHT), true),
@@ -358,7 +352,7 @@ mod imp {
                 }
             }
         }
-        CallNextHookEx(std::ptr::null_mut(), code, wparam, lparam)
+        CallNextHookEx(None, code, wparam, lparam)
     }
 
     /// Owns the hook thread. Dropping posts `WM_QUIT` to its pump and joins —
@@ -391,42 +385,36 @@ mod imp {
                     unsafe {
                         // Low-level hooks deliver through the installing
                         // thread's message queue, so install + pump here.
-                        let kb = SetWindowsHookExW(
-                            WH_KEYBOARD_LL,
-                            Some(keyboard_proc),
-                            std::ptr::null_mut::<core::ffi::c_void>() as HINSTANCE,
-                            0,
-                        );
-                        let ms = SetWindowsHookExW(
-                            WH_MOUSE_LL,
-                            Some(mouse_proc),
-                            std::ptr::null_mut::<core::ffi::c_void>() as HINSTANCE,
-                            0,
-                        );
-                        if kb.is_null() || ms.is_null() {
-                            for h in [kb, ms] {
-                                if !h.is_null() {
-                                    UnhookWindowsHookEx(h);
+                        let kb = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), None, 0);
+                        let ms = SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_proc), None, 0);
+                        let (kb, ms) = match (kb, ms) {
+                            (Ok(kb), Ok(ms)) => (kb, ms),
+                            // Unhook whichever half made it in.
+                            (kb, ms) => {
+                                for h in [kb, ms].into_iter().flatten() {
+                                    let _ = UnhookWindowsHookEx(h);
                                 }
+                                let _ = ready_tx
+                                    .send(Err("SetWindowsHookExW failed (LL hooks)".to_string()));
+                                return;
                             }
-                            let _ = ready_tx
-                                .send(Err("SetWindowsHookExW failed (LL hooks)".to_string()));
-                            return;
-                        }
+                        };
 
                         // Force the message queue into existence so the
                         // shutdown PostThreadMessageW can never race its
                         // creation, then hand the pump's thread id back.
-                        let mut msg: MSG = std::mem::zeroed();
-                        PeekMessageW(&mut msg, std::ptr::null_mut(), 0, 0, PM_NOREMOVE);
+                        let mut msg = MSG::default();
+                        let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
                         let _ = ready_tx.send(Ok(GetCurrentThreadId()));
 
-                        while GetMessageW(&mut msg, std::ptr::null_mut(), 0, 0) > 0 {
+                        // Tri-state BOOL: 0 is WM_QUIT, -1 an error — both
+                        // end the pump.
+                        while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
                             DispatchMessageW(&msg);
                         }
 
-                        UnhookWindowsHookEx(kb);
-                        UnhookWindowsHookEx(ms);
+                        let _ = UnhookWindowsHookEx(kb);
+                        let _ = UnhookWindowsHookEx(ms);
                     }
                 })
                 .map_err(|e| format!("failed to spawn the input-hook thread: {e}"))?;
@@ -455,7 +443,7 @@ mod imp {
 
     impl Drop for InputHook {
         fn drop(&mut self) {
-            unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, 0, 0) };
+            let _ = unsafe { PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0)) };
             if let Some(thread) = self.thread.take() {
                 let _ = thread.join();
             }
@@ -465,116 +453,37 @@ mod imp {
 
 #[cfg(target_os = "macos")]
 mod imp {
-    use std::ffi::c_void;
+    use std::ffi::{c_ulong, c_void};
+    use std::ptr::NonNull;
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::mpsc;
     use std::sync::{Arc, OnceLock};
+
+    use objc2_core_foundation::{
+        kCFRunLoopCommonModes, kCFRunLoopDefaultMode, CFMachPort, CFRetained, CFRunLoop,
+    };
+    use objc2_core_graphics::{
+        CGEvent, CGEventField, CGEventMask, CGEventSource, CGEventSourceStateID,
+        CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventTapProxy, CGEventType,
+    };
 
     use super::{
         cg_button_bit, modifier_mask, modifier_twins, EventSink, InputState, RawEvent, RawEventKind,
     };
 
-    // -- CoreGraphics / CoreFoundation ---------------------------------------
-    // Hand-rolled like `platform/macos.rs`; the frameworks are already linked
-    // by build.rs (CoreGraphics + CoreFoundation), so this needs no new flags.
-
-    type CFMachPortRef = *mut c_void;
-    type CFRunLoopSourceRef = *mut c_void;
-    type CFRunLoopRef = *mut c_void;
-    type CGEventRef = *mut c_void;
-    type CGEventTapProxy = *mut c_void;
-
-    type CGEventTapCallBack = unsafe extern "C" fn(
-        proxy: CGEventTapProxy,
-        etype: u32,
-        event: CGEventRef,
-        user_info: *mut c_void,
-    ) -> CGEventRef;
-
-    #[repr(C)]
-    #[derive(Debug, Copy, Clone)]
-    struct CGPoint {
-        x: f64,
-        y: f64,
+    const fn ev(t: CGEventType) -> CGEventMask {
+        1 << t.0
     }
 
-    extern "C" {
-        fn CGEventTapCreate(
-            tap: u32,
-            place: u32,
-            options: u32,
-            events_of_interest: u64,
-            callback: CGEventTapCallBack,
-            user_info: *mut c_void,
-        ) -> CFMachPortRef;
-        fn CGEventTapEnable(tap: CFMachPortRef, enable: bool);
-        // `*const` rather than the CGEventRef alias, to agree with the
-        // declaration in platform/macos.rs (clashing_extern_declarations).
-        fn CGEventGetLocation(event: *const c_void) -> CGPoint;
-        fn CGEventGetFlags(event: CGEventRef) -> u64;
-        /// True state of a key, read without a tap — so it stays truthful even
-        /// while secure input is withholding events. No permission needed.
-        fn CGEventSourceKeyState(state_id: i32, key: u16) -> bool;
-        fn CGEventGetIntegerValueField(event: CGEventRef, field: u32) -> i64;
-        fn CGEventKeyboardGetUnicodeString(
-            event: CGEventRef,
-            max_length: usize,
-            actual_length: *mut usize,
-            unicode_string: *mut u16,
-        );
-
-        fn CFMachPortCreateRunLoopSource(
-            allocator: *const c_void,
-            port: CFMachPortRef,
-            order: isize,
-        ) -> CFRunLoopSourceRef;
-        fn CFRunLoopGetCurrent() -> CFRunLoopRef;
-        fn CFRunLoopAddSource(rl: CFRunLoopRef, source: CFRunLoopSourceRef, mode: *const c_void);
-        fn CFRunLoopRunInMode(mode: *const c_void, seconds: f64, return_after_handled: u8) -> i32;
-        fn CFRunLoopStop(rl: CFRunLoopRef);
-        fn CFRetain(cf: *const c_void) -> *const c_void;
-        fn CFRelease(cf: *const c_void);
-
-        static kCFRunLoopCommonModes: *const c_void;
-        static kCFRunLoopDefaultMode: *const c_void;
-    }
-
-    // CGEventType
-    const LEFT_MOUSE_DOWN: u32 = 1;
-    const LEFT_MOUSE_UP: u32 = 2;
-    const RIGHT_MOUSE_DOWN: u32 = 3;
-    const RIGHT_MOUSE_UP: u32 = 4;
-    const KEY_DOWN: u32 = 10;
-    const KEY_UP: u32 = 11;
-    const FLAGS_CHANGED: u32 = 12;
-    const OTHER_MOUSE_DOWN: u32 = 25;
-    const OTHER_MOUSE_UP: u32 = 26;
-    const TAP_DISABLED_BY_TIMEOUT: u32 = 0xFFFF_FFFE;
-    const TAP_DISABLED_BY_USER_INPUT: u32 = 0xFFFF_FFFF;
-
-    // CGEventField
-    const FIELD_MOUSE_BUTTON_NUMBER: u32 = 3;
-    const FIELD_KEYCODE: u32 = 9;
-
-    // CGEventTapLocation / CGEventTapPlacement / CGEventTapOptions
-    const HID_EVENT_TAP: u32 = 0;
-    const HEAD_INSERT_EVENT_TAP: u32 = 0;
-    /// Observe only — the tap must never be able to modify or swallow input.
-    const LISTEN_ONLY: u32 = 1;
-
-    const fn ev(t: u32) -> u64 {
-        1 << t
-    }
-
-    const EVENT_MASK: u64 = ev(KEY_DOWN)
-        | ev(KEY_UP)
-        | ev(FLAGS_CHANGED)
-        | ev(LEFT_MOUSE_DOWN)
-        | ev(LEFT_MOUSE_UP)
-        | ev(RIGHT_MOUSE_DOWN)
-        | ev(RIGHT_MOUSE_UP)
-        | ev(OTHER_MOUSE_DOWN)
-        | ev(OTHER_MOUSE_UP);
+    const EVENT_MASK: CGEventMask = ev(CGEventType::KeyDown)
+        | ev(CGEventType::KeyUp)
+        | ev(CGEventType::FlagsChanged)
+        | ev(CGEventType::LeftMouseDown)
+        | ev(CGEventType::LeftMouseUp)
+        | ev(CGEventType::RightMouseDown)
+        | ev(CGEventType::RightMouseUp)
+        | ev(CGEventType::OtherMouseDown)
+        | ev(CGEventType::OtherMouseUp);
 
     /// How long the tap thread blocks per run-loop turn. Only the shutdown
     /// latency floor — events wake the loop immediately.
@@ -582,7 +491,7 @@ mod imp {
 
     /// `kCGEventSourceStateCombinedSessionState` — the same state id
     /// `platform::macos::get_mouse_info` samples button state from.
-    const COMBINED_SESSION_STATE: i32 = 0;
+    const COMBINED_SESSION_STATE: CGEventSourceStateID = CGEventSourceStateID::CombinedSessionState;
 
     /// The tap callback gets a `user_info` pointer, but the sink must outlive
     /// any in-flight callback, so the context lives in a process-wide static
@@ -608,11 +517,18 @@ mod imp {
     /// accepted). `CGEventKeyboardGetUnicodeString` applies the active keyboard
     /// layout and the event's own modifier flags, so unlike the Windows path
     /// there is no keyboard state to rebuild by hand.
-    fn translate_char(event: CGEventRef) -> Option<char> {
+    fn translate_char(event: &CGEvent) -> Option<char> {
         let mut buf = [0u16; 8];
-        let mut len: usize = 0;
-        unsafe { CGEventKeyboardGetUnicodeString(event, buf.len(), &mut len, buf.as_mut_ptr()) };
-        let len = len.min(buf.len());
+        let mut len: c_ulong = 0;
+        unsafe {
+            CGEvent::keyboard_get_unicode_string(
+                Some(event),
+                buf.len() as c_ulong,
+                &mut len,
+                buf.as_mut_ptr(),
+            )
+        };
+        let len = (len as usize).min(buf.len());
         if len == 0 {
             return None;
         }
@@ -637,35 +553,44 @@ mod imp {
     fn release_stranded_keys(ctx: &HookCtx) {
         let (_, keys) = ctx.state.snapshot();
         for vk in keys {
-            if !unsafe { CGEventSourceKeyState(COMBINED_SESSION_STATE, vk as u16) } {
+            // Reads true key state without a tap — so it stays truthful even
+            // while secure input is withholding events. No permission needed.
+            if !CGEventSource::key_state(COMBINED_SESSION_STATE, vk as u16) {
                 ctx.state.key_up(vk);
                 send(RawEventKind::KeyUp { vk });
             }
         }
     }
 
-    unsafe extern "C" fn tap_callback(
+    unsafe extern "C-unwind" fn tap_callback(
         _proxy: CGEventTapProxy,
-        etype: u32,
-        event: CGEventRef,
+        etype: CGEventType,
+        event: NonNull<CGEvent>,
         _user_info: *mut c_void,
-    ) -> CGEventRef {
-        let Some(ctx) = CTX.get() else { return event };
+    ) -> *mut CGEvent {
+        // Listen-only: the event is passed through untouched.
+        let pass = event.as_ptr();
+        let Some(ctx) = CTX.get() else { return pass };
+        let event = event.as_ref();
 
         // A slow callback — or a burst the OS decides to protect itself from —
         // disables the tap, and it stays dead until explicitly re-armed. Not
         // handling this is how event taps silently stop working mid-session.
-        if etype == TAP_DISABLED_BY_TIMEOUT || etype == TAP_DISABLED_BY_USER_INPUT {
-            let tap = ctx.tap.load(Ordering::Acquire) as CFMachPortRef;
+        if etype == CGEventType::TapDisabledByTimeout
+            || etype == CGEventType::TapDisabledByUserInput
+        {
+            let tap = ctx.tap.load(Ordering::Acquire) as *const CFMachPort;
             if !tap.is_null() {
-                CGEventTapEnable(tap, true);
+                CGEvent::tap_enable(&*tap, true);
             }
-            return event;
+            return pass;
         }
 
         match etype {
-            KEY_DOWN => {
-                let vk = CGEventGetIntegerValueField(event, FIELD_KEYCODE) as u32;
+            CGEventType::KeyDown => {
+                let vk =
+                    CGEvent::integer_value_field(Some(event), CGEventField::KeyboardEventKeycode)
+                        as u32;
                 // A repeat finds the bit already set — state only.
                 if !ctx.state.key_down(vk) {
                     send(RawEventKind::KeyDown {
@@ -674,18 +599,22 @@ mod imp {
                     });
                 }
             }
-            KEY_UP => {
-                let vk = CGEventGetIntegerValueField(event, FIELD_KEYCODE) as u32;
+            CGEventType::KeyUp => {
+                let vk =
+                    CGEvent::integer_value_field(Some(event), CGEventField::KeyboardEventKeycode)
+                        as u32;
                 ctx.state.key_up(vk);
                 send(RawEventKind::KeyUp { vk });
             }
             // Modifiers never produce key up/down; they report the new flag set.
             // Caps lock therefore reads as held for as long as the lock is on,
             // which is the state a consumer actually wants to render.
-            FLAGS_CHANGED => {
-                let vk = CGEventGetIntegerValueField(event, FIELD_KEYCODE) as u32;
+            CGEventType::FlagsChanged => {
+                let vk =
+                    CGEvent::integer_value_field(Some(event), CGEventField::KeyboardEventKeycode)
+                        as u32;
                 if let Some(mask) = modifier_mask(vk) {
-                    if CGEventGetFlags(event) & mask != 0 {
+                    if CGEvent::flags(Some(event)).bits() & mask != 0 {
                         if !ctx.state.key_down(vk) {
                             send(RawEventKind::KeyDown { vk, ch: None });
                         }
@@ -701,15 +630,20 @@ mod imp {
             }
             _ => {
                 let down = match etype {
-                    LEFT_MOUSE_DOWN | RIGHT_MOUSE_DOWN | OTHER_MOUSE_DOWN => true,
-                    LEFT_MOUSE_UP | RIGHT_MOUSE_UP | OTHER_MOUSE_UP => false,
-                    _ => return event,
+                    CGEventType::LeftMouseDown
+                    | CGEventType::RightMouseDown
+                    | CGEventType::OtherMouseDown => true,
+                    CGEventType::LeftMouseUp
+                    | CGEventType::RightMouseUp
+                    | CGEventType::OtherMouseUp => false,
+                    _ => return pass,
                 };
-                let n = CGEventGetIntegerValueField(event, FIELD_MOUSE_BUTTON_NUMBER);
+                let n =
+                    CGEvent::integer_value_field(Some(event), CGEventField::MouseEventButtonNumber);
                 if let Some(btn) = cg_button_bit(n) {
                     // Global display points, top-left origin — the same space
                     // as `CGDisplayBounds`, hence as frame-row x/y (§1.1).
-                    let p = CGEventGetLocation(event as *const c_void);
+                    let p = CGEvent::location(Some(event));
                     let (x, y) = (p.x as i32, p.y as i32);
                     if down {
                         ctx.state.button_down(btn);
@@ -722,16 +656,16 @@ mod imp {
             }
         }
 
-        // Listen-only: the event is passed through untouched.
-        event
+        pass
     }
 
     /// Owns the tap thread. Dropping asks its run loop to stop and joins — the
     /// thread releases the tap on the way out. Exit paths that skip Drop are
     /// fine: the tap dies with the process.
     pub struct InputHook {
-        /// The tap thread's `CFRunLoop`, retained for the lifetime of this
-        /// handle so the wake-up in Drop cannot race the thread's teardown.
+        /// The tap thread's `CFRunLoop`, retained (a raw +1 from
+        /// `CFRetained::into_raw`) for the lifetime of this handle so the
+        /// wake-up in Drop cannot race the thread's teardown.
         runloop: usize,
         stop: Arc<AtomicBool>,
         thread: Option<std::thread::JoinHandle<()>>,
@@ -763,58 +697,67 @@ mod imp {
                     // Taps deliver into the run loop of the thread that adds
                     // the source, so create + pump here. No main-thread
                     // requirement — only a run loop.
-                    let tap = CGEventTapCreate(
-                        HID_EVENT_TAP,
-                        HEAD_INSERT_EVENT_TAP,
-                        LISTEN_ONLY,
+                    let Some(tap) = CGEvent::tap_create(
+                        CGEventTapLocation::HIDEventTap,
+                        CGEventTapPlacement::HeadInsertEventTap,
+                        // Observe only — the tap must never be able to modify
+                        // or swallow input.
+                        CGEventTapOptions::ListenOnly,
                         EVENT_MASK,
-                        tap_callback,
+                        Some(tap_callback),
                         std::ptr::null_mut(),
-                    );
-                    if tap.is_null() {
+                    ) else {
                         let _ = ready_tx.send(Err(
                             "CGEventTapCreate failed — grant this binary Input Monitoring under \
                              System Settings › Privacy & Security, then retry"
                                 .to_string(),
                         ));
                         return;
-                    }
+                    };
                     // Publish before the source goes live: the first event can
                     // arrive immediately, and the callback needs the port to
                     // re-arm itself.
                     if let Some(ctx) = CTX.get() {
-                        ctx.tap.store(tap as usize, Ordering::Release);
+                        ctx.tap
+                            .store(CFRetained::as_ptr(&tap).as_ptr() as usize, Ordering::Release);
                     }
 
-                    let source = CFMachPortCreateRunLoopSource(std::ptr::null(), tap, 0);
-                    if source.is_null() {
-                        CFRelease(tap as *const c_void);
+                    // `tap` is CFRetained: the early-return drop here (and the
+                    // fall-off-the-end drop below) replaces the manual
+                    // CFRelease calls of the hand-rolled version.
+                    let Some(source) = CFMachPort::new_run_loop_source(None, Some(&tap), 0) else {
                         let _ = ready_tx.send(Err(
                             "CFMachPortCreateRunLoopSource failed for the event tap".to_string(),
                         ));
                         return;
-                    }
+                    };
 
-                    let runloop = CFRunLoopGetCurrent();
-                    CFRunLoopAddSource(runloop, source, kCFRunLoopCommonModes);
-                    CGEventTapEnable(tap, true);
+                    let Some(runloop) = CFRunLoop::current() else {
+                        let _ = ready_tx.send(Err(
+                            "CFRunLoopGetCurrent returned no run loop for the tap thread"
+                                .to_string(),
+                        ));
+                        return;
+                    };
+                    runloop.add_source(Some(&source), kCFRunLoopCommonModes);
+                    CGEvent::tap_enable(&tap, true);
 
-                    // Retained for the handle: Drop wakes this run loop from
-                    // another thread (CFRunLoop is one of the few thread-safe
-                    // CF types) and releases it after the join.
-                    CFRetain(runloop as *const c_void);
-                    let _ = ready_tx.send(Ok(runloop as usize));
+                    // Ownership handed to the handle: Drop wakes this run loop
+                    // from another thread (CFRunLoop is one of the few
+                    // thread-safe CF types) and releases it after the join.
+                    // `into_raw` keeps the +1 alive across the channel —
+                    // CFRetained is not Send, so it crosses as a raw pointer.
+                    let _ = ready_tx.send(Ok(CFRetained::into_raw(runloop).as_ptr() as usize));
 
                     // Bounded turns rather than CFRunLoopRun + CFRunLoopStop:
                     // a Drop that lands before the loop starts would make a
                     // bare stop a no-op and hang the join forever.
                     while !thread_stop.load(Ordering::Acquire) {
-                        CFRunLoopRunInMode(kCFRunLoopDefaultMode, RUN_LOOP_TURN_SECS, 0);
+                        CFRunLoop::run_in_mode(kCFRunLoopDefaultMode, RUN_LOOP_TURN_SECS, false);
                     }
 
-                    CGEventTapEnable(tap, false);
-                    CFRelease(source as *const c_void);
-                    CFRelease(tap as *const c_void);
+                    CGEvent::tap_enable(&tap, false);
+                    // `source` and `tap` drop (release) here.
                 })
                 .map_err(|e| format!("failed to spawn the input-hook thread: {e}"))?;
 
@@ -849,11 +792,15 @@ mod imp {
             self.stop.store(true, Ordering::Release);
             // Cut the current turn short; if the loop is not running yet the
             // stop flag still ends it one turn later.
-            unsafe { CFRunLoopStop(self.runloop as CFRunLoopRef) };
+            unsafe { &*(self.runloop as *const CFRunLoop) }.stop();
             if let Some(thread) = self.thread.take() {
                 let _ = thread.join();
             }
-            unsafe { CFRelease(self.runloop as *const c_void) };
+            // Rebuild the CFRetained to drop it — the release balancing the
+            // +1 `into_raw` handed over at startup.
+            drop(unsafe {
+                CFRetained::from_raw(NonNull::new_unchecked(self.runloop as *mut CFRunLoop))
+            });
         }
     }
 }

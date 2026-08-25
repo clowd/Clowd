@@ -1,137 +1,30 @@
-//! Windows platform implementation (DESIGN §2.2).
+//! Windows platform implementation (DESIGN §2.2) — the recorder-specific
+//! remainder: cursor/mouse sampling and audio/webcam helpers. The monitor /
+//! paths / display-capture layer moved to the shared `obs-platform` crate
+//! (SHARE_REGION_PLAN §4.3).
 
-use std::env;
-use std::ffi::CStr;
 use std::mem;
-use std::path::Path;
 
 use obs::data::ObsData;
-use windows_sys::core::BOOL;
-use windows_sys::Win32::Foundation::{LPARAM, POINT, RECT, TRUE};
-use windows_sys::Win32::Graphics::Gdi::{
-    EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, DISPLAY_DEVICEW,
-    HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
-};
-use windows_sys::Win32::System::Threading::ExitProcess;
-use windows_sys::Win32::UI::HiDpi::{
-    GetDpiForMonitor, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
-    MDT_DEFAULT,
-};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
-use windows_sys::Win32::UI::WindowsAndMessaging::{
+use windows::Win32::Foundation::POINT;
+use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTONEAREST};
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_DEFAULT};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
+use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorInfo, GetCursorPos, LoadCursorW, CURSORINFO, CURSOR_SHOWING, IDC_APPSTARTING,
     IDC_ARROW, IDC_CROSS, IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL,
     IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_UPARROW, IDC_WAIT,
-    MONITORINFOF_PRIMARY,
 };
 
 use crate::cursor_sprite::SpriteEvent;
 
-use super::{CursorKind, CursorState, MonitorInfo, MouseInfo, ObsPaths};
+use super::{CursorKind, CursorState, MouseInfo};
 
-/// `platform` field of the input-capture header (wire contract).
-pub const PLATFORM_NAME: &str = "windows";
-
-pub const GRAPHICS_MODULE: &CStr = c"libobs-d3d11";
-pub const DISPLAY_CAPTURE_ID: &str = "monitor_capture";
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "wasapi_input_capture";
 /// Webcam capture source (`--webcam` / `--list-cameras`): DirectShow.
 pub const WEBCAM_SOURCE_ID: &str = "dshow_input";
 /// The `WEBCAM_SOURCE_ID` settings key (and property) holding the device id.
 pub const WEBCAM_DEVICE_KEY: &str = "video_device_id";
-
-/// `EDD_GET_DEVICE_INTERFACE_NAME` — request the device interface path in
-/// `DISPLAY_DEVICEW.DeviceID`.
-const EDD_GET_DEVICE_INTERFACE_NAME: u32 = 0x0000_0001;
-
-/// Must run before any monitor enumeration so `EnumDisplayMonitors` rects are
-/// physical pixels (per-monitor-v2 DPI awareness).
-pub fn init_process() {
-    unsafe {
-        SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    }
-}
-
-pub fn enumerate_monitors() -> Vec<MonitorInfo> {
-    unsafe extern "system" fn enum_proc(
-        hmonitor: HMONITOR,
-        _hdc: HDC,
-        _rect: *mut RECT,
-        lparam: LPARAM,
-    ) -> BOOL {
-        let list = &mut *(lparam as *mut Vec<HMONITOR>);
-        list.push(hmonitor);
-        TRUE
-    }
-
-    let mut handles: Vec<HMONITOR> = Vec::new();
-    unsafe {
-        EnumDisplayMonitors(
-            std::ptr::null_mut(),
-            std::ptr::null(),
-            Some(enum_proc),
-            &mut handles as *mut Vec<HMONITOR> as LPARAM,
-        );
-    }
-
-    let mut monitors = Vec::new();
-    for hmonitor in handles {
-        let mut info: MONITORINFOEXW = unsafe { mem::zeroed() };
-        info.monitorInfo.cbSize = mem::size_of::<MONITORINFOEXW>() as u32;
-        let ok = unsafe {
-            GetMonitorInfoW(
-                hmonitor,
-                &mut info as *mut MONITORINFOEXW as *mut MONITORINFO,
-            )
-        };
-        if ok == 0 {
-            continue;
-        }
-
-        let device_name = wide_to_string(&info.szDevice);
-        let rc = info.monitorInfo.rcMonitor;
-
-        // Resolve the stable device interface path; mirrors win-capture, which
-        // matches DeviceID first and falls back to szDevice.
-        let mut dd: DISPLAY_DEVICEW = unsafe { mem::zeroed() };
-        dd.cb = mem::size_of::<DISPLAY_DEVICEW>() as u32;
-        let dd_ok = unsafe {
-            EnumDisplayDevicesW(
-                info.szDevice.as_ptr(),
-                0,
-                &mut dd,
-                EDD_GET_DEVICE_INTERFACE_NAME,
-            )
-        };
-
-        let (id, alt_id) = if dd_ok != 0 {
-            let device_id = wide_to_string(&dd.DeviceID);
-            if device_id.is_empty() {
-                (device_name.clone(), None)
-            } else {
-                (device_id, Some(device_name.clone()))
-            }
-        } else {
-            (device_name.clone(), None)
-        };
-
-        monitors.push(MonitorInfo {
-            id,
-            alt_id,
-            x: rc.left,
-            y: rc.top,
-            width: (rc.right - rc.left).max(0) as u32,
-            height: (rc.bottom - rc.top).max(0) as u32,
-            scale: 1.0,
-            is_primary: info.monitorInfo.dwFlags & MONITORINFOF_PRIMARY != 0,
-        });
-    }
-    monitors
-}
-
-pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
-    super::match_monitor(id, &enumerate_monitors())
-}
 
 /// Cursor position (physical px — the process is per-monitor-v2 DPI aware),
 /// button state, and the DPI zoom of the monitor under the cursor.
@@ -141,8 +34,7 @@ pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
 /// sampling the C++ original does.
 pub fn get_mouse_info() -> MouseInfo {
     let mut p = POINT { x: 0, y: 0 };
-    let got = unsafe { GetCursorPos(&mut p) };
-    if got == 0 {
+    if unsafe { GetCursorPos(&mut p) }.is_err() {
         return MouseInfo {
             x: 0.0,
             y: 0.0,
@@ -152,15 +44,15 @@ pub fn get_mouse_info() -> MouseInfo {
     }
 
     let down = |vk: i32| unsafe { (GetAsyncKeyState(vk) as u16 & 0x8000) != 0 };
-    let pressed = down(VK_LBUTTON as i32) || down(VK_RBUTTON as i32);
+    let pressed = down(VK_LBUTTON.0 as i32) || down(VK_RBUTTON.0 as i32);
 
     // Per-monitor DPI: 96 = 100% scaling, so dpi/96 is the zoom factor.
     let mut dpi_x: u32 = 96;
     let mut dpi_y: u32 = 96;
     let hmon = unsafe { MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST) };
-    if !hmon.is_null() {
-        let hr = unsafe { GetDpiForMonitor(hmon, MDT_DEFAULT, &mut dpi_x, &mut dpi_y) };
-        if hr < 0 || dpi_x == 0 {
+    if !hmon.is_invalid() {
+        let ok = unsafe { GetDpiForMonitor(hmon, MDT_DEFAULT, &mut dpi_x, &mut dpi_y) };
+        if ok.is_err() || dpi_x == 0 {
             dpi_x = 96;
         }
     }
@@ -185,7 +77,7 @@ fn stock_cursor_table() -> &'static Vec<(isize, CursorKind)> {
     TABLE.get_or_init(|| {
         // IDC_PIN (the Win10 "location/pin" cursor) is the closest stock match
         // for the wire contract's `pen` kind — there is no IDC_PEN.
-        let ids: [(windows_sys::core::PCWSTR, CursorKind); 16] = [
+        let ids: [(windows::core::PCWSTR, CursorKind); 16] = [
             (IDC_ARROW, CursorKind::Arrow),
             (IDC_IBEAM, CursorKind::IBeam),
             (IDC_WAIT, CursorKind::Wait),
@@ -205,8 +97,8 @@ fn stock_cursor_table() -> &'static Vec<(isize, CursorKind)> {
         ];
         ids.into_iter()
             .filter_map(|(id, kind)| {
-                let h = unsafe { LoadCursorW(std::ptr::null_mut(), id) };
-                (!h.is_null()).then_some((h as isize, kind))
+                let h = unsafe { LoadCursorW(None, id) }.ok()?;
+                Some((h.0 as isize, kind))
             })
             .collect()
     })
@@ -219,7 +111,7 @@ fn stock_cursor_table() -> &'static Vec<(isize, CursorKind)> {
 pub fn get_cursor_state() -> CursorState {
     let mut info: CURSORINFO = unsafe { mem::zeroed() };
     info.cbSize = mem::size_of::<CURSORINFO>() as u32;
-    if unsafe { GetCursorInfo(&mut info) } == 0 {
+    if unsafe { GetCursorInfo(&mut info) }.is_err() {
         return CursorState {
             x: 0,
             y: 0,
@@ -227,10 +119,10 @@ pub fn get_cursor_state() -> CursorState {
             handle: 0,
         };
     }
-    let kind = if info.flags & CURSOR_SHOWING == 0 {
+    let kind = if info.flags.0 & CURSOR_SHOWING.0 == 0 {
         CursorKind::Hidden
     } else {
-        let h = info.hCursor as isize;
+        let h = info.hCursor.0 as isize;
         stock_cursor_table()
             .iter()
             .find(|(handle, _)| *handle == h)
@@ -241,7 +133,7 @@ pub fn get_cursor_state() -> CursorState {
         x: info.ptScreenPos.x,
         y: info.ptScreenPos.y,
         kind,
-        handle: info.hCursor as isize,
+        handle: info.hCursor.0 as isize,
     }
 }
 
@@ -272,13 +164,14 @@ mod sprite {
     use std::sync::{Mutex, OnceLock};
     use std::time::Instant;
 
-    use windows_sys::Win32::Graphics::Gdi::{
+    use windows::core::{s, w};
+    use windows::Win32::Graphics::Gdi::{
         CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GdiFlush, GetDC, GetDIBits,
         GetObjectW, ReleaseDC, SelectObject, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB,
         DIB_RGB_COLORS, HBITMAP, HDC, RGBQUAD,
     };
-    use windows_sys::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
+    use windows::Win32::System::LibraryLoader::{GetModuleHandleW, GetProcAddress};
+    use windows::Win32::UI::WindowsAndMessaging::{
         CopyIcon, DestroyIcon, DrawIconEx, GetIconInfo, DI_NORMAL, HCURSOR, HICON, ICONINFO,
     };
 
@@ -317,7 +210,7 @@ mod sprite {
         };
         drop(tracker);
 
-        let hcur = state.handle as HCURSOR;
+        let hcur = HCURSOR(state.handle as *mut c_void);
         let event = match frame_info(hcur) {
             // A static cursor whose handle did not change is byte-identical to
             // what the writer already holds — skip the pixel work entirely.
@@ -360,12 +253,11 @@ mod sprite {
     /// ref — the wire contract's "unavailable" case) rather than `Unchanged`,
     /// which would pin the ref to a sprite of the *previous* shape.
     fn rasterize_copied(hcur: HCURSOR, kind: CursorKind) -> SpriteEvent {
-        let copy = unsafe { CopyIcon(hcur) };
-        if copy.is_null() {
+        let Ok(copy) = (unsafe { CopyIcon(hcur.into()) }) else {
             return SpriteEvent::Hidden;
-        }
+        };
         let sprite = rasterize_icon(copy, kind);
-        unsafe { DestroyIcon(copy) };
+        let _ = unsafe { DestroyIcon(copy) };
         match sprite {
             Some(s) => SpriteEvent::Candidate(s),
             None => SpriteEvent::Hidden,
@@ -386,7 +278,9 @@ mod sprite {
 
     /// `user32!GetCursorFrameInfo` — undocumented but stable since XP (prior
     /// art in OBS-adjacent recorders). Returns the HCURSOR of animation step
-    /// `istep` and reports the step rate (jiffies) and step count.
+    /// `istep` and reports the step rate (jiffies) and step count. The export
+    /// has no `windows`-crate binding, so it stays a GetProcAddress-resolved
+    /// raw fn pointer.
     type GetCursorFrameInfoFn =
         unsafe extern "system" fn(HCURSOR, u32, u32, *mut u32, *mut u32) -> HCURSOR;
 
@@ -395,12 +289,8 @@ mod sprite {
         static F: OnceLock<Option<GetCursorFrameInfoFn>> = OnceLock::new();
         *F.get_or_init(|| unsafe {
             // user32 is guaranteed resident (this module links GetCursorInfo).
-            let wide: Vec<u16> = "user32.dll".encode_utf16().chain(Some(0)).collect();
-            let user32 = GetModuleHandleW(wide.as_ptr());
-            if user32.is_null() {
-                return None;
-            }
-            GetProcAddress(user32, c"GetCursorFrameInfo".as_ptr() as *const u8).map(|p| {
+            let user32 = GetModuleHandleW(w!("user32.dll")).ok()?;
+            GetProcAddress(user32, s!("GetCursorFrameInfo")).map(|p| {
                 mem::transmute::<unsafe extern "system" fn() -> isize, GetCursorFrameInfoFn>(p)
             })
         })
@@ -413,7 +303,7 @@ mod sprite {
         let mut rate_jiffies: u32 = 0;
         let mut frames: u32 = 0;
         let frame = unsafe { f(hcur, 0, 0, &mut rate_jiffies, &mut frames) };
-        if frame.is_null() || frames <= 1 {
+        if frame.is_invalid() || frames <= 1 {
             AnimInfo::Static
         } else {
             AnimInfo::Animated {
@@ -430,7 +320,7 @@ mod sprite {
         let mut rate: u32 = 0;
         let mut frames: u32 = 0;
         let frame = unsafe { f(hcur, 0, istep, &mut rate, &mut frames) };
-        (!frame.is_null()).then_some(frame)
+        (!frame.is_invalid()).then_some(frame)
     }
 
     // -- rasterization (GetIconInfo + GetDIBits) ----------------------------
@@ -440,27 +330,27 @@ mod sprite {
     fn rasterize_icon(icon: HICON, kind: CursorKind) -> Option<RawSprite> {
         unsafe {
             let mut ii: ICONINFO = mem::zeroed();
-            if GetIconInfo(icon, &mut ii) == 0 {
+            if GetIconInfo(icon, &mut ii).is_err() {
                 return None;
             }
             let sprite = read_icon_planes(icon, &ii, kind);
-            if !ii.hbmMask.is_null() {
-                DeleteObject(ii.hbmMask);
+            if !ii.hbmMask.is_invalid() {
+                let _ = DeleteObject(ii.hbmMask.into());
             }
-            if !ii.hbmColor.is_null() {
-                DeleteObject(ii.hbmColor);
+            if !ii.hbmColor.is_invalid() {
+                let _ = DeleteObject(ii.hbmColor.into());
             }
             sprite
         }
     }
 
     unsafe fn read_icon_planes(icon: HICON, ii: &ICONINFO, kind: CursorKind) -> Option<RawSprite> {
-        let hdc = GetDC(std::ptr::null_mut());
-        if hdc.is_null() {
+        let hdc = GetDC(None);
+        if hdc.is_invalid() {
             return None;
         }
         let sprite = read_icon_planes_with_dc(hdc, icon, ii, kind);
-        ReleaseDC(std::ptr::null_mut(), hdc);
+        ReleaseDC(None, hdc);
         sprite
     }
 
@@ -480,7 +370,7 @@ mod sprite {
             mask,
         };
 
-        if ii.hbmColor.is_null() {
+        if ii.hbmColor.is_invalid() {
             // Mono cursor: hbmMask is double height — the AND plane stacked on
             // top of the XOR plane.
             let (w, full_h) = bitmap_size(ii.hbmMask)?;
@@ -523,9 +413,9 @@ mod sprite {
     unsafe fn bitmap_size(hbm: HBITMAP) -> Option<(u32, u32)> {
         let mut bm: BITMAP = mem::zeroed();
         let read = GetObjectW(
-            hbm,
+            hbm.into(),
             mem::size_of::<BITMAP>() as i32,
-            &mut bm as *mut BITMAP as *mut c_void,
+            Some(&mut bm as *mut BITMAP as *mut c_void),
         );
         if read == 0 || bm.bmWidth <= 0 || bm.bmHeight <= 0 {
             return None;
@@ -534,7 +424,7 @@ mod sprite {
     }
 
     /// `BITMAPINFO` with room for the 2-entry color table a 1bpp `GetDIBits`
-    /// writes back (the windows-sys struct only reserves one entry).
+    /// writes back (the `windows`-crate struct only reserves one entry).
     #[repr(C)]
     struct BitmapInfo2 {
         header: BITMAPINFOHEADER,
@@ -551,13 +441,13 @@ mod sprite {
         bi.header.biHeight = -(h as i32);
         bi.header.biPlanes = 1;
         bi.header.biBitCount = bpp;
-        bi.header.biCompression = BI_RGB as u32;
+        bi.header.biCompression = BI_RGB.0;
         GetDIBits(
             hdc,
             hbm,
             0,
             h,
-            buf.as_mut_ptr() as *mut c_void,
+            Some(buf.as_mut_ptr() as *mut c_void),
             &mut bi as *mut BitmapInfo2 as *mut BITMAPINFO,
             DIB_RGB_COLORS,
         ) as u32
@@ -616,8 +506,8 @@ mod sprite {
     /// Draws the icon over a solid background (`bg` per channel) into a 32bpp
     /// top-down DIB section and returns its BGRA bytes.
     unsafe fn render_on(hdc: HDC, icon: HICON, w: u32, h: u32, bg: u8) -> Option<Vec<u8>> {
-        let memdc = CreateCompatibleDC(hdc);
-        if memdc.is_null() {
+        let memdc = CreateCompatibleDC(Some(hdc));
+        if memdc.is_invalid() {
             return None;
         }
         let result = (|| {
@@ -627,21 +517,22 @@ mod sprite {
             bi.header.biHeight = -(h as i32);
             bi.header.biPlanes = 1;
             bi.header.biBitCount = 32;
-            bi.header.biCompression = BI_RGB as u32;
+            bi.header.biCompression = BI_RGB.0;
             let mut bits: *mut c_void = std::ptr::null_mut();
             let dib = CreateDIBSection(
-                memdc,
+                Some(memdc),
                 &bi as *const BitmapInfo2 as *const BITMAPINFO,
                 DIB_RGB_COLORS,
                 &mut bits,
-                std::ptr::null_mut(),
+                None,
                 0,
-            );
-            if dib.is_null() || bits.is_null() {
+            )
+            .ok()?;
+            if bits.is_null() {
                 return None;
             }
             let len = (w as usize) * (h as usize) * 4;
-            let old = SelectObject(memdc, dib);
+            let old = SelectObject(memdc, dib.into());
             std::ptr::write_bytes(bits as *mut u8, bg, len);
             let drawn = DrawIconEx(
                 memdc,
@@ -651,62 +542,20 @@ mod sprite {
                 w as i32,
                 h as i32,
                 0,
-                std::ptr::null_mut(),
+                None,
                 DI_NORMAL,
             );
-            GdiFlush();
-            let out =
-                (drawn != 0).then(|| std::slice::from_raw_parts(bits as *const u8, len).to_vec());
+            let _ = GdiFlush();
+            let out = drawn
+                .is_ok()
+                .then(|| std::slice::from_raw_parts(bits as *const u8, len).to_vec());
             SelectObject(memdc, old);
-            DeleteObject(dib);
+            let _ = DeleteObject(dib.into());
             out
         })();
-        DeleteDC(memdc);
+        let _ = DeleteDC(memdc);
         result
     }
-}
-
-/// The display's DPI zoom (dpi/96) — the input-capture header's per-monitor
-/// `scale`, which the editor uses to size themed cursors like the OS does.
-/// Distinct from `MonitorInfo::scale` (capture px per coordinate unit, always
-/// 1.0 on Windows).
-pub fn monitor_display_scale(m: &MonitorInfo) -> f64 {
-    let center = POINT {
-        x: m.x + (m.width as i32 / 2),
-        y: m.y + (m.height as i32 / 2),
-    };
-    let hmon = unsafe { MonitorFromPoint(center, MONITOR_DEFAULTTONEAREST) };
-    if hmon.is_null() {
-        return 1.0;
-    }
-    let mut dpi_x: u32 = 96;
-    let mut dpi_y: u32 = 96;
-    let hr = unsafe { GetDpiForMonitor(hmon, MDT_DEFAULT, &mut dpi_x, &mut dpi_y) };
-    if hr < 0 || dpi_x == 0 {
-        return 1.0;
-    }
-    dpi_x as f64 / 96.0
-}
-
-pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
-    let settings = ObsData::new();
-    settings.set_string("monitor_id", &m.id);
-    // 2 = WGC. Deliberate deviation from the design's `0` (auto): auto prefers
-    // the DXGI duplicator, which was verified to produce black frames on this
-    // Win11 26H1 + NVIDIA machine, while WGC captures correctly. Requesting
-    // WGC is safe everywhere — win-capture's choose_method() force-falls back
-    // to DXGI when WGC is unsupported (duplicator-monitor-capture.c).
-    settings.set_int("method", 2);
-    settings.set_bool("capture_cursor", show_cursor);
-    settings
-}
-
-/// Partial `obs_source_update` payload toggling cursor capture on an existing
-/// display source (win-capture applies it live).
-pub fn cursor_update_settings(show_cursor: bool) -> ObsData {
-    let settings = ObsData::new();
-    settings.set_bool("capture_cursor", show_cursor);
-    settings
 }
 
 /// Source id + settings for a speaker (output) capture source. Must be called
@@ -733,32 +582,6 @@ pub fn webcam_settings(device_id: &str) -> ObsData {
     settings
 }
 
-pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {
-    let module_bin = env::var("OBS_PLUGIN_PATH").unwrap_or_else(|_| {
-        exe_dir
-            .join("obs-plugins")
-            .join("64bit")
-            .to_string_lossy()
-            .into_owned()
-    });
-    let module_data_base = env::var("OBS_PLUGIN_DATA_PATH").unwrap_or_else(|_| {
-        exe_dir
-            .join("data")
-            .join("obs-plugins")
-            .to_string_lossy()
-            .into_owned()
-    });
-    let libobs_data = env::var("OBS_DATA_PATH")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| exe_dir.join("data").join("libobs"));
-    ObsPaths {
-        module_bin,
-        // The %module% suffix is appended internally (§1.6).
-        module_data: format!("{module_data_base}/%module%"),
-        libobs_data: Some(libobs_data),
-    }
-}
-
 /// Linear gain that undoes the endpoint's software master volume for a
 /// loopback (speaker) capture. On endpoints without hardware volume, Windows
 /// applies the volume slider in the audio engine *before* the loopback tap, so
@@ -775,7 +598,7 @@ pub fn speaker_compensation_gain(device_id: &str) -> f32 {
 
 /// ±30 dB compensation cap: keeps a near-zero volume slider from requesting an
 /// absurd boost (the captured signal is float, so the math is lossless, but a
-/// >30 dB "restoration" of a slider someone parked at 2% is not what they
+/// \>30 dB "restoration" of a slider someone parked at 2% is not what they
 /// meant).
 const MAX_COMPENSATION_DB: f32 = 30.0;
 
@@ -787,114 +610,23 @@ fn compensation_gain_from_db(master_db: f32) -> f32 {
     10f32.powf(boost_db / 20.0)
 }
 
-/// Minimal hand-rolled Core Audio endpoint COM client. windows-sys exposes the
-/// plain-C COM entry points but not interface vtables, and the full `windows`
-/// crate is a heavy dependency for three method calls — so the three vtable
-/// prefixes used here are declared manually.
+/// Core Audio endpoint volume query via the `windows` crate's generated COM
+/// bindings (which replaced the hand-rolled vtable prefixes windows-sys
+/// forced). The interface wrappers `Release` on drop, so every early return
+/// still balances the refcounts.
 mod endpoint_volume {
     use std::cell::Cell;
-    use std::ffi::c_void;
-    use std::ptr;
 
-    use windows_sys::core::{GUID, HRESULT, PCWSTR};
-    use windows_sys::Win32::System::Com::{
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::RPC_E_CHANGED_MODE;
+    use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+    use windows::Win32::Media::Audio::{
+        eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator,
+        ENDPOINT_HARDWARE_SUPPORT_VOLUME,
+    };
+    use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
     };
-
-    const CLSID_MM_DEVICE_ENUMERATOR: GUID = GUID {
-        data1: 0xBCDE0395,
-        data2: 0xE52F,
-        data3: 0x467C,
-        data4: [0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E],
-    };
-    const IID_IMM_DEVICE_ENUMERATOR: GUID = GUID {
-        data1: 0xA95664D2,
-        data2: 0x9614,
-        data3: 0x4F35,
-        data4: [0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6],
-    };
-    const IID_IAUDIO_ENDPOINT_VOLUME: GUID = GUID {
-        data1: 0x5CDF2C82,
-        data2: 0x841E,
-        data3: 0x4546,
-        data4: [0x97, 0x22, 0x0C, 0xF7, 0x40, 0x78, 0x22, 0x9A],
-    };
-
-    const E_RENDER: i32 = 0; // EDataFlow::eRender
-    /// ERole::eConsole — the role win-wasapi resolves "default" with, so both
-    /// sides always talk about the same device.
-    const E_CONSOLE: i32 = 0;
-    const ENDPOINT_HARDWARE_SUPPORT_VOLUME: u32 = 0x1;
-    const RPC_E_CHANGED_MODE: HRESULT = 0x80010106u32 as HRESULT;
-
-    /// Leading vtable entries shared by every COM interface.
-    #[repr(C)]
-    struct IUnknownPrefix {
-        query_interface: usize,
-        add_ref: usize,
-        release: unsafe extern "system" fn(*mut c_void) -> u32,
-    }
-
-    #[repr(C)]
-    struct IMMDeviceEnumeratorVtbl {
-        unknown: IUnknownPrefix,
-        enum_audio_endpoints: usize,
-        get_default_audio_endpoint:
-            unsafe extern "system" fn(*mut c_void, i32, i32, *mut *mut c_void) -> HRESULT,
-        get_device: unsafe extern "system" fn(*mut c_void, PCWSTR, *mut *mut c_void) -> HRESULT,
-    }
-
-    #[repr(C)]
-    struct IMMDeviceVtbl {
-        unknown: IUnknownPrefix,
-        activate: unsafe extern "system" fn(
-            *mut c_void,
-            *const GUID,
-            u32,
-            *mut c_void,
-            *mut *mut c_void,
-        ) -> HRESULT,
-    }
-
-    #[repr(C)]
-    struct IAudioEndpointVolumeVtbl {
-        unknown: IUnknownPrefix,
-        register_control_change_notify: usize,
-        unregister_control_change_notify: usize,
-        get_channel_count: usize,
-        set_master_volume_level: usize,
-        set_master_volume_level_scalar: usize,
-        get_master_volume_level: unsafe extern "system" fn(*mut c_void, *mut f32) -> HRESULT,
-        get_master_volume_level_scalar: usize,
-        set_channel_volume_level: usize,
-        set_channel_volume_level_scalar: usize,
-        get_channel_volume_level: usize,
-        get_channel_volume_level_scalar: usize,
-        set_mute: usize,
-        get_mute: unsafe extern "system" fn(*mut c_void, *mut i32) -> HRESULT,
-        get_volume_step_info: usize,
-        volume_step_up: usize,
-        volume_step_down: usize,
-        query_hardware_support: unsafe extern "system" fn(*mut c_void, *mut u32) -> HRESULT,
-    }
-
-    unsafe fn vtbl<T>(obj: *mut c_void) -> *const T {
-        *(obj as *mut *const T)
-    }
-
-    unsafe fn com_release(obj: *mut c_void) {
-        ((*vtbl::<IUnknownPrefix>(obj)).release)(obj);
-    }
-
-    /// Owned COM pointer so every early return releases.
-    struct ComPtr(*mut c_void);
-    impl Drop for ComPtr {
-        fn drop(&mut self) {
-            if !self.0.is_null() {
-                unsafe { com_release(self.0) };
-            }
-        }
-    }
 
     /// Per-thread one-time CoInitializeEx. `RPC_E_CHANGED_MODE` (already
     /// initialized STA by someone else) still leaves COM usable. Never
@@ -908,8 +640,8 @@ mod endpoint_volume {
             if let Some(ready) = state.get() {
                 return ready;
             }
-            let hr = unsafe { CoInitializeEx(ptr::null(), COINIT_MULTITHREADED as u32) };
-            let ready = hr >= 0 || hr == RPC_E_CHANGED_MODE;
+            let hr = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
+            let ready = hr.is_ok() || hr == RPC_E_CHANGED_MODE;
             state.set(Some(ready));
             ready
         })
@@ -925,61 +657,28 @@ mod endpoint_volume {
             return None;
         }
         unsafe {
-            let mut enumerator: *mut c_void = ptr::null_mut();
-            let hr = CoCreateInstance(
-                &CLSID_MM_DEVICE_ENUMERATOR,
-                ptr::null_mut(),
-                CLSCTX_ALL,
-                &IID_IMM_DEVICE_ENUMERATOR,
-                &mut enumerator,
-            );
-            if hr < 0 || enumerator.is_null() {
-                return None;
-            }
-            let enumerator = ComPtr(enumerator);
+            let enumerator: IMMDeviceEnumerator =
+                CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
 
-            let mut device: *mut c_void = ptr::null_mut();
-            let ev = vtbl::<IMMDeviceEnumeratorVtbl>(enumerator.0);
-            let hr = if device_id == "default" {
-                ((*ev).get_default_audio_endpoint)(enumerator.0, E_RENDER, E_CONSOLE, &mut device)
+            let device = if device_id == "default" {
+                // eConsole — the role win-wasapi resolves "default" with, so
+                // both sides always talk about the same device.
+                enumerator.GetDefaultAudioEndpoint(eRender, eConsole).ok()?
             } else {
                 let wide: Vec<u16> = device_id.encode_utf16().chain(Some(0)).collect();
-                ((*ev).get_device)(enumerator.0, wide.as_ptr(), &mut device)
+                enumerator.GetDevice(PCWSTR::from_raw(wide.as_ptr())).ok()?
             };
-            if hr < 0 || device.is_null() {
-                return None;
-            }
-            let device = ComPtr(device);
 
-            let mut volume: *mut c_void = ptr::null_mut();
-            let hr = ((*vtbl::<IMMDeviceVtbl>(device.0)).activate)(
-                device.0,
-                &IID_IAUDIO_ENDPOINT_VOLUME,
-                CLSCTX_ALL,
-                ptr::null_mut(),
-                &mut volume,
-            );
-            if hr < 0 || volume.is_null() {
-                return None;
-            }
-            let volume = ComPtr(volume);
-            let vv = vtbl::<IAudioEndpointVolumeVtbl>(volume.0);
+            let volume: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None).ok()?;
 
-            let mut hw_mask: u32 = 0;
-            if ((*vv).query_hardware_support)(volume.0, &mut hw_mask) < 0
-                || hw_mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME != 0
-            {
+            let hw_mask = volume.QueryHardwareSupport().ok()?;
+            if hw_mask & ENDPOINT_HARDWARE_SUPPORT_VOLUME != 0 {
                 return None;
             }
-            let mut muted: i32 = 0;
-            if ((*vv).get_mute)(volume.0, &mut muted) < 0 || muted != 0 {
+            if volume.GetMute().ok()?.as_bool() {
                 return None;
             }
-            let mut db: f32 = 0.0;
-            if ((*vv).get_master_volume_level)(volume.0, &mut db) < 0 {
-                return None;
-            }
-            Some(db)
+            volume.GetMasterVolumeLevel().ok()
         }
     }
 }
@@ -1010,17 +709,3 @@ mod tests {
     }
 }
 
-pub fn exit_process(code: i32) -> ! {
-    unsafe {
-        ExitProcess(code as u32);
-    }
-    #[allow(unreachable_code)]
-    loop {
-        std::thread::park();
-    }
-}
-
-fn wide_to_string(buf: &[u16]) -> String {
-    let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    String::from_utf16_lossy(&buf[..len])
-}

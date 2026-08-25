@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 obs = { workspace = true }
 obs-sys = { workspace = true }
+obs-platform = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -21,4 +22,12 @@ png = { workspace = true }
 ctrlc = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true }
+windows = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { workspace = true }
+objc2-app-kit = { workspace = true }
+objc2-core-foundation = { workspace = true }
+objc2-core-graphics = { workspace = true }
+# NSDictionary/NSData: the cursor sprite PNG encode (platform/macos.rs).
+objc2-foundation = { workspace = true }
