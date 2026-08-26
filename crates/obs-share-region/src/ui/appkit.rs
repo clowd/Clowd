@@ -189,6 +189,75 @@ fn work_areas(mtm: MainThreadMarker) -> Vec<Rect> {
 }
 
 // ---------------------------------------------------------------------------
+// ShareWindow: an NSWindow that stays exactly where it is put
+// ---------------------------------------------------------------------------
+
+define_class!(
+    // SAFETY: NSWindow subclassing with one documented override; no Drop impl
+    // and () ivars.
+    #[unsafe(super(NSWindow))]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = ()]
+    struct ShareWindow;
+
+    impl ShareWindow {
+        /// Returns the proposed rect verbatim, opting every window here out of
+        /// AppKit's automatic frame constraining.
+        ///
+        /// This is load-bearing, not a nicety. By default AppKit shoves any
+        /// window whose top would fall under the menu bar (or off the screen)
+        /// back down into the visible frame. All three of our windows are
+        /// placed from the capture-space model — the mirror at the region, the
+        /// mask over the mirror's whole frame, the frame window at
+        /// `layout.outer`, which is inflated *outward* and so legitimately
+        /// starts above the region — and a region flush with the top of the
+        /// screen puts all three above the menu bar line.
+        ///
+        /// Letting AppKit move them silently desynchronizes the model from
+        /// reality: the windows sit tens of points below where the layout says
+        /// they are, so every hit test resolves the wrong zone (usually the
+        /// hollow interior, i.e. `Zone::Outside` → `hitTest:` nil) and the
+        /// entire frame goes inert — no drag, no resize, no close button.
+        /// Measured: `--region 756,0,756,491` on a 1512x982 display put all
+        /// three windows at y=33 instead of the modeled y=-50/-4.
+        ///
+        /// The mirror's title bar can now sit off-screen; that is fine and in
+        /// fact wanted, since the mask covers the mirror's whole frame anyway.
+        #[unsafe(method(constrainFrameRect:toScreen:))]
+        fn constrain_frame_rect(&self, rect: NSRect, _screen: Option<&NSScreen>) -> NSRect {
+            rect
+        }
+    }
+);
+
+impl ShareWindow {
+    /// `initWithContentRect:styleMask:backing:defer:` on the subclass. Returned
+    /// as the superclass type: nothing past construction needs the subclass,
+    /// and the override is installed on the instance's real class regardless.
+    fn create(
+        mtm: MainThreadMarker,
+        content_rect: NSRect,
+        style: NSWindowStyleMask,
+    ) -> Retained<NSWindow> {
+        let this = Self::alloc(mtm).set_ivars(());
+        let win: Retained<Self> = unsafe {
+            msg_send![
+                super(this),
+                initWithContentRect: content_rect,
+                styleMask: style,
+                backing: NSBackingStoreType::Buffered,
+                defer: false,
+            ]
+        };
+        // Windows live for the whole process (see the module docs); letting
+        // AppKit also release-on-close would double-free the mirror and free
+        // the contentView obs renders into.
+        unsafe { win.setReleasedWhenClosed(false) };
+        Retained::into_super(win)
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Controller: notification + timer target (exists even with --no-frame,
 // because the mirror's close/activate notifications always need a receiver)
 // ---------------------------------------------------------------------------
@@ -423,12 +492,24 @@ define_class!(
             // `point` arrives in the superview's coordinate system.
             let sup = unsafe { self.superview() };
             let local = self.convertPoint_fromView(point, sup.as_deref());
-            let zone = read_app(|app| {
-                let l = app.layout.as_ref()?;
-                let p = (l.outer.x + local.x.round() as i32, l.outer.y + local.y.round() as i32);
-                Some(geometry::hit_test(l, app.cfg.resizable, p))
-            })
-            .flatten();
+            // Resolved through the window's ACTUAL screen position rather than
+            // by offsetting `layout.outer`, so this agrees with `mouseDown:`
+            // (which measures the same way) by construction. The two must
+            // never disagree: a point this returns non-nil for but mouseDown:
+            // then classifies differently is a click that lands on the wrong
+            // zone or nothing at all.
+            let zone = self
+                .window_point_to_capture(self.convertPoint_toView(local, None))
+                .and_then(|p| {
+                    read_app(|app| {
+                        Some(geometry::hit_test(
+                            app.layout.as_ref()?,
+                            app.cfg.resizable,
+                            p,
+                        ))
+                    })
+                    .flatten()
+                });
             match zone {
                 None | Some(Zone::Outside) => None,
                 Some(_) => Some(Retained::into_super(self.retain())),
@@ -500,10 +581,18 @@ impl FrameView {
     /// frame window itself moves/resizes mid-drag, so window-relative
     /// positions would measure a moving target.
     fn event_capture_point(&self, event: &NSEvent) -> Option<(i32, i32)> {
+        self.window_point_to_capture(event.locationInWindow())
+    }
+
+    /// Window-base coordinates (the space `locationInWindow` reports in) to
+    /// capture space, via the window's live screen position.
+    fn window_point_to_capture(&self, window_point: NSPoint) -> Option<(i32, i32)> {
         let window = self.window()?;
         let mtm = MainThreadMarker::new()?;
-        let p = window.convertPointToScreen(event.locationInWindow());
-        Some(cocoa_point_to_capture(mtm, p))
+        Some(cocoa_point_to_capture(
+            mtm,
+            window.convertPointToScreen(window_point),
+        ))
     }
 }
 
@@ -811,34 +900,14 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
     // miniaturizable (a minimized mirror stops presenting) and not resizable
     // (its client size is dictated by the region, never by the user).
     let style = NSWindowStyleMask::Titled | NSWindowStyleMask::Closable;
-    let mirror = unsafe {
-        NSWindow::initWithContentRect_styleMask_backing_defer(
-            NSWindow::alloc(mtm),
-            capture_to_cocoa(mtm, region), // content rect = region, in points
-            style,
-            NSBackingStoreType::Buffered,
-            false,
-        )
-    };
-    // We keep every window alive in APP for the life of the process; letting
-    // AppKit also release-on-close would double-free the mirror and, worse,
-    // free the contentView obs is rendering into.
-    unsafe { mirror.setReleasedWhenClosed(false) };
+    // content rect = region, in points
+    let mirror = ShareWindow::create(mtm, capture_to_cocoa(mtm, region), style);
     mirror.setTitle(&NSString::from_str(&cfg.title));
 
     // --- Mask: opaque, borderless, exactly covering the mirror's window
     // frame (title bar included). Borderless windows can never become
     // key/main, which is exactly what we want.
-    let mask = unsafe {
-        NSWindow::initWithContentRect_styleMask_backing_defer(
-            NSWindow::alloc(mtm),
-            mirror.frame(),
-            NSWindowStyleMask::Borderless,
-            NSBackingStoreType::Buffered,
-            false,
-        )
-    };
-    unsafe { mask.setReleasedWhenClosed(false) };
+    let mask = ShareWindow::create(mtm, mirror.frame(), NSWindowStyleMask::Borderless);
     mask.setOpaque(true);
     // Solid dark grey, matching the Windows implementation's 0x202020 (plan
     // §1: any opaque color works).
@@ -849,16 +918,11 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
     // user across Spaces and over fullscreen apps.
     let (frame_win, view, layout) = if cfg.show_frame {
         let layout = geometry::compute_layout(region, cfg.border, &work_areas(mtm));
-        let fw = unsafe {
-            NSWindow::initWithContentRect_styleMask_backing_defer(
-                NSWindow::alloc(mtm),
-                capture_to_cocoa(mtm, layout.outer),
-                NSWindowStyleMask::Borderless,
-                NSBackingStoreType::Buffered,
-                false,
-            )
-        };
-        unsafe { fw.setReleasedWhenClosed(false) };
+        let fw = ShareWindow::create(
+            mtm,
+            capture_to_cocoa(mtm, layout.outer),
+            NSWindowStyleMask::Borderless,
+        );
         fw.setOpaque(false);
         fw.setBackgroundColor(Some(&NSColor::clearColor()));
         fw.setHasShadow(false);
