@@ -29,7 +29,9 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{define_class, msg_send, sel, AllocAnyThread, MainThreadMarker, MainThreadOnly, Message};
 use objc2_app_kit::{
     NSApplication, NSApplicationDidChangeScreenParametersNotification, NSBackingStoreType,
-    NSBezierPath, NSColor, NSCursor, NSEvent, NSFloatingWindowLevel, NSLineCapStyle, NSScreen,
+    NSBezelStyle, NSBezierPath, NSButton, NSButtonType, NSColor, NSCursor, NSEvent, NSLineCapStyle,
+    NSScreen, NSStatusWindowLevel,
+    NSTextField,
     NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindingRule, NSWindow,
     NSWindowCollectionBehavior, NSWindowDidBecomeKeyNotification,
     NSWindowDidBecomeMainNotification, NSWindowDidMoveNotification, NSWindowOrderingMode,
@@ -81,6 +83,11 @@ struct App {
     /// used to restore the arrow exactly once and then leave the cursor to
     /// whatever application is underneath (see `mouseMoved:`).
     hover_outside: bool,
+    /// The prompt phase's controls (ui/mod.rs), non-empty exactly while that
+    /// phase is running. Their presence is the phase flag: while they exist
+    /// the mirror is a plain front window the user can pick, the mask and
+    /// frame are not on screen, and no ObsDisplay exists yet.
+    prompt_controls: Vec<Retained<NSView>>,
 }
 
 struct ResizeDrag {
@@ -297,6 +304,13 @@ define_class!(
         fn move_tick(&self, _t: &NSTimer) {
             on_move_tick();
         }
+
+        /// OK in the prompt phase: the user has pointed their meeting app at
+        /// this window, so it can now become the mirror.
+        #[unsafe(method(promptAccepted:))]
+        fn prompt_accepted(&self, _sender: Option<&AnyObject>) {
+            begin_mirror_phase();
+        }
     }
 );
 
@@ -314,10 +328,204 @@ impl Controller {
 /// outside the APP borrow (ordering can post further notifications).
 fn on_mirror_activated() {
     let mut wins = None;
-    try_with_app(|app| wins = Some((app.mask.clone(), app.mirror.clone())));
+    try_with_app(|app| {
+        // Not during the prompt phase: there the mirror is *supposed* to be
+        // frontmost and key so the user can find and pick it, and this handler
+        // would shove it to the back the instant it was activated.
+        if app.prompt_controls.is_empty() {
+            wins = Some((app.mask.clone(), app.mirror.clone()));
+        }
+    });
     if let Some((mask, mirror)) = wins {
         mask.orderBack(None);
         mirror.orderWindow_relativeTo(NSWindowOrderingMode::Below, mask.windowNumber());
+    }
+}
+
+define_class!(
+    // SAFETY: NSButton subclassing with one documented override; no Drop impl
+    // and () ivars.
+    #[unsafe(super(NSButton))]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = ()]
+    struct PromptButton;
+
+    impl PromptButton {
+        /// Fire on the click that reactivates the app, instead of swallowing
+        /// it. This is the normal path here, not an edge case: accepting the
+        /// prompt means going away to a meeting app, picking this window
+        /// there, and coming back — so our app is inactive at the moment the
+        /// user reaches for OK, and the default behaviour would make them
+        /// click it twice.
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
+            true
+        }
+    }
+);
+
+/// Builds the prompt phase's controls into the mirror's content view and
+/// returns them (the caller stores them as the phase flag).
+///
+/// Plain AppKit controls rather than something hand-drawn: this is a window
+/// the user is about to hunt for in a picker, so it should look like an
+/// ordinary dialog, and the button gets focus ring, Return-key activation and
+/// accessibility for free.
+fn install_prompt(
+    mtm: MainThreadMarker,
+    content: &NSView,
+    controller: &Controller,
+) -> Vec<Retained<NSView>> {
+    const PAD: f64 = 12.0;
+    const GAP: f64 = 14.0;
+    const LABEL_H: f64 = 34.0;
+    const BTN_W: f64 = 110.0;
+    const BTN_H: f64 = 32.0;
+
+    let bounds = content.bounds();
+    let (w, h) = (bounds.size.width, bounds.size.height);
+
+    let target: &AnyObject = controller;
+    let button = PromptButton::alloc(mtm).set_ivars(());
+    let button: Retained<PromptButton> =
+        unsafe { msg_send![super(button), initWithFrame: NSRect::ZERO] };
+    button.setTitle(&NSString::from_str("OK"));
+    button.setBezelStyle(NSBezelStyle::Push);
+    button.setButtonType(NSButtonType::MomentaryPushIn);
+    unsafe {
+        button.setTarget(Some(target));
+        button.setAction(Some(sel!(promptAccepted:)));
+    }
+    // Return activates it, and AppKit paints it as the default button.
+    button.setKeyEquivalent(&NSString::from_str("\r"));
+
+    // The region can be as small as geometry::MIN_REGION (64), far smaller
+    // than a comfortable dialog, so the layout degrades in two steps rather
+    // than letting a control overflow the client area: drop the label first,
+    // then let the button take the whole view.
+    let btn_w = BTN_W.min(w - 2.0 * PAD).max(0.0);
+    let btn_h = BTN_H.min(h - 2.0 * PAD).max(0.0);
+    let room_for_label = w >= 220.0 && h >= LABEL_H + GAP + BTN_H + 2.0 * PAD;
+
+    let mut out: Vec<Retained<NSView>> = Vec::new();
+
+    if btn_w < 40.0 || btn_h < 20.0 {
+        button.setFrame(bounds);
+    } else if room_for_label {
+        let block_h = LABEL_H + GAP + btn_h;
+        let block_bottom = ((h - block_h) / 2.0).max(PAD);
+        button.setFrame(NSRect::new(
+            NSPoint::new((w - btn_w) / 2.0, block_bottom),
+            NSSize::new(btn_w, btn_h),
+        ));
+        let label = NSTextField::labelWithString(
+            &NSString::from_str("Share this window, then press OK"),
+            mtm,
+        );
+        // Centered, wrapping across the full width so a narrow-but-tall region
+        // still reads correctly.
+        label.setAlignment(objc2_app_kit::NSTextAlignment::Center);
+        label.setFrame(NSRect::new(
+            NSPoint::new(PAD, block_bottom + btn_h + GAP),
+            NSSize::new(w - 2.0 * PAD, LABEL_H),
+        ));
+        content.addSubview(&label);
+        // NSTextField : NSControl : NSView
+        out.push(Retained::into_super(Retained::into_super(label)));
+    } else {
+        button.setFrame(NSRect::new(
+            NSPoint::new((w - btn_w) / 2.0, (h - btn_h) / 2.0),
+            NSSize::new(btn_w, btn_h),
+        ));
+    }
+
+    content.addSubview(&button);
+    // PromptButton : NSButton : NSControl : NSView
+    out.push(Retained::into_super(Retained::into_super(
+        Retained::into_super(button),
+    )));
+    out
+}
+
+/// Prompt phase → mirror phase, on OK. The mirror window is REUSED, never
+/// recreated: the share the user just started in their meeting app is bound to
+/// this window's identity, and its size is left alone across the transition
+/// (a mid-share resize makes some apps letterbox instead of renegotiating).
+/// Only what is *inside* and *behind* it changes — the controls come out, obs
+/// takes the client area, and the mask and frame arrive around it.
+fn begin_mirror_phase() {
+    // Staged in two borrows: the AppKit ordering below can post notifications
+    // straight back into handlers that borrow APP.
+    // Take the controls out and confirm we are actually in the prompt phase,
+    // in a borrow of its own: the style change below reworks the window's
+    // frame view and can post notifications straight back into handlers that
+    // borrow APP.
+    let mirror = {
+        let mut out = None;
+        try_with_app(|app| {
+            if app.prompt_controls.is_empty() {
+                return; // already mirroring (double-click on OK)
+            }
+            for c in app.prompt_controls.drain(..) {
+                c.removeFromSuperview();
+            }
+            out = Some(app.mirror.clone());
+        });
+        out
+    };
+    let Some(mirror) = mirror else { return };
+
+    // Drop the title bar. A window share captures the whole window frame, so
+    // a titled mirror puts its own title bar in the shared output — the client
+    // area is the only part that is the mirrored region. Borderless also means
+    // frame rect == content rect, which is why this must happen BEFORE the
+    // geometry below is computed (`adopt` derives the mirror's frame from the
+    // region via frameRectForContentRect) and before `mirror_ready` hands out
+    // the content view.
+    //
+    // setStyleMask keeps the same NSWindow — and, load-bearing here, the same
+    // window number — so the share the user just started stays bound to it.
+    mirror.setStyleMask(NSWindowStyleMask::Borderless);
+
+    let staged = {
+        let mut out = None;
+        try_with_app(|app| {
+            // Give every window its real geometry, derived from the region:
+            // the prompt window was small and centred (and the user may have
+            // dragged it), so this is where the mirror both moves and resizes
+            // onto the region, and where the mask is sized to cover it exactly.
+            let adoption = adopt(app, app.region);
+            out = Some((
+                app.mask.clone(),
+                app.frame.clone(),
+                app.view.clone(),
+                adoption,
+            ));
+        });
+        out
+    };
+    let Some((mask, frame, view, adoption)) = staged else {
+        return;
+    };
+    apply_adoption(adoption);
+
+    // Mask to the very back, mirror directly below it — the arrangement that
+    // stops the capture photographing the mirror (plan §1).
+    mask.orderBack(None);
+    mirror.orderWindow_relativeTo(NSWindowOrderingMode::Below, mask.windowNumber());
+
+    if let Some(content) = mirror.contentView() {
+        let handle = Retained::as_ptr(&content) as *mut NSView as *mut c_void;
+        with_app(|app| app.events.mirror_ready(handle));
+    }
+
+    // Frame last: its first draw pass reads APP, which is fully populated by
+    // the time the prompt phase can end.
+    if let Some(fw) = &frame {
+        fw.orderFrontRegardless();
+    }
+    if let Some(v) = &view {
+        v.setNeedsDisplay(true);
     }
 }
 
@@ -896,13 +1104,38 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
 
     let controller = Controller::new(mtm);
 
-    // --- Mirror: the window meeting apps pick. Titled + closable only: not
-    // miniaturizable (a minimized mirror stops presenting) and not resizable
-    // (its client size is dictated by the region, never by the user).
-    let style = NSWindowStyleMask::Titled | NSWindowStyleMask::Closable;
-    // content rect = region, in points
-    let mirror = ShareWindow::create(mtm, capture_to_cocoa(mtm, region), style);
+    // --- Mirror: the window meeting apps pick.
+    //
+    // In the prompt phase it is a small ordinary dialog the user has to find
+    // and click, so it is titled (the title is also what list-style pickers
+    // show) and centred rather than parked on the region — a window sized and
+    // placed like the final mirror is awkward to pick and can be mostly
+    // off-screen for an edge region. `begin_mirror_phase` gives it its real
+    // geometry, and strips the title bar, on OK.
+    //
+    // Titled + closable only for that phase: not miniaturizable (a minimized
+    // mirror stops presenting) and not resizable (its size is dictated by the
+    // region, never by the user). Skipping the prompt goes straight to the
+    // borderless form, since a window share captures the whole window frame
+    // and a caption would end up in the shared output either way.
+    let style = if cfg.prompt {
+        NSWindowStyleMask::Titled | NSWindowStyleMask::Closable
+    } else {
+        NSWindowStyleMask::Borderless
+    };
+    let initial_content = if cfg.prompt {
+        // 3:2, comfortably bigger than the message needs — it has to be easy
+        // to spot and click in a share picker, not compact.
+        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(420.0, 280.0))
+    } else {
+        capture_to_cocoa(mtm, region) // content rect = region, in points
+    };
+    let mirror = ShareWindow::create(mtm, initial_content, style);
     mirror.setTitle(&NSString::from_str(&cfg.title));
+    if cfg.prompt {
+        // Let AppKit place it: centred is the easiest thing to find and click.
+        mirror.center();
+    }
 
     // --- Mask: opaque, borderless, exactly covering the mirror's window
     // frame (title bar included). Borderless windows can never become
@@ -926,10 +1159,22 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
         fw.setOpaque(false);
         fw.setBackgroundColor(Some(&NSColor::clearColor()));
         fw.setHasShadow(false);
-        fw.setLevel(NSFloatingWindowLevel);
+        // Above the menu bar (24) and the Dock (20), not merely above ordinary
+        // windows the way NSFloatingWindowLevel (3) is. The region is drawn
+        // wherever the user put it, and its border is inflated *outward*, so
+        // both routinely overlap the menu bar or Dock — at floating level the
+        // border silently vanishes behind them, leaving the shared area
+        // unmarked exactly where it is least obvious what is being shared.
+        // Pairing with `constrainFrameRect:toScreen:` (see ShareWindow) is what
+        // makes "the region can be anywhere on screen" actually true: the
+        // override lets us place the window there, this lets it be seen there.
+        fw.setLevel(NSStatusWindowLevel);
         fw.setCollectionBehavior(
             NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::FullScreenAuxiliary,
+                | NSWindowCollectionBehavior::FullScreenAuxiliary
+                // Stationary: Mission Control / Spaces transitions must not
+                // drag the border away from the region it marks.
+                | NSWindowCollectionBehavior::Stationary,
         );
         fw.setAcceptsMouseMovedEvents(true);
         let v = FrameView::new(mtm);
@@ -986,20 +1231,36 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
         );
     }
 
-    // --- Show mirror + mask at the bottom of the Z-order: mask at the very
-    // back, mirror inserted directly below it (plan §1: the mask is what
-    // keeps the mirror from photographing itself).
-    mask.orderBack(None);
-    mirror.orderWindow_relativeTo(NSWindowOrderingMode::Below, mask.windowNumber());
+    let content = mirror
+        .contentView()
+        .expect("titled NSWindow always has a contentView");
 
-    // --- Hand the mirror's contentView to the app so it can create the
-    // ObsDisplay. Must happen after the mirror is shown (the swapchain needs
-    // a realized view) and strictly before NSApp.run(). The pointer stays
-    // valid forever: the view is retained by the mirror window, which is
-    // retained by APP, which is never dropped.
-    let content = mirror.contentView().expect("titled NSWindow always has a contentView");
-    let handle = Retained::as_ptr(&content) as *mut NSView as *mut c_void;
-    events.mirror_ready(handle);
+    // --- Phase split (ui/mod.rs). With the prompt on, the mirror opens as an
+    // ordinary front window carrying a message and an OK button, and nothing
+    // else exists yet; `begin_mirror_phase` does the rest when the user
+    // confirms. With it off we go straight to mirroring, which is the
+    // pre-prompt behaviour exactly.
+    let prompt_phase = cfg.prompt;
+    let prompt_controls = if prompt_phase {
+        let controls = install_prompt(mtm, &content, &controller);
+        // Key + front + activated: the whole point of this phase is that the
+        // window is easy to see and click in a share picker.
+        mirror.makeKeyAndOrderFront(None);
+        #[allow(deprecated)] // activate() is macOS 14+; this works everywhere.
+        nsapp.activateIgnoringOtherApps(true);
+        controls
+    } else {
+        mask.orderBack(None);
+        mirror.orderWindow_relativeTo(NSWindowOrderingMode::Below, mask.windowNumber());
+        // Hand the mirror's contentView to the app so it can create the
+        // ObsDisplay. Must happen after the mirror is shown (the swapchain
+        // needs a realized view) and strictly before NSApp.run(). The pointer
+        // stays valid forever: the view is retained by the mirror window,
+        // which is retained by APP, which is never dropped.
+        let handle = Retained::as_ptr(&content) as *mut NSView as *mut c_void;
+        events.mirror_ready(handle);
+        Vec::new()
+    };
 
     *APP.0.borrow_mut() = Some(App {
         mtm,
@@ -1017,14 +1278,20 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
         resize: None,
         close_armed: false,
         hover_outside: true,
+        prompt_controls,
     });
 
-    // Order the frame front only now: its first draw pass reads APP.
-    if let Some(fw) = &frame_win {
-        fw.orderFrontRegardless();
-    }
-    if let Some(v) = &view {
-        v.setNeedsDisplay(true);
+    // Order the frame front only now: its first draw pass reads APP. Held back
+    // entirely during the prompt phase — the region border marks a share that
+    // has not started yet, and it would sit over the window the user is being
+    // asked to pick.
+    if !prompt_phase {
+        if let Some(fw) = &frame_win {
+            fw.orderFrontRegardless();
+        }
+        if let Some(v) = &view {
+            v.setNeedsDisplay(true);
+        }
     }
 
     nsapp.run();

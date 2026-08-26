@@ -60,6 +60,13 @@ struct Cli {
     /// Frame can be moved but not resized.
     #[arg(long)]
     no_resize: bool,
+
+    /// Skip the "share this window, then press OK" step and start mirroring
+    /// immediately. The mirror then opens at the back under the mask, which
+    /// share pickers that require clicking the window on screen cannot reach —
+    /// only pass this when the caller selects the window some other way.
+    #[arg(long)]
+    no_prompt: bool,
 }
 
 /// `R,G,B` accent parser; a clap value_parser, so a bad value is a usage
@@ -161,6 +168,7 @@ fn main() {
         border: cli.border,
         resizable: !cli.no_resize,
         show_frame: !cli.no_frame,
+        prompt: !cli.no_prompt,
     };
 
     // Never returns: the platform event loop runs until events.quit() →

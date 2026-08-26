@@ -102,6 +102,12 @@ objc2-app-kit = { version = "0.3", features = [
     "NSCursor",
     "NSTrackingArea",
     "NSImage",
+    # The pre-share prompt's controls (ui/appkit.rs): a label and an OK button
+    # in the mirror window before it becomes the share surface.
+    "NSControl",
+    "NSButton",
+    "NSTextField",
+    "NSButtonCell",
     # Cursor sprite capture (platform/macos.rs): representation ladder + the
     # PNG encode via representationUsingType:properties:.
     "NSImageRep",
