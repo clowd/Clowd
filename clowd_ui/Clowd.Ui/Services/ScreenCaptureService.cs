@@ -168,6 +168,14 @@ namespace Clowd.UI
                 return;
             }
 
+            // Never launch either capturer until the shell has established that screen capture is
+            // permitted. Normal screenshots then use (or wake) the supervised standby process;
+            // video retains its separate one-shot lifetime/protocol.
+            if (!await EnsureScreenRecordingPermissionAsync())
+                return;
+            if (!video && CaptureStandbySupervisor.TryCapture(mode))
+                return;
+
             if (Interlocked.CompareExchange(ref _captureActive, 1, 0) != 0)
             {
                 Debug.WriteLine("Screen capture is already in progress; ignoring re-entrant request.");
@@ -178,13 +186,6 @@ namespace Clowd.UI
 
             try
             {
-                // The capturer must never be launched into a desktop it cannot see: without Screen
-                // Recording it would put an overlay over a blank screenshot. Ask here, where there is
-                // a real UI to explain it, instead of letting the capture process own the
-                // conversation (issue #49).
-                if (!await EnsureScreenRecordingPermissionAsync())
-                    return;
-
                 var binary = CaptureBinaryLocator.Resolve();
                 if (binary == null)
                 {
@@ -331,13 +332,61 @@ namespace Clowd.UI
             Closed?.Invoke(this, EventArgs.Empty);
         }
 
+        /// <summary>Completes a session produced by the supervised standby capturer.</summary>
+        internal static void StandbyCaptureStarted()
+        {
+            if (Interlocked.Exchange(ref _captureActive, 1) == 0)
+                IdleMonitor.NotifyCaptureActivity();
+        }
+
+        internal static void StandbyCaptureAborted()
+        {
+            if (Interlocked.Exchange(ref _captureActive, 0) != 0)
+                IdleMonitor.NotifyCaptureActivity();
+        }
+
+        internal static async Task ProcessStandbySessionAsync(string sessionDir)
+        {
+            if (String.IsNullOrWhiteSpace(sessionDir) || !Directory.Exists(sessionDir))
+            {
+                StandbyCaptureAborted();
+                return;
+            }
+
+            StandbyCaptureStarted();
+            try
+            {
+                var result = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
+                switch (result?.Action)
+                {
+                    case CaptureAction.Edit: EditorWindow.ShowSession(result.Session); break;
+                    case CaptureAction.Upload: await UploadManager.UploadSession(result.Session); break;
+                    case CaptureAction.SelectColor: NiceDialog.ShowColorViewer(result.Color); break;
+                    case CaptureAction.Video:
+                        PageManager.Current.GetVideoCapturePage().Open(result.Region, result.CornerRadius, result.SessionDir);
+                        break;
+                    case CaptureAction.Scroll:
+                        PageManager.Current.GetScrollCapturePage().Open(result.Region, result.ScrollPoint, result.TargetHwnd, result.SessionDir);
+                        break;
+                    case CaptureAction.OcrUpload:
+                        await UploadManager.UploadText(result.Text, "Captured Text");
+                        break;
+                }
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _captureActive, 0);
+                IdleMonitor.NotifyCaptureActivity();
+            }
+        }
+
         /// <summary>
         /// Returns whether the capture may go ahead. The first capture on a fresh install is where
         /// macOS still has its own one-tap prompt to offer, so try that before anything else; every
         /// later attempt falls through to the dialog, since the only route left by then is System
         /// Settings plus a restart. True on every platform without such a permission.
         /// </summary>
-        private static async Task<bool> EnsureScreenRecordingPermissionAsync()
+        internal static async Task<bool> EnsureScreenRecordingPermissionAsync()
         {
             if (MacPermissions.HasScreenRecording || MacPermissions.Request(MacPermission.ScreenRecording))
                 return true;
@@ -504,6 +553,27 @@ namespace Clowd.UI
                 args.Add("--video");
 
             return args;
+        }
+
+        public static IReadOnlyList<string> BuildStandby(string sessionRoot, SettingsCapture settings,
+                                                          SettingsHotkey hotkeys, string lastSavePath = null)
+        {
+            var args = new List<string>(Build(sessionRoot, settings, CaptureMode.Region, false, lastSavePath));
+            args.RemoveRange(0, 2); // standby creates the per-capture directory itself
+            args.InsertRange(0, new[] { "--standby", "--session-root", sessionRoot });
+
+            AddHotkey("--hk-main", hotkeys.CaptureRegionShortcut);
+            AddHotkey("--hk-window", hotkeys.CaptureActiveShortcut);
+            AddHotkey("--hk-monitor", hotkeys.CaptureFullscreenShortcut);
+            return args;
+
+            void AddHotkey(string flag, SimpleKeyGesture gesture)
+            {
+                if (gesture == null)
+                    return;
+                args.Add(flag);
+                args.Add(gesture.ToSerializedString());
+            }
         }
     }
 

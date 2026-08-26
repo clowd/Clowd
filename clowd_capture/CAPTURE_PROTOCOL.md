@@ -60,6 +60,42 @@ flags that differ (`CaptureArguments.Build`).
 The shell pre-creates the session directory and passes it via
 `--session-dir`. Which files appear depends on how the capture ended:
 
+Standby mode intentionally reverses creation ownership. With
+`--standby`, the shell supplies `--session-root` plus `--hk-main`,
+`--hk-window`, and/or `--hk-monitor`. The capturer prints
+`CLOWD_STANDBY_READY`, waits without initializing capture/GPU resources, then
+creates a unique child directory and prints `CLOWD_SESSION <absolute-path>`
+when a hotkey fires. It runs one ordinary capture cycle and exits; the shell
+dispatches the announced directory and starts a fresh standby process.
+Immediately before creating the directory it prints `CLOWD_HOTKEY <mode>`, so
+the shell log distinguishes native hotkey delivery from later capture startup.
+The hotkey backend supports Windows, macOS, and X11 Linux; when registration
+is unavailable (including native Wayland), the shell retains its own fallback.
+Redirected stdin is a lifetime lease: EOF means the shell is gone and the
+waiting capturer exits without starting a capture.
+
+While waiting, stdin is also a newline-delimited JSON control channel. A
+`{"type":"settings","revision":N,"args":[...]}` message replaces the complete
+standby CLI snapshot (including hotkeys) after parsing it through `CliArgs`;
+every snapshot is answered with `CLOWD_SETTINGS_STATUS <json>`, containing its
+revision, whether the CLI snapshot was applied, and an active/error result for
+each of `main`, `window`, and `monitor`. Hotkey registration failures are
+non-fatal and do not prevent other hotkeys or settings from being applied. A
+`{"type":"capture","mode":"region|screen|window"}` message starts the same
+single capture cycle as the corresponding native hotkey. This is how shell and
+tray capture buttons reuse the waiting process instead of spawning a second one.
+
+Normal completion does not exit the standby process. After all overlay windows,
+render workers and GPU objects have been dropped, the capturer prints
+`CLOWD_CAPTURE_FINISHED <absolute-path>`; the shell dispatches that directory
+immediately. The capturer closes that session's `capture.log` and prints
+`CLOWD_STANDBY_READY` again; queued settings are then applied by the standby
+loop. Process exit is therefore reserved for parent EOF or a fatal error.
+
+The native hotkey registrations remain owned by the capturer while an overlay
+is active, preventing another application from claiming or handling them.
+Presses received during that interval are discarded before standby resumes.
+
 | Outcome | Files written | `action.txt` content |
 |---|---|---|
 | EDIT | `desktop.png`, `cropped.png`, [`cursor.png`], `session.json` | none (any stale marker from a failed retry is deleted) |
