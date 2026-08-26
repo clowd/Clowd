@@ -24,6 +24,8 @@ namespace Clowd
         private MutexArgsForwarder _processor;
         private TrayIcon _trayIcon;
         private HotkeyManager _hotkeys;
+        private CaptureStandbySupervisor _captureStandby;
+        private readonly object _captureStandbyLock = new();
         private bool _exiting;
 
         public override void Initialize()
@@ -131,6 +133,7 @@ namespace Clowd
                 Loc.CultureChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
 
                 SetupGlobalHotkeys();
+                _captureStandby = new CaptureStandbySupervisor();
 
                 // macOS: Finder right-click → "Upload with Clowd" (NSServices) delivers the
                 // selection here in-process — background handoff, same as forwarded CLI args.
@@ -396,9 +399,11 @@ namespace Clowd
             // capture and the recording region picker are provided by the separate Rust process.
             _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
             _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
-            _hotkeys.SetAction(HotkeyId.CaptureRegion, () => StartCapture(CaptureMode.Region));
-            _hotkeys.SetAction(HotkeyId.CaptureFullscreen, () => StartCapture(CaptureMode.Screen));
-            _hotkeys.SetAction(HotkeyId.CaptureActive, () => StartCapture(CaptureMode.Window));
+            // Screenshot hotkeys are deliberately NOT registered with SharpHook. Its matching
+            // handler suppresses the native key event before invoking the callback, which prevents
+            // RegisterHotKey/global-hotkey in the standby child from ever receiving WM_HOTKEY.
+            // Rust is the sole owner while the fast path is being validated; tray/menu captures
+            // still call StartCapture directly.
             _hotkeys.SetAction(HotkeyId.StartStopRecording, ToggleRecording);
 
             HotkeyManager.Current = _hotkeys;
@@ -406,6 +411,15 @@ namespace Clowd
 
         private void ShutdownGlobalHotkeys()
         {
+            try
+            {
+                lock (_captureStandbyLock)
+                {
+                    _captureStandby?.Dispose();
+                    _captureStandby = null;
+                }
+            }
+            catch { }
             try
             {
                 _hotkeys?.Dispose(); // also disposes the underlying GlobalHotkeyHost

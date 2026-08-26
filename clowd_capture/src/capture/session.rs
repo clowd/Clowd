@@ -21,10 +21,9 @@ pub struct CaptureSession {
 }
 
 impl CaptureSession {
-    /// `t_start` is taken by `main` at process entry, not here: everything
-    /// before this call (clap, the logger, sentry, the permission check) is
-    /// startup latency too, and anchoring at the first line of this function
-    /// would silently subtract it.
+    /// `t_start` is taken by `main` when this capture leaves standby. Process
+    /// loading, the logger and Sentry stay warm and are intentionally excluded;
+    /// every display/GPU/window resource constructed below remains measured.
     pub fn new(settings: Arc<CapturerSettings>, t_start: Instant) -> anyhow::Result<Self> {
         let monitors = SystemInterop::all_monitors();
         if monitors.is_empty() {
