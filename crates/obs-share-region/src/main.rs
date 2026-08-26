@@ -40,12 +40,16 @@ struct Cli {
     #[arg(long, default_value = "Shared Region")]
     title: String,
 
-    /// Frame + handle-cluster color, R,G,B (0-255 each).
-    #[arg(long, default_value = "0,120,215", value_parser = parse_accent)]
-    accent: (u8, u8, u8),
+    /// Frame + handle-cluster color, as hex `#RRGGBB` or `#RRGGBBAA` (leading
+    /// `#` optional). Same flag name, syntax and default as Clowd's wgpu
+    /// capturer, so the shell can pass one accent string to both.
+    #[arg(long, value_name = "HEX", default_value = "#2F7CAE", value_parser = parse_hex_color)]
+    accent_color: (u8, u8, u8),
 
-    /// Frame border thickness in capture units.
-    #[arg(long, default_value = "3", value_parser = clap::value_parser!(u32).range(1..=32))]
+    /// Thickness of the border's accent line, in logical (DPI-independent) px.
+    /// The white hairline inside it is always 1 logical px; both are scaled by
+    /// the display's DPI and snapped to whole device pixels.
+    #[arg(long, default_value = "2", value_parser = clap::value_parser!(u32).range(1..=32))]
     border: u32,
 
     /// Do not capture the cursor (passed through to the display capture source).
@@ -69,19 +73,22 @@ struct Cli {
     no_prompt: bool,
 }
 
-/// `R,G,B` accent parser; a clap value_parser, so a bad value is a usage
+/// Hex color parser matching `clowd_capture`'s `parse_hex_color` byte for
+/// byte in accepted syntax, so the shell can hand the same accent string to
+/// the capturer and to us. A clap value_parser, so a bad value is a usage
 /// error (exit 2) like any other malformed flag.
-fn parse_accent(s: &str) -> Result<(u8, u8, u8), String> {
-    let parts: Vec<&str> = s.split(',').map(str::trim).collect();
-    if parts.len() != 3 {
-        return Err("accent must be R,G,B".to_string());
+///
+/// An `AA` suffix is accepted and ignored: the frame is painted with opaque
+/// platform primitives (a GDI solid brush has no alpha at all), and silently
+/// rejecting a string the capturer accepts would be worse than ignoring a
+/// channel we cannot honour.
+fn parse_hex_color(s: &str) -> Result<(u8, u8, u8), String> {
+    let hex = s.trim_start_matches('#');
+    if !matches!(hex.len(), 6 | 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(format!("'{s}' is not a #RRGGBB or #RRGGBBAA color"));
     }
-    let mut rgb = [0u8; 3];
-    for (slot, part) in rgb.iter_mut().zip(&parts) {
-        *slot = part
-            .parse()
-            .map_err(|_| format!("invalid accent component '{part}' (expected 0-255)"))?;
-    }
+    let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).unwrap();
+    let rgb = [channel(0), channel(2), channel(4)];
     Ok((rgb[0], rgb[1], rgb[2]))
 }
 
@@ -164,7 +171,7 @@ fn main() {
 
     let cfg = UiConfig {
         title: cli.title,
-        accent: cli.accent,
+        accent: cli.accent_color,
         border: cli.border,
         resizable: !cli.no_resize,
         show_frame: !cli.no_frame,

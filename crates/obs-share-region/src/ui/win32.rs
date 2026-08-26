@@ -21,14 +21,15 @@ use windows::Win32::Foundation::{
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CombineRgn, CreateFontIndirectW, CreatePen, CreateRectRgn, CreateSolidBrush,
     DeleteObject, EndPaint, EnumDisplayMonitors, FillRect, GetDC, GetMonitorInfoW, GetStockObject,
-    GetSysColor, GetSysColorBrush, GetTextExtentPoint32W, InvalidateRect, LineTo, MoveToEx,
-    ReleaseDC, SelectObject, SetBkColor, SetTextColor, SetWindowRgn, COLOR_BTNFACE, COLOR_BTNTEXT,
-    DEFAULT_GUI_FONT, HBRUSH, HDC, HFONT, HMONITOR, HPEN, MONITORINFO, PAINTSTRUCT, PS_SOLID,
-    RGN_DIFF, RGN_OR,
+    GetSysColor, GetSysColorBrush, GetTextExtentPoint32W, InvalidateRect, LineTo, MonitorFromRect,
+    MoveToEx, ReleaseDC, SelectObject, SetBkColor, SetTextColor, SetWindowRgn, COLOR_BTNFACE,
+    COLOR_BTNTEXT, DEFAULT_GUI_FONT, HBRUSH, HDC, HFONT, HMONITOR, HPEN, MONITORINFO,
+    MONITOR_DEFAULTTONEAREST, PAINTSTRUCT, PS_SOLID, RGN_DIFF, RGN_OR,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::{
-    AdjustWindowRectExForDpi, GetDpiForWindow, SystemParametersInfoForDpi,
+    AdjustWindowRectExForDpi, GetDpiForMonitor, GetDpiForWindow, SystemParametersInfoForDpi,
+    MDT_EFFECTIVE_DPI,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, SetFocus};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -51,7 +52,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use obs_platform::region::Rect;
 
-use crate::geometry::{compute_layout, hit_test, Cor, Dir, FrameLayout, Zone, MIN_REGION};
+use crate::geometry::{
+    compute_layout, hit_test, BorderSpec, Cor, Dir, FrameLayout, Zone, MIN_REGION,
+};
 
 use super::{AppEvents, UiConfig};
 
@@ -136,6 +139,13 @@ struct App {
     /// live during a move drag, recomputed from the in-drag rect during a
     /// resize drag, recomputed from scratch on commit/display change.
     layout: FrameLayout,
+    /// The DPI-scaled border thickness the current `layout` was built with.
+    /// Cached rather than recomputed per use so paint and layout can never
+    /// disagree — and so a resize drag keeps one constant thickness even if
+    /// the rubber band crosses a monitor with a different scale (the band
+    /// thickness is baked into `drag_insets` at WM_ENTERSIZEMOVE). Rebuilt in
+    /// `apply_layout`, the single place the layout is built from scratch.
+    border: BorderSpec,
     mirror: HWND,
     /// Null for the whole prompt phase — the mask does not exist yet. That
     /// null is also what disarms the mirror's Z-order pin (see
@@ -171,6 +181,11 @@ struct App {
     drag_insets: OuterInsets,
     /// Mouse captured on the close button (press seen, release pending).
     close_pressed: bool,
+    /// Ring + cluster fills for WM_PAINT. The accent used to be the frame
+    /// class's background brush, painted for free by BeginPaint's erase, but
+    /// a two-tone ring cannot be produced that way — see `paint_frame`.
+    accent_brush: HBRUSH,
+    white_brush: HBRUSH,
     /// Cluster background (darker accent) for WM_PAINT.
     cluster_brush: HBRUSH,
     /// 2px white pen for the X / four-arrow glyphs.
@@ -201,6 +216,38 @@ fn layout_region(l: &FrameLayout) -> Rect {
     }
 }
 
+/// Effective DPI of the monitor the region sits on. Taken from the *rect*
+/// rather than from a window handle because the spec is needed before the
+/// frame window exists (the frame is created at `layout.outer`, which the
+/// spec determines), and because a move drag can carry the region onto
+/// another monitor while the frame's own DPI notification is still in flight.
+/// 96 on failure — an unscaled border is wrong but harmless; a zero one is
+/// an invisible border.
+unsafe fn region_dpi(region: Rect) -> u32 {
+    let rc = RECT {
+        left: region.x,
+        top: region.y,
+        right: region.x + region.w as i32,
+        bottom: region.y + region.h as i32,
+    };
+    let mon = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
+    let (mut dpi_x, mut dpi_y) = (0u32, 0u32);
+    if GetDpiForMonitor(mon, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y).is_ok() && dpi_x > 0 {
+        dpi_x
+    } else {
+        96
+    }
+}
+
+/// The border's two lines at the region's current scale. `accent_logical` is
+/// `UiConfig::border` — the ACCENT line's thickness in logical px; the white
+/// hairline is always `geometry::LOGICAL_WHITE`. Capture space on Windows is
+/// physical px, so this scaling is real: at 150% a logical (1, 2) design
+/// becomes (2, 3) device px.
+unsafe fn border_spec(region: Rect, accent_logical: u32) -> BorderSpec {
+    BorderSpec::scaled(region_dpi(region) as f64 / 96.0, accent_logical)
+}
+
 fn region_insets(l: &FrameLayout) -> OuterInsets {
     let r = layout_region(l);
     OuterInsets {
@@ -227,11 +274,14 @@ fn region_from_outer(ins: &OuterInsets, rc: &RECT) -> Rect {
 }
 
 /// Rigid translation of every layout rect — the cheap live-move path (shape
-/// is unchanged, only the origin moves).
+/// is unchanged, only the origin moves). This list must name EVERY rect in
+/// FrameLayout: one left behind stays at the old origin and is painted there
+/// for the rest of the drag.
 fn translate_layout(l: &mut FrameLayout, dx: i32, dy: i32) {
     for r in [
         &mut l.outer,
         &mut l.band,
+        &mut l.white_band,
         &mut l.hole,
         &mut l.cluster,
         &mut l.move_btn,
@@ -400,8 +450,16 @@ unsafe fn apply_frame_region(frame: HWND, l: &FrameLayout, origin: (i32, i32)) {
 /// Recomputes the frame layout from the authoritative region and re-applies
 /// window rect + region + paint. The cluster may jump sides here (that is
 /// the point of recomputing).
+///
+/// The BorderSpec is refreshed first, not just carried over: it is
+/// DPI-derived, and every caller of this function is a moment where the DPI
+/// may have changed under us — a commit that landed the region on another
+/// monitor, a WM_DPICHANGED, a display-topology change. Refreshing here
+/// rather than at each call site means the spec and the layout are always
+/// built from the same reading.
 unsafe fn apply_layout(app: *mut App) {
-    (*app).layout = compute_layout((*app).region, (*app).cfg.border, &(*app).work_areas);
+    (*app).border = border_spec((*app).region, (*app).cfg.border);
+    (*app).layout = compute_layout((*app).region, (*app).border, &(*app).work_areas);
     let outer = (*app).layout.outer;
     let _ = SetWindowPos(
         (*app).frame,
@@ -461,9 +519,62 @@ unsafe fn draw_move_glyph(hdc: HDC, r: &RECT) {
     line(hdc, cx, cy + arm, cx + hd, cy + arm - hd);
 }
 
-/// The band paints itself: the class background brush is the accent color
-/// and BeginPaint's erase fills the window region (band ∪ cluster − hole)
-/// with it. This only draws what differs: cluster background + glyphs.
+/// Fills the ring `outer` − `inner` as four non-overlapping strips. FrameRect
+/// is not an option: it draws exactly one pixel per side, and both of our
+/// lines can be several device px once DPI-scaled. Strips (rather than one
+/// FillRect of `outer` overpainted by `inner`) keep each pixel written once,
+/// so the two lines cannot flicker against each other on a partial repaint.
+/// FillRect excludes the right/bottom edge, so these tile `outer` − `inner`
+/// exactly, with no seam and no overlap.
+unsafe fn fill_ring(hdc: HDC, outer: &RECT, inner: &RECT, brush: HBRUSH) {
+    // Top and bottom span the full width; left and right fill only the gap
+    // between them, which is what makes the four disjoint.
+    let strips = [
+        RECT {
+            left: outer.left,
+            top: outer.top,
+            right: outer.right,
+            bottom: inner.top,
+        },
+        RECT {
+            left: outer.left,
+            top: inner.bottom,
+            right: outer.right,
+            bottom: outer.bottom,
+        },
+        RECT {
+            left: outer.left,
+            top: inner.top,
+            right: inner.left,
+            bottom: inner.bottom,
+        },
+        RECT {
+            left: inner.right,
+            top: inner.top,
+            right: outer.right,
+            bottom: inner.bottom,
+        },
+    ];
+    for s in &strips {
+        if s.right > s.left && s.bottom > s.top {
+            FillRect(hdc, s, brush);
+        }
+    }
+}
+
+/// Paints the whole frame explicitly. The band no longer paints itself: the
+/// ring is two-tone now (Clowd's BorderWindow — reading outward from the
+/// captured region, a white hairline then the accent line), and a single
+/// class background brush can only produce one colour, so the frame class
+/// brush is NULL and every pixel of the window region is written here.
+///
+/// The three fills tile the window region — (band ∪ cluster) − hole —
+/// exactly: accent = band − white_band, white = white_band − hole, plus the
+/// cluster. The white ring is computed from white_band/hole directly rather
+/// than leaning on SetWindowRgn to clip it away from the hole: the window
+/// region is rebuilt on a different schedule (mid-drag rubber band), and a
+/// border pixel landing inside the captured area is exactly the artifact the
+/// hole's slack unit exists to prevent.
 unsafe fn paint_frame(app: *mut App, hwnd: HWND) {
     let mut ps = PAINTSTRUCT::default();
     let hdc = BeginPaint(hwnd, &mut ps);
@@ -474,6 +585,11 @@ unsafe fn paint_frame(app: *mut App, hwnd: HWND) {
     // the two can differ (cluster side jump) and the window region above was
     // built with the same origin, so paint and region always agree.
     let origin = frame_origin(hwnd);
+    let band = win_rect(&(*app).layout.band, origin);
+    let white_band = win_rect(&(*app).layout.white_band, origin);
+    let hole = win_rect(&(*app).layout.hole, origin);
+    fill_ring(hdc, &band, &white_band, (*app).accent_brush);
+    fill_ring(hdc, &white_band, &hole, (*app).white_brush);
     let cluster = win_rect(&(*app).layout.cluster, origin);
     FillRect(hdc, &cluster, (*app).cluster_brush);
     let old = SelectObject(hdc, (*app).glyph_pen.into());
@@ -996,8 +1112,14 @@ unsafe extern "system" fn frame_proc(
                 let mut rc = RECT::default();
                 if GetWindowRect(hwnd, &mut rc).is_ok() {
                     let implied = region_from_outer(&(*app).drag_insets, &rc);
+                    // Cached spec, deliberately: the band thickness is baked
+                    // into drag_insets at WM_ENTERSIZEMOVE, so re-deriving it
+                    // from the live rect's monitor would make the rubber band
+                    // disagree with the region the drag is actually implying
+                    // the moment it crosses a scale boundary. The commit path
+                    // (apply_layout) picks up the new scale.
                     (*app).layout =
-                        compute_layout(implied, (*app).cfg.border, &(*app).work_areas);
+                        compute_layout(implied, (*app).border, &(*app).work_areas);
                     apply_frame_region(hwnd, &(*app).layout, (rc.left, rc.top));
                     let _ = InvalidateRect(Some(hwnd), None, true);
                 }
@@ -1030,10 +1152,13 @@ unsafe extern "system" fn frame_proc(
             LRESULT(0)
         }
         // The window region is in physical px and the process is per-monitor
-        // aware, so nothing scales — but re-apply per spec so the shape is
-        // known-good after the DPI transition.
+        // aware, so the region's own coordinates do not scale — but the
+        // BORDER does: a new monitor scale is a new BorderSpec, which changes
+        // the band thickness and therefore the entire layout, not just the
+        // shape. apply_layout rebuilds the spec, the layout, the window rect,
+        // the region and the paint, in that order.
         WM_DPICHANGED => {
-            apply_frame_region(hwnd, &(*app).layout, frame_origin(hwnd));
+            apply_layout(app);
             LRESULT(0)
         }
         // Monitor topology changed: work areas moved, the cluster may need
@@ -1194,17 +1319,22 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             mask_proc,
             CreateSolidBrush(colorref(0x20, 0x20, 0x20)),
         );
-        // Accent class brush: the band literally paints itself via the
-        // background erase, clipped to the window region.
+        // NULL class brush, like the mirror's but for a different reason: the
+        // ring is two-tone (white hairline inside, accent outside) and one
+        // class brush is one colour. paint_frame writes every pixel of the
+        // window region itself, so an erase would only be overdraw — and a
+        // single-colour erase would flash the wrong colour under the white
+        // line on every repaint.
         register_class(
             hinst,
             w!("obs_share_region_frame"),
             frame_proc,
-            CreateSolidBrush(colorref(ar, ag, ab)),
+            HBRUSH::default(),
         );
 
         let areas = work_areas();
-        let layout = compute_layout(region, cfg.border, &areas);
+        let border = border_spec(region, cfg.border);
+        let layout = compute_layout(region, border, &areas);
 
         // Created hidden, roughly placed; exact client placement (which
         // needs the window's own DPI) happens below via place_prompt /
@@ -1261,6 +1391,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             region,
             work_areas: areas,
             layout,
+            border,
             mirror,
             // Both created by enter_mirror_phase, which for the prompt phase
             // does not run until the user presses OK.
@@ -1275,6 +1406,8 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             in_size_move: false,
             drag_insets,
             close_pressed: false,
+            accent_brush: CreateSolidBrush(colorref(ar, ag, ab)),
+            white_brush: CreateSolidBrush(colorref(0xff, 0xff, 0xff)),
             cluster_brush: CreateSolidBrush(colorref(
                 (ar as u32 * 2 / 3) as u8,
                 (ag as u32 * 2 / 3) as u8,

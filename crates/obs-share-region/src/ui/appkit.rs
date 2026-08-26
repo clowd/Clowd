@@ -186,6 +186,19 @@ fn cocoa_point_to_capture(mtm: MainThreadMarker, p: NSPoint) -> (i32, i32) {
     (p.x.round() as i32, (ph - p.y).round() as i32)
 }
 
+/// The border's two lines in capture units.
+///
+/// Capture space on macOS is CG points, which are already the
+/// DPI-independent unit — a 1-point line is one device pixel on a 1x display
+/// and two crisp ones on a Retina panel, i.e. the same physical size on both.
+/// So the logical design needs no scaling here (scale 1.0), and integer point
+/// widths land on whole device pixels at 1x and 2x alike. This is the whole
+/// difference from Windows, where capture units are physical pixels and the
+/// same design has to be multiplied by dpi/96.
+fn border_spec(cfg: &UiConfig) -> geometry::BorderSpec {
+    geometry::BorderSpec::scaled(1.0, cfg.border)
+}
+
 /// Work areas for the cluster placement scoring (spec `compute_layout`):
 /// `visibleFrame` already excludes the menu bar and the Dock.
 fn work_areas(mtm: MainThreadMarker) -> Vec<Rect> {
@@ -636,7 +649,7 @@ fn adopt(app: &mut App, committed: Rect) -> Adoption {
     // no sliver of the mirror is ever visible.
     let mirror_rect = app.mirror.frameRectForContentRect(capture_to_cocoa(mtm, committed));
     let frame_upd = app.frame.as_ref().map(|fw| {
-        let layout = geometry::compute_layout(committed, app.cfg.border, &work_areas(mtm));
+        let layout = geometry::compute_layout(committed, border_spec(&app.cfg), &work_areas(mtm));
         let rect = capture_to_cocoa(mtm, layout.outer);
         app.layout = Some(layout);
         (fw.clone(), rect, app.view.clone().expect("frame window implies view"))
@@ -901,7 +914,7 @@ fn on_mouse_dragged(view: &FrameView, event: &NSEvent) {
         let drag = app.resize.as_ref()?;
         let live =
             geometry::resize_region(drag.start, drag.zone, p.0 - drag.origin.0, p.1 - drag.origin.1);
-        let layout = geometry::compute_layout(live, app.cfg.border, &work_areas(app.mtm));
+        let layout = geometry::compute_layout(live, border_spec(&app.cfg), &work_areas(app.mtm));
         let rect = capture_to_cocoa(app.mtm, layout.outer);
         // Publish the live layout so drawRect:/hitTest: track the rubber-band.
         app.layout = Some(layout);
@@ -968,14 +981,25 @@ fn draw_frame() {
         )
     };
 
-    // Band ring: band minus hole via one even-odd path (the window background
-    // is clear, so only the ring itself gets pixels).
+    // The border is two concentric rings, mirroring Clowd's BorderWindow: the
+    // accent line outside, a white hairline inside it, the captured region
+    // within that. Each is one even-odd path (outer rect + inner rect), so the
+    // interior stays unpainted — the window background is clear, which is what
+    // makes the hole click-through.
+    //
+    // Drawn outermost-first, but they do not overlap by construction
+    // (white_band is the shared edge), so the order is presentational only.
+    let ring = |outer: Rect, inner: Rect| {
+        let path = NSBezierPath::bezierPath();
+        path.appendBezierPathWithRect(local(outer));
+        path.appendBezierPathWithRect(local(inner));
+        path.setWindingRule(NSWindingRule::EvenOdd);
+        path.fill();
+    };
     srgb(accent.0, accent.1, accent.2).setFill();
-    let ring = NSBezierPath::bezierPath();
-    ring.appendBezierPathWithRect(local(layout.band));
-    ring.appendBezierPathWithRect(local(layout.hole));
-    ring.setWindingRule(NSWindingRule::EvenOdd);
-    ring.fill();
+    ring(layout.band, layout.white_band);
+    NSColor::whiteColor().setFill();
+    ring(layout.white_band, layout.hole);
 
     // Cluster: a darker shade of the accent so the buttons read as controls.
     let darker = |c: u8| (c as f64 * 0.55) as u8;
@@ -1150,7 +1174,7 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
     // --- Frame (optional): borderless, transparent, floating, following the
     // user across Spaces and over fullscreen apps.
     let (frame_win, view, layout) = if cfg.show_frame {
-        let layout = geometry::compute_layout(region, cfg.border, &work_areas(mtm));
+        let layout = geometry::compute_layout(region, border_spec(&cfg), &work_areas(mtm));
         let fw = ShareWindow::create(
             mtm,
             capture_to_cocoa(mtm, layout.outer),

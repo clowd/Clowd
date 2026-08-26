@@ -21,6 +21,54 @@ pub const HANDLE_PAD: u32 = 4;
 /// make diagonal resizing nearly impossible to hit).
 pub const CORNER_GRAB: u32 = 16;
 
+/// Thickness of the white inner line, in logical (DPI-independent) px.
+/// Fixed, unlike the accent line, because it is a hairline highlight rather
+/// than the border proper — see [`BorderSpec`].
+pub const LOGICAL_WHITE: u32 = 1;
+
+/// The border's two lines, in capture units, already DPI-scaled and snapped
+/// to whole device pixels by the platform layer.
+///
+/// Mirrors Clowd's `BorderWindow.axaml`, which nests a 1px white `Border`
+/// inside a 2px accent one: reading outward from the captured region you get
+/// the white hairline first, then the accent. The white line is what keeps the
+/// accent legible against arbitrary desktop content underneath.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BorderSpec {
+    /// White hairline, immediately outside the region (inside the accent).
+    pub white: u32,
+    /// Accent line, outside the white one.
+    pub accent: u32,
+}
+
+impl BorderSpec {
+    /// Scales the logical design (`LOGICAL_WHITE` white + `accent_logical`
+    /// accent) by `scale`, where 1.0 is 96 dpi / non-Retina.
+    ///
+    /// Each line is rounded to whole device pixels *independently* rather than
+    /// scaling the total and splitting it, so neither line can round away and
+    /// the boundary between them always lands on a pixel edge — a border this
+    /// thin looks wrong the moment it is allowed to blur across one. Both are
+    /// floored at 1: a line that rounds to zero is a line that vanishes.
+    ///
+    /// Worked example at 150% (scale 1.5): white 1→2, accent 2→3. The exact
+    /// ratio drifts (2:3 rather than 1:2) because there is no way to honour
+    /// both the ratio and the pixel grid at fractional scales; sharpness wins,
+    /// since the alternative is a grey smear where the two lines meet.
+    pub fn scaled(scale: f64, accent_logical: u32) -> Self {
+        let snap = |logical: u32| ((logical as f64 * scale).round() as u32).max(1);
+        BorderSpec {
+            white: snap(LOGICAL_WHITE),
+            accent: snap(accent_logical),
+        }
+    }
+
+    /// Combined thickness of both lines.
+    pub fn total(self) -> u32 {
+        self.white + self.accent
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Dir {
     N,
@@ -55,10 +103,14 @@ pub enum Zone {
 pub struct FrameLayout {
     /// Frame window bounds = union(band, cluster).
     pub outer: Rect,
-    /// Border ring outer rect: region inflated by `1 + border` per side.
-    /// The extra 1 unit is rounding slack (plan §6.4): logical-to-physical
+    /// Border ring outer rect: region inflated by `1 + border.total()` per
+    /// side. The extra 1 unit is rounding slack (plan §6.4): logical-to-physical
     /// rounding must never place a border pixel inside the captured area.
     pub band: Rect,
+    /// Outer edge of the white hairline: `hole` inflated by `border.white`.
+    /// The two lines are therefore `white_band` minus `hole` (white) and
+    /// `band` minus `white_band` (accent).
+    pub white_band: Rect,
     /// Hollow interior: region inflated by the 1 slack unit. Strictly
     /// contains the region, so no painted pixel can ever land inside it.
     pub hole: Rect,
@@ -140,9 +192,11 @@ fn rect_distance_sq(a: &Rect, b: &Rect) -> i64 {
 
 /// Computes the frame layout for `region`.
 ///
-/// `band` = region inflated outward by `1 + border` per side (1 = rounding
-/// slack, plan §6.4: no border pixel may ever land inside the region);
-/// `hole` = region inflated by 1.
+/// `band` = region inflated outward by `1 + border.total()` per side (1 =
+/// rounding slack, plan §6.4: no border pixel may ever land inside the
+/// region); `hole` = region inflated by 1; `white_band` = hole inflated by
+/// `border.white`, splitting the ring into the white hairline and the accent
+/// line outside it.
 ///
 /// The cluster is `HANDLE_PAD*2 + HANDLE_BUTTON*2 + HANDLE_PAD` (between)
 /// wide and `HANDLE_BUTTON + 2*HANDLE_PAD` tall, placed `HANDLE_GAP` outside
@@ -167,9 +221,10 @@ fn rect_distance_sq(a: &Rect, b: &Rect) -> i64 {
 /// then appears in the capture); accepted, there is nowhere else to put it.
 /// With no work areas at all (defensive; enumeration should never be empty)
 /// candidate 1 is used unclamped.
-pub fn compute_layout(region: Rect, border: u32, work_areas: &[Rect]) -> FrameLayout {
-    let band = inflate(region, 1 + border);
+pub fn compute_layout(region: Rect, border: BorderSpec, work_areas: &[Rect]) -> FrameLayout {
+    let band = inflate(region, 1 + border.total());
     let hole = inflate(region, 1);
+    let white_band = inflate(hole, border.white);
 
     let pad = HANDLE_PAD as i64;
     let btn = HANDLE_BUTTON as i64;
@@ -247,6 +302,7 @@ pub fn compute_layout(region: Rect, border: u32, work_areas: &[Rect]) -> FrameLa
     FrameLayout {
         outer: union(&band, &cluster),
         band,
+        white_band,
         hole,
         cluster,
         move_btn,
@@ -377,6 +433,17 @@ mod tests {
         Rect { x, y, w, h }
     }
 
+    /// A spec of a given TOTAL thickness, keeping the 1-unit white hairline.
+    /// Band/hole geometry depends only on the total, so the pre-two-tone
+    /// expectations below are unchanged by the split.
+    fn bs(total: u32) -> BorderSpec {
+        assert!(total >= 2, "a two-line border needs at least 1+1");
+        BorderSpec {
+            white: 1,
+            accent: total - 1,
+        }
+    }
+
     /// Derived cluster dims, spelled out so the tests break loudly if the
     /// constants change: 4+30+4+30+4 = 72 wide, 30+8 = 38 tall.
     const CW: u32 = HANDLE_PAD * 2 + HANDLE_BUTTON * 2 + HANDLE_PAD;
@@ -398,8 +465,61 @@ mod tests {
     };
 
     #[test]
+    fn border_spec_scales_and_snaps() {
+        // 100%: the Clowd design verbatim — 1px white, 2px accent.
+        assert_eq!(
+            BorderSpec::scaled(1.0, 2),
+            BorderSpec {
+                white: 1,
+                accent: 2
+            }
+        );
+        assert_eq!(BorderSpec::scaled(1.0, 2).total(), 3);
+        // 150%: each line rounded on its own, so both stay on the pixel grid.
+        assert_eq!(
+            BorderSpec::scaled(1.5, 2),
+            BorderSpec {
+                white: 2,
+                accent: 3
+            }
+        );
+        // 200% / 300%: exact multiples, ratio preserved.
+        assert_eq!(
+            BorderSpec::scaled(2.0, 2),
+            BorderSpec {
+                white: 2,
+                accent: 4
+            }
+        );
+        assert_eq!(
+            BorderSpec::scaled(3.0, 2),
+            BorderSpec {
+                white: 3,
+                accent: 6
+            }
+        );
+        // Every line survives a downscale: neither may round away to nothing.
+        assert_eq!(
+            BorderSpec::scaled(0.1, 2),
+            BorderSpec {
+                white: 1,
+                accent: 1
+            }
+        );
+        // 125% rounds the hairline down to 1 rather than up, keeping it a
+        // hairline; the accent goes to 3 (2.5 rounds away from zero).
+        assert_eq!(
+            BorderSpec::scaled(1.25, 2),
+            BorderSpec {
+                white: 1,
+                accent: 3
+            }
+        );
+    }
+
+    #[test]
     fn layout_band_hole_cluster_basic() {
-        let l = compute_layout(r(100, 100, 300, 200), 3, &[BIG_WA]);
+        let l = compute_layout(r(100, 100, 300, 200), bs(3), &[BIG_WA]);
         // band = region + (1 + border) = 4 per side; hole = region + 1.
         assert_eq!(l.band, r(96, 96, 308, 208));
         assert_eq!(l.hole, r(99, 99, 302, 202));
@@ -421,7 +541,7 @@ mod tests {
         // the top makes the "above" candidates poke into the strip, so the
         // cluster must land below (candidate 2, right-aligned).
         let wa = r(0, 25, 1920, 1055);
-        let l = compute_layout(r(100, 40, 400, 300), 3, &[wa]);
+        let l = compute_layout(r(100, 40, 400, 300), bs(3), &[wa]);
         // band = (96,36)..(504,344); candidate 2: below, right-aligned.
         assert_eq!(l.cluster, r(504 - CW as i32, 344 + 8, CW, CH));
         assert_eq!(l.cluster, r(432, 352, 72, 38));
@@ -434,7 +554,7 @@ mod tests {
         // The region nearly spans it vertically, so above and below both
         // fail; candidate 3 (right of band, top-aligned) wins.
         let wa = r(0, 25, 1920, 1005);
-        let l = compute_layout(r(100, 40, 400, 980), 3, &[wa]);
+        let l = compute_layout(r(100, 40, 400, 980), bs(3), &[wa]);
         // band = (96,36)..(504,1024): below would start at y=1032 > 1030.
         assert_eq!(l.cluster, r(504 + 8, 36, CW, CH));
         assert_eq!(l.cluster, r(512, 36, 72, 38));
@@ -446,7 +566,7 @@ mod tests {
         // Region on a monitor left of primary: all-negative x. Candidate 1
         // must be picked with correct i64 math.
         let was = [r(0, 0, 1920, 1080), r(-1920, 0, 1920, 1080)];
-        let l = compute_layout(r(-1800, 300, 640, 480), 2, &was);
+        let l = compute_layout(r(-1800, 300, 640, 480), bs(2), &was);
         // band inflation 3: band = (-1803,297)..(-1157,783).
         assert_eq!(l.band, r(-1803, 297, 646, 486));
         assert_eq!(l.cluster, r(-1157 - CW as i32, 297 - 8 - CH as i32, CW, CH));
@@ -460,7 +580,7 @@ mod tests {
         // the menu bar. The best partial (candidate 1) wins, unclamped.
         let wa = r(0, 25, 1930, 1055); // y = 25..1080
         let region = r(0, 55, 1920, 1025); // bottom = 1080 = wa bottom
-        let l = compute_layout(region, 3, &[wa]);
+        let l = compute_layout(region, bs(3), &[wa]);
         // band = (-4,51)..(1924,1084). Candidate 1: (1852,5)..(1924,43) —
         // 72x18 visible. Candidate 5 loses columns off the left edge; the
         // right/left/below candidates are entirely outside.
@@ -478,7 +598,7 @@ mod tests {
         // the documented last resort where cluster ∩ region ≠ ∅.
         let wa = r(0, 0, 1920, 1080);
         let region = r(0, 0, 1920, 1080);
-        let l = compute_layout(region, 3, &[wa]);
+        let l = compute_layout(region, bs(3), &[wa]);
         assert_eq!(l.cluster, r(1920 - CW as i32, 0, CW, CH));
         assert!(contains_rect(&wa, &l.cluster));
         assert!(intersect_area(&l.cluster, &region) > 0); // accepted overlap
@@ -487,7 +607,7 @@ mod tests {
     #[test]
     fn layout_no_work_areas_defensive() {
         // Empty work-area list (should never happen): candidate 1 as-is.
-        let l = compute_layout(r(100, 100, 300, 200), 3, &[]);
+        let l = compute_layout(r(100, 100, 300, 200), bs(3), &[]);
         assert_eq!(l.cluster, r(332, 50, 72, 38));
     }
 
@@ -505,9 +625,22 @@ mod tests {
             r(2000, 100, 1200, 800),
         ];
         for &region in &regions {
-            for &border in &[1u32, 3, 8, 32] {
+            for &border in &[bs(2), bs(3), bs(8), bs(32), BorderSpec { white: 4, accent: 4 }] {
                 let l = compute_layout(region, border, &[BIG_WA]);
-                let d = (1 + border) as i64;
+                let d = (1 + border.total()) as i64;
+                // The two lines exactly tile the ring, with no gap and no
+                // overlap: white_band is their shared edge.
+                assert_eq!(
+                    l.white_band.x as i64,
+                    l.hole.x as i64 - border.white as i64
+                );
+                assert_eq!(x2(&l.white_band), x2(&l.hole) + border.white as i64);
+                assert_eq!(
+                    l.band.x as i64,
+                    l.white_band.x as i64 - border.accent as i64
+                );
+                assert!(contains_rect(&l.band, &l.white_band));
+                assert!(contains_rect(&l.white_band, &l.hole));
                 // band/hole inflation exact.
                 assert_eq!(l.band.x as i64, region.x as i64 - d);
                 assert_eq!(x2(&l.band), x2(&region) + d);
@@ -531,7 +664,7 @@ mod tests {
     // (99,99)..(401,301), cluster (332,50)..(404,88), move (336,54)..(366,84),
     // close (370,54)..(400,84). Corner grab = max(16, 4) = 16.
     fn hit_layout() -> FrameLayout {
-        compute_layout(r(100, 100, 300, 200), 3, &[BIG_WA])
+        compute_layout(r(100, 100, 300, 200), bs(3), &[BIG_WA])
     }
 
     #[test]
@@ -603,7 +736,7 @@ mod tests {
     #[test]
     fn hit_thick_border_grows_corner_grab() {
         // border 32 → inflation 33 > CORNER_GRAB, so the grab square is 33.
-        let l = compute_layout(r(200, 200, 300, 300), 32, &[BIG_WA]);
+        let l = compute_layout(r(200, 200, 300, 300), bs(32), &[BIG_WA]);
         // band = (167,167)..(533,533); (196,180) is 29 in from the corner —
         // inside the 33px grab square, outside a 16px one.
         assert_eq!(hit_test(&l, true, (196, 180)), Zone::Corner(Cor::NW));
@@ -615,7 +748,7 @@ mod tests {
         // Clamp fallback puts the cluster on top of the region; its buttons
         // and background must still hit (checked before the hole).
         let wa = r(0, 0, 1920, 1080);
-        let l = compute_layout(r(0, 0, 1920, 1080), 3, &[wa]);
+        let l = compute_layout(r(0, 0, 1920, 1080), bs(3), &[wa]);
         let cx = l.close_btn.x + 5;
         let cy = l.close_btn.y + 5;
         assert_eq!(hit_test(&l, true, (cx, cy)), Zone::CloseButton);
