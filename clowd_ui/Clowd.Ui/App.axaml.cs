@@ -26,6 +26,7 @@ namespace Clowd
         private HotkeyManager _hotkeys;
         private CaptureStandbySupervisor _captureStandby;
         private readonly object _captureStandbyLock = new();
+        private bool _captureWarmFaulted;
         private bool _exiting;
 
         public override void Initialize()
@@ -133,7 +134,6 @@ namespace Clowd
                 Loc.CultureChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
 
                 SetupGlobalHotkeys();
-                _captureStandby = new CaptureStandbySupervisor();
 
                 // macOS: Finder right-click → "Upload with Clowd" (NSServices) delivers the
                 // selection here in-process — background handoff, same as forwarded CLI args.
@@ -396,18 +396,58 @@ namespace Clowd
         {
             _hotkeys = new HotkeyManager(new GlobalHotkeyHost(), SettingsRoot.Current.Hotkeys);
 
-            // capture and the recording region picker are provided by the separate Rust process.
             _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
             _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
-            // Screenshot hotkeys are deliberately NOT registered with SharpHook. Its matching
-            // handler suppresses the native key event before invoking the callback, which prevents
-            // RegisterHotKey/global-hotkey in the standby child from ever receiving WM_HOTKEY.
-            // Rust is the sole owner while the fast path is being validated; tray/menu captures
-            // still call StartCapture directly.
             _hotkeys.SetAction(HotkeyId.StartStopRecording, ToggleRecording);
 
             HotkeyManager.Current = _hotkeys;
+            ConfigureCaptureHotkeys();
+
+            SettingsRoot.Current.Capture.PropertyChanged += (s, e) =>
+            {
+                if (e.PropertyName == nameof(SettingsCapture.KeepCapturerWarm))
+                    Dispatcher.UIThread.Post(ConfigureCaptureHotkeys);
+            };
         }
+
+        /// <summary>
+        /// The screenshot hotkeys have exactly one owner at a time. Warm: the standby capturer
+        /// hooks them itself (handy-keys low-level hook — see standby_hotkeys.rs for why they
+        /// must live in that process), and SharpHook must stay out so two hooks never race to
+        /// suppress and handle the same press. Not warm — setting off, or overridden after
+        /// standby faulted — SharpHook drives the classic one-shot path. Called at startup and
+        /// again on every ownership change (setting toggled, supervisor fallback), always on
+        /// the UI thread.
+        /// </summary>
+        private void ConfigureCaptureHotkeys()
+        {
+            if (_hotkeys == null)
+                return; // shutdown already ran; nothing left to (re)wire
+
+            bool warm = SettingsRoot.Current.Capture.KeepCapturerWarm && !_captureWarmFaulted && !_exiting;
+            lock (_captureStandbyLock)
+            {
+                if (warm && _captureStandby == null)
+                    _captureStandby = new CaptureStandbySupervisor(OnCaptureStandbyFallback);
+                else if (!warm && _captureStandby != null)
+                {
+                    _captureStandby.Dispose();
+                    _captureStandby = null;
+                }
+            }
+            _hotkeys.SetAction(HotkeyId.CaptureRegion, warm ? null : () => StartCapture(CaptureMode.Region));
+            _hotkeys.SetAction(HotkeyId.CaptureFullscreen, warm ? null : () => StartCapture(CaptureMode.Screen));
+            _hotkeys.SetAction(HotkeyId.CaptureActive, warm ? null : () => StartCapture(CaptureMode.Window));
+        }
+
+        /// <summary>The supervisor's give-up signal (missing permission/binary, repeated
+        /// crashes). Overrides warm capture off for the rest of this process — the saved
+        /// setting is untouched, so a machine with a transient problem heals on restart.</summary>
+        private void OnCaptureStandbyFallback() => Dispatcher.UIThread.Post(() =>
+        {
+            _captureWarmFaulted = true;
+            ConfigureCaptureHotkeys();
+        });
 
         private void ShutdownGlobalHotkeys()
         {
