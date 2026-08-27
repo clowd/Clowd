@@ -60,6 +60,86 @@ flags that differ (`CaptureArguments.Build`).
 The shell pre-creates the session directory and passes it via
 `--session-dir`. Which files appear depends on how the capture ended:
 
+Standby mode intentionally reverses creation ownership. With
+`--standby`, the shell supplies `--session-root` plus `--hk-main`,
+`--hk-window`, and/or `--hk-monitor` (hotkeys take effect when the first
+settings snapshot arrives — see below). The capturer prints
+`CLOWD_STANDBY_READY` and waits event-driven without initializing capture/GPU
+resources (the main loop is fully blocked; the crate's hook thread wakes on a
+short internal timer), then creates a unique child directory and
+prints `CLOWD_SESSION <absolute-path>` when a hotkey fires, followed by one
+ordinary capture cycle. stdout carries ONLY protocol lines — the log goes to
+stderr (and the session's `capture.log`), because a log record spliced into
+the protocol stream could corrupt a line the shell must not miss. Both pipes
+and stdin are UTF-8: session paths round-trip through them, and the shell pins
+the encodings explicitly because .NET would otherwise default them to the OEM
+codepage. Redirected stdin is a lifetime lease: EOF means the shell is gone
+and the waiting capturer exits without starting a capture (mid-capture, it
+exits immediately).
+
+The capturer owns the screenshot hotkeys, via a low-level keyboard hook
+(the handy-keys crate: WH_KEYBOARD_LL on Windows, CGEventTap on macOS —
+which needs the same Accessibility permission SharpHook did — and evdev on
+Linux, X11 and Wayland alike), NOT via RegisterHotKey-style registration.
+Both halves of that choice are load-bearing: the trigger path must not
+depend on the shell being resident (a paged-out Clowd.UI would add its
+page-in time to every capture), and the key must be suppressed before OS
+handlers see it — Windows 11's "PrintScreen opens Snipping Tool" feature
+consumes the key ahead of RegisterHotKey delivery, so a plain registration
+reports success and then never fires. Gestures travel in handy-keys'
+grammar: `Control`/`Alt`/`Shift`/`Super` joined with `+`, then a key token
+(`A`, `1`, `PrintScreen`, `Keypad7`). The shell owns the translation from
+its Avalonia key names (`CapturerKeyMap` in Clowd.Shared); the capturer
+translates nothing, so an unmapped key surfaces as an explicit per-hotkey
+error. Standby is not the only capture path: the shell only runs it while
+its "keep capturer warm" setting is in effect, and it falls back to its own
+SharpHook hotkeys plus classic one-shot spawns for the rest of its process
+lifetime when standby proves unusable — no permission or binary, exit
+code 3 (permission revoked), or repeated crashes.
+
+While waiting, stdin is also a newline-delimited JSON control channel. A
+`{"type":"settings","args":[...]}` message replaces the complete standby CLI
+snapshot (including hotkeys) after parsing it through `CliArgs`; every
+snapshot is answered with `CLOWD_SETTINGS_STATUS <json>` carrying an
+active/error result for each of `main`, `window`, and `monitor` (statuses
+cannot arrive out of order: one pipe, one sequential reader). Hook-based
+hotkeys cannot conflict with other applications, so a gesture is active
+exactly when it parses and the hook is running; an unparseable gesture or a
+failed hook is non-fatal and does not prevent other hotkeys or settings from
+being applied. A snapshot that fails to parse changes nothing and is
+answered with the surviving hotkeys' real state. A
+`{"type":"capture","mode":"region|screen|window"}` message starts the same
+single capture cycle as a native hotkey. This is how shell and tray capture
+buttons reuse the waiting process instead of spawning a second one; the shell
+sends one only when no overlay is open or requested — nothing is ever queued
+on either side. `CLOWD_IPC_ERROR <text>` (always a single line) reports a
+rejected message or a failed session-dir creation; the shell treats it as a
+NACK and clears its overlay-pending state. Overlay exclusion is per-side:
+during the brief windows where the shell falls back to a one-shot spawn, a
+native hotkey can still race a second overlay from the standby process —
+accepted as rare and harmless rather than adding cross-process locking.
+
+Normal completion does not exit the standby process. After all overlay windows,
+render workers and GPU objects have been dropped, the capturer closes that
+session's `capture.log`, prints `CLOWD_CAPTURE_FINISHED <absolute-path>` —
+the shell dispatches that directory immediately — and prints
+`CLOWD_STANDBY_READY` again. Process exit is therefore reserved for parent EOF
+or a fatal error, after which the shell restarts the standby process (with
+backoff) or falls back as above.
+
+The keyboard hook stays installed while an overlay is active, so the
+gestures remain suppressed system-wide for the overlay's duration (the
+dedicated hook thread keeps pumping regardless of what the capture cycle is
+doing). Everything received during that interval — hotkey presses and stdin
+messages alike — is stale and discarded before the next
+`CLOWD_STANDBY_READY` (best effort: an event in flight between hook and
+channel during the final microseconds of teardown can survive the drain and
+start a capture, which is what the press asked for). The shell re-sends its
+full settings snapshot in
+response to every READY, so dropped settings cannot be lost, and that
+snapshot is also the only thing that changes the hooked gesture set —
+configuration has exactly one path.
+
 | Outcome | Files written | `action.txt` content |
 |---|---|---|
 | EDIT | `desktop.png`, `cropped.png`, [`cursor.png`], `session.json` | none (any stale marker from a failed retry is deleted) |

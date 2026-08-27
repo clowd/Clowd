@@ -83,6 +83,26 @@ namespace Clowd.Config
             set => Set(ref _ocrEnabled, value);
         }
 
+        /// <summary>
+        /// Whether the shell keeps a capturer process waiting in the background
+        /// (standby mode, CAPTURE_PROTOCOL.md) so the overlay opens without paying
+        /// process/GPU startup on every capture. When off — or after the standby
+        /// process crashes repeatedly, which overrides this to off for the rest of
+        /// the shell's lifetime without touching the saved value — the shell
+        /// registers the screenshot hotkeys itself and spawns a one-shot capturer
+        /// per capture, exactly as before this setting existed.
+        /// </summary>
+        [Category("Behavior")]
+        [DisplayName("Keep capturer warm")]
+        [Description("Keep the capture overlay ready in the background so it opens with the lowest " +
+                     "possible latency. Turn this off if it causes problems; captures then start " +
+                     "the overlay on demand, which is slightly slower.")]
+        public bool KeepCapturerWarm
+        {
+            get => _keepCapturerWarm;
+            set => Set(ref _keepCapturerWarm, value);
+        }
+
         [Category("Behavior")]
         [DisplayName("Capture with cursor")]
         [Description("If this is enabled, the cursor will be shown in screenshots")]
@@ -215,6 +235,7 @@ namespace Clowd.Config
         }
 
         private string _filenamePattern = DefaultFilenamePattern;
+        private bool _keepCapturerWarm = true;
         private bool _screenshotWithCursor = true;
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;

@@ -164,9 +164,37 @@ impl Default for CapturerSettings {
 /// command line — see `clowd_scroll_driver` and CAPTURE_PROTOCOL.md §2.
 /// Nothing about it belongs here: the overlay's part ends when it writes
 /// the `scroll` action marker.
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Parser)]
 #[command(version, about = "Clowd screen capturer")]
 pub struct CliArgs {
+    /// Wait for one of the global screenshot hotkeys (or a stdin capture
+    /// request) before initializing the capture stack. Each trigger runs one
+    /// normal capture cycle, then the process returns to waiting; it exits
+    /// only on stdin EOF or a fatal error (CAPTURE_PROTOCOL.md). This process
+    /// owns the hotkeys — via a low-level keyboard hook, not RegisterHotKey —
+    /// so a paged-out shell cannot delay the trigger, and the key is
+    /// suppressed before OS handlers like Windows 11's PrintScreen-opens-
+    /// Snipping-Tool can steal it.
+    #[arg(long, requires = "session_root")]
+    pub standby: bool,
+
+    /// Parent directory in which standby mode creates a unique capture session.
+    #[arg(long, value_name = "PATH", requires = "standby")]
+    pub session_root: Option<PathBuf>,
+
+    /// Global hotkey for a region capture, in handy-keys grammar
+    /// (for example `Control+Shift+PrintScreen`).
+    #[arg(long, value_name = "GESTURE", requires = "standby")]
+    pub hk_main: Option<String>,
+
+    /// Global hotkey for an active-window capture.
+    #[arg(long, value_name = "GESTURE", requires = "standby")]
+    pub hk_window: Option<String>,
+
+    /// Global hotkey for an active-monitor capture.
+    #[arg(long, value_name = "GESTURE", requires = "standby")]
+    pub hk_monitor: Option<String>,
+
     /// Directory to write the session payload into. When set, the
     /// EDIT/UPLOAD/SELECT-COLOR actions write their payload here and
     /// exit (see CAPTURE_PROTOCOL.md). Omit for standalone mode.

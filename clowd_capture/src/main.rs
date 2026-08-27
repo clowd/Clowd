@@ -2,6 +2,7 @@
 mod app;
 mod capture;
 mod capture_output;
+mod cycle_logger;
 mod filename_pattern;
 mod gpu;
 mod image_extract;
@@ -11,6 +12,8 @@ mod render;
 mod selection;
 mod session_output;
 mod settings;
+mod standby;
+mod standby_hotkeys;
 mod sync;
 mod system;
 mod telemetry;
@@ -36,65 +39,65 @@ fn main() -> anyhow::Result<()> {
     // permission check are inside the measurement instead of hidden in front
     // of it. Anything moved above this line becomes invisible to the
     // benchmark.
-    let t_start = Instant::now();
-    // High priority class for the whole process (as the v3 C++ capturer
-    // did): while the overlay is up it IS the foreground experience. The
-    // per-thread tiers in `system` refine this — render threads go higher
-    // still, disk-bound background work drops out of the class entirely.
+    let process_start = Instant::now();
+    // This is a process-lifetime scheduling posture. Standby spends its idle
+    // time blocked in the event loop, so retaining it does not consume CPU and
+    // avoids changing priority around every capture cycle.
     system::raise_process_priority_class();
-    let args = settings::CliArgs::parse();
-
-    // Terminal output plus a mirror into the session dir: when the shell spawns us
-    // from an installed .app, stdout goes to /dev/null and stderr is only read back
-    // after a non-zero exit, so the file is the only diagnostics that survive a hang
-    // — or a native fault, which never reaches a Rust error path at all. LineWriter
-    // flushes each record, so the log is current even if the process dies without
-    // unwinding.
-    let mut loggers: Vec<Box<dyn simplelog::SharedLogger>> = vec![simplelog::TermLogger::new(
-        log::LevelFilter::Info,
-        simplelog::Config::default(),
-        simplelog::TerminalMode::Mixed,
-        simplelog::ColorChoice::Auto,
-    )];
-    let log_file = args
-        .session_dir
-        .as_ref()
-        .and_then(|dir| std::fs::File::create(dir.join("capture.log")).ok());
-    if let Some(file) = log_file {
-        loggers.push(simplelog::WriteLogger::new(
-            log::LevelFilter::Info,
-            simplelog::Config::default(),
-            std::io::LineWriter::new(file),
-        ));
-    }
-    clowd_rust_core::telemetry::install_logger(simplelog::CombinedLogger::new(loggers));
-
-    // Stashed rather than marked: `StartupTimings` is sized by the monitor
-    // count and cannot exist until the session enumerates them, which is
-    // several stages from here.
-    let mut prologue = Prologue {
-        logging_ready: t_start.elapsed(),
-        ..Prologue::default()
-    };
-
-    // held for the rest of main: dropping the guard flushes anything still queued
+    let mut args = settings::CliArgs::parse();
+    let logger = cycle_logger::CycleLogger::install();
     let _sentry = clowd_rust_core::telemetry::init("clowd_capture");
-    prologue.sentry_ready = t_start.elapsed();
+    system::SystemInterop::init();
+    let mut event_loop = build_event_loop()?;
 
-    // run() bails out with `?` in several places, and an Err return is not a panic —
-    // the hook would never see it. Report it here, then hand it back to the runtime
-    // so the exit code and stderr output are unchanged (the shell reads both:
-    // ScreenCaptureService.LaunchAsync).
-    let result = run(args, t_start, prologue);
-    if let Err(err) = &result {
-        clowd_rust_core::telemetry::capture_error(err);
+    if !args.standby {
+        if let Some(dir) = &args.session_dir {
+            logger.begin_session(dir);
+        }
+        let mut prologue = Prologue {
+            logging_ready: process_start.elapsed(),
+            ..Prologue::default()
+        };
+        prologue.sentry_ready = process_start.elapsed();
+        let result = run_cycle(args, process_start, prologue, &mut event_loop);
+        if let Err(err) = &result {
+            clowd_rust_core::telemetry::capture_error(err);
+        }
+        logger.end_session();
+        return result;
     }
-    result
+
+    let mut standby = standby::Standby::new(event_loop.create_proxy())?;
+    loop {
+        if !standby.wait(&mut args, &mut event_loop)? {
+            return Ok(());
+        }
+        let t_start = Instant::now();
+        let session_dir = args
+            .session_dir
+            .clone()
+            .expect("standby creates a session");
+        logger.begin_session(&session_dir);
+        let result = run_cycle(args.clone(), t_start, Prologue::default(), &mut event_loop);
+        if let Err(err) = result {
+            clowd_rust_core::telemetry::capture_error(&err);
+            logger.end_session();
+            return Err(err);
+        }
+        logger.end_session();
+        standby::emit!("CLOWD_CAPTURE_FINISHED {}", session_dir.display());
+        args.session_dir = None;
+        args.capture_mode = settings::CaptureMode::Region;
+        args.video = false;
+    }
 }
 
-fn run(args: settings::CliArgs, t_start: Instant, mut prologue: Prologue) -> anyhow::Result<()> {
-    system::SystemInterop::init();
-
+fn run_cycle(
+    args: settings::CliArgs,
+    t_start: Instant,
+    mut prologue: Prologue,
+    event_loop: &mut winit::event_loop::EventLoop<()>,
+) -> anyhow::Result<()> {
     // Before any window exists, so the cycle cannot end without knowing who to
     // hand foreground rights back to.
     system::SystemInterop::set_shell_pid(args.shell_pid);
@@ -134,26 +137,31 @@ fn run(args: settings::CliArgs, t_start: Instant, mut prologue: Prologue) -> any
     // `cargo run`), a pre-event-loop Prohibited poisons the window-server session
     // and orderFrontRegardless() silently never puts windows on screen, even after
     // winit switches the policy back to Accessory at applicationDidFinishLaunching.
-    #[cfg(target_os = "macos")]
-    let event_loop = {
-        use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
-        winit::event_loop::EventLoop::builder()
-            .with_activation_policy(ActivationPolicy::Accessory)
-            .with_activate_ignoring_other_apps(false)
-            .build()?
-    };
-    #[cfg(not(target_os = "macos"))]
-    let event_loop = winit::event_loop::EventLoop::new()?;
-
     timings.mark_event_loop_built();
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let mut app = session.into_app();
     timings.mark_run_app_entered();
-    event_loop.run_app(&mut app)?;
+    use winit::platform::run_on_demand::EventLoopExtRunOnDemand;
+    event_loop.run_app_on_demand(&mut app)?;
     // A failure detected inside the event loop (the screenshot deadline)
     // exits the loop cleanly and parks its error here — surface it so the
     // shell still sees a non-zero exit, as it did when the wait was a
     // blocking `?` in CaptureSession::new.
-    app.fatal_result()
+    let fatal = app.fatal_result();
+    drop(app);
+    fatal
+}
+
+fn build_event_loop() -> anyhow::Result<winit::event_loop::EventLoop<()>> {
+    #[cfg(target_os = "macos")]
+    {
+        use winit::platform::macos::{ActivationPolicy, EventLoopBuilderExtMacOS};
+        Ok(winit::event_loop::EventLoop::builder()
+            .with_activation_policy(ActivationPolicy::Accessory)
+            .with_activate_ignoring_other_apps(false)
+            .build()?)
+    }
+    #[cfg(not(target_os = "macos"))]
+    Ok(winit::event_loop::EventLoop::new()?)
 }
