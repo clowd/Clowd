@@ -125,7 +125,7 @@ impl StandbyHotkeys {
                     Ok(hotkey) => match &self.listener_error {
                         Some(err) => (false, Some(err.clone())),
                         None => {
-                            next_blocking.insert(hotkey.clone());
+                            next_blocking.insert(hotkey);
                             next_matches.push((hotkey, mode));
                             (true, None)
                         }
