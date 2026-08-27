@@ -40,9 +40,9 @@ const ZOOM_STEP: f32 = 2.0;
 const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
 const MOMENTUM_GAP: Duration = Duration::from_millis(50);
 
-/// Process-wide state built once during startup: the wgpu instance,
-/// monitors and windows. Everything specific to the capture itself lives
-/// in [`CaptureCycle`].
+/// One capture cycle's state. The persistent process drops this whole graph
+/// before returning to standby, including its wgpu instance, monitors,
+/// windows, surfaces and render workers.
 pub struct App {
     windows: WindowSet,
     monitors: Vec<MonitorInfo>,
@@ -672,8 +672,8 @@ impl App {
     }
 
     /// Tear down the current capture cycle: hide every window, restore the
-    /// hardware cursor, drop the per-cycle state and exit the event loop —
-    /// the process serves exactly one capture.
+    /// hardware cursor, drop the per-cycle state and exit this event-loop run.
+    /// `main` then drops `App` itself and returns to minimal standby.
     fn finish_cycle(&mut self, event_loop: &ActiveEventLoop, action: CycleAction) {
         log::info!("capture cycle finished: {:?}", action);
         // Every exit path that has a live cycle comes through here, so this is
@@ -1778,6 +1778,11 @@ impl ApplicationHandler for App {
                 .with_inner_size(win_size);
             #[cfg(windows)]
             {
+                // These are desktop overlays, never application windows. Apply
+                // WS_EX_TOOLWINDOW at HWND creation so Explorer cannot briefly
+                // add one taskbar button while the hidden window is shown and
+                // focused (particularly visible after the standby transition).
+                attrs = attrs.with_skip_taskbar(true);
                 attrs = attrs.with_no_redirection_bitmap(true);
                 // The overlay never accepts a drop, but winit registers every window
                 // it creates as an OLE drop target — an OleInitialize plus a

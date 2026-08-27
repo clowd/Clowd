@@ -130,8 +130,8 @@ run_guarded() {
 failures=0
 for ((i = 1; i <= RUNS; i++)); do
   printf '==> run %d/%d ... ' "$i" "$RUNS"
-  # Both streams: simplelog's TerminalMode::Mixed sends info to stdout and
-  # warn/error to stderr, and a crashing run puts its diagnosis on stderr.
+  # Both streams: the log (TerminalMode::Stderr) and any crash diagnosis are
+  # on stderr; stdout carries only the standby protocol lines, if any.
   if run_guarded "$OUT_DIR/run-$i.log"; then
     printf 'ok\n'
   else
