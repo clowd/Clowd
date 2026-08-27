@@ -80,6 +80,22 @@ namespace Clowd
         }
 
         /// <summary>
+        /// This gesture in the grammar the Rust capturer's hotkey backend (handy-keys)
+        /// parses: modifiers joined with '+' (Meta becomes "Super"), then the key token
+        /// from <see cref="CapturerKeyMap"/> — e.g. "Control+Shift+PrintScreen".
+        /// Distinct from <see cref="ToSerializedString"/>, which stays on Avalonia names
+        /// for the settings file.
+        /// </summary>
+        public string ToCapturerString()
+        {
+            var parts = new[] { KeyModifiers.Control, KeyModifiers.Alt, KeyModifiers.Shift, KeyModifiers.Meta }
+                        .Where(m => Modifiers.HasFlag(m))
+                        .Select(m => m == KeyModifiers.Meta ? "Super" : m.ToString())
+                        .Append(CapturerKeyMap.ToCapturerToken(Key));
+            return string.Join("+", parts);
+        }
+
+        /// <summary>
         /// Parses the <see cref="ToSerializedString"/> form. Tolerant: null, empty or
         /// unrecognizable input yields null (the gesture is treated as not set).
         /// </summary>

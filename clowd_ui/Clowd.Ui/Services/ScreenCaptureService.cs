@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
@@ -150,15 +151,17 @@ namespace Clowd.UI
         // one capture process at a time, across all page instances.
         private static int _captureActive;
 
-        /// <summary>True while the capture overlay is on screen — a hard block on applying a
-        /// background update (IdleMonitor).</summary>
-        public static bool IsCaptureActive => Volatile.Read(ref _captureActive) != 0;
+        /// <summary>True while a capture overlay is on screen — a hard block on applying a
+        /// background update (IdleMonitor). Covers both lifetimes: one-shot captures tracked
+        /// here, and the standby capturer's overlay tracked by its supervisor.</summary>
+        public static bool IsCaptureActive =>
+            Volatile.Read(ref _captureActive) != 0 || CaptureStandbySupervisor.IsOverlayOpen;
 
         /// <summary>The capturer's exit code for "macOS has not granted Screen Recording" — see
         /// <c>NO_SCREEN_PERMISSION</c> in clowd_rust_core/src/exit.rs. Reported instead of
         /// crashing, so a revoked permission gets the permission dialog rather than a stack trace.
         /// </summary>
-        private const int ExitCodeNoScreenPermission = 3;
+        internal const int ExitCodeNoScreenPermission = 3;
 
         public async void Open(CaptureMode mode, bool video = false)
         {
@@ -169,12 +172,23 @@ namespace Clowd.UI
             }
 
             // Never launch either capturer until the shell has established that screen capture is
-            // permitted. Normal screenshots then use (or wake) the supervised standby process;
-            // video retains its separate one-shot lifetime/protocol.
+            // permitted. Normal screenshots then wake the supervised standby process; when it
+            // cannot take the capture — warm mode off, faulted, or mid-restart — TryCapture
+            // returns false and the classic one-shot spawn below runs instead. Video always
+            // retains its separate one-shot lifetime/protocol.
             if (!await EnsureScreenRecordingPermissionAsync())
                 return;
             if (!video && CaptureStandbySupervisor.TryCapture(mode))
                 return;
+
+            // Only one capturer overlay at a time, whichever process owns it: this stops a
+            // video/recording request (or a one-shot fallback) from stacking a second
+            // fullscreen overlay on top of the standby capturer's.
+            if (CaptureStandbySupervisor.IsOverlayOpen)
+            {
+                Debug.WriteLine("Standby capture overlay is open; ignoring capture request.");
+                return;
+            }
 
             if (Interlocked.CompareExchange(ref _captureActive, 1, 0) != 0)
             {
@@ -206,9 +220,11 @@ namespace Clowd.UI
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
-                    // capture the capturer's log output (simplelog writes errors and any
-                    // Rust panic to stderr) so a crash can be reported to the user.
+                    // capture the capturer's log output (simplelog writes its log and any
+                    // Rust panic to stderr) so a crash can be reported to the user. Rust
+                    // writes UTF-8; without pinning, .NET decodes with the OEM codepage.
                     RedirectStandardError = true,
+                    StandardErrorEncoding = Encoding.UTF8,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
                 foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video,
@@ -275,38 +291,7 @@ namespace Clowd.UI
                     return;
                 }
 
-                var result = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
-                switch (result?.Action)
-                {
-                    case CaptureAction.Edit:
-                        EditorWindow.ShowSession(result.Session);
-                        break;
-                    case CaptureAction.Upload:
-                        await UploadManager.UploadSession(result.Session);
-                        break;
-                    case CaptureAction.SelectColor:
-                        NiceDialog.ShowColorViewer(result.Color);
-                        break;
-                    case CaptureAction.Video:
-                        // the capture-active interlock is released in `finally` before the video
-                        // page runs its own lifetime — correct: the screenshot overlay is done and
-                        // VideoCapturePage has its own single-instance guard.
-                        PageManager.Current.GetVideoCapturePage()
-                            .Open(result.Region, result.CornerRadius, result.SessionDir);
-                        break;
-                    case CaptureAction.Scroll:
-                        // same hand-off as Video: the overlay is gone, and the scroll page runs its
-                        // own (much longer) lifetime around the session dir it now owns.
-                        PageManager.Current.GetScrollCapturePage()
-                            .Open(result.Region, result.ScrollPoint, result.TargetHwnd, result.SessionDir);
-                        break;
-                    case CaptureAction.OcrUpload:
-                        // the recognized text travels in the result, not in a session — the
-                        // capturer's session dir is already gone by now. UploadText creates its
-                        // own session, exactly as the clipboard-upload hotkey does.
-                        await UploadManager.UploadText(result.Text, "Captured Text");
-                        break;
-                }
+                await DispatchCaptureResultAsync(CaptureSessionDispatcher.ProcessFinishedSession(sessionDir));
             }
             catch (Exception ex)
             {
@@ -332,51 +317,62 @@ namespace Clowd.UI
             Closed?.Invoke(this, EventArgs.Empty);
         }
 
-        /// <summary>Completes a session produced by the supervised standby capturer.</summary>
-        internal static void StandbyCaptureStarted()
+        /// <summary>What the shell does with a finished session, shared verbatim by the one-shot
+        /// and standby lifetimes so the two capture paths cannot drift apart.</summary>
+        private static async Task DispatchCaptureResultAsync(CaptureResult result)
         {
-            if (Interlocked.Exchange(ref _captureActive, 1) == 0)
-                IdleMonitor.NotifyCaptureActivity();
+            switch (result?.Action)
+            {
+                case CaptureAction.Edit:
+                    EditorWindow.ShowSession(result.Session);
+                    break;
+                case CaptureAction.Upload:
+                    await UploadManager.UploadSession(result.Session);
+                    break;
+                case CaptureAction.SelectColor:
+                    NiceDialog.ShowColorViewer(result.Color);
+                    break;
+                case CaptureAction.Video:
+                    // the overlay is done by the time any result is dispatched, and
+                    // VideoCapturePage has its own single-instance guard.
+                    PageManager.Current.GetVideoCapturePage()
+                        .Open(result.Region, result.CornerRadius, result.SessionDir);
+                    break;
+                case CaptureAction.Scroll:
+                    // same hand-off as Video: the scroll page runs its own (much longer)
+                    // lifetime around the session dir it now owns.
+                    PageManager.Current.GetScrollCapturePage()
+                        .Open(result.Region, result.ScrollPoint, result.TargetHwnd, result.SessionDir);
+                    break;
+                case CaptureAction.OcrUpload:
+                    // the recognized text travels in the result, not in a session — the
+                    // capturer's session dir is already gone by now. UploadText creates its
+                    // own session, exactly as the clipboard-upload hotkey does.
+                    await UploadManager.UploadText(result.Text, "Captured Text");
+                    break;
+            }
         }
 
-        internal static void StandbyCaptureAborted()
-        {
-            if (Interlocked.Exchange(ref _captureActive, 0) != 0)
-                IdleMonitor.NotifyCaptureActivity();
-        }
-
+        /// <summary>Completes a session announced by the standby capturer's
+        /// CLOWD_CAPTURE_FINISHED line. Runs on the UI thread via the supervisor.</summary>
         internal static async Task ProcessStandbySessionAsync(string sessionDir)
         {
-            if (String.IsNullOrWhiteSpace(sessionDir) || !Directory.Exists(sessionDir))
-            {
-                StandbyCaptureAborted();
-                return;
-            }
-
-            StandbyCaptureStarted();
             try
             {
-                var result = CaptureSessionDispatcher.ProcessFinishedSession(sessionDir);
-                switch (result?.Action)
-                {
-                    case CaptureAction.Edit: EditorWindow.ShowSession(result.Session); break;
-                    case CaptureAction.Upload: await UploadManager.UploadSession(result.Session); break;
-                    case CaptureAction.SelectColor: NiceDialog.ShowColorViewer(result.Color); break;
-                    case CaptureAction.Video:
-                        PageManager.Current.GetVideoCapturePage().Open(result.Region, result.CornerRadius, result.SessionDir);
-                        break;
-                    case CaptureAction.Scroll:
-                        PageManager.Current.GetScrollCapturePage().Open(result.Region, result.ScrollPoint, result.TargetHwnd, result.SessionDir);
-                        break;
-                    case CaptureAction.OcrUpload:
-                        await UploadManager.UploadText(result.Text, "Captured Text");
-                        break;
-                }
+                // A missing directory means a capture the user just took is lost — that must
+                // surface, not silently no-op (it would point at path/encoding corruption
+                // between the two processes).
+                if (String.IsNullOrWhiteSpace(sessionDir) || !Directory.Exists(sessionDir))
+                    throw new DirectoryNotFoundException("Standby capture session not found: " + sessionDir);
+
+                await DispatchCaptureResultAsync(CaptureSessionDispatcher.ProcessFinishedSession(sessionDir));
             }
-            finally
+            catch (Exception ex)
             {
-                Interlocked.Exchange(ref _captureActive, 0);
-                IdleMonitor.NotifyCaptureActivity();
+                Debug.WriteLine("Standby capture dispatch failed: " + ex);
+                SentryConfig.CaptureHandled(ex, "capture.standby-dispatch");
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Error, ex.Message,
+                    "An error occurred while processing the capture");
             }
         }
 
@@ -559,7 +555,11 @@ namespace Clowd.UI
                                                           SettingsHotkey hotkeys, string lastSavePath = null)
         {
             var args = new List<string>(Build(sessionRoot, settings, CaptureMode.Region, false, lastSavePath));
-            args.RemoveRange(0, 2); // standby creates the per-capture directory itself
+            // standby creates the per-capture directory itself; throwing (rather than shipping a
+            // corrupt command line) lands in the supervisor's crash handling and its fallback.
+            if (args[0] != "--session-dir")
+                throw new InvalidOperationException("CaptureArguments.Build no longer starts with --session-dir");
+            args.RemoveRange(0, 2);
             args.InsertRange(0, new[] { "--standby", "--session-root", sessionRoot });
 
             AddHotkey("--hk-main", hotkeys.CaptureRegionShortcut);
@@ -572,7 +572,7 @@ namespace Clowd.UI
                 if (gesture == null)
                     return;
                 args.Add(flag);
-                args.Add(gesture.ToSerializedString());
+                args.Add(gesture.ToCapturerString());
             }
         }
     }

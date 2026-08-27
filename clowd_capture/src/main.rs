@@ -13,6 +13,7 @@ mod selection;
 mod session_output;
 mod settings;
 mod standby;
+mod standby_hotkeys;
 mod sync;
 mod system;
 mod telemetry;
@@ -66,7 +67,7 @@ fn main() -> anyhow::Result<()> {
         return result;
     }
 
-    let mut standby = standby::Standby::new()?;
+    let mut standby = standby::Standby::new(event_loop.create_proxy())?;
     loop {
         if !standby.wait(&mut args, &mut event_loop)? {
             return Ok(());
@@ -84,9 +85,7 @@ fn main() -> anyhow::Result<()> {
             return Err(err);
         }
         logger.end_session();
-        println!("CLOWD_CAPTURE_FINISHED {}", session_dir.display());
-        use std::io::Write;
-        std::io::stdout().flush()?;
+        standby::emit!("CLOWD_CAPTURE_FINISHED {}", session_dir.display());
         args.session_dir = None;
         args.capture_mode = settings::CaptureMode::Region;
         args.video = false;

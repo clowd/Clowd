@@ -15,10 +15,13 @@ struct InstalledLogger(Arc<CycleLogger>);
 impl CycleLogger {
     pub fn install() -> Arc<Self> {
         let logger = Arc::new(Self {
+            // Stderr, never Mixed: stdout is the standby line protocol, and a log
+            // record flushed in chunks could splice itself into a protocol line
+            // (the scroll driver keeps its logger on stderr for the same reason).
             terminal: simplelog::TermLogger::new(
                 log::LevelFilter::Info,
                 simplelog::Config::default(),
-                simplelog::TerminalMode::Mixed,
+                simplelog::TerminalMode::Stderr,
                 simplelog::ColorChoice::Auto,
             ),
             file: Mutex::new(None),

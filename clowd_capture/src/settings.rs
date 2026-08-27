@@ -167,9 +167,14 @@ impl Default for CapturerSettings {
 #[derive(Debug, Clone, Parser)]
 #[command(version, about = "Clowd screen capturer")]
 pub struct CliArgs {
-    /// Wait for one of the shell-provided global screenshot hotkeys before
-    /// initializing the capture stack. After a hotkey fires the
-    /// process performs one normal capture and exits.
+    /// Wait for one of the global screenshot hotkeys (or a stdin capture
+    /// request) before initializing the capture stack. Each trigger runs one
+    /// normal capture cycle, then the process returns to waiting; it exits
+    /// only on stdin EOF or a fatal error (CAPTURE_PROTOCOL.md). This process
+    /// owns the hotkeys — via a low-level keyboard hook, not RegisterHotKey —
+    /// so a paged-out shell cannot delay the trigger, and the key is
+    /// suppressed before OS handlers like Windows 11's PrintScreen-opens-
+    /// Snipping-Tool can steal it.
     #[arg(long, requires = "session_root")]
     pub standby: bool,
 
@@ -177,7 +182,8 @@ pub struct CliArgs {
     #[arg(long, value_name = "PATH", requires = "standby")]
     pub session_root: Option<PathBuf>,
 
-    /// Global hotkey for a region capture (for example `Control+Snapshot`).
+    /// Global hotkey for a region capture, in handy-keys grammar
+    /// (for example `Control+Shift+PrintScreen`).
     #[arg(long, value_name = "GESTURE", requires = "standby")]
     pub hk_main: Option<String>,
 

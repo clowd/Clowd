@@ -15,7 +15,7 @@ simplelog.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 winit.workspace = true
-global-hotkey.workspace = true
+handy-keys.workspace = true
 # "wgsl" enables the runtime WGSL frontend: the only shader path on macOS.
 # Windows consumes precompiled DXBC via passthrough (see gpu/shaders.rs and
 # build.rs) and never compiles WGSL at runtime, but the frontend feature stays
