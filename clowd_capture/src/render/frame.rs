@@ -1,108 +1,78 @@
 use std::time::{Duration, Instant};
 
 use crate::gpu::WindowGpu;
+use crate::gxi::{self, AcquireResult};
 use crate::render::desktop::SnapshotState;
 use crate::telemetry::perf::{PerfSample, PerfTracker};
-use crate::ui::gpu::gpu_timing::GpuTimings;
 use crate::ui::gpu::UiRenderer;
+
+/// What [`draw_once`] wants the render loop to do next.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DrawStatus {
+    /// Frame drawn, or a transient miss (timeout / occluded / swapchain
+    /// reconfigured) — the next iteration retries.
+    Continue,
+    /// The GPU device itself is gone ([`AcquireResult::DeviceLost`], the
+    /// d3d11 backend's `DXGI_ERROR_DEVICE_REMOVED/RESET` map). Terminal:
+    /// a dead device fails every subsequent acquire instantly, so
+    /// retrying would hot-spin — the worker must exit instead. Dead on
+    /// the wgpu backend, which never constructs that variant.
+    DeviceLost,
+}
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn draw_once(
-    surface: &wgpu::Surface<'static>,
+    surface: &mut gxi::Surface,
     gpu: &WindowGpu,
-    config: &wgpu::SurfaceConfiguration,
+    surface_size: (u32, u32),
     snapshot_state: Option<&SnapshotState>,
-    peek_bind_group: Option<&wgpu::BindGroup>,
+    peek_bind_group: Option<&gxi::BindGroup>,
     // `None` while the deferred UI build is still in flight (see
     // `WindowGpu::peek`): the frame is then the desktop pass alone.
     mut ui_renderer: Option<&mut UiRenderer>,
     perf: &PerfTracker,
-    gpu_timing: Option<&GpuTimings>,
+    gpu_timing: Option<&gxi::GpuTimings>,
     out_sample: &mut Option<PerfSample>,
-) {
-    let t_wait_start = Instant::now();
-    let frame = match surface.get_current_texture() {
-        wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => f,
-        wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return,
-        wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-            surface.configure(&gpu.device, config);
-            return;
-        }
-        wgpu::CurrentSurfaceTexture::Validation => return,
+) -> DrawStatus {
+    let t_start = Instant::now();
+    let mut frame = match surface.acquire(gpu_timing) {
+        AcquireResult::Frame(f) => f,
+        // A lost/outdated surface has already been reconfigured by the
+        // backend; like the transient skips, the next iteration retries.
+        AcquireResult::Skip | AcquireResult::Occluded | AcquireResult::Reconfigured => return DrawStatus::Continue,
+        AcquireResult::DeviceLost => return DrawStatus::DeviceLost,
     };
-    let wait = t_wait_start.elapsed();
-
-    let t_draw_start = Instant::now();
-    let view = frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-    let mut encoder = gpu
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("frame encoder"),
-        });
+    // The sample's wait bucket is the swapchain acquire alone (the vsync
+    // block); the encoder/render-pass setup `acquire` also did lands in
+    // the draw bucket below, matching the pre-gxi bucketing.
+    let wait = frame.acquire_wait();
 
     if let Some(ui) = ui_renderer.as_mut() {
-        ui.prepare(&gpu.device, &gpu.queue, (config.width, config.height), perf);
+        ui.prepare(&gpu.device, &gpu.queue, surface_size, perf);
     }
 
-    let begin_frame = gpu_timing.and_then(|gt| gt.begin_frame());
-    let (pass_ts, slot_id) = match &begin_frame {
-        Some(bf) => (Some(bf.pass.clone()), Some(bf.id)),
-        None => (None, None),
-    };
-
-    {
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("frame pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                depth_slice: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.05,
-                        g: 0.05,
-                        b: 0.08,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: pass_ts,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        rpass.set_pipeline(&gpu.pipeline);
-        if let Some(state) = snapshot_state {
-            rpass.set_bind_group(0, &state.bind_group, &[]);
-            rpass.draw(0..3, 0..1);
-        }
-        if let (Some(peek_bg), Some(peek)) = (peek_bind_group, gpu.peek.as_ref()) {
-            rpass.set_pipeline(&peek.pipeline);
-            rpass.set_bind_group(0, peek_bg, &[]);
-            rpass.draw(0..6, 0..1);
-        }
-        if let Some(ui) = ui_renderer.as_deref() {
-            ui.draw(&mut rpass);
-        }
+    frame.set_pipeline(&gpu.pipeline);
+    if let Some(state) = snapshot_state {
+        frame.set_bind_group(0, &state.bind_group);
+        frame.draw(0..3, 0..1);
+    }
+    if let (Some(peek_bg), Some(peek)) = (peek_bind_group, gpu.peek.as_ref()) {
+        frame.set_pipeline(&peek.pipeline);
+        frame.set_bind_group(0, peek_bg);
+        frame.draw(0..6, 0..1);
+    }
+    if let Some(ui) = ui_renderer.as_deref() {
+        ui.draw(&mut frame);
     }
 
-    if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
-        gt.resolve(&mut encoder, id);
-    }
-
-    gpu.queue
-        .submit(std::iter::once(encoder.finish()));
-    if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
-        gt.after_submit(id);
-    }
-    let draw = t_draw_start.elapsed();
-
-    let t_present_start = Instant::now();
-    gpu.queue.present(frame);
-    let present = t_present_start.elapsed();
+    // `present` submits and presents; it hands back the time spent in the
+    // final compositor handoff so the sample's draw/present split matches
+    // the pre-gxi bucketing (submit counts as draw work).
+    let present = frame.present(gpu_timing);
+    let draw = t_start
+        .elapsed()
+        .saturating_sub(wait)
+        .saturating_sub(present);
 
     *out_sample = Some(PerfSample {
         wait,
@@ -111,4 +81,5 @@ pub(crate) fn draw_once(
         overall: Duration::ZERO,
         gpu: None,
     });
+    DrawStatus::Continue
 }

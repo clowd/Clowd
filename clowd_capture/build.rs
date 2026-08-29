@@ -210,6 +210,14 @@ fn build_hlsl_options(bindings: &[BindingEntry]) -> naga::back::hlsl::Options {
     }
 
     hlsl::Options {
+        // NOTE for the d3d11 backend (Phase D): these blobs are SM 5.1
+        // with wgpu-hal's sampler-heap ABI (the space-255 sampler remap
+        // plus the sampler-index-buffer SRV inserted after the real
+        // textures, below). D3D11 rejects SM 5.1 bytecode and has no
+        // sampler heap, so it needs its own vs_5_0/ps_5_0 emission with
+        // direct s# registers — the shader_bindings tables map cleanly to
+        // b#/t#/s# via the same per-kind counter walk, but the blobs and
+        // their SRV layout must not be reused.
         shader_model: hlsl::ShaderModel::V5_1,
         binding_map,
         fake_missing_bindings: false,

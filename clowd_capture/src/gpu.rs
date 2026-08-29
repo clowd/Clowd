@@ -3,18 +3,11 @@ use std::time::Instant;
 
 use anyhow::Result;
 
+use crate::gxi::{self, BlendMode, CreateMark, FilterMode, PipelineDesc, ShaderId};
 use crate::telemetry::startup::WorkerTimings;
 
 pub mod desktop;
-pub mod device;
 pub mod peek;
-pub mod pipeline;
-pub mod shaders;
-
-/// Non-sRGB format used by every pipeline and surface. On DX12 and Metal
-/// this is universally supported as a swapchain format. Verified at
-/// surface-bind time via an assertion.
-pub const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 
 /// 80-byte uniform block written once per render-thread startup (UV region,
 /// DPI scale, crosshair color) and updated every frame by each render
@@ -25,19 +18,15 @@ pub const SURFACE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 /// Stage-A output: GPU device + queue + compiled shaders + format-agnostic
 /// resources. Created on the render worker thread with no window or surface.
 pub struct DeviceBundle {
-    #[allow(dead_code)]
-    pub instance: Arc<wgpu::Instance>,
-    pub adapter: wgpu::Adapter,
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
+    pub device: gxi::Device,
+    pub queue: gxi::Queue,
     pub adapter_name: String,
-    pub desktop_pipeline: wgpu::RenderPipeline,
-    pub desktop_bgl: wgpu::BindGroupLayout,
-    pub desktop_sampler: wgpu::Sampler,
+    pub desktop_pipeline: gxi::RenderPipeline,
+    pub desktop_sampler: gxi::Sampler,
 }
 
 /// The peek half of the render state: the pipeline that draws the
-/// un-obscured window contents inside the selection, plus its layout.
+/// un-obscured window contents inside the selection.
 ///
 /// Deliberately NOT part of Stage A. Frame 0 cannot draw a peek quad —
 /// peeking needs a hovered window, which needs the overlay to already be
@@ -47,16 +36,18 @@ pub struct DeviceBundle {
 /// (`WindowGpu::peek`) whenever that build lands — the render loop is
 /// already running by then and simply skips the peek quad until it has.
 pub struct PeekGpu {
-    pub pipeline: wgpu::RenderPipeline,
-    pub bgl: wgpu::BindGroupLayout,
+    pub pipeline: gxi::RenderPipeline,
 }
 
-pub fn create_peek_gpu(device: &wgpu::Device) -> PeekGpu {
-    let bgl = pipeline::create_peek_bind_group_layout(device);
-    let pipeline = pipeline::create_peek_pipeline(device, &bgl);
+pub fn create_peek_gpu(device: &gxi::Device) -> PeekGpu {
+    let pipeline = device.create_pipeline(&PipelineDesc {
+        label: "peek pipeline",
+        shader: ShaderId::Peek,
+        vertex: None,
+        blend: BlendMode::Replace,
+    });
     PeekGpu {
         pipeline,
-        bgl,
     }
 }
 
@@ -72,12 +63,10 @@ pub fn create_peek_gpu(device: &wgpu::Device) -> PeekGpu {
 /// cursor — so it runs desktop-only until the build lands and then fills
 /// this in.
 pub struct WindowGpu {
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    pub pipeline: wgpu::RenderPipeline,
+    pub device: gxi::Device,
+    pub queue: gxi::Queue,
+    pub pipeline: gxi::RenderPipeline,
     pub peek: Option<PeekGpu>,
-    #[allow(dead_code)]
-    pub surface_format: wgpu::TextureFormat,
     #[allow(dead_code)]
     pub adapter_name: String,
     pub snapshot: Option<Arc<desktop::DesktopSnapshot>>,
@@ -86,7 +75,7 @@ pub struct WindowGpu {
 // ── Stage A: device + pipelines (no window needed) ──────────────────
 
 pub fn stage_a_create_device(
-    instance: Arc<wgpu::Instance>,
+    instance: gxi::Instance,
     adapter_hint: Option<(u32, u32)>,
     t_start: Instant,
     timings: &WorkerTimings,
@@ -95,36 +84,39 @@ pub fn stage_a_create_device(
         .prep_start
         .set_once(t_start.elapsed());
 
-    pollster::block_on(async {
-        let (adapter, device, queue, adapter_name) = device::request_adapter_device(&instance, adapter_hint, t_start, timings).await?;
+    let (device, queue) = gxi::Device::create(&instance, adapter_hint, |mark| match mark {
+        CreateMark::AdapterSelected => timings
+            .prep_adapter
+            .set_once(t_start.elapsed()),
+        CreateMark::DeviceReady => timings
+            .prep_device
+            .set_once(t_start.elapsed()),
+    })?;
+    let adapter_name = device.adapter_name().to_string();
 
-        // Exactly what frame 0 draws and nothing more: one triangle
-        // sampling the desktop snapshot. Every other pipeline in the
-        // process (peek, the UI stack) is compiled off this path.
-        let desktop_bgl = pipeline::create_desktop_bind_group_layout(&device);
-        let desktop_sampler = pipeline::create_desktop_sampler(&device);
-        let desktop_pipeline = pipeline::create_desktop_pipeline(&device, &desktop_bgl);
+    // Exactly what frame 0 draws and nothing more: one triangle
+    // sampling the desktop snapshot. Every other pipeline in the
+    // process (peek, the UI stack) is compiled off this path.
+    let desktop_sampler = device.create_sampler("desktop snapshot sampler", FilterMode::Nearest);
+    let desktop_pipeline = device.create_pipeline(&PipelineDesc {
+        label: "desktop pipeline",
+        shader: ShaderId::Desktop,
+        vertex: None,
+        blend: BlendMode::Replace,
+    });
 
-        timings
-            .prep_pipelines
-            .set_once(t_start.elapsed());
+    timings
+        .prep_pipelines
+        .set_once(t_start.elapsed());
 
-        Ok(DeviceBundle {
-            instance,
-            adapter,
-            device,
-            queue,
-            adapter_name,
-            desktop_pipeline,
-            desktop_bgl,
-            desktop_sampler,
-        })
+    Ok(DeviceBundle {
+        device,
+        queue,
+        adapter_name,
+        desktop_pipeline,
+        desktop_sampler,
     })
 }
-
-// ── Stage B: upload desktop snapshot texture ─────────────────────────
-
-// ── Surface creation (main thread only) ─────────────────────────────
 
 // ── Assemble final WindowGpu ────────────────────────────────────────
 
@@ -134,7 +126,6 @@ pub fn finalize_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<desktop::D
         queue: bundle.queue,
         pipeline: bundle.desktop_pipeline,
         peek: None,
-        surface_format: SURFACE_FORMAT,
         adapter_name: bundle.adapter_name,
         snapshot,
     }

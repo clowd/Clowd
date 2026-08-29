@@ -1,18 +1,68 @@
+//! Shader registry + load machinery for the wgpu backend.
+//!
+//! [`ShaderId`] maps to WGSL source (compiled at runtime on macOS) and, on
+//! Windows, to the precompiled DXBC blobs `build.rs` emits (WGSL → naga →
+//! HLSL → FXC), consumed via wgpu passthrough. A blob the driver rejects
+//! PANICS in debug builds — a binding-contract break must be caught at the
+//! developer's desk — but in release it falls back to compiling the WGSL
+//! at runtime, with an `error!` that becomes a Sentry event: for a user, a
+//! working overlay on the slow path beats an error dialog, and the event
+//! tells us it happened (see issue #74).
+
 use std::borrow::Cow;
 use std::sync::Arc;
 #[cfg(windows)]
 use std::sync::Mutex;
 
-/// A shader program for one pipeline. Windows ships precompiled DXBC
-/// (`build.rs`: WGSL → naga → HLSL → FXC) as separate vertex/fragment
-/// passthrough modules. A blob the driver rejects PANICS in debug builds
-/// — a binding-contract break must be caught at the developer's desk —
-/// but in release it falls back to compiling the WGSL at runtime, with an
-/// `error!` that becomes a Sentry event: for a user, a working overlay on
-/// the slow path beats an error dialog, and the event tells us it
-/// happened (see issue #74). Everywhere else the WGSL is compiled at
+use crate::gxi::types::ShaderId;
+
+/// WGSL source (+ DXBC blobs on Windows) for one shader program.
+#[derive(Clone, Copy)]
+pub(crate) struct ShaderSource {
+    pub label: &'static str,
+    pub wgsl: &'static str,
+    #[cfg(windows)]
+    pub vs_dxbc: &'static [u8],
+    #[cfg(windows)]
+    pub fs_dxbc: &'static [u8],
+}
+
+/// The registry: everything the backend needs to build `id`'s program.
+pub(crate) fn source(id: ShaderId) -> ShaderSource {
+    macro_rules! s {
+        ($label:literal, $wgsl:literal, $vs:literal, $fs:literal) => {{
+            #[cfg(windows)]
+            {
+                ShaderSource {
+                    label: $label,
+                    wgsl: include_str!(concat!("../../../shaders/", $wgsl)),
+                    vs_dxbc: include_bytes!(concat!(env!("OUT_DIR"), $vs)),
+                    fs_dxbc: include_bytes!(concat!(env!("OUT_DIR"), $fs)),
+                }
+            }
+            #[cfg(not(windows))]
+            {
+                ShaderSource {
+                    label: $label,
+                    wgsl: include_str!(concat!("../../../shaders/", $wgsl)),
+                }
+            }
+        }};
+    }
+    match id {
+        ShaderId::Desktop => s!("desktop", "desktop.wgsl", "/desktop_vs.dxbc", "/desktop_ps.dxbc"),
+        ShaderId::Peek => s!("peek", "peek.wgsl", "/peek_vs.dxbc", "/peek_ps.dxbc"),
+        ShaderId::UiRect => s!("ui_rect", "ui_rect.wgsl", "/ui_rect_vs.dxbc", "/ui_rect_ps.dxbc"),
+        ShaderId::UiIcon => s!("ui_icon", "ui_icon.wgsl", "/ui_icon_vs.dxbc", "/ui_icon_ps.dxbc"),
+        ShaderId::UiLift => s!("ui_lift", "ui_lift.wgsl", "/ui_lift_vs.dxbc", "/ui_lift_ps.dxbc"),
+        ShaderId::UiText => s!("ui_text", "ui_text.wgsl", "/ui_text_vs.dxbc", "/ui_text_ps.dxbc"),
+    }
+}
+
+/// A shader program for one pipeline. Windows: separate vertex/fragment
+/// passthrough modules from DXBC. Everywhere else the WGSL is compiled at
 /// runtime into a single module exposing both entry points.
-pub struct ShaderPair {
+pub(crate) struct ShaderPair {
     modules: ShaderModules,
     /// Carried so [`build_pipeline`] can rebuild this shader from source
     /// when the precompiled blobs fail at pipeline creation.
@@ -54,16 +104,17 @@ impl ShaderPair {
     }
 }
 
-// A failed passthrough create surfaces as an *uncaptured* wgpu error (no error
-// scope is open), which our handler records here so `load` can turn it into a
-// panic that names the shader. Without the recording, the failure would only
-// show up later as cryptic invalid-object errors at pipeline creation.
+// A failed passthrough create surfaces as an *uncaptured* wgpu error (no
+// error scope is open), which our handler records here so [`load`] can turn
+// it into a panic that names the shader. Without the recording, the failure
+// would only show up later as cryptic invalid-object errors at pipeline
+// creation.
 #[cfg(windows)]
 static LAST_UNCAPTURED_ERROR: Mutex<Option<String>> = Mutex::new(None);
 // Serialises shader loads so a concurrent load can't interleave the
-// clear/create/check of `LAST_UNCAPTURED_ERROR`. Kept separate from that mutex
-// so the error handler (which runs synchronously *inside* the create call)
-// never contends with a lock this holds.
+// clear/create/check of `LAST_UNCAPTURED_ERROR`. Kept separate from that
+// mutex so the error handler (which runs synchronously *inside* the create
+// call) never contends with a lock this holds.
 #[cfg(windows)]
 static LOAD_GUARD: Mutex<()> = Mutex::new(());
 
@@ -80,12 +131,12 @@ pub fn precompiled_in_use() -> bool {
     ANY_SPLIT_USED.load(Ordering::Relaxed) && !ANY_FALLBACK_USED.load(Ordering::Relaxed)
 }
 
-/// Install a non-fatal uncaptured-error handler on `device`. Must be called
-/// once, right after the device is created and before any shader is loaded.
-/// Without it, wgpu's default handler panics on the first uncaptured error
-/// with a generic message; this one logs the real error text (and on Windows
-/// records it so [`load`] can panic naming the shader that caused it).
-pub fn install_error_handler(device: &wgpu::Device) {
+/// Install a non-fatal uncaptured-error handler on `device`. Called once by
+/// `Device::create`, before any shader is loaded. Without it, wgpu's
+/// default handler panics on the first uncaptured error with a generic
+/// message; this one logs the real error text (and on Windows records it so
+/// [`load`] can panic naming the shader that caused it).
+pub(crate) fn install_error_handler(device: &wgpu::Device) {
     device.on_uncaptured_error(Arc::new(|err| {
         let msg = err.to_string();
         log::error!("wgpu uncaptured error (non-fatal): {msg}");
@@ -185,6 +236,20 @@ fn load(
     }
 }
 
+/// Build the [`ShaderPair`] for `id` on `device` — passthrough DXBC on
+/// Windows, runtime WGSL elsewhere.
+pub(crate) fn load_shader(device: &wgpu::Device, id: ShaderId) -> ShaderPair {
+    let src = source(id);
+    #[cfg(windows)]
+    {
+        load(device, src.label, src.vs_dxbc, src.fs_dxbc, src.wgsl)
+    }
+    #[cfg(not(windows))]
+    {
+        wgsl(device, src.label, src.wgsl)
+    }
+}
+
 /// Build a render pipeline from `shader`, handling precompiled-blob
 /// failure at the point where it actually surfaces (see [`load`]'s note).
 /// On a creation error from the passthrough modules: debug builds PANIC
@@ -197,7 +262,7 @@ fn load(
 /// silent. The guard serialises concurrent pipeline builds (the deferred
 /// UI stack compiles on several threads) so an uncaptured error is
 /// attributed to the build that caused it.
-pub fn build_pipeline(
+pub(crate) fn build_pipeline(
     device: &wgpu::Device,
     pipeline_label: &str,
     shader: &ShaderPair,
@@ -237,55 +302,3 @@ pub fn build_pipeline(
         build(shader)
     }
 }
-
-macro_rules! shader_fn {
-    ($name:ident, $label:literal, $wgsl:literal, $vs:literal, $fs:literal) => {
-        pub fn $name(device: &wgpu::Device) -> ShaderPair {
-            #[cfg(windows)]
-            {
-                const VS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), $vs));
-                const FS: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), $fs));
-                load(device, $label, VS, FS, include_str!($wgsl))
-            }
-            #[cfg(not(windows))]
-            wgsl(device, $label, include_str!($wgsl))
-        }
-    };
-}
-
-shader_fn!(
-    desktop,
-    "desktop",
-    "../../shaders/desktop.wgsl",
-    "/desktop_vs.dxbc",
-    "/desktop_ps.dxbc"
-);
-shader_fn!(peek, "peek", "../../shaders/peek.wgsl", "/peek_vs.dxbc", "/peek_ps.dxbc");
-shader_fn!(
-    ui_rect,
-    "ui_rect",
-    "../../shaders/ui_rect.wgsl",
-    "/ui_rect_vs.dxbc",
-    "/ui_rect_ps.dxbc"
-);
-shader_fn!(
-    ui_icon,
-    "ui_icon",
-    "../../shaders/ui_icon.wgsl",
-    "/ui_icon_vs.dxbc",
-    "/ui_icon_ps.dxbc"
-);
-shader_fn!(
-    ui_lift,
-    "ui_lift",
-    "../../shaders/ui_lift.wgsl",
-    "/ui_lift_vs.dxbc",
-    "/ui_lift_ps.dxbc"
-);
-shader_fn!(
-    ui_text,
-    "ui_text",
-    "../../shaders/ui_text.wgsl",
-    "/ui_text_vs.dxbc",
-    "/ui_text_ps.dxbc"
-);

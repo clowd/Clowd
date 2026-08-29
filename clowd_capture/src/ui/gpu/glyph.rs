@@ -34,6 +34,9 @@ use std::collections::HashMap;
 use bytemuck::{Pod, Zeroable};
 use cosmic_text::{CacheKey, Color, FontSystem, SwashCache, SwashContent};
 
+use crate::gxi::{
+    self, BindingRes, BlendMode, FilterMode, PipelineDesc, ShaderId, TexFormat, TextureDesc, VertexAttr, VertexFormat, VertexLayout,
+};
 use crate::ui::gpu::text::TextArea;
 
 const INITIAL_MASK_SIZE: u32 = 512;
@@ -106,73 +109,37 @@ struct GlyphSlot {
 struct AtlasFull;
 
 struct InnerAtlas {
-    texture: wgpu::Texture,
-    view: wgpu::TextureView,
+    texture: gxi::Texture,
     packer: etagere::BucketedAtlasAllocator,
     size: u32,
-    format: wgpu::TextureFormat,
-    channels: u32,
+    format: TexFormat,
     label: &'static str,
 }
 
 impl InnerAtlas {
-    fn new(device: &wgpu::Device, label: &'static str, format: wgpu::TextureFormat, channels: u32, size: u32) -> Self {
+    fn new(device: &gxi::Device, label: &'static str, format: TexFormat, size: u32) -> Self {
         let packer = etagere::BucketedAtlasAllocator::new(etagere::size2(size as i32, size as i32));
-        let (texture, view) = Self::create_texture(device, label, format, size);
+        let texture = Self::create_texture(device, label, format, size);
         Self {
             texture,
-            view,
             packer,
             size,
             format,
-            channels,
             label,
         }
     }
 
-    fn create_texture(device: &wgpu::Device, label: &str, format: wgpu::TextureFormat, size: u32) -> (wgpu::Texture, wgpu::TextureView) {
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size: wgpu::Extent3d {
-                width: size,
-                height: size,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
+    fn create_texture(device: &gxi::Device, label: &str, format: TexFormat, size: u32) -> gxi::Texture {
+        device.create_texture(&TextureDesc {
+            label,
+            width: size,
+            height: size,
             format,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        (texture, view)
+        })
     }
 
-    fn upload(&self, queue: &wgpu::Queue, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &self.texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d {
-                    x,
-                    y,
-                    z: 0,
-                },
-                aspect: wgpu::TextureAspect::All,
-            },
-            data,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(width * self.channels),
-                rows_per_image: None,
-            },
-            wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-        );
+    fn upload(&self, queue: &gxi::Queue, x: u32, y: u32, width: u32, height: u32, data: &[u8]) {
+        queue.write_texture(&self.texture, (x, y), (width, height), data);
     }
 }
 
@@ -182,201 +149,88 @@ pub struct GlyphAtlas {
     mask: InnerAtlas,
     color: InnerAtlas,
     cache: HashMap<CacheKey, GlyphDetails>,
-    pipeline: wgpu::RenderPipeline,
-    bgl: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
-    params_buf: wgpu::Buffer,
-    bind_group: wgpu::BindGroup,
+    pipeline: gxi::RenderPipeline,
+    sampler: gxi::Sampler,
+    params_buf: gxi::Buffer,
+    bind_group: gxi::BindGroup,
     screen_resolution: (u32, u32),
     max_size: u32,
     /// Set by a cap-hit reset; consumed via [`Self::take_reset`].
     reset: bool,
 }
 
+const GLYPH_INSTANCE_LAYOUT: VertexLayout = VertexLayout {
+    stride: std::mem::size_of::<GlyphInstance>() as u64,
+    attrs: &[
+        VertexAttr {
+            format: VertexFormat::Sint32x2,
+            offset: 0,
+            location: 0,
+        },
+        VertexAttr {
+            format: VertexFormat::Uint32,
+            offset: 8,
+            location: 1,
+        },
+        VertexAttr {
+            format: VertexFormat::Uint32,
+            offset: 12,
+            location: 2,
+        },
+        VertexAttr {
+            format: VertexFormat::Uint32,
+            offset: 16,
+            location: 3,
+        },
+        VertexAttr {
+            format: VertexFormat::Uint32,
+            offset: 20,
+            location: 4,
+        },
+    ],
+};
+
 impl GlyphAtlas {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+    pub fn new(device: &gxi::Device) -> Self {
         // Same growth ceiling as glyphon's atlas (typically 16384); the
         // reset fallback below only triggers where glyphon would have hit
         // AtlasFull.
-        let max_size = device.limits().max_texture_dimension_2d;
-        let mask = InnerAtlas::new(
-            device,
-            "glyph mask atlas",
-            wgpu::TextureFormat::R8Unorm,
-            1,
-            INITIAL_MASK_SIZE.min(max_size),
-        );
+        let max_size = device.max_texture_dimension_2d();
+        let mask = InnerAtlas::new(device, "glyph mask atlas", TexFormat::R8Unorm, INITIAL_MASK_SIZE.min(max_size));
         let color = InnerAtlas::new(
             device,
             "glyph color atlas",
             // Srgb: glyphon's ColorMode::Accurate color atlas — emoji
             // texels are sRGB-decoded on sample (see the module docs).
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-            4,
+            TexFormat::Rgba8UnormSrgb,
             INITIAL_COLOR_SIZE.min(max_size),
         );
 
-        let shader = crate::gpu::shaders::ui_text(device);
+        let params_buf = device.create_uniform_buffer("ui_text params", std::mem::size_of::<Params>() as u64);
+        // Descriptor delta vs glyphon's sampler, which pinned
+        // lod_min/max_clamp to 0.0: the unified gxi sampler leaves LOD at
+        // the API defaults (0.0/32.0). Provably inert — both atlases are
+        // mip 1 with nearest mip filtering, so no LOD can ever select a
+        // different mip. Backends should NOT "fix" this by restoring the
+        // 0.0 clamp; defaults are the contract.
+        let sampler = device.create_sampler("ui_text sampler", FilterMode::Nearest);
 
-        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ui_text bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<Params>() as u64),
-                    },
-                    count: None,
-                },
-                // The two atlas textures are vertex-visible too: the VS
-                // reads textureDimensions() to normalize the texel UVs.
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float {
-                            filterable: true,
-                        },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float {
-                            filterable: true,
-                        },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
+        // STRAIGHT alpha (glyphon's blend), not the icon pipeline's
+        // premultiplied source-over.
+        let pipeline = device.create_pipeline(&PipelineDesc {
+            label: "ui_text pipeline",
+            shader: ShaderId::UiText,
+            vertex: Some(GLYPH_INSTANCE_LAYOUT),
+            blend: BlendMode::StraightAlpha,
         });
 
-        let params_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ui_text params"),
-            size: std::mem::size_of::<Params>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("ui_text sampler"),
-            min_filter: wgpu::FilterMode::Nearest,
-            mag_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 0.0,
-            ..Default::default()
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("ui_text pipeline layout"),
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
-        });
-
-        let instance_layout = wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<GlyphInstance>() as u64,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Sint32x2,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32,
-                    offset: 8,
-                    shader_location: 1,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32,
-                    offset: 12,
-                    shader_location: 2,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32,
-                    offset: 16,
-                    shader_location: 3,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Uint32,
-                    offset: 20,
-                    shader_location: 4,
-                },
-            ],
-        };
-
-        let pipeline = crate::gpu::shaders::build_pipeline(device, "ui_text pipeline", &shader, |shader| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("ui_text pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: shader.vs(),
-                    entry_point: Some("vs_main"),
-                    buffers: &[Some(instance_layout.clone())],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: shader.fs(),
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: surface_format,
-                        // STRAIGHT alpha (glyphon's blend), not the icon
-                        // pipeline's premultiplied source-over.
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::SrcAlpha,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                            alpha: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                        }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: crate::render::MSAA_SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview_mask: None,
-                cache: None,
-            })
-        });
-
-        let bind_group = create_bind_group(device, &bgl, &params_buf, &color.view, &mask.view, &sampler);
+        let bind_group = create_bind_group(device, &params_buf, &color.texture, &mask.texture, &sampler);
 
         Self {
             mask,
             color,
             cache: HashMap::new(),
             pipeline,
-            bgl,
             sampler,
             params_buf,
             bind_group,
@@ -388,7 +242,7 @@ impl GlyphAtlas {
 
     /// Write the screen resolution the vertex shader maps pixels with.
     /// Cheap when unchanged.
-    pub fn update_viewport(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
+    pub fn update_viewport(&mut self, queue: &gxi::Queue, width: u32, height: u32) {
         if self.screen_resolution == (width, height) {
             return;
         }
@@ -426,7 +280,7 @@ impl GlyphAtlas {
     /// from their CPU-side copies. Allocations are preserved in place by
     /// `etagere::BucketedAtlasAllocator::grow`, so cached coordinates and
     /// retained instances stay valid.
-    fn grow(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, content: GlyphContent) -> bool {
+    fn grow(&mut self, device: &gxi::Device, queue: &gxi::Queue, content: GlyphContent) -> bool {
         let inner = match content {
             GlyphContent::Mask => &mut self.mask,
             GlyphContent::Color => &mut self.color,
@@ -440,9 +294,7 @@ impl GlyphAtlas {
         inner
             .packer
             .grow(etagere::size2(new_size as i32, new_size as i32));
-        let (texture, view) = InnerAtlas::create_texture(device, inner.label, inner.format, new_size);
-        inner.texture = texture;
-        inner.view = view;
+        inner.texture = InnerAtlas::create_texture(device, inner.label, inner.format, new_size);
         inner.size = new_size;
         for details in self.cache.values() {
             if details.content == content && details.width > 0 && details.height > 0 {
@@ -456,14 +308,7 @@ impl GlyphAtlas {
                 );
             }
         }
-        self.bind_group = create_bind_group(
-            device,
-            &self.bgl,
-            &self.params_buf,
-            &self.color.view,
-            &self.mask.view,
-            &self.sampler,
-        );
+        self.bind_group = create_bind_group(device, &self.params_buf, &self.color.texture, &self.mask.texture, &self.sampler);
         true
     }
 
@@ -472,8 +317,8 @@ impl GlyphAtlas {
     /// nothing).
     fn glyph_slot(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &gxi::Device,
+        queue: &gxi::Queue,
         font_system: &mut FontSystem,
         swash_cache: &mut SwashCache,
         cache_key: CacheKey,
@@ -554,35 +399,22 @@ impl GlyphAtlas {
 }
 
 fn create_bind_group(
-    device: &wgpu::Device,
-    bgl: &wgpu::BindGroupLayout,
-    params_buf: &wgpu::Buffer,
-    color_view: &wgpu::TextureView,
-    mask_view: &wgpu::TextureView,
-    sampler: &wgpu::Sampler,
-) -> wgpu::BindGroup {
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("ui_text bind group"),
-        layout: bgl,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: params_buf.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(color_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::TextureView(mask_view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 3,
-                resource: wgpu::BindingResource::Sampler(sampler),
-            },
+    device: &gxi::Device,
+    params_buf: &gxi::Buffer,
+    color_tex: &gxi::Texture,
+    mask_tex: &gxi::Texture,
+    sampler: &gxi::Sampler,
+) -> gxi::BindGroup {
+    device.create_bind_group(
+        "ui_text bind group",
+        ShaderId::UiText,
+        &[
+            BindingRes::Uniform(params_buf),
+            BindingRes::Texture(color_tex),
+            BindingRes::Texture(mask_tex),
+            BindingRes::Sampler(sampler),
         ],
-    })
+    )
 }
 
 /// Per-glyph clip window (glyphon's `Bounds`/`GlyphBounds`): the text
@@ -603,20 +435,18 @@ struct ClipBounds {
 /// re-issues whatever the last `prepare` staged, which is what the
 /// static-Lifted bubble fast path relies on.
 pub struct GlyphRenderer {
-    instance_buf: wgpu::Buffer,
+    instance_buf: gxi::Buffer,
     instance_capacity: u64,
     instances: Vec<GlyphInstance>,
     count: u32,
 }
 
 impl GlyphRenderer {
-    pub fn new(device: &wgpu::Device) -> Self {
-        let instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ui_text instance buffer"),
-            size: std::mem::size_of::<GlyphInstance>() as u64 * INITIAL_INSTANCE_CAPACITY,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+    pub fn new(device: &gxi::Device) -> Self {
+        let instance_buf = device.create_instance_buffer(
+            "ui_text instance buffer",
+            std::mem::size_of::<GlyphInstance>() as u64 * INITIAL_INSTANCE_CAPACITY,
+        );
         Self {
             instance_buf,
             instance_capacity: INITIAL_INSTANCE_CAPACITY,
@@ -633,8 +463,8 @@ impl GlyphRenderer {
     /// caller — see [`GlyphAtlas::take_reset`]).
     pub fn prepare(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &gxi::Device,
+        queue: &gxi::Queue,
         atlas: &mut GlyphAtlas,
         font_system: &mut FontSystem,
         swash_cache: &mut SwashCache,
@@ -671,12 +501,7 @@ impl GlyphRenderer {
             while new_cap < needed {
                 new_cap *= 2;
             }
-            self.instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("ui_text instance buffer"),
-                size: stride * new_cap,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+            self.instance_buf = device.create_instance_buffer("ui_text instance buffer", stride * new_cap);
             self.instance_capacity = new_cap;
         }
         queue.write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(&self.instances));
@@ -688,8 +513,8 @@ impl GlyphRenderer {
     /// `TextRenderer::prepare` exactly.
     fn try_stage(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &gxi::Device,
+        queue: &gxi::Queue,
         atlas: &mut GlyphAtlas,
         font_system: &mut FontSystem,
         swash_cache: &mut SwashCache,
@@ -758,14 +583,14 @@ impl GlyphRenderer {
     /// `prepare`'s return (or the armed fast path), exactly as with
     /// glyphon: a renderer that staged nothing would re-issue stale
     /// vertices.
-    pub fn draw(&self, atlas: &GlyphAtlas, rpass: &mut wgpu::RenderPass<'_>) {
+    pub fn draw(&self, atlas: &GlyphAtlas, frame: &mut gxi::Frame) {
         if self.count == 0 {
             return;
         }
-        rpass.set_pipeline(&atlas.pipeline);
-        rpass.set_bind_group(0, &atlas.bind_group, &[]);
-        rpass.set_vertex_buffer(0, self.instance_buf.slice(..));
-        rpass.draw(0..6, 0..self.count);
+        frame.set_pipeline(&atlas.pipeline);
+        frame.set_bind_group(0, &atlas.bind_group);
+        frame.set_vertex_buffer(0, &self.instance_buf);
+        frame.draw(0..6, 0..self.count);
     }
 }
 

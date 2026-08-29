@@ -6,6 +6,10 @@
 
 use bytemuck::{Pod, Zeroable};
 
+use crate::gxi::{
+    self, BindingRes, BlendMode, FilterMode, PipelineDesc, ShaderId, TexFormat, TextureDesc, VertexAttr, VertexFormat, VertexLayout,
+};
+
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
 pub struct IconInstance {
@@ -25,31 +29,22 @@ struct IconUniforms {
 const INITIAL_INSTANCE_CAPACITY: u64 = 16;
 
 pub struct IconAtlas {
-    pub view: wgpu::TextureView,
+    pub texture: gxi::Texture,
     pub icon_px: u32,
     rects: Vec<etagere::Rectangle>,
     atlas_size: u32,
-    _texture: wgpu::Texture,
 }
 
 impl IconAtlas {
-    pub fn build(device: &wgpu::Device, queue: &wgpu::Queue, trees: &[usvg::Tree], icon_px: u32) -> Self {
+    pub fn build(device: &gxi::Device, queue: &gxi::Queue, trees: &[usvg::Tree], icon_px: u32) -> Self {
         let atlas_size = if icon_px <= 36 { 256u32 } else { 512 };
         let mut allocator = etagere::AtlasAllocator::new(etagere::size2(atlas_size as i32, atlas_size as i32));
 
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("icon atlas"),
-            size: wgpu::Extent3d {
-                width: atlas_size,
-                height: atlas_size,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
+        let texture = device.create_texture(&TextureDesc {
+            label: "icon atlas",
+            width: atlas_size,
+            height: atlas_size,
+            format: TexFormat::Rgba8Unorm,
         });
 
         let mut rects = Vec::with_capacity(trees.len());
@@ -69,38 +64,19 @@ impl IconAtlas {
                 .allocate(etagere::size2(icon_px as i32, icon_px as i32))
                 .expect("icon atlas too small");
             queue.write_texture(
-                wgpu::TexelCopyTextureInfo {
-                    texture: &texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: alloc.rectangle.min.x as u32,
-                        y: alloc.rectangle.min.y as u32,
-                        z: 0,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
+                &texture,
+                (alloc.rectangle.min.x as u32, alloc.rectangle.min.y as u32),
+                (icon_px, icon_px),
                 pm.data(),
-                wgpu::TexelCopyBufferLayout {
-                    offset: 0,
-                    bytes_per_row: Some(icon_px * 4),
-                    rows_per_image: None,
-                },
-                wgpu::Extent3d {
-                    width: icon_px,
-                    height: icon_px,
-                    depth_or_array_layers: 1,
-                },
             );
             rects.push(alloc.rectangle);
         }
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Self {
-            view,
+            texture,
             icon_px,
             rects,
             atlas_size,
-            _texture: texture,
         }
     }
 
@@ -117,154 +93,54 @@ impl IconAtlas {
     }
 }
 
+const ICON_INSTANCE_LAYOUT: VertexLayout = VertexLayout {
+    stride: std::mem::size_of::<IconInstance>() as u64,
+    attrs: &[
+        VertexAttr {
+            format: VertexFormat::Float32x4,
+            offset: 0,
+            location: 0,
+        },
+        VertexAttr {
+            format: VertexFormat::Float32x4,
+            offset: 16,
+            location: 1,
+        },
+        VertexAttr {
+            format: VertexFormat::Float32,
+            offset: 32,
+            location: 2,
+        },
+    ],
+};
+
 pub struct IconPipeline {
-    pipeline: wgpu::RenderPipeline,
-    bgl: wgpu::BindGroupLayout,
-    sampler: wgpu::Sampler,
-    uniform_buf: wgpu::Buffer,
-    instance_buf: wgpu::Buffer,
+    pipeline: gxi::RenderPipeline,
+    sampler: gxi::Sampler,
+    uniform_buf: gxi::Buffer,
+    instance_buf: gxi::Buffer,
     instance_capacity: u64,
-    bind_group: Option<wgpu::BindGroup>,
+    bind_group: Option<gxi::BindGroup>,
     pending_count: u32,
 }
 
 impl IconPipeline {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        let shader = crate::gpu::shaders::ui_icon(device);
+    pub fn new(device: &gxi::Device) -> Self {
+        let uniform_buf = device.create_uniform_buffer("ui_icon uniforms", std::mem::size_of::<IconUniforms>() as u64);
+        let sampler = device.create_sampler("ui_icon sampler", FilterMode::Nearest);
 
-        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ui_icon bgl"),
-            entries: &[
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<IconUniforms>() as u64),
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        sample_type: wgpu::TextureSampleType::Float {
-                            filterable: true,
-                        },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                        multisampled: false,
-                    },
-                    count: None,
-                },
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                    count: None,
-                },
-            ],
-        });
-
-        let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ui_icon uniforms"),
-            size: std::mem::size_of::<IconUniforms>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("ui_icon sampler"),
-            mag_filter: wgpu::FilterMode::Nearest,
-            min_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
-
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("ui_icon pipeline layout"),
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+        let pipeline = device.create_pipeline(&PipelineDesc {
+            label: "ui_icon pipeline",
+            shader: ShaderId::UiIcon,
+            vertex: Some(ICON_INSTANCE_LAYOUT),
+            blend: BlendMode::PremultipliedAlpha,
         });
 
         let instance_stride = std::mem::size_of::<IconInstance>() as u64;
-        let instance_layout = wgpu::VertexBufferLayout {
-            array_stride: instance_stride,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 16,
-                    shader_location: 1,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32,
-                    offset: 32,
-                    shader_location: 2,
-                },
-            ],
-        };
-
-        let pipeline = crate::gpu::shaders::build_pipeline(device, "ui_icon pipeline", &shader, |shader| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("ui_icon pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: shader.vs(),
-                    entry_point: Some("vs_main"),
-                    buffers: &[Some(instance_layout.clone())],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: shader.fs(),
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: surface_format,
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                            alpha: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                        }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: crate::render::MSAA_SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview_mask: None,
-                cache: None,
-            })
-        });
-
-        let instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ui_icon instance buffer"),
-            size: instance_stride * INITIAL_INSTANCE_CAPACITY,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let instance_buf = device.create_instance_buffer("ui_icon instance buffer", instance_stride * INITIAL_INSTANCE_CAPACITY);
 
         Self {
             pipeline,
-            bgl,
             sampler,
             uniform_buf,
             instance_buf,
@@ -276,8 +152,8 @@ impl IconPipeline {
 
     pub fn prepare(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &gxi::Device,
+        queue: &gxi::Queue,
         viewport_px: (u32, u32),
         atlas: &IconAtlas,
         instances: &[IconInstance],
@@ -288,24 +164,15 @@ impl IconPipeline {
         };
         queue.write_buffer(&self.uniform_buf, 0, bytemuck::bytes_of(&uniforms));
 
-        self.bind_group = Some(device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ui_icon bind group"),
-            layout: &self.bgl,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.uniform_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(&atlas.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
+        self.bind_group = Some(device.create_bind_group(
+            "ui_icon bind group",
+            ShaderId::UiIcon,
+            &[
+                BindingRes::Uniform(&self.uniform_buf),
+                BindingRes::Texture(&atlas.texture),
+                BindingRes::Sampler(&self.sampler),
             ],
-        }));
+        ));
 
         let stride = std::mem::size_of::<IconInstance>() as u64;
         if !instances.is_empty() {
@@ -315,12 +182,7 @@ impl IconPipeline {
                 while new_cap < needed {
                     new_cap *= 2;
                 }
-                self.instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("ui_icon instance buffer"),
-                    size: stride * new_cap,
-                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
+                self.instance_buf = device.create_instance_buffer("ui_icon instance buffer", stride * new_cap);
                 self.instance_capacity = new_cap;
             }
             queue.write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(instances));
@@ -328,16 +190,16 @@ impl IconPipeline {
         self.pending_count = instances.len() as u32;
     }
 
-    pub fn draw(&self, rpass: &mut wgpu::RenderPass<'_>) {
+    pub fn draw(&self, frame: &mut gxi::Frame) {
         if self.pending_count == 0 {
             return;
         }
         let Some(bg) = &self.bind_group else {
             return;
         };
-        rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, bg, &[]);
-        rpass.set_vertex_buffer(0, self.instance_buf.slice(..));
-        rpass.draw(0..6, 0..self.pending_count);
+        frame.set_pipeline(&self.pipeline);
+        frame.set_bind_group(0, bg);
+        frame.set_vertex_buffer(0, &self.instance_buf);
+        frame.draw(0..6, 0..self.pending_count);
     }
 }

@@ -8,6 +8,8 @@
 
 use cosmic_text::{FontSystem, SwashCache};
 
+use crate::gxi;
+
 // Re-exported so components have one import for everything text-shaped
 // (these used to come via glyphon, which re-exported the same types).
 pub use cosmic_text::{Attrs, Buffer, Color, Family, Metrics, Shaping, Weight, Wrap};
@@ -71,7 +73,7 @@ pub struct TextStack {
 }
 
 impl TextStack {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+    pub fn new(device: &gxi::Device) -> Self {
         let mut db = cosmic_text::fontdb::Database::new();
         db.load_font_data(FONT_MONO_REGULAR.to_vec());
         db.load_font_data(FONT_MONO_BOLD.to_vec());
@@ -80,7 +82,7 @@ impl TextStack {
         let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
 
         let swash_cache = SwashCache::new();
-        let atlas = GlyphAtlas::new(device, surface_format);
+        let atlas = GlyphAtlas::new(device);
         let renderer = GlyphRenderer::new(device);
 
         Self {
@@ -138,7 +140,7 @@ impl TextStack {
         true
     }
 
-    pub fn update_viewport(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
+    pub fn update_viewport(&mut self, queue: &gxi::Queue, width: u32, height: u32) {
         self.atlas
             .update_viewport(queue, width, height);
     }
@@ -147,7 +149,7 @@ impl TextStack {
     /// the caller must gate [`Self::draw`] on it. An atlas cap-hit is
     /// handled internally by reset + retry (see
     /// [`Self::take_atlas_reset`]).
-    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, text_areas: &[TextArea<'_>]) -> bool {
+    pub fn prepare(&mut self, device: &gxi::Device, queue: &gxi::Queue, text_areas: &[TextArea<'_>]) -> bool {
         if text_areas.is_empty() {
             return false;
         }
@@ -161,8 +163,8 @@ impl TextStack {
         )
     }
 
-    pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
-        self.renderer.draw(&self.atlas, pass);
+    pub fn draw(&self, frame: &mut gxi::Frame) {
+        self.renderer.draw(&self.atlas, frame);
     }
 
     /// Prepare the OCR bubble glyphs on the dedicated renderer (created on
@@ -170,7 +172,7 @@ impl TextStack {
     /// staged; the caller MUST gate [`Self::draw_bubbles`] on it, because
     /// a renderer that prepared nothing this frame would re-issue its
     /// previous frame's vertices.
-    pub fn prepare_bubbles(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, text_areas: &[TextArea<'_>]) -> bool {
+    pub fn prepare_bubbles(&mut self, device: &gxi::Device, queue: &gxi::Queue, text_areas: &[TextArea<'_>]) -> bool {
         if text_areas.is_empty() {
             return false;
         }
@@ -190,9 +192,9 @@ impl TextStack {
     /// Draw the bubble glyphs. Only called when the same frame's
     /// `prepare_bubbles` returned true (or the caller's retained fast
     /// path is armed) — see its docs.
-    pub fn draw_bubbles(&self, pass: &mut wgpu::RenderPass<'_>) {
+    pub fn draw_bubbles(&self, frame: &mut gxi::Frame) {
         if let Some(r) = &self.bubble_renderer {
-            r.draw(&self.atlas, pass);
+            r.draw(&self.atlas, frame);
         }
     }
 

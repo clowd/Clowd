@@ -3,6 +3,7 @@ use std::sync::{mpsc, Arc};
 use std::time::{Duration, Instant};
 
 use crate::app::App;
+use crate::gxi;
 use crate::image_extract;
 use crate::render::protocol::{BlurredDesktopImage, CycleParams, RenderMsg, WorkerInput};
 use crate::render::worker::{self, RenderWorkerParams, WorkerSetup};
@@ -37,7 +38,7 @@ impl CaptureSession {
 
         // Everything the desktop capture needs, gathered before anything else:
         // the capture is the longest pole in startup and the main thread blocks
-        // on it below, so it is spawned FIRST and the wgpu instance and the
+        // on it below, so it is spawned FIRST and the GPU instance and the
         // render workers are built beside it instead of in front of it. Only the
         // cursor and the monitor list are genuine prerequisites; the worker
         // channels it also wants arrive later over `worker_channels_latch`.
@@ -74,7 +75,7 @@ impl CaptureSession {
             timings: timings.clone(),
         });
 
-        let instance = Arc::new(create_wgpu_instance());
+        let instance = gxi::Instance::new();
         timings.mark_instance_created();
         timings.mark_initialize();
 
@@ -155,32 +156,9 @@ impl CaptureSession {
     }
 }
 
-fn create_wgpu_instance() -> wgpu::Instance {
-    #[allow(unused_mut)]
-    let mut backend_options = wgpu::BackendOptions::default();
-    #[cfg(windows)]
-    {
-        backend_options.dx12.shader_compiler = wgpu::Dx12Compiler::Fxc;
-        backend_options.dx12.latency_waitable_object = wgpu::Dx12UseFrameLatencyWaitableObject::Wait;
-    }
-    #[cfg(windows)]
-    let backends = wgpu::Backends::DX12;
-    #[cfg(target_os = "macos")]
-    let backends = wgpu::Backends::METAL;
-    #[cfg(not(any(windows, target_os = "macos")))]
-    let backends = wgpu::Backends::VULKAN;
-
-    wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends,
-        flags: wgpu::InstanceFlags::DISCARD_HAL_LABELS,
-        backend_options,
-        ..wgpu::InstanceDescriptor::new_without_display_handle()
-    })
-}
-
 fn spawn_render_workers(
     monitors: &[MonitorInfo],
-    instance: &Arc<wgpu::Instance>,
+    instance: &gxi::Instance,
     startup: &Arc<StartupTimings>,
     failed_count: &Arc<AtomicUsize>,
 ) -> Vec<WorkerSetup> {

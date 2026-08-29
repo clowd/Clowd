@@ -17,6 +17,7 @@
 
 use bytemuck::{Pod, Zeroable};
 
+use crate::gxi::{self, BindingRes, BlendMode, PipelineDesc, ShaderId, VertexAttr, VertexFormat, VertexLayout};
 use crate::interaction::OcrState;
 use crate::ocr::anim;
 use crate::ui::shared::{UiMonitor, UiSharedState};
@@ -56,137 +57,58 @@ const INITIAL_INSTANCE_CAPACITY: u64 = 4;
 const SWEEP_ALPHA: f32 = 0.30;
 
 pub struct LiftPipeline {
-    pipeline: wgpu::RenderPipeline,
-    uniform_buf: wgpu::Buffer,
-    instance_buf: wgpu::Buffer,
+    pipeline: gxi::RenderPipeline,
+    uniform_buf: gxi::Buffer,
+    instance_buf: gxi::Buffer,
     instance_capacity: u64,
-    bind_group: wgpu::BindGroup,
+    bind_group: gxi::BindGroup,
     pending_count: u32,
     /// Scratch reused across frames to avoid a per-frame allocation.
     instances: Vec<LiftInstance>,
 }
 
+const LIFT_INSTANCE_LAYOUT: VertexLayout = VertexLayout {
+    stride: std::mem::size_of::<LiftInstance>() as u64,
+    attrs: &[
+        VertexAttr {
+            format: VertexFormat::Float32x4,
+            offset: 0,
+            location: 0,
+        },
+        VertexAttr {
+            format: VertexFormat::Float32x4,
+            offset: 16,
+            location: 1,
+        },
+        VertexAttr {
+            format: VertexFormat::Float32x4,
+            offset: 32,
+            location: 2,
+        },
+    ],
+};
+
 impl LiftPipeline {
-    pub fn new(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
-        let shader = crate::gpu::shaders::ui_lift(device);
-
-        let bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("ui_lift bgl"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(std::mem::size_of::<LiftUniforms>() as u64),
-                },
-                count: None,
-            }],
-        });
-
-        let uniform_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ui_lift uniforms"),
-            size: std::mem::size_of::<LiftUniforms>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+    pub fn new(device: &gxi::Device) -> Self {
+        let uniform_buf = device.create_uniform_buffer("ui_lift uniforms", std::mem::size_of::<LiftUniforms>() as u64);
 
         // Static bind group: unlike the old snapshot-sampling version there
         // is no per-cycle resource here, so it is built once and never
         // invalidated — no VRAM bracket, no ABA key.
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("ui_lift bind group"),
-            layout: &bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buf.as_entire_binding(),
-            }],
-        });
+        let bind_group = device.create_bind_group("ui_lift bind group", ShaderId::UiLift, &[BindingRes::Uniform(&uniform_buf)]);
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("ui_lift pipeline layout"),
-            bind_group_layouts: &[Some(&bgl)],
-            immediate_size: 0,
+        // Premultiplied source-over — NOT the REPLACE blend the
+        // desktop/peek pipelines use: the sweep is translucent
+        // and must composite over the desktop pass.
+        let pipeline = device.create_pipeline(&PipelineDesc {
+            label: "ui_lift pipeline",
+            shader: ShaderId::UiLift,
+            vertex: Some(LIFT_INSTANCE_LAYOUT),
+            blend: BlendMode::PremultipliedAlpha,
         });
 
         let instance_stride = std::mem::size_of::<LiftInstance>() as u64;
-        let instance_layout = wgpu::VertexBufferLayout {
-            array_stride: instance_stride,
-            step_mode: wgpu::VertexStepMode::Instance,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 0,
-                    shader_location: 0,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 16,
-                    shader_location: 1,
-                },
-                wgpu::VertexAttribute {
-                    format: wgpu::VertexFormat::Float32x4,
-                    offset: 32,
-                    shader_location: 2,
-                },
-            ],
-        };
-
-        let pipeline = crate::gpu::shaders::build_pipeline(device, "ui_lift pipeline", &shader, |shader| {
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("ui_lift pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: shader.vs(),
-                    entry_point: Some("vs_main"),
-                    buffers: &[Some(instance_layout.clone())],
-                    compilation_options: Default::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: shader.fs(),
-                    entry_point: Some("fs_main"),
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: surface_format,
-                        // Premultiplied source-over — NOT the REPLACE blend the
-                        // desktop/peek pipelines use: the sweep is translucent
-                        // and must composite over the desktop pass.
-                        blend: Some(wgpu::BlendState {
-                            color: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                            alpha: wgpu::BlendComponent {
-                                src_factor: wgpu::BlendFactor::One,
-                                dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                                operation: wgpu::BlendOperation::Add,
-                            },
-                        }),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: Default::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: crate::render::MSAA_SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview_mask: None,
-                cache: None,
-            })
-        });
-
-        let instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("ui_lift instance buffer"),
-            size: instance_stride * INITIAL_INSTANCE_CAPACITY,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let instance_buf = device.create_instance_buffer("ui_lift instance buffer", instance_stride * INITIAL_INSTANCE_CAPACITY);
 
         Self {
             pipeline,
@@ -202,8 +124,8 @@ impl LiftPipeline {
     /// Stage this frame's sweep instance (if any).
     pub fn prepare(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &gxi::Device,
+        queue: &gxi::Queue,
         viewport_px: (u32, u32),
         state: &UiSharedState,
         this_monitor: &UiMonitor,
@@ -284,26 +206,21 @@ impl LiftPipeline {
             while new_cap < needed {
                 new_cap *= 2;
             }
-            self.instance_buf = device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("ui_lift instance buffer"),
-                size: stride * new_cap,
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+            self.instance_buf = device.create_instance_buffer("ui_lift instance buffer", stride * new_cap);
             self.instance_capacity = new_cap;
         }
         queue.write_buffer(&self.instance_buf, 0, bytemuck::cast_slice(&self.instances));
         self.pending_count = self.instances.len() as u32;
     }
 
-    pub fn draw(&self, rpass: &mut wgpu::RenderPass<'_>) {
+    pub fn draw(&self, frame: &mut gxi::Frame) {
         if self.pending_count == 0 {
             return;
         }
-        rpass.set_pipeline(&self.pipeline);
-        rpass.set_bind_group(0, &self.bind_group, &[]);
-        rpass.set_vertex_buffer(0, self.instance_buf.slice(..));
-        rpass.draw(0..6, 0..self.pending_count);
+        frame.set_pipeline(&self.pipeline);
+        frame.set_bind_group(0, &self.bind_group);
+        frame.set_vertex_buffer(0, &self.instance_buf);
+        frame.draw(0..6, 0..self.pending_count);
     }
 }
 
