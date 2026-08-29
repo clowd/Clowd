@@ -28,8 +28,15 @@ pub enum ShaderId {
 }
 
 impl ShaderId {
+    /// Used by the wgpu backend's bind-group-layout cache (with
+    /// [`ShaderId::index`] as the slot key); the d3d11 backend has no
+    /// layout objects to cache — it resolves registers per bind group —
+    /// so both are dead there.
+    #[cfg_attr(all(windows, not(feature = "backend-wgpu")), allow(dead_code))]
     pub const COUNT: usize = 6;
 
+    /// See [`ShaderId::COUNT`].
+    #[cfg_attr(all(windows, not(feature = "backend-wgpu")), allow(dead_code))]
     pub const fn index(self) -> usize {
         self as usize
     }
@@ -189,9 +196,11 @@ pub enum AcquireResult {
     /// in the steady-state loop; frame 0 on macOS retries this for a
     /// bounded window (see `render::present_first_frame`) because the
     /// early order-front races wgpu's occlusion guard.
+    #[allow(dead_code)] // constructed only by the wgpu backend
     Occluded,
     /// The swapchain was outdated/lost; the backend has already
     /// reconfigured it. Skip this frame — the next acquire should succeed.
+    #[allow(dead_code)] // constructed only by the wgpu backend
     Reconfigured,
     /// The device itself is gone. Not produced by the wgpu backend (wgpu
     /// folds device loss into surface errors handled above); the d3d11

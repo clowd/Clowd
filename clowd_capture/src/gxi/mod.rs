@@ -6,27 +6,24 @@
 //! exists), so the rest of the crate is written against `crate::gxi::*`
 //! and never names a backend.
 //!
-//! Phase B (this phase): the wgpu backend is the only one and is selected
-//! unconditionally — the module exists so call sites can be re-plumbed
-//! with zero behavior change on both OSes. Phase D adds `d3d11/` and the
-//! selection becomes:
-//!
-//! ```ignore
-//! #[cfg(all(windows, not(feature = "backend-wgpu")))]
-//! pub use self::d3d11::*;
-//! #[cfg(any(not(windows), feature = "backend-wgpu"))]
-//! pub use self::wgpu::*;
-//! ```
-//!
-//! Until then, do not add the `backend-wgpu` feature or any cfg gymnastics
-//! — the swap must stay a one-line diff.
+//! Backend selection (Phase D): Windows ships the `d3d11` backend; the
+//! `wgpu` backend serves macOS and stays compilable on Windows behind the
+//! `backend-wgpu` cargo feature — a CI/parity build that keeps the two
+//! public surfaces from drifting, never shipped to users. Exactly one
+//! backend is compiled into any given binary.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub mod types;
 
+#[cfg(all(windows, not(feature = "backend-wgpu")))]
+mod d3d11;
+#[cfg(any(not(windows), feature = "backend-wgpu"))]
 mod wgpu;
 
+#[cfg(all(windows, not(feature = "backend-wgpu")))]
+pub use self::d3d11::*;
+#[cfg(any(not(windows), feature = "backend-wgpu"))]
 pub use self::wgpu::*;
 pub use types::*;
 

@@ -63,6 +63,15 @@ fn compile_shaders(manifest_dir: &str) {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let fxc = FxcCompiler::load();
 
+    // The SM 5.1 wgpu set is only consumed by the wgpu backend
+    // (gxi/wgpu/shaders.rs), which on Windows compiles only under the
+    // `backend-wgpu` parity feature — skip the whole set otherwise
+    // (halves shader-compile work on the default build). rerun-if is
+    // belt-and-braces: a feature flip already changes the build-script
+    // env fingerprint, but stating it keeps the dependency explicit.
+    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_BACKEND_WGPU");
+    let wgpu_backend = std::env::var_os("CARGO_FEATURE_BACKEND_WGPU").is_some();
+
     for shader in ALL_SHADERS {
         let wgsl_path = format!("{}/{}", manifest_dir, shader.wgsl_path);
         println!("cargo:rerun-if-changed={}", wgsl_path);
@@ -75,7 +84,9 @@ fn compile_shaders(manifest_dir: &str) {
             .validate(&module)
             .unwrap_or_else(|e| panic!("validation failed for {}: {e}", shader.name));
 
-        compile_wgpu_set(&fxc, &out_dir, shader, &module, &info);
+        if wgpu_backend {
+            compile_wgpu_set(&fxc, &out_dir, shader, &module, &info);
+        }
         compile_d3d11_set(&fxc, &out_dir, shader, &module, &info);
     }
 }
