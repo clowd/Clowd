@@ -64,7 +64,7 @@ bytemuck = "1"
 usvg = { version = "0.47", default-features = false }
 resvg = { version = "0.47", default-features = false }
 etagere = "0.3"
-glyphon = "0.12"
+cosmic-text = "0.19"
 arboard = "3.6"
 rfd = { version = "0.17", default-features = false }
 xdialog = "3.1"

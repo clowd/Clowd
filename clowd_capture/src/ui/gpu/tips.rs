@@ -3,9 +3,9 @@
 //! Per-frame work on this render thread:
 //!   1. Check [`tips_visibility`] against this monitor — early out if
 //!      the tips aren't on this monitor.
-//!   2. Update cached glyphon buffers for each text element whose
+//!   2. Update cached cosmic-text buffers for each text element whose
 //!      content changed (hovered window/monitor/pixel).
-//!   3. Feed glyphon measurements into the shared `compute_layout`
+//!   3. Feed cosmic-text measurements into the shared `compute_layout`
 //!      function to decide the panel rect and internal positions.
 //!   4. Emit rect instances (body background, title bar, shadow, color
 //!      swatch) into the caller's accumulator and a list of
@@ -16,7 +16,7 @@
 //! `Self`) — we hand those out via [`TipsRenderer::text_areas`] once
 //! positions are known.
 
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
+use crate::ui::gpu::text::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 use crate::ui::components::tips::layout::{compute_layout as compute_tips_layout, BODY_FONT_PX, TITLE_FONT_PX};
 use crate::ui::components::tips::model::{render_description, COLOR_ROW_HOTKEY, HOTKEY_GAP, TIPS_BOTTOM, TIPS_TOP, TITLE};
@@ -31,7 +31,7 @@ const BASE_OPACITY: f32 = 0.70;
 /// Shadow strip opacity — black * this alpha.
 const SHADOW_ALPHA: f32 = 0.30;
 
-/// Cached glyphon buffer + last-rendered content for change detection.
+/// Cached cosmic-text buffer + last-rendered content for change detection.
 struct CachedBuffer {
     buffer: Buffer,
     last_text: String,
@@ -184,7 +184,7 @@ impl TipsRenderer {
             self.buffers[IDX_BOTTOM_BASE + i].set(ts, &combined, body_px, false);
         }
 
-        // Measure widest body row + title + body-row height from glyphon.
+        // Measure widest body row + title + body-row height from cosmic-text.
         let mut longest_body = 0.0f32;
         for i in IDX_TOP_BASE..IDX_TOP_BASE + TIPS_TOP.len() {
             longest_body = longest_body.max(self.buffers[i].width());
@@ -299,7 +299,7 @@ impl TipsRenderer {
         // row uses panel-local column offsets from the shared layout.
         let title_width_f = self.buffers[IDX_TITLE].width();
         let title_x = panel_left_w + (panel_w - title_width_f) * 0.5;
-        // Center the glyphon line (which occupies line_height = font * 1.2)
+        // Center the shaped line (which occupies line_height = font * 1.2)
         // vertically in the title bar.
         let title_line_h = title_px * 1.2;
         let title_y = panel_top_w + (title_h - title_line_h) * 0.5;
@@ -310,7 +310,7 @@ impl TipsRenderer {
             color: [0xFF, 0xFF, 0xFF, 0xFF],
         });
 
-        let text_y_adjust = 0.0; // glyphon renders from top-left of the run
+        let text_y_adjust = 0.0; // text renders from top-left of the run
         let mut y = panel_top_w + layout.top_block_y;
         for i in 0..TIPS_TOP.len() {
             self.positions.push(PositionedText {
@@ -356,7 +356,7 @@ impl TipsRenderer {
         }
     }
 
-    /// Build the glyphon `TextArea` list for this frame. Must be called
+    /// Build the `TextArea` list for this frame. Must be called
     /// AFTER `prepare()` and the results must be consumed before any
     /// `&mut self` call (they borrow `self.buffers`).
     pub fn text_areas<'a>(&'a self, viewport_px: (u32, u32), out: &mut Vec<TextArea<'a>>) {
@@ -373,7 +373,6 @@ impl TipsRenderer {
                 bottom: vh,
             },
             default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
-            custom_glyphs: &[],
         }));
     }
 }

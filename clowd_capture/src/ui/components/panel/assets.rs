@@ -3,7 +3,7 @@
 //! Each `include_bytes!` points at a file in `assets/icons/`; the bytes
 //! are parsed with `usvg` + tessellated with `lyon` at render-thread
 //! startup — see `ui::gpu::svg` and `ui::gpu::panel`. Fonts live in
-//! `ui::gpu::text` because they're consumed by glyphon directly.
+//! `ui::gpu::text` because they're consumed by the text stack directly.
 
 pub const SVG_UPLOAD: &[u8] = include_bytes!("../../../../assets/icons/clowd-white.svg");
 pub const SVG_EDIT: &[u8] = include_bytes!("../../../../assets/icons/edit_image.svg");

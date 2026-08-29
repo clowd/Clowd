@@ -5,13 +5,15 @@
 //!   * [`icon`]   — CPU-rasterized icon atlas + textured-quad pipeline
 //!   * [`lift`]   — OCR scanning-sweep band
 //!   * [`ocr_bubbles`] — OCR re-rendered text bubbles
-//!   * [`text`]   — glyphon wrapper
+//!   * [`glyph`]  — glyph atlas + instanced glyph-quad pipeline
+//!   * [`text`]   — text stack (fonts, shaping, glyph renderers)
 //!   * [`panel`]  — per-frame button-panel draw
 //!   * [`tips`]   — per-frame tips-panel draw
 //!   * [`renderer`] — the top-level `UiRenderer`
 
 pub mod area;
 pub mod debug;
+pub mod glyph;
 pub mod gpu_timing;
 pub mod hints;
 pub mod icon;

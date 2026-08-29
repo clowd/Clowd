@@ -8,13 +8,13 @@
 //!   3. Emit rect instances for the button backgrounds, area indicator,
 //!      and corner brackets.
 //!   4. Emit one SVG draw per button (scaled into the button rect).
-//!   5. Cache glyphon `Buffer`s for each label + the "W × H" area text
+//!   5. Cache cosmic-text `Buffer`s for each label + the "W × H" area text
 //!      and return their positions.
 //!
 //! Click routing runs on the app thread via the same shared layout
 //! function — this renderer never sends anything back.
 
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
+use crate::ui::gpu::text::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
 
 use crate::ui::components::panel::layout::PanelLayout;
 use crate::ui::components::panel::model::{PanelButtonSet, MAX_PANEL_BUTTONS, PANEL_ICONS};
@@ -34,7 +34,7 @@ const HOVER_OVERLAY_STRENGTH: f32 = 0.30;
 /// the old `animation.rs` value (~200 ms to reach 90 % of target at 60 FPS).
 const HOVER_ANIM_SPEED: f32 = 12.0;
 
-/// One glyphon buffer + content cache for change detection.
+/// One cosmic-text buffer + content cache for change detection.
 struct CachedBuffer {
     buffer: Buffer,
     last_text: String,
@@ -67,7 +67,7 @@ impl CachedBuffer {
                 .set_metrics(Metrics::new(font_px, font_px * 1.2));
             self.last_font_px = font_px;
         }
-        // glyphon's `set_rich_text` lets us underline a single glyph via
+        // cosmic-text's `set_rich_text` lets us underline a single glyph via
         // attrs. Simpler: render the whole string uniformly and draw the
         // underline as a rect in the caller.
         let attrs = Attrs::new().family(Family::Name(FAMILY_CODE));
@@ -364,7 +364,7 @@ impl PanelRenderer {
             let icon_top = t + v_gap;
             let label_width = self.buffers[IDX_LABEL_BASE + i].width();
             let label_x = l + (bw / 2.0) - (label_width / 2.0);
-            // Round Y to the pixel grid. glyphon's `physical()` truncates
+            // Round Y to the pixel grid. cosmic-text's `physical()` truncates
             // the Y component (cosmic-text `layout.rs`) to hint on the
             // baseline; feeding it a fractional `top` causes the text to
             // snap one pixel upward. At low DPI (Windows 100%) that pixel
@@ -396,7 +396,7 @@ impl PanelRenderer {
         let ah = ab - at;
         let area_line_h = area_px * 1.2;
 
-        // Round Y so glyphon's `truncf` hinting doesn't steal a pixel.
+        // Round Y so cosmic-text's `truncf` hinting doesn't steal a pixel.
         // See the label block above for the full rationale.
         self.positions.push(PositionedText {
             buffer_idx: IDX_WIDTH,
@@ -433,7 +433,6 @@ impl PanelRenderer {
                     bottom: vh,
                 },
                 default_color: Color::rgba(p.color[0], p.color[1], p.color[2], p.color[3]),
-                custom_glyphs: &[],
             };
             if self.dpi_scale < 1.01 {
                 out.push(area.clone());

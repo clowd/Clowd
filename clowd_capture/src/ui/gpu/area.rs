@@ -6,10 +6,10 @@
 //! monitor bounds. Matches `DxScreenCapture.cpp:652-704`.
 
 use crate::ui::gpu::rect::RectInstance;
+use crate::ui::gpu::text::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 use crate::ui::gpu::text::{TextStack, FAMILY_CODE};
 use crate::ui::shared::{area_indicator_visibility, UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::RectExt;
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 const AREA_FONT_PX: f32 = 14.0;
 const AREA_PADDING_PX: f32 = 10.0;
@@ -213,7 +213,6 @@ impl AreaRenderer {
                 bottom: vh,
             },
             default_color: Color::rgba(0, 0, 0, 0xFF),
-            custom_glyphs: &[],
         };
         out.push(area);
     }
