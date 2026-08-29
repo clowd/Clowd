@@ -122,10 +122,10 @@ fn run_cycle(
     // All the slow work — monitors, GPU instance, render workers, the desktop
     // screenshot — happens before the event loop exists, so the overlay windows
     // can be created against state that is already warm.
-    // Read before the workers exist: `Features::TIMESTAMP_QUERY` is a device
-    // creation parameter, so this must be set before the first
-    // `request_adapter_device`. Not on `CapturerSettings` — nothing after
-    // device creation consults it.
+    // Read before the workers exist: GPU timing is a device-creation
+    // parameter (the wgpu backend requests `Features::TIMESTAMP_QUERY`),
+    // so this must be set before the first `gxi::Device::create`. Not on
+    // `CapturerSettings` — nothing after device creation consults it.
     gxi::set_gpu_timing_enabled(args.gpu_timing);
     let settings = Arc::new(args.into_settings());
     if let Some(dir) = &settings.session_dir {

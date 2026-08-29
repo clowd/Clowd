@@ -57,9 +57,13 @@ impl Device {
     /// runtime-WGSL fallback (this backend ships no shader compiler), and
     /// a rejected blob can only mean a broken build or a drifted register
     /// contract — never a legitimate runtime condition, because `create`
-    /// guarantees FL ≥ 11_0 and SM 5.0 is core there. The panic rides the
-    /// worker's existing fail path (`ReadyGuard` → `failed_count` → show
-    /// gate → the shell's error dialog).
+    /// guarantees FL ≥ 11_0 and SM 5.0 is core there. Containment depends
+    /// on the call site: the desktop pipeline (worker Stage A) panics with
+    /// the fail guard armed and rides `ReadyGuard` → `failed_count` → show
+    /// gate → the shell's error dialog; the other five pipelines (peek +
+    /// the UI stack) are built on the deferred builder thread, whose panic
+    /// is absorbed in `render.rs` — that monitor keeps a desktop-only
+    /// overlay, no failure is counted, and the only evidence is the log.
     pub fn create_pipeline(&self, desc: &PipelineDesc) -> RenderPipeline {
         let blobs = shaders::source(desc.shader);
         let device = self.raw();

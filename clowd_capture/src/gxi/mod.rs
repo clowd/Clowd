@@ -2,9 +2,8 @@
 //!
 //! Concrete structs, zero dynamic dispatch, compile-time backend selection.
 //! Both backends expose the *same* public API (identical type names and
-//! signatures, enforced by the CI compile matrix once the d3d11 backend
-//! exists), so the rest of the crate is written against `crate::gxi::*`
-//! and never names a backend.
+//! signatures, enforced by the CI compile matrix), so the rest of the
+//! crate is written against `crate::gxi::*` and never names a backend.
 //!
 //! Backend selection (Phase D): Windows ships the `d3d11` backend; the
 //! `wgpu` backend serves macOS and stays compilable on Windows behind the

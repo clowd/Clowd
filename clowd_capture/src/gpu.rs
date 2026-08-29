@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn create_device_and_all_pipelines() {
         let instance = gxi::Instance::new();
-        let (device, _queue) = match gxi::Device::create(&instance, None, |_| {}) {
+        let (device, queue) = match gxi::Device::create(&instance, None, |_| {}) {
             Ok(pair) => pair,
             Err(err) => {
                 eprintln!("skipping: no usable GPU device ({err:#})");
@@ -165,5 +165,58 @@ mod tests {
         let _lift = crate::ui::gpu::lift::LiftPipeline::new(&device);
         let _atlas = crate::ui::gpu::glyph::GlyphAtlas::new(&device);
         let _glyphs = crate::ui::gpu::glyph::GlyphRenderer::new(&device);
+
+        // The bind-group tables the constructors above do NOT build —
+        // Desktop (the largest register walk, mixed VS/PS visibility, and
+        // the frame-0 critical path), Peek and UiIcon — plus both queue
+        // upload paths (write_buffer: d3d11 Map/WRITE_DISCARD incl. its
+        // size assert; write_texture: UpdateSubresource with a
+        // sub-rectangle D3D11_BOX, the atlas path). On d3d11 this
+        // validates the runtime b/t/s register recomputation and
+        // per-stage slot split against each table — the exact contract
+        // shared with build.rs — not just the three smallest tables.
+        use crate::gxi::{BindingRes, TexFormat, TextureDesc};
+        let tex_desc = |label| TextureDesc {
+            label,
+            width: 2,
+            height: 2,
+            format: TexFormat::Bgra8Unorm,
+        };
+        let immutable = device.create_texture_with_data(&queue, &tex_desc("smoke immutable tex"), &[0u8; 16]);
+        let atlas = device.create_texture(&tex_desc("smoke atlas tex"));
+        queue.write_texture(&atlas, (1, 1), (1, 1), &[0u8; 4]);
+        let ubo = device.create_uniform_buffer("smoke ubo", 80);
+        queue.write_buffer(&ubo, 0, &[0u8; 80]);
+        let sampler = device.create_sampler("smoke sampler", FilterMode::Nearest);
+        let _desktop_bg = device.create_bind_group(
+            "smoke desktop bind group",
+            ShaderId::Desktop,
+            &[
+                BindingRes::Uniform(&ubo),
+                BindingRes::Texture(&immutable),
+                BindingRes::Sampler(&sampler),
+                BindingRes::Texture(&atlas),
+                BindingRes::Texture(&atlas),
+            ],
+        );
+        let _peek_bg = device.create_bind_group(
+            "smoke peek bind group",
+            ShaderId::Peek,
+            &[
+                BindingRes::Uniform(&ubo),
+                BindingRes::Texture(&immutable),
+                BindingRes::Texture(&atlas),
+                BindingRes::Sampler(&sampler),
+            ],
+        );
+        let _icon_bg = device.create_bind_group(
+            "smoke icon bind group",
+            ShaderId::UiIcon,
+            &[
+                BindingRes::Uniform(&ubo),
+                BindingRes::Texture(&atlas),
+                BindingRes::Sampler(&sampler),
+            ],
+        );
     }
 }

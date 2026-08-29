@@ -144,9 +144,14 @@ impl Device {
     /// explicit array containing 11_1 fails with `E_INVALIDARG` on old
     /// runtimes that predate that level — exactly the machines this
     /// backend exists for. The precompiled SM 5.0 blobs then require the
-    /// *achieved* level to be ≥ 11_0; below that we return `Err` and the
-    /// worker fails via its existing path (the achieved level is logged
-    /// either way, so telemetry sees what the machine offered).
+    /// *achieved* level to be ≥ 11_0; hardware that comes up below that
+    /// (FL-10 iGPUs, e.g. Sandy Bridge) takes the same WARP retry an
+    /// outright creation failure does — see `create_d3d11_device` — and
+    /// only if even that ends below 11_0 (not a real configuration on any
+    /// supported Windows, where WARP is FL 11_1) does `create` return
+    /// `Err` and fail the worker via its existing path (the achieved
+    /// level is logged either way, so telemetry sees what the machine
+    /// offered).
     pub fn create(instance: &Instance, adapter_hint: Option<(u32, u32)>, mut mark: impl FnMut(CreateMark)) -> Result<(Device, Queue)> {
         let _ = instance;
         let factory: IDXGIFactory2 = unsafe { CreateDXGIFactory1() }.context("CreateDXGIFactory1")?;
@@ -173,6 +178,9 @@ impl Device {
             format_feature_level(feature_level),
         );
 
+        // Safety net only: `create_d3d11_device` already retries on WARP
+        // when hardware ends up below 11_0, so reaching this bail means
+        // even WARP could not offer 11_0.
         if feature_level.0 < D3D_FEATURE_LEVEL_11_0.0 {
             anyhow::bail!(
                 "d3d11 feature level {} is below 11_0; the precompiled SM 5.0 shaders cannot run",
@@ -316,6 +324,18 @@ impl Device {
     /// texture it created with data (empty-then-written textures — the
     /// atlases — go through [`Device::create_texture`], `USAGE_DEFAULT`).
     pub fn create_texture_with_data(&self, queue: &Queue, desc: &TextureDesc, data: &[u8]) -> Texture {
+        self.try_create_texture_with_data(queue, desc, data)
+            .unwrap_or_else(|e| panic!("d3d11 texture '{}' ({}x{}): {e:#}", desc.label, desc.width, desc.height))
+    }
+
+    /// Fallible variant of [`Device::create_texture_with_data`] for the
+    /// mid-render-loop, size-driven uploads (blurred desktop, peek):
+    /// those textures are optional cosmetics, and an `E_OUTOFMEMORY` on a
+    /// multi-4K desktop should be a logged skip, not a dead render worker
+    /// (this backend has no equivalent of the wgpu backend's installed
+    /// error handler). Size-mismatch asserts still panic — that is a
+    /// caller bug, not a runtime condition.
+    pub fn try_create_texture_with_data(&self, queue: &Queue, desc: &TextureDesc, data: &[u8]) -> Result<Texture> {
         let _ = queue; // the upload rides device creation; no context needed
         let expected = desc.format.bytes_per_pixel() as usize * desc.width as usize * desc.height as usize;
         assert!(
@@ -332,10 +352,15 @@ impl Device {
             SysMemPitch: desc.format.bytes_per_pixel() * desc.width,
             SysMemSlicePitch: 0,
         };
-        self.create_texture_impl(desc, Some(init))
+        self.try_create_texture_impl(desc, Some(init))
     }
 
     fn create_texture_impl(&self, desc: &TextureDesc, init: Option<D3D11_SUBRESOURCE_DATA>) -> Texture {
+        self.try_create_texture_impl(desc, init)
+            .unwrap_or_else(|e| panic!("d3d11 texture '{}' ({}x{}): {e:#}", desc.label, desc.width, desc.height))
+    }
+
+    fn try_create_texture_impl(&self, desc: &TextureDesc, init: Option<D3D11_SUBRESOURCE_DATA>) -> Result<Texture> {
         let raw_desc = D3D11_TEXTURE2D_DESC {
             Width: desc.width,
             Height: desc.height,
@@ -360,19 +385,19 @@ impl Device {
             self.device
                 .CreateTexture2D(&raw_desc, init.as_ref().map(|i| i as *const _), Some(&mut tex))
         }
-        .unwrap_or_else(|e| panic!("d3d11 texture '{}' ({}x{}): {e}", desc.label, desc.width, desc.height));
+        .context("CreateTexture2D")?;
         let tex = tex.expect("CreateTexture2D succeeded without an object");
         let mut srv: Option<ID3D11ShaderResourceView> = None;
         unsafe {
             self.device
                 .CreateShaderResourceView(&tex, None, Some(&mut srv))
         }
-        .unwrap_or_else(|e| panic!("d3d11 SRV '{}': {e}", desc.label));
-        Texture {
+        .context("CreateShaderResourceView")?;
+        Ok(Texture {
             tex,
             srv: srv.expect("CreateShaderResourceView succeeded without an object"),
             bytes_per_pixel: desc.format.bytes_per_pixel(),
-        }
+        })
     }
 
     pub fn create_sampler(&self, label: &str, filter: FilterMode) -> Sampler {
@@ -592,7 +617,11 @@ fn select_adapter(factory: &IDXGIFactory2, adapter_hint: Option<(u32, u32)>) -> 
 
 /// `D3D11CreateDevice` with the compat-critical parameters (see
 /// [`Device::create`]'s docs), plus the fallback ladder: debug layer (debug
-/// builds, only if the SDK layers are installed) → plain → WARP.
+/// builds, only if the SDK layers are installed) → plain → WARP. A
+/// hardware device that comes up below feature level 11_0 counts as a
+/// failure for the ladder's purposes: the precompiled SM 5.0 blobs cannot
+/// run on it, so WARP (FL 11_1 software rasterizer) is the device that
+/// actually serves that machine.
 fn create_d3d11_device(adapter: Option<&IDXGIAdapter1>) -> Result<(ID3D11Device, ID3D11DeviceContext, D3D_FEATURE_LEVEL)> {
     // `Param<IDXGIAdapter>` accepts `Option<&IDXGIAdapter>` only for the
     // exact interface type, so upcast the enumerated `IDXGIAdapter1` once.
@@ -611,17 +640,31 @@ fn create_d3d11_device(adapter: Option<&IDXGIAdapter1>) -> Result<(ID3D11Device,
     // UNKNOWN with a NULL adapter is a documented E_INVALIDARG.
     if cfg!(debug_assertions) {
         match try_create(adapter.as_ref(), D3D_DRIVER_TYPE_HARDWARE, base_flags | D3D11_CREATE_DEVICE_DEBUG) {
-            Ok(ok) => return Ok(ok),
+            Ok(ok) if ok.2 .0 >= D3D_FEATURE_LEVEL_11_0.0 => return Ok(ok),
+            Ok((_, _, fl)) => info!(
+                "d3d11 debug-layer device reached only feature level {}; falling through",
+                format_feature_level(fl)
+            ),
             Err(e) => info!("d3d11 debug layer unavailable ({e}); creating without it"),
         }
     }
 
+    // Keep going on WARP rather than fail the capture outright — both when
+    // hardware creation fails and when it succeeds below 11_0 (the NULL
+    // feature-level ladder happily returns an FL-10 device on e.g. Sandy
+    // Bridge iGPUs, which the SM 5.0 blobs cannot use): a software-rendered
+    // overlay beats an error dialog, and the log + adapter-name telemetry
+    // tell us it happened.
     match try_create(adapter.as_ref(), D3D_DRIVER_TYPE_HARDWARE, base_flags) {
-        Ok(ok) => Ok(ok),
+        Ok(ok) if ok.2 .0 >= D3D_FEATURE_LEVEL_11_0.0 => Ok(ok),
+        Ok((_, _, fl)) => {
+            warn!(
+                "d3d11 hardware device reached only feature level {}; retrying on WARP",
+                format_feature_level(fl)
+            );
+            try_create(None, D3D_DRIVER_TYPE_WARP, base_flags).context("D3D11CreateDevice(WARP)")
+        }
         Err(e) => {
-            // Keep going on WARP rather than fail the capture outright: a
-            // software-rendered overlay beats an error dialog, and the log
-            // + adapter-name telemetry tell us it happened.
             warn!("d3d11 hardware device creation failed ({e}); retrying on WARP");
             try_create(None, D3D_DRIVER_TYPE_WARP, base_flags).context("D3D11CreateDevice(WARP)")
         }
@@ -700,7 +743,10 @@ fn format_feature_level(fl: D3D_FEATURE_LEVEL) -> String {
     format!("{}.{}", (fl.0 >> 12) & 0xF, (fl.0 >> 8) & 0xF)
 }
 
-fn texture_format(format: TexFormat) -> DXGI_FORMAT {
+/// The one `TexFormat` → native translation for this backend. `const` so
+/// `super::SURFACE_FORMAT` can be derived from the shared policy const in
+/// `gxi/types.rs` at compile time.
+pub(super) const fn texture_format(format: TexFormat) -> DXGI_FORMAT {
     match format {
         TexFormat::Bgra8Unorm => DXGI_FORMAT_B8G8R8A8_UNORM,
         TexFormat::Rgba8Unorm => DXGI_FORMAT_R8G8B8A8_UNORM,

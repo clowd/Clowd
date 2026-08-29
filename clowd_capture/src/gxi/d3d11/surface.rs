@@ -9,7 +9,7 @@
 //! `Dx12UseFrameLatencyWaitableObject::Wait`).
 
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use windows::core::Interface;
@@ -254,6 +254,13 @@ impl Surface {
             // followed by a Skip (no Present) would consume its one
             // signal for good and wedge every later acquire on a 1 s
             // timeout — even after a reconfigure restores the RTV.
+            //
+            // The sleep is the loop's pacing for this path: the render
+            // loop has no sleep of its own (its pacing normally comes
+            // from the waitable wait below), so an immediate Skip here
+            // would hot-spin a core — permanently, if `create_rtv` failed
+            // at startup and nothing ever reconfigures.
+            std::thread::sleep(Duration::from_millis(10));
             return AcquireResult::Skip;
         };
 
@@ -263,6 +270,10 @@ impl Surface {
             WAIT_TIMEOUT => return AcquireResult::Skip,
             other => {
                 warn!("d3d11 frame-latency wait returned {other:?}; skipping frame");
+                // WAIT_FAILED returns instantly (e.g. an invalid waitable
+                // handle) — sleep so a permanently broken wait neither
+                // hot-spins the loop nor spams the warn above at loop rate.
+                std::thread::sleep(Duration::from_millis(10));
                 return AcquireResult::Skip;
             }
         }

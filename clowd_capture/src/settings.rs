@@ -290,10 +290,14 @@ pub struct CliArgs {
     #[arg(long, value_name = "PATH")]
     pub save_dir: Option<PathBuf>,
 
-    /// Collect per-pass GPU timings for the debug panel. Off by default: it
-    /// requests `Features::TIMESTAMP_QUERY` at device creation and builds a
-    /// query set plus four buffers per worker before the first frame, none
-    /// of which frame 0 consumes. Read once, before the render workers start.
+    /// Collect per-pass GPU timings for the debug panel. Off by default.
+    /// Only implemented by the wgpu backend (macOS, or Windows built with
+    /// `--features backend-wgpu`), where it requests
+    /// `Features::TIMESTAMP_QUERY` at device creation and builds a query
+    /// set plus four buffers per worker before the first frame. The
+    /// shipped Windows d3d11 backend has no GPU timestamp support yet, so
+    /// there the debug panel's GPU column stays "n/a" regardless of this
+    /// flag. Read once, before the render workers start.
     #[arg(long)]
     pub gpu_timing: bool,
 }

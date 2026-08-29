@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::Result;
 
-use crate::gxi::types::{BindingRes, CreateMark, FilterMode, ShaderId, TextureDesc};
+use crate::gxi::types::{BindingRes, CreateMark, FilterMode, ShaderId, TexFormat, TextureDesc};
 use crate::shader_bindings::ResourceKind;
 
 use super::pipeline::create_bind_group_layout;
@@ -88,8 +88,8 @@ pub struct Device {
 ///
 /// Threading contract: the API is `Sync`, so every backend must be safe
 /// under concurrent calls — wgpu's queue is free-threaded, and the d3d11
-/// backend must wrap its immediate `ID3D11DeviceContext` (which is NOT
-/// free-threaded) in a mutex to honor the same bound. That mutex will be
+/// backend wraps its immediate `ID3D11DeviceContext` (which is NOT
+/// free-threaded) in a mutex to honor the same bound. That mutex is
 /// uncontended in practice: every queue touch today happens on the owning
 /// render worker's thread (the deferred build thread clones only
 /// [`Device`], whose `ID3D11Device` half IS free-threaded).
@@ -249,12 +249,7 @@ impl Device {
     }
 
     pub fn create_texture(&self, desc: &TextureDesc) -> Texture {
-        let format = match desc.format {
-            crate::gxi::types::TexFormat::Bgra8Unorm => wgpu::TextureFormat::Bgra8Unorm,
-            crate::gxi::types::TexFormat::Rgba8Unorm => wgpu::TextureFormat::Rgba8Unorm,
-            crate::gxi::types::TexFormat::Rgba8UnormSrgb => wgpu::TextureFormat::Rgba8UnormSrgb,
-            crate::gxi::types::TexFormat::R8Unorm => wgpu::TextureFormat::R8Unorm,
-        };
+        let format = texture_format(desc.format);
         let raw = self
             .device
             .create_texture(&wgpu::TextureDescriptor {
@@ -281,12 +276,22 @@ impl Device {
 
     /// Primary texture path: create and upload the full contents in one
     /// call (`data` is tightly packed, `bytes_per_pixel * width` per row).
-    /// The d3d11 backend will map this to `USAGE_IMMUTABLE` +
-    /// `pInitialData`.
+    /// The d3d11 backend maps this to `USAGE_IMMUTABLE` + `pInitialData`.
     pub fn create_texture_with_data(&self, queue: &Queue, desc: &TextureDesc, data: &[u8]) -> Texture {
         let texture = self.create_texture(desc);
         queue.write_texture(&texture, (0, 0), (desc.width, desc.height), data);
         texture
+    }
+
+    /// Fallible variant of [`Device::create_texture_with_data`] for the
+    /// mid-render-loop, size-driven uploads (blurred desktop, peek). On
+    /// this backend creation errors (validation, OOM) are reported through
+    /// the installed error handler rather than a return value, so this
+    /// never returns `Err` — the fallible signature exists for the d3d11
+    /// backend, where an HRESULT failure would otherwise panic the render
+    /// worker.
+    pub fn try_create_texture_with_data(&self, queue: &Queue, desc: &TextureDesc, data: &[u8]) -> Result<Texture> {
+        Ok(self.create_texture_with_data(queue, desc, data))
     }
 
     pub fn create_sampler(&self, label: &str, filter: FilterMode) -> Sampler {
@@ -499,6 +504,18 @@ fn pick_high_performance(adapters: Vec<wgpu::Adapter>) -> Option<wgpu::Adapter> 
     adapters
         .into_iter()
         .min_by_key(|a| order(a.get_info().device_type))
+}
+
+/// The one `TexFormat` → native translation for this backend. `const` so
+/// `super::SURFACE_FORMAT` can be derived from the shared policy const in
+/// `gxi/types.rs` at compile time.
+pub(super) const fn texture_format(format: TexFormat) -> wgpu::TextureFormat {
+    match format {
+        TexFormat::Bgra8Unorm => wgpu::TextureFormat::Bgra8Unorm,
+        TexFormat::Rgba8Unorm => wgpu::TextureFormat::Rgba8Unorm,
+        TexFormat::Rgba8UnormSrgb => wgpu::TextureFormat::Rgba8UnormSrgb,
+        TexFormat::R8Unorm => wgpu::TextureFormat::R8Unorm,
+    }
 }
 
 // ── Plain resource wrappers ─────────────────────────────────────────

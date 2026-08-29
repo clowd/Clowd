@@ -349,8 +349,8 @@ impl OcrBubblesRenderer {
             let e = anim::reveal_progress(t, entry.rel_top);
             // Not yet revealed but revealing SOON: no pill, but the TEXT
             // is staged at its resting spot with alpha 0 — the look-ahead
-            // pre-rasterization pass the module docs describe. Glyphon
-            // rasterizes staged glyphs regardless of color, so by the
+            // pre-rasterization pass the module docs describe. The glyph
+            // renderer rasterizes staged glyphs regardless of color, so by the
             // time the wave reaches this line its glyphs are guaranteed
             // atlas-resident (and re-staging every frame until reveal
             // keeps them pinned there). Lines beyond the look-ahead don't
