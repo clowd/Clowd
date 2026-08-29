@@ -21,6 +21,7 @@
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::gxi;
 use crate::telemetry::perf::PerfTracker;
 use crate::telemetry::startup::StartupTimings;
 use crate::ui::gpu::area::AreaRenderer;
@@ -105,21 +106,21 @@ impl UiPipelines {
     /// process. On macOS that means MTLCompilerService's XPC concurrency
     /// (~3-4 in flight) — which is why fanning three compiles out is worth
     /// three threads and fanning out further would not be.
-    pub fn build_parallel(device: &wgpu::Device, surface_format: wgpu::TextureFormat) -> Self {
+    pub fn build_parallel(device: &gxi::Device) -> Self {
         std::thread::scope(|s| {
             // Deferred-build threads run below normal (the caller already
             // is; spawns do not inherit priority on Windows).
             let rect = s.spawn(|| {
                 crate::system::lower_thread_priority();
-                RectPipeline::new(device, surface_format)
+                RectPipeline::new(device)
             });
             let icon = s.spawn(|| {
                 crate::system::lower_thread_priority();
-                IconPipeline::new(device, surface_format)
+                IconPipeline::new(device)
             });
             // The third compile rides the calling thread: spawning for it
             // would only add a join.
-            let lift = LiftPipeline::new(device, surface_format);
+            let lift = LiftPipeline::new(device);
             Self {
                 rect: rect.join().expect("ui rect pipeline thread"),
                 icon: icon.join().expect("ui icon pipeline thread"),
@@ -227,7 +228,7 @@ impl UiRenderer {
     /// from `draw` so the UI can share the same render pass as the
     /// desktop triangle — on M1 TBDR this avoids an MSAA tile
     /// store+load between passes.
-    pub fn prepare(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, viewport_px: (u32, u32), perf: &PerfTracker) {
+    pub fn prepare(&mut self, device: &gxi::Device, queue: &gxi::Queue, viewport_px: (u32, u32), perf: &PerfTracker) {
         self.has_prepared = false;
         self.any_text = false;
         self.any_bubble_text = false;
@@ -367,7 +368,7 @@ impl UiRenderer {
         self.has_prepared = true;
     }
 
-    pub fn draw<'a>(&'a self, rpass: &mut wgpu::RenderPass<'a>) {
+    pub fn draw(&self, frame: &mut gxi::Frame) {
         if !self.has_prepared {
             return;
         }
@@ -386,17 +387,17 @@ impl UiRenderer {
         //   5. icons, then 6. main glyph text (panel/hint labels) —
         //      the panel and its labels end up above EVERYTHING, bubbles
         //      included.
-        self.lift.draw(rpass);
+        self.lift.draw(frame);
         self.rect
-            .draw_range(rpass, 0..self.bubble_rect_count);
+            .draw_range(frame, 0..self.bubble_rect_count);
         if self.any_bubble_text {
-            self.text.draw_bubbles(rpass);
+            self.text.draw_bubbles(frame);
         }
         self.rect
-            .draw_range(rpass, self.bubble_rect_count..u32::MAX);
-        self.icon.draw(rpass);
+            .draw_range(frame, self.bubble_rect_count..u32::MAX);
+        self.icon.draw(frame);
         if self.any_text {
-            self.text.draw(rpass);
+            self.text.draw(frame);
         }
     }
 }

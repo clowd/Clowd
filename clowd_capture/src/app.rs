@@ -41,7 +41,7 @@ const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
 const MOMENTUM_GAP: Duration = Duration::from_millis(50);
 
 /// One capture cycle's state. The persistent process drops this whole graph
-/// before returning to standby, including its wgpu instance, monitors,
+/// before returning to standby, including its GPU instance, monitors,
 /// windows, surfaces and render workers.
 pub struct App {
     windows: WindowSet,
@@ -52,7 +52,7 @@ pub struct App {
     vd_bounds: ScreenRect,
     startup: Arc<StartupTimings>,
     pinch_monitor: Option<crate::system::PinchMonitor>,
-    instance: Arc<wgpu::Instance>,
+    instance: crate::gxi::Instance,
     /// Consumed in resumed() — each one gets a window + surface handoff.
     worker_setups: Option<Vec<WorkerSetup>>,
     /// Incremented by workers that die without a clean shutdown (and by
@@ -522,7 +522,7 @@ impl App {
     pub fn new(
         settings: Arc<CapturerSettings>,
         startup: Arc<StartupTimings>,
-        instance: Arc<wgpu::Instance>,
+        instance: crate::gxi::Instance,
         monitors: Vec<MonitorInfo>,
         initial_mouse: ScreenPointF,
         worker_setups: Vec<WorkerSetup>,

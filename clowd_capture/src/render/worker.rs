@@ -2,6 +2,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::{mpsc, Arc};
 use std::thread::{self, JoinHandle};
 
+use crate::gxi;
 use crate::render::protocol::{RenderMsg, WorkerInput};
 use crate::system::MonitorInfo;
 use crate::telemetry::startup::StartupTimings;
@@ -10,7 +11,7 @@ use clowd_rust_core::geometry::ScreenRect;
 pub struct RenderWorkerParams {
     pub monitor: MonitorInfo,
     pub monitor_index: usize,
-    pub instance: Arc<wgpu::Instance>,
+    pub instance: gxi::Instance,
     pub startup: Arc<StartupTimings>,
     /// GPU allocator strategy for this worker's device (`--memory-hints`).
     /// Incremented (once, via `ReadyGuard`) when this worker dies without a

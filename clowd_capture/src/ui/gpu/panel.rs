@@ -199,8 +199,8 @@ impl PanelRenderer {
     #[allow(clippy::too_many_arguments)]
     pub fn prepare(
         &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        device: &crate::gxi::Device,
+        queue: &crate::gxi::Queue,
         ts: &mut TextStack,
         state: &UiSharedState,
         this_monitor: &UiMonitor,

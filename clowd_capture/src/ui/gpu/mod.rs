@@ -14,7 +14,6 @@
 pub mod area;
 pub mod debug;
 pub mod glyph;
-pub mod gpu_timing;
 pub mod hints;
 pub mod icon;
 pub mod lift;

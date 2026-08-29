@@ -201,7 +201,7 @@ impl DebugRenderer {
                 hovered_window_obstructed: state.hovered_window_obstructed,
                 ram: readings.ram,
                 vram_total: readings.vram_total,
-                precomp_shaders: crate::gpu::shaders::precompiled_in_use(),
+                precomp_shaders: crate::gxi::precompiled_in_use(),
             };
             data.write_lines(&mut self.line_buf);
             render_panel_inner(

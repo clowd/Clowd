@@ -1,4 +1,5 @@
 use crate::gpu::desktop::{CursorTextures, WindowUniforms};
+use crate::gxi;
 use crate::interaction::OcrState;
 use crate::ocr::anim;
 use clowd_rust_core::geometry::{screen_to_window, RectExt, ScreenPointF, ScreenRect};
@@ -20,8 +21,8 @@ fn grayscale_fade(elapsed: f32) -> f32 {
 }
 
 pub(crate) struct SnapshotState {
-    pub ubo: wgpu::Buffer,
-    pub bind_group: wgpu::BindGroup,
+    pub ubo: gxi::Buffer,
+    pub bind_group: gxi::BindGroup,
     pub uniforms: WindowUniforms,
     pub base_uv_offset_scale: [f32; 4],
 }
@@ -63,7 +64,7 @@ pub(crate) struct FrameState {
 }
 
 impl SnapshotState {
-    pub fn update_uniforms(&mut self, queue: &wgpu::Queue, frame: &FrameState, cursor_textures: Option<&CursorTextures>) {
+    pub fn update_uniforms(&mut self, queue: &gxi::Queue, frame: &FrameState, cursor_textures: Option<&CursorTextures>) {
         let FrameState {
             monitor_bounds,
             mouse_pos,
