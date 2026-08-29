@@ -45,6 +45,17 @@ fn main() {
 
 // ═══════════════════════════════════════════════════════════════════════
 // Windows: WGSL → naga → HLSL → FXC → DXBC
+//
+// Two blob sets are produced per shader:
+//   * {name}_vs.dxbc / {name}_ps.dxbc — SM 5.1, wgpu-hal's register ABI
+//     (sampler heap + sampler-index SRV), consumed via wgpu passthrough
+//     by the wgpu backend (gxi/wgpu/shaders.rs).
+//   * {name}_d11_vs.dxbc / {name}_d11_ps.dxbc — SM 5.0, flat classic
+//     registers for the D3D11 backend (Phase D). Register contract: walk
+//     the shader's BindingEntry table in order with three counters —
+//     UniformBuffer → b0.., Texture2D → t0.., Sampler → s0.. — all
+//     space0. The runtime backend recomputes identical slots from the
+//     same tables (see the note in src/shader_bindings.rs).
 // ═══════════════════════════════════════════════════════════════════════
 
 #[cfg(windows)]
@@ -64,19 +75,168 @@ fn compile_shaders(manifest_dir: &str) {
             .validate(&module)
             .unwrap_or_else(|e| panic!("validation failed for {}: {e}", shader.name));
 
-        let hlsl_options = build_hlsl_options(shader.bindings);
-
-        let vs_hlsl = generate_hlsl(shader.name, &module, &info, &hlsl_options, naga::ShaderStage::Vertex, "vs_main");
-        let ps_hlsl = generate_hlsl(shader.name, &module, &info, &hlsl_options, naga::ShaderStage::Fragment, "fs_main");
-
-        let vs_dxbc = fxc.compile(shader.name, &vs_hlsl.source, &vs_hlsl.entry_point, "vs_5_1");
-        let ps_dxbc = fxc.compile(shader.name, &ps_hlsl.source, &ps_hlsl.entry_point, "ps_5_1");
-
-        std::fs::write(format!("{out_dir}/{}_vs.dxbc", shader.name), &vs_dxbc)
-            .unwrap_or_else(|e| panic!("failed to write {}_vs.dxbc: {e}", shader.name));
-        std::fs::write(format!("{out_dir}/{}_ps.dxbc", shader.name), &ps_dxbc)
-            .unwrap_or_else(|e| panic!("failed to write {}_ps.dxbc: {e}", shader.name));
+        compile_wgpu_set(&fxc, &out_dir, shader, &module, &info);
+        compile_d3d11_set(&fxc, &out_dir, shader, &module, &info);
     }
+}
+
+/// SM 5.1 set for the wgpu D3D12 backend — behavior unchanged from before
+/// the D3D11 set existed.
+#[cfg(windows)]
+fn compile_wgpu_set(fxc: &FxcCompiler, out_dir: &str, shader: &ShaderDef, module: &naga::Module, info: &naga::valid::ModuleInfo) {
+    let hlsl_options = build_hlsl_options(shader.bindings);
+
+    let vs_hlsl = generate_hlsl(shader.name, module, info, &hlsl_options, naga::ShaderStage::Vertex, "vs_main");
+    let ps_hlsl = generate_hlsl(shader.name, module, info, &hlsl_options, naga::ShaderStage::Fragment, "fs_main");
+
+    let vs_dxbc = fxc.compile(shader.name, &vs_hlsl.source, &vs_hlsl.entry_point, "vs_5_1");
+    let ps_dxbc = fxc.compile(shader.name, &ps_hlsl.source, &ps_hlsl.entry_point, "ps_5_1");
+
+    std::fs::write(format!("{out_dir}/{}_vs.dxbc", shader.name), &vs_dxbc)
+        .unwrap_or_else(|e| panic!("failed to write {}_vs.dxbc: {e}", shader.name));
+    std::fs::write(format!("{out_dir}/{}_ps.dxbc", shader.name), &ps_dxbc)
+        .unwrap_or_else(|e| panic!("failed to write {}_ps.dxbc: {e}", shader.name));
+}
+
+/// SM 5.0 set for the D3D11 backend. naga 30's HLSL backend has no classic
+/// sampler-register mode — it unconditionally emits a 2048-entry sampler
+/// heap plus a StructuredBuffer of sampler indices (register-space syntax
+/// FXC rejects below SM 5.1) — so the generated HLSL is deterministically
+/// patched back to `SamplerState name : register(sN);` before FXC. The
+/// patch is guarded by hard assertions; any failure dumps the HLSL to
+/// OUT_DIR and panics with the path.
+#[cfg(windows)]
+fn compile_d3d11_set(fxc: &FxcCompiler, out_dir: &str, shader: &ShaderDef, module: &naga::Module, info: &naga::valid::ModuleInfo) {
+    let hlsl_options = build_d3d11_hlsl_options(shader.bindings);
+    let expected_samplers = shader
+        .bindings
+        .iter()
+        .filter(|b| b.kind == ResourceKind::Sampler)
+        .count();
+
+    for (stage, entry_name, suffix, profile) in [
+        (naga::ShaderStage::Vertex, "vs_main", "vs", "vs_5_0"),
+        (naga::ShaderStage::Fragment, "fs_main", "ps", "ps_5_0"),
+    ] {
+        let hlsl = generate_hlsl(shader.name, module, info, &hlsl_options, stage, entry_name);
+        let patched = patch_d3d11_hlsl(shader.name, suffix, &hlsl.source, expected_samplers, out_dir);
+
+        let dxbc = fxc
+            .try_compile(&patched, &hlsl.entry_point, profile)
+            .unwrap_or_else(|err| {
+                let dump = dump_hlsl(out_dir, shader.name, suffix, &patched);
+                panic!(
+                    "FXC compilation failed for {} ({profile} {}):\n{err}\npatched HLSL dumped to {dump}",
+                    shader.name, hlsl.entry_point
+                );
+            });
+
+        std::fs::write(format!("{out_dir}/{}_d11_{suffix}.dxbc", shader.name), &dxbc)
+            .unwrap_or_else(|e| panic!("failed to write {}_d11_{suffix}.dxbc: {e}", shader.name));
+    }
+}
+
+/// Rewrites naga's sampler-heap ABI into classic SM 5.0 sampler registers:
+///   * drops the `SamplerState nagaSamplerHeap[2048]` /
+///     `SamplerComparisonState nagaComparisonSamplerHeap[2048]` declarations,
+///   * drops the `StructuredBuffer<uint> nagaGroup*SamplerIndexArray`
+///     declaration (its scratch t# register is never referenced again),
+///   * replaces each
+///     `static const SamplerState NAME = nagaSamplerHeap[nagaGroup…SamplerIndexArray[R]];`
+///     with `SamplerState NAME : register(sR);` — R is the literal we put in
+///     the sampler's BindTarget, i.e. the flat s# slot.
+#[cfg(windows)]
+fn patch_d3d11_hlsl(shader_name: &str, stage_suffix: &str, source: &str, expected_samplers: usize, out_dir: &str) -> String {
+    let mut replaced = 0usize;
+    let mut out = String::with_capacity(source.len());
+
+    for line in source.lines() {
+        let trimmed = line.trim_start();
+
+        if trimmed.starts_with("SamplerState nagaSamplerHeap[")
+            || trimmed.starts_with("SamplerComparisonState nagaComparisonSamplerHeap[")
+            || (trimmed.starts_with("StructuredBuffer<uint> nagaGroup") && trimmed.contains("SamplerIndexArray"))
+        {
+            continue;
+        }
+
+        if let Some(rest) = trimmed.strip_prefix("static const SamplerState ") {
+            if let Some(eq_pos) = rest.find(" = nagaSamplerHeap[") {
+                let name = &rest[..eq_pos];
+                let tail = &rest[eq_pos..];
+                let idx_open = tail
+                    .find("SamplerIndexArray[")
+                    .map(|p| p + "SamplerIndexArray[".len())
+                    .unwrap_or_else(|| {
+                        let dump = dump_hlsl(out_dir, shader_name, stage_suffix, source);
+                        panic!("d11 patcher: unrecognized sampler initializer for {shader_name} {stage_suffix}: {line:?}\nHLSL dumped to {dump}");
+                    });
+                let idx_close = tail[idx_open..]
+                    .find(']')
+                    .unwrap_or_else(|| {
+                        let dump = dump_hlsl(out_dir, shader_name, stage_suffix, source);
+                        panic!("d11 patcher: unterminated sampler index for {shader_name} {stage_suffix}: {line:?}\nHLSL dumped to {dump}");
+                    });
+                let register: u32 = tail[idx_open..idx_open + idx_close].parse().unwrap_or_else(|e| {
+                    let dump = dump_hlsl(out_dir, shader_name, stage_suffix, source);
+                    panic!("d11 patcher: non-numeric sampler index for {shader_name} {stage_suffix} ({e}): {line:?}\nHLSL dumped to {dump}");
+                });
+                out.push_str(&format!("SamplerState {name} : register(s{register});\n"));
+                replaced += 1;
+                continue;
+            }
+        }
+
+        out.push_str(line);
+        out.push('\n');
+    }
+
+    // Hard assertions: the patch must have fully eliminated the heap ABI,
+    // and touched exactly as many samplers as the binding table declares
+    // (naga emits every module global into both stages' HLSL).
+    let mut failure = None;
+    if replaced != expected_samplers {
+        failure = Some(format!(
+            "replaced {replaced} sampler declarations, binding table has {expected_samplers}"
+        ));
+    } else if out.contains("nagaSamplerHeap") || out.contains("nagaComparisonSamplerHeap") {
+        failure = Some("nagaSamplerHeap reference survived patching".to_string());
+    } else if out.contains("SamplerIndexArray") {
+        failure = Some("SamplerIndexArray reference survived patching".to_string());
+    } else if register_annotation_has_space(&out) {
+        failure = Some("register-space annotation survived patching (FXC SM 5.0 rejects it)".to_string());
+    }
+    if let Some(msg) = failure {
+        let dump = dump_hlsl(out_dir, shader_name, stage_suffix, &out);
+        panic!("d11 patcher assertion failed for {shader_name} {stage_suffix}: {msg}\npatched HLSL dumped to {dump}");
+    }
+
+    out
+}
+
+/// True if any `register(...)` annotation in the HLSL still names a register
+/// space (naga writes them as `register(xN, spaceM)`). Anchored to the
+/// annotations themselves so a WGSL identifier that happens to be called
+/// `space` elsewhere in the shader can't trip a spurious build panic.
+#[cfg(windows)]
+fn register_annotation_has_space(hlsl: &str) -> bool {
+    let mut rest = hlsl;
+    while let Some(pos) = rest.find("register(") {
+        let after = &rest[pos + "register(".len()..];
+        let annotation = after.split(')').next().unwrap_or(after);
+        if annotation.contains("space") {
+            return true;
+        }
+        rest = after;
+    }
+    false
+}
+
+#[cfg(windows)]
+fn dump_hlsl(out_dir: &str, shader_name: &str, stage_suffix: &str, source: &str) -> String {
+    let path = format!("{out_dir}/{shader_name}_d11_{stage_suffix}_failed.hlsl");
+    std::fs::write(&path, source).unwrap_or_else(|e| panic!("failed to dump HLSL to {path}: {e}"));
+    path
 }
 
 // ── HLSL generation ─────────────────────────────────────────────────
@@ -210,14 +370,12 @@ fn build_hlsl_options(bindings: &[BindingEntry]) -> naga::back::hlsl::Options {
     }
 
     hlsl::Options {
-        // NOTE for the d3d11 backend (Phase D): these blobs are SM 5.1
-        // with wgpu-hal's sampler-heap ABI (the space-255 sampler remap
-        // plus the sampler-index-buffer SRV inserted after the real
-        // textures, below). D3D11 rejects SM 5.1 bytecode and has no
-        // sampler heap, so it needs its own vs_5_0/ps_5_0 emission with
-        // direct s# registers — the shader_bindings tables map cleanly to
-        // b#/t#/s# via the same per-kind counter walk, but the blobs and
-        // their SRV layout must not be reused.
+        // These blobs are SM 5.1 with wgpu-hal's sampler-heap ABI (the
+        // space-255 sampler remap plus the sampler-index-buffer SRV
+        // inserted after the real textures, below). D3D11 rejects SM 5.1
+        // bytecode and has no sampler heap, so it gets its own vs_5_0/
+        // ps_5_0 set with direct s# registers — see compile_d3d11_set /
+        // build_d3d11_hlsl_options. Neither set's blobs are interchangeable.
         shader_model: hlsl::ShaderModel::V5_1,
         binding_map,
         fake_missing_bindings: false,
@@ -248,6 +406,92 @@ fn build_hlsl_options(bindings: &[BindingEntry]) -> naga::back::hlsl::Options {
         ray_query_initialization_tracking: true,
         // mesh/task shader knobs (naga 30). None of our shaders are mesh or task
         // shaders, so these never affect the generated HLSL; keep naga's defaults.
+        task_dispatch_limits: None,
+        mesh_shader_primitive_indices_clamp: true,
+    }
+}
+
+// ── D3D11 HLSL binding map construction ─────────────────────────────
+// Flat classic-register scheme derived from the BindingEntry table order:
+// UniformBuffer → b0.., Texture2D → t0.., Sampler → s0.., all space0.
+// This is the contract the Phase D d3d11 backend recomputes at runtime
+// from the same tables — see the note in src/shader_bindings.rs.
+
+#[cfg(windows)]
+fn build_d3d11_hlsl_options(bindings: &[BindingEntry]) -> naga::back::hlsl::Options {
+    use naga::back::hlsl;
+    use std::collections::BTreeMap;
+
+    let flat = |register: u32| hlsl::BindTarget {
+        space: 0,
+        register,
+        binding_array_size: None,
+        dynamic_storage_buffer_offsets_index: None,
+        restrict_indexing: false,
+    };
+
+    let mut binding_map = hlsl::BindingMap::default();
+    let mut sampler_buffer_binding_map = hlsl::SamplerIndexBufferBindingMap::default();
+
+    let mut cbv_register: u32 = 0;
+    let mut srv_register: u32 = 0;
+    let mut sampler_register: u32 = 0;
+
+    for entry in bindings {
+        let rb = naga::ResourceBinding {
+            group: 0,
+            binding: entry.binding,
+        };
+        match entry.kind {
+            ResourceKind::UniformBuffer => {
+                binding_map.insert(rb, flat(cbv_register));
+                cbv_register += 1;
+            }
+            ResourceKind::Texture2D => {
+                binding_map.insert(rb, flat(srv_register));
+                srv_register += 1;
+            }
+            ResourceKind::Sampler => {
+                // naga writes this register as the literal subscript of the
+                // sampler-index array — the patcher lifts it back out as the
+                // s# slot, so it IS the flat sampler register.
+                binding_map.insert(rb, flat(sampler_register));
+                sampler_register += 1;
+            }
+        }
+    }
+
+    if sampler_register > 0 {
+        // Scratch SRV register above our real textures for naga's
+        // sampler-index StructuredBuffer; the patcher deletes its
+        // declaration, so it never reaches FXC.
+        sampler_buffer_binding_map.insert(
+            hlsl::SamplerIndexBufferKey {
+                group: 0,
+            },
+            flat(srv_register),
+        );
+    }
+
+    hlsl::Options {
+        shader_model: hlsl::ShaderModel::V5_0,
+        binding_map,
+        fake_missing_bindings: false,
+        special_constants_binding: None,
+        immediates_target: None,
+        // Only feeds the heap declarations the patcher deletes; the values
+        // never reach FXC.
+        sampler_heap_target: hlsl::SamplerHeapBindTargets {
+            standard_samplers: flat(0),
+            comparison_samplers: flat(2048),
+        },
+        sampler_buffer_binding_map,
+        dynamic_storage_buffer_offsets_targets: BTreeMap::new(),
+        external_texture_binding_map: BTreeMap::new(),
+        zero_initialize_workgroup_memory: true,
+        restrict_indexing: true,
+        force_loop_bounding: true,
+        ray_query_initialization_tracking: true,
         task_dispatch_limits: None,
         mesh_shader_primitive_indices_clamp: true,
     }
@@ -324,6 +568,11 @@ impl FxcCompiler {
     }
 
     fn compile(&self, shader_name: &str, hlsl_source: &str, entry_point: &str, profile: &str) -> Vec<u8> {
+        self.try_compile(hlsl_source, entry_point, profile)
+            .unwrap_or_else(|err| panic!("FXC compilation failed for {shader_name} ({profile} {entry_point}):\n{err}"))
+    }
+
+    fn try_compile(&self, hlsl_source: &str, entry_point: &str, profile: &str) -> Result<Vec<u8>, String> {
         let entry_cstr = std::ffi::CString::new(entry_point).unwrap();
         let profile_cstr = std::ffi::CString::new(profile).unwrap();
 
@@ -354,7 +603,7 @@ impl FxcCompiler {
             } else {
                 format!("HRESULT 0x{:08x}", hr as u32)
             };
-            panic!("FXC compilation failed for {shader_name} ({profile} {entry_point}):\n{err_msg}");
+            return Err(err_msg);
         }
 
         let result = unsafe { (*code).data().to_vec() };
@@ -362,6 +611,6 @@ impl FxcCompiler {
         if !errors.is_null() {
             unsafe { (*errors).release() };
         }
-        result
+        Ok(result)
     }
 }

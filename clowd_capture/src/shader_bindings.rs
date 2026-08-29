@@ -8,6 +8,15 @@
 //     `gxi::ShaderId::bindings`), which derives each backend's bind
 //     layouts from these same tables.
 // Update here when shader bindings change.
+//
+// D3D11 register contract: the precompiled `{name}_d11_vs.dxbc` /
+// `{name}_d11_ps.dxbc` blobs (SM 5.0, built by build.rs alongside the
+// SM 5.1 wgpu set) assign registers by walking each shader's table IN
+// ORDER with three independent counters, all space0:
+//   UniformBuffer → b0, b1, ..   Texture2D → t0, t1, ..   Sampler → s0, s1, ..
+// The d3d11 backend must recompute slots with this exact walk at runtime
+// (no extra metadata is emitted) so its Set*ShaderResources /
+// Set*ConstantBuffers / Set*Samplers calls land where the blobs expect.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResourceKind {
