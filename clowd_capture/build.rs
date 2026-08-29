@@ -9,8 +9,11 @@
 const SHARED_MANIFEST: &str = "../clowd_rust_core/app.manifest";
 
 // Windows precompiles the capture shaders (WGSL → naga → HLSL → FXC → DXBC)
-// and the binary consumes the blobs via wgpu passthrough — no naga or FXC on
-// user machines (gpu/shaders.rs). macOS compiles WGSL at runtime instead: a
+// and the binary consumes the blobs directly — the shipped d3d11 backend
+// feeds the SM 5.0 set to Create{Vertex,Pixel}Shader (src/gxi/d3d11/
+// shaders.rs), and the `backend-wgpu` parity build passes the SM 5.1 set
+// through wgpu (src/gxi/wgpu/shaders.rs) — so no naga or FXC runs on user
+// machines. macOS compiles WGSL at runtime instead: a
 // metallib is pinned to the Metal language version it was built against,
 // which caused too many compatibility problems across supported macOS
 // versions.

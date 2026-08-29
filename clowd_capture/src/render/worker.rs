@@ -13,7 +13,6 @@ pub struct RenderWorkerParams {
     pub monitor_index: usize,
     pub instance: gxi::Instance,
     pub startup: Arc<StartupTimings>,
-    /// GPU allocator strategy for this worker's device (`--memory-hints`).
     /// Incremented (once, via `ReadyGuard`) when this worker dies without a
     /// clean shutdown, so the app's show gate (`ready + failed >= expected`)
     /// can never deadlock on a dead worker.

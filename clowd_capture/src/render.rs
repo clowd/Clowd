@@ -605,7 +605,11 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     if bd.width > max_dim || bd.height > max_dim || bd.width == 0 || bd.height == 0 {
                         continue;
                     }
-                    let texture = gpu.device.create_texture_with_data(
+                    // Fallible: this runs mid-loop with the fail guard
+                    // long disarmed, and the texture is an optional
+                    // cosmetic — an OOM on a huge desktop must be a
+                    // logged skip, not a dead render worker.
+                    let texture = gpu.device.try_create_texture_with_data(
                         &gpu.queue,
                         &TextureDesc {
                             label: "blurred desktop texture",
@@ -615,14 +619,18 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         },
                         &bd.bgra,
                     );
-                    blurred_desktop = Some(texture);
+                    match texture {
+                        Ok(t) => blurred_desktop = Some(t),
+                        Err(e) => error!("blurred desktop texture creation failed (skipping): {e:#}"),
+                    }
                 }
                 Ok(RenderMsg::PeekImage(peek)) => {
                     let max_dim = gpu.device.max_texture_dimension_2d();
                     if peek.width > max_dim || peek.height > max_dim || peek.width == 0 || peek.height == 0 {
                         continue;
                     }
-                    let texture = gpu.device.create_texture_with_data(
+                    // Fallible for the same reason as BlurredDesktop above.
+                    let texture = match gpu.device.try_create_texture_with_data(
                         &gpu.queue,
                         &TextureDesc {
                             label: "peek window texture",
@@ -631,7 +639,13 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                             format: TexFormat::Bgra8Unorm,
                         },
                         &peek.bgra,
-                    );
+                    ) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            error!("peek window texture creation failed (skipping): {e:#}");
+                            continue;
+                        }
+                    };
                     peek_textures.insert(
                         peek.window_index,
                         PeekTextureEntry {

@@ -32,11 +32,12 @@ pub use surface::{BackdropImage, Surface, SurfaceViews};
 pub use timing::GpuTimings;
 
 /// Non-sRGB format used by every pipeline and surface — the DXGI spelling
-/// of the wgpu backend's `Bgra8Unorm`. Universally supported as a
-/// flip-model swapchain format on every D3D11 runtime.
+/// of the shared policy const in `gxi/types.rs` (`Bgra8Unorm`), derived
+/// through this backend's own translator so it cannot diverge from the
+/// wgpu backend's. Universally supported as a flip-model swapchain format
+/// on every D3D11 runtime.
 ///
 /// Private for the same reason as the wgpu backend's `SURFACE_FORMAT`:
 /// the type is backend-specific, and code outside `src/gxi/` must never
 /// bind to it.
-const SURFACE_FORMAT: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT =
-    windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
+const SURFACE_FORMAT: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT = device::texture_format(crate::gxi::types::SURFACE_FORMAT);

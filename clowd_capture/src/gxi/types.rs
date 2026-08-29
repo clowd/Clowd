@@ -54,7 +54,7 @@ impl ShaderId {
 
     /// The shader's binding table — binding index, resource kind and stage
     /// visibility per slot. Backends derive their bind layouts from this
-    /// (wgpu: `BindGroupLayout`; d3d11 later: b#/t#/s# register slots), and
+    /// (wgpu: `BindGroupLayout`; d3d11: b#/t#/s# register slots), and
     /// `build.rs` derives the DXBC register assignment from the same
     /// consts, so the register contract cannot drift.
     pub const fn bindings(self) -> &'static [BindingEntry] {
@@ -70,7 +70,7 @@ impl ShaderId {
 }
 
 /// Fixed-function blend state, one of the three combinations the overlay
-/// actually uses. (Backends translate; d3d11 will map these to the three
+/// actually uses. (Backends translate; d3d11 maps these to the three
 /// `ID3D11BlendState` objects.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlendMode {
@@ -95,6 +95,13 @@ pub enum TexFormat {
     Rgba8UnormSrgb,
     R8Unorm,
 }
+
+/// Shared surface policy: surfaces and every pipeline's color target are
+/// BGRA8 non-sRGB. Each backend derives its private, native-typed
+/// `SURFACE_FORMAT` from this through its own `TexFormat` translator
+/// (d3d11 `texture_format()`, wgpu `texture_format()`), so the two
+/// spellings cannot silently diverge.
+pub const SURFACE_FORMAT: TexFormat = TexFormat::Bgra8Unorm;
 
 impl TexFormat {
     pub const fn bytes_per_pixel(self) -> u32 {
@@ -204,15 +211,27 @@ pub enum AcquireResult {
     Reconfigured,
     /// The device itself is gone. Not produced by the wgpu backend (wgpu
     /// folds device loss into surface errors handled above); the d3d11
-    /// backend will map `DXGI_ERROR_DEVICE_REMOVED/RESET` here so the
-    /// worker can exit via its fail path.
-    #[allow(dead_code)] // constructed only by the d3d11 backend (Phase D)
+    /// backend maps `DXGI_ERROR_DEVICE_REMOVED/RESET` here (in
+    /// `Surface::acquire`) so the worker can exit via its fail path.
+    #[allow(dead_code)] // constructed only by the d3d11 backend
     DeviceLost,
 }
 
 /// Progress callbacks out of `Device::create`, so the caller can stamp its
 /// startup-telemetry marks without the backend depending on the telemetry
 /// types.
+///
+/// The marks keep their ORDER across backends but not their cost split,
+/// so read per-stage deltas in the startup report backend-aware: on wgpu,
+/// adapter selection (`request_adapter`) does real driver work and device
+/// creation is a second driver call, splitting the cost across both
+/// deltas; on d3d11, adapter selection is pure DXGI enumeration
+/// (microseconds) and ALL driver work lands in the `AdapterSelected` →
+/// `DeviceReady` delta (`prep_device`). Likewise `instance_created` is
+/// always ~0 on d3d11 (its `Instance` is an empty token; the DXGI factory
+/// is created inside `Device::create` on the worker thread). Compare
+/// totals (`prep_start` → `prep_pipelines`) when A/B-ing across backends,
+/// not columns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CreateMark {
     /// The adapter has been selected (`prep_adapter`).
