@@ -130,3 +130,40 @@ pub fn finalize_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<desktop::D
         snapshot,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Headless smoke test: create a real device on the active backend and
+    /// compile every production pipeline. On D3D11 this validates the
+    /// precompiled SM 5.0 blobs, the input layouts against each VS
+    /// signature, and the blend/rasterizer state setup — the failure modes
+    /// that otherwise only surface on the first live overlay frame. Skips
+    /// (rather than fails) on machines with no usable GPU so CI runners
+    /// without an adapter stay green.
+    #[test]
+    fn create_device_and_all_pipelines() {
+        let instance = gxi::Instance::new();
+        let (device, _queue) = match gxi::Device::create(&instance, None, |_| {}) {
+            Ok(pair) => pair,
+            Err(err) => {
+                eprintln!("skipping: no usable GPU device ({err:#})");
+                return;
+            }
+        };
+
+        let _desktop = device.create_pipeline(&PipelineDesc {
+            label: "desktop pipeline (test)",
+            shader: ShaderId::Desktop,
+            vertex: None,
+            blend: BlendMode::Replace,
+        });
+        let _peek = create_peek_gpu(&device);
+        let _rect = crate::ui::gpu::rect::RectPipeline::new(&device);
+        let _icon = crate::ui::gpu::icon::IconPipeline::new(&device);
+        let _lift = crate::ui::gpu::lift::LiftPipeline::new(&device);
+        let _atlas = crate::ui::gpu::glyph::GlyphAtlas::new(&device);
+        let _glyphs = crate::ui::gpu::glyph::GlyphRenderer::new(&device);
+    }
+}
