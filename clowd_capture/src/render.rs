@@ -46,7 +46,7 @@ pub const MSAA_SAMPLES: u32 = 1;
 /// is a no-op there (no `UiSharedState` exists until after the visible
 /// latch, so `prepare` stages nothing) and the peek quad needs a hovered
 /// window, which needs a visible overlay. So the whole UI stack — three
-/// pipelines, glyphon's atlas + text renderer, ~2.4 MB of embedded fonts
+/// pipelines, the glyph atlas + text renderers, ~2.4 MB of embedded fonts
 /// into fontdb, 11 usvg parses — plus the peek pipeline used to sit on the
 /// critical path buying nothing: ~185 ms cold on macOS, 15-60 ms on every
 /// Windows launch.
@@ -72,12 +72,11 @@ struct DeferredStack {
 /// Start the deferred build. Call immediately after Stage A; poll it from
 /// the render loop (never block on it before the first visible frames).
 ///
-/// `Device`/`Queue` are refcounted handles, so the builder gets its own
-/// clones and the worker thread keeps using the originals meanwhile.
+/// `Device` is a refcounted handle, so the builder gets its own clone and
+/// the worker thread keeps using the original meanwhile.
 #[allow(clippy::too_many_arguments)]
 fn spawn_deferred_stack(
     device: wgpu::Device,
-    queue: wgpu::Queue,
     this_monitor: UiMonitor,
     monitor_index: usize,
     monitor_name: String,
@@ -115,7 +114,7 @@ fn spawn_deferred_stack(
                     crate::system::lower_thread_priority();
                     UiPipelines::build_parallel(&device, SURFACE_FORMAT)
                 });
-                let text_stack = TextStack::new(&device, &queue, SURFACE_FORMAT);
+                let text_stack = TextStack::new(&device, SURFACE_FORMAT);
                 mark(|t| &t.prep_fonts);
                 let text = UiText::new(text_stack);
                 (
@@ -303,7 +302,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // front of any of them.
     let deferred = spawn_deferred_stack(
         bundle.device.clone(),
-        bundle.queue.clone(),
         this_monitor,
         monitor_index,
         monitor_name,

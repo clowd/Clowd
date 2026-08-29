@@ -282,3 +282,10 @@ shader_fn!(
     "/ui_lift_vs.dxbc",
     "/ui_lift_ps.dxbc"
 );
+shader_fn!(
+    ui_text,
+    "ui_text",
+    "../../shaders/ui_text.wgsl",
+    "/ui_text_vs.dxbc",
+    "/ui_text_ps.dxbc"
+);

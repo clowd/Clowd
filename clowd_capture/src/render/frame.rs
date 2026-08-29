@@ -98,9 +98,6 @@ pub(crate) fn draw_once(
     if let (Some(gt), Some(id)) = (gpu_timing, slot_id) {
         gt.after_submit(id);
     }
-    if let Some(ui) = ui_renderer.as_mut() {
-        ui.trim();
-    }
     let draw = t_draw_start.elapsed();
 
     let t_present_start = Instant::now();

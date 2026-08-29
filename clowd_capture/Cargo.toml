@@ -26,7 +26,7 @@ bytemuck = { workspace = true, features = ["derive"] }
 usvg.workspace = true
 resvg.workspace = true
 etagere.workspace = true
-glyphon.workspace = true
+cosmic-text.workspace = true
 arboard.workspace = true
 rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }

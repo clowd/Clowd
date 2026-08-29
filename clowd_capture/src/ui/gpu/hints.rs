@@ -1,4 +1,4 @@
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
+use crate::ui::gpu::text::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 use crate::ui::components::hints::layout::{
     compute_color_hint, compute_cursor_hint, compute_monitor_hint, compute_monitor_hint_top, compute_scroll_pick_hint, HintLayout,
@@ -669,7 +669,6 @@ impl HintsRenderer {
                     bottom: vh,
                 },
                 default_color: Color::rgba(p.color[0], p.color[1], p.color[2], a),
-                custom_glyphs: &[],
             }
         }));
     }

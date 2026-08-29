@@ -55,10 +55,21 @@ pub const LIFT_BINDINGS: &[BindingEntry] = &[
     BindingEntry { binding: 0, kind: ResourceKind::UniformBuffer, vertex: true,  fragment: false },
 ];
 
+// ui_text.wgsl: Params uniform (vertex), color + mask glyph atlases (the
+// VS calls textureDimensions on them, the FS samples them), nearest
+// sampler. See `GlyphAtlas` in ui/gpu/glyph.rs.
+pub const TEXT_BINDINGS: &[BindingEntry] = &[
+    BindingEntry { binding: 0, kind: ResourceKind::UniformBuffer, vertex: true,  fragment: false },
+    BindingEntry { binding: 1, kind: ResourceKind::Texture2D,     vertex: true,  fragment: true  },
+    BindingEntry { binding: 2, kind: ResourceKind::Texture2D,     vertex: true,  fragment: true  },
+    BindingEntry { binding: 3, kind: ResourceKind::Sampler,       vertex: false, fragment: true  },
+];
+
 pub const ALL_SHADERS: &[ShaderDef] = &[
     ShaderDef { name: "desktop", wgsl_path: "shaders/desktop.wgsl", bindings: DESKTOP_BINDINGS },
     ShaderDef { name: "peek",    wgsl_path: "shaders/peek.wgsl",    bindings: PEEK_BINDINGS },
     ShaderDef { name: "ui_rect", wgsl_path: "shaders/ui_rect.wgsl", bindings: RECT_BINDINGS },
     ShaderDef { name: "ui_icon", wgsl_path: "shaders/ui_icon.wgsl", bindings: ICON_BINDINGS },
     ShaderDef { name: "ui_lift", wgsl_path: "shaders/ui_lift.wgsl", bindings: LIFT_BINDINGS },
+    ShaderDef { name: "ui_text", wgsl_path: "shaders/ui_text.wgsl", bindings: TEXT_BINDINGS },
 ];

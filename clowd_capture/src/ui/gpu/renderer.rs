@@ -2,7 +2,7 @@
 //!
 //! One instance per render thread. Every frame the caller first invokes
 //! [`UiRenderer::prepare`] to decide what belongs on this monitor and
-//! upload all per-frame GPU data (rect/svg instance buffers, glyphon
+//! upload all per-frame GPU data (rect/svg instance buffers, glyph
 //! shape+atlas), then hands the renderer an open `RenderPass` via
 //! [`UiRenderer::draw`]. The two-phase split lets the caller fold the UI
 //! draw into the same render pass as the desktop triangle, avoiding an
@@ -12,11 +12,11 @@
 //! bubble sandwich):
 //!   1. `lift` pipeline: the OCR scanning sweep.
 //!   2. `rect` pipeline, LEADING range: OCR bubble pills + shadows.
-//!   3. glyphon bubble renderer: the bubbles' recognized-text glyphs.
+//!   3. bubble glyph renderer: the bubbles' recognized-text glyphs.
 //!   4. `rect` pipeline, TRAILING range: backgrounds, borders, shadow,
 //!      color swatch, area indicator brackets, label underlines.
 //!   5. `svg` pipeline: button icons (lyon-tessellated meshes).
-//!   6. glyphon text: labels, tips body, area-indicator digits.
+//!   6. main glyph text: labels, tips body, area-indicator digits.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -31,7 +31,7 @@ use crate::ui::gpu::lift::LiftPipeline;
 use crate::ui::gpu::ocr_bubbles::OcrBubblesRenderer;
 use crate::ui::gpu::panel::PanelRenderer;
 use crate::ui::gpu::rect::{RectInstance, RectPipeline};
-use crate::ui::gpu::text::TextStack;
+use crate::ui::gpu::text::{TextArea, TextStack};
 use crate::ui::gpu::tips::TipsRenderer;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 
@@ -59,7 +59,7 @@ pub struct UiRenderer {
     /// nothing to render (no state yet), so `draw()` becomes a no-op.
     has_prepared: bool,
     /// Set by `prepare()` when at least one text area was shaped — tells
-    /// `draw()` whether to issue the glyphon draw.
+    /// `draw()` whether to issue the main text draw.
     any_text: bool,
     /// Set by `prepare()` when at least one OCR bubble text area was
     /// staged on the dedicated bubble renderer. MUST gate the bubble text
@@ -78,12 +78,6 @@ pub struct UiRenderer {
     /// Viewport the armed preparation was made for — a resize invalidates
     /// the retained vertices, so the fast path requires it unchanged.
     bubble_static_viewport: (u32, u32),
-    /// Set per frame: this frame is RE-ISSUING the bubble renderer's
-    /// retained vertices instead of re-preparing them. While true, `trim`
-    /// must be (and is) skipped — trim evicts every atlas entry no
-    /// prepare referenced since the last trim, which would tear the
-    /// retained vertices' glyphs out from under them.
-    bubble_reuse_active: bool,
     /// Animation clock origin for UI effects (border trail).
     start_time: Instant,
 }
@@ -135,7 +129,7 @@ impl UiPipelines {
     }
 }
 
-/// The glyphon stack plus every component whose construction needs it —
+/// The text stack plus every component whose construction needs it —
 /// they all allocate their `CachedBuffer`s out of the font system, and the
 /// panel additionally parses its 11 icon SVGs. Kept together because the
 /// `&mut TextStack` borrow makes them inherently sequential, so they are
@@ -206,7 +200,6 @@ impl UiRenderer {
             bubble_rect_count: 0,
             bubble_static_prepared: false,
             bubble_static_viewport: (0, 0),
-            bubble_reuse_active: false,
             start_time: Instant::now(),
         }
     }
@@ -228,7 +221,7 @@ impl UiRenderer {
     }
 
     /// Stage all per-frame work: component visibility decisions,
-    /// rect/svg instance uploads, glyphon shape + atlas prep. After
+    /// rect/svg instance uploads, glyph shape + atlas prep. After
     /// `prepare` returns the caller may open a render pass and invoke
     /// [`UiRenderer::draw`] to issue the UI draw calls into it. Split
     /// from `draw` so the UI can share the same render pass as the
@@ -239,7 +232,6 @@ impl UiRenderer {
         self.any_text = false;
         self.any_bubble_text = false;
         self.bubble_rect_count = 0;
-        self.bubble_reuse_active = false;
 
         let now = Instant::now();
         let dt = self
@@ -326,29 +318,23 @@ impl UiRenderer {
         // Static-Lifted fast path: once the reveal has settled every
         // frame's staging is byte-identical (the animation is a pure
         // clamped function of elapsed time), so the previous frame's
-        // prepared vertices are simply re-issued — glyphon renderers
+        // prepared vertices are simply re-issued — the glyph renderers
         // retain them — instead of re-shaping and re-uploading the whole
         // page per frame per monitor (a dense page is thousands of glyphs,
         // at up to whatever this monitor's refresh rate is). Correctness
-        // leans on two things: the viewport is unchanged, and `trim` is
-        // suppressed while the path is active (see [`Self::trim`]).
-        self.bubble_reuse_active = bubbles_at_rest && self.bubble_static_prepared && self.bubble_static_viewport == viewport_px;
-        if self.bubble_reuse_active {
+        // leans on two things: the viewport is unchanged, and the glyph
+        // atlas never evicts (it only grows in place, or resets — and a
+        // reset disarms the path below).
+        let bubble_reuse_active = bubbles_at_rest && self.bubble_static_prepared && self.bubble_static_viewport == viewport_px;
+        if bubble_reuse_active {
             self.any_bubble_text = true;
         } else {
-            let mut bubble_text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(16);
+            let mut bubble_text_areas: Vec<TextArea<'_>> = Vec::with_capacity(16);
             self.ocr_bubbles
                 .text_areas(&mut bubble_text_areas);
-            self.any_bubble_text = match self
+            self.any_bubble_text = self
                 .text
-                .prepare_bubbles(device, queue, &bubble_text_areas)
-            {
-                Ok(b) => b,
-                Err(e) => {
-                    log::warn!("glyphon bubble prepare error: {:?}", e);
-                    false
-                }
-            };
+                .prepare_bubbles(device, queue, &bubble_text_areas);
             // Arm the fast path only off a frame that actually staged
             // bubble text at rest; an empty staging (no bubbles reach this
             // monitor) keeps taking the cheap empty prepare instead.
@@ -356,7 +342,7 @@ impl UiRenderer {
             self.bubble_static_viewport = viewport_px;
         }
 
-        let mut text_areas: Vec<glyphon::TextArea<'_>> = Vec::with_capacity(48);
+        let mut text_areas: Vec<TextArea<'_>> = Vec::with_capacity(48);
         self.area
             .text_areas(viewport_px, &mut text_areas);
         self.hints
@@ -367,13 +353,17 @@ impl UiRenderer {
             .text_areas(viewport_px, &mut text_areas);
         self.debug
             .text_areas(viewport_px, &mut text_areas);
-        self.any_text = match self.text.prepare(device, queue, &text_areas) {
-            Ok(b) => b,
-            Err(e) => {
-                log::warn!("glyphon prepare error: {:?}", e);
-                false
-            }
-        };
+        self.any_text = self.text.prepare(device, queue, &text_areas);
+
+        // An atlas cap-hit inside either prepare above cleared the atlas:
+        // every retained instance buffer may now reference recycled
+        // regions. Disarm the fast path (next frame re-prepares the
+        // bubbles) and skip the bubble draw this frame rather than sample
+        // stale texels.
+        if self.text.take_atlas_reset() {
+            self.bubble_static_prepared = false;
+            self.any_bubble_text = false;
+        }
         self.has_prepared = true;
     }
 
@@ -388,43 +378,25 @@ impl UiRenderer {
         //      everything below.
         //   2. rect LEADING range — OCR bubble pills + shadows, over the
         //      dimmed desktop.
-        //   3. bubble glyphs — the recognized text, on its own glyphon
+        //   3. bubble glyphs — the recognized text, on its own glyph
         //      renderer precisely so it can be issued here: above its
         //      pill backgrounds, below the panel's rects.
         //   4. rect TRAILING range — hint pills, the button panel: covers
         //      any bubble it overlaps.
-        //   5. icons, then 6. main glyphon text (panel/hint labels) —
+        //   5. icons, then 6. main glyph text (panel/hint labels) —
         //      the panel and its labels end up above EVERYTHING, bubbles
         //      included.
         self.lift.draw(rpass);
         self.rect
             .draw_range(rpass, 0..self.bubble_rect_count);
         if self.any_bubble_text {
-            if let Err(e) = self.text.draw_bubbles(rpass) {
-                log::warn!("glyphon bubble render error: {:?}", e);
-            }
+            self.text.draw_bubbles(rpass);
         }
         self.rect
             .draw_range(rpass, self.bubble_rect_count..u32::MAX);
         self.icon.draw(rpass);
         if self.any_text {
-            if let Err(e) = self.text.draw(rpass) {
-                log::warn!("glyphon render error: {:?}", e);
-            }
+            self.text.draw(rpass);
         }
-    }
-
-    pub fn trim(&mut self) {
-        // While the static-Lifted fast path re-issues retained bubble
-        // vertices without re-preparing them (see `prepare`), trim would
-        // evict their glyphs — trim drops every atlas entry no prepare
-        // referenced since the last trim — and the retained vertices
-        // would sample whatever replaced them. Skipping it costs nothing
-        // there: the page is static and the generic warmup pauses during
-        // Lifted, so no new glyphs are entering the atlas anyway.
-        if self.bubble_reuse_active {
-            return;
-        }
-        self.text.trim();
     }
 }

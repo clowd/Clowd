@@ -57,7 +57,7 @@
 //! `dpi_scale`, not this monitor's, so a bubble crossing a mixed-DPI seam
 //! is byte-identical on both halves.
 
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
+use crate::ui::gpu::text::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Wrap};
 
 use crate::interaction::OcrState;
 use crate::ocr::anim;
@@ -100,7 +100,7 @@ const WARMUP_SIZES: &[f32] = &[
 /// Every printable-ASCII glyph, as one line — warmup steps slice it into
 /// [`WARMUP_CHUNK_BYTES`]-char chunks (all ASCII, so byte slicing is
 /// safe). A chunk stays well inside any monitor's width even at the
-/// largest ladder size, which matters because glyphon culls out-of-bounds
+/// largest ladder size, which matters because the glyph renderer culls out-of-bounds
 /// glyphs BEFORE rasterization and would silently defeat the warmup.
 const WARMUP_CHARS: &str = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
 
@@ -197,7 +197,7 @@ pub struct OcrBubblesRenderer {
     /// `clowd_ai` child) runs before OCR is actually used.
     ocr_engaged: bool,
     /// Window-local clip size for the warmup area, captured in `prepare`
-    /// (glyphon culls out-of-bounds glyphs before rasterizing, so the
+    /// (the glyph renderer culls out-of-bounds glyphs before rasterizing, so the
     /// warmup must be staged inside the real viewport).
     warm_bounds: [i32; 2],
 }
@@ -215,7 +215,7 @@ impl OcrBubblesRenderer {
         }
     }
 
-    /// Drop the cached layouts (glyphon Buffers hold shaped-glyph heap
+    /// Drop the cached layouts (cosmic-text Buffers hold shaped-glyph heap
     /// data — a page of recognized text is worth releasing promptly).
     /// Called whenever the mode leaves Lifted. Deliberately does NOT touch
     /// `warm_step`: the caches the warmup filled outlive it.
@@ -234,7 +234,7 @@ impl OcrBubblesRenderer {
     /// finished, every bubble fully risen and opaque — from here on every
     /// frame's staging is byte-identical (the animation is a pure clamped
     /// function of elapsed time), which is what lets `UiRenderer` skip the
-    /// per-frame glyphon re-prepare of the whole page and re-issue its
+    /// per-frame glyph re-prepare of the whole page and re-issue its
     /// retained vertices instead.
     pub fn prepare(
         &mut self,
@@ -456,7 +456,7 @@ impl OcrBubblesRenderer {
     /// docs for the full stacking contract.
     pub fn text_areas<'a>(&'a self, out: &mut Vec<TextArea<'a>>) {
         // This frame's warmup chunk (if any): fully transparent,
-        // positioned inside the viewport so glyphon actually rasterizes
+        // positioned inside the viewport so the glyph renderer actually rasterizes
         // it. One frame on stage is all a chunk needs — the atlas keeps
         // the rasterization.
         out.extend(
@@ -474,7 +474,6 @@ impl OcrBubblesRenderer {
                         bottom: self.warm_bounds[1],
                     },
                     default_color: Color::rgba(255, 255, 255, 0),
-                    custom_glyphs: &[],
                 }),
         );
         out.extend(self.drawn.iter().map(|d| {
@@ -493,7 +492,6 @@ impl OcrBubblesRenderer {
                     bottom: d.bounds[3],
                 },
                 default_color: Color::rgba(TOOLTIP_TEXT_COLOR[0], TOOLTIP_TEXT_COLOR[1], TOOLTIP_TEXT_COLOR[2], a),
-                custom_glyphs: &[],
             }
         }));
     }
@@ -544,7 +542,7 @@ fn estimated_bubble_bounds(lines: &[crate::ocr::OcrLine], region: [f32; 4], dpi:
 }
 
 /// Shape one line and compute its resting pill geometry. Impure only in
-/// that it drives glyphon; every numeric decision is delegated to the pure
+/// that it drives the glyph renderer; every numeric decision is delegated to the pure
 /// helpers below, which carry the tests.
 fn layout_bubble(ts: &mut TextStack, text: &str, line: [f32; 4], region: [f32; 4], dpi: f32) -> BubbleEntry {
     let line_h = line[3] - line[1];
