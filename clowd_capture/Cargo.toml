@@ -16,12 +16,6 @@ serde.workspace = true
 serde_json.workspace = true
 winit.workspace = true
 handy-keys.workspace = true
-# "wgsl" enables the runtime WGSL frontend: the only shader path on macOS.
-# Windows consumes precompiled DXBC via passthrough (see gpu/shaders.rs and
-# build.rs) and never compiles WGSL at runtime, but the frontend feature stays
-# on so the same wgpu build serves both targets.
-wgpu = { workspace = true, features = ["dx12", "metal", "wgsl"] }
-pollster.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 usvg.workspace = true
 resvg.workspace = true
@@ -36,7 +30,26 @@ sentry.workspace = true
 # an abort or segfault inside ONNX Runtime cannot take a capture down, and its tens of MB
 # of embedded models stay out of the overlay's start-up path.
 
+[features]
+# Windows-only parity build of the wgpu (DX12) gxi backend. Windows ships the
+# d3d11 backend (src/gxi/d3d11); CI compiles this feature so the two backends'
+# public surfaces cannot drift. Never enabled in shipped builds.
+backend-wgpu = ["dep:wgpu", "dep:pollster"]
+
+# The wgpu backend is the only backend off-Windows (macOS/Metal; the module
+# cfg in src/gxi/mod.rs is `not(windows)`, so this table matches it exactly).
+# "wgsl" enables the runtime WGSL frontend — the only shader path on macOS.
+[target.'cfg(not(windows))'.dependencies]
+wgpu = { workspace = true, features = ["metal", "wgsl"] }
+pollster.workspace = true
+
 [target.'cfg(windows)'.dependencies]
+# Optional: only the backend-wgpu parity build compiles the wgpu backend on
+# Windows (which consumes precompiled SM 5.1 DXBC via passthrough — see
+# gxi/wgpu/shaders.rs and build.rs — but keeps "wgsl" on for its release
+# fallback path).
+wgpu = { workspace = true, features = ["dx12", "wgsl"], optional = true }
+pollster = { workspace = true, optional = true }
 windows = { workspace = true, features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
@@ -46,6 +59,11 @@ windows = { workspace = true, features = [
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Dxgi",
+    # The d3d11 gxi backend (src/gxi/d3d11): D3D11CreateDevice + resources,
+    # D3D_DRIVER_TYPE/D3D_FEATURE_LEVEL/topology, DXGI formats + swapchain.
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Dxgi_Common",
     "Win32_Storage_Xps",
     "Win32_System_Com",
     # SetThreadPriority / MMCSS / power throttling for the thread tiers
