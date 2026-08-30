@@ -219,19 +219,14 @@ mod tests {
             ],
         );
 
-        // GPU timing: with the master switch on, `GpuTimings::new` must
-        // build on the active backend (headlessly there is no surface to
-        // drive a frame through, so constructibility plus an empty poll
-        // is what this test can pin). No other test reads the switch, so
-        // flipping it here cannot race a parallel test.
-        gxi::set_gpu_timing_enabled(true);
-        let timings = gxi::GpuTimings::new(&device, &queue);
-        gxi::set_gpu_timing_enabled(false);
-        let mut timings = timings.expect("GpuTimings::new returned None with timing enabled");
+        // GPU timing is always on, so `GpuTimings::new` must build on
+        // the active backend (headlessly there is no surface to drive a
+        // frame through, so constructibility plus an empty poll is what
+        // this test can pin).
+        let mut timings = gxi::GpuTimings::new(&device, &queue).expect("GpuTimings::new failed on a healthy device");
         assert!(
             timings.poll_completed(&device).is_empty(),
             "no frames were submitted, so no samples can have landed"
         );
-        assert!(gxi::GpuTimings::new(&device, &queue).is_none(), "timing off must construct nothing");
     }
 }

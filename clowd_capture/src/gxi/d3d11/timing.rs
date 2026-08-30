@@ -1,5 +1,5 @@
-//! GPU-side frame timing via D3D11 timestamp queries. The master switch
-//! lives in `gxi::mod` (`set_gpu_timing_enabled`), backend-agnostic.
+//! GPU-side frame timing via D3D11 timestamp queries. Always on: every
+//! render worker constructs one.
 //!
 //! Per render thread. Maintains a small ring of query triples - one
 //! `D3D11_QUERY_TIMESTAMP_DISJOINT` bracketing a start and an end
@@ -8,9 +8,9 @@
 //! stalled for: an unmeasured frame beats a pipeline bubble).
 //!
 //! Use:
-//!   1. [`GpuTimings::new`] - returns `None` when timing is disabled or
-//!      query creation fails. Callers treat `None` as "no GPU timing
-//!      available" (the debug panel renders `n/a`).
+//!   1. [`GpuTimings::new`] - returns `None` when query creation fails.
+//!      Callers treat `None` as "no GPU timing available" (the debug
+//!      panel renders `n/a`).
 //!   2. `Surface::acquire` calls [`GpuTimings::begin_frame`] under the
 //!      context lock (begin disjoint + start timestamp) and threads the
 //!      returned slot id through `Frame`; `Frame::present` calls
@@ -68,14 +68,11 @@ unsafe impl Send for GpuTimings {}
 unsafe impl Sync for GpuTimings {}
 
 impl GpuTimings {
-    /// `None` when GPU timing is switched off (the default) or the ring's
-    /// queries cannot be created (logged; timestamp queries exist on
-    /// every FL >= 10_0 device, so this is defensive).
+    /// `None` when the ring's queries cannot be created (logged;
+    /// timestamp queries exist on every FL >= 10_0 device, so this is
+    /// defensive).
     pub fn new(device: &Device, queue: &Queue) -> Option<Self> {
         let _ = queue;
-        if !crate::gxi::gpu_timing_enabled() {
-            return None;
-        }
         let mut slots = Vec::with_capacity(RING_SIZE);
         for _ in 0..RING_SIZE {
             slots.push(Slot {

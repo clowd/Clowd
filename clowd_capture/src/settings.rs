@@ -289,15 +289,6 @@ pub struct CliArgs {
     /// last left it.
     #[arg(long, value_name = "PATH")]
     pub save_dir: Option<PathBuf>,
-
-    /// Collect whole-frame GPU timings for the debug panel. Off by
-    /// default. Implemented natively on both backends: Metal reads each
-    /// frame's command-buffer GPUStartTime/GPUEndTime, D3D11 runs a
-    /// timestamp-query ring (see the backends' `timing.rs`). Read once,
-    /// before the render workers start (see
-    /// `gxi::set_gpu_timing_enabled`).
-    #[arg(long)]
-    pub gpu_timing: bool,
 }
 
 impl CliArgs {
