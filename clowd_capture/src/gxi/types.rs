@@ -28,19 +28,6 @@ pub enum ShaderId {
 }
 
 impl ShaderId {
-    /// Used by the wgpu backend's bind-group-layout cache (with
-    /// [`ShaderId::index`] as the slot key); the d3d11 backend has no
-    /// layout objects to cache — it resolves registers per bind group —
-    /// so both are dead there.
-    #[cfg_attr(all(windows, not(feature = "backend-wgpu")), allow(dead_code))]
-    pub const COUNT: usize = 6;
-
-    /// See [`ShaderId::COUNT`].
-    #[cfg_attr(all(windows, not(feature = "backend-wgpu")), allow(dead_code))]
-    pub const fn index(self) -> usize {
-        self as usize
-    }
-
     pub const fn name(self) -> &'static str {
         match self {
             ShaderId::Desktop => "desktop",
@@ -54,9 +41,9 @@ impl ShaderId {
 
     /// The shader's binding table — binding index, resource kind and stage
     /// visibility per slot. Backends derive their bind layouts from this
-    /// (wgpu: `BindGroupLayout`; d3d11: b#/t#/s# register slots), and
-    /// `build.rs` derives the DXBC register assignment from the same
-    /// consts, so the register contract cannot drift.
+    /// (d3d11: b#/t#/s# register slots; metal: buffer/texture/sampler
+    /// slot lists), and `build.rs` derives the DXBC register and MSL slot
+    /// assignment from the same consts, so the contract cannot drift.
     pub const fn bindings(self) -> &'static [BindingEntry] {
         match self {
             ShaderId::Desktop => shader_bindings::DESKTOP_BINDINGS,
@@ -99,7 +86,7 @@ pub enum TexFormat {
 /// Shared surface policy: surfaces and every pipeline's color target are
 /// BGRA8 non-sRGB. Each backend derives its private, native-typed
 /// `SURFACE_FORMAT` from this through its own `TexFormat` translator
-/// (d3d11 `texture_format()`, wgpu `texture_format()`), so the two
+/// (the d3d11 and metal `texture_format()` functions), so the two
 /// spellings cannot silently diverge.
 pub const SURFACE_FORMAT: TexFormat = TexFormat::Bgra8Unorm;
 
@@ -192,9 +179,10 @@ pub enum BindingRes<'a> {
 /// What `Surface::acquire` produced.
 pub enum AcquireResult {
     /// A frame is open (render pass begun, cleared); draw into it and call
-    /// `Frame::present`. Boxed because the wgpu backend's `Frame` is
-    /// ~1.2 KB (`wgpu::RenderPass` dominates) — one heap allocation per
-    /// presented frame, noise next to encoder creation.
+    /// `Frame::present`. Boxed since the wgpu era, when `Frame` was
+    /// ~1.2 KB; today's backends are far smaller, but one heap allocation
+    /// per presented frame is still noise next to encoder creation, so
+    /// the shape stays put.
     Frame(Box<Frame>),
     /// Nothing to draw this iteration (timeout / validation hiccup). Skip
     /// the frame and carry on.
@@ -202,18 +190,22 @@ pub enum AcquireResult {
     /// The surface is occluded. Same handling as [`AcquireResult::Skip`]
     /// in the steady-state loop; frame 0 on macOS retries this for a
     /// bounded window (see `render::present_first_frame`) because the
-    /// early order-front races wgpu's occlusion guard.
-    #[allow(dead_code)] // constructed only by the wgpu backend
+    /// early order-front races the metal backend's occlusion guard.
+    #[cfg_attr(windows, allow(dead_code))] // constructed only by the metal backend
     Occluded,
     /// The swapchain was outdated/lost; the backend has already
-    /// reconfigured it. Skip this frame — the next acquire should succeed.
-    #[allow(dead_code)] // constructed only by the wgpu backend
+    /// reconfigured it. Skip this frame — the next acquire should
+    /// succeed. Currently never constructed: d3d11's flip-model swapchain
+    /// and Metal's CAMetalLayer have no outdated state to report. Kept
+    /// because it documents the acquire contract the render loop already
+    /// handles, and a future backend condition may need it.
+    #[allow(dead_code)]
     Reconfigured,
-    /// The device itself is gone. Not produced by the wgpu backend (wgpu
-    /// folds device loss into surface errors handled above); the d3d11
-    /// backend maps `DXGI_ERROR_DEVICE_REMOVED/RESET` here (in
-    /// `Surface::acquire`) so the worker can exit via its fail path.
-    #[allow(dead_code)] // constructed only by the d3d11 backend
+    /// The device itself is gone. Produced only by the d3d11 backend,
+    /// which maps `DXGI_ERROR_DEVICE_REMOVED/RESET` here (in
+    /// `Surface::acquire`) so the worker can exit via its fail path;
+    /// Metal has no equivalent runtime device-loss signal.
+    #[cfg_attr(target_os = "macos", allow(dead_code))] // constructed only by the d3d11 backend
     DeviceLost,
 }
 
@@ -222,16 +214,16 @@ pub enum AcquireResult {
 /// types.
 ///
 /// The marks keep their ORDER across backends but not their cost split,
-/// so read per-stage deltas in the startup report backend-aware: on wgpu,
-/// adapter selection (`request_adapter`) does real driver work and device
-/// creation is a second driver call, splitting the cost across both
-/// deltas; on d3d11, adapter selection is pure DXGI enumeration
-/// (microseconds) and ALL driver work lands in the `AdapterSelected` →
-/// `DeviceReady` delta (`prep_device`). Likewise `instance_created` is
-/// always ~0 on d3d11 (its `Instance` is an empty token; the DXGI factory
-/// is created inside `Device::create` on the worker thread). Compare
-/// totals (`prep_start` → `prep_pipelines`) when A/B-ing across backends,
-/// not columns.
+/// so read per-stage deltas in the startup report backend-aware: on
+/// d3d11, adapter selection is pure DXGI enumeration (microseconds) and
+/// ALL driver work lands in the `AdapterSelected` → `DeviceReady` delta
+/// (`prep_device`); on metal, `MTLCreateSystemDefaultDevice` does the
+/// driver work *before* the `AdapterSelected` mark, so that same delta
+/// is ~0 instead. Likewise `instance_created` is always ~0 (both
+/// backends' `Instance` is an empty token; d3d11 creates its DXGI
+/// factory inside `Device::create` on the worker thread). Compare totals
+/// (`prep_start` → `prep_pipelines`) when A/B-ing across backends, not
+/// columns.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CreateMark {
     /// The adapter has been selected (`prep_adapter`).

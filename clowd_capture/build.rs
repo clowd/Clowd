@@ -9,15 +9,17 @@
 const SHARED_MANIFEST: &str = "../clowd_rust_core/app.manifest";
 
 // Windows precompiles the capture shaders (WGSL → naga → HLSL → FXC → DXBC)
-// and the binary consumes the blobs directly — the shipped d3d11 backend
-// feeds the SM 5.0 set to Create{Vertex,Pixel}Shader (src/gxi/d3d11/
-// shaders.rs), and the `backend-wgpu` parity build passes the SM 5.1 set
-// through wgpu (src/gxi/wgpu/shaders.rs) — so no naga or FXC runs on user
-// machines. macOS compiles WGSL at runtime instead: a
-// metallib is pinned to the Metal language version it was built against,
-// which caused too many compatibility problems across supported macOS
-// versions.
-#[cfg(windows)]
+// and the binary consumes the blobs directly — the d3d11 backend feeds
+// the SM 5.0 set to Create{Vertex,Pixel}Shader (src/gxi/d3d11/shaders.rs)
+// — so no naga or FXC runs on user machines. macOS precompiles the same
+// WGSL to MSL *source* text instead
+// (WGSL → naga → {name}.metal in OUT_DIR), which the metal backend
+// compiles at runtime with newLibraryWithSource. Source rather than a
+// metallib because a metallib is pinned to the Metal language version it
+// was built against, which caused too many compatibility problems across
+// supported macOS versions; MSL source has no such pin, so naga still
+// never runs on user machines and WGSL stays the single source of truth.
+#[cfg(any(windows, target_os = "macos"))]
 include!("src/shader_bindings.rs");
 
 fn main() {
@@ -44,18 +46,21 @@ fn main() {
 
         compile_shaders(&manifest_dir);
     }
+
+    #[cfg(target_os = "macos")]
+    {
+        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        compile_shaders_msl(&manifest_dir);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // Windows: WGSL → naga → HLSL → FXC → DXBC
 //
-// Two blob sets are produced per shader:
-//   * {name}_vs.dxbc / {name}_ps.dxbc — SM 5.1, wgpu-hal's register ABI
-//     (sampler heap + sampler-index SRV), consumed via wgpu passthrough
-//     by the wgpu backend (gxi/wgpu/shaders.rs).
+// One blob set is produced per shader:
 //   * {name}_d11_vs.dxbc / {name}_d11_ps.dxbc — SM 5.0, flat classic
-//     registers for the D3D11 backend (Phase D). Register contract: walk
-//     the shader's BindingEntry table in order with three counters —
+//     registers for the D3D11 backend. Register contract: walk the
+//     shader's BindingEntry table in order with three counters —
 //     UniformBuffer → b0.., Texture2D → t0.., Sampler → s0.. — all
 //     space0. The runtime backend recomputes identical slots from the
 //     same tables (see the note in src/shader_bindings.rs).
@@ -65,15 +70,6 @@ fn main() {
 fn compile_shaders(manifest_dir: &str) {
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let fxc = FxcCompiler::load();
-
-    // The SM 5.1 wgpu set is only consumed by the wgpu backend
-    // (gxi/wgpu/shaders.rs), which on Windows compiles only under the
-    // `backend-wgpu` parity feature — skip the whole set otherwise
-    // (halves shader-compile work on the default build). rerun-if is
-    // belt-and-braces: a feature flip already changes the build-script
-    // env fingerprint, but stating it keeps the dependency explicit.
-    println!("cargo:rerun-if-env-changed=CARGO_FEATURE_BACKEND_WGPU");
-    let wgpu_backend = std::env::var_os("CARGO_FEATURE_BACKEND_WGPU").is_some();
 
     for shader in ALL_SHADERS {
         let wgsl_path = format!("{}/{}", manifest_dir, shader.wgsl_path);
@@ -87,29 +83,8 @@ fn compile_shaders(manifest_dir: &str) {
             .validate(&module)
             .unwrap_or_else(|e| panic!("validation failed for {}: {e}", shader.name));
 
-        if wgpu_backend {
-            compile_wgpu_set(&fxc, &out_dir, shader, &module, &info);
-        }
         compile_d3d11_set(&fxc, &out_dir, shader, &module, &info);
     }
-}
-
-/// SM 5.1 set for the wgpu D3D12 backend — behavior unchanged from before
-/// the D3D11 set existed.
-#[cfg(windows)]
-fn compile_wgpu_set(fxc: &FxcCompiler, out_dir: &str, shader: &ShaderDef, module: &naga::Module, info: &naga::valid::ModuleInfo) {
-    let hlsl_options = build_hlsl_options(shader.bindings);
-
-    let vs_hlsl = generate_hlsl(shader.name, module, info, &hlsl_options, naga::ShaderStage::Vertex, "vs_main");
-    let ps_hlsl = generate_hlsl(shader.name, module, info, &hlsl_options, naga::ShaderStage::Fragment, "fs_main");
-
-    let vs_dxbc = fxc.compile(shader.name, &vs_hlsl.source, &vs_hlsl.entry_point, "vs_5_1");
-    let ps_dxbc = fxc.compile(shader.name, &ps_hlsl.source, &ps_hlsl.entry_point, "ps_5_1");
-
-    std::fs::write(format!("{out_dir}/{}_vs.dxbc", shader.name), &vs_dxbc)
-        .unwrap_or_else(|e| panic!("failed to write {}_vs.dxbc: {e}", shader.name));
-    std::fs::write(format!("{out_dir}/{}_ps.dxbc", shader.name), &ps_dxbc)
-        .unwrap_or_else(|e| panic!("failed to write {}_ps.dxbc: {e}", shader.name));
 }
 
 /// SM 5.0 set for the D3D11 backend. naga 30's HLSL backend has no classic
@@ -302,129 +277,6 @@ fn generate_hlsl(
     }
 }
 
-// ── HLSL binding map construction ───────────────────────────────────
-// Replicates wgpu-hal's create_pipeline_layout register assignment
-// for our simple case: single bind group, no dynamic offsets, no immediates.
-
-#[cfg(windows)]
-fn build_hlsl_options(bindings: &[BindingEntry]) -> naga::back::hlsl::Options {
-    use naga::back::hlsl;
-    use std::collections::BTreeMap;
-
-    let mut binding_map = hlsl::BindingMap::default();
-    let mut sampler_buffer_binding_map = hlsl::SamplerIndexBufferBindingMap::default();
-
-    let mut cbv_register: u32 = 0;
-    let mut srv_register: u32 = 0;
-    let mut sampler_index: u32 = 0;
-    let mut has_samplers = false;
-
-    for entry in bindings {
-        let rb = naga::ResourceBinding {
-            group: 0,
-            binding: entry.binding,
-        };
-        match entry.kind {
-            ResourceKind::UniformBuffer => {
-                binding_map.insert(
-                    rb,
-                    hlsl::BindTarget {
-                        space: 0,
-                        register: cbv_register,
-                        binding_array_size: None,
-                        dynamic_storage_buffer_offsets_index: None,
-                        restrict_indexing: false,
-                    },
-                );
-                cbv_register += 1;
-            }
-            ResourceKind::Texture2D => {
-                binding_map.insert(
-                    rb,
-                    hlsl::BindTarget {
-                        space: 0,
-                        register: srv_register,
-                        binding_array_size: None,
-                        dynamic_storage_buffer_offsets_index: None,
-                        restrict_indexing: false,
-                    },
-                );
-                srv_register += 1;
-            }
-            ResourceKind::Sampler => {
-                binding_map.insert(
-                    rb,
-                    hlsl::BindTarget {
-                        space: 255,
-                        register: sampler_index,
-                        binding_array_size: None,
-                        dynamic_storage_buffer_offsets_index: None,
-                        restrict_indexing: false,
-                    },
-                );
-                sampler_index += 1;
-                has_samplers = true;
-            }
-        }
-    }
-
-    if has_samplers {
-        sampler_buffer_binding_map.insert(
-            hlsl::SamplerIndexBufferKey {
-                group: 0,
-            },
-            hlsl::BindTarget {
-                space: 0,
-                register: srv_register,
-                binding_array_size: None,
-                dynamic_storage_buffer_offsets_index: None,
-                restrict_indexing: false,
-            },
-        );
-    }
-
-    hlsl::Options {
-        // These blobs are SM 5.1 with wgpu-hal's sampler-heap ABI (the
-        // space-255 sampler remap plus the sampler-index-buffer SRV
-        // inserted after the real textures, below). D3D11 rejects SM 5.1
-        // bytecode and has no sampler heap, so it gets its own vs_5_0/
-        // ps_5_0 set with direct s# registers — see compile_d3d11_set /
-        // build_d3d11_hlsl_options. Neither set's blobs are interchangeable.
-        shader_model: hlsl::ShaderModel::V5_1,
-        binding_map,
-        fake_missing_bindings: false,
-        special_constants_binding: None,
-        immediates_target: None,
-        sampler_heap_target: hlsl::SamplerHeapBindTargets {
-            standard_samplers: hlsl::BindTarget {
-                space: 0,
-                register: 0,
-                binding_array_size: None,
-                dynamic_storage_buffer_offsets_index: None,
-                restrict_indexing: false,
-            },
-            comparison_samplers: hlsl::BindTarget {
-                space: 0,
-                register: 2048,
-                binding_array_size: None,
-                dynamic_storage_buffer_offsets_index: None,
-                restrict_indexing: false,
-            },
-        },
-        sampler_buffer_binding_map,
-        dynamic_storage_buffer_offsets_targets: BTreeMap::new(),
-        external_texture_binding_map: BTreeMap::new(),
-        zero_initialize_workgroup_memory: true,
-        restrict_indexing: true,
-        force_loop_bounding: true,
-        ray_query_initialization_tracking: true,
-        // mesh/task shader knobs (naga 30). None of our shaders are mesh or task
-        // shaders, so these never affect the generated HLSL; keep naga's defaults.
-        task_dispatch_limits: None,
-        mesh_shader_primitive_indices_clamp: true,
-    }
-}
-
 // ── D3D11 HLSL binding map construction ─────────────────────────────
 // Flat classic-register scheme derived from the BindingEntry table order:
 // UniformBuffer → b0.., Texture2D → t0.., Sampler → s0.., all space0.
@@ -581,11 +433,6 @@ impl FxcCompiler {
         }
     }
 
-    fn compile(&self, shader_name: &str, hlsl_source: &str, entry_point: &str, profile: &str) -> Vec<u8> {
-        self.try_compile(hlsl_source, entry_point, profile)
-            .unwrap_or_else(|err| panic!("FXC compilation failed for {shader_name} ({profile} {entry_point}):\n{err}"))
-    }
-
     fn try_compile(&self, hlsl_source: &str, entry_point: &str, profile: &str) -> Result<Vec<u8>, String> {
         let entry_cstr = std::ffi::CString::new(entry_point).unwrap();
         let profile_cstr = std::ffi::CString::new(profile).unwrap();
@@ -626,5 +473,143 @@ impl FxcCompiler {
             unsafe { (*errors).release() };
         }
         Ok(result)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// macOS: WGSL → naga → MSL source ({name}.metal)
+//
+// One MSL source file per shader, carrying both entry points; the metal
+// backend include_str!s the text and compiles it at runtime with
+// newLibraryWithSource (see the header comment for why source rather
+// than a metallib). Slot contract: walk the shader's BindingEntry table
+// in order with three counters, UniformBuffer → buffer(0..),
+// Texture2D → texture(0..), Sampler → sampler(0..). The runtime backend
+// recomputes identical slots from the same tables (see the note in
+// src/shader_bindings.rs). Vertex/instance data arrives via [[stage_in]]
+// plus a runtime MTLVertexDescriptor with its layout pinned at
+// buffer(30), so it can never collide with the uniform-buffer slots.
+// ═══════════════════════════════════════════════════════════════════════
+
+#[cfg(target_os = "macos")]
+fn compile_shaders_msl(manifest_dir: &str) {
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+
+    for shader in ALL_SHADERS {
+        let wgsl_path = format!("{}/{}", manifest_dir, shader.wgsl_path);
+        println!("cargo:rerun-if-changed={}", wgsl_path);
+
+        let wgsl_source = std::fs::read_to_string(&wgsl_path).unwrap_or_else(|e| panic!("failed to read {}: {e}", wgsl_path));
+
+        let module = naga::front::wgsl::parse_str(&wgsl_source).unwrap_or_else(|e| panic!("failed to parse {}: {e}", shader.name));
+
+        let info = naga::valid::Validator::new(naga::valid::ValidationFlags::all(), naga::valid::Capabilities::empty())
+            .validate(&module)
+            .unwrap_or_else(|e| panic!("validation failed for {}: {e}", shader.name));
+
+        let options = build_msl_options(shader.bindings);
+        let pipeline_options = naga::back::msl::PipelineOptions {
+            // None writes every entry point, so one source file serves both
+            // stages of the pipeline.
+            entry_point: None,
+            // Keep Metal's [[stage_in]] attribute assembly; the runtime
+            // MTLVertexDescriptor does the unpacking, not injected code.
+            vertex_pulling_transform: false,
+            ..Default::default()
+        };
+
+        let (msl, translation) = naga::back::msl::write_string(&module, &info, &options, &pipeline_options)
+            .unwrap_or_else(|e| panic!("MSL generation failed for {}: {e}", shader.name));
+
+        // The metal backend looks the functions up by name with
+        // newFunctionWithName, so the translated names must survive
+        // untouched. Fail the build loudly if naga ever renames them
+        // (same posture as the D3D11 HLSL patcher's assertions).
+        let entry_names = translation
+            .entry_point_names
+            .into_iter()
+            .map(|r| r.unwrap_or_else(|e| panic!("entry point error for {}: {e}", shader.name)))
+            .collect::<Vec<String>>();
+        assert_eq!(
+            entry_names,
+            ["vs_main", "fs_main"],
+            "unexpected MSL entry point names for {}",
+            shader.name
+        );
+
+        let metal_path = format!("{out_dir}/{}.metal", shader.name);
+        std::fs::write(&metal_path, &msl).unwrap_or_else(|e| panic!("failed to write {metal_path}: {e}"));
+    }
+}
+
+// ── MSL binding map construction ────────────────────────────────────
+// Flat slot scheme derived from the BindingEntry table order, mirroring
+// build_d3d11_hlsl_options' three-counter walk. naga resolves resources
+// per entry point; both stages see the same module globals, so both
+// keys carry the identical map.
+
+#[cfg(target_os = "macos")]
+fn build_msl_options(bindings: &[BindingEntry]) -> naga::back::msl::Options {
+    use naga::back::msl;
+
+    let mut resources = msl::BindingMap::default();
+
+    let mut buffer_slot: msl::Slot = 0;
+    let mut texture_slot: msl::Slot = 0;
+    let mut sampler_slot: msl::Slot = 0;
+
+    for entry in bindings {
+        let rb = naga::ResourceBinding {
+            group: 0,
+            binding: entry.binding,
+        };
+        let target = match entry.kind {
+            ResourceKind::UniformBuffer => {
+                let t = msl::BindTarget {
+                    buffer: Some(buffer_slot),
+                    ..Default::default()
+                };
+                buffer_slot += 1;
+                t
+            }
+            ResourceKind::Texture2D => {
+                let t = msl::BindTarget {
+                    texture: Some(texture_slot),
+                    ..Default::default()
+                };
+                texture_slot += 1;
+                t
+            }
+            ResourceKind::Sampler => {
+                let t = msl::BindTarget {
+                    sampler: Some(msl::BindSamplerTarget::Resource(sampler_slot)),
+                    ..Default::default()
+                };
+                sampler_slot += 1;
+                t
+            }
+        };
+        resources.insert(rb, target);
+    }
+
+    let per_entry_point = msl::EntryPointResources {
+        resources,
+        immediates_buffer: None,
+        sizes_buffer: None,
+    };
+
+    let mut per_entry_point_map = msl::EntryPointResourceMap::default();
+    per_entry_point_map.insert("vs_main".to_string(), per_entry_point.clone());
+    per_entry_point_map.insert("fs_main".to_string(), per_entry_point);
+
+    msl::Options {
+        // MSL 2.0 is available on every supported macOS version; nothing in
+        // these shaders needs newer language features.
+        lang_version: (2, 0),
+        per_entry_point_map,
+        // A binding missing from the map must fail the build, not emit
+        // invalid MSL that only breaks at runtime.
+        fake_missing_bindings: false,
+        ..Default::default()
     }
 }

@@ -159,9 +159,9 @@ impl Device {
         let adapter = select_adapter(&factory, adapter_hint);
         mark(CreateMark::AdapterSelected);
 
-        // Split point for wedge diagnosis (mirrors the wgpu backend's
-        // "requesting wgpu device" line): a log that ends here says the
-        // hang is inside D3D11CreateDevice, in the driver.
+        // Split point for wedge diagnosis (the metal backend logs the
+        // same split before its device call): a log that ends here says
+        // the hang is inside D3D11CreateDevice, in the driver.
         info!("creating d3d11 device");
 
         let (device, context, feature_level) = create_d3d11_device(adapter.as_ref())?;
@@ -332,8 +332,8 @@ impl Device {
     /// mid-render-loop, size-driven uploads (blurred desktop, peek):
     /// those textures are optional cosmetics, and an `E_OUTOFMEMORY` on a
     /// multi-4K desktop should be a logged skip, not a dead render worker
-    /// (this backend has no equivalent of the wgpu backend's installed
-    /// error handler). Size-mismatch asserts still panic — that is a
+    /// (this backend has no installed device error handler to catch it
+    /// otherwise). Size-mismatch asserts still panic — that is a
     /// caller bug, not a runtime condition.
     pub fn try_create_texture_with_data(&self, queue: &Queue, desc: &TextureDesc, data: &[u8]) -> Result<Texture> {
         let _ = queue; // the upload rides device creation; no context needed

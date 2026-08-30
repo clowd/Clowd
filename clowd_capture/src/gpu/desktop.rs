@@ -85,17 +85,15 @@ pub fn upload_snapshot(
         return None;
     }
 
-    // No forced empty submit after this upload on purpose. It used to
-    // force the pending ~33 MB staging copy into a real submission right
-    // away, and that submission was the *only* thing giving
-    // `configure_surface`'s `maintain(wait_indefinitely)`
-    // (wgpu-core-30.0.0 `device/resource.rs`, "Wait for all work to
-    // finish before configuring the surface") anything to wait on — with
-    // nothing in flight the dx12 fence wait early-returns on
-    // `GetCompletedValue() >= value` (wgpu-hal-30.0.0
-    // `dx12/device.rs::wait`). Frame 0's own submit flushes the write
-    // regardless, so dropping the forced submit costs nothing in
-    // correctness.
+    // No forced empty submit after this upload on purpose. Under the old
+    // wgpu backend one existed to force the pending ~33 MB staging copy
+    // into a real submission right away, purely so wgpu-core's
+    // "wait for all work" step inside `configure_surface` had something
+    // to wait on; it was dropped once measurement showed frame 0's own
+    // submit flushes the write regardless. Neither current backend
+    // stages uploads behind a submission at all (d3d11 UpdateSubresource
+    // and Metal replaceRegion write directly), so there is nothing to
+    // force anymore either.
     //
     // TRADEOFF, and it is a real one: the upload no longer starts early
     // enough to overlap window creation, so the copy is serialized into

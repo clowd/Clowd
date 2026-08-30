@@ -16,7 +16,7 @@ pub(crate) enum DrawStatus {
     /// d3d11 backend's `DXGI_ERROR_DEVICE_REMOVED/RESET` map). Terminal:
     /// a dead device fails every subsequent acquire instantly, so
     /// retrying would hot-spin — the worker must exit instead. Dead on
-    /// the wgpu backend, which never constructs that variant.
+    /// the metal backend, which never constructs that variant.
     DeviceLost,
 }
 
