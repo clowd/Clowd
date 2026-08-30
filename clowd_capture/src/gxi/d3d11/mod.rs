@@ -26,7 +26,6 @@ mod timing;
 pub use device::{BindGroup, Buffer, Device, Instance, Queue, Sampler, Texture};
 pub use frame::Frame;
 pub use pipeline::RenderPipeline;
-pub use shaders::precompiled_in_use;
 pub use surface::{BackdropImage, Surface, SurfaceViews};
 pub use timing::GpuTimings;
 

@@ -7,10 +7,10 @@
 //!   * `present` — time inside `frame.present()`.
 //!   * `overall` — wall-clock gap between consecutive loop iterations.
 //!     Reciprocal ≈ FPS. Also the series the dropped-frame detector uses.
-//!   * `gpu` — actual GPU execution time (desktop pass + UI pass).
-//!     Permanently `None` today: both backends' `GpuTimings` are stubs
-//!     (no timestamp-query implementation yet), so the series only fills
-//!     in once a backend grows one.
+//!   * `gpu` - actual GPU execution time for the whole frame. `None`
+//!     unless `--gpu-timing` is on; both backends implement it (Metal
+//!     via command-buffer GPU start/end times, D3D11 via a
+//!     timestamp-query ring; see the backends' `timing.rs`).
 //!
 //! Rolling window: dynamically sized to cover ~10 s of wall-clock time
 //! at the monitor's refresh rate (600 samples @ 60 Hz, 1440 @ 144 Hz).

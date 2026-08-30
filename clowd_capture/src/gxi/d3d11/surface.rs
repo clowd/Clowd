@@ -230,9 +230,6 @@ impl Surface {
     /// independent of whatever state uploads or a previous frame left on
     /// the context.
     pub fn acquire(&mut self, timings: Option<&GpuTimings>) -> AcquireResult {
-        // `GpuTimings::new` returns `None` on this backend (stub), so
-        // there is never a slot to reserve here.
-        let _ = timings;
         let cfg = self
             .configured
             .as_mut()
@@ -278,8 +275,11 @@ impl Surface {
         }
         let acquire_wait = t_wait.elapsed();
 
-        {
+        let timing_slot = {
             let ctx = cfg.queue.lock();
+            // Reserve a timing slot first so the clear below is inside the
+            // measured window; `Frame::present` closes the bracket.
+            let timing_slot = timings.and_then(|t| t.begin_frame(&ctx));
             let viewport = D3D11_VIEWPORT {
                 TopLeftX: 0.0,
                 TopLeftY: 0.0,
@@ -298,13 +298,15 @@ impl Surface {
                 ctx.0
                     .RSSetState(&cfg.device.states().rasterizer);
             }
-        }
+            timing_slot
+        };
 
         AcquireResult::Frame(Box::new(Frame::new(
             cfg.device.clone(),
             cfg.queue.clone(),
             cfg.swapchain.clone(),
             acquire_wait,
+            timing_slot,
         )))
     }
 }

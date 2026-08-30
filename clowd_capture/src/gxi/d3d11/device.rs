@@ -35,7 +35,7 @@ use windows::Win32::Graphics::Dxgi::{
     CreateDXGIFactory1, IDXGIAdapter, IDXGIAdapter1, IDXGIDevice, IDXGIFactory2, DXGI_ADAPTER_FLAG_SOFTWARE,
 };
 
-use crate::gxi::types::{BindingRes, CreateMark, FilterMode, ShaderId, TexFormat, TextureDesc};
+use crate::gxi::types::{BindingRes, CreateMark, ShaderId, TexFormat, TextureDesc};
 use crate::shader_bindings::{BindingEntry, ResourceKind};
 
 use super::pipeline::SharedStates;
@@ -400,8 +400,10 @@ impl Device {
         })
     }
 
-    pub fn create_sampler(&self, label: &str, filter: FilterMode) -> Sampler {
-        let FilterMode::Nearest = filter;
+    /// Every sampler in the crate is nearest-filtered, clamp-to-edge; a
+    /// filter parameter joins the signature the day a pipeline wants
+    /// something else.
+    pub fn create_sampler(&self, label: &str) -> Sampler {
         let desc = D3D11_SAMPLER_DESC {
             Filter: D3D11_FILTER_MIN_MAG_MIP_POINT,
             AddressU: D3D11_TEXTURE_ADDRESS_CLAMP,

@@ -214,8 +214,9 @@ impl Surface {
     /// frame-0 show-gate choreography in `app.rs`/`render.rs`, which
     /// retries `Occluded` in a bounded loop around the early order-front.
     pub fn acquire(&mut self, timings: Option<&GpuTimings>) -> AcquireResult {
-        // `GpuTimings::new` returns `None` on this backend (stub), so
-        // there is never a slot to reserve here.
+        // Nothing to reserve at acquire time on this backend: the frame's
+        // GPU duration is read off the command buffer itself when
+        // `Frame::present` registers its completed handler.
         let _ = timings;
         let cfg = self
             .configured

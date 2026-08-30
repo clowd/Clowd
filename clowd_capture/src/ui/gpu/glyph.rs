@@ -34,9 +34,7 @@ use std::collections::HashMap;
 use bytemuck::{Pod, Zeroable};
 use cosmic_text::{CacheKey, Color, FontSystem, SwashCache, SwashContent};
 
-use crate::gxi::{
-    self, BindingRes, BlendMode, FilterMode, PipelineDesc, ShaderId, TexFormat, TextureDesc, VertexAttr, VertexFormat, VertexLayout,
-};
+use crate::gxi::{self, BindingRes, BlendMode, PipelineDesc, ShaderId, TexFormat, TextureDesc, VertexAttr, VertexFormat, VertexLayout};
 use crate::ui::gpu::text::TextArea;
 
 const INITIAL_MASK_SIZE: u32 = 512;
@@ -213,7 +211,7 @@ impl GlyphAtlas {
         // mip 1 with nearest mip filtering, so no LOD can ever select a
         // different mip. Backends should NOT "fix" this by restoring the
         // 0.0 clamp; defaults are the contract.
-        let sampler = device.create_sampler("ui_text sampler", FilterMode::Nearest);
+        let sampler = device.create_sampler("ui_text sampler");
 
         // STRAIGHT alpha (glyphon's blend), not the icon pipeline's
         // premultiplied source-over.

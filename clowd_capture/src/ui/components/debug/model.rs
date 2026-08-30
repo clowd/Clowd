@@ -281,10 +281,6 @@ pub struct PrimaryPanelData<'a> {
     pub ram: Option<u64>,
     /// This process's video-memory usage across all adapters.
     pub vram_total: Option<u64>,
-    /// Rendering actually runs on the precompiled passthrough shaders
-    /// (false whenever any shader fell back to runtime WGSL, and always
-    /// false off Windows) — usage, not presence.
-    pub precomp_shaders: bool,
 }
 
 impl<'a> PrimaryPanelData<'a> {
@@ -396,7 +392,6 @@ impl<'a> PrimaryPanelData<'a> {
             Some(used) => out.push(format_args!("vram {}", super::resources::DisplayMbOne(used))),
             None => out.push(format_args!("vram n/a")),
         }
-        out.push(format_args!("precomp_shaders: {}", self.precomp_shaders));
         match self.selection {
             Some(s) => out.push(format_args!("select: {}", DisplayRect(s))),
             None => out.push(format_args!("select: (none)")),

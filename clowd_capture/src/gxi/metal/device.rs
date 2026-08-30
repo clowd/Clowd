@@ -27,7 +27,7 @@ use objc2_metal::{
     MTLSamplerMipFilter, MTLSamplerState, MTLSize, MTLStorageMode, MTLTexture as MTLTextureProto, MTLTextureDescriptor, MTLTextureUsage,
 };
 
-use crate::gxi::types::{BindingRes, CreateMark, FilterMode, ShaderId, TexFormat, TextureDesc};
+use crate::gxi::types::{BindingRes, CreateMark, ShaderId, TexFormat, TextureDesc};
 use crate::shader_bindings::{BindingEntry, ResourceKind};
 
 // ── Instance ────────────────────────────────────────────────────────
@@ -308,8 +308,10 @@ impl Device {
         })
     }
 
-    pub fn create_sampler(&self, label: &str, filter: FilterMode) -> Sampler {
-        let FilterMode::Nearest = filter;
+    /// Every sampler in the crate is nearest-filtered, clamp-to-edge; a
+    /// filter parameter joins the signature the day a pipeline wants
+    /// something else.
+    pub fn create_sampler(&self, label: &str) -> Sampler {
         let desc = MTLSamplerDescriptor::new();
         desc.setLabel(Some(&NSString::from_str(label)));
         desc.setMinFilter(MTLSamplerMinMagFilter::Nearest);

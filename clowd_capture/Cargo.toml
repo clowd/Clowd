@@ -93,6 +93,10 @@ objc2-metal = { workspace = true, features = [
     "MTLSampler",
     "MTLTypes",
     "MTLDrawable",
+    # GPU frame timing (src/gxi/metal/timing.rs): addCompletedHandler takes a
+    # block2 block, GPUStartTime/GPUEndTime return CFTimeInterval.
+    "block2",
+    "objc2-core-foundation",
 ] }
 # CAMetalLayer + the objc2-metal interop feature (its setDevice/pixelFormat/
 # nextDrawable signatures are typed against objc2-metal's protocols).

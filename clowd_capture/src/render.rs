@@ -185,10 +185,9 @@ fn present_first_frame(surface: &mut gxi::Surface, pipeline: &gxi::RenderPipelin
             AcquireResult::Occluded if cfg!(target_os = "macos") && Instant::now() < occluded_deadline => {
                 thread::sleep(Duration::from_millis(1));
             }
-            // Reconfigured means the backend already rebuilt the swapchain;
-            // like the other misses, the render loop picks up the first
+            // Like the other misses, the render loop picks up the first
             // paint.
-            AcquireResult::Skip | AcquireResult::Occluded | AcquireResult::Reconfigured => return FirstFrame::Skipped,
+            AcquireResult::Skip | AcquireResult::Occluded => return FirstFrame::Skipped,
             AcquireResult::DeviceLost => return FirstFrame::DeviceLost,
         }
     };
