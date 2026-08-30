@@ -9,8 +9,8 @@ use crate::ui::gpu::UiRenderer;
 /// What [`draw_once`] wants the render loop to do next.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DrawStatus {
-    /// Frame drawn, or a transient miss (timeout / occluded / swapchain
-    /// reconfigured) — the next iteration retries.
+    /// Frame drawn, or a transient miss (timeout / occluded); the next
+    /// iteration retries.
     Continue,
     /// The GPU device itself is gone ([`AcquireResult::DeviceLost`], the
     /// d3d11 backend's `DXGI_ERROR_DEVICE_REMOVED/RESET` map). Terminal:
@@ -37,9 +37,8 @@ pub(crate) fn draw_once(
     let t_start = Instant::now();
     let mut frame = match surface.acquire(gpu_timing) {
         AcquireResult::Frame(f) => f,
-        // A lost/outdated surface has already been reconfigured by the
-        // backend; like the transient skips, the next iteration retries.
-        AcquireResult::Skip | AcquireResult::Occluded | AcquireResult::Reconfigured => return DrawStatus::Continue,
+        // Transient misses; the next iteration retries.
+        AcquireResult::Skip | AcquireResult::Occluded => return DrawStatus::Continue,
         AcquireResult::DeviceLost => return DrawStatus::DeviceLost,
     };
     // The sample's wait bucket is the swapchain acquire alone (the vsync

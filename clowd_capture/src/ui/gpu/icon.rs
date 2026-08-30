@@ -6,9 +6,7 @@
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::gxi::{
-    self, BindingRes, BlendMode, FilterMode, PipelineDesc, ShaderId, TexFormat, TextureDesc, VertexAttr, VertexFormat, VertexLayout,
-};
+use crate::gxi::{self, BindingRes, BlendMode, PipelineDesc, ShaderId, TexFormat, TextureDesc, VertexAttr, VertexFormat, VertexLayout};
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Debug)]
@@ -127,7 +125,7 @@ pub struct IconPipeline {
 impl IconPipeline {
     pub fn new(device: &gxi::Device) -> Self {
         let uniform_buf = device.create_uniform_buffer("ui_icon uniforms", std::mem::size_of::<IconUniforms>() as u64);
-        let sampler = device.create_sampler("ui_icon sampler", FilterMode::Nearest);
+        let sampler = device.create_sampler("ui_icon sampler");
 
         let pipeline = device.create_pipeline(&PipelineDesc {
             label: "ui_icon pipeline",

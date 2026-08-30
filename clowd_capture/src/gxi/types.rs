@@ -109,15 +109,6 @@ pub struct TextureDesc<'a> {
     pub format: TexFormat,
 }
 
-/// Sampler filtering. Address mode is always clamp-to-edge and mip
-/// filtering always nearest — no current sampler differs. Every sampler
-/// in the crate is currently nearest-filtered; a `Linear` variant joins
-/// this enum the day a pipeline wants one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FilterMode {
-    Nearest,
-}
-
 /// Vertex attribute formats in use by the instance layouts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VertexFormat {
@@ -193,14 +184,6 @@ pub enum AcquireResult {
     /// early order-front races the metal backend's occlusion guard.
     #[cfg_attr(windows, allow(dead_code))] // constructed only by the metal backend
     Occluded,
-    /// The swapchain was outdated/lost; the backend has already
-    /// reconfigured it. Skip this frame — the next acquire should
-    /// succeed. Currently never constructed: d3d11's flip-model swapchain
-    /// and Metal's CAMetalLayer have no outdated state to report. Kept
-    /// because it documents the acquire contract the render loop already
-    /// handles, and a future backend condition may need it.
-    #[allow(dead_code)]
-    Reconfigured,
     /// The device itself is gone. Produced only by the d3d11 backend,
     /// which maps `DXGI_ERROR_DEVICE_REMOVED/RESET` here (in
     /// `Surface::acquire`) so the worker can exit via its fail path;

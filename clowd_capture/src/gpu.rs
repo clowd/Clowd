@@ -3,7 +3,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 
-use crate::gxi::{self, BlendMode, CreateMark, FilterMode, PipelineDesc, ShaderId};
+use crate::gxi::{self, BlendMode, CreateMark, PipelineDesc, ShaderId};
 use crate::telemetry::startup::WorkerTimings;
 
 pub mod desktop;
@@ -97,7 +97,7 @@ pub fn stage_a_create_device(
     // Exactly what frame 0 draws and nothing more: one triangle
     // sampling the desktop snapshot. Every other pipeline in the
     // process (peek, the UI stack) is compiled off this path.
-    let desktop_sampler = device.create_sampler("desktop snapshot sampler", FilterMode::Nearest);
+    let desktop_sampler = device.create_sampler("desktop snapshot sampler");
     let desktop_pipeline = device.create_pipeline(&PipelineDesc {
         label: "desktop pipeline",
         shader: ShaderId::Desktop,
@@ -187,7 +187,7 @@ mod tests {
         queue.write_texture(&atlas, (1, 1), (1, 1), &[0u8; 4]);
         let ubo = device.create_uniform_buffer("smoke ubo", 80);
         queue.write_buffer(&ubo, 0, &[0u8; 80]);
-        let sampler = device.create_sampler("smoke sampler", FilterMode::Nearest);
+        let sampler = device.create_sampler("smoke sampler");
         let _desktop_bg = device.create_bind_group(
             "smoke desktop bind group",
             ShaderId::Desktop,
@@ -218,5 +218,20 @@ mod tests {
                 BindingRes::Sampler(&sampler),
             ],
         );
+
+        // GPU timing: with the master switch on, `GpuTimings::new` must
+        // build on the active backend (headlessly there is no surface to
+        // drive a frame through, so constructibility plus an empty poll
+        // is what this test can pin). No other test reads the switch, so
+        // flipping it here cannot race a parallel test.
+        gxi::set_gpu_timing_enabled(true);
+        let timings = gxi::GpuTimings::new(&device, &queue);
+        gxi::set_gpu_timing_enabled(false);
+        let mut timings = timings.expect("GpuTimings::new returned None with timing enabled");
+        assert!(
+            timings.poll_completed(&device).is_empty(),
+            "no frames were submitted, so no samples can have landed"
+        );
+        assert!(gxi::GpuTimings::new(&device, &queue).is_none(), "timing off must construct nothing");
     }
 }

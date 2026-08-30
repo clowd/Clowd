@@ -159,18 +159,22 @@ impl Frame {
 
     /// End the pass, commit, and hand the frame to the compositor.
     ///
-    /// `timings` is accepted for signature parity; `GpuTimings::new`
-    /// returns `None` on this backend, so it is always `None` here.
+    /// `timings`, when present, registers this command buffer's completed
+    /// handler so the frame's GPU duration lands in the queue
+    /// `GpuTimings::poll_completed` drains.
     ///
     /// Returns the time spent handing the frame to the compositor
     /// (presentDrawable + commit); the `endEncoding` before it is
     /// encoding work, which the caller's own bracket around this call
     /// absorbs into its draw bucket, matching the other backends.
     pub fn present(mut self, timings: Option<&GpuTimings>) -> Duration {
-        let _ = timings;
         self.encoder.endEncoding();
         // Disarm the drop guard: the encoder is ended for good.
         self.presented = true;
+        if let Some(gt) = timings {
+            // Before commit: Metal rejects handlers added afterwards.
+            gt.observe(&self.cmd);
+        }
         let drawable: &ProtocolObject<dyn MTLDrawableProto> = ProtocolObject::from_ref(&*self.drawable);
         let t_present = Instant::now();
         self.cmd.presentDrawable(drawable);

@@ -28,24 +28,20 @@ pub use types::*;
 
 // ── GPU-timing master switch ────────────────────────────────────────
 // Backend-agnostic policy, which is why it lives here and not in a
-// backend module: both the device-creation path (whether to request the
-// timestamp feature) and `GpuTimings::new` read it.
+// backend module: both backends' `GpuTimings::new` read it.
 
-/// Master switch for GPU frame timing, off by default. When `false`:
-///   * `GpuTimings::new` returns `None` (so nothing is constructed — no
-///     query set, no resolve/readback buffers, no per-frame resolve or
-///     readback mapping).
-///   * Device creation skips requesting the timestamp-query feature —
-///     some backends instrument the queue differently when the feature
-///     is enabled even if unused.
+/// Master switch for GPU frame timing, off by default. When `false`,
+/// `GpuTimings::new` returns `None` - nothing is constructed (no query
+/// ring on d3d11, no completed handlers on metal) and every per-frame
+/// timing hook is a no-op.
 static GPU_TIMING: AtomicBool = AtomicBool::new(false);
 
-/// Must be called before any render worker reaches `Device::create`: the
-/// timestamp feature is a *device creation* parameter, so flipping this
-/// afterwards leaves `GpuTimings::new` unable to build anything (it
-/// checks the device's granted features, not this flag alone). Relaxed
-/// ordering is enough — the worker threads are spawned after this runs,
-/// and thread spawn is itself the synchronization edge.
+/// Must be called before any render worker reaches `GpuTimings::new`
+/// (each worker calls it once, right before its render loop): flipping
+/// the switch afterwards changes nothing for workers that already built
+/// (or skipped building) their `GpuTimings`. Relaxed ordering is enough:
+/// the worker threads are spawned after this runs, and thread spawn is
+/// itself the synchronization edge.
 // Called from `main::run` with `--gpu-timing`, before the session spawns
 // any render worker.
 pub fn set_gpu_timing_enabled(enabled: bool) {

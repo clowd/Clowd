@@ -9,8 +9,6 @@
 //! condition — pipeline creation panics instead (see
 //! `Device::create_pipeline`).
 
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use crate::gxi::types::ShaderId;
 
 /// Precompiled SM 5.0 DXBC pair for one shader program.
@@ -41,21 +39,4 @@ pub(crate) fn source(id: ShaderId) -> ShaderBlobs {
         ShaderId::UiLift => s!("/ui_lift_d11_vs.dxbc", "/ui_lift_d11_ps.dxbc"),
         ShaderId::UiText => s!("/ui_text_d11_vs.dxbc", "/ui_text_d11_ps.dxbc"),
     }
-}
-
-// Debug-overlay truth for `precomp_shaders`, same semantics as the metal
-// backend's: "were the precompiled shaders actually used". On this
-// backend they are the only shader path, so it flips true when the first
-// pipeline is built and can never regress to false.
-static ANY_BUILT: AtomicBool = AtomicBool::new(false);
-
-/// Whether rendering is running on the precompiled shaders.
-pub fn precompiled_in_use() -> bool {
-    ANY_BUILT.load(Ordering::Relaxed)
-}
-
-/// Called by `Device::create_pipeline` once a pipeline's shaders have
-/// been accepted by the driver.
-pub(super) fn note_pipeline_built() {
-    ANY_BUILT.store(true, Ordering::Relaxed);
 }

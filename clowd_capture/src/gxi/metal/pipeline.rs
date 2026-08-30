@@ -115,8 +115,6 @@ impl Device {
             .newRenderPipelineStateWithDescriptor_error(&rp_desc)
             .unwrap_or_else(|e| panic!("pipeline '{}': pipeline state rejected: {e}", desc.label));
 
-        shaders::note_pipeline_built();
-
         RenderPipeline {
             raw,
         }

@@ -100,8 +100,6 @@ impl Device {
             layout.expect("CreateInputLayout succeeded without an object")
         });
 
-        shaders::note_pipeline_built();
-
         RenderPipeline {
             vs: vs.expect("CreateVertexShader succeeded without an object"),
             ps: ps.expect("CreatePixelShader succeeded without an object"),

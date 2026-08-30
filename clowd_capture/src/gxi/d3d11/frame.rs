@@ -21,7 +21,7 @@ use windows::Win32::Graphics::Dxgi::{IDXGISwapChain1, DXGI_PRESENT};
 
 use super::device::{BindGroup, Buffer, Device, Queue};
 use super::pipeline::RenderPipeline;
-use super::timing::GpuTimings;
+use super::timing::{FrameSlotId, GpuTimings};
 
 pub struct Frame {
     /// For the device-removed log on a failed present (the next
@@ -36,16 +36,27 @@ pub struct Frame {
     /// Time `Surface::acquire` spent blocked in the swapchain's
     /// frame-latency wait, exposed via [`Frame::acquire_wait`].
     acquire_wait: Duration,
+    /// The timing-ring slot `Surface::acquire` opened for this frame
+    /// (`None` when timing is off or every slot was busy); `present`
+    /// closes it.
+    timing_slot: Option<FrameSlotId>,
 }
 
 impl Frame {
-    pub(super) fn new(device: Device, queue: Queue, swapchain: IDXGISwapChain1, acquire_wait: Duration) -> Self {
+    pub(super) fn new(
+        device: Device,
+        queue: Queue,
+        swapchain: IDXGISwapChain1,
+        acquire_wait: Duration,
+        timing_slot: Option<FrameSlotId>,
+    ) -> Self {
         Self {
             device,
             queue,
             swapchain,
             stride: 0,
             acquire_wait,
+            timing_slot,
         }
     }
 
@@ -137,8 +148,10 @@ impl Frame {
 
     /// Hand the frame to the compositor: `Present(1, 0)` (vsync).
     ///
-    /// `timings` is accepted for signature parity; `GpuTimings::new`
-    /// returns `None` on this backend, so it is always `None` here.
+    /// `timings`, when present, closes the timing slot `Surface::acquire`
+    /// opened for this frame (end timestamp + end disjoint) right before
+    /// the present, so the measured window covers the whole frame's GPU
+    /// work.
     ///
     /// Returns the time spent in the present call itself; there is no
     /// separate submit on D3D11 (draws executed eagerly on the immediate
@@ -148,12 +161,14 @@ impl Frame {
     /// [`crate::gxi::AcquireResult::DeviceLost`] — `present` has no error
     /// channel in its signature, by (Phase B) design.
     pub fn present(self, timings: Option<&GpuTimings>) -> Duration {
-        let _ = timings;
         let t_present = Instant::now();
         let hr = {
             // Present drives the immediate context (implicit flush), so it
             // is serialized like every other context touch.
-            let _ctx = self.queue.lock();
+            let ctx = self.queue.lock();
+            if let (Some(gt), Some(slot)) = (timings, self.timing_slot) {
+                gt.end_frame(&ctx, slot);
+            }
             unsafe { self.swapchain.Present(1, DXGI_PRESENT(0)) }
         };
         if hr.is_err() {

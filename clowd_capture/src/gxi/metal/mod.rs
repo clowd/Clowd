@@ -24,7 +24,6 @@ mod timing;
 pub use device::{BindGroup, Buffer, Device, Instance, Queue, Sampler, Texture};
 pub use frame::Frame;
 pub use pipeline::RenderPipeline;
-pub use shaders::precompiled_in_use;
 // `BackdropImage` is part of the shared backend contract but only the
 // non-macOS arm of `render/window.rs` names it (the macOS arm produces
 // the concrete `CGImage` directly), so the re-export is unused here.

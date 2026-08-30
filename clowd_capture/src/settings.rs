@@ -290,14 +290,12 @@ pub struct CliArgs {
     #[arg(long, value_name = "PATH")]
     pub save_dir: Option<PathBuf>,
 
-    /// Collect per-pass GPU timings for the debug panel. Off by default.
-    /// Currently implemented by neither backend: both `GpuTimings` are
-    /// stubs, so passing this logs a warning per worker and the debug
-    /// panel's GPU column stays "n/a". The flag is kept because the
-    /// switch is a device-creation parameter by contract (see
-    /// `gxi::set_gpu_timing_enabled`) and a timestamp implementation is a
-    /// plausible follow-up on both backends. Read once, before the render
-    /// workers start.
+    /// Collect whole-frame GPU timings for the debug panel. Off by
+    /// default. Implemented natively on both backends: Metal reads each
+    /// frame's command-buffer GPUStartTime/GPUEndTime, D3D11 runs a
+    /// timestamp-query ring (see the backends' `timing.rs`). Read once,
+    /// before the render workers start (see
+    /// `gxi::set_gpu_timing_enabled`).
     #[arg(long)]
     pub gpu_timing: bool,
 }
