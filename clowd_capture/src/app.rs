@@ -220,11 +220,12 @@ fn hide_overlay_for_action(windows: &WindowSet) {
 /// Put an overlay window on screen without activating it or making it key,
 /// before its worker has drawn anything into it.
 ///
-/// macOS only, and a correctness fix rather than a latency one: wgpu-hal's
-/// Metal backend refuses `acquire_texture` with `SurfaceError::Occluded`
-/// whenever the hosting NSWindow lacks `NSWindowOcclusionStateVisible` (its
-/// workaround for gfx-rs/wgpu#8309, where a presented drawable on an occluded
-/// window wedges `nextDrawable` for a second). Windows are created hidden, so
+/// macOS only, and a correctness fix rather than a latency one: the metal
+/// backend refuses `Surface::acquire` with `AcquireResult::Occluded`
+/// whenever the hosting NSWindow lacks `NSWindowOcclusionStateVisible` (the
+/// guard carried over from wgpu-hal's workaround for gfx-rs/wgpu#8309,
+/// where a presented drawable on an occluded window wedges `nextDrawable`
+/// for a second). Windows are created hidden, so
 /// an unordered window means frame 0 acquires nothing, `draw_once` returns
 /// before it ever reaches `queue.present`, and the worker bumps `ready_count`
 /// anyway — the show gate then raises an overlay that was never painted, and

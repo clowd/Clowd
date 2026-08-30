@@ -98,10 +98,10 @@ pub struct UiPipelines {
 impl UiPipelines {
     /// Compile the three pipelines concurrently on one shared device.
     ///
-    /// `create_render_pipeline` takes no device-wide lock in wgpu 30
-    /// (wgpu-core's `Device::create_render_pipeline` locks nothing; the
-    /// DX12 backend holds its shader cache only across the map probe, with
-    /// `compile()` outside it; the Metal backend takes none), so the real
+    /// `create_pipeline` takes no device-wide lock on either backend
+    /// (d3d11's `CreateVertexShader`/`CreateInputLayout` calls are
+    /// free-threaded; metal's `newLibraryWithSource`/
+    /// `newRenderPipelineState` hold nothing of ours), so the real
     /// serialization point is the platform shader compiler, not this
     /// process. On macOS that means MTLCompilerService's XPC concurrency
     /// (~3-4 in flight) — which is why fanning three compiles out is worth

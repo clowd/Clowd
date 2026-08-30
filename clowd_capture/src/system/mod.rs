@@ -159,10 +159,10 @@ pub struct MonitorInfo {
     /// failed (fallback to the backend's default adapter).
     pub adapter_id: Option<(u32, u32)>,
     /// The adapter driving this monitor reports under 1 GB of dedicated
-    /// VRAM — the DXGI-enumeration-time stand-in for wgpu's
-    /// `DeviceType::IntegratedGpu`, chosen because it is known at ~40 ms
-    /// (before the peek/blur jobs spawn) while the wgpu adapter type is
-    /// only known once the render workers reach Stage A. iGPUs report a
+    /// VRAM — the DXGI-enumeration-time stand-in for an integrated-GPU
+    /// check, chosen because it is known at ~40 ms (before the peek/blur
+    /// jobs spawn), long before the render workers touch the device.
+    /// iGPUs report a
     /// small carve-out (Intel: typically 128 MB) regardless of shared
     /// budget; the cosmetic peek feature is disabled on them
     /// (`CaptureSession::new`). Windows-only signal — always `false` on

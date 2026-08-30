@@ -3,10 +3,11 @@
 //! registers → FXC), one `{name}_d11_vs.dxbc` / `{name}_d11_ps.dxbc` pair
 //! per [`ShaderId`].
 //!
-//! There is no runtime fallback here (contrast `gxi/wgpu/shaders.rs`):
-//! this backend ships no shader compiler, and a rejected blob on an
-//! FL ≥ 11_0 device is a build bug, not a runtime condition — pipeline
-//! creation panics instead (see `Device::create_pipeline`).
+//! There is no runtime fallback here (the deleted wgpu backend kept a
+//! runtime-WGSL one): this backend ships no shader compiler, and a
+//! rejected blob on an FL ≥ 11_0 device is a build bug, not a runtime
+//! condition — pipeline creation panics instead (see
+//! `Device::create_pipeline`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -42,7 +43,7 @@ pub(crate) fn source(id: ShaderId) -> ShaderBlobs {
     }
 }
 
-// Debug-overlay truth for `precomp_shaders`, same semantics as the wgpu
+// Debug-overlay truth for `precomp_shaders`, same semantics as the metal
 // backend's: "were the precompiled shaders actually used". On this
 // backend they are the only shader path, so it flips true when the first
 // pipeline is built and can never regress to false.

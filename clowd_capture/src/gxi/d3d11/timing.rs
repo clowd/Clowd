@@ -3,10 +3,10 @@
 //! `TIMESTAMP_DISJOINT` ring plumbing).
 //!
 //! [`GpuTimings::new`] always returns `None`, which is a state every
-//! caller already handles: the wgpu backend returns `None` whenever
-//! timing is switched off or the device lacks `TIMESTAMP_QUERY`, and the
-//! debug panel renders `n/a`. The type still exists with the exact
-//! signatures of the wgpu backend's so `Option<&GpuTimings>` /
+//! caller already handles (the deleted wgpu backend returned `None`
+//! whenever timing was switched off or unsupported), and the debug panel
+//! renders `n/a`. The type still exists with the exact signatures of the
+//! metal backend's identical stub so `Option<&GpuTimings>` /
 //! `Option<GpuTimings>` plumbing compiles identically against both.
 
 use std::convert::Infallible;
@@ -23,8 +23,7 @@ pub struct GpuTimings {
 impl GpuTimings {
     /// Always `None` — GPU timestamp queries are not implemented on the
     /// D3D11 backend yet. Callers treat `None` as "no GPU timing
-    /// available" (identical to a device without `TIMESTAMP_QUERY` on the
-    /// wgpu backend).
+    /// available".
     pub fn new(device: &Device, queue: &Queue) -> Option<Self> {
         let _ = (device, queue);
         if crate::gxi::gpu_timing_enabled() {

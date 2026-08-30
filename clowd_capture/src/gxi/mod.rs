@@ -2,28 +2,28 @@
 //!
 //! Concrete structs, zero dynamic dispatch, compile-time backend selection.
 //! Both backends expose the *same* public API (identical type names and
-//! signatures, enforced by the CI compile matrix), so the rest of the
-//! crate is written against `crate::gxi::*` and never names a backend.
+//! signatures, enforced by the CI compile matrix building both OSes), so
+//! the rest of the crate is written against `crate::gxi::*` and never
+//! names a backend.
 //!
-//! Backend selection (Phase D): Windows ships the `d3d11` backend; the
-//! `wgpu` backend serves macOS and stays compilable on Windows behind the
-//! `backend-wgpu` cargo feature — a CI/parity build that keeps the two
-//! public surfaces from drifting, never shipped to users. Exactly one
-//! backend is compiled into any given binary.
+//! Backend selection: Windows ships the `d3d11` backend and macOS ships
+//! the `metal` backend. No other platform has a backend: the overlay
+//! only supports these two, and any other target fails to compile here.
+//! Exactly one backend is compiled into any given binary.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 pub mod types;
 
-#[cfg(all(windows, not(feature = "backend-wgpu")))]
+#[cfg(windows)]
 mod d3d11;
-#[cfg(any(not(windows), feature = "backend-wgpu"))]
-mod wgpu;
+#[cfg(target_os = "macos")]
+mod metal;
 
-#[cfg(all(windows, not(feature = "backend-wgpu")))]
+#[cfg(windows)]
 pub use self::d3d11::*;
-#[cfg(any(not(windows), feature = "backend-wgpu"))]
-pub use self::wgpu::*;
+#[cfg(target_os = "macos")]
+pub use self::metal::*;
 pub use types::*;
 
 // ── GPU-timing master switch ────────────────────────────────────────

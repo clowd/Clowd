@@ -160,9 +160,10 @@ fn spawn_deferred_stack(
 fn present_first_frame(surface: &mut gxi::Surface, pipeline: &gxi::RenderPipeline, snapshot_state: Option<&SnapshotState>) -> FirstFrame {
     // macOS: the early order-front (`app.rs::order_window_front_early`) is
     // asynchronous — `orderFrontRegardless` returns before AppKit has heard
-    // back from the window server, and wgpu-hal's Metal backend refuses
-    // `acquire_texture` with `Occluded` until the NSWindow's occlusionState
-    // gains `NSWindowOcclusionStateVisible` (its gfx-rs/wgpu#8309 guard). On
+    // back from the window server, and the metal backend's `acquire`
+    // returns `Occluded` until the NSWindow's occlusionState gains
+    // `NSWindowOcclusionStateVisible` (the guard carried over from
+    // wgpu-hal's gfx-rs/wgpu#8309 workaround). On
     // a warm run this worker reaches the acquire within a millisecond or
     // two of the order-front — and can even beat it, since the main thread
     // only orders front once its screenshot pickup poll fires — so the
@@ -209,7 +210,7 @@ enum FirstFrame {
     /// Transient miss — the render loop picks up the first paint.
     Skipped,
     /// The device is gone (see [`frame::DrawStatus::DeviceLost`]) — the
-    /// worker must exit via its fail path. Dead on the wgpu backend.
+    /// worker must exit via its fail path. Dead on the metal backend.
     DeviceLost,
 }
 

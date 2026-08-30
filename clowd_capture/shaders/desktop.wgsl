@@ -117,7 +117,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
 }
 
 // Gamma-2.0 approximation of the sRGB transfer. The texture and surface
-// are both non-sRGB (`Bgra8Unorm`), so wgpu does *no* color-space
+// are both non-sRGB (`Bgra8Unorm`), so the GPU does *no* color-space
 // conversion on sample or store — values go in and out as raw byte / 255.
 // We only need linear light for the grayscale luma math, and the output
 // gets crushed to luma × 0.42 × fade anyway, so the ~0.01-in-8-bit error

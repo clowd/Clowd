@@ -34,7 +34,6 @@ log = "0.4"
 simplelog = "0.12"
 winit = "0.30"
 handy-keys = "0.3"
-wgpu = { version = "30.0", default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # clowd_ai's inference runtime. Default features: ort-sys downloads
@@ -59,7 +58,6 @@ ort = { version = "2.0.0-rc.13", default-features = false, features = [
 ] }
 # clowd_ai's STFT/ISTFT for the 48 kHz denoiser.
 realfft = "3.5"
-pollster = "1.0"
 bytemuck = "1"
 usvg = { version = "0.47", default-features = false }
 resvg = { version = "0.47", default-features = false }
@@ -76,10 +74,11 @@ objc2 = "0.6"
 objc2-core-graphics = "0.3"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
+objc2-metal = "0.3"
 objc2-quartz-core = "0.3"
 block2 = "0.6"
-# build-time shader precompilation (clowd_capture/build.rs); naga version must
-# match what wgpu 30.0 uses internally so the generated HLSL binds identically
+# build-time shader precompilation (clowd_capture/build.rs): WGSL to HLSL on
+# Windows, WGSL to MSL source on macOS. Build time only; never in a binary.
 naga = "30.0"
 libloading = "0.9"
 # rustls keeps every target off OpenSSL/schannel, and debug-images/log/anyhow are what make the reports symbolicated and readable.
@@ -97,7 +96,7 @@ sentry = { version = "0.48", default-features = false, features = [
 
 [profile.release]
 opt-level = 3
-# Thin rather than fat: fat LTO's single-threaded link was ~70% of CI wall clock, and these binaries gain little from it (libblur runtime-dispatches its SIMD, wgpu work lands on the GPU, ONNX Runtime is prebuilt C++).
+# Thin rather than fat: fat LTO's single-threaded link was ~70% of CI wall clock, and these binaries gain little from it (libblur runtime-dispatches its SIMD, render work lands on the GPU, ONNX Runtime is prebuilt C++).
 lto = "thin"
 # Line tables only, in a companion .pdb/.dSYM that CI uploads to Sentry — enough for readable stack traces, and the only split mode Windows-MSVC supports.
 debug = 1

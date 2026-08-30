@@ -126,8 +126,8 @@ pub(super) fn read_dibits_bgra(box_hdc_mem: BoxHDC, box_h_bitmap: BoxHBITMAP, wi
             biSize: mem::size_of::<BITMAPINFOHEADER>() as u32,
             biWidth: width,
             // Negative height = top-down DIB. Pixel (0,0) is screen
-            // top-left, which matches wgpu's texture coordinate convention,
-            // so the GPU upload needs no Y flip.
+            // top-left, which matches the texture coordinate convention
+            // the shaders assume, so the GPU upload needs no Y flip.
             biHeight: -height,
             biPlanes: 1,
             biBitCount: 32,

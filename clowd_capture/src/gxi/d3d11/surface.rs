@@ -62,7 +62,7 @@ pub struct Surface {
 // Considerations" — and every context call here goes through the
 // [`Queue`] mutex), and kernel waitable handles are process-global
 // tokens usable from any thread. `Sync` is vacuous in practice — the
-// type has no `&self` methods — but is claimed for parity with the wgpu
+// type has no `&self` methods — but is claimed for parity with the metal
 // backend's `Surface`, and is sound because a shared `&Surface` exposes
 // no operations at all.
 unsafe impl Send for Surface {}
@@ -182,8 +182,7 @@ impl Surface {
             Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
         };
         let hwnd = HWND(self.hwnd as *mut core::ffi::c_void);
-        // Panic on failure, like the wgpu backend's configure (whose
-        // internal validation also panics the worker): a swapchain that
+        // Panic on failure: a swapchain that
         // cannot be created at all leaves nothing to render to, and the
         // worker's fail path turns the panic into a counted failure.
         let swapchain = unsafe {
@@ -225,7 +224,7 @@ impl Surface {
     /// The waitable wait happens FIRST, immediately before the frame is
     /// built (the flip-model low-latency pattern), and is measured alone —
     /// `Frame::acquire_wait` reports pure wait time so the perf tracker's
-    /// bucketing matches the wgpu backend's. The clear / RTV bind /
+    /// bucketing matches the metal backend's. The clear / RTV bind /
     /// viewport / topology / rasterizer set that follows is deliberately
     /// redone every frame: it is nearly free, and it makes the frame
     /// independent of whatever state uploads or a previous frame left on

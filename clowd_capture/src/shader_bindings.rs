@@ -1,22 +1,30 @@
 // Shared binding definitions for each shader — the single source of truth
 // for the binding/register contract:
-//   * include!()'d by build.rs (Windows only) for naga HLSL register
-//     assignment, so the precompiled DXBC lands on the same registers
-//     wgpu-hal expects. This context is why the file must stay
-//     self-contained (no `use` of crate items).
+//   * include!()'d by build.rs (Windows and macOS) for naga register/slot
+//     assignment, so the precompiled DXBC and MSL land on the same slots
+//     the runtime backends recompute. This context is why the file must
+//     stay self-contained (no `use` of crate items).
 //   * consumed at runtime as a crate module by `gxi` (via
 //     `gxi::ShaderId::bindings`), which derives each backend's bind
 //     layouts from these same tables.
 // Update here when shader bindings change.
 //
 // D3D11 register contract: the precompiled `{name}_d11_vs.dxbc` /
-// `{name}_d11_ps.dxbc` blobs (SM 5.0, built by build.rs alongside the
-// SM 5.1 wgpu set) assign registers by walking each shader's table IN
-// ORDER with three independent counters, all space0:
+// `{name}_d11_ps.dxbc` blobs (SM 5.0, built by build.rs) assign
+// registers by walking each shader's table IN ORDER with three
+// independent counters, all space0:
 //   UniformBuffer → b0, b1, ..   Texture2D → t0, t1, ..   Sampler → s0, s1, ..
 // The d3d11 backend must recompute slots with this exact walk at runtime
 // (no extra metadata is emitted) so its Set*ShaderResources /
 // Set*ConstantBuffers / Set*Samplers calls land where the blobs expect.
+//
+// MSL slot contract (macOS): the precompiled `{name}.metal` sources
+// (built by build.rs via `build_msl_options`) assign `[[buffer/texture/
+// sampler(n)]]` slots with the SAME in-order three-counter walk:
+//   UniformBuffer → buffer(0..)   Texture2D → texture(0..)   Sampler → sampler(0..)
+// The metal backend recomputes it at runtime in `create_bind_group`,
+// exactly like d3d11 (the per-instance vertex buffer is out of range at
+// the pinned index 30, see `gxi/metal/mod.rs`).
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResourceKind {
