@@ -1,6 +1,6 @@
 //! Scrolling capture — the second half of the feature.
 //!
-//! By the time this binary runs the overlay (`clowd_capture_wgpu`) has
+//! By the time this binary runs the overlay (`clowd_capture`) has
 //! already done its part: the user picked a region, pressed SCROLL,
 //! clicked the point to scroll at, and the overlay wrote `action.txt` =
 //! `scroll X,Y,W,H PX,PY HWND` and exited. Clowd.Ui reads that marker,

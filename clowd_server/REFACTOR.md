@@ -406,7 +406,7 @@ materially better than the AWS story (no localstack equivalent needed).
   WASM-safe — `ring` is not).
 - Keep this folder **out of the root cargo workspace** (own `[workspace]` in
   `clowd_server/Cargo.toml`, plus `exclude = ["clowd_server"]` in the root manifest):
-  different target, profile, and dependency constraints than `clowd_capture_wgpu`.
+  different target, profile, and dependency constraints than `clowd_capture`.
 
 ---
 

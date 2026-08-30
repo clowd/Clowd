@@ -19,7 +19,7 @@ namespace Clowd.UI
     /// Screen Recording is checked with <c>CGPreflightScreenCaptureAccess</c> and Accessibility
     /// with <c>AXIsProcessTrusted</c>. Both are per-app decisions recorded in TCC against the
     /// bundle, not the individual executable, which is what makes a check here meaningful for the
-    /// out-of-process Rust capturer: <c>clowd_capture_wgpu</c> ships inside
+    /// out-of-process Rust capturer: <c>clowd_capture</c> ships inside
     /// <c>Clowd.app/Contents/MacOS</c> and is launched by us, so TCC holds Clowd.app responsible
     /// for its captures.
     ///

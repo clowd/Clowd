@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use clowd_rust_core::ocr::{OcrError, OcrOutcome, OcrRequest, OcrResponse, RequestHeader, RESULT_FILE_NAME};
 
 /// Binary we spawn, expected beside our own executable — which is where CI
-/// puts it (`publish/`, next to `clowd_capture_wgpu`) and where `cargo build`
+/// puts it (`publish/`, next to `clowd_capture`) and where `cargo build`
 /// puts it too (`target/<profile>/`), so one resolution rule covers both. It
 /// is the one AI inference binary Clowd ships (its `ocr` subcommand; the
 /// video editor spawns the same exe for matting and denoising), and it does

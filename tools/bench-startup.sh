@@ -25,7 +25,7 @@ set -euo pipefail
 RUNS="${1:-10}"
 SETTLE="${SETTLE:-1}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN="$REPO_ROOT/target/release/clowd_capture_wgpu"
+BIN="$REPO_ROOT/target/release/clowd_capture"
 
 if ! [[ "$RUNS" =~ ^[0-9]+$ ]] || [[ "$RUNS" -lt 1 ]]; then
   echo "error: run count must be a positive integer (got '$RUNS')" >&2
@@ -71,7 +71,7 @@ fi
 
 # --------------------------------------------------------------- build ----
 echo "==> building release binary"
-cargo build --release -p clowd_capture_wgpu
+cargo build --release -p clowd_capture
 
 if [[ ! -x "$BIN" ]]; then
   echo "error: expected binary at $BIN" >&2

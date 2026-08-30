@@ -14,7 +14,7 @@ license = "GPL-3.0-only"
 # Every on-device AI model Clowd runs, as its own process, one subcommand per
 # job kind:
 # - `ocr`: PaddleOCR text recognition for the capture overlay. The overlay
-#   (`clowd_capture_wgpu`) spawns it per OCR press with the selected pixels on
+#   (`clowd_capture`) spawns it per OCR press with the selected pixels on
 #   stdin and reads the answer from the `--out` file (contract in
 #   `clowd_rust_core::ocr`).
 # - `matte` / `denoise`: Clowd.VideoSDK's sidecar generators (AiClient.cs)
