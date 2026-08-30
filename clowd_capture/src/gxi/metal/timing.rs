@@ -1,6 +1,5 @@
 //! GPU-side frame timing via `MTLCommandBuffer` GPUStartTime/GPUEndTime
-//! (macOS 10.15+). The master switch lives in `gxi::mod`
-//! (`set_gpu_timing_enabled`), backend-agnostic.
+//! (macOS 10.15+). Always on: every render worker constructs one.
 //!
 //! Per render thread. The backend encodes exactly one command buffer per
 //! frame, so the whole-frame GPU duration is simply that buffer's
@@ -37,14 +36,12 @@ pub struct GpuTimings {
 }
 
 impl GpuTimings {
-    /// `None` when GPU timing is switched off (the default). No device
-    /// feature gate: command-buffer GPU start/end times exist on every
-    /// macOS version this crate supports.
+    /// Never `None` on this backend - no device feature gate, since
+    /// command-buffer GPU start/end times exist on every macOS version
+    /// this crate supports. The `Option` return is signature parity with
+    /// the d3d11 backend, whose query creation can fail.
     pub fn new(device: &Device, queue: &Queue) -> Option<Self> {
         let _ = (device, queue);
-        if !crate::gxi::gpu_timing_enabled() {
-            return None;
-        }
         Some(Self {
             completed: Arc::new(Mutex::new(VecDeque::new())),
         })

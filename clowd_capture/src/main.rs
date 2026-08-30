@@ -122,11 +122,6 @@ fn run_cycle(
     // All the slow work — monitors, GPU instance, render workers, the desktop
     // screenshot — happens before the event loop exists, so the overlay windows
     // can be created against state that is already warm.
-    // Set before the workers exist: each render worker reads the switch
-    // once, in its `GpuTimings::new` (see `gxi::set_gpu_timing_enabled`).
-    // Not on `CapturerSettings`: nothing after worker startup consults
-    // it.
-    gxi::set_gpu_timing_enabled(args.gpu_timing);
     let settings = Arc::new(args.into_settings());
     if let Some(dir) = &settings.session_dir {
         info!("session mode: payload will be written to {:?}", dir);
