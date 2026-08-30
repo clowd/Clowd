@@ -3,7 +3,7 @@
 //!
 //! One binary, one subcommand per job kind, one process per job:
 //!
-//! * `ocr` — the capture overlay (`clowd_capture_wgpu`) spawns it per OCR
+//! * `ocr` — the capture overlay (`clowd_capture`) spawns it per OCR
 //!   press, writes a [`RequestHeader`](clowd_rust_core::ocr::RequestHeader)
 //!   line and the selected region's raw BGRA down stdin, and reads the
 //!   PaddleOCR result from the `--out` file after it exits (see

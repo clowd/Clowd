@@ -192,7 +192,7 @@ struct StandbyApp<'a> {
 
 impl StandbyApp<'_> {
     fn apply_settings(&mut self, raw_args: Vec<String>) {
-        let rejection = match CliArgs::try_parse_from(std::iter::once("clowd_capture_wgpu".to_string()).chain(raw_args)) {
+        let rejection = match CliArgs::try_parse_from(std::iter::once("clowd_capture".to_string()).chain(raw_args)) {
             Ok(next) if next.standby => {
                 let statuses = self.hotkeys.apply(&next);
                 *self.args = next;

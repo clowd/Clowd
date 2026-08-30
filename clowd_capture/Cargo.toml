@@ -1,10 +1,5 @@
 [package]
-# The "_wgpu" suffix is historical (the crate no longer uses wgpu on any
-# platform) but the name is load-bearing downstream: CI workflows invoke
-# cargo -p by it, the Sentry .pdb/.dSYM uploads key on it, and the C#
-# ScreenCaptureService locates the published binary by filename. Renaming
-# is a coordinated change across those consumers, tracked as a follow-up.
-name = "clowd_capture_wgpu"
+name = "clowd_capture"
 version = "1.0.0"
 edition = "2021"
 
