@@ -53,7 +53,7 @@ impl ShaderId {
             ShaderId::Desktop => shader_bindings::DESKTOP_BINDINGS,
             ShaderId::Peek => shader_bindings::PEEK_BINDINGS,
             ShaderId::Selection => shader_bindings::OVERLAY_BINDINGS,
-            ShaderId::Crosshair => shader_bindings::OVERLAY_BINDINGS,
+            ShaderId::Crosshair => shader_bindings::CROSSHAIR_BINDINGS,
             ShaderId::UiRect => shader_bindings::RECT_BINDINGS,
             ShaderId::UiIcon => shader_bindings::ICON_BINDINGS,
             ShaderId::UiLift => shader_bindings::LIFT_BINDINGS,

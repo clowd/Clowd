@@ -49,9 +49,35 @@ struct OverlayUniforms {
     uv_offset_scale: vec4<f32>,
 };
 
+// The thin cross's color is a per-pixel black/white choice made from
+// whatever is DISPLAYED beneath it — and a fragment shader cannot read
+// the framebuffer it draws into, so being later in the pass order only
+// fixes occlusion, not this decision. Under an active peek the displayed
+// pixels are the peek composite, not the snapshot (they differ exactly
+// inside the obstruction rects), so the pass carries enough of the peek
+// pass's inputs to replicate that composite for the handful of thin-
+// cross pixels: the window texture + its UV mapping, the ghost's
+// blurred-desktop texture, and the obstruction rects. All zero (and the
+// textures 1×1 placeholders) while no peek is on screen.
+//   params.x           = 1.0 while a peek quad is being drawn, else 0.
+//   params.y           = ghost_opacity (peek.wgsl params.y).
+//   params.z           = number of obstruction rects.
+//   window_uv          = the peek quad's window-texture UV mapping,
+//                        identical values to peek.wgsl's window_uv; the
+//                        quad itself is `selection_rect` above.
+//   obstruction_rects  = window-local px, identical to peek.wgsl's.
+struct CrosshairPeekUniforms {
+    params:            vec4<f32>,
+    window_uv:         vec4<f32>,
+    obstruction_rects: array<vec4<f32>, 16>,
+};
+
 @group(0) @binding(0) var<uniform> u: OverlayUniforms;
-@group(0) @binding(1) var desktop_tex: texture_2d<f32>;
-@group(0) @binding(2) var desktop_samp: sampler;
+@group(0) @binding(1) var<uniform> pk: CrosshairPeekUniforms;
+@group(0) @binding(2) var desktop_tex: texture_2d<f32>;
+@group(0) @binding(3) var window_tex: texture_2d<f32>;
+@group(0) @binding(4) var blur_tex: texture_2d<f32>;
+@group(0) @binding(5) var desktop_samp: sampler;
 
 // Quad kinds, one per fragment path.
 const KIND_DASH_V: u32 = 0u;  // long dashed vertical line
@@ -153,17 +179,53 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
             color = u.accent_color.rgb;
         }
         default {
-            // Thin cross: black on light backgrounds, white on dark.
-            // The luma is read from the desktop snapshot — under a peeked
-            // window that is the obscured content rather than the pixels
-            // actually displayed, an acceptable 1-px approximation that
-            // keeps this pass decoupled from peek (the snapshot and the
-            // peeked window only differ inside obstruction rects anyway).
-            // Explicit-LOD sample: the switch is non-uniform control
-            // flow, where implicit-derivative sampling is not allowed
-            // (the snapshot has a single mip level anyway).
-            let uv = u.uv_offset_scale.xy + (in.pos.xy / u.viewport.xy) * u.uv_offset_scale.zw;
-            let base = textureSampleLevel(desktop_tex, desktop_samp, uv, 0.0).rgb;
+            // Thin cross: black on light backgrounds, white on dark,
+            // decided from the pixels actually displayed beneath this
+            // pass. Baseline is the desktop snapshot; under an active
+            // peek quad the displayed pixel is the peek composite
+            // instead, replicated here from the same inputs peek.wgsl
+            // uses (see CrosshairPeekUniforms above). All samples are
+            // explicit-LOD: the switch is non-uniform control flow,
+            // where implicit-derivative sampling is not allowed (every
+            // texture here has a single mip level anyway).
+            let fpos = in.pos.xy;
+            let uv = u.uv_offset_scale.xy + (fpos / u.viewport.xy) * u.uv_offset_scale.zw;
+            var base = textureSampleLevel(desktop_tex, desktop_samp, uv, 0.0).rgb;
+
+            let sr = u.selection_rect;
+            if (pk.params.x > 0.5 &&
+                fpos.x >= sr.x && fpos.x < sr.z &&
+                fpos.y >= sr.y && fpos.y < sr.w) {
+                // Same interpolation the peek vertex shader produces:
+                // quad-relative fraction through the window UV window.
+                let frac = (fpos - sr.xy) / (sr.zw - sr.xy);
+                let wuv = pk.window_uv.xy + frac * pk.window_uv.zw;
+                // Outside the window texture the peek fragment discards
+                // and the snapshot stays visible — keep the baseline.
+                if (wuv.x >= 0.0 && wuv.x < 1.0 && wuv.y >= 0.0 && wuv.y < 1.0) {
+                    var col = textureSampleLevel(window_tex, desktop_samp, wuv, 0.0).rgb;
+                    let n = i32(pk.params.z);
+                    var obstructed = false;
+                    for (var i = 0; i < n; i++) {
+                        let r = pk.obstruction_rects[i];
+                        if (fpos.x >= r.x && fpos.x < r.z &&
+                            fpos.y >= r.y && fpos.y < r.w) {
+                            obstructed = true;
+                            break;
+                        }
+                    }
+                    if (obstructed) {
+                        // peek.wgsl's ghost treatment, byte for byte:
+                        // grayscale of the blurred desktop with the
+                        // window ghosted over it.
+                        let blur = textureSampleLevel(blur_tex, desktop_samp, uv, 0.0).rgb;
+                        let gray = vec3(dot(blur, vec3(0.2126, 0.7152, 0.0722)));
+                        col = mix(gray, col, pk.params.y);
+                    }
+                    base = col;
+                }
+            }
+
             let lum = dot(base, vec3(0.299, 0.587, 0.114));
             color = select(vec3(1.0, 1.0, 1.0), vec3(0.0, 0.0, 0.0), lum > 0.65);
         }

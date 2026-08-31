@@ -37,6 +37,33 @@ impl OverlayUniforms {
 
 pub const OVERLAY_UNIFORMS_SIZE: u64 = std::mem::size_of::<OverlayUniforms>() as u64;
 
+/// The crosshair pass's peek-replication block (its second uniform
+/// buffer): the thin cross's black/white contrast is decided from the
+/// pixels actually displayed beneath it, which under an active peek quad
+/// is the peek composite rather than the desktop snapshot — a fragment
+/// shader cannot read the framebuffer, so the composite is replicated
+/// from the same inputs peek.wgsl uses. Written zeroed while no peek is
+/// on screen. MUST stay byte-identical to `CrosshairPeekUniforms` in
+/// crosshair.wgsl; per-field meaning is documented there.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct CrosshairPeekUniforms {
+    /// (active, ghost_opacity, num_obstruction_rects, 0).
+    pub params: [f32; 4],
+    /// The peek quad's window-texture UV mapping (peek.wgsl window_uv).
+    pub window_uv: [f32; 4],
+    /// Window-local px, identical to the peek pass's rects.
+    pub obstruction_rects: [[f32; 4]; 16],
+}
+
+impl CrosshairPeekUniforms {
+    pub fn zeroed() -> Self {
+        bytemuck::Zeroable::zeroed()
+    }
+}
+
+pub const CROSSHAIR_PEEK_UNIFORMS_SIZE: u64 = std::mem::size_of::<CrosshairPeekUniforms>() as u64;
+
 /// Vertex counts for the fixed vertex-shader-generated geometry: the
 /// crosshair's 11 quads and the selection pass's 16 (4 border slabs, 4
 /// corner patches, 8 handles — unused ones degenerate to zero area).

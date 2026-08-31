@@ -107,9 +107,8 @@ pub const PEEK_BINDINGS: &[BindingEntry] = &[
     },
 ];
 
-// selection.wgsl and crosshair.wgsl: the two overlay passes share one
-// uniform buffer (`gpu::overlay::OverlayUniforms`) and both sample the
-// desktop snapshot, so they share one binding table too.
+// selection.wgsl: shared overlay uniform buffer
+// (`gpu::overlay::OverlayUniforms`) + the desktop snapshot.
 pub const OVERLAY_BINDINGS: &[BindingEntry] = &[
     BindingEntry {
         binding: 0,
@@ -125,6 +124,50 @@ pub const OVERLAY_BINDINGS: &[BindingEntry] = &[
     },
     BindingEntry {
         binding: 2,
+        kind: ResourceKind::Sampler,
+        vertex: false,
+        fragment: true,
+    },
+];
+
+// crosshair.wgsl: the shared overlay uniforms plus the peek-replication
+// block — a second uniform buffer (`gpu::overlay::CrosshairPeekUniforms`)
+// and the peek pass's window + blurred-desktop textures, so the thin
+// cross's contrast choice can be made against the pixels actually
+// displayed under it (see the shader's header comment).
+pub const CROSSHAIR_BINDINGS: &[BindingEntry] = &[
+    BindingEntry {
+        binding: 0,
+        kind: ResourceKind::UniformBuffer,
+        vertex: true,
+        fragment: true,
+    },
+    BindingEntry {
+        binding: 1,
+        kind: ResourceKind::UniformBuffer,
+        vertex: false,
+        fragment: true,
+    },
+    BindingEntry {
+        binding: 2,
+        kind: ResourceKind::Texture2D,
+        vertex: false,
+        fragment: true,
+    },
+    BindingEntry {
+        binding: 3,
+        kind: ResourceKind::Texture2D,
+        vertex: false,
+        fragment: true,
+    },
+    BindingEntry {
+        binding: 4,
+        kind: ResourceKind::Texture2D,
+        vertex: false,
+        fragment: true,
+    },
+    BindingEntry {
+        binding: 5,
         kind: ResourceKind::Sampler,
         vertex: false,
         fragment: true,
@@ -217,7 +260,7 @@ pub const ALL_SHADERS: &[ShaderDef] = &[
     ShaderDef {
         name: "crosshair",
         wgsl_path: "shaders/crosshair.wgsl",
-        bindings: OVERLAY_BINDINGS,
+        bindings: CROSSHAIR_BINDINGS,
     },
     ShaderDef {
         name: "ui_rect",

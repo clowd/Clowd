@@ -31,6 +31,10 @@ pub(crate) fn draw_once(
     // `update_uniforms`): a hidden feature costs no GPU time at all.
     overlay: OverlayVisibility,
     peek_bind_group: Option<&gxi::BindGroup>,
+    // Peek-aware crosshair bind group for frames where a peek quad draws
+    // (the thin cross's contrast tracks the peek composite); `None` uses
+    // the snapshot-only fallback in `SnapshotState`.
+    crosshair_peek_bg: Option<&gxi::BindGroup>,
     // `None` while the deferred UI build is still in flight (see
     // `WindowGpu::peek`): the frame is then the desktop pass alone.
     mut ui_renderer: Option<&mut UiRenderer>,
@@ -41,8 +45,23 @@ pub(crate) fn draw_once(
     let t_start = Instant::now();
     let mut frame = match surface.acquire(gpu_timing) {
         AcquireResult::Frame(f) => f,
-        // Transient misses; the next iteration retries.
-        AcquireResult::Skip | AcquireResult::Occluded => return DrawStatus::Continue,
+        // Transient miss; the next iteration retries. The backend's
+        // degraded paths carry their own pacing sleeps (d3d11) or a
+        // bounded internal wait (metal's nextDrawable), so no extra
+        // sleep here.
+        AcquireResult::Skip => return DrawStatus::Continue,
+        // Occluded is different: the metal backend's occlusion guard
+        // returns WITHOUT any wait (it must — frame 0's show-gate
+        // choreography retries it on a 1 ms cadence), so retrying
+        // straight away from the steady-state loop would spin this
+        // worker's core at 100 % for as long as the overlay window
+        // stays occluded. Sleep the same 10 ms the d3d11 backend uses
+        // on its own degraded paths; visibility transitions are
+        // compositor events, so 10 ms costs at most a frame.
+        AcquireResult::Occluded => {
+            std::thread::sleep(Duration::from_millis(10));
+            return DrawStatus::Continue;
+        }
         AcquireResult::DeviceLost => return DrawStatus::DeviceLost,
     };
     // The sample's wait bucket is the swapchain acquire alone (the vsync
@@ -79,7 +98,7 @@ pub(crate) fn draw_once(
         }
         if overlay.crosshair {
             frame.set_pipeline(&gpu.crosshair);
-            frame.set_bind_group(0, &state.crosshair_bind_group);
+            frame.set_bind_group(0, crosshair_peek_bg.unwrap_or(&state.crosshair_bind_group));
             frame.draw(0..CROSSHAIR_VERTICES, 0..1);
         }
     }

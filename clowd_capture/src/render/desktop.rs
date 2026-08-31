@@ -30,6 +30,13 @@ pub(crate) struct SnapshotState {
     /// groups (crosshair.wgsl / selection.wgsl — one buffer, two
     /// layouts). Written every frame alongside `ubo`.
     pub overlay_ubo: gxi::Buffer,
+    /// The crosshair pass's peek-replication uniforms (see
+    /// `gpu::overlay::CrosshairPeekUniforms`): filled by the render loop
+    /// whenever a peek quad draws, zeroed otherwise.
+    pub crosshair_peek_ubo: gxi::Buffer,
+    /// Fallback crosshair bind group — peek textures are 1×1
+    /// placeholders. The render loop builds a peek-aware replacement in
+    /// the frames a peek quad actually draws.
     pub crosshair_bind_group: gxi::BindGroup,
     pub selection_bind_group: gxi::BindGroup,
     pub overlay_uniforms: OverlayUniforms,
