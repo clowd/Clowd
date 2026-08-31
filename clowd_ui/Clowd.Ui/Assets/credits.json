@@ -204,6 +204,12 @@
           "url": "https://github.com/grovesNL/glyphon"
         },
         {
+          "name": "handy-keys",
+          "version": "0.3.4",
+          "license": "MIT",
+          "url": "https://github.com/handy-computer/handy-keys"
+        },
+        {
           "name": "image",
           "version": "0.25.10",
           "license": "MIT OR Apache-2.0",
@@ -222,10 +228,22 @@
           "url": "https://github.com/rust-lang/libc"
         },
         {
+          "name": "libloading",
+          "version": "0.9.0",
+          "license": "ISC",
+          "url": "https://github.com/nagisa/rust_libloading/"
+        },
+        {
           "name": "log",
-          "version": "0.4.33",
+          "version": "0.4.34",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/rust-lang/log"
+        },
+        {
+          "name": "naga",
+          "version": "30.0.1",
+          "license": "MIT OR Apache-2.0",
+          "url": "https://github.com/gfx-rs/wgpu"
         },
         {
           "name": "objc2",
@@ -337,7 +355,7 @@
         },
         {
           "name": "wgpu",
-          "version": "30.0.0",
+          "version": "30.0.1",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/gfx-rs/wgpu"
         },
@@ -361,7 +379,7 @@
         },
         {
           "name": "xdialog",
-          "version": "3.1.5",
+          "version": "3.1.6",
           "license": "MIT",
           "url": "https://github.com/velopack/xdialog"
         }
