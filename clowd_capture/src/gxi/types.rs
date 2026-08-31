@@ -21,6 +21,8 @@ use super::{Buffer, Frame, Sampler, Texture};
 pub enum ShaderId {
     Desktop,
     Peek,
+    Selection,
+    Crosshair,
     UiRect,
     UiIcon,
     UiLift,
@@ -32,6 +34,8 @@ impl ShaderId {
         match self {
             ShaderId::Desktop => "desktop",
             ShaderId::Peek => "peek",
+            ShaderId::Selection => "selection",
+            ShaderId::Crosshair => "crosshair",
             ShaderId::UiRect => "ui_rect",
             ShaderId::UiIcon => "ui_icon",
             ShaderId::UiLift => "ui_lift",
@@ -48,6 +52,8 @@ impl ShaderId {
         match self {
             ShaderId::Desktop => shader_bindings::DESKTOP_BINDINGS,
             ShaderId::Peek => shader_bindings::PEEK_BINDINGS,
+            ShaderId::Selection => shader_bindings::OVERLAY_BINDINGS,
+            ShaderId::Crosshair => shader_bindings::OVERLAY_BINDINGS,
             ShaderId::UiRect => shader_bindings::RECT_BINDINGS,
             ShaderId::UiIcon => shader_bindings::ICON_BINDINGS,
             ShaderId::UiLift => shader_bindings::LIFT_BINDINGS,

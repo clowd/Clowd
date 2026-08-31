@@ -107,6 +107,30 @@ pub const PEEK_BINDINGS: &[BindingEntry] = &[
     },
 ];
 
+// selection.wgsl and crosshair.wgsl: the two overlay passes share one
+// uniform buffer (`gpu::overlay::OverlayUniforms`) and both sample the
+// desktop snapshot, so they share one binding table too.
+pub const OVERLAY_BINDINGS: &[BindingEntry] = &[
+    BindingEntry {
+        binding: 0,
+        kind: ResourceKind::UniformBuffer,
+        vertex: true,
+        fragment: true,
+    },
+    BindingEntry {
+        binding: 1,
+        kind: ResourceKind::Texture2D,
+        vertex: false,
+        fragment: true,
+    },
+    BindingEntry {
+        binding: 2,
+        kind: ResourceKind::Sampler,
+        vertex: false,
+        fragment: true,
+    },
+];
+
 pub const RECT_BINDINGS: &[BindingEntry] = &[BindingEntry {
     binding: 0,
     kind: ResourceKind::UniformBuffer,
@@ -184,6 +208,16 @@ pub const ALL_SHADERS: &[ShaderDef] = &[
         name: "peek",
         wgsl_path: "shaders/peek.wgsl",
         bindings: PEEK_BINDINGS,
+    },
+    ShaderDef {
+        name: "selection",
+        wgsl_path: "shaders/selection.wgsl",
+        bindings: OVERLAY_BINDINGS,
+    },
+    ShaderDef {
+        name: "crosshair",
+        wgsl_path: "shaders/crosshair.wgsl",
+        bindings: OVERLAY_BINDINGS,
     },
     ShaderDef {
         name: "ui_rect",

@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
 
+use crate::gpu::overlay::{CROSSHAIR_VERTICES, SELECTION_VERTICES};
 use crate::gpu::WindowGpu;
 use crate::gxi::{self, AcquireResult};
-use crate::render::desktop::SnapshotState;
+use crate::render::desktop::{OverlayVisibility, SnapshotState};
 use crate::telemetry::perf::{PerfSample, PerfTracker};
 use crate::ui::gpu::UiRenderer;
 
@@ -26,6 +27,9 @@ pub(crate) fn draw_once(
     gpu: &WindowGpu,
     surface_size: (u32, u32),
     snapshot_state: Option<&SnapshotState>,
+    // Which overlay feature passes draw this frame (decided CPU-side in
+    // `update_uniforms`): a hidden feature costs no GPU time at all.
+    overlay: OverlayVisibility,
     peek_bind_group: Option<&gxi::BindGroup>,
     // `None` while the deferred UI build is still in flight (see
     // `WindowGpu::peek`): the frame is then the desktop pass alone.
@@ -50,6 +54,11 @@ pub(crate) fn draw_once(
         ui.prepare(&gpu.device, &gpu.queue, surface_size, perf);
     }
 
+    // Pass order is the painter's stack, background to front: desktop
+    // (snapshot + cursor + region fade) → peek (the hovered window's
+    // contents inside the selection) → selection border + handles →
+    // crosshair → UI chrome. Peek draws before the border/crosshair so
+    // it needs no knowledge of either — they simply paint over it.
     frame.set_pipeline(&gpu.pipeline);
     if let Some(state) = snapshot_state {
         frame.set_bind_group(0, &state.bind_group);
@@ -59,6 +68,20 @@ pub(crate) fn draw_once(
         frame.set_pipeline(&peek.pipeline);
         frame.set_bind_group(0, peek_bg);
         frame.draw(0..6, 0..1);
+    }
+    if let Some(state) = snapshot_state {
+        // `selection` is None while the deferred build is in flight —
+        // the border appears when it lands, same policy as peek.
+        if let (true, Some(selection)) = (overlay.selection, gpu.selection.as_ref()) {
+            frame.set_pipeline(selection);
+            frame.set_bind_group(0, &state.selection_bind_group);
+            frame.draw(0..SELECTION_VERTICES, 0..1);
+        }
+        if overlay.crosshair {
+            frame.set_pipeline(&gpu.crosshair);
+            frame.set_bind_group(0, &state.crosshair_bind_group);
+            frame.draw(0..CROSSHAIR_VERTICES, 0..1);
+        }
     }
     if let Some(ui) = ui_renderer.as_deref() {
         ui.draw(&mut frame);

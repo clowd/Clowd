@@ -990,7 +990,6 @@ impl App {
                 cycle.ocr_ready = None;
             }
             OcrState::Lifted {
-                region,
                 ..
             } => {
                 // Fresh anchor: the exit fade starts NOW. The outcome is
@@ -999,7 +998,6 @@ impl App {
                 // the region's fade back to color remains to play.
                 cycle.input.ocr = OcrState::Retracting {
                     anchor: Instant::now(),
-                    region,
                 };
             }
             // Second Escape mid-retract: the user wants out, not a replay —
@@ -2599,7 +2597,6 @@ mod tests {
 
         i.ocr = OcrState::Retracting {
             anchor: Instant::now(),
-            region: ScreenRect::from_xy_size(0, 0, 10, 10),
         };
         assert_eq!(default_action(&i), None);
     }

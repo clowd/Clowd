@@ -34,6 +34,8 @@ pub(crate) fn source(id: ShaderId) -> ShaderSource {
     match id {
         ShaderId::Desktop => s!("/desktop.metal"),
         ShaderId::Peek => s!("/peek.metal"),
+        ShaderId::Selection => s!("/selection.metal"),
+        ShaderId::Crosshair => s!("/crosshair.metal"),
         ShaderId::UiRect => s!("/ui_rect.metal"),
         ShaderId::UiIcon => s!("/ui_icon.metal"),
         ShaderId::UiLift => s!("/ui_lift.metal"),

@@ -7,14 +7,9 @@ use crate::gxi::{self, BlendMode, CreateMark, PipelineDesc, ShaderId};
 use crate::telemetry::startup::WorkerTimings;
 
 pub mod desktop;
+pub mod overlay;
 pub mod peek;
 
-/// 80-byte uniform block written once per render-thread startup (UV region,
-/// DPI scale, crosshair color) and updated every frame by each render
-/// thread (fade factor, cursor position, selection rect, animation time).
-/// Five `vec4`s — still 16-byte-aligned and a single cache line on x86_64.
-/// The frozen-desktop snapshot uploaded to the GPU at startup. One per
-/// render thread — each thread uploads its own copy to its own device.
 /// Stage-A output: GPU device + queue + compiled shaders + format-agnostic
 /// resources. Created on the render worker thread with no window or surface.
 pub struct DeviceBundle {
@@ -22,6 +17,7 @@ pub struct DeviceBundle {
     pub queue: gxi::Queue,
     pub adapter_name: String,
     pub desktop_pipeline: gxi::RenderPipeline,
+    pub crosshair_pipeline: gxi::RenderPipeline,
     pub desktop_sampler: gxi::Sampler,
 }
 
@@ -66,6 +62,14 @@ pub struct WindowGpu {
     pub device: gxi::Device,
     pub queue: gxi::Queue,
     pub pipeline: gxi::RenderPipeline,
+    /// The crosshair pass (Stage A, like the desktop pipeline: it must
+    /// track the mouse from the first visible frames).
+    pub crosshair: gxi::RenderPipeline,
+    /// The selection border + handles pass. Deferred alongside `peek`
+    /// (a selection needs user interaction, which needs a visible
+    /// overlay), so on a cold start the border appears a beat after the
+    /// desktop — the same policy as the rest of the deferred stack.
+    pub selection: Option<gxi::RenderPipeline>,
     pub peek: Option<PeekGpu>,
     #[allow(dead_code)]
     pub adapter_name: String,
@@ -94,9 +98,11 @@ pub fn stage_a_create_device(
     })?;
     let adapter_name = device.adapter_name().to_string();
 
-    // Exactly what frame 0 draws and nothing more: one triangle
-    // sampling the desktop snapshot. Every other pipeline in the
-    // process (peek, the UI stack) is compiled off this path.
+    // What frame 0 draws (one triangle sampling the desktop snapshot)
+    // plus the crosshair pass, which must exist the moment the overlay
+    // is visible — the mouse is being tracked from the first frames.
+    // Every other pipeline in the process (peek, selection, the UI
+    // stack) is compiled off this path.
     let desktop_sampler = device.create_sampler("desktop snapshot sampler");
     let desktop_pipeline = device.create_pipeline(&PipelineDesc {
         label: "desktop pipeline",
@@ -104,6 +110,7 @@ pub fn stage_a_create_device(
         vertex: None,
         blend: BlendMode::Replace,
     });
+    let crosshair_pipeline = overlay::create_crosshair_pipeline(&device);
 
     timings
         .prep_pipelines
@@ -114,6 +121,7 @@ pub fn stage_a_create_device(
         queue,
         adapter_name,
         desktop_pipeline,
+        crosshair_pipeline,
         desktop_sampler,
     })
 }
@@ -125,6 +133,8 @@ pub fn finalize_window_gpu(bundle: DeviceBundle, snapshot: Option<Arc<desktop::D
         device: bundle.device,
         queue: bundle.queue,
         pipeline: bundle.desktop_pipeline,
+        crosshair: bundle.crosshair_pipeline,
+        selection: None,
         peek: None,
         adapter_name: bundle.adapter_name,
         snapshot,
@@ -160,6 +170,8 @@ mod tests {
             blend: BlendMode::Replace,
         });
         let _peek = create_peek_gpu(&device);
+        let _selection = overlay::create_selection_pipeline(&device);
+        let _crosshair = overlay::create_crosshair_pipeline(&device);
         let _rect = crate::ui::gpu::rect::RectPipeline::new(&device);
         let _icon = crate::ui::gpu::icon::IconPipeline::new(&device);
         let _lift = crate::ui::gpu::lift::LiftPipeline::new(&device);
@@ -215,6 +227,15 @@ mod tests {
             &[
                 BindingRes::Uniform(&ubo),
                 BindingRes::Texture(&atlas),
+                BindingRes::Sampler(&sampler),
+            ],
+        );
+        let _overlay_bg = device.create_bind_group(
+            "smoke overlay bind group",
+            ShaderId::Selection,
+            &[
+                BindingRes::Uniform(&ubo),
+                BindingRes::Texture(&immutable),
                 BindingRes::Sampler(&sampler),
             ],
         );
