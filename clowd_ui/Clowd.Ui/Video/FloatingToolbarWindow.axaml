@@ -13,7 +13,7 @@
         Background="Transparent"
         TransparencyLevelHint="Transparent">
 
-    <!-- Styled to match the wgpu capture overlay's button panel (clowd_capture_wgpu
+    <!-- Styled to match the capture overlay's button panel (clowd_capture
          ui/components/panel/layout.rs + ui/gpu/panel.rs): buttons carry their own fill
          (accent / #373737) on a dark-gray panel backdrop (IdealBackgroundBrush, the same
          #373737 the overlay uses for its rects — matches the WPF FloatingButtonWindow

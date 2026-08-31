@@ -1,6 +1,6 @@
 # Standalone workspace — deliberately NOT part of the root clowd workspace.
 # Different target (wasm32-unknown-unknown), profile, and dependency constraints
-# than clowd_capture_wgpu. The root Cargo.toml lists `exclude = ["clowd_server"]`.
+# than clowd_capture. The root Cargo.toml lists `exclude = ["clowd_server"]`.
 [package]
 name = "clowd-server"
 version = "0.1.0"

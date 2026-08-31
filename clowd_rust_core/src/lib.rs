@@ -1,5 +1,5 @@
 //! Code shared by Clowd's Rust binaries — the capture overlay
-//! (`clowd_capture_wgpu`), the scrolling-capture driver
+//! (`clowd_capture`), the scrolling-capture driver
 //! (`clowd_scroll_driver`) and the AI inference binary (`clowd_ai`).
 //!
 //! The bar for living here is that **two processes must agree**, so a change

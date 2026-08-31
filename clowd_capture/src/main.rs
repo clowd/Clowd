@@ -5,6 +5,7 @@ mod capture_output;
 mod cycle_logger;
 mod filename_pattern;
 mod gpu;
+mod gxi;
 mod image_extract;
 mod interaction;
 mod ocr;
@@ -12,6 +13,10 @@ mod render;
 mod selection;
 mod session_output;
 mod settings;
+// Also include!()'d by build.rs; some items (ShaderDef, ALL_SHADERS) are
+// build-script-only, hence the allow.
+#[allow(dead_code)]
+mod shader_bindings;
 mod standby;
 mod standby_hotkeys;
 mod sync;
@@ -114,14 +119,9 @@ fn run_cycle(
     }
     prologue.permission_checked = t_start.elapsed();
 
-    // All the slow work — monitors, wgpu instance, render workers, the desktop
+    // All the slow work — monitors, GPU instance, render workers, the desktop
     // screenshot — happens before the event loop exists, so the overlay windows
     // can be created against state that is already warm.
-    // Read before the workers exist: `Features::TIMESTAMP_QUERY` is a device
-    // creation parameter, so this must be set before the first
-    // `request_adapter_device`. Not on `CapturerSettings` — nothing after
-    // device creation consults it.
-    ui::gpu::gpu_timing::set_gpu_timing_enabled(args.gpu_timing);
     let settings = Arc::new(args.into_settings());
     if let Some(dir) = &settings.session_dir {
         info!("session mode: payload will be written to {:?}", dir);

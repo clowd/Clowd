@@ -146,8 +146,8 @@ namespace Clowd.UI.Controls
             }
         }
 
-        // Matches the wgpu overlay's label rendering: Cascadia Code Regular 11px with a
-        // 1.2 line height, white (clowd_capture_wgpu ui/gpu/panel.rs LABEL_FONT_PX +
+        // Matches the capture overlay's label rendering: Cascadia Code Regular 11px with a
+        // 1.2 line height, white (clowd_capture ui/gpu/panel.rs LABEL_FONT_PX +
         // text.rs FAMILY_CODE). The ttf is the same file the overlay embeds.
         private static readonly FontFamily LabelFontFamily =
             new FontFamily("avares://Clowd.Ui/Assets/Fonts#Cascadia Code");

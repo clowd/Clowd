@@ -41,7 +41,7 @@ const TOUCHPAD_PIXELS_PER_DOUBLING: f32 = 200.0;
 const MOMENTUM_GAP: Duration = Duration::from_millis(50);
 
 /// One capture cycle's state. The persistent process drops this whole graph
-/// before returning to standby, including its wgpu instance, monitors,
+/// before returning to standby, including its GPU instance, monitors,
 /// windows, surfaces and render workers.
 pub struct App {
     windows: WindowSet,
@@ -52,7 +52,7 @@ pub struct App {
     vd_bounds: ScreenRect,
     startup: Arc<StartupTimings>,
     pinch_monitor: Option<crate::system::PinchMonitor>,
-    instance: Arc<wgpu::Instance>,
+    instance: crate::gxi::Instance,
     /// Consumed in resumed() — each one gets a window + surface handoff.
     worker_setups: Option<Vec<WorkerSetup>>,
     /// Incremented by workers that die without a clean shutdown (and by
@@ -220,11 +220,12 @@ fn hide_overlay_for_action(windows: &WindowSet) {
 /// Put an overlay window on screen without activating it or making it key,
 /// before its worker has drawn anything into it.
 ///
-/// macOS only, and a correctness fix rather than a latency one: wgpu-hal's
-/// Metal backend refuses `acquire_texture` with `SurfaceError::Occluded`
-/// whenever the hosting NSWindow lacks `NSWindowOcclusionStateVisible` (its
-/// workaround for gfx-rs/wgpu#8309, where a presented drawable on an occluded
-/// window wedges `nextDrawable` for a second). Windows are created hidden, so
+/// macOS only, and a correctness fix rather than a latency one: the metal
+/// backend refuses `Surface::acquire` with `AcquireResult::Occluded`
+/// whenever the hosting NSWindow lacks `NSWindowOcclusionStateVisible` (the
+/// guard carried over from wgpu-hal's workaround for gfx-rs/wgpu#8309,
+/// where a presented drawable on an occluded window wedges `nextDrawable`
+/// for a second). Windows are created hidden, so
 /// an unordered window means frame 0 acquires nothing, `draw_once` returns
 /// before it ever reaches `queue.present`, and the worker bumps `ready_count`
 /// anyway — the show gate then raises an overlay that was never painted, and
@@ -460,6 +461,14 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
     // the locked peek; otherwise follow hover.
     let new_peek = if !cycle.input.overlays_visible || cycle.input.peek_suspended || cycle.input.dragging {
         cycle.locked_peek.clone()
+    } else if cycle.input.mouse_down {
+        // Button held (pre-capture, pre-drag): the hover selection is
+        // frozen at its press-time target (`set_hover_target` is gated on
+        // `!mouse_down`), so the peek must freeze with it — following the
+        // cursor here would draw a neighbouring window's peek inside the
+        // frozen selection rect, and a release would then lock that
+        // mismatched pair.
+        cycle.cached_peek_command.clone()
     } else {
         hovered_full
             .as_ref()
@@ -522,7 +531,7 @@ impl App {
     pub fn new(
         settings: Arc<CapturerSettings>,
         startup: Arc<StartupTimings>,
-        instance: Arc<wgpu::Instance>,
+        instance: crate::gxi::Instance,
         monitors: Vec<MonitorInfo>,
         initial_mouse: ScreenPointF,
         worker_setups: Vec<WorkerSetup>,
@@ -738,10 +747,7 @@ impl App {
         };
         if cycle.walker.is_none() {
             if let Some(w) = cycle.walker_latch.try_get() {
-                let pt = ScreenPoint::new(
-                    cycle.input.virtual_cursor.x.round() as i32,
-                    cycle.input.virtual_cursor.y.round() as i32,
-                );
+                let pt = to_screen_point(cycle.input.virtual_cursor);
                 cycle
                     .input
                     .set_hover_target(w.hit_test_target(pt));
@@ -989,7 +995,6 @@ impl App {
                 cycle.ocr_ready = None;
             }
             OcrState::Lifted {
-                region,
                 ..
             } => {
                 // Fresh anchor: the exit fade starts NOW. The outcome is
@@ -998,7 +1003,6 @@ impl App {
                 // the region's fade back to color remains to play.
                 cycle.input.ocr = OcrState::Retracting {
                     anchor: Instant::now(),
-                    region,
                 };
             }
             // Second Escape mid-retract: the user wants out, not a replay —
@@ -1151,10 +1155,7 @@ impl App {
         let Some(cycle) = self.cycle.as_mut() else {
             return;
         };
-        let pt = ScreenPoint::new(
-            cycle.input.virtual_cursor.x.round() as i32,
-            cycle.input.virtual_cursor.y.round() as i32,
-        );
+        let pt = to_screen_point(cycle.input.virtual_cursor);
         let hover = cycle
             .walker
             .as_ref()
@@ -2086,10 +2087,7 @@ impl ApplicationHandler for App {
                                 broadcast_mouse_state(&self.windows, &cycle.input);
                             }
                             'w' => {
-                                let pt = ScreenPoint::new(
-                                    cycle.input.virtual_cursor.x.round() as i32,
-                                    cycle.input.virtual_cursor.y.round() as i32,
-                                );
+                                let pt = to_screen_point(cycle.input.virtual_cursor);
                                 if let Some(target) = cycle
                                     .walker
                                     .as_ref()
@@ -2099,10 +2097,7 @@ impl ApplicationHandler for App {
                                 }
                             }
                             'f' => {
-                                let pt = ScreenPoint::new(
-                                    cycle.input.virtual_cursor.x.round() as i32,
-                                    cycle.input.virtual_cursor.y.round() as i32,
-                                );
+                                let pt = to_screen_point(cycle.input.virtual_cursor);
                                 if let Some(bounds) = self
                                     .monitors
                                     .iter()
@@ -2158,10 +2153,7 @@ impl ApplicationHandler for App {
                 }
 
                 if !cycle.input.mouse_down && !cycle.input.captured {
-                    let pt = ScreenPoint::new(
-                        cycle.input.virtual_cursor.x.round() as i32,
-                        cycle.input.virtual_cursor.y.round() as i32,
-                    );
+                    let pt = to_screen_point(cycle.input.virtual_cursor);
                     let hover = cycle
                         .walker
                         .as_ref()
@@ -2598,7 +2590,6 @@ mod tests {
 
         i.ocr = OcrState::Retracting {
             anchor: Instant::now(),
-            region: ScreenRect::from_xy_size(0, 0, 10, 10),
         };
         assert_eq!(default_action(&i), None);
     }

@@ -1,5 +1,5 @@
 [package]
-name = "clowd_capture_wgpu"
+name = "clowd_capture"
 version = "1.0.0"
 edition = "2021"
 
@@ -16,17 +16,11 @@ serde.workspace = true
 serde_json.workspace = true
 winit.workspace = true
 handy-keys.workspace = true
-# "wgsl" enables the runtime WGSL frontend: the only shader path on macOS.
-# Windows consumes precompiled DXBC via passthrough (see gpu/shaders.rs and
-# build.rs) and never compiles WGSL at runtime, but the frontend feature stays
-# on so the same wgpu build serves both targets.
-wgpu = { workspace = true, features = ["dx12", "metal", "wgsl"] }
-pollster.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 usvg.workspace = true
 resvg.workspace = true
 etagere.workspace = true
-glyphon.workspace = true
+cosmic-text.workspace = true
 arboard.workspace = true
 rfd.workspace = true
 xdialog = { workspace = true, features = ["win32-direct", "maccf-direct"] }
@@ -46,6 +40,11 @@ windows = { workspace = true, features = [
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Dxgi",
+    # The d3d11 gxi backend (src/gxi/d3d11): D3D11CreateDevice + resources,
+    # D3D_DRIVER_TYPE/D3D_FEATURE_LEVEL/topology, DXGI formats + swapchain.
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Dxgi_Common",
     "Win32_Storage_Xps",
     "Win32_System_Com",
     # SetThreadPriority / MMCSS / power throttling for the thread tiers
@@ -72,10 +71,41 @@ core-foundation.workspace = true
 objc2.workspace = true
 objc2-app-kit.workspace = true
 objc2-foundation.workspace = true
-objc2-quartz-core = { workspace = true, features = ["CALayer", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "objc2-core-foundation"] }
+# The metal gxi backend (src/gxi/metal): device/queue/resources, MSL library
+# compilation, render pipelines + vertex descriptors, command buffers and the
+# render pass/encoder used per frame. Per-header features, one per Metal
+# framework header the backend touches.
+objc2-metal = { workspace = true, features = [
+    "MTLDevice",
+    "MTLCommandQueue",
+    "MTLCommandBuffer",
+    "MTLCommandEncoder",
+    "MTLRenderCommandEncoder",
+    "MTLRenderPass",
+    "MTLRenderPipeline",
+    "MTLVertexDescriptor",
+    "MTLLibrary",
+    "MTLPixelFormat",
+    "MTLResource",
+    "MTLAllocation",
+    "MTLBuffer",
+    "MTLTexture",
+    "MTLSampler",
+    "MTLTypes",
+    "MTLDrawable",
+    # GPU frame timing (src/gxi/metal/timing.rs): addCompletedHandler takes a
+    # block2 block, GPUStartTime/GPUEndTime return CFTimeInterval.
+    "block2",
+    "objc2-core-foundation",
+] }
+# CAMetalLayer + the objc2-metal interop feature (its setDevice/pixelFormat/
+# nextDrawable signatures are typed against objc2-metal's protocols).
+objc2-quartz-core = { workspace = true, features = ["CALayer", "CAAnimation", "CAMediaTiming", "CAMediaTimingFunction", "CAMetalLayer", "objc2-core-foundation", "objc2-metal"] }
 block2.workspace = true
 
-# naga version must match what wgpu 30.0 uses internally
-[target.'cfg(windows)'.build-dependencies]
-naga = { workspace = true, features = ["wgsl-in", "hlsl-out"] }
+# Build-time shader translation (see build.rs): WGSL to DXBC on Windows, WGSL
+# to MSL source on macOS. One block for both; the unused naga backend only
+# costs build time, and nothing from naga ships in the binary.
+[build-dependencies]
+naga = { workspace = true, features = ["wgsl-in", "hlsl-out", "msl-out"] }
 libloading.workspace = true

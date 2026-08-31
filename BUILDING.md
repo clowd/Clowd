@@ -9,7 +9,7 @@
 
 ```cmd
 git clone https://github.com/clowd/Clowd.git
-cargo build -p clowd_capture_wgpu
+cargo build -p clowd_capture
 dotnet build clowd_ui/Clowd.Ui/Clowd.Ui.csproj
 ```
 
@@ -36,7 +36,7 @@ Roughly a hundred tests — every encode, render, composition-player, filmstrip,
 sidecar test — skip rather than fail when FFmpeg is missing, so check for `Skipped: 0` before
 believing a green run.
 
-The screen capture overlay is a separate Rust binary (`clowd_capture_wgpu`); the tray app / editor is the Avalonia project `Clowd.Ui`. For video recording, Clowd looks for an [obs-express](https://github.com/clowd/obs-express-rs) distribution in an `obs-express/` directory alongside the Clowd.Ui binary — see `.github/workflows/ci.yml` for how release packages are assembled.
+The screen capture overlay is a separate Rust binary (`clowd_capture`); the tray app / editor is the Avalonia project `Clowd.Ui`. For video recording, Clowd looks for an [obs-express](https://github.com/clowd/obs-express-rs) distribution in an `obs-express/` directory alongside the Clowd.Ui binary — see `.github/workflows/ci.yml` for how release packages are assembled.
 
 The video editor runs on Windows and macOS alike. Platform-specific pieces: the frame compositor
 renders on Direct3D 12 or Metal (`GpuSurfaceFactory`, with a CPU fallback either way), video decode
@@ -52,7 +52,7 @@ On Windows there is also `clowd_shell_ext`, a small COM dll (`IExplorerCommand`)
 ## Tests
 
 ```cmd
-cargo test -p clowd_capture_wgpu
+cargo test -p clowd_capture
 cargo test -p clowd_shell_ext
 cargo test -p clowd_ai
 dotnet test clowd_ui/Clowd.VideoSDK.Tests/Clowd.VideoSDK.Tests.csproj

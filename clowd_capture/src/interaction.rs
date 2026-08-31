@@ -148,7 +148,6 @@ pub enum OcrState {
     /// duration.
     Retracting {
         anchor: Instant,
-        region: ScreenRect,
     },
 }
 
@@ -613,7 +612,6 @@ mod tests {
         // selection stays frozen) but hands the Normal buttons back at once.
         let retracting = OcrState::Retracting {
             anchor: Instant::now(),
-            region,
         };
         assert!(retracting.active());
         assert!(!retracting.shows_ocr_panel());

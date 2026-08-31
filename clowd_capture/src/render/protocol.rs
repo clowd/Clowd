@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
+use crate::gxi;
 use crate::sync::VisibleLatch;
 use crate::system::{CapturedDesktop, WindowPeekImage};
 use crate::ui::shared::UiSharedState;
@@ -57,7 +58,10 @@ pub struct CycleParams {
 /// Messages sent to workers on the bootstrap channel. `Handoff` carries the
 /// window + surface; `BeginCycle` starts the capture.
 pub enum WorkerInput {
-    Handoff(WindowHandoff),
+    /// Boxed: the surface (with its stored configuration) dwarfs the other
+    /// variants, and clippy's large-enum-variant lint is right that every
+    /// `BeginCycle`/`Shutdown` should not pay its size.
+    Handoff(Box<WindowHandoff>),
     BeginCycle(Arc<CycleParams>),
     /// Sent by `WindowHandle::drop` so a worker still waiting on `BeginCycle`
     /// after its handoff wakes for teardown — channel disconnection alone
@@ -70,5 +74,5 @@ pub enum WorkerInput {
 /// render worker via the bootstrap channel.
 pub struct WindowHandoff {
     pub window: Arc<Window>,
-    pub surface: wgpu::Surface<'static>,
+    pub surface: gxi::Surface,
 }

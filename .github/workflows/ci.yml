@@ -53,8 +53,8 @@ jobs:
           cargo fmt --check
           cargo clippy -p clowd_rust_core --all-targets -- -D warnings
           cargo test -p clowd_rust_core
-          cargo clippy -p clowd_capture_wgpu -- -D warnings
-          cargo test -p clowd_capture_wgpu
+          cargo clippy -p clowd_capture -- -D warnings
+          cargo test -p clowd_capture
           cargo clippy -p clowd_scroll_driver --all-targets -- -D warnings
           cargo test -p clowd_scroll_driver
           cargo clippy -p clowd_ai --all-targets -- -D warnings
@@ -220,7 +220,7 @@ jobs:
       - name: Build rust binaries
         shell: bash
         run: |
-          PKGS="-p clowd_capture_wgpu -p clowd_scroll_driver"
+          PKGS="-p clowd_capture -p clowd_scroll_driver"
           if [ "${{ runner.os }}" = "Windows" ]; then
             PKGS="$PKGS -p clowd_shell_ext"
           fi
@@ -239,16 +239,16 @@ jobs:
           OUT="target/${{ matrix.target }}/release"
           # Name the artifacts rather than the directory, which would recurse into deps/ and upload every dependency's intermediates.
           if [ "${{ runner.os }}" = "Windows" ]; then
-            DIF="$OUT/clowd_capture_wgpu.pdb"
+            DIF="$OUT/clowd_capture.pdb"
             SCROLL_DIF="$OUT/clowd_scroll_driver.pdb"
             AI_DIF="$OUT/clowd_ai.pdb"
           else
-            DIF="$OUT/clowd_capture_wgpu.dSYM"
+            DIF="$OUT/clowd_capture.dSYM"
             SCROLL_DIF="$OUT/clowd_scroll_driver.dSYM"
             AI_DIF="$OUT/clowd_ai.dSYM"
           fi
           # The executable goes up alongside the debug file for its symbol table.
-          sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture_wgpu${{ matrix.exe }}"
+          sentry-cli debug-files upload "$DIF" "$OUT/clowd_capture${{ matrix.exe }}"
           sentry-cli debug-files upload "$SCROLL_DIF" "$OUT/clowd_scroll_driver${{ matrix.exe }}"
           # absent on the one leg that does not build the AI inference binary
           if [ "${{ matrix.ai }}" = "true" ]; then
@@ -260,7 +260,7 @@ jobs:
 
       # The driver (and clowd_ai, below) sit beside the overlay, which resolves them as siblings of its own executable.
       - name: Copy capture binary into package
-        run: cp "target/${{ matrix.target }}/release/clowd_capture_wgpu${{ matrix.exe }}" publish/
+        run: cp "target/${{ matrix.target }}/release/clowd_capture${{ matrix.exe }}" publish/
         shell: bash
 
       - name: Copy scrolling capture driver into package

@@ -21,8 +21,8 @@ namespace Clowd.UI
     /// The floating recording toolbar. Behavior ports the WPF FloatingButtonWindow +
     /// VideoCaptureWindow button strip (drag handle rotates on click / moves on drag with a 5px
     /// threshold, manual interaction disables auto-placement, below → right → left → inside
-    /// placement cascade, live audio level bars on MIC/SPK); visuals match the wgpu capture
-    /// overlay's button panel (clowd_capture_wgpu ui/gpu/panel.rs — Cascadia Code labels,
+    /// placement cascade, live audio level bars on MIC/SPK); visuals match the capture
+    /// overlay's button panel (clowd_capture ui/gpu/panel.rs — Cascadia Code labels,
     /// canvas-fitted icons, transparent gaps; see CaptureToolButton.axaml for the mapping).
     /// Deliberately decoupled from VideoCapturePage — it only raises events and persists
     /// the mic/speaker toggles; the page wires the events and drives state via the Set* methods.

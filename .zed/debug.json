@@ -15,7 +15,7 @@
     },
   },
   {
-    "label": "Debug clowd_capture_wgpu",
+    "label": "Debug clowd_capture",
     "adapter": "CodeLLDB",
     "request": "launch",
     "args": [
@@ -28,7 +28,7 @@
     ],
     "build": {
       "command": "cargo",
-      "args": ["build", "-p", "clowd_capture_wgpu"],
+      "args": ["build", "-p", "clowd_capture"],
     },
   },
 ]

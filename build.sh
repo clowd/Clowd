@@ -4,7 +4,7 @@
 # Usage: ./build.sh <version>
 #
 # 1. dotnet publish Clowd.Ui (Release, framework-dependent, host RID) to build/<version>/<rid>
-# 2. cargo build --release (builds clowd_capture_wgpu, the scrolling capture
+# 2. cargo build --release (builds clowd_capture, the scrolling capture
 #    driver, and the clowd_ai inference binary the overlay spawns for OCR and
 #    Clowd.VideoSDK spawns for the AI effects)
 # 3. copy the capture binaries next to the published Clowd.Ui executable
@@ -67,7 +67,7 @@ fi
 CLOWD_VERSION="$VERSION" cargo build --release --manifest-path "$ROOT/Cargo.toml" "${CARGO_EXCLUDE[@]}"
 
 echo "==> Copying capture binaries into publish output"
-cp "$ROOT/target/release/clowd_capture_wgpu$EXE" "$OUT/"
+cp "$ROOT/target/release/clowd_capture$EXE" "$OUT/"
 # Beside the overlay, which is where CaptureBinaryLocator.ResolveScrollDriver
 # looks for it.
 cp "$ROOT/target/release/clowd_scroll_driver$EXE" "$OUT/"

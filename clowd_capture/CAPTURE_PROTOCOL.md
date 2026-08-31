@@ -2,7 +2,7 @@
 
 The contract between the Clowd.Ui shell and the Rust capture processes.
 
-The capture overlay `clowd_capture_wgpu` runs **one-shot**: the shell spawns one
+The capture overlay `clowd_capture` runs **one-shot**: the shell spawns one
 process per capture with CLI flags; the process shows the overlay, writes its
 result into `--session-dir`, and exits. Completion signal = process exit.
 
@@ -256,7 +256,7 @@ the region, and spawns the driver to do the mechanical part.
 It is a **separate binary**, not a mode of the capturer. Nothing it does needs
 a window, an event loop, a GPU or the screen-recording permission dance, and
 bringing any of that up would put pixels on screen in front of the content it
-is about to photograph. It ships beside `clowd_capture_wgpu`, which is where
+is about to photograph. It ships beside `clowd_capture`, which is where
 `CaptureBinaryLocator.ResolveScrollDriver` looks for it.
 
 **Windows and macOS.** The loop, the caps, the stitcher, this protocol and the
@@ -438,7 +438,7 @@ the next one queues behind it; and the tens of MB of embedded models plus the
 static runtime left the overlay, which is spawned fresh for every capture and
 therefore pays for its own size in start-up latency.
 
-It ships beside `clowd_capture_wgpu` on every platform that has an ONNX
+It ships beside `clowd_capture` on every platform that has an ONNX
 Runtime build — Windows x64/arm64 and Apple Silicon, **not** Intel macOS,
 where the spawn fails and the overlay shows OCR as unavailable — which is
 where `src/ocr/client.rs` looks for it (sibling of `current_exe()`; the

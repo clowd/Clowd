@@ -9,9 +9,9 @@
     ],
   },
   {
-    "label": "Build clowd_capture_wgpu (Debug)",
+    "label": "Build clowd_capture (Debug)",
     "command": "cargo",
-    "args": ["build", "-p", "clowd_capture_wgpu"],
+    "args": ["build", "-p", "clowd_capture"],
   },
   {
     "label": "Rebuild All",
@@ -24,7 +24,7 @@
       "cargo",
       "build",
       "-p",
-      "clowd_capture_wgpu",
+      "clowd_capture",
     ],
   },
 ]

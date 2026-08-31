@@ -11,7 +11,7 @@ rustflags = ["-Ctarget-cpu=x86-64-v2"]
 rustflags = ["-Ctarget-cpu=x86-64-v2"]
 
 [alias]
-r = "run -p clowd_capture_wgpu"
-b = "build -p clowd_capture_wgpu"
-rr = "run -p clowd_capture_wgpu --release"
-bb = "build -p clowd_capture_wgpu --release"
+r = "run -p clowd_capture"
+b = "build -p clowd_capture"
+rr = "run -p clowd_capture --release"
+bb = "build -p clowd_capture --release"

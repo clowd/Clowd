@@ -289,13 +289,6 @@ pub struct CliArgs {
     /// last left it.
     #[arg(long, value_name = "PATH")]
     pub save_dir: Option<PathBuf>,
-
-    /// Collect per-pass GPU timings for the debug panel. Off by default: it
-    /// requests `Features::TIMESTAMP_QUERY` at device creation and builds a
-    /// query set plus four buffers per worker before the first frame, none
-    /// of which frame 0 consumes. Read once, before the render workers start.
-    #[arg(long)]
-    pub gpu_timing: bool,
 }
 
 impl CliArgs {
@@ -349,7 +342,7 @@ mod tests {
 
     #[test]
     fn cli_defaults_mirror_settings_default() {
-        let cli = CliArgs::parse_from(["clowd_capture_wgpu"]);
+        let cli = CliArgs::parse_from(["clowd_capture"]);
         let from_cli = cli.into_settings();
         let default = CapturerSettings::default();
         assert_eq!(from_cli.accent_color, default.accent_color);
@@ -374,10 +367,10 @@ mod tests {
     /// the full strip, and each flag removes exactly its own button.
     #[test]
     fn panel_feature_flags_are_opt_out() {
-        let bare = CliArgs::parse_from(["clowd_capture_wgpu"]).into_settings();
+        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
         assert_eq!(bare.panel_features, PanelFeatures::ALL);
 
-        let none = CliArgs::parse_from(["clowd_capture_wgpu", "--no-upload", "--no-scroll-capture", "--no-ocr"]).into_settings();
+        let none = CliArgs::parse_from(["clowd_capture", "--no-upload", "--no-scroll-capture", "--no-ocr"]).into_settings();
         assert_eq!(
             none.panel_features,
             PanelFeatures {
@@ -387,7 +380,7 @@ mod tests {
             }
         );
 
-        let no_ocr = CliArgs::parse_from(["clowd_capture_wgpu", "--no-ocr"]).into_settings();
+        let no_ocr = CliArgs::parse_from(["clowd_capture", "--no-ocr"]).into_settings();
         assert!(!no_ocr.panel_features.ocr);
         assert!(no_ocr.panel_features.upload && no_ocr.panel_features.scroll_capture);
     }
@@ -397,12 +390,12 @@ mod tests {
     #[test]
     fn rounded_corners_flag_is_opt_out() {
         assert!(
-            CliArgs::parse_from(["clowd_capture_wgpu"])
+            CliArgs::parse_from(["clowd_capture"])
                 .into_settings()
                 .rounded_window_corners
         );
         assert!(
-            !CliArgs::parse_from(["clowd_capture_wgpu", "--no-rounded-corners"])
+            !CliArgs::parse_from(["clowd_capture", "--no-rounded-corners"])
                 .into_settings()
                 .rounded_window_corners
         );
@@ -412,29 +405,23 @@ mod tests {
     fn shell_pid_parses_and_is_absent_by_default() {
         // Standalone runs have no shell, and nothing to hand foreground
         // rights back to.
-        assert_eq!(CliArgs::parse_from(["clowd_capture_wgpu"]).shell_pid, None);
-        assert_eq!(
-            CliArgs::parse_from(["clowd_capture_wgpu", "--shell-pid", "4321"]).shell_pid,
-            Some(4321)
-        );
+        assert_eq!(CliArgs::parse_from(["clowd_capture"]).shell_pid, None);
+        assert_eq!(CliArgs::parse_from(["clowd_capture", "--shell-pid", "4321"]).shell_pid, Some(4321));
         // Both spawn paths use the two-token form; the `=` form is what a
         // human types, and clap accepts either.
-        assert_eq!(
-            CliArgs::parse_from(["clowd_capture_wgpu", "--shell-pid=4321"]).shell_pid,
-            Some(4321)
-        );
+        assert_eq!(CliArgs::parse_from(["clowd_capture", "--shell-pid=4321"]).shell_pid, Some(4321));
     }
 
     /// The save-dialog naming flags: a bare command line keeps the shell's own
     /// default pattern and lets the dialog pick its folder.
     #[test]
     fn filename_pattern_and_save_dir_parse() {
-        let bare = CliArgs::parse_from(["clowd_capture_wgpu"]).into_settings();
+        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
         assert_eq!(bare.filename_pattern, DEFAULT_FILENAME_PATTERN);
         assert_eq!(bare.save_directory, None);
 
         let set = CliArgs::parse_from([
-            "clowd_capture_wgpu",
+            "clowd_capture",
             "--filename-pattern",
             "'clowd' yyyy-MM-dd",
             "--save-dir",
@@ -447,15 +434,15 @@ mod tests {
 
     #[test]
     fn capture_mode_defaults_to_region_and_parses_variants() {
-        let default = CliArgs::parse_from(["clowd_capture_wgpu"]);
+        let default = CliArgs::parse_from(["clowd_capture"]);
         assert_eq!(default.capture_mode, CaptureMode::Region);
         assert!(!default.capture_mode.is_preselect());
 
-        let window = CliArgs::parse_from(["clowd_capture_wgpu", "--capture-mode", "window"]);
+        let window = CliArgs::parse_from(["clowd_capture", "--capture-mode", "window"]);
         assert_eq!(window.capture_mode, CaptureMode::Window);
         assert!(window.capture_mode.is_preselect());
 
-        let screen = CliArgs::parse_from(["clowd_capture_wgpu", "--capture-mode", "screen"]);
+        let screen = CliArgs::parse_from(["clowd_capture", "--capture-mode", "screen"]);
         assert_eq!(screen.capture_mode, CaptureMode::Screen);
     }
 

@@ -7,6 +7,7 @@ use anyhow::Result;
 use winit::window::{CursorIcon, Window, WindowId};
 
 use crate::capture_output::{save_to_file_with_peek, ActionResult};
+use crate::gxi;
 use crate::render::protocol::{PeekCommand, RenderMsg, WindowHandoff, WorkerInput};
 use crate::render::worker::WorkerSetup;
 use crate::settings::CapturerSettings;
@@ -43,7 +44,7 @@ impl WindowHandle {
     pub fn new(
         window: Arc<Window>,
         setup: WorkerSetup,
-        instance: &wgpu::Instance,
+        instance: &gxi::Instance,
         #[cfg(target_os = "macos")] screenshot: Option<&CapturedDesktop>,
         #[cfg(not(target_os = "macos"))] _screenshot: Option<&CapturedDesktop>,
     ) -> Result<Self> {
@@ -62,19 +63,21 @@ impl WindowHandle {
         #[cfg(target_os = "macos")]
         let screenshot_image = screenshot.and_then(|s| crop_screenshot_to_cgimage(s, setup.monitor_bounds));
         #[cfg(not(target_os = "macos"))]
-        let screenshot_image: Option<()> = None;
+        let screenshot_image: Option<gxi::BackdropImage> = None;
 
-        #[cfg(target_os = "macos")]
-        let (surface, render_subview, backdrop_view) = create_surface(instance, window.clone(), screenshot_image)?;
+        // The backend builds the surface (macOS: including the backdrop +
+        // render subviews the fields below keep driving) on this, the main
+        // thread.
+        let (surface, views): (gxi::Surface, gxi::SurfaceViews) = gxi::Surface::create(instance, window.clone(), screenshot_image)?;
         #[cfg(not(target_os = "macos"))]
-        let surface = create_surface(instance, window.clone(), screenshot_image)?;
+        let _ = views;
 
         let _ = setup
             .input_tx
-            .send(WorkerInput::Handoff(WindowHandoff {
+            .send(WorkerInput::Handoff(Box::new(WindowHandoff {
                 window: window.clone(),
                 surface,
-            }));
+            })));
 
         Ok(Self {
             window,
@@ -84,9 +87,9 @@ impl WindowHandle {
             thread: Some(setup.thread),
             shown: Cell::new(false),
             #[cfg(target_os = "macos")]
-            render_subview,
+            render_subview: views.render_view,
             #[cfg(target_os = "macos")]
-            backdrop_view,
+            backdrop_view: views.backdrop_view,
         })
     }
 
@@ -103,7 +106,7 @@ impl WindowHandle {
     }
 
     /// Deferred half of the frozen-desktop backdrop: fill the (empty) layer
-    /// created by `create_surface` with the cropped screenshot. Used when
+    /// created by `gxi::Surface::create` with the cropped screenshot. Used when
     /// `WindowHandle::new` ran before the desktop capture finished; the
     /// caller orders the window front immediately afterwards — never
     /// before, or the user sees an opaque black fullscreen window for the
@@ -476,87 +479,6 @@ pub(crate) fn set_hardware_cursor_visible(visible: bool) {
         unsafe { CGDisplay::new(CGMainDisplayID()).hide_cursor() }.ok();
         HIDDEN.store(true, Ordering::Relaxed);
     }
-}
-
-// ── Platform: surface creation (private) ───────────────────────────
-
-/// What the macOS surface build hands back: the wgpu surface plus the two
-/// layer-backed views `WindowHandle` keeps driving afterwards — the render
-/// subview (faded in by `show`) and the backdrop view below it (filled by
-/// `install_backdrop` when the screenshot post-dates window creation).
-#[cfg(target_os = "macos")]
-type SurfaceParts = (
-    wgpu::Surface<'static>,
-    Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-    Option<objc2::rc::Retained<objc2_app_kit::NSView>>,
-);
-
-#[cfg(target_os = "macos")]
-fn create_surface(
-    instance: &wgpu::Instance,
-    window: Arc<Window>,
-    screenshot_image: Option<core_graphics::image::CGImage>,
-) -> Result<SurfaceParts> {
-    use objc2::{MainThreadMarker, MainThreadOnly};
-    use objc2_app_kit::{NSAutoresizingMaskOptions, NSView};
-    use std::ptr::NonNull;
-    use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-
-    let mtm = MainThreadMarker::new().expect("create_surface must be called on the main thread");
-
-    let handle = window.window_handle()?;
-    let RawWindowHandle::AppKit(h) = handle.as_raw() else {
-        anyhow::bail!("expected AppKit window handle");
-    };
-
-    let content_view: &NSView = unsafe { &*(h.ns_view.as_ptr() as *const NSView) };
-    let frame = content_view.frame();
-
-    // Always built, even with no image yet: subview order is fixed here
-    // (backdrop below, render subview above), so a screenshot that arrives
-    // after window creation only has to `setContents` on the existing layer
-    // — see `WindowHandle::install_backdrop`. An empty layer is transparent
-    // and the window stays hidden until the backdrop is filled, so nothing
-    // black ever flashes.
-    let bg_view = NSView::initWithFrame(NSView::alloc(mtm), frame);
-    bg_view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
-    bg_view.setWantsLayer(true);
-    if let Some(ref cg_image) = screenshot_image {
-        if let Some(layer) = bg_view.layer() {
-            unsafe {
-                let cg_ptr: *const std::ffi::c_void = *(cg_image as *const _ as *const *const std::ffi::c_void);
-                layer.setContents(Some(&*(cg_ptr as *const objc2::runtime::AnyObject)));
-                layer.setContentsGravity(objc2_quartz_core::kCAGravityResize);
-            }
-        }
-    }
-    content_view.addSubview(&bg_view);
-
-    let subview = NSView::initWithFrame(NSView::alloc(mtm), frame);
-    subview.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
-    content_view.addSubview(&subview);
-    subview.setWantsLayer(true);
-    if let Some(layer) = subview.layer() {
-        layer.setOpacity(0.0);
-    }
-
-    let subview_ptr = NonNull::new(objc2::rc::Retained::as_ptr(&subview) as *mut _).expect("subview pointer is non-null");
-    let raw_window_handle = RawWindowHandle::AppKit(winit::raw_window_handle::AppKitWindowHandle::new(subview_ptr));
-    let raw_display_handle = winit::raw_window_handle::RawDisplayHandle::AppKit(winit::raw_window_handle::AppKitDisplayHandle::new());
-
-    let surface = unsafe {
-        instance.create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-            raw_display_handle: Some(raw_display_handle),
-            raw_window_handle,
-        })?
-    };
-
-    Ok((surface, Some(subview), Some(bg_view)))
-}
-
-#[cfg(not(target_os = "macos"))]
-fn create_surface(instance: &wgpu::Instance, window: Arc<Window>, _screenshot_image: Option<()>) -> Result<wgpu::Surface<'static>> {
-    Ok(instance.create_surface(window)?)
 }
 
 // ── Platform: screenshot crop (private) ────────────────────────────

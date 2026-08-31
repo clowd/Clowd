@@ -1,93 +1,45 @@
+// Desktop background pass: the frozen desktop snapshot, the captured
+// cursor composited into it, and the region treatment — untouched inside
+// the selection (or OCR-dimmed while that mode runs), darkened grayscale
+// outside it. NOTHING ELSE: the crosshair, the selection border, the
+// resize handles and the peeked window all live in their own passes
+// (crosshair.wgsl, selection.wgsl, peek.wgsl), drawn over this one, so
+// this fullscreen pass stays close to a plain textured triangle. See
+// render/frame.rs for the pass order.
+//
 // Per-window uniforms.
 //   uv_offset_scale.xy = where this monitor begins in the shared desktop
 //                        texture, in normalized UV space.
 //   uv_offset_scale.zw = the size of this monitor in the same UV space.
+//                        The magnifier zoom is folded in CPU-side.
 //   params.x           = grayscale fade factor in [0, 1].
 //                        0 = original color, 1 = darkened grayscale.
-//   params.yz          = cursor position in window-local physical pixels.
-//                        Out-of-range values mean the cursor is on another
-//                        monitor; the integer-equality test below silently
-//                        misses and no line is drawn for that axis.
-//   params.w           = this monitor's DPI scale factor (1.0 = 100 %,
-//                        1.5 = 150 %, …). Used to size the colored
-//                        crosshair arms so they stay the same physical
-//                        size on every display.
-//   accent_color    = RGBA color used for both the inner thin cross,
-//                        the outer thick segments, AND the marching-ants
-//                        dashes on the selection border. Seeded once from
-//                        `CapturerSettings`; never updated per frame.
 //   selection_rect     = mouse-drag selection in window-local physical
 //                        pixels: x=left y=top z=right w=bottom. Empty if
-//                        z<=x || w<=y; the shader treats any such rect
-//                        as "no selection" and falls through to the
-//                        normal grayscale path.
-//   selection_params.x = elapsed seconds since the per-thread animation
-//                        clock started; drives the marching-ants phase
-//                        on the selection border.
-//   selection_params.y = `captured` flag (0 = not captured, 1 = the
-//                        selection has been finalized). When set, the
-//                        shader stops drawing the crosshair entirely
-//                        so the OS cursor takes over the visual role.
-//   selection_params.w = scroll-point pick flag (0 = normal, 1 = the user
-//                        pressed SCROLL and is picking the point the wheel
-//                        will be aimed at). Suppresses the resize handles:
-//                        the picker owns the next click, so nothing that
-//                        looks draggable may be on screen. The dashed
-//                        border stays — it is what shows the region being
-//                        captured.
-//   selection_params.z = current magnifier zoom (1 .. 256). Currently
-//                        unused — the selection border stays a fixed
-//                        2 physical px and the dash period scales
-//                        with `params.w` (DPI), not zoom. Plumbed
-//                        through anyway so a future version can e.g.
-//                        grow the crosshair arms with zoom without a
-//                        uniform-layout change.
+//                        z<=x || w<=y; any such rect means "no selection"
+//                        and every pixel takes the outside treatment.
+//                        The selection pass's border straddles this rect's
+//                        edge and repaints the transition band, so the
+//                        plain rect test here never shows: for a rounded
+//                        selection the corner regions outside the curve
+//                        are likewise repainted by that pass's corner
+//                        patches.
+//   cursor_rect        = frozen-cursor rect in window-local physical px:
+//                        x=left y=top z=right w=bottom. Empty (z <= x)
+//                        when the cursor is hidden or off this monitor.
+//   cursor_params.x    = cursor type: 0=hidden, 1=alpha_blended, 2=masked.
+//   ocr_params.x       = OCR source dim amount in [0, 1]; ramps alongside
+//                        the lift animation and reverses during retract.
+//   ocr_params.z       = OCR selection desaturation in [0, 1], same
+//                        shared clock as the dim (see render/desktop.rs).
 struct Uniforms {
-    uv_offset_scale:  vec4<f32>,
-    params:           vec4<f32>,
-    accent_color:  vec4<f32>,
-    selection_rect:   vec4<f32>,
-    selection_params: vec4<f32>,
-    // cursor_rect.xyzw = left, top, right, bottom in window-local px.
-    // Empty (z <= x) when cursor is hidden or off this monitor.
-    cursor_rect:      vec4<f32>,
-    // cursor_params.x = cursor type: 0=hidden, 1=alpha_blended, 2=masked.
-    cursor_params:    vec4<f32>,
-    // ocr_rect.xyzw = OCR source region in window-local px (l, t, r, b).
-    // Empty (z <= x) while OCR mode is idle. Currently unread — the dim
-    // below applies to the whole selection fill, which IS the OCR region
-    // modulo edge clamping — but mirrored here so the Rust struct and this
-    // block cannot diverge in layout.
-    ocr_rect:         vec4<f32>,
-    // ocr_params.x = OCR source dim amount in [0, 1]; ramps alongside the
-    //                lift animation and reverses during retract.
-    // ocr_params.y = OCR-mode-active flag; suppresses the resize handles
-    //                so nothing draws over (or looks draggable under) the
-    //                lifted text.
-    // ocr_params.z = OCR selection desaturation in [0, 1]. Ramps on the
-    //                same shared-anchor clock as the dim (CPU-side, the
-    //                same quartic curve as the opening fade — see
-    //                render/desktop.rs) so the selection interior joins
-    //                the monochrome page when OCR starts and color
-    //                returns with the retract.
-    ocr_params:       vec4<f32>,
-    // selection_shape.x = corner radius of the selection in window-local
-    //                px (through the same zoom transform as
-    //                selection_rect). 0 = square: the border takes the
-    //                original pixel-exact integer-slab path below. > 0
-    //                only for a picked window, whose OS corner radius it
-    //                is; the border is then drawn as an anti-aliased
-    //                rounded rect whose dashes run along the curved
-    //                perimeter, and the rect's own corners — outside the
-    //                curve — get the faded "outside" treatment, matching
-    //                the transparent corners of the copied / saved image.
-    // selection_shape.y = dash period in physical px for this frame, or 0
-    //                for the nominal 32 × DPI-step. See dash_period().
-    selection_shape:  vec4<f32>,
+    uv_offset_scale: vec4<f32>,
+    params:          vec4<f32>,
+    selection_rect:  vec4<f32>,
+    cursor_rect:     vec4<f32>,
+    cursor_params:   vec4<f32>,
+    ocr_params:      vec4<f32>,
 };
-
-const PI: f32 = 3.14159265;
-const HALF_PI: f32 = 1.57079633;
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var desktop_tex: texture_2d<f32>;
@@ -117,7 +69,7 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
 }
 
 // Gamma-2.0 approximation of the sRGB transfer. The texture and surface
-// are both non-sRGB (`Bgra8Unorm`), so wgpu does *no* color-space
+// are both non-sRGB (`Bgra8Unorm`), so the GPU does *no* color-space
 // conversion on sample or store — values go in and out as raw byte / 255.
 // We only need linear light for the grayscale luma math, and the output
 // gets crushed to luma × 0.42 × fade anyway, so the ~0.01-in-8-bit error
@@ -135,120 +87,19 @@ fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
     return sqrt(c);
 }
 
-// The colour of a pixel OUTSIDE the selection: the desktop crushed to
-// darkened grayscale by `fade`. Bit-exact passthrough at fade = 0 (see
-// the comment at the end of fs_main — this is that code, shared with the
-// rounded-corner border path, which needs it mid-function).
-fn fade_outside(base: vec4<f32>, fade: f32) -> vec4<f32> {
-    if (fade == 0.0) {
-        return base;
-    }
-    let linear = srgb_to_linear(base.rgb);
-    let luma = dot(linear, vec3<f32>(0.2126, 0.7152, 0.0722)) * 0.42;
-    let gray_linear = vec3<f32>(luma);
-    let out_linear = mix(linear, gray_linear, fade);
-    return vec4<f32>(linear_to_srgb(out_linear), 1.0);
-}
-
-// The colour of a pixel INSIDE the selection: the desktop untouched, or
-// desaturated + dimmed while OCR mode is active (see the in_fill comment
-// below for the reasoning; this is that code, shared the same way).
-fn selection_fill(base: vec4<f32>) -> vec4<f32> {
-    let dim = clamp(u.ocr_params.x, 0.0, 1.0);
-    let gray = clamp(u.ocr_params.z, 0.0, 1.0);
-    if (dim <= 0.0 && gray <= 0.0) {
-        return base;
-    }
-    let lin = srgb_to_linear(base.rgb);
-    let luma = vec3<f32>(dot(lin, vec3<f32>(0.2126, 0.7152, 0.0722)));
-    let desat = linear_to_srgb(mix(lin, luma, gray));
-    return vec4<f32>(desat * (1.0 - dim), 1.0);
-}
-
-// The marching-ants dash period for this frame: the CPU's (render/
-// desktop.rs `dash_period`) when it sent one — nominal 32 px × DPI step,
-// snapped to the border's perimeter so the pattern wraps seamlessly,
-// except mid-drag — else the nominal period.
-fn dash_period(sel_step: i32) -> f32 {
-    let sent = u.selection_shape.y;
-    return select(32.0 * f32(sel_step), sent, sent > 0.0);
-}
-
-// Signed distance from pixel centre `p` to the rounded rect
-// [rmin, rmax] with corner radius `r`: negative inside, zero on the
-// curve, positive outside. The classic Inigo Quilez rounded-box SDF.
-fn rounded_rect_sdf(p: vec2<f32>, rmin: vec2<f32>, rmax: vec2<f32>, r: f32) -> f32 {
-    let half_size = (rmax - rmin) * 0.5;
-    let centre = rmin + half_size;
-    let q = abs(p - centre) - (half_size - vec2<f32>(r, r));
-    return length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
-}
-
-// Arc length of the clockwise walk around a rounded rect [rmin, rmax]
-// with radius `r`, starting at the top of the LEFT edge — where the
-// straight left side meets the top-left curve — so the seam where the
-// dash pattern wraps (the perimeter is never a whole number of periods)
-// sits just before that curve rather than breaking the curve itself:
-// TL arc → top → TR arc → right → BR arc → bottom → BL arc → left.
-// Evaluated for a pixel by which straight edge or corner quadrant it
-// falls in, so every pixel across the border's thickness gets (near) the
-// same value and a dash reads as a solid stripe across the stroke — the
-// same property the integer path's `arc` has.
-fn rounded_rect_arc(p: vec2<f32>, rmin: vec2<f32>, rmax: vec2<f32>, r: f32) -> f32 {
-    let lt = (rmax.x - rmin.x) - 2.0 * r;   // straight top / bottom length
-    let ls = (rmax.y - rmin.y) - 2.0 * r;   // straight left / right length
-    let qa = HALF_PI * r;                   // one quarter arc
-    let near_left   = p.x < rmin.x + r;
-    let near_right  = p.x > rmax.x - r;
-    let near_top    = p.y < rmin.y + r;
-    let near_bottom = p.y > rmax.y - r;
-    if (near_top && near_left) {
-        // phi in (-PI, -PI/2): from the left edge's end round to the top's start.
-        let phi = atan2(p.y - (rmin.y + r), p.x - (rmin.x + r));
-        return (phi + PI) * r;
-    }
-    if (near_top && near_right) {
-        // phi in (-PI/2, 0).
-        let phi = atan2(p.y - (rmin.y + r), p.x - (rmax.x - r));
-        return qa + lt + (phi + HALF_PI) * r;
-    }
-    if (near_bottom && near_right) {
-        // phi in (0, PI/2).
-        let phi = atan2(p.y - (rmax.y - r), p.x - (rmax.x - r));
-        return 2.0 * qa + lt + ls + phi * r;
-    }
-    if (near_bottom && near_left) {
-        // phi in (PI/2, PI).
-        let phi = atan2(p.y - (rmax.y - r), p.x - (rmin.x + r));
-        return 3.0 * qa + 2.0 * lt + ls + (phi - HALF_PI) * r;
-    }
-    if (near_top) {
-        return qa + (p.x - (rmin.x + r));
-    }
-    if (near_right) {
-        return 2.0 * qa + lt + (p.y - (rmin.y + r));
-    }
-    if (near_bottom) {
-        return 3.0 * qa + lt + ls + ((rmax.x - r) - p.x);
-    }
-    // left
-    return 4.0 * qa + 2.0 * lt + ls + ((rmax.y - r) - p.y);
-}
-
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    let px = vec2<i32>(floor(in.pos.xy));
-    let captured = u.selection_params.y > 0.5;
     let fade = clamp(u.params.x, 0.0, 1.0);
 
-    // Sample the desktop texture once — needed both for the grayscale
-    // path and as the base color that overlay elements (crosshair,
-    // selection border) blend on top of during the fade-in.
     let color = textureSample(desktop_tex, desktop_samp, in.uv);
     var base = vec4<f32>(color.rgb, 1.0);
 
-    // Composite captured cursor onto the desktop. Done before crosshair,
-    // selection border, and fade so the cursor is part of the desktop content.
+    // Composite the captured cursor onto the desktop. Done before the
+    // region treatment so the cursor is part of the desktop content —
+    // dimmed with it outside the selection, untouched inside. The masked
+    // path needs the destination pixel (AND/XOR), which is why the frozen
+    // cursor lives in this pass rather than its own: fixed-function
+    // blending cannot express an XOR against the framebuffer.
     let cr = u.cursor_rect;
     let cursor_type = u32(u.cursor_params.x);
     if cursor_type != 0u && cr.z > cr.x && cr.w > cr.y {
@@ -275,322 +126,33 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         }
     }
 
-    // Crosshair: only when not captured. Once the user has finalized
-    // a selection, the OS cursor takes over and the rendered crosshair
-    // (both the colored arms and the dashed b/w long lines) is
-    // suppressed entirely. Mirrors the C++ behavior: `data.crosshair`
-    // is gated on the same captured/not-captured distinction at
-    // DxScreenCapture.cpp:526.
-    if (!captured) {
-        // White line with a black dashed pattern overlaid on top, so
-        // the cursor stays visible on both light and dark backgrounds
-        // (white survives the dark stretches, black survives the
-        // light ones). Drawn over everything else, including the
-        // fade. Comparing integer pixel indices guarantees exactly 1
-        // physical pixel thickness on every display, regardless of
-        // DPI scale, because the swapchain is sized in physical
-        // pixels and `@builtin(position)` is the framebuffer pixel
-        // coordinate (centered on .5).
-        let mouse_x = i32(u.params.y);
-        let mouse_y = i32(u.params.z);
-        let scale = max(u.params.w, 1.0);
-        let dx = px.x - mouse_x;
-        let dy = px.y - mouse_y;
-        let adx = abs(dx);
-        let ady = abs(dy);
-        let on_v_line = dx == 0;
-        let on_h_line = dy == 0;
-
-        // Colored section geometry.
-        //
-        //     ┊     ▌         ┊
-        //     ┊     ▌         ┊  <- outer thick segment (red, ~5 px at 100 %)
-        //     ┊     │         ┊
-        //     ┊     │         ┊  <- inner thin arm (red, 1 px)
-        //   ──┴─────┼─────────┴──  <- main long crosshair (b/w dashed)
-        //     ┊     │         ┊
-        //     ┊     │         ┊
-        //     ┊     ▌         ┊
-        //     ┊     ▌         ┊
-        //
-        //            └─ chunk ─┘
-        //     └───── chunk2 ───┘
-        //
-        // `chunk` is the length of one arm of the inner cross; the
-        // outer thick segments extend from `chunk` to `2*chunk` out
-        // from the cursor along each axis. Everything scales with
-        // the monitor's DPI so the feature is the same physical size
-        // on every display. `UNSCALED_CURSOR_PART_LENGTH` in the
-        // original C++ source = 50.
-        let chunk = i32(round(50.0 * scale));
-        let chunk2 = chunk * 2;
-        // Stepped DPI factor in whole pixels: 1 at 100–199 %, 2 at
-        // 200–299 %, … . `floor()` rather than `round()` so the jump
-        // happens AT the DPI boundary, not half-way — matches the
-        // selection-border treatment below.
-        let dpi_step = i32(floor(scale));
-        // Thick-segment half-width; total pixel count = 2*wide_half
-        // + 1, always odd so the segment sits pixel-sharp on the
-        // cursor column/row. ~5 physical pixels wide at 100 %,
-        // capped at 9.
-        let wide_half = clamp(i32(round(2.5 * scale)), 1, 4);
-
-        // Inner thin colored cross (1 pixel wide, radius `chunk`).
-        let on_thin_color = (on_v_line && ady <= chunk) || (on_h_line && adx <= chunk);
-        // Outer thick colored segments: a wide slab on each arm,
-        // lying between the inner thin cross and the long dashed
-        // line. The `adx <= wide_half` / `ady <= wide_half` tests
-        // naturally clip the slab if the cursor is well off this
-        // monitor, since both axes have to be close to the cursor
-        // for red to appear.
-        let on_thick_v_color = adx <= wide_half && ady > chunk && ady <= chunk2;
-        let on_thick_h_color = ady <= wide_half && adx > chunk && adx <= chunk2;
-        if (on_thin_color) {
-            let lum = dot(base.rgb, vec3<f32>(0.299, 0.587, 0.114));
-            let contrast = select(vec4<f32>(1.0, 1.0, 1.0, 1.0), vec4<f32>(0.0, 0.0, 0.0, 1.0), lum > 0.65);
-            return mix(base, contrast, fade);
-        }
-        if (on_thick_v_color || on_thick_h_color) {
-            return mix(base, u.accent_color, fade);
-        }
-
-        if (on_v_line || on_h_line) {
-            // Dash runs ALONG the line: along Y for the vertical
-            // line, along X for the horizontal one. 6 black + 6
-            // white pixels per period at 100 %, scaled by the
-            // whole-pixel DPI step so the dashes are the same
-            // physical size on every display (12-px period at
-            // 100 %, 24 at 200 %, …). Anchored to absolute window
-            // coordinates so the dashes feel screen-fixed rather
-            // than swimming with the cursor. At the intersection
-            // both axes are on the line; we arbitrarily pick the
-            // vertical line's phase — the pixel only gets one color
-            // anyway.
-            let dash_coord = select(px.x, px.y, on_v_line);
-            let period = 12 * dpi_step;
-            let half_period = period / 2;
-            // WGSL signed `%` preserves sign of the dividend; add
-            // `period` before the second `%` so negative window
-            // coordinates still yield a non-negative phase.
-            let phase = ((dash_coord % period) + period) % period;
-            if (phase < half_period) {
-                return mix(base, vec4<f32>(0.0, 0.0, 0.0, 1.0), fade);
-            }
-            return mix(base, vec4<f32>(1.0, 1.0, 1.0, 1.0), fade);
-        }
-    }
-
-    // Mouse-drag selection. The rect lives in window-local physical
-    // pixels (already through the same zoom transform as the UV path,
-    // done CPU-side in the render thread), so the comparison is just
-    // against the framebuffer pixel index. The border straddles the
-    // rect's edge evenly (`half` px inside + `half` px outside), with
-    // `half` stepped on whole-pixel DPI boundaries — 2 px at 100–199 %,
-    // 4 px at 200–299 %, … — so the stroke stays pixel-sharp on every
-    // display. The dash period scales on the same step so dashes and
-    // stroke width grow together.
+    // Selection interior: the desktop untouched, or desaturated + dimmed
+    // while OCR mode is active. The `<= 0` early-out keeps the byte-exact
+    // passthrough the uncloak invariant depends on (both params are 0
+    // outside the mode).
+    let px = vec2<i32>(floor(in.pos.xy));
     let sr = u.selection_rect;
     let sr_empty = sr.z <= sr.x || sr.w <= sr.y;
-    if (!sr_empty) {
-        let sx = i32(sr.x);
-        let sy = i32(sr.y);
-        let sz = i32(sr.z);
-        let sw = i32(sr.w);
-
-        let dpi_scale = max(u.params.w, 1.0);
-        let sel_step = i32(floor(dpi_scale));               // 1 / 1 / 2 / …
-        // `half` is the border's half-thickness in physical pixels.
-        // Total stroke width = 2*half (2 / 2 / 4 / 6 / …). Using
-        // `floor()` means 150 % stays at 2 px and 200 % is where the
-        // step fires; matches the crosshair handle treatment above.
-        let half = sel_step;
-        let inner_top    = sy + half;
-        let inner_bottom = sw - half - 1;
-        let inner_left   = sx + half;
-        let inner_right  = sz - half - 1;
-        let outer_top    = sy - half;
-        let outer_bottom = sw + half - 1;
-        let outer_left   = sx - half;
-        let outer_right  = sz + half - 1;
-
-        // Resize handles: 8 anti-aliased circles (corners + edge
-        // midpoints), shown only after capture and never while a scroll
-        // point is being picked.  From edge inward: sel_step px accent,
-        // sel_step px white ring, rest accent.
-        let scroll_pick = u.selection_params.w > 0.5;
-        // The OCR gate mirrors the scroll_pick one: while lines are lifted
-        // (or lifting/retracting), the selection is frozen and the handles
-        // would draw right across the raised text.
-        if (captured && !scroll_pick && u.ocr_params.y < 0.5) {
-            let fpos = in.pos.xy;
-            let step_f = f32(sel_step);
-            let handle_r    = 6.0 * step_f;
-            let white_outer = handle_r - step_f;
-            let white_inner = handle_r - 3.0 * step_f;
-            let aa = 0.5;
-
-            let mid_x = (f32(sx) + f32(sz)) * 0.5;
-            let mid_y = (f32(sy) + f32(sw)) * 0.5;
-
-            var hd = handle_r + aa + 1.0;
-            hd = min(hd, distance(fpos, vec2<f32>(f32(sx), f32(sy))));
-            hd = min(hd, distance(fpos, vec2<f32>(f32(sz), f32(sy))));
-            hd = min(hd, distance(fpos, vec2<f32>(f32(sx), f32(sw))));
-            hd = min(hd, distance(fpos, vec2<f32>(f32(sz), f32(sw))));
-            hd = min(hd, distance(fpos, vec2<f32>(mid_x,   f32(sy))));
-            hd = min(hd, distance(fpos, vec2<f32>(mid_x,   f32(sw))));
-            hd = min(hd, distance(fpos, vec2<f32>(f32(sx), mid_y)));
-            hd = min(hd, distance(fpos, vec2<f32>(f32(sz), mid_y)));
-
-            if (hd < handle_r + aa) {
-                let outer_a = 1.0 - smoothstep(handle_r - aa, handle_r + aa, hd);
-                let white_a = smoothstep(white_inner - aa, white_inner + aa, hd)
-                            * (1.0 - smoothstep(white_outer - aa, white_outer + aa, hd));
-                let hcol = mix(u.accent_color, vec4<f32>(1.0, 1.0, 1.0, 1.0), white_a);
-                return mix(base, hcol, fade * outer_a);
-            }
+    if (!sr_empty &&
+        px.x >= i32(sr.x) && px.x < i32(sr.z) &&
+        px.y >= i32(sr.y) && px.y < i32(sr.w)) {
+        let dim = clamp(u.ocr_params.x, 0.0, 1.0);
+        let gray = clamp(u.ocr_params.z, 0.0, 1.0);
+        if (dim <= 0.0 && gray <= 0.0) {
+            return base;
         }
-
-        // Rounded selection (a picked window): the border is the same
-        // 2*half stroke straddling the rect's edge, but run around a
-        // rounded rect and anti-aliased over one pixel, with the dash
-        // phase measured along the curved perimeter. The rect's square
-        // corners lie OUTSIDE the curve and take the faded treatment —
-        // exactly the pixels the copied image leaves transparent. The
-        // integer path below stays byte-for-byte for radius 0.
-        let radius = u.selection_shape.x;
-        if (radius > 0.0) {
-            let fpos = in.pos.xy;
-            let rmin = vec2<f32>(f32(sx), f32(sy));
-            let rmax = vec2<f32>(f32(sz), f32(sw));
-            // A radius past half the shorter side would invert the SDF;
-            // the window server clamps the same way (stadium / circle).
-            let r = min(radius, min(rmax.x - rmin.x, rmax.y - rmin.y) * 0.5);
-            let d = rounded_rect_sdf(fpos, rmin, rmax, r);
-            let half_f = f32(half);
-            // Straight edges at integer coordinates land pixel centres at
-            // half-integer distances, so these two coverages are exactly
-            // 0 or 1 there and reproduce the integer path's classification;
-            // only the curves see fractional values.
-            let border_a = clamp(half_f + 0.5 - abs(d), 0.0, 1.0);
-            let inside_a = clamp(-(d + half_f) + 0.5, 0.0, 1.0);
-            var col = mix(fade_outside(base, fade), selection_fill(base), inside_a);
-            if (border_a > 0.0) {
-                let period = dash_period(sel_step);
-                let half_period = period * 0.5;
-                let t_offset = u.selection_params.x * period;
-                let raw = rounded_rect_arc(fpos, rmin, rmax, r) - t_offset;
-                let phase = raw - period * floor(raw / period);
-                let dash = select(vec4<f32>(1.0, 1.0, 1.0, 1.0), u.accent_color, phase < half_period);
-                col = mix(col, dash, border_a * fade);
-            }
-            return col;
-        }
-
-        // Classify the pixel into one of the four border slabs.
-        // Each slab is 2*half px thick. Top/bottom claim the
-        // (2*half)×(2*half) corner squares so the left/right slabs
-        // can be strictly interior on the y-axis — gives a disjoint
-        // classification, which the clockwise perimeter walk below
-        // relies on.
-        let slab_top    = px.y >= outer_top    && px.y <= outer_top    + 2 * half - 1;
-        let slab_bottom = px.y >= outer_bottom - 2 * half + 1 && px.y <= outer_bottom;
-        let slab_left   = px.x >= outer_left   && px.x <= outer_left   + 2 * half - 1;
-        let slab_right  = px.x >= outer_right  - 2 * half + 1 && px.x <= outer_right;
-
-        let on_top    = slab_top    && px.x >= outer_left && px.x <= outer_right;
-        let on_bottom = slab_bottom && px.x >= outer_left && px.x <= outer_right;
-        let on_right  = !on_top && !on_bottom && slab_right
-                        && px.y >= inner_top && px.y <= inner_bottom;
-        let on_left   = !on_top && !on_bottom && slab_left
-                        && px.y >= inner_top && px.y <= inner_bottom;
-        let in_border = on_top || on_bottom || on_right || on_left;
-
-        if (in_border) {
-            // Walk the border clockwise from the outside-top-left
-            // corner: top → right → bottom → left → back to start.
-            // `arc` is the cumulative pixel count along that walk,
-            // constant across each slab's thickness so every row
-            // (or column) at a given axis position gets the same
-            // arc value and the dash reads as a solid stripe.
-            // `phase = arc - t_offset`; increasing `t_offset` shifts
-            // dashes toward higher arc, which is clockwise.
-            //
-            // Top/bottom slabs span the full outer width (including
-            // the corner squares). Left/right slabs span only the
-            // inner-y strip strictly between them.
-            let top_len  = (outer_right - outer_left) + 1;
-            let side_len = (inner_bottom - inner_top) + 1;
-
-            var arc: i32;
-            if (on_top) {
-                arc = px.x - outer_left;
-            } else if (on_right) {
-                arc = top_len + (px.y - inner_top);
-            } else if (on_bottom) {
-                arc = top_len + side_len + (outer_right - px.x);
-            } else { // on_left
-                arc = 2 * top_len + side_len + (inner_bottom - px.y);
-            }
-
-            // Dash pattern: 16 px on, 16 px off at 100 %, stepped
-            // on the same whole-pixel DPI ladder as the stroke
-            // width so dashes and stroke grow together (32 px
-            // period at 100 %, 64 at 200 %, …). Matches the C++
-            // D2D stroke style values of {8, 8} in stroke-width
-            // units × 2 DIPs stroke width at
-            // DxScreenCapture.cpp:638-645. The animation completes
-            // one full cycle per second. WGSL has no f32 `%`, so
-            // fold with floor() instead. The period comes from the
-            // CPU — snapped to the perimeter so the pattern wraps
-            // without a seam, nominal only while a drag is in progress
-            // (see render/desktop.rs).
-            let period = dash_period(sel_step);
-            let half_period = period * 0.5;
-            let t_offset = u.selection_params.x * period;
-            let raw = f32(arc) - t_offset;
-            let phase = raw - period * floor(raw / period);
-            if (phase < half_period) {
-                return mix(base, u.accent_color, fade);
-            }
-            return mix(base, vec4<f32>(1.0, 1.0, 1.0, 1.0), fade);
-        }
-
-        // Fill area: the rect minus the `half`-px inner ring
-        // reserved for the "inside half" of the straddling border.
-        // Border cells win above; everything strictly interior to
-        // them gets the un-faded desktop color.
-        let in_fill = px.x >= inner_left && px.x <= inner_right
-                   && px.y >= inner_top  && px.y <= inner_bottom;
-        if (in_fill) {
-            // OCR treatment of the selection interior: desaturate, then
-            // darken, so the raised copies read as the live layer over a
-            // monochrome page. Done here rather than as a RectInstance
-            // because rect.draw runs AFTER lift.draw — a rect dim would
-            // land on top of the lifted lines. The `<= 0` early-out keeps
-            // the byte-exact passthrough the uncloak invariant depends on
-            // (and is the non-OCR fast path: both params are 0 outside the
-            // mode, so this branch is behaviorally identical to before).
-            let dim = clamp(u.ocr_params.x, 0.0, 1.0);
-            let gray = clamp(u.ocr_params.z, 0.0, 1.0);
-            if (dim <= 0.0 && gray <= 0.0) {
-                return base;
-            }
-            // Same linear-light luma machinery as the outside fade below,
-            // but WITHOUT its 0.42 luma crush: the OCR dim (ocr_params.x)
-            // is the darkening channel here, and stacking the crush under
-            // the dim would land the region at ~27% brightness —
-            // "crushed to black", exactly the read this composition is
-            // tuned to avoid. Result: selection ≈ luma × (1 - dim), which
-            // holds at 65% for the WHOLE mode (one darkening, on entry —
-            // deepening again when the text renders read as dimming
-            // twice) and always sits brighter than the crushed outside,
-            // so the region stays the focus of the whole screen.
-            let lin = srgb_to_linear(base.rgb);
-            let luma = vec3<f32>(dot(lin, vec3<f32>(0.2126, 0.7152, 0.0722)));
-            let desat = linear_to_srgb(mix(lin, luma, gray));
-            return vec4<f32>(desat * (1.0 - dim), 1.0);
-        }
+        // Same linear-light luma machinery as the outside fade below, but
+        // WITHOUT its 0.42 luma crush: the OCR dim (ocr_params.x) is the
+        // darkening channel here, and stacking the crush under the dim
+        // would land the region at ~27% brightness — "crushed to black",
+        // exactly the read this composition is tuned to avoid. Result:
+        // selection ≈ luma × (1 - dim), which holds for the WHOLE mode
+        // and always sits brighter than the crushed outside, so the
+        // region stays the focus of the whole screen.
+        let lin = srgb_to_linear(base.rgb);
+        let luma = vec3<f32>(dot(lin, vec3<f32>(0.2126, 0.7152, 0.0722)));
+        let desat = linear_to_srgb(mix(lin, luma, gray));
+        return vec4<f32>(desat * (1.0 - dim), 1.0);
     }
 
     // fade = 0 is the common case during the hold phase. Pass through
