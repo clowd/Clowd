@@ -5,7 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::gpu::desktop::{create_placeholder_cursor_texture, WindowUniforms, WINDOW_UNIFORMS_SIZE};
-use crate::gpu::overlay::{OverlayUniforms, OVERLAY_UNIFORMS_SIZE};
+use crate::gpu::overlay::{CrosshairPeekUniforms, OverlayUniforms, CROSSHAIR_PEEK_UNIFORMS_SIZE, OVERLAY_UNIFORMS_SIZE};
 use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
 use crate::gpu::{self};
 use crate::gxi::{self, AcquireResult, BindingRes, GpuTimings, ShaderId, SurfaceConfig, TexFormat, TextureDesc};
@@ -455,12 +455,26 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         bundle
             .queue
             .write_buffer(&overlay_ubo, 0, bytemuck::bytes_of(&overlay_uniforms));
+        let crosshair_peek_ubo = bundle
+            .device
+            .create_uniform_buffer("crosshair peek uniforms", CROSSHAIR_PEEK_UNIFORMS_SIZE);
+        bundle
+            .queue
+            .write_buffer(&crosshair_peek_ubo, 0, bytemuck::bytes_of(&CrosshairPeekUniforms::zeroed()));
+        // Fallback bind group for frames with no peek quad: the peek slots
+        // hold 1×1 placeholders (never sampled — the peek ubo is zeroed,
+        // so the shader's peek branch is dead). Bind groups retain their
+        // resources on both backends, so reusing the cursor placeholder
+        // here is safe.
         let crosshair_bind_group = bundle.device.create_bind_group(
             "crosshair bind group",
             ShaderId::Crosshair,
             &[
                 BindingRes::Uniform(&overlay_ubo),
+                BindingRes::Uniform(&crosshair_peek_ubo),
                 BindingRes::Texture(&snap.texture),
+                BindingRes::Texture(&placeholder_cursor),
+                BindingRes::Texture(&placeholder_cursor),
                 BindingRes::Sampler(&snap.sampler),
             ],
         );
@@ -480,6 +494,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             uniforms,
             base_uv_offset_scale,
             overlay_ubo,
+            crosshair_peek_ubo,
             crosshair_bind_group,
             selection_bind_group,
             overlay_uniforms,
@@ -746,14 +761,18 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             );
         }
 
-        // Build per-frame peek draw state if active + texture available.
-        let peek_bind_group = active_peek.as_ref().and_then(|cmd| {
+        // Build per-frame peek draw state if active + texture available:
+        // the peek quad's bind group, plus the peek-aware crosshair bind
+        // group + uniforms so the thin cross's contrast choice tracks the
+        // peek composite actually displayed under it (see crosshair.wgsl).
+        let peek_draw = active_peek.as_ref().and_then(|cmd| {
             // No peek pipeline yet (deferred build still running): skip the
             // quad this frame; it appears once the build lands.
             let _peek = gpu.peek.as_ref()?;
             let pt = peek_textures.get(&cmd.window_index)?;
             let snap = gpu.snapshot.as_ref()?;
             let blurred_tex = blurred_desktop.as_ref()?;
+            let state = snapshot_state.as_ref()?;
 
             // Compute peek uniforms in monitor-local coords.
             let sel = selection?;
@@ -835,8 +854,41 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     BindingRes::Sampler(&snap.sampler),
                 ],
             );
-            Some(bind_group)
+
+            // Same values the peek pass got this frame — the crosshair's
+            // replicated composite must match the displayed pixels.
+            let mut cp = CrosshairPeekUniforms::zeroed();
+            cp.params = [1.0, peek_uniforms.params[1], n as f32, 0.0];
+            cp.window_uv = window_uv;
+            cp.obstruction_rects = peek_uniforms.obstruction_rects;
+            gpu.queue
+                .write_buffer(&state.crosshair_peek_ubo, 0, bytemuck::bytes_of(&cp));
+            let crosshair_bg = gpu.device.create_bind_group(
+                "crosshair bind group (peek)",
+                ShaderId::Crosshair,
+                &[
+                    BindingRes::Uniform(&state.overlay_ubo),
+                    BindingRes::Uniform(&state.crosshair_peek_ubo),
+                    BindingRes::Texture(&snap.texture),
+                    BindingRes::Texture(&pt.texture),
+                    BindingRes::Texture(blurred_tex),
+                    BindingRes::Sampler(&snap.sampler),
+                ],
+            );
+            Some((bind_group, crosshair_bg))
         });
+        let (peek_bind_group, crosshair_peek_bg) = match peek_draw {
+            Some((p, c)) => (Some(p), Some(c)),
+            None => (None, None),
+        };
+        // No peek quad this frame: make sure the crosshair's peek branch
+        // is dead (a stale active flag would sample the placeholders).
+        if crosshair_peek_bg.is_none() {
+            if let Some(state) = snapshot_state.as_ref() {
+                gpu.queue
+                    .write_buffer(&state.crosshair_peek_ubo, 0, bytemuck::bytes_of(&CrosshairPeekUniforms::zeroed()));
+            }
+        }
 
         if let Some(gt) = gpu_timing.as_mut() {
             for gpu_dur in gt.poll_completed(&gpu.device) {
@@ -863,6 +915,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             snapshot_state.as_ref(),
             overlay_vis,
             peek_bind_group.as_ref(),
+            crosshair_peek_bg.as_ref(),
             ui_renderer.as_mut(),
             &perf,
             gpu_timing.as_ref(),

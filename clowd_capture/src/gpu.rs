@@ -239,6 +239,18 @@ mod tests {
                 BindingRes::Sampler(&sampler),
             ],
         );
+        let _crosshair_bg = device.create_bind_group(
+            "smoke crosshair bind group",
+            ShaderId::Crosshair,
+            &[
+                BindingRes::Uniform(&ubo),
+                BindingRes::Uniform(&ubo),
+                BindingRes::Texture(&immutable),
+                BindingRes::Texture(&atlas),
+                BindingRes::Texture(&atlas),
+                BindingRes::Sampler(&sampler),
+            ],
+        );
 
         // GPU timing is always on, so `GpuTimings::new` must build on
         // the active backend (headlessly there is no surface to drive a
