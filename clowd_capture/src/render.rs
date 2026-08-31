@@ -5,6 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::gpu::desktop::{create_placeholder_cursor_texture, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::overlay::{OverlayUniforms, OVERLAY_UNIFORMS_SIZE};
 use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
 use crate::gpu::{self};
 use crate::gxi::{self, AcquireResult, BindingRes, GpuTimings, ShaderId, SurfaceConfig, TexFormat, TextureDesc};
@@ -45,8 +46,8 @@ use worker::RenderWorkerParams;
 ///
 /// It is built on a side thread started the moment the device exists, so it
 /// overlaps the screenshot wait, the window handoff and frame 0 itself. It is
-/// NEVER blocked on: the render loop starts without it — desktop pass,
-/// selection and the software cursor all live in the desktop pipeline — and
+/// NEVER blocked on: the render loop starts without it — the desktop pass,
+/// the software cursor and the crosshair are all Stage-A pipelines — and
 /// polls the handle each iteration, folding the stack in the moment it
 /// lands. On a warm start that is before the overlay is even visible; on a
 /// cold one (driver shader cache empty, the embedded fonts and DLLs not yet
@@ -58,6 +59,7 @@ use worker::RenderWorkerParams;
 /// and peek arriving when ready.
 struct DeferredStack {
     peek: gpu::PeekGpu,
+    selection: gxi::RenderPipeline,
     ui: UiRenderer,
 }
 
@@ -97,10 +99,16 @@ fn spawn_deferred_stack(
             // shaped buffers + 11 SVG trees), so it runs here while the
             // pipeline compiles and the peek compile occupy their own
             // threads. `scope` lets all of them borrow the one device.
-            let (peek, pipelines, text) = thread::scope(|s| {
+            let (peek, selection, pipelines, text) = thread::scope(|s| {
                 let peek = s.spawn(|| {
                     crate::system::lower_thread_priority();
-                    gpu::create_peek_gpu(&device)
+                    // Peek and the selection pass compile back to back on
+                    // this helper thread — both are small, and a fourth
+                    // thread would only contend on the platform shader
+                    // compiler (see the note below).
+                    let peek = gpu::create_peek_gpu(&device);
+                    let selection = gpu::overlay::create_selection_pipeline(&device);
+                    (peek, selection)
                 });
                 let pipelines = s.spawn(|| {
                     crate::system::lower_thread_priority();
@@ -109,11 +117,8 @@ fn spawn_deferred_stack(
                 let text_stack = TextStack::new(&device);
                 mark(|t| &t.prep_fonts);
                 let text = UiText::new(text_stack);
-                (
-                    peek.join().expect("peek pipeline thread"),
-                    pipelines.join().expect("ui pipeline thread"),
-                    text,
-                )
+                let (peek, selection) = peek.join().expect("peek pipeline thread");
+                (peek, selection, pipelines.join().expect("ui pipeline thread"), text)
             });
             // Both marks now measure DEFERRED work running beside the
             // critical path, not work on it — they no longer sit between
@@ -124,6 +129,7 @@ fn spawn_deferred_stack(
 
             DeferredStack {
                 peek,
+                selection,
                 ui: UiRenderer::from_parts(
                     pipelines,
                     text,
@@ -404,19 +410,13 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             mf.height() / vd_h,
         ];
 
-        let init_local = screen_to_window(monitor_bounds, cycle.initial_mouse);
-
         let uniforms = WindowUniforms {
             uv_offset_scale: base_uv_offset_scale,
-            params: [0.0, init_local.x, init_local.y, scale_factor],
-            accent_color: cycle.accent_color,
+            params: [0.0, 0.0, 0.0, 0.0],
             selection_rect: [0.0, 0.0, -1.0, -1.0],
-            selection_params: [0.0, 0.0, 0.0, 0.0],
             cursor_rect: [0.0, 0.0, -1.0, -1.0],
             cursor_params: [0.0, 0.0, 0.0, 0.0],
-            ocr_rect: [0.0, 0.0, -1.0, -1.0],
             ocr_params: [0.0, 0.0, 0.0, 0.0],
-            selection_shape: [0.0, 0.0, 0.0, 0.0],
         };
 
         let ubo = bundle
@@ -444,11 +444,47 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             ],
         );
 
+        // The overlay passes (crosshair + selection) share one uniform
+        // buffer, zero-initialized here: fade 0 and an empty selection
+        // mean both passes draw nothing until the first
+        // `update_uniforms` — and neither is drawn on frame 0 anyway.
+        let overlay_ubo = bundle
+            .device
+            .create_uniform_buffer("overlay uniforms", OVERLAY_UNIFORMS_SIZE);
+        let overlay_uniforms = OverlayUniforms::zeroed();
+        bundle
+            .queue
+            .write_buffer(&overlay_ubo, 0, bytemuck::bytes_of(&overlay_uniforms));
+        let crosshair_bind_group = bundle.device.create_bind_group(
+            "crosshair bind group",
+            ShaderId::Crosshair,
+            &[
+                BindingRes::Uniform(&overlay_ubo),
+                BindingRes::Texture(&snap.texture),
+                BindingRes::Sampler(&snap.sampler),
+            ],
+        );
+        let selection_bind_group = bundle.device.create_bind_group(
+            "selection bind group",
+            ShaderId::Selection,
+            &[
+                BindingRes::Uniform(&overlay_ubo),
+                BindingRes::Texture(&snap.texture),
+                BindingRes::Sampler(&snap.sampler),
+            ],
+        );
+
         SnapshotState {
             ubo,
             bind_group,
             uniforms,
             base_uv_offset_scale,
+            overlay_ubo,
+            crosshair_bind_group,
+            selection_bind_group,
+            overlay_uniforms,
+            accent_color: cycle.accent_color,
+            dpi_scale: scale_factor,
         }
     });
 
@@ -551,6 +587,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             match deferred.take().map(|h| h.join()) {
                 Some(Ok(DeferredStack {
                     peek,
+                    selection,
                     mut ui,
                 })) => {
                     info!("render worker {monitor_index}: deferred UI stack folded in");
@@ -564,6 +601,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         ui.set_state(state);
                     }
                     gpu.peek = Some(peek);
+                    gpu.selection = Some(selection);
                     ui_renderer = Some(ui);
                 }
                 Some(Err(_)) => {
@@ -679,12 +717,13 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         // identical treatment (see peek.wgsl).
         let ocr_fx = desktop::ocr_overlay(&ocr);
 
+        let mut overlay_vis = desktop::OverlayVisibility::default();
         if let Some(state) = snapshot_state.as_mut() {
             let cursor_textures = gpu
                 .snapshot
                 .as_ref()
                 .and_then(|s| s.cursor.as_ref());
-            state.update_uniforms(
+            overlay_vis = state.update_uniforms(
                 &gpu.queue,
                 &FrameState {
                     monitor_bounds,
@@ -697,7 +736,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     overlays_visible,
                     cursor_overlay_visible,
                     scroll_pick_mode,
-                    ocr_rect: ocr_fx.rect,
                     ocr_dim: ocr_fx.dim,
                     ocr_gray: ocr_fx.gray,
                     ocr_active: ocr_fx.active,
@@ -758,10 +796,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
             let mut peek_uniforms = PeekUniforms::zeroed();
             peek_uniforms.selection_rect = [sl, st, sr, sb];
-            // Same window-local scaling as the desktop pass's
-            // selection_shape: the radius rides the magnifier zoom with
-            // the rect it belongs to.
-            peek_uniforms.selection_shape = [selection_radius * zoom.max(1.0), 0.0, 0.0, 0.0];
             peek_uniforms.window_uv = window_uv;
             peek_uniforms.desktop_uv = desktop_uv;
 
@@ -772,7 +806,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                 surface_size.0 as f32,
                 surface_size.1 as f32,
             ];
-            peek_uniforms.cursor_params = [local_cursor.x, local_cursor.y, scale_factor, 0.0];
             // Same values the desktop pass got this frame — the two
             // shaders must dim/desaturate in lockstep or the peeked
             // region visibly detaches from the rest of the selection.
@@ -828,6 +861,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             &gpu,
             surface_size,
             snapshot_state.as_ref(),
+            overlay_vis,
             peek_bind_group.as_ref(),
             ui_renderer.as_mut(),
             &perf,

@@ -6,8 +6,6 @@ pub struct PeekUniforms {
     pub desktop_uv: [f32; 4],
     /// (num_obstruction_rects, ghost_opacity, viewport_w, viewport_h)
     pub params: [f32; 4],
-    /// (cursor_x, cursor_y, dpi_scale, 0) in monitor-local pixels
-    pub cursor_params: [f32; 4],
     /// (ocr_dim, ocr_gray, ocr_active, 0) — the OCR mode's region dim /
     /// desaturation / active flag, identical values to the desktop pass's
     /// `ocr_params`. The peek quad draws OVER the desktop pass inside the
@@ -16,12 +14,6 @@ pub struct PeekUniforms {
     /// was supposed to be monochrome. All zero outside OCR mode — the
     /// non-OCR peek path is byte-identical to before.
     pub ocr_params: [f32; 4],
-    /// x = the selection's corner radius in monitor-local px (0 = square),
-    /// same value and space as the desktop pass's `selection_shape.x`. The
-    /// peek quad covers the selection's interior, so it must stop at the
-    /// same rounded inner edge the desktop pass draws, or it would paint
-    /// the peeked window over the corner the border curves around.
-    pub selection_shape: [f32; 4],
     pub obstruction_rects: [[f32; 4]; 16],
 }
 

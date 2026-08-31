@@ -34,6 +34,8 @@ pub(crate) fn source(id: ShaderId) -> ShaderBlobs {
     match id {
         ShaderId::Desktop => s!("/desktop_d11_vs.dxbc", "/desktop_d11_ps.dxbc"),
         ShaderId::Peek => s!("/peek_d11_vs.dxbc", "/peek_d11_ps.dxbc"),
+        ShaderId::Selection => s!("/selection_d11_vs.dxbc", "/selection_d11_ps.dxbc"),
+        ShaderId::Crosshair => s!("/crosshair_d11_vs.dxbc", "/crosshair_d11_ps.dxbc"),
         ShaderId::UiRect => s!("/ui_rect_d11_vs.dxbc", "/ui_rect_d11_ps.dxbc"),
         ShaderId::UiIcon => s!("/ui_icon_d11_vs.dxbc", "/ui_icon_d11_ps.dxbc"),
         ShaderId::UiLift => s!("/ui_lift_d11_vs.dxbc", "/ui_lift_d11_ps.dxbc"),

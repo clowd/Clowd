@@ -1,4 +1,5 @@
 use crate::gpu::desktop::{CursorTextures, WindowUniforms};
+use crate::gpu::overlay::OverlayUniforms;
 use crate::gxi;
 use crate::interaction::OcrState;
 use crate::ocr::anim;
@@ -25,6 +26,26 @@ pub(crate) struct SnapshotState {
     pub bind_group: gxi::BindGroup,
     pub uniforms: WindowUniforms,
     pub base_uv_offset_scale: [f32; 4],
+    /// The overlay passes' shared uniform buffer + per-shader bind
+    /// groups (crosshair.wgsl / selection.wgsl — one buffer, two
+    /// layouts). Written every frame alongside `ubo`.
+    pub overlay_ubo: gxi::Buffer,
+    pub crosshair_bind_group: gxi::BindGroup,
+    pub selection_bind_group: gxi::BindGroup,
+    pub overlay_uniforms: OverlayUniforms,
+    /// Seeded once from `CycleParams`; never updated per frame.
+    pub accent_color: [f32; 4],
+    /// This monitor's DPI scale factor (1.0 = 100 %).
+    pub dpi_scale: f32,
+}
+
+/// Which overlay passes [`SnapshotState::update_uniforms`] decided are
+/// on screen this frame. A `false` means the pass's draw call is
+/// skipped entirely — the feature costs no GPU time at all.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct OverlayVisibility {
+    pub crosshair: bool,
+    pub selection: bool,
 }
 
 pub(crate) struct FrameState {
@@ -44,10 +65,6 @@ pub(crate) struct FrameState {
     /// Suppresses the resize handles (see `desktop.wgsl`) and the frozen
     /// cursor composited from the snapshot.
     pub scroll_pick_mode: bool,
-    /// OCR source region in virtual-desktop pixels — `None` while OCR mode
-    /// is idle. Derived per frame from the mirrored [`OcrState`] via
-    /// [`ocr_overlay`].
-    pub ocr_rect: Option<ScreenRect>,
     /// Source-region dim in [0, 1], already evaluated on the OCR phase's
     /// shared anchor clock (never this worker's own) so every monitor dims
     /// in lockstep with the lift animation.
@@ -64,7 +81,14 @@ pub(crate) struct FrameState {
 }
 
 impl SnapshotState {
-    pub fn update_uniforms(&mut self, queue: &gxi::Queue, frame: &FrameState, cursor_textures: Option<&CursorTextures>) {
+    /// Write this frame's uniforms for the desktop pass and the two
+    /// overlay passes, and decide which overlay passes draw at all.
+    pub fn update_uniforms(
+        &mut self,
+        queue: &gxi::Queue,
+        frame: &FrameState,
+        cursor_textures: Option<&CursorTextures>,
+    ) -> OverlayVisibility {
         let FrameState {
             monitor_bounds,
             mouse_pos,
@@ -76,7 +100,6 @@ impl SnapshotState {
             overlays_visible,
             cursor_overlay_visible,
             scroll_pick_mode,
-            ocr_rect,
             ocr_dim,
             ocr_gray,
             ocr_active,
@@ -84,83 +107,18 @@ impl SnapshotState {
             surface_size,
         } = *frame;
 
-        self.uniforms.selection_params[3] = if scroll_pick_mode { 1.0 } else { 0.0 };
+        // OCR uniforms track the state machine unconditionally, not only
+        // while overlays draw — the dim/desaturation are animations on
+        // the phase's shared anchor clock.
+        self.uniforms.ocr_params = [ocr_dim.clamp(0.0, 1.0), 0.0, ocr_gray.clamp(0.0, 1.0), 0.0];
 
-        // OCR uniforms are written before the overlays_visible early-return
-        // (same treatment as scroll_pick above): the mode flags must track
-        // the state machine unconditionally, not only while overlays draw.
-        self.uniforms.ocr_params = [
-            ocr_dim.clamp(0.0, 1.0),
-            if ocr_active { 1.0 } else { 0.0 },
-            ocr_gray.clamp(0.0, 1.0),
-            0.0,
-        ];
-        self.uniforms.ocr_rect = match ocr_rect {
-            Some(r) => {
-                // Same window-local transform as selection_rect below —
-                // through the zoom mapping, so the two rects stay congruent
-                // in every magnifier state.
-                let local_cursor = screen_to_window(monitor_bounds, mouse_pos);
-                let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) {
-                    (
-                        (vd_x - mouse_pos.x) * zoom + local_cursor.x,
-                        (vd_y - mouse_pos.y) * zoom + local_cursor.y,
-                    )
-                };
-                let rf = r.to_f32();
-                let (l, t) = to_local(rf.left(), rf.top());
-                let (rr, b) = to_local(rf.right(), rf.bottom());
-                [l, t, rr, b]
-            }
-            None => [0.0, 0.0, -1.0, -1.0],
-        };
-
-        // The picker draws its own reticle at the live cursor. The
-        // snapshot's frozen cursor sits wherever the pointer happened to
-        // be when the screenshot was taken, so it reads as a second,
-        // stuck pointer right where the user is aiming — hide it for the
-        // duration whatever the M toggle says. Display only: the frozen
-        // cursor is not part of what the scroll driver captures, and the
-        // user's setting is untouched when they back out.
-        let show_frozen_cursor = cursor_overlay_visible && !scroll_pick_mode;
-
-        if !overlays_visible {
-            self.uniforms.params[0] = 0.0;
-            let local = screen_to_window(monitor_bounds, mouse_pos);
-            self.uniforms.params[1] = -1.0;
-            self.uniforms.params[2] = -1.0;
-            if zoom <= 1.0 {
-                self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
-            } else {
-                let w = surface_size.0 as f32;
-                let h = surface_size.1 as f32;
-                let cu = local.x / w;
-                let cv = local.y / h;
-                let k = 1.0 - 1.0 / zoom;
-                let base = self.base_uv_offset_scale;
-                self.uniforms.uv_offset_scale = [
-                    base[0] + base[2] * cu * k,
-                    base[1] + base[3] * cv * k,
-                    base[2] / zoom,
-                    base[3] / zoom,
-                ];
-            }
-            self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
-            self.uniforms.selection_shape = [0.0; 4];
-            self.uniforms.selection_params[0] = elapsed;
-            self.uniforms.selection_params[1] = 0.0;
-            self.uniforms.selection_params[2] = zoom;
-            self.set_cursor_uniforms(cursor_textures, show_frozen_cursor, monitor_bounds, mouse_pos, zoom);
-            queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
-            return;
-        }
-
-        self.uniforms.params[0] = grayscale_fade(elapsed);
+        // While overlays are hidden the desktop pass shows the plain
+        // (zoomed) desktop — no fade — and the selection/crosshair
+        // passes are skipped outright.
+        let fade = if overlays_visible { grayscale_fade(elapsed) } else { 0.0 };
+        self.uniforms.params[0] = fade;
 
         let local = screen_to_window(monitor_bounds, mouse_pos);
-        self.uniforms.params[1] = local.x;
-        self.uniforms.params[2] = local.y;
-
         if zoom <= 1.0 {
             self.uniforms.uv_offset_scale = self.base_uv_offset_scale;
         } else {
@@ -178,45 +136,81 @@ impl SnapshotState {
             ];
         }
 
-        if let Some(sel) = selection {
-            let cx = mouse_pos.x;
-            let cy = mouse_pos.y;
-            let local_cursor = screen_to_window(monitor_bounds, mouse_pos);
-            let sel_f = sel.to_f32();
-            let to_local =
-                |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local_cursor.x, (vd_y - cy) * zoom + local_cursor.y) };
-            let (l, t) = to_local(sel_f.left(), sel_f.top());
-            let (r, b) = to_local(sel_f.right(), sel_f.bottom());
-            self.uniforms.selection_rect = [l, t, r, b];
-            // The radius is a length in the same space as the rect, so it
-            // scales with the magnifier like the rect's edges do.
-            let radius_local = selection_radius.max(0.0) * zoom.max(1.0);
-            // Dash period: snapped to the border's perimeter (same DPI
-            // step rule the shader uses for the stroke) so the pattern
-            // wraps without a cut dash — square or rounded — except
-            // while a drag is in progress: the rect changes every frame
-            // then, and a period that tracked it would re-phase every
-            // dash along the walk under the cursor. Nominal mid-drag;
-            // re-snapped once on release.
-            let dpi_step = self.uniforms.params[3].max(1.0).floor();
-            let nominal = NOMINAL_DASH_PERIOD * dpi_step;
-            let period = if selection_dragging {
-                nominal
-            } else {
-                dash_period(nominal, border_perimeter(r - l, b - t, radius_local))
-            };
-            self.uniforms.selection_shape = [radius_local, period, 0.0, 0.0];
+        // Selection rect in window-local physical pixels — through the
+        // zoom mapping, so it stays congruent with the UV path above.
+        // `None` while overlays are hidden: the desktop shows unfaded
+        // and no border draws.
+        let sel_local = if overlays_visible {
+            selection.map(|sel| {
+                let cx = mouse_pos.x;
+                let cy = mouse_pos.y;
+                let sel_f = sel.to_f32();
+                let to_local = |vd_x: f32, vd_y: f32| -> (f32, f32) { ((vd_x - cx) * zoom + local.x, (vd_y - cy) * zoom + local.y) };
+                let (l, t) = to_local(sel_f.left(), sel_f.top());
+                let (r, b) = to_local(sel_f.right(), sel_f.bottom());
+                // The radius is a length in the same space as the rect, so
+                // it scales with the magnifier like the rect's edges do.
+                let radius_local = selection_radius.max(0.0) * zoom.max(1.0);
+                // Dash period: snapped to the border's perimeter (same DPI
+                // step rule the shader uses for the stroke) so the pattern
+                // wraps without a cut dash — square or rounded — except
+                // while a drag is in progress: the rect changes every frame
+                // then, and a period that tracked it would re-phase every
+                // dash along the walk under the cursor. Nominal mid-drag;
+                // re-snapped once on release.
+                let dpi_step = self.dpi_scale.max(1.0).floor();
+                let nominal = NOMINAL_DASH_PERIOD * dpi_step;
+                let period = if selection_dragging {
+                    nominal
+                } else {
+                    dash_period(nominal, border_perimeter(r - l, b - t, radius_local))
+                };
+                ([l, t, r, b], radius_local, period)
+            })
         } else {
-            self.uniforms.selection_rect = [0.0, 0.0, -1.0, -1.0];
-            self.uniforms.selection_shape = [0.0; 4];
-        }
+            None
+        };
+        self.uniforms.selection_rect = sel_local
+            .map(|(rect, _, _)| rect)
+            .unwrap_or([0.0, 0.0, -1.0, -1.0]);
 
-        self.uniforms.selection_params[0] = elapsed;
-        self.uniforms.selection_params[1] = if captured { 1.0 } else { 0.0 };
-        self.uniforms.selection_params[2] = zoom;
+        // The picker draws its own reticle at the live cursor. The
+        // snapshot's frozen cursor sits wherever the pointer happened to
+        // be when the screenshot was taken, so it reads as a second,
+        // stuck pointer right where the user is aiming — hide it for the
+        // duration whatever the M toggle says. Display only: the frozen
+        // cursor is not part of what the scroll driver captures, and the
+        // user's setting is untouched when they back out.
+        let show_frozen_cursor = cursor_overlay_visible && !scroll_pick_mode;
         self.set_cursor_uniforms(cursor_textures, show_frozen_cursor, monitor_bounds, mouse_pos, zoom);
-
         queue.write_buffer(&self.ubo, 0, bytemuck::bytes_of(&self.uniforms));
+
+        // ── Overlay passes (crosshair + selection border/handles) ──
+        let o = &mut self.overlay_uniforms;
+        o.viewport = [surface_size.0 as f32, surface_size.1 as f32, self.dpi_scale, fade];
+        o.cursor = [local.x, local.y, 0.0, 0.0];
+        o.accent_color = self.accent_color;
+        o.uv_offset_scale = self.uniforms.uv_offset_scale;
+        if let Some((rect, radius, period)) = sel_local {
+            // Handle visibility is a CPU decision now: shown only after
+            // capture, and never while a scroll point is being picked
+            // (the picker owns the next click, so nothing that looks
+            // draggable may be on screen) or while OCR lines are lifted
+            // (they must not draw over the raised text).
+            let handles = captured && !scroll_pick_mode && !ocr_active;
+            o.selection_rect = rect;
+            o.sel_params = [elapsed, period, radius, if handles { 1.0 } else { 0.0 }];
+        } else {
+            o.sel_params = [elapsed, 0.0, 0.0, 0.0];
+        }
+        queue.write_buffer(&self.overlay_ubo, 0, bytemuck::bytes_of(&self.overlay_uniforms));
+
+        OverlayVisibility {
+            // Once the user has finalized a selection the OS cursor takes
+            // over and the rendered crosshair is suppressed entirely.
+            crosshair: overlays_visible && !captured,
+            selection: sel_local.is_some(),
+        }
     }
 
     fn set_cursor_uniforms(
@@ -297,7 +291,6 @@ pub(crate) fn dash_period(nominal: f32, perimeter: f32) -> f32 {
 
 /// Per-frame OCR inputs for [`FrameState`].
 pub(crate) struct OcrOverlay {
-    pub rect: Option<ScreenRect>,
     pub dim: f32,
     pub gray: f32,
     pub active: bool,
@@ -309,18 +302,16 @@ pub(crate) struct OcrOverlay {
 /// late (or a suspend/resume gap) produce sane, settled values rather than
 /// out-of-range ones.
 pub(crate) fn ocr_overlay(ocr: &OcrState) -> OcrOverlay {
-    let (rect, dim, gray, active) = match ocr {
-        OcrState::Idle => (None, 0.0, 0.0, false),
+    let (dim, gray, active) = match ocr {
+        OcrState::Idle => (0.0, 0.0, false),
         OcrState::Scanning {
             anchor,
-            region,
             ..
         } => {
             let t = anchor.elapsed().as_secs_f32();
-            (Some(*region), scanning_dim(t), scanning_gray(t), true)
+            (scanning_dim(t), scanning_gray(t), true)
         }
         OcrState::Lifted {
-            region,
             ..
         } => {
             // Both HOLD at their scanning ceilings — no new ramp on this
@@ -330,18 +321,16 @@ pub(crate) fn ocr_overlay(ocr: &OcrState) -> OcrOverlay {
             // dim deliberately does NOT deepen when the text renders: an
             // earlier build darkened again here and the region visibly
             // dimmed twice (owner call — one darkening, on entry, only).
-            (Some(*region), anim::DIM_MAX, 1.0, true)
+            (anim::DIM_MAX, 1.0, true)
         }
         OcrState::Retracting {
             anchor,
-            region,
         } => {
             let t = anchor.elapsed().as_secs_f32();
-            (Some(*region), retracting_dim(t), retracting_gray(t), true)
+            (retracting_dim(t), retracting_gray(t), true)
         }
     };
     OcrOverlay {
-        rect,
         dim,
         gray,
         active,
