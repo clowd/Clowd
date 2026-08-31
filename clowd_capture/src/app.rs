@@ -461,6 +461,14 @@ fn broadcast_ui_state(windows: &WindowSet, monitors: &[MonitorInfo], ui_monitors
     // the locked peek; otherwise follow hover.
     let new_peek = if !cycle.input.overlays_visible || cycle.input.peek_suspended || cycle.input.dragging {
         cycle.locked_peek.clone()
+    } else if cycle.input.mouse_down {
+        // Button held (pre-capture, pre-drag): the hover selection is
+        // frozen at its press-time target (`set_hover_target` is gated on
+        // `!mouse_down`), so the peek must freeze with it — following the
+        // cursor here would draw a neighbouring window's peek inside the
+        // frozen selection rect, and a release would then lock that
+        // mismatched pair.
+        cycle.cached_peek_command.clone()
     } else {
         hovered_full
             .as_ref()
@@ -739,10 +747,7 @@ impl App {
         };
         if cycle.walker.is_none() {
             if let Some(w) = cycle.walker_latch.try_get() {
-                let pt = ScreenPoint::new(
-                    cycle.input.virtual_cursor.x.round() as i32,
-                    cycle.input.virtual_cursor.y.round() as i32,
-                );
+                let pt = to_screen_point(cycle.input.virtual_cursor);
                 cycle
                     .input
                     .set_hover_target(w.hit_test_target(pt));
@@ -1150,10 +1155,7 @@ impl App {
         let Some(cycle) = self.cycle.as_mut() else {
             return;
         };
-        let pt = ScreenPoint::new(
-            cycle.input.virtual_cursor.x.round() as i32,
-            cycle.input.virtual_cursor.y.round() as i32,
-        );
+        let pt = to_screen_point(cycle.input.virtual_cursor);
         let hover = cycle
             .walker
             .as_ref()
@@ -2085,10 +2087,7 @@ impl ApplicationHandler for App {
                                 broadcast_mouse_state(&self.windows, &cycle.input);
                             }
                             'w' => {
-                                let pt = ScreenPoint::new(
-                                    cycle.input.virtual_cursor.x.round() as i32,
-                                    cycle.input.virtual_cursor.y.round() as i32,
-                                );
+                                let pt = to_screen_point(cycle.input.virtual_cursor);
                                 if let Some(target) = cycle
                                     .walker
                                     .as_ref()
@@ -2098,10 +2097,7 @@ impl ApplicationHandler for App {
                                 }
                             }
                             'f' => {
-                                let pt = ScreenPoint::new(
-                                    cycle.input.virtual_cursor.x.round() as i32,
-                                    cycle.input.virtual_cursor.y.round() as i32,
-                                );
+                                let pt = to_screen_point(cycle.input.virtual_cursor);
                                 if let Some(bounds) = self
                                     .monitors
                                     .iter()
@@ -2157,10 +2153,7 @@ impl ApplicationHandler for App {
                 }
 
                 if !cycle.input.mouse_down && !cycle.input.captured {
-                    let pt = ScreenPoint::new(
-                        cycle.input.virtual_cursor.x.round() as i32,
-                        cycle.input.virtual_cursor.y.round() as i32,
-                    );
+                    let pt = to_screen_point(cycle.input.virtual_cursor);
                     let hover = cycle
                         .walker
                         .as_ref()
