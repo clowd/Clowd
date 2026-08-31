@@ -1,7 +1,7 @@
 //! Text recognition — PaddleOCR (PP-OCRv6) on ONNX Runtime, the `ocr`
 //! subcommand.
 //!
-//! By the time this runs the overlay (`clowd_capture_wgpu`) has already done
+//! By the time this runs the overlay (`clowd_capture`) has already done
 //! its part: the user captured a region, pressed OCR, and the overlay extracted
 //! that region's pixels — compositing a click-locked peek if one is up, so what
 //! is recognized is what the user can actually see. It spawns this process per

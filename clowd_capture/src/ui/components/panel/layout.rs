@@ -1,7 +1,7 @@
 //! Layout math for the button panel.
 //!
 //! Port of `SetButtonPanelPositions` from
-//! `clowd_capture_dx/DxScreenCapture.cpp:112-195`. Pure CPU; no wgpu,
+//! `clowd_capture_dx/DxScreenCapture.cpp:112-195`. Pure CPU; no GPU,
 //! no winit, no globals — the caller passes the monitor's bounds, the
 //! current selection, the monitor's DPI scale and which button set is
 //! showing, and gets back a `PanelLayout` carrying that set's button

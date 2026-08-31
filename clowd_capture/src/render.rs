@@ -4,14 +4,15 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::gpu::desktop::{create_placeholder_cursor_view, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::desktop::{create_placeholder_cursor_texture, WindowUniforms, WINDOW_UNIFORMS_SIZE};
+use crate::gpu::overlay::{CrosshairPeekUniforms, OverlayUniforms, CROSSHAIR_PEEK_UNIFORMS_SIZE, OVERLAY_UNIFORMS_SIZE};
 use crate::gpu::peek::{PeekUniforms, PEEK_UNIFORMS_SIZE};
-use crate::gpu::{self, SURFACE_FORMAT};
+use crate::gpu::{self};
+use crate::gxi::{self, AcquireResult, BindingRes, GpuTimings, ShaderId, SurfaceConfig, TexFormat, TextureDesc};
 use crate::interaction::OcrState;
 use crate::sync::ReadyGuard;
 use crate::telemetry::perf::{PerfSample, PerfTracker};
 use crate::telemetry::startup::{AtomicDuration, StartupTimings, WorkerTimings};
-use crate::ui::gpu::gpu_timing::GpuTimings;
 use crate::ui::gpu::renderer::{UiPipelines, UiText};
 use crate::ui::gpu::text::TextStack;
 use crate::ui::gpu::UiRenderer;
@@ -25,18 +26,10 @@ pub mod protocol;
 pub mod window;
 pub mod worker;
 use desktop::{FrameState, SnapshotState};
-use frame::draw_once;
+use frame::{draw_once, DrawStatus};
 use peek::PeekTextureEntry;
 use protocol::{CycleParams, PeekCommand, RenderMsg, WorkerInput};
 use worker::RenderWorkerParams;
-
-/// Duration of the color → grayscale fade after the window first becomes
-/// visible.
-/// MSAA sample count applied to every render pipeline in the frame.
-/// Set to 1 (no multisampling) — all UI geometry is axis-aligned
-/// (rects, textured quads, glyph quads) so MSAA adds cost without
-/// visual benefit.
-pub const MSAA_SAMPLES: u32 = 1;
 
 // ── Deferred (post-first-frame) GPU build ───────────────────────────
 
@@ -46,15 +39,15 @@ pub const MSAA_SAMPLES: u32 = 1;
 /// is a no-op there (no `UiSharedState` exists until after the visible
 /// latch, so `prepare` stages nothing) and the peek quad needs a hovered
 /// window, which needs a visible overlay. So the whole UI stack — three
-/// pipelines, glyphon's atlas + text renderer, ~2.4 MB of embedded fonts
+/// pipelines, the glyph atlas + text renderers, ~2.4 MB of embedded fonts
 /// into fontdb, 11 usvg parses — plus the peek pipeline used to sit on the
 /// critical path buying nothing: ~185 ms cold on macOS, 15-60 ms on every
 /// Windows launch.
 ///
 /// It is built on a side thread started the moment the device exists, so it
 /// overlaps the screenshot wait, the window handoff and frame 0 itself. It is
-/// NEVER blocked on: the render loop starts without it — desktop pass,
-/// selection and the software cursor all live in the desktop pipeline — and
+/// NEVER blocked on: the render loop starts without it — the desktop pass,
+/// the software cursor and the crosshair are all Stage-A pipelines — and
 /// polls the handle each iteration, folding the stack in the moment it
 /// lands. On a warm start that is before the overlay is even visible; on a
 /// cold one (driver shader cache empty, the embedded fonts and DLLs not yet
@@ -66,18 +59,18 @@ pub const MSAA_SAMPLES: u32 = 1;
 /// and peek arriving when ready.
 struct DeferredStack {
     peek: gpu::PeekGpu,
+    selection: gxi::RenderPipeline,
     ui: UiRenderer,
 }
 
 /// Start the deferred build. Call immediately after Stage A; poll it from
 /// the render loop (never block on it before the first visible frames).
 ///
-/// `Device`/`Queue` are refcounted handles, so the builder gets its own
-/// clones and the worker thread keeps using the originals meanwhile.
+/// `Device` is a refcounted handle, so the builder gets its own clone and
+/// the worker thread keeps using the original meanwhile.
 #[allow(clippy::too_many_arguments)]
 fn spawn_deferred_stack(
-    device: wgpu::Device,
-    queue: wgpu::Queue,
+    device: gxi::Device,
     this_monitor: UiMonitor,
     monitor_index: usize,
     monitor_name: String,
@@ -106,23 +99,26 @@ fn spawn_deferred_stack(
             // shaped buffers + 11 SVG trees), so it runs here while the
             // pipeline compiles and the peek compile occupy their own
             // threads. `scope` lets all of them borrow the one device.
-            let (peek, pipelines, text) = thread::scope(|s| {
+            let (peek, selection, pipelines, text) = thread::scope(|s| {
                 let peek = s.spawn(|| {
                     crate::system::lower_thread_priority();
-                    gpu::create_peek_gpu(&device)
+                    // Peek and the selection pass compile back to back on
+                    // this helper thread — both are small, and a fourth
+                    // thread would only contend on the platform shader
+                    // compiler (see the note below).
+                    let peek = gpu::create_peek_gpu(&device);
+                    let selection = gpu::overlay::create_selection_pipeline(&device);
+                    (peek, selection)
                 });
                 let pipelines = s.spawn(|| {
                     crate::system::lower_thread_priority();
-                    UiPipelines::build_parallel(&device, SURFACE_FORMAT)
+                    UiPipelines::build_parallel(&device)
                 });
-                let text_stack = TextStack::new(&device, &queue, SURFACE_FORMAT);
+                let text_stack = TextStack::new(&device);
                 mark(|t| &t.prep_fonts);
                 let text = UiText::new(text_stack);
-                (
-                    peek.join().expect("peek pipeline thread"),
-                    pipelines.join().expect("ui pipeline thread"),
-                    text,
-                )
+                let (peek, selection) = peek.join().expect("peek pipeline thread");
+                (peek, selection, pipelines.join().expect("ui pipeline thread"), text)
             });
             // Both marks now measure DEFERRED work running beside the
             // critical path, not work on it — they no longer sit between
@@ -133,6 +129,7 @@ fn spawn_deferred_stack(
 
             DeferredStack {
                 peek,
+                selection,
                 ui: UiRenderer::from_parts(
                     pipelines,
                     text,
@@ -163,20 +160,16 @@ fn spawn_deferred_stack(
 /// Returns whether the frame actually reached `queue.present()` — a
 /// lost/outdated/timed-out surface returns early — so the caller's
 /// `first_present` mark means "pixels handed to the compositor", not
-/// "a draw was attempted".
-fn present_first_frame(
-    surface: &wgpu::Surface<'static>,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    pipeline: &wgpu::RenderPipeline,
-    config: &wgpu::SurfaceConfiguration,
-    snapshot_state: Option<&SnapshotState>,
-) -> bool {
+/// "a draw was attempted". [`FirstFrame::DeviceLost`] is terminal: the
+/// worker must exit with its fail guard still armed so the show gate
+/// counts the display as failed instead of waiting on it.
+fn present_first_frame(surface: &mut gxi::Surface, pipeline: &gxi::RenderPipeline, snapshot_state: Option<&SnapshotState>) -> FirstFrame {
     // macOS: the early order-front (`app.rs::order_window_front_early`) is
     // asynchronous — `orderFrontRegardless` returns before AppKit has heard
-    // back from the window server, and wgpu-hal's Metal backend refuses
-    // `acquire_texture` with `Occluded` until the NSWindow's occlusionState
-    // gains `NSWindowOcclusionStateVisible` (its gfx-rs/wgpu#8309 guard). On
+    // back from the window server, and the metal backend's `acquire`
+    // returns `Occluded` until the NSWindow's occlusionState gains
+    // `NSWindowOcclusionStateVisible` (the guard carried over from
+    // wgpu-hal's gfx-rs/wgpu#8309 workaround). On
     // a warm run this worker reaches the acquire within a millisecond or
     // two of the order-front — and can even beat it, since the main thread
     // only orders front once its screenshot pickup poll fires — so the
@@ -192,58 +185,38 @@ fn present_first_frame(
     // and any macOS run slow enough that AppKit caught up — breaks out of
     // the loop on the first attempt and never sleeps.
     let occluded_deadline = Instant::now() + Duration::from_millis(500);
-    let frame = loop {
-        match surface.get_current_texture() {
-            wgpu::CurrentSurfaceTexture::Success(f) | wgpu::CurrentSurfaceTexture::Suboptimal(f) => break f,
-            wgpu::CurrentSurfaceTexture::Occluded if cfg!(target_os = "macos") && Instant::now() < occluded_deadline => {
+    let mut frame = loop {
+        match surface.acquire(None) {
+            AcquireResult::Frame(f) => break f,
+            AcquireResult::Occluded if cfg!(target_os = "macos") && Instant::now() < occluded_deadline => {
                 thread::sleep(Duration::from_millis(1));
             }
-            wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return false,
-            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                surface.configure(device, config);
-                return false;
-            }
-            wgpu::CurrentSurfaceTexture::Validation => return false,
+            // Like the other misses, the render loop picks up the first
+            // paint.
+            AcquireResult::Skip | AcquireResult::Occluded => return FirstFrame::Skipped,
+            AcquireResult::DeviceLost => return FirstFrame::DeviceLost,
         }
     };
 
-    let view = frame
-        .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
-    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("frame 0 encoder"),
-    });
-    {
-        let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("frame 0 pass"),
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: &view,
-                resolve_target: None,
-                depth_slice: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color {
-                        r: 0.05,
-                        g: 0.05,
-                        b: 0.08,
-                        a: 1.0,
-                    }),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            occlusion_query_set: None,
-            multiview_mask: None,
-        });
-        rpass.set_pipeline(pipeline);
-        if let Some(state) = snapshot_state {
-            rpass.set_bind_group(0, &state.bind_group, &[]);
-            rpass.draw(0..3, 0..1);
-        }
+    frame.set_pipeline(pipeline);
+    if let Some(state) = snapshot_state {
+        frame.set_bind_group(0, &state.bind_group);
+        frame.draw(0..3, 0..1);
     }
-    queue.submit(std::iter::once(encoder.finish()));
-    queue.present(frame);
-    true
+    frame.present(None);
+    FirstFrame::Presented
+}
+
+/// What [`present_first_frame`] achieved.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FirstFrame {
+    /// Pixels were handed to the compositor.
+    Presented,
+    /// Transient miss — the render loop picks up the first paint.
+    Skipped,
+    /// The device is gone (see [`frame::DrawStatus::DeviceLost`]) — the
+    /// worker must exit via its fail path. Dead on the metal backend.
+    DeviceLost,
 }
 
 // ── Messages ────────────────────────────────────────────────────────
@@ -303,7 +276,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // front of any of them.
     let deferred = spawn_deferred_stack(
         bundle.device.clone(),
-        bundle.queue.clone(),
         this_monitor,
         monitor_index,
         monitor_name,
@@ -327,7 +299,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let mut pending_cycle: Option<(Arc<CycleParams>, Option<Arc<gpu::desktop::DesktopSnapshot>>)> = None;
     let handoff = loop {
         match input_rx.recv() {
-            Ok(WorkerInput::Handoff(h)) => break h,
+            Ok(WorkerInput::Handoff(h)) => break *h,
             Ok(WorkerInput::BeginCycle(p)) => {
                 let stamp = |field: fn(&WorkerTimings) -> &AtomicDuration| {
                     if let Some(t) = startup.background.workers.get(monitor_index) {
@@ -335,13 +307,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     }
                 };
                 stamp(|t| &t.upload_start);
-                let snapshot = gpu::desktop::upload_snapshot(
-                    &bundle.device,
-                    &bundle.queue,
-                    &p.snapshot,
-                    &bundle.desktop_bgl,
-                    &bundle.desktop_sampler,
-                );
+                let snapshot = gpu::desktop::upload_snapshot(&bundle.device, &bundle.queue, &p.snapshot, &bundle.desktop_sampler);
                 stamp(|t| &t.upload);
                 pending_cycle = Some((p, snapshot));
             }
@@ -356,44 +322,30 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         }
     };
     let _window = handoff.window;
-    let surface = handoff.surface;
+    let mut surface = handoff.surface;
 
     worker_timings
         .handoff
         .set_once(startup.t_start.elapsed());
 
-    // Verify surface format.
-    let caps = surface.get_capabilities(&bundle.adapter);
-    let actual_format = caps
-        .formats
-        .iter()
-        .copied()
-        .find(|f| !f.is_srgb())
-        .unwrap_or(caps.formats[0]);
-    assert_eq!(actual_format, SURFACE_FORMAT, "surface format mismatch on monitor {monitor_index}");
-
     // ── Configure the surface ───────────────────────────────────────
     // Still working straight off the Stage-A bundle: `WindowGpu` cannot be
     // assembled until the deferred build lands its peek pipeline, and
-    // nothing before frame 0 needs it.
+    // nothing before frame 0 needs it. Swapchain policy (BGRA8 non-sRGB —
+    // asserted against the adapter — fifo, opaque, latency 1) lives in the
+    // gxi backend.
 
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: SURFACE_FORMAT,
-        width: (monitor_bounds.width() as u32).max(1),
-        height: (monitor_bounds.height() as u32).max(1),
-        present_mode: wgpu::PresentMode::Fifo,
-        alpha_mode: wgpu::CompositeAlphaMode::Opaque,
-        // Auto reproduces wgpu's pre-30 behavior for our non-HDR surface format.
-        color_space: wgpu::SurfaceColorSpace::Auto,
-        view_formats: vec![],
-        desired_maximum_frame_latency: 1,
+    let surface_size = ((monitor_bounds.width() as u32).max(1), (monitor_bounds.height() as u32).max(1));
+    let config = SurfaceConfig {
+        width: surface_size.0,
+        height: surface_size.1,
+        clear_color: [0.05, 0.05, 0.08, 1.0],
     };
     // Configure at monitor size right away, while the main thread is still
     // finishing its own window setup — this is the one swapchain create we
     // need, and doing it here keeps it off the critical path between the
     // screenshot landing and frame 0.
-    surface.configure(&bundle.device, &config);
+    surface.configure(&bundle.device, &bundle.queue, &config);
 
     // `preloaded_snapshot` is `Some` only for a cycle that arrived during
     // the handoff wait and was uploaded there. Otherwise wait for it: the
@@ -437,15 +389,8 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     // which is the common case. `set_once` keeps the marks stamped there.
 
     mark(|t| &t.upload_start);
-    let snapshot = preloaded_snapshot.or_else(|| {
-        gpu::desktop::upload_snapshot(
-            &bundle.device,
-            &bundle.queue,
-            &cycle.snapshot,
-            &bundle.desktop_bgl,
-            &bundle.desktop_sampler,
-        )
-    });
+    let snapshot = preloaded_snapshot
+        .or_else(|| gpu::desktop::upload_snapshot(&bundle.device, &bundle.queue, &cycle.snapshot, &bundle.desktop_sampler));
     mark(|t| &t.upload);
 
     // ── Stage C: per-cycle uniforms + bind group, draw frame 0 ──
@@ -465,95 +410,116 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             mf.height() / vd_h,
         ];
 
-        let init_local = screen_to_window(monitor_bounds, cycle.initial_mouse);
-
         let uniforms = WindowUniforms {
             uv_offset_scale: base_uv_offset_scale,
-            params: [0.0, init_local.x, init_local.y, scale_factor],
-            accent_color: cycle.accent_color,
+            params: [0.0, 0.0, 0.0, 0.0],
             selection_rect: [0.0, 0.0, -1.0, -1.0],
-            selection_params: [0.0, 0.0, 0.0, 0.0],
             cursor_rect: [0.0, 0.0, -1.0, -1.0],
             cursor_params: [0.0, 0.0, 0.0, 0.0],
-            ocr_rect: [0.0, 0.0, -1.0, -1.0],
             ocr_params: [0.0, 0.0, 0.0, 0.0],
-            selection_shape: [0.0, 0.0, 0.0, 0.0],
         };
 
         let ubo = bundle
             .device
-            .create_buffer(&wgpu::BufferDescriptor {
-                label: Some("window uniforms"),
-                size: WINDOW_UNIFORMS_SIZE,
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            });
+            .create_uniform_buffer("window uniforms", WINDOW_UNIFORMS_SIZE);
         bundle
             .queue
             .write_buffer(&ubo, 0, bytemuck::bytes_of(&uniforms));
 
-        let placeholder_cursor = create_placeholder_cursor_view(&bundle.device, &bundle.queue);
-        let (cursor_color_view, cursor_mask_view) = match &snap.cursor {
-            Some(ct) => (&ct.color_view, &ct.mask_view),
+        let placeholder_cursor = create_placeholder_cursor_texture(&bundle.device, &bundle.queue);
+        let (cursor_color, cursor_mask) = match &snap.cursor {
+            Some(ct) => (&ct.color, &ct.mask),
             None => (&placeholder_cursor, &placeholder_cursor),
         };
 
-        let bind_group = bundle
+        let bind_group = bundle.device.create_bind_group(
+            "window snapshot bind group",
+            ShaderId::Desktop,
+            &[
+                BindingRes::Uniform(&ubo),
+                BindingRes::Texture(&snap.texture),
+                BindingRes::Sampler(&snap.sampler),
+                BindingRes::Texture(cursor_color),
+                BindingRes::Texture(cursor_mask),
+            ],
+        );
+
+        // The overlay passes (crosshair + selection) share one uniform
+        // buffer, zero-initialized here: fade 0 and an empty selection
+        // mean both passes draw nothing until the first
+        // `update_uniforms` — and neither is drawn on frame 0 anyway.
+        let overlay_ubo = bundle
             .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("window snapshot bind group"),
-                layout: &snap.bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: ubo.as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::TextureView(&snap.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::Sampler(&snap.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::TextureView(cursor_color_view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 4,
-                        resource: wgpu::BindingResource::TextureView(cursor_mask_view),
-                    },
-                ],
-            });
+            .create_uniform_buffer("overlay uniforms", OVERLAY_UNIFORMS_SIZE);
+        let overlay_uniforms = OverlayUniforms::zeroed();
+        bundle
+            .queue
+            .write_buffer(&overlay_ubo, 0, bytemuck::bytes_of(&overlay_uniforms));
+        let crosshair_peek_ubo = bundle
+            .device
+            .create_uniform_buffer("crosshair peek uniforms", CROSSHAIR_PEEK_UNIFORMS_SIZE);
+        bundle
+            .queue
+            .write_buffer(&crosshair_peek_ubo, 0, bytemuck::bytes_of(&CrosshairPeekUniforms::zeroed()));
+        // Fallback bind group for frames with no peek quad: the peek slots
+        // hold 1×1 placeholders (never sampled — the peek ubo is zeroed,
+        // so the shader's peek branch is dead). Bind groups retain their
+        // resources on both backends, so reusing the cursor placeholder
+        // here is safe.
+        let crosshair_bind_group = bundle.device.create_bind_group(
+            "crosshair bind group",
+            ShaderId::Crosshair,
+            &[
+                BindingRes::Uniform(&overlay_ubo),
+                BindingRes::Uniform(&crosshair_peek_ubo),
+                BindingRes::Texture(&snap.texture),
+                BindingRes::Texture(&placeholder_cursor),
+                BindingRes::Texture(&placeholder_cursor),
+                BindingRes::Sampler(&snap.sampler),
+            ],
+        );
+        let selection_bind_group = bundle.device.create_bind_group(
+            "selection bind group",
+            ShaderId::Selection,
+            &[
+                BindingRes::Uniform(&overlay_ubo),
+                BindingRes::Texture(&snap.texture),
+                BindingRes::Sampler(&snap.sampler),
+            ],
+        );
 
         SnapshotState {
             ubo,
             bind_group,
             uniforms,
             base_uv_offset_scale,
+            overlay_ubo,
+            crosshair_peek_ubo,
+            crosshair_bind_group,
+            selection_bind_group,
+            overlay_uniforms,
+            accent_color: cycle.accent_color,
+            dpi_scale: scale_factor,
         }
     });
 
     mark(|t| &t.first_render_start);
-    let presented = present_first_frame(
-        &surface,
-        &bundle.device,
-        &bundle.queue,
-        &bundle.desktop_pipeline,
-        &config,
-        snapshot_state.as_ref(),
-    );
+    let presented = present_first_frame(&mut surface, &bundle.desktop_pipeline, snapshot_state.as_ref());
+    if presented == FirstFrame::DeviceLost {
+        // Exit with `fail_guard` still armed: the bump lets the show gate
+        // count this display as failed instead of waiting on it.
+        error!("render worker {monitor_index}: GPU device lost at frame 0");
+        return;
+    }
     // Marks pixels actually handed to the compositor rather than merely a
     // draw attempt — unlike `first_render` below, which also waits out the
     // device poll.
-    if presented {
+    if presented == FirstFrame::Presented {
         mark(|t| &t.first_present);
     }
-    let _ = bundle.device.poll(wgpu::PollType::Wait {
-        submission_index: None,
-        timeout: Some(Duration::from_secs(5)),
-    });
+    bundle
+        .device
+        .wait_idle(Duration::from_secs(5));
 
     mark(|t| &t.first_render);
 
@@ -594,12 +560,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
     let mut gpu_timing = GpuTimings::new(&gpu.device, &gpu.queue);
     let peek_ubo = gpu
         .device
-        .create_buffer(&wgpu::BufferDescriptor {
-            label: Some("peek uniforms"),
-            size: PEEK_UNIFORMS_SIZE,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        .create_uniform_buffer("peek uniforms", PEEK_UNIFORMS_SIZE);
 
     cycle.visible_latch.wait();
 
@@ -607,7 +568,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
     let mut peek_textures: HashMap<usize, PeekTextureEntry> = HashMap::new();
     let mut active_peek: Option<PeekCommand> = None;
-    let mut blurred_desktop: Option<(wgpu::Texture, wgpu::TextureView)> = None;
+    let mut blurred_desktop: Option<gxi::Texture> = None;
 
     // ── Render loop ─────────────────────────────────────────────
 
@@ -641,6 +602,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             match deferred.take().map(|h| h.join()) {
                 Some(Ok(DeferredStack {
                     peek,
+                    selection,
                     mut ui,
                 })) => {
                     info!("render worker {monitor_index}: deferred UI stack folded in");
@@ -654,6 +616,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                         ui.set_state(state);
                     }
                     gpu.peek = Some(peek);
+                    gpu.selection = Some(selection);
                     ui_renderer = Some(ui);
                 }
                 Some(Err(_)) => {
@@ -691,88 +654,55 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     }
                 }
                 Ok(RenderMsg::BlurredDesktop(bd)) => {
-                    let max_dim = gpu.device.limits().max_texture_dimension_2d;
+                    let max_dim = gpu.device.max_texture_dimension_2d();
                     if bd.width > max_dim || bd.height > max_dim || bd.width == 0 || bd.height == 0 {
                         continue;
                     }
-                    let size = wgpu::Extent3d {
-                        width: bd.width,
-                        height: bd.height,
-                        depth_or_array_layers: 1,
-                    };
-                    let texture = gpu
-                        .device
-                        .create_texture(&wgpu::TextureDescriptor {
-                            label: Some("blurred desktop texture"),
-                            size,
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2,
-                            format: wgpu::TextureFormat::Bgra8Unorm,
-                            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                            view_formats: &[],
-                        });
-                    gpu.queue.write_texture(
-                        wgpu::TexelCopyTextureInfo {
-                            texture: &texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
+                    // Fallible: this runs mid-loop with the fail guard
+                    // long disarmed, and the texture is an optional
+                    // cosmetic — an OOM on a huge desktop must be a
+                    // logged skip, not a dead render worker.
+                    let texture = gpu.device.try_create_texture_with_data(
+                        &gpu.queue,
+                        &TextureDesc {
+                            label: "blurred desktop texture",
+                            width: bd.width,
+                            height: bd.height,
+                            format: TexFormat::Bgra8Unorm,
                         },
                         &bd.bgra,
-                        wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(4 * bd.width),
-                            rows_per_image: Some(bd.height),
-                        },
-                        size,
                     );
-                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                    blurred_desktop = Some((texture, view));
+                    match texture {
+                        Ok(t) => blurred_desktop = Some(t),
+                        Err(e) => error!("blurred desktop texture creation failed (skipping): {e:#}"),
+                    }
                 }
                 Ok(RenderMsg::PeekImage(peek)) => {
-                    let max_dim = gpu.device.limits().max_texture_dimension_2d;
+                    let max_dim = gpu.device.max_texture_dimension_2d();
                     if peek.width > max_dim || peek.height > max_dim || peek.width == 0 || peek.height == 0 {
                         continue;
                     }
-                    let size = wgpu::Extent3d {
-                        width: peek.width,
-                        height: peek.height,
-                        depth_or_array_layers: 1,
-                    };
-                    let texture = gpu
-                        .device
-                        .create_texture(&wgpu::TextureDescriptor {
-                            label: Some("peek window texture"),
-                            size,
-                            mip_level_count: 1,
-                            sample_count: 1,
-                            dimension: wgpu::TextureDimension::D2,
-                            format: wgpu::TextureFormat::Bgra8Unorm,
-                            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                            view_formats: &[],
-                        });
-                    gpu.queue.write_texture(
-                        wgpu::TexelCopyTextureInfo {
-                            texture: &texture,
-                            mip_level: 0,
-                            origin: wgpu::Origin3d::ZERO,
-                            aspect: wgpu::TextureAspect::All,
+                    // Fallible for the same reason as BlurredDesktop above.
+                    let texture = match gpu.device.try_create_texture_with_data(
+                        &gpu.queue,
+                        &TextureDesc {
+                            label: "peek window texture",
+                            width: peek.width,
+                            height: peek.height,
+                            format: TexFormat::Bgra8Unorm,
                         },
                         &peek.bgra,
-                        wgpu::TexelCopyBufferLayout {
-                            offset: 0,
-                            bytes_per_row: Some(4 * peek.width),
-                            rows_per_image: Some(peek.height),
-                        },
-                        size,
-                    );
-                    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                    ) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            error!("peek window texture creation failed (skipping): {e:#}");
+                            continue;
+                        }
+                    };
                     peek_textures.insert(
                         peek.window_index,
                         PeekTextureEntry {
-                            _texture: texture,
-                            view,
+                            texture,
                             window_rect: peek.window_rect,
                             obstruction_rects: peek.obstruction_rects.clone(),
                             width: peek.width,
@@ -802,12 +732,13 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         // identical treatment (see peek.wgsl).
         let ocr_fx = desktop::ocr_overlay(&ocr);
 
+        let mut overlay_vis = desktop::OverlayVisibility::default();
         if let Some(state) = snapshot_state.as_mut() {
             let cursor_textures = gpu
                 .snapshot
                 .as_ref()
                 .and_then(|s| s.cursor.as_ref());
-            state.update_uniforms(
+            overlay_vis = state.update_uniforms(
                 &gpu.queue,
                 &FrameState {
                     monitor_bounds,
@@ -820,25 +751,28 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
                     overlays_visible,
                     cursor_overlay_visible,
                     scroll_pick_mode,
-                    ocr_rect: ocr_fx.rect,
                     ocr_dim: ocr_fx.dim,
                     ocr_gray: ocr_fx.gray,
                     ocr_active: ocr_fx.active,
                     elapsed: start.elapsed().as_secs_f32(),
-                    surface_size: (config.width, config.height),
+                    surface_size,
                 },
                 cursor_textures,
             );
         }
 
-        // Build per-frame peek draw state if active + texture available.
-        let peek_bind_group = active_peek.as_ref().and_then(|cmd| {
+        // Build per-frame peek draw state if active + texture available:
+        // the peek quad's bind group, plus the peek-aware crosshair bind
+        // group + uniforms so the thin cross's contrast choice tracks the
+        // peek composite actually displayed under it (see crosshair.wgsl).
+        let peek_draw = active_peek.as_ref().and_then(|cmd| {
             // No peek pipeline yet (deferred build still running): skip the
             // quad this frame; it appears once the build lands.
-            let peek = gpu.peek.as_ref()?;
+            let _peek = gpu.peek.as_ref()?;
             let pt = peek_textures.get(&cmd.window_index)?;
             let snap = gpu.snapshot.as_ref()?;
-            let (_, ref blurred_view) = *blurred_desktop.as_ref()?;
+            let blurred_tex = blurred_desktop.as_ref()?;
+            let state = snapshot_state.as_ref()?;
 
             // Compute peek uniforms in monitor-local coords.
             let sel = selection?;
@@ -881,10 +815,6 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
 
             let mut peek_uniforms = PeekUniforms::zeroed();
             peek_uniforms.selection_rect = [sl, st, sr, sb];
-            // Same window-local scaling as the desktop pass's
-            // selection_shape: the radius rides the magnifier zoom with
-            // the rect it belongs to.
-            peek_uniforms.selection_shape = [selection_radius * zoom.max(1.0), 0.0, 0.0, 0.0];
             peek_uniforms.window_uv = window_uv;
             peek_uniforms.desktop_uv = desktop_uv;
 
@@ -892,10 +822,9 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             peek_uniforms.params = [
                 n as f32,
                 if cmd.captured { 0.0 } else { 0.45 },
-                config.width as f32,
-                config.height as f32,
+                surface_size.0 as f32,
+                surface_size.1 as f32,
             ];
-            peek_uniforms.cursor_params = [local_cursor.x, local_cursor.y, scale_factor, 0.0];
             // Same values the desktop pass got this frame — the two
             // shaders must dim/desaturate in lockstep or the peeked
             // region visibly detaches from the rest of the selection.
@@ -915,39 +844,54 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             gpu.queue
                 .write_buffer(&peek_ubo, 0, bytemuck::bytes_of(&peek_uniforms));
 
-            let bind_group = gpu
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("peek bind group"),
-                    layout: &peek.bgl,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: peek_ubo.as_entire_binding(),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::TextureView(&pt.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 2,
-                            resource: wgpu::BindingResource::TextureView(blurred_view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 3,
-                            resource: wgpu::BindingResource::Sampler(&snap.sampler),
-                        },
-                    ],
-                });
-            Some(bind_group)
-        });
+            let bind_group = gpu.device.create_bind_group(
+                "peek bind group",
+                ShaderId::Peek,
+                &[
+                    BindingRes::Uniform(&peek_ubo),
+                    BindingRes::Texture(&pt.texture),
+                    BindingRes::Texture(blurred_tex),
+                    BindingRes::Sampler(&snap.sampler),
+                ],
+            );
 
-        if gpu_timing.is_some() {
-            let _ = gpu.device.poll(wgpu::PollType::Poll);
+            // Same values the peek pass got this frame — the crosshair's
+            // replicated composite must match the displayed pixels.
+            let mut cp = CrosshairPeekUniforms::zeroed();
+            cp.params = [1.0, peek_uniforms.params[1], n as f32, 0.0];
+            cp.window_uv = window_uv;
+            cp.obstruction_rects = peek_uniforms.obstruction_rects;
+            gpu.queue
+                .write_buffer(&state.crosshair_peek_ubo, 0, bytemuck::bytes_of(&cp));
+            let crosshair_bg = gpu.device.create_bind_group(
+                "crosshair bind group (peek)",
+                ShaderId::Crosshair,
+                &[
+                    BindingRes::Uniform(&state.overlay_ubo),
+                    BindingRes::Uniform(&state.crosshair_peek_ubo),
+                    BindingRes::Texture(&snap.texture),
+                    BindingRes::Texture(&pt.texture),
+                    BindingRes::Texture(blurred_tex),
+                    BindingRes::Sampler(&snap.sampler),
+                ],
+            );
+            Some((bind_group, crosshair_bg))
+        });
+        let (peek_bind_group, crosshair_peek_bg) = match peek_draw {
+            Some((p, c)) => (Some(p), Some(c)),
+            None => (None, None),
+        };
+        // No peek quad this frame: make sure the crosshair's peek branch
+        // is dead (a stale active flag would sample the placeholders).
+        if crosshair_peek_bg.is_none() {
+            if let Some(state) = snapshot_state.as_ref() {
+                gpu.queue
+                    .write_buffer(&state.crosshair_peek_ubo, 0, bytemuck::bytes_of(&CrosshairPeekUniforms::zeroed()));
+            }
         }
 
         if let Some(gt) = gpu_timing.as_mut() {
-            for gpu_dur in gt.poll_completed() {
+            for gpu_dur in gt.poll_completed(&gpu.device) {
                 perf.backfill_next_gpu(gpu_dur);
             }
         }
@@ -964,17 +908,27 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
         }
 
         let mut sample: Option<PerfSample> = None;
-        draw_once(
-            &surface,
+        let status = draw_once(
+            &mut surface,
             &gpu,
-            &config,
+            surface_size,
             snapshot_state.as_ref(),
+            overlay_vis,
             peek_bind_group.as_ref(),
+            crosshair_peek_bg.as_ref(),
             ui_renderer.as_mut(),
             &perf,
             gpu_timing.as_ref(),
             &mut sample,
         );
+        if status == DrawStatus::DeviceLost {
+            // Terminal: a dead device fails every acquire instantly, so
+            // looping would hot-spin. The show gate has already been
+            // satisfied by this worker (`fail_guard` was disarmed before
+            // the loop), so exiting is the whole fail path here.
+            error!("render worker {monitor_index}: GPU device lost; exiting render loop");
+            return;
+        }
         if let Some(mut s) = sample {
             s.overall = overall;
             perf.record(s);

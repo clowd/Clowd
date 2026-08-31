@@ -202,7 +202,7 @@ pub fn all() -> Result<Vec<ImplMonitor>> {
 
 /// Walk DXGI adapters → outputs and build a map of GDI device name
 /// (e.g. `\\.\DISPLAY1`) → `(vendor_id, device_id)`. This tells the GPU
-/// bootstrap which wgpu adapter to select for each monitor, matching the
+/// bootstrap which adapter to select for each monitor, matching the
 /// C++ version's per-monitor `display.AdapterIdx`.
 /// Per-output adapter identity plus how much dedicated VRAM that adapter
 /// reports. `(vendor, device, dedicated_video_memory_bytes)`.

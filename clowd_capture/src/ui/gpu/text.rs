@@ -1,12 +1,20 @@
-//! glyphon wrapper. One stack per render thread.
+//! Text stack. One per render thread.
 //!
-//! A [`TextStack`] owns the per-device glyphon resources (font system,
-//! swash cache, atlas, viewport, renderer). Per-frame: call
+//! A [`TextStack`] owns the per-device text resources (font system, swash
+//! cache, glyph atlas, renderers — see [`super::glyph`]). Per-frame: call
 //! [`TextStack::update_viewport`] when the surface changes, then `prepare`
 //! with all the text areas for the frame, then `draw` inside a render
 //! pass.
 
-use glyphon::{Cache, FontSystem, Resolution, SwashCache, TextArea, TextAtlas, TextRenderer, Viewport};
+use cosmic_text::{FontSystem, SwashCache};
+
+use crate::gxi;
+
+// Re-exported so components have one import for everything text-shaped
+// (these used to come via glyphon, which re-exported the same types).
+pub use cosmic_text::{Attrs, Buffer, Color, Family, Metrics, Shaping, Weight, Wrap};
+
+use crate::ui::gpu::glyph::{GlyphAtlas, GlyphRenderer};
 
 pub const FONT_MONO_REGULAR: &[u8] = include_bytes!("../../../assets/fonts/CascadiaMono-Regular.ttf");
 pub const FONT_MONO_BOLD: &[u8] = include_bytes!("../../../assets/fonts/CascadiaMono-Bold.ttf");
@@ -16,30 +24,57 @@ pub const FONT_CODE_BOLD: &[u8] = include_bytes!("../../../assets/fonts/Cascadia
 pub const FAMILY_MONO: &str = "Cascadia Mono";
 pub const FAMILY_CODE: &str = "Cascadia Code";
 
+/// The visible area of a [`TextArea`] in screen pixels, used to clip its
+/// glyphs; it doesn't have to match the area's `left`/`top`.
+#[derive(Clone, Copy, Debug)]
+pub struct TextBounds {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+/// One buffer of shaped text placed on screen for a frame.
+#[derive(Clone)]
+pub struct TextArea<'a> {
+    /// The buffer containing the text to be rendered.
+    pub buffer: &'a Buffer,
+    /// The left edge of the buffer.
+    pub left: f32,
+    /// The top edge of the buffer.
+    pub top: f32,
+    /// The scaling to apply to the buffer (always 1.0 in this crate —
+    /// buffers are shaped at physical pixel sizes).
+    pub scale: f32,
+    /// The visible bounds of the text area.
+    pub bounds: TextBounds,
+    /// The default color of the text area.
+    pub default_color: Color,
+}
+
 pub struct TextStack {
     pub font_system: FontSystem,
     pub swash_cache: SwashCache,
-    pub viewport: Viewport,
-    pub atlas: TextAtlas,
-    pub renderer: TextRenderer,
+    atlas: GlyphAtlas,
+    renderer: GlyphRenderer,
     /// Second renderer over the SAME atlas, for the OCR bubble glyphs.
     ///
     /// It exists because draw order is the layering: bubble text must land
     /// UNDER the panel/hint rects while the main text draw runs above them
-    /// (`UiRenderer::draw`), and one glyphon renderer issues one draw.
-    /// Lazily created on the first OCR reveal — this overlay is
+    /// (`UiRenderer::draw`), and one renderer issues one draw. Lazily
+    /// created on the first OCR reveal — this overlay is
     /// startup-latency-sensitive (see the startup marks around
     /// `TextStack::new`) and non-OCR sessions never pay for it. Cheap when
-    /// it does happen: the pipeline is shared via glyphon's `Cache`, so
-    /// this is essentially a vertex-buffer allocation.
-    bubble_renderer: Option<TextRenderer>,
+    /// it does happen: the atlas and pipeline are shared, so this is
+    /// essentially a vertex-buffer allocation.
+    bubble_renderer: Option<GlyphRenderer>,
     /// Whether [`Self::try_merge_system_fonts`] merged the scan — see its docs.
     fallback_fonts_loaded: bool,
 }
 
 impl TextStack {
-    pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, surface_format: wgpu::TextureFormat) -> Self {
-        let mut db = glyphon::fontdb::Database::new();
+    pub fn new(device: &gxi::Device) -> Self {
+        let mut db = cosmic_text::fontdb::Database::new();
         db.load_font_data(FONT_MONO_REGULAR.to_vec());
         db.load_font_data(FONT_MONO_BOLD.to_vec());
         db.load_font_data(FONT_CODE_REGULAR.to_vec());
@@ -47,24 +82,12 @@ impl TextStack {
         let font_system = FontSystem::new_with_locale_and_db("en-US".to_string(), db);
 
         let swash_cache = SwashCache::new();
-        let cache = Cache::new(device);
-        let viewport = Viewport::new(device, &cache);
-        let mut atlas = TextAtlas::new(device, queue, &cache, surface_format);
-        let renderer = TextRenderer::new(
-            &mut atlas,
-            device,
-            wgpu::MultisampleState {
-                count: crate::render::MSAA_SAMPLES,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            None,
-        );
+        let atlas = GlyphAtlas::new(device);
+        let renderer = GlyphRenderer::new(device);
 
         Self {
             font_system,
             swash_cache,
-            viewport,
             atlas,
             renderer,
             bubble_renderer: None,
@@ -117,40 +140,31 @@ impl TextStack {
         true
     }
 
-    pub fn update_viewport(&mut self, queue: &wgpu::Queue, width: u32, height: u32) {
-        self.viewport.update(
-            queue,
-            Resolution {
-                width,
-                height,
-            },
-        );
+    pub fn update_viewport(&mut self, queue: &gxi::Queue, width: u32, height: u32) {
+        self.atlas
+            .update_viewport(queue, width, height);
     }
 
-    pub fn prepare<'a>(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        text_areas: &[TextArea<'a>],
-    ) -> Result<bool, glyphon::PrepareError> {
+    /// Stage the frame's main text. Returns whether anything was staged;
+    /// the caller must gate [`Self::draw`] on it. An atlas cap-hit is
+    /// handled internally by reset + retry (see
+    /// [`Self::take_atlas_reset`]).
+    pub fn prepare(&mut self, device: &gxi::Device, queue: &gxi::Queue, text_areas: &[TextArea<'_>]) -> bool {
         if text_areas.is_empty() {
-            return Ok(false);
+            return false;
         }
         self.renderer.prepare(
             device,
             queue,
-            &mut self.font_system,
             &mut self.atlas,
-            &self.viewport,
-            text_areas.iter().cloned(),
+            &mut self.font_system,
             &mut self.swash_cache,
-        )?;
-        Ok(true)
+            text_areas,
+        )
     }
 
-    pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) -> Result<(), glyphon::RenderError> {
-        self.renderer
-            .render(&self.atlas, &self.viewport, pass)
+    pub fn draw(&self, frame: &mut gxi::Frame) {
+        self.renderer.draw(&self.atlas, frame);
     }
 
     /// Prepare the OCR bubble glyphs on the dedicated renderer (created on
@@ -158,50 +172,38 @@ impl TextStack {
     /// staged; the caller MUST gate [`Self::draw_bubbles`] on it, because
     /// a renderer that prepared nothing this frame would re-issue its
     /// previous frame's vertices.
-    pub fn prepare_bubbles<'a>(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        text_areas: &[TextArea<'a>],
-    ) -> Result<bool, glyphon::PrepareError> {
+    pub fn prepare_bubbles(&mut self, device: &gxi::Device, queue: &gxi::Queue, text_areas: &[TextArea<'_>]) -> bool {
         if text_areas.is_empty() {
-            return Ok(false);
+            return false;
         }
-        let renderer = self.bubble_renderer.get_or_insert_with(|| {
-            TextRenderer::new(
-                &mut self.atlas,
-                device,
-                wgpu::MultisampleState {
-                    count: crate::render::MSAA_SAMPLES,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                None,
-            )
-        });
+        let renderer = self
+            .bubble_renderer
+            .get_or_insert_with(|| GlyphRenderer::new(device));
         renderer.prepare(
             device,
             queue,
-            &mut self.font_system,
             &mut self.atlas,
-            &self.viewport,
-            text_areas.iter().cloned(),
+            &mut self.font_system,
             &mut self.swash_cache,
-        )?;
-        Ok(true)
+            text_areas,
+        )
     }
 
     /// Draw the bubble glyphs. Only called when the same frame's
-    /// `prepare_bubbles` returned true — see its docs.
-    pub fn draw_bubbles<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>) -> Result<(), glyphon::RenderError> {
-        match &self.bubble_renderer {
-            Some(r) => r.render(&self.atlas, &self.viewport, pass),
-            None => Ok(()),
+    /// `prepare_bubbles` returned true (or the caller's retained fast
+    /// path is armed) — see its docs.
+    pub fn draw_bubbles(&self, frame: &mut gxi::Frame) {
+        if let Some(r) = &self.bubble_renderer {
+            r.draw(&self.atlas, frame);
         }
     }
 
-    pub fn trim(&mut self) {
-        self.atlas.trim();
+    /// Whether an atlas cap-hit reset happened since the last call.
+    /// When true, every retained instance buffer referenced stale atlas
+    /// regions: the caller must disarm any retained fast path and skip
+    /// re-issuing retained draws until they are re-prepared.
+    pub fn take_atlas_reset(&mut self) -> bool {
+        self.atlas.take_reset()
     }
 }
 
@@ -209,8 +211,8 @@ impl TextStack {
 /// the OCR worker thread needs a blocking-with-timeout wait
 /// ([`wait_for_system_font_scan`]) while render threads need a non-blocking
 /// peek (`try_get`).
-fn system_font_scan_latch() -> &'static crate::sync::Latch<std::sync::Arc<glyphon::fontdb::Database>> {
-    static LATCH: std::sync::OnceLock<crate::sync::Latch<std::sync::Arc<glyphon::fontdb::Database>>> = std::sync::OnceLock::new();
+fn system_font_scan_latch() -> &'static crate::sync::Latch<std::sync::Arc<cosmic_text::fontdb::Database>> {
+    static LATCH: std::sync::OnceLock<crate::sync::Latch<std::sync::Arc<cosmic_text::fontdb::Database>>> = std::sync::OnceLock::new();
     LATCH.get_or_init(crate::sync::Latch::new)
 }
 
@@ -233,7 +235,7 @@ pub fn begin_system_font_scan() {
                 // tier lowers I/O priority too.
                 crate::system::background_thread_priority();
                 let t0 = std::time::Instant::now();
-                let mut db = glyphon::fontdb::Database::new();
+                let mut db = cosmic_text::fontdb::Database::new();
                 db.load_system_fonts();
                 log::info!("system font scan: {} faces in {:?}", db.faces().count(), t0.elapsed());
                 system_font_scan_latch().set(std::sync::Arc::new(db));
@@ -278,7 +280,7 @@ mod tests {
     /// not the bound.
     #[test]
     fn probe_system_font_load_cost() {
-        let mut db = glyphon::fontdb::Database::new();
+        let mut db = cosmic_text::fontdb::Database::new();
         let t = std::time::Instant::now();
         db.load_system_fonts();
         eprintln!("load_system_fonts: {} faces in {:?}", db.faces().count(), t.elapsed());

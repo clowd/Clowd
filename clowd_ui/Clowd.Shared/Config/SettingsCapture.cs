@@ -4,7 +4,7 @@ using Avalonia.Media;
 
 namespace Clowd.Config
 {
-    /// <summary>Mirrors the capturer's --tips-mode flag (clowd_capture_wgpu, see CAPTURE_PROTOCOL.md).</summary>
+    /// <summary>Mirrors the capturer's --tips-mode flag (clowd_capture, see CAPTURE_PROTOCOL.md).</summary>
     public enum CapturerTipsMode
     {
         Hints,

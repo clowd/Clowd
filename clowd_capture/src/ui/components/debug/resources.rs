@@ -125,8 +125,9 @@ impl ResourcePoller {
 }
 
 /// Enumerate every DXGI adapter, sorting the one matching `(vendor,
-/// device)` — the same identity the worker's wgpu adapter was selected by
-/// (`gpu/device.rs`) — to the front. `CurrentUsage` from
+/// device)` — the same identity the worker's adapter was selected by
+/// (`select_adapter` in `gxi::Device::create`, either backend) — to the
+/// front. `CurrentUsage` from
 /// `QueryVideoMemoryInfo` is per-process, so index 0 reports what THIS
 /// process has resident on the worker's own adapter and the full list
 /// sums to the process total. Returns `None` when nothing enumerates.

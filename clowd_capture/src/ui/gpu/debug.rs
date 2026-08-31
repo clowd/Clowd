@@ -6,7 +6,7 @@
 //!   * **Primary Debug** — drawn only on the cursor's monitor, anchored
 //!     top-right. Text-only.
 
-use glyphon::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
+use crate::ui::gpu::text::{Attrs, Buffer, Color, Family, Metrics, Shaping, TextArea, TextBounds, Weight, Wrap};
 
 use crate::ui::components::debug::layout::{compute_layout, DebugPanelLayout, PanelAnchor, BODY_FONT_PX};
 use crate::ui::components::debug::model::{LineBuf, MonitorPanelData, PrimaryPanelData};
@@ -201,7 +201,6 @@ impl DebugRenderer {
                 hovered_window_obstructed: state.hovered_window_obstructed,
                 ram: readings.ram,
                 vram_total: readings.vram_total,
-                precomp_shaders: crate::gpu::shaders::precompiled_in_use(),
             };
             data.write_lines(&mut self.line_buf);
             render_panel_inner(
@@ -238,7 +237,6 @@ impl DebugRenderer {
                 bottom: vh,
             },
             default_color: p.color,
-            custom_glyphs: &[],
         }));
     }
 }

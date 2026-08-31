@@ -17,7 +17,7 @@ namespace Clowd.UI
 {
     /// <summary>
     /// Locates the external Rust capture binaries (see CAPTURE_PROTOCOL.md): the capture overlay
-    /// <c>clowd_capture_wgpu</c> and, beside it, the scrolling-capture driver
+    /// <c>clowd_capture</c> and, beside it, the scrolling-capture driver
     /// <c>clowd_scroll_driver</c>.
     /// Probe order: the <c>CLOWD_CAPTURE_PATH</c> environment variable, then alongside the Clowd.Ui
     /// executable (release layout), then walking up from the app base directory to a cargo workspace
@@ -28,7 +28,7 @@ namespace Clowd.UI
     {
         public const string EnvVarName = "CLOWD_CAPTURE_PATH";
 
-        public static string BinaryFileName => Executable("clowd_capture_wgpu");
+        public static string BinaryFileName => Executable("clowd_capture");
 
         /// <summary>The scrolling-capture driver (CAPTURE_PROTOCOL.md §2) — a separate process
         /// from the overlay, spawned once the user has picked the region and the scroll point.
@@ -456,7 +456,7 @@ namespace Clowd.UI
     }
 
     /// <summary>
-    /// Maps Clowd.Ui state onto the capturer's clap CLI (CAPTURE_PROTOCOL.md / `clowd_capture_wgpu
+    /// Maps Clowd.Ui state onto the capturer's clap CLI (CAPTURE_PROTOCOL.md / `clowd_capture
     /// --help`). Flags are only emitted when they differ from the capturer's own defaults, so the
     /// command line stays minimal. Factored out of the page so it is testable without a process.
     /// </summary>

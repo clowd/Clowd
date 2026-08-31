@@ -414,7 +414,6 @@ mod tests {
         s.captured = true;
         s.ocr = OcrState::Retracting {
             anchor: Instant::now(),
-            region: s.selection.unwrap(),
         };
         assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Normal);
     }

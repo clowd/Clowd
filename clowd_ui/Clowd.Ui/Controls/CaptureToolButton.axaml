@@ -2,7 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="using:Clowd.UI.Controls">
 
-    <!-- Styled to match the wgpu capture overlay's button panel 1:1 (clowd_capture_wgpu):
+    <!-- Styled to match the capture overlay's button panel 1:1 (clowd_capture):
          50x50 buttons (layout.rs:29), a fixed 26px icon slot with the glyph canvas-fitted
          inside (panel.rs:30), Cascadia Code 11px white labels with 1.2 line height
          (panel.rs:28,47 + text.rs FAMILY_CODE), even-thirds vertical layout (panel.rs
@@ -13,7 +13,7 @@
     <ControlTheme x:Key="{x:Type controls:CaptureToolButton}" TargetType="controls:CaptureToolButton">
         <!-- non-Primary buttons are transparent — the gray panel behind them (the host
              window's backdrop, e.g. FloatingToolbarWindow's RootBorder #373737) shows
-             through, matching the wgpu overlay look. Primary buttons get the accent brush
+             through, matching the capture overlay look. Primary buttons get the accent brush
              in code-behind. -->
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="White" />

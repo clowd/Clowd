@@ -1,8 +1,9 @@
 use clowd_rust_core::geometry::ScreenRect;
 
+use crate::gxi;
+
 pub(crate) struct PeekTextureEntry {
-    pub _texture: wgpu::Texture,
-    pub view: wgpu::TextureView,
+    pub texture: gxi::Texture,
     pub window_rect: ScreenRect,
     pub obstruction_rects: Vec<ScreenRect>,
     pub width: u32,
