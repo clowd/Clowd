@@ -14,6 +14,11 @@
         <!-- button strip -->
         <Border DockPanel.Dock="Bottom" Background="{DynamicResource SemiColorFill0}">
             <DockPanel Margin="16,10" LastChildFill="False">
+                <CheckBox x:Name="VerificationCheck"
+                          DockPanel.Dock="Left"
+                          Margin="0,0,12,0"
+                          VerticalAlignment="Center"
+                          IsVisible="False" />
                 <StackPanel x:Name="FooterPanel"
                             DockPanel.Dock="Left"
                             Orientation="Horizontal"
