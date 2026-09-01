@@ -9,12 +9,13 @@ using Avalonia.Media;
 namespace Clowd.UI.Controls
 {
     /// <summary>
-    /// Single-line text drawn as a true vector outline: each glyph's geometry is stroked with a
-    /// round-joined pen and then filled on top, so the outline is even the whole way around (no
-    /// gaps on the cardinal edges the way an offset-copy fake outline leaves them). All strokes
-    /// are drawn behind all fills, so only the outer half of the stroke is visible — the inner
-    /// half is painted over by the fill — giving a clean <see cref="StrokeThickness"/>/2 outline
-    /// that never eats into the letter body or a neighboring glyph.
+    /// Text drawn as a true vector outline: each glyph's geometry is stroked with a round-joined
+    /// pen and then filled on top, so the outline is even the whole way around (no gaps on the
+    /// cardinal edges the way an offset-copy fake outline leaves them). All strokes are drawn
+    /// behind all fills, so only the outer half of the stroke is visible — the inner half is
+    /// painted over by the fill — giving a clean <see cref="StrokeThickness"/>/2 outline that
+    /// never eats into the letter body or a neighboring glyph. Newlines in <see cref="Text"/>
+    /// break the text into centered lines.
     /// </summary>
     public class OutlinedTextBlock : Control
     {
@@ -106,38 +107,66 @@ namespace Clowd.UI.Controls
         private void RebuildGeometry()
         {
             _glyphs.Clear();
-            double x = 0;
-            double height = 0;
+            _geoWidth = 0;
+            _geoHeight = 0;
 
             var text = Text;
             var size = FontSize;
-            if (!string.IsNullOrEmpty(text) && size > 0)
-            {
-                // The outline extends StrokeThickness/2 beyond the glyph on every side; bake that
-                // margin into the origin so the top/left of the outline isn't clipped at (0,0).
-                var margin = StrokeThickness / 2;
-                var typeface = new Typeface(FontFamily ?? FontFamily.Default, FontStyle.Normal, FontWeight);
+            if (string.IsNullOrEmpty(text) || size <= 0)
+                return;
 
-                foreach (var ch in text)
+            // The outline extends StrokeThickness/2 beyond the glyph on every side; bake that
+            // margin into the origin so the top/left of the outline isn't clipped at (0,0).
+            var margin = StrokeThickness / 2;
+            var typeface = new Typeface(FontFamily ?? FontFamily.Default, FontStyle.Normal, FontWeight);
+
+            var lines = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
+
+            // First pass: line widths, so every line can be centered against the widest one, and
+            // one shared line height, so the lines sit on an even baseline grid.
+            var widths = new double[lines.Length];
+            double lineHeight = 0;
+            for (var i = 0; i < lines.Length; i++)
+            {
+                double w = 0;
+                foreach (var ch in lines[i])
                 {
-                    // NB: FormattedText.BuildGeometry returns null when the foreground brush is
-                    // null, so a non-null brush is mandatory here even though the returned geometry
-                    // is re-colored by Fill/Stroke at draw time.
-                    var ft = new FormattedText(ch.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, size,
-                                               Brushes.Black);
-                    var g = ft.BuildGeometry(new Point(x + margin, margin));
+                    var m = Measure(ch, typeface, size);
+                    w += m.WidthIncludingTrailingWhitespace + LetterSpacing;
+                    lineHeight = Math.Max(lineHeight, m.Height);
+                }
+
+                // The last glyph of a line gets no trailing spacing.
+                widths[i] = Math.Max(0, w - LetterSpacing);
+                _geoWidth = Math.Max(_geoWidth, widths[i]);
+            }
+
+            // Second pass: lay the glyphs out now that the centering offsets are known.
+            for (var i = 0; i < lines.Length; i++)
+            {
+                var x = margin + (_geoWidth - widths[i]) / 2;
+                var y = margin + i * lineHeight;
+
+                foreach (var ch in lines[i])
+                {
+                    var ft = Measure(ch, typeface, size);
+                    // NB: BuildGeometry returns null when the foreground brush is null, so the
+                    // non-null brush passed to FormattedText is mandatory even though the returned
+                    // geometry is re-colored by Fill/Stroke at draw time.
+                    var g = ft.BuildGeometry(new Point(x, y));
                     if (g != null)
                         _glyphs.Add(g);
                     x += ft.WidthIncludingTrailingWhitespace + LetterSpacing;
-                    height = Math.Max(height, ft.Height);
                 }
-
-                // The last glyph gets no trailing spacing.
-                x -= LetterSpacing;
             }
 
-            _geoWidth = Math.Max(0, x);
-            _geoHeight = height;
+            _geoHeight = lineHeight * lines.Length;
+        }
+
+        private static FormattedText Measure(char ch, Typeface typeface, double size)
+        {
+            return new FormattedText(ch.ToString(), CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, size,
+                                     Brushes.Black);
         }
 
         protected override Size MeasureOverride(Size availableSize)
