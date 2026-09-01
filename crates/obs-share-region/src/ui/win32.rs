@@ -55,10 +55,10 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetClientRect, GetMessageW,
-    GetSystemMetrics, GetWindowLongPtrW, IsDialogMessageW, LoadCursorW, PostMessageW,
+    GetSystemMetrics, GetWindowLongPtrW, IsDialogMessageW, LoadCursorW, LoadIconW, PostMessageW,
     RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, TranslateMessage,
-    CW_USEDEFAULT, GWLP_USERDATA, GWL_EXSTYLE, GWL_STYLE, HICON, HWND_TOP, IDCANCEL, IDC_ARROW,
-    IDOK, MSG, SET_WINDOW_POS_FLAGS, SM_CXVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    CW_USEDEFAULT, GWLP_USERDATA, GWL_EXSTYLE, GWL_STYLE, HWND_TOP, IDCANCEL, IDC_ARROW, IDOK, MSG,
+    SET_WINDOW_POS_FLAGS, SM_CXVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
     SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
     WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DISPLAYCHANGE,
     WM_DPICHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT,
@@ -1244,7 +1244,10 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             cbClsExtra: 0,
             cbWndExtra: 0,
             hInstance: hinst,
-            hIcon: HICON::default(),
+            // Icon resource 1, compiled into the exe by build.rs. The window
+            // wears the same icon the file does, which is what a share picker
+            // lists it by; a class with no icon gets the OS's generic one.
+            hIcon: LoadIconW(Some(hinst), PCWSTR(1 as *const u16)).unwrap_or_default(),
             hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             hbrBackground: HBRUSH::default(),
             lpszMenuName: PCWSTR::null(),

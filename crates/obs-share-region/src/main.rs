@@ -65,6 +65,16 @@
 //! validation. Every exit routes through `obs_platform::exit_process` — libobs
 //! is never shut down (known OBS teardown crashes; see crates/obs/src/context.rs).
 
+// Release Windows builds link as a GUI-subsystem binary. The shell spawns this
+// process with pipes for all three standard streams and shows the user only the
+// prompt window, so a console-subsystem exe would flash (or, launched from
+// Explorer, keep open) a console window that is never meant to be part of the
+// product. Nothing about the pipe protocol changes: a GUI-subsystem process
+// still inherits the handles its parent hands it, which is where every stdout
+// line and every stderr line goes. Debug builds stay on the console subsystem
+// so that running the binary by hand still prints where it was started.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod commands;
 mod mirror;
 mod obscure;
@@ -98,7 +108,7 @@ struct Cli {
     /// window picker, so callers should set something recognisable. It stays
     /// the window's title after the caption is dropped, because pickers list
     /// the title rather than the caption bar.
-    #[arg(long, default_value = "Shared Region")]
+    #[arg(long, default_value = "Clowd Shared Region")]
     title: String,
 
     /// Do not capture the cursor (passed through to the display capture source).
