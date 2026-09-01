@@ -18,14 +18,13 @@ using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.LogicalTree;
-using Avalonia.Media;
-using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Clowd.UI.Controls;
 using Clowd.UI.Dialogs;
 using Clowd.UI.Helpers;
+using Clowd.UI.Preview;
 using Clowd.UI.Services;
 
 namespace Clowd.UI
@@ -216,6 +215,7 @@ namespace Clowd.UI
             base.OnAttachedToVisualTree(e);
             SessionManager.Current.Sessions.CollectionChanged += OnSessionsChanged;
             SessionManager.Current.PropertyChanged += OnSessionManagerPropertyChanged;
+            SessionScroller.ScrollChanged += OnSessionsScrolled;
             RebuildGroups();
 
             // a capture, recording or upload creates its session and then opens this page — so by the
@@ -230,7 +230,18 @@ namespace Clowd.UI
             base.OnDetachedFromVisualTree(e);
             SessionManager.Current.Sessions.CollectionChanged -= OnSessionsChanged;
             SessionManager.Current.PropertyChanged -= OnSessionManagerPropertyChanged;
+            SessionScroller.ScrollChanged -= OnSessionsScrolled;
             _regroupTimer.Stop();
+        }
+
+        /// <summary>During a fling the rows under the pointer change faster than any of them can be
+        /// produced, so the cheap preview lane is gated shut for a beat rather than made to chase
+        /// them. Already-decoded previews are unaffected — this pauses dequeue, not drawing — and
+        /// requests still arrive and are still ordered while the gate is down, so whatever the user
+        /// lands on is at the head of the queue when it lifts.</summary>
+        private void OnSessionsScrolled(object sender, ScrollChangedEventArgs e)
+        {
+            SessionPreviewEngine.Current.SuspendFor(TimeSpan.FromMilliseconds(120));
         }
 
         private void OnSessionsChanged(object sender, NotifyCollectionChangedEventArgs e)
@@ -1100,95 +1111,6 @@ namespace Clowd.UI
                 session.UploadUrl = null;
                 session.UploadFileKey = null;
             }
-        }
-    }
-
-    /// <summary>
-    /// Loads (and caches) a thumbnail-sized Bitmap from a file path — replaces the WPF
-    /// convCacheImage converter used by the recent sessions list. Full screenshots are decoded
-    /// at thumbnail width (the list renders them at 110px logical / ~220px at 2x scale), which
-    /// keeps decode time and memory per entry small; the cache is bounded as a backstop.
-    /// </summary>
-    public sealed class ImagePathToBitmapConverter : IValueConverter
-    {
-        private const int ThumbnailDecodeWidth = 220;
-        private const int MaxCacheEntries = 256;
-
-        private static readonly object _lock = new();
-        private static readonly Dictionary<string, (DateTime Written, Bitmap Bitmap)> _cache =
-            new(StringComparer.OrdinalIgnoreCase);
-
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            if (value is not string path || String.IsNullOrWhiteSpace(path))
-                return null;
-
-            try
-            {
-                if (!File.Exists(path))
-                    return null;
-
-                var written = File.GetLastWriteTimeUtc(path);
-
-                lock (_lock)
-                {
-                    if (_cache.TryGetValue(path, out var hit) && hit.Written == written)
-                        return hit.Bitmap;
-
-                    // decoded thumbnails are tiny — dropping the whole cache on overflow is
-                    // cheaper than bookkeeping a true LRU.
-                    if (_cache.Count >= MaxCacheEntries)
-                        _cache.Clear();
-
-                    using var stream = File.OpenRead(path);
-                    var bmp = Bitmap.DecodeToWidth(stream, ThumbnailDecodeWidth);
-                    _cache[path] = (written, bmp);
-                    return bmp;
-                }
-            }
-            catch
-            {
-                return null;
-            }
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotSupportedException();
-        }
-    }
-
-    /// <summary>Maps a session's ContentKind to the placeholder icon geometry shown when an
-    /// upload-only session has no preview image. Unknown/other non-empty kinds fall back to the
-    /// generic file icon.</summary>
-    public sealed class ContentKindToIconConverter : IValueConverter
-    {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            // a video project carries no ContentKind (it has no payload file of its own, only the
-            // composition in its directory) but it is video work, and the generic-file tile reads
-            // as "we do not know what this is".
-            var kind = value is SessionInfo session
-                ? (session.IsVideoProject ? "video" : session.ContentKind)
-                : value as string;
-
-            var key = kind?.ToLowerInvariant() switch
-            {
-                "video" => "IconVideo",
-                "image" => "IconPhoto",
-                "text" => "IconTextFile",
-                _ => "IconFileGeneric",
-            };
-
-            if (Application.Current != null && Application.Current.TryGetResource(key, null, out var res) && res is Geometry geometry)
-                return geometry;
-
-            return null;
-        }
-
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-        {
-            throw new NotSupportedException();
         }
     }
 

@@ -6,6 +6,7 @@ using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI;
 using Clowd.UI.Helpers;
+using Clowd.UI.Preview;
 using Clowd.Util;
 
 namespace Clowd
@@ -174,13 +175,28 @@ namespace Clowd
             if (session.OpenEditor != null)
                 throw new InvalidOperationException("Can't delete session that is opened in an editor");
 
+            // read while the session is still alive — every other property throws once it is
+            // disposed, and the purge below needs the directory, which is the preview engine's
+            // identity for this session.
+            var sessionDir = Path.GetDirectoryName(session.FilePath);
+
+            // the engine's caches are UI-thread-affine and DeleteSession is reachable from a worker
+            // (UploadManager's failure paths, the hourly retention sweep), so the purge is posted
+            // rather than called. Ordering against Dispose does not matter: it is a pure in-memory
+            // forget of a directory name, and the disk cache is keyed on each source file's own
+            // path, mtime and length, so a recycled directory can never serve a stale picture.
+            if (Dispatcher.UIThread.CheckAccess())
+                SessionPreviewEngine.Current.PurgeSession(sessionDir);
+            else
+                Dispatcher.UIThread.Post(() => SessionPreviewEngine.Current.PurgeSession(sessionDir));
+
             lock (_lock)
             {
                 Sessions.Remove(session);
                 if (ReferenceEquals(LastCreated, session))
                     LastCreated = null;
                 session.Dispose();
-                Directory.Delete(Path.GetDirectoryName(session.FilePath), true);
+                Directory.Delete(sessionDir, true);
             }
         }
 

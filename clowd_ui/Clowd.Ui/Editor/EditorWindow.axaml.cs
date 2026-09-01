@@ -1073,6 +1073,9 @@ namespace Clowd.UI
             var newpreview = SaveImageToSessionDir(bitmap);
             var oldpreview = _session.PreviewImgPath;
             _session.PreviewImgPath = newpreview;
+            // the flattened canvas IS this session's content, not just its thumbnail: everything
+            // drawing the entry was drawing the png we are about to delete below.
+            _session.NotifyContentChanged();
 
             try {
                 // it could be locked by something else

@@ -240,25 +240,26 @@ namespace Clowd.UI.Services
         /// <summary>The project <paramref name="source"/> would open in the editor with: the saved
         /// <c>videoedit.json</c> beside it, or the identity edit of its recording when there is no
         /// saved one yet. Null when the recording carries no video stream to build one from. The
-        /// caller has already initialized FFmpeg — the probe needs it.</summary>
-        private static async Task<Project> BuildProjectAsync(SessionInfo source)
+        /// caller has already initialized FFmpeg — the probe needs it.
+        ///
+        /// The recipe itself lives in <see cref="SessionProjectBuilder"/> so the recents preview
+        /// engine composes the same project this renders; everything the session knows is read here,
+        /// on the calling thread, and handed over as values.</summary>
+        private static Task<Project> BuildProjectAsync(SessionInfo source)
         {
             var sessionDir = Path.GetDirectoryName(source.FilePath);
-            var editDocPath = String.IsNullOrEmpty(sessionDir)
-                ? null
-                : Path.Combine(sessionDir, VideoEditPersistence.FileName);
-
-            // a blank project owns nothing but its edit document — there is no recording to probe.
-            if (source.IsVideoProject)
-                return VideoEditPersistence.LoadOrCreateBlank(editDocPath);
-
             var videoPath = source.VideoPath;
-            var probe = await Task.Run(() => MediaProbe.ProbeDetailed(videoPath));
-            if (probe.VideoStreams == null || probe.VideoStreams.Count == 0)
-                return null;
+            var isVideoProject = source.IsVideoProject;
+            var audioTrackNames = AudioTrackLabels.From(source.AudioTracks);
+            var hints = RecordingTrackHints.From(source);
 
-            return VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe,
-                AudioTrackLabels.From(source.AudioTracks), RecordingTrackHints.From(source));
+            // the probe opens and reads the file, so it stays off the caller's thread as it always
+            // has; the load that follows it is cheap but goes along for the ride rather than
+            // hopping back. Failures surface out of the await either way.
+            return Task.Run(() => SessionProjectBuilder.TryBuild(sessionDir, videoPath, isVideoProject,
+                audioTrackNames, hints, out var project)
+                ? project
+                : null);
         }
 
         /// <summary>Where the FFmpeg natives live; see
@@ -528,6 +529,9 @@ namespace Clowd.UI.Services
                         try
                         {
                             session.VideoPath = result.OutputPath;
+                            // same as the GIF path: the entry has been showing a copy of the source
+                            // recording's poster since it appeared. The rendered file is the content.
+                            session.NotifyContentChanged();
                         }
                         catch (ObjectDisposedException)
                         {

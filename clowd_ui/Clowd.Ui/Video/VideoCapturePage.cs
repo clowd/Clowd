@@ -963,6 +963,10 @@ namespace Clowd.UI
             // actually got — not what the settings say now, which a mid-recording edit can no
             // longer act on (a respawn is refused once frames are flowing).
             session.SingleTrack = !_appliedMultiTrack;
+            // the recording is finished and every path on the session now points at a real file.
+            // Stamped explicitly rather than leaning on CreatedUtc above happening to be the same
+            // instant, which is only true while this stays one straight-line method.
+            session.NotifyContentChanged();
             return session;
         }
 
