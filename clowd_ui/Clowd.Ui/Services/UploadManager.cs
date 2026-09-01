@@ -78,6 +78,8 @@ namespace Clowd
 
             using var ms = new MemoryStream();
             image.Save(ms, PngBitmapEncoderOptions.Default);
+            session.UploadSizeBytes = ms.Length;
+            session.UploadFileCount = 1;
 
             // persist the image into the session dir so the recents list shows a preview.
             try
@@ -85,6 +87,9 @@ namespace Clowd
                 var previewPath = Path.Combine(Path.GetDirectoryName(session.FilePath), "content.png");
                 File.WriteAllBytes(previewPath, ms.ToArray());
                 session.PreviewImgPath = previewPath;
+                // content.png is the payload, not a thumbnail of one; it lands after
+                // CreateNewSession has already stamped the entry.
+                session.NotifyContentChanged();
             }
             catch (Exception ex)
             {
@@ -119,6 +124,8 @@ namespace Clowd
             try
             {
                 File.WriteAllText(Path.Combine(Path.GetDirectoryName(session.FilePath), "content.txt"), text);
+                // content.txt landed; the entry now has real content in its directory.
+                session.NotifyContentChanged();
             }
             catch (Exception ex)
             {
@@ -127,6 +134,8 @@ namespace Clowd
             }
 
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(text));
+            session.UploadSizeBytes = ms.Length;
+            session.UploadFileCount = 1;
 
             var upload = _uploads.StartUpload(textType, session);
             if (upload == null)
@@ -154,7 +163,11 @@ namespace Clowd
                 return null;
 
             var session = SessionManager.Current.CreateNewSession();
-            session.Name = "File Upload";
+            // the file's own name, not "File Upload": every upload row said the same three words,
+            // so the one thing that told them apart was the icon.
+            session.Name = "Upload · " + fileName;
+            session.UploadSizeBytes = fileInfo.Length;
+            session.UploadFileCount = 1;
             session.ContentKind = category switch
             {
                 ContentCategory.Image => "image",
@@ -162,6 +175,10 @@ namespace Clowd
                 ContentCategory.Text => "text",
                 _ => "file",
             };
+            // only an image payload is copied into the session directory (below), so for every
+            // other category this name is the sole trace of the original extension - and the sole
+            // trace of anything at all if the upload never lands.
+            session.OriginalFileName = fileName;
 
             // for images, copy the file into the session dir so the recents list shows a preview.
             if (category == ContentCategory.Image)
@@ -171,6 +188,8 @@ namespace Clowd
                     var dest = Path.Combine(Path.GetDirectoryName(session.FilePath), "content" + extension);
                     File.Copy(filePath, dest, true);
                     session.PreviewImgPath = dest;
+                    // the copied image is the payload; this is the only category that gets one.
+                    session.NotifyContentChanged();
                 }
                 catch (Exception ex)
                 {
@@ -230,6 +249,14 @@ namespace Clowd
             return selection.Info.Provider;
         }
 
+        /// <summary>What a multi-file upload's row is called. The count is of files after any folder
+        /// in the selection was walked, so dropping one folder reads as the number of files it
+        /// actually sent rather than "1".</summary>
+        private static string DescribeArchive(int fileCount)
+        {
+            return fileCount == 1 ? "Upload · 1 file" : $"Upload · {fileCount} files";
+        }
+
         private static async Task<UploadResult> ZipUpload(string[] filePaths, string archiveName = null)
         {
             var provider = await GetUploadProvider(SupportedUploadType.Binary);
@@ -237,8 +264,16 @@ namespace Clowd
                 return null;
 
             var session = SessionManager.Current.CreateNewSession();
-            session.Name = "File Upload";
+            // provisional: how many files are behind the selection is only known once the folders
+            // in it have been walked, which both branches below do. Each replaces this.
+            session.Name = "Upload";
             session.ContentKind = "file";
+            // the archive is either spooled into a temp directory (deleted in the finally below) or
+            // piped straight to the provider, so it never exists inside the session directory. Set
+            // here rather than in the two branches because StreamingZipUpload shares this very
+            // session and this is a write-once-at-creation field. archiveName is only defaulted to
+            // a random name further down; either way the extension - all a file icon reads - is zip.
+            session.OriginalFileName = archiveName ?? "archive.zip";
 
             // providers that accept a non-seekable stream get the zip piped straight into the
             // upload; the rest spool it to a temp file first (below). Accelerated configs stream
@@ -262,10 +297,10 @@ namespace Clowd
                 }
                 upload.SetStatus("Compressing...");
 
-                var anyAdded = await Task.Run(() =>
+                var addedCount = await Task.Run(() =>
                 {
                     using var zip = ZipFile.Open(zipPath, ZipArchiveMode.Create);
-                    var added = false;
+                    var added = 0;
                     foreach (var path in filePaths)
                     {
                         upload.CancelToken.ThrowIfCancellationRequested();
@@ -279,13 +314,13 @@ namespace Clowd
                                 upload.CancelToken.ThrowIfCancellationRequested();
                                 var entryName = Path.Combine(rootName, Path.GetRelativePath(root, file)).Replace('\\', '/');
                                 zip.CreateEntryFromFile(file, entryName);
-                                added = true;
+                                added++;
                             }
                         }
                         else if (File.Exists(path))
                         {
                             zip.CreateEntryFromFile(path, Path.GetFileName(path));
-                            added = true;
+                            added++;
                         }
                     }
 
@@ -293,13 +328,18 @@ namespace Clowd
                 }, upload.CancelToken);
 
                 // no files were added to the archive; there is nothing to upload
-                if (!anyAdded)
+                if (addedCount == 0)
                 {
                     _uploads.DiscardUpload(upload);
                     return null;
                 }
 
                 var size = new FileInfo(zipPath).Length;
+
+                // this branch knows the archive's real size, so that is what the row reports.
+                session.Name = DescribeArchive(addedCount);
+                session.UploadFileCount = addedCount;
+                session.UploadSizeBytes = size;
 
                 upload.SetStatus("Uploading...");
                 upload.SetProgress(0, size, true);
@@ -347,7 +387,13 @@ namespace Clowd
                 }
 
                 // progress is the source bytes consumed by the compressor — the compressed size
-                // isn't known up front, but the input size is.
+                // isn't known up front, but the input size is. The row reports that same input
+                // total for the same reason: nothing ever learns the compressed size here, because
+                // the archive is piped straight out and never lands anywhere it could be measured.
+                session.Name = DescribeArchive(composer.EntryCount);
+                session.UploadFileCount = composer.EntryCount;
+                session.UploadSizeBytes = composer.TotalSourceBytes;
+
                 upload.SetStatus("Uploading...");
                 upload.SetProgress(0, composer.TotalSourceBytes, true);
 

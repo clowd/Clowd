@@ -260,6 +260,9 @@ namespace Clowd.UI.Services
                         try
                         {
                             session.VideoPath = result.OutputPath;
+                            // until now this entry carried a byte-copy of the SOURCE recording's
+                            // poster, copied before the gif existed; the gif is the content now.
+                            session.NotifyContentChanged();
                         }
                         catch (ObjectDisposedException)
                         {

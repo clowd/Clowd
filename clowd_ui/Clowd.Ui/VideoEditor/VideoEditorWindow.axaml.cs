@@ -1794,6 +1794,11 @@ namespace Clowd.UI.VideoEditor
             _pendingSave = null;
             _editor?.FlushSave();
             _autosave?.Flush();
+            // videoedit.json is on disk now, and for a project entry that document IS the content a
+            // preview is composed from. Stamped on close rather than on each debounced save: a save
+            // fires after every 500ms of quiet while editing, and each stamp raises PropertyChanged
+            // -> a full Recents rebuild for a page that is behind this window anyway.
+            _session?.NotifyContentChanged();
 
             DiscardEmptyProject();
 

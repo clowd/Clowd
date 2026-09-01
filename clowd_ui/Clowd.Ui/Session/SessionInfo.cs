@@ -74,6 +74,95 @@ namespace Clowd
             set => Set(value);
         }
 
+        /// <summary>
+        /// Not persisted — the instant this session's <i>content</i> last changed on disk: a capture
+        /// landing, the image editor flattening its canvas, a recording, render or GIF conversion
+        /// finishing, an upload payload being written. Anything drawing this session (the Recent
+        /// page's preview) reads a change here as "what you drew is out of date"; it is only a nudge
+        /// to re-check, never the authority on freshness — the file's own timestamp is.
+        /// Defaults to <see cref="CreatedUtc"/> so a session that has never announced a change still
+        /// has a stable, non-zero stamp to key a cache on.
+        /// Written only through <see cref="NotifyContentChanged"/>, and deliberately NOT through
+        /// Set(): a persisted write is a synchronous full-file serialize + fsync and it bumps
+        /// LastModifiedUtc, which is what SessionManager's retention sweep ages entries by — neither
+        /// is remotely appropriate for a redraw hint. Same plain-field pattern as
+        /// <see cref="RenderStatusText"/> / <see cref="LinkedToPrevious"/> below.
+        /// </summary>
+        [JsonIgnore]
+        public DateTime ContentModifiedUtc
+        {
+            get => _contentModifiedUtc == default ? CreatedUtc : _contentModifiedUtc;
+            private set
+            {
+                if (_contentModifiedUtc == value)
+                    return;
+                _contentModifiedUtc = value;
+                OnPropertyChanged();
+            }
+        }
+
+        /// <summary>Announces that this session's content on disk has just changed. Touches no disk
+        /// itself. Call it beside the persisted write that produced the new content, so the extra
+        /// PropertyChanged costs no additional Recent-page rebuild.</summary>
+        public void NotifyContentChanged() => ContentModifiedUtc = DateTime.UtcNow;
+
+        /// <summary>Persisted. The size of what an upload-only session sent, in bytes — the file for
+        /// a single-file upload, the payload for a clipboard image or text, the total input size for
+        /// an archive (the compressed size is not known until the transfer is over, and by then the
+        /// archive is gone). 0 on everything else, and on uploads made before this was recorded,
+        /// which is why the row treats 0 as "say nothing" rather than "0 bytes".</summary>
+        public long UploadSizeBytes
+        {
+            get => Get<long>();
+            set
+            {
+                if (Set(value))
+                {
+                    OnPropertyChanged(nameof(UploadSizeText));
+                    OnPropertyChanged(nameof(ShowUploadSize));
+                }
+            }
+        }
+
+        /// <summary>Persisted. How many files a multi-file upload sent, after folders in the
+        /// selection were expanded. 0 or 1 on a single-file upload and on everything that is not
+        /// one — only a genuinely multi-file archive sets it above 1.</summary>
+        public int UploadFileCount
+        {
+            get => Get<int>();
+            set => Set(value);
+        }
+
+        /// <summary>What the row prints beside the date: "4.2 MB". Null when nothing was recorded,
+        /// so the separator can be hidden with it.</summary>
+        [JsonIgnore]
+        public string UploadSizeText => UploadSizeBytes > 0 ? FormatSize(UploadSizeBytes) : null;
+
+        [JsonIgnore]
+        public bool ShowUploadSize => UploadSizeBytes > 0;
+
+        /// <summary>Binary-prefixed but decimally labelled, which is what every file manager on this
+        /// desktop does — matching them matters more here than being right about the prefix.
+        /// One decimal below 10 units and none above, so the column does not jitter between
+        /// "9.9 MB" and "10.4 MB".</summary>
+        private static string FormatSize(long bytes)
+        {
+            string[] units = { "bytes", "KB", "MB", "GB", "TB" };
+
+            double value = bytes;
+            var unit = 0;
+            while (value >= 1024 && unit < units.Length - 1)
+            {
+                value /= 1024;
+                unit++;
+            }
+
+            if (unit == 0)
+                return $"{bytes} {units[0]}";
+
+            return value < 10 ? $"{value:0.0} {units[unit]}" : $"{value:0} {units[unit]}";
+        }
+
         public string PreviewImgPath
         {
             get => Get<string>();
@@ -192,6 +281,17 @@ namespace Clowd
         }
 
         [JsonIgnore] public bool IsUploadOnly => !String.IsNullOrEmpty(ContentKind);
+
+        // the name the uploaded file had when the user picked it, written once when UploadManager
+        // creates the session for a generic file or zip upload. Those sessions keep no payload in
+        // their own directory (UploadManager copies the file in only for ContentCategory.Image), so
+        // this is the only trace of the original extension while the upload is in flight — and the
+        // only one at all if it never lands. Null on every other kind of session.
+        public string OriginalFileName
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
 
         // set for video ("video") sessions; the playable recording file. Normally lives in the
         // user's configured recording output folder, outside this session's directory (issue #50).
@@ -641,6 +741,7 @@ namespace Clowd
         private Clowd.UI.ActiveUpload _activeUpload;
         private Clowd.UI.Services.GifConversion _activeGifConversion;
         private Clowd.UI.Services.VideoRender _activeRender;
+        private DateTime _contentModifiedUtc;
         private string _renderStatusText;
         private bool _linkedToPrevious;
         private bool _linkedToNext;

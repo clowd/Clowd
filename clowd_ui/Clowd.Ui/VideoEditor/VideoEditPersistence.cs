@@ -55,7 +55,7 @@ namespace Clowd.UI.VideoEditor
     /// <see cref="SessionInfo"/> rather than passed as one so the dev harness and the tests, which
     /// have no session, can construct it (or skip it) directly.
     /// </summary>
-    internal sealed class RecordingTrackHints
+    public sealed class RecordingTrackHints
     {
         public SessionVideoTrack Webcam { get; set; }
         public string InputCapturePath { get; set; }

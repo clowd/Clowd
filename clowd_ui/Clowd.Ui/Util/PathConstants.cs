@@ -19,6 +19,13 @@ namespace Clowd
     {
         public static string LogData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "logs");
         public static string SessionData => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "sessions");
+
+        /// <summary>Per-user cache of generated session previews. Like every other folder here the
+        /// getter has a side effect — <see cref="GetClowdFolder(string, string)"/> creates the whole
+        /// tree — so it must never be read from the UI or a render thread. The preview engine
+        /// resolves it exactly once, lazily, on a background worker.</summary>
+        public static string PreviewCache => GetClowdFolder(Environment.SpecialFolder.LocalApplicationData, "previews");
+
         public static string SettingsData => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Clowd");
 
         public static string GetFolderPath(string name, string parentDirectory)

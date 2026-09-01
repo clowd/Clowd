@@ -8,9 +8,7 @@
     x:Class="Clowd.UI.RecentSessionsPage">
 
     <UserControl.Resources>
-        <local:ImagePathToBitmapConverter x:Key="ConvCacheImage" />
         <local:UiDateTimeConverter x:Key="ConvUiDateTime" />
-        <local:ContentKindToIconConverter x:Key="ConvContentKindIcon" />
 
         <!-- one finished upload: link (click copies) + launch/delete, shared by the standalone list and
              session rows. The buttons sit right beside the link; the link is the row's flexible child,
@@ -253,7 +251,7 @@
         </Style>
     </UserControl.Styles>
 
-    <controls:FadeEdgeScrollViewer>
+    <controls:FadeEdgeScrollViewer x:Name="SessionScroller">
         <StackPanel Margin="0,0,16,16">
 
             <!-- zero state: shown until the first capture exists, and again whenever the header's
@@ -275,6 +273,17 @@
                                      KeyDown="SessionListKeyDown"
                                      SelectionChanged="SessionSelectionChanged"
                                      ItemsSource="{Binding Items}">
+                                <!-- stated explicitly for CacheLength: it defaults to 0, so the
+                                     realized set would be exactly the visible rows with no
+                                     look-ahead at all and every preview would pop in as it
+                                     scrolled into view. Half a viewport on each side gives the
+                                     engine's buffer bands something to work on. (There is no
+                                     CacheLengthUnit in Avalonia 12.1 — the unit is viewports.) -->
+                                <ListBox.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <VirtualizingStackPanel CacheLength="0.5" />
+                                    </ItemsPanelTemplate>
+                                </ListBox.ItemsPanel>
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Grid Background="Transparent"
@@ -407,27 +416,16 @@
                                                           ToolTip.Tip="The item above was made from this one" />
                                                 </Viewbox>
                                             </Grid>
+                                            <!-- one control, not a converter stack: the preview a row
+                                                 deserves depends on what is actually on disk beside
+                                                 its session file, which is a worker's question, and
+                                                 the tile is keyed on the session directory so it
+                                                 survives this list's frequent container rebuilds. -->
                                             <Border Width="110"
                                                     Height="75"
                                                     Margin="4"
                                                     VerticalAlignment="Center">
-                                                <Panel>
-                                                    <!-- checkerboard only backs a real preview; the icon placeholder sits on a transparent tile -->
-                                                    <Border Background="{x:Static clowd:AppStyles.CheckerboardBrushSmall}"
-                                                            IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                                        <Image Source="{Binding PreviewImgPath, Converter={StaticResource ConvCacheImage}}"
-                                                               Stretch="Uniform" />
-                                                    </Border>
-                                                    <Viewbox Width="36"
-                                                             Height="36"
-                                                             Opacity="0.5"
-                                                             HorizontalAlignment="Center"
-                                                             VerticalAlignment="Center"
-                                                             IsVisible="{Binding PreviewImgPath, Converter={x:Static StringConverters.IsNullOrEmpty}}">
-                                                        <Path Fill="{DynamicResource SemiColorText1}"
-                                                              Data="{Binding Converter={StaticResource ConvContentKindIcon}}" />
-                                                    </Viewbox>
-                                                </Panel>
+                                                <controls:SessionPreviewTile Session="{Binding}" />
                                             </Border>
                                             <!-- two stacked rows: the header line (name / date, with the card's
                                                  actions docked right) and the uploads block underneath it. Keeping
@@ -607,8 +605,20 @@
                                                                 </Viewbox>
                                                             </Button>
                                                         </controls:ShrinkingRowPanel>
-                                                        <TextBlock Classes="Body"
-                                                                   Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
+                                                        <!-- date, then the upload's size on the same line. The size is its
+                                                             own TextBlock rather than part of the date string so the
+                                                             separator can hide with it: a capture has no size to report,
+                                                             and neither does an upload made before it was recorded. -->
+                                                        <StackPanel Orientation="Horizontal" Spacing="0">
+                                                            <TextBlock Classes="Body"
+                                                                       Text="{Binding CreatedUtc, Converter={StaticResource ConvUiDateTime}}" />
+                                                            <TextBlock Classes="Body"
+                                                                       Text=" · "
+                                                                       IsVisible="{Binding ShowUploadSize}" />
+                                                            <TextBlock Classes="Body"
+                                                                       Text="{Binding UploadSizeText}"
+                                                                       IsVisible="{Binding ShowUploadSize}" />
+                                                        </StackPanel>
                                                     </StackPanel>
                                                 </DockPanel>
 

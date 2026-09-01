@@ -28,6 +28,12 @@ namespace Clowd.Upload
 
         public bool HasEntries => _entries.Count > 0;
 
+        /// <summary>How many files the archive will hold, after the recursive walk has expanded any
+        /// folders in the selection. Not the number of paths the user picked: dropping one folder
+        /// is one path and can be a thousand entries, and the count is only worth showing if it
+        /// says which of the two happened.</summary>
+        public int EntryCount => _entries.Count;
+
         private ZipStreamComposer(List<(string SourcePath, string EntryName)> entries, long totalSourceBytes)
         {
             _entries = entries;
