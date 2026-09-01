@@ -54,8 +54,13 @@ namespace Clowd.UI
         [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         private interface IEnumMoniker
         {
+            // [Out] is load-bearing: COM interop marshals an array parameter as In by default,
+            // and IMoniker[] is not blittable, so without it the marshaller copies the managed
+            // array in, lets DirectShow fill the native buffer, and discards it. Next then
+            // reports S_OK for a real camera while the slot stays null, and every machine looks
+            // like it has no cameras.
             [PreserveSig]
-            int Next(int count, [MarshalAs(UnmanagedType.LPArray)] IMoniker[] monikers, IntPtr fetched);
+            int Next(int count, [Out, MarshalAs(UnmanagedType.LPArray)] IMoniker[] monikers, IntPtr fetched);
         }
 
         [ComImport]
