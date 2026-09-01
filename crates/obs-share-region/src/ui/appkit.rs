@@ -1,62 +1,82 @@
-//! macOS AppKit implementation of the share-region UI (SHARE_REGION_PLAN §6.2,
-//! spec "Window behavior"). Three windows: a titled *mirror* (the window
-//! meeting apps pick; libobs paints into its contentView), an opaque
-//! borderless *mask* pinned exactly over it at the back of the Z-order (so
-//! the capture never photographs the mirror — no recursion), and a floating
-//! hollow *frame* whose custom NSView draws the two-tone band, its resize
-//! handles and the button panel, and drives move/resize.
+//! macOS AppKit implementation of the share-region UI (see `ui/mod.rs` for the
+//! platform-neutral contract). ONE window exists for the life of the process.
+//! It opens as an ordinary titled dialog carrying the prompt ("Share this
+//! window, then press OK"), and when the user accepts, that very same NSWindow
+//! — never a replacement, because the share the meeting app has just started is
+//! bound to this window's identity — sheds its title bar, takes the region's
+//! size, and is parked entirely off screen, where libobs paints the mirrored
+//! region into its contentView.
+//!
+//! There is deliberately no other UI here at all: no border, no handles, no
+//! buttons. The Clowd shell that spawns this process draws the border around
+//! the live region and the floating controls itself (Clowd.Ui/Video/
+//! BorderWindow and FloatingToolbarWindow), and anything this process put on
+//! screen would land on top of Clowd's own chrome.
 //!
 //! Threading: everything here runs on the main thread. `main.rs` created the
-//! NSApplication (Accessory policy) before obs bootstrap; we only fetch the
+//! NSApplication (Accessory policy) before the obs bootstrap; we only fetch the
 //! shared instance and `run()` it. libobs renders the mirror from its own
 //! graphics thread via the ObsDisplay swapchain, which does not contend with
-//! the AppKit run loop.
+//! the AppKit run loop. Commands parsed on the stdin thread reach this thread
+//! through `ui::post_command` and are drained by the repeating timer below.
 //!
 //! Retention / pointer validity: the process NEVER returns from `run` — every
-//! exit path goes through `AppEvents::quit` → `obs_platform::exit_process`.
-//! All windows (and thus the mirror's contentView, whose raw pointer we hand
-//! to `AppEvents::mirror_ready` for `obs_display_create`) are retained in the
+//! exit path goes through `AppEvents::quit` → `obs_platform::exit_process`. The
+//! window (and thus its contentView, whose raw pointer we hand to
+//! `AppEvents::mirror_ready` for `obs_display_create`) is retained in the
 //! process-global `APP` cell below and deliberately never dropped, so that
 //! pointer stays valid for the life of the process. Belt-and-braces we also
-//! `setReleasedWhenClosed(false)` so closing the mirror cannot free it out
-//! from under obs before `quit` runs.
+//! `setReleasedWhenClosed(false)` so closing the window cannot free it out from
+//! under obs before `quit` runs.
 
 use std::cell::RefCell;
 use std::ffi::c_void;
 
-use std::sync::OnceLock;
-
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
-use objc2::{
-    define_class, msg_send, sel, AllocAnyThread, ClassType, MainThreadMarker, MainThreadOnly,
-    Message,
-};
+use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSApplication, NSApplicationDidChangeScreenParametersNotification, NSBackingStoreType,
-    NSBezelStyle, NSBezierPath, NSButton, NSButtonType, NSColor, NSCursor,
-    NSCursorFrameResizeDirections, NSCursorFrameResizePosition, NSEvent, NSGraphicsContext,
-    NSLineCapStyle, NSScreen, NSStatusWindowLevel,
-    NSTextField,
-    NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindingRule, NSWindow,
-    NSWindowCollectionBehavior, NSWindowDidBecomeKeyNotification,
-    NSWindowDidBecomeMainNotification, NSWindowDidMoveNotification, NSWindowOrderingMode,
+    NSBezelStyle, NSButton, NSButtonType, NSEvent, NSScreen, NSTextField, NSView, NSWindow,
     NSWindowStyleMask, NSWindowWillCloseNotification,
 };
 use objc2_foundation::{
-    NSNotification, NSNotificationCenter, NSPoint, NSRect, NSSize, NSString, NSTimer,
+    NSNotification, NSNotificationCenter, NSPoint, NSRect, NSRunLoop, NSRunLoopCommonModes, NSSize,
+    NSString, NSTimer,
 };
 
 use obs_platform::region::Rect;
 
 use super::{AppEvents, UiConfig};
-use crate::geometry::{self, Cor, Dir, FrameLayout, HandleKind, Zone};
+use crate::commands::Command;
 
-/// How often the move-commit poller checks `NSEvent::pressedMouseButtons`.
-/// `performWindowDragWithEvent:` gives no end-of-drag callback (spec), so a
-/// caption drag arms this repeating timer and the tick that first observes
-/// "left button up" performs the commit. 30 ms is imperceptible and cheap.
-const MOVE_POLL_SECS: f64 = 0.03;
+/// Content size of the prompt window, in points. 3:2 and comfortably bigger
+/// than the message needs: this window's whole job in that phase is to be easy
+/// to spot in a meeting app's share picker and easy to click, not to be
+/// compact. It is nothing to do with the region — the region's size only
+/// arrives on the window when the prompt is accepted.
+const PROMPT_SIZE: NSSize = NSSize::new(420.0, 280.0);
+
+/// How often the controller drains `ui::take_commands`.
+///
+/// macOS has no cheap equivalent of Win32's `PostMessage` for nudging the
+/// AppKit run loop from an arbitrary thread (the options are a CFRunLoopSource
+/// wired up at startup or `performSelectorOnMainThread:`, both of which mean
+/// handing an ObjC object to the stdin thread), so [`wake`] is a no-op and this
+/// poll is what actually gets commands onto the UI thread. 30 ms is
+/// imperceptible for the two things the shell sends — a region change while the
+/// user drags Clowd's border, and quit — and costs one no-op timer callback per
+/// frame-ish, which is nothing next to the mirror itself.
+const COMMAND_POLL_SECS: f64 = 0.03;
+
+/// How far past the right-hand edge of every display the parked mirror sits,
+/// in capture units (points).
+///
+/// Any positive value would do — the window only has to miss every display —
+/// but a generous one means no rounding, no HiDPI backing-scale surprise and no
+/// display hot-plug race can leave a sliver of the mirror visible on a real
+/// screen, which would immediately show up as the capture photographing itself.
+const OFFSCREEN_MARGIN: i32 = 512;
 
 // ---------------------------------------------------------------------------
 // Process-global state
@@ -65,44 +85,25 @@ const MOVE_POLL_SECS: f64 = 0.03;
 struct App {
     mtm: MainThreadMarker,
     events: Box<dyn AppEvents>,
-    cfg: UiConfig,
-    /// Last *committed* region (capture space). Live drags derive from it and
-    /// only overwrite it via `adopt` after `AppEvents::region_committed`.
+    /// The region actually being mirrored — the last rect that
+    /// `AppEvents::set_region` accepted, not the last one that was asked for.
+    /// The shell is free to send `move` while the prompt is still up (Clowd
+    /// repositions its border before the user has pressed anything), so this
+    /// is also what the mirror phase sizes the window from, rather than the
+    /// `--region` value `run` was given.
     region: Rect,
-    /// Layout for the frame window (present iff `cfg.show_frame`). During a
-    /// resize drag this holds the live rubber-band layout so drawing,
-    /// hit-testing and cursor feedback all agree with what is on screen.
-    layout: Option<FrameLayout>,
-    mirror: Retained<NSWindow>,
-    mask: Retained<NSWindow>,
-    frame: Option<Retained<NSWindow>>,
-    view: Option<Retained<FrameView>>,
-    controller: Retained<Controller>,
-    /// A `performWindowDragWithEvent:` caption/handle drag is in flight.
-    move_drag: bool,
-    move_timer: Option<Retained<NSTimer>>,
-    /// A hand-rolled edge/corner resize drag is in flight.
-    resize: Option<ResizeDrag>,
-    /// mouseDown landed on the close button; quit fires on mouseUp-inside.
-    close_armed: bool,
-    /// Last hover was over the hollow interior / outside (`Zone::Outside`):
-    /// used to restore the arrow exactly once and then leave the cursor to
-    /// whatever application is underneath (see `mouseMoved:`).
-    hover_outside: bool,
-    /// The prompt phase's controls (ui/mod.rs), non-empty exactly while that
-    /// phase is running. Their presence is the phase flag: while they exist
-    /// the mirror is a plain front window the user can pick, the mask and
-    /// frame are not on screen, and no ObsDisplay exists yet.
+    /// The one window: prompt dialog first, parked mirror afterwards.
+    window: Retained<NSWindow>,
+    /// False while the prompt is up, true from the moment the window has been
+    /// restyled, resized and parked. It gates the window geometry updates: a
+    /// `move` arriving during the prompt phase must re-plan obs and be acked,
+    /// but must NOT resize the dialog the user is currently being asked to
+    /// find and pick.
+    mirroring: bool,
+    /// The prompt phase's controls (label + OK button). Drained when the user
+    /// accepts, which is also the re-entrancy guard: a second click on OK finds
+    /// this empty and does nothing.
     prompt_controls: Vec<Retained<NSView>>,
-}
-
-struct ResizeDrag {
-    /// Region at mouseDown; deltas are always applied to this, not to the
-    /// intermediate live rects, so the drag never accumulates rounding.
-    start: Rect,
-    zone: Zone,
-    /// mouseDown position, capture space.
-    origin: (i32, i32),
 }
 
 /// The one `App` for the process. AppKit delivers every callback that touches
@@ -117,16 +118,17 @@ struct MainThreadCell(RefCell<Option<App>>);
 unsafe impl Sync for MainThreadCell {}
 static APP: MainThreadCell = MainThreadCell(RefCell::new(None));
 
-/// Mutable access for direct event handlers (mouse methods, timer ticks).
+/// Mutable access for direct event handlers (the OK action, timer ticks).
 /// These are never re-entered, so a failed borrow is a programming error.
 fn with_app<R>(f: impl FnOnce(&mut App) -> R) -> R {
     let mut guard = APP.0.borrow_mut();
     f(guard.as_mut().expect("APP initialized before NSApp.run()"))
 }
 
-/// Mutable access for *notification* handlers. NSNotificationCenter posts
-/// synchronously, so a programmatic `setFrame:` inside one of our handlers
-/// re-enters `frameDidMove:` while the cell is already borrowed; those echoes
+/// Mutable access for *notification* handlers, and for the staged steps of
+/// [`begin_mirror_phase`]. NSNotificationCenter posts synchronously, so a
+/// programmatic `setStyleMask:`/`setFrame:` inside one of our handlers can
+/// re-enter another handler while the cell is already borrowed; those echoes
 /// are exactly the ones we want to ignore, so a failed borrow is a silent
 /// no-op rather than a panic.
 fn try_with_app(f: impl FnOnce(&mut App)) {
@@ -137,30 +139,32 @@ fn try_with_app(f: impl FnOnce(&mut App)) {
     }
 }
 
-/// Read-only access for AppKit render/query callbacks (`drawRect:`,
-/// `hitTest:`, `resetCursorRects`). Returns `None` before `run()` populates
-/// the cell (e.g. a first display pass while the windows are being ordered)
-/// or in the unlikely event of re-entry — both cases mean "draw/hit nothing".
+/// Read-only access, for the steps that only need to *look* at the model
+/// between two AppKit calls. Returns `None` before `run()` populates the cell
+/// or in the unlikely event of re-entry — both of which mean "there is nothing
+/// to do yet".
 fn read_app<R>(f: impl FnOnce(&App) -> R) -> Option<R> {
     let guard = APP.0.try_borrow().ok()?;
     guard.as_ref().map(f)
 }
 
 // ---------------------------------------------------------------------------
-// Coordinate conversion (spec "Coordinate space")
+// Coordinate conversion (see ui/mod.rs "Coordinate space")
 // ---------------------------------------------------------------------------
 
 /// Cocoa's global space and capture space (CG display coords, the space of
-/// `--region` / `MonitorInfo` / geometry.rs) share units (points) and an
-/// origin screen, but Cocoa's origin is the *bottom*-left of the primary
-/// screen (`NSScreen.screens[0]`, whose Cocoa frame origin is (0,0)) with y
-/// growing up, while capture space is top-left with y growing down. The two
-/// are therefore a pure y-flip about the primary screen height:
+/// `--region` and of the `move` command) share units (points) and an origin
+/// screen, but Cocoa's origin is the *bottom*-left of the primary screen
+/// (`NSScreen.screens[0]`, whose Cocoa frame origin is (0,0)) with y growing
+/// up, while capture space is top-left with y growing down. The two are
+/// therefore a pure y-flip about the primary screen height:
 ///
 ///     cocoa_y = primary_h - (cg_y + h)
 ///
 /// (a Cocoa rect's origin is its bottom-left corner, hence the `+ h`).
-/// ALL conversion in this file funnels through the helpers below.
+/// ALL conversion in this file funnels through the helpers below, so the
+/// parking arithmetic can be done in capture space — the space every other
+/// module in the crate speaks — and flipped exactly once, at the window.
 fn primary_screen_height(mtm: MainThreadMarker) -> f64 {
     NSScreen::screens(mtm)
         .firstObject()
@@ -186,38 +190,55 @@ fn cocoa_to_capture(mtm: MainThreadMarker, r: NSRect) -> Rect {
     }
 }
 
-/// Point (not rect) flavor: `cg_y = primary_h - cocoa_y`.
-fn cocoa_point_to_capture(mtm: MainThreadMarker, p: NSPoint) -> (i32, i32) {
-    let ph = primary_screen_height(mtm);
-    (p.x.round() as i32, (ph - p.y).round() as i32)
-}
-
-/// Number of buttons in the frame's panel. One (close) today; `FrameSpec`
-/// lays out N, so a second is a change to this constant plus a `Zone::Button`
-/// arm in `on_mouse_down`/`on_mouse_up` and a glyph in `draw_frame`.
-const PANEL_BUTTONS: u32 = 1;
-
-/// Every DPI-derived frame measurement, in capture units.
+/// Where the mirror lives once the prompt is accepted: `region`'s size, at an
+/// origin past the right-hand edge of every display.
 ///
-/// Capture space on macOS is CG points, which are already the
-/// DPI-independent unit — a 1-point line is one device pixel on a 1x display
-/// and two crisp ones on a Retina panel, i.e. the same physical size on both.
-/// So the logical design needs no scaling here (scale 1.0), and integer point
-/// widths land on whole device pixels at 1x and 2x alike. This is the whole
-/// difference from Windows, where capture units are physical pixels and the
-/// same design has to be multiplied by dpi/96.
-fn frame_spec(cfg: &UiConfig) -> geometry::FrameSpec {
-    geometry::FrameSpec::scaled(1.0, cfg.border, PANEL_BUTTONS)
+/// To the *right* rather than above or below because the desktop is a
+/// horizontal strip of displays in every normal arrangement, so one number —
+/// the largest right edge — puts the window clear of all of them regardless of
+/// how they are stacked vertically. The y is the union's top edge, which is
+/// arbitrary but keeps the window in a predictable place for anyone inspecting
+/// it with a window-list tool.
+///
+/// Recomputed on every placement rather than cached, because displays are
+/// hot-pluggable: an external monitor arriving to the right of the built-in one
+/// would otherwise extend the desktop over the parked mirror and re-introduce
+/// exactly the recursion the parking exists to prevent.
+fn parked_region(mtm: MainThreadMarker, region: Rect) -> Rect {
+    let screens = NSScreen::screens(mtm);
+    let mut right: Option<i32> = None;
+    let mut top: Option<i32> = None;
+    for screen in screens.iter() {
+        // `frame`, not `visibleFrame`: the menu bar and the Dock are still
+        // screen, and a window hiding under either is still on a display the
+        // capture can see.
+        let r = cocoa_to_capture(mtm, screen.frame());
+        let edge = r.x.saturating_add(r.w as i32);
+        right = Some(right.map_or(edge, |v| v.max(edge)));
+        top = Some(top.map_or(r.y, |v| v.min(r.y)));
+    }
+    Rect {
+        // No screens at all (headless CI, every display asleep): 0 + margin is
+        // still a well-defined place to put a window nobody can see.
+        x: right.unwrap_or(0).saturating_add(OFFSCREEN_MARGIN),
+        y: top.unwrap_or(0),
+        w: region.w,
+        h: region.h,
+    }
 }
 
-/// Work areas for the panel placement cascade (DESIGN §5): `visibleFrame`
-/// already excludes the menu bar and the Dock, which is exactly the rect the
-/// cascade wants — the panel must not land under either.
-fn work_areas(mtm: MainThreadMarker) -> Vec<Rect> {
-    NSScreen::screens(mtm)
-        .iter()
-        .map(|s| cocoa_to_capture(mtm, s.visibleFrame()))
-        .collect()
+/// Places the window at [`parked_region`] for `region`, sized to it.
+///
+/// The window is borderless by the time this is ever called, so its frame rect
+/// and its content rect are the same thing; `frameRectForContentRect` is still
+/// used because the size that has to end up correct is the CONTENT size — that
+/// is the surface obs paints and the meeting app captures — and going through
+/// the window's own conversion keeps that true even if the style ever changes.
+fn park(window: &NSWindow, mtm: MainThreadMarker, region: Rect) {
+    let content = capture_to_cocoa(mtm, parked_region(mtm, region));
+    // display:false — there is no display to draw on, and the swapchain
+    // presents on the graphics thread regardless.
+    window.setFrame_display(window.frameRectForContentRect(content), false);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,28 +254,27 @@ define_class!(
     struct ShareWindow;
 
     impl ShareWindow {
-        /// Returns the proposed rect verbatim, opting every window here out of
+        /// Returns the proposed rect verbatim, opting this window out of
         /// AppKit's automatic frame constraining.
         ///
-        /// This is load-bearing, not a nicety. By default AppKit shoves any
-        /// window whose top would fall under the menu bar (or off the screen)
-        /// back down into the visible frame. All three of our windows are
-        /// placed from the capture-space model — the mirror at the region, the
-        /// mask over the mirror's whole frame, the frame window at
-        /// `layout.outer`, which is inflated *outward* and so legitimately
-        /// starts above the region — and a region flush with the top of the
-        /// screen puts all three above the menu bar line.
+        /// This is the single most load-bearing line in the file. AppKit's
+        /// default implementation shoves any window whose frame falls outside
+        /// the visible frame of a screen back onto that screen, and parking the
+        /// mirror off screen is precisely a request to place a window nowhere
+        /// near one. Without this override the `setFrame:` in [`park`] would be
+        /// silently rewritten to an on-screen rect, and the mirror would
+        /// reappear on a display — where the region's display capture would
+        /// photograph it, the mirror would show the capture of itself, and the
+        /// user would get the infinite corridor the whole off-screen design
+        /// exists to avoid. (Measured before the rewrite, when the same
+        /// override was protecting an on-screen window: `--region
+        /// 756,0,756,491` on a 1512x982 display had every window dragged to
+        /// y=33, the first pixel below the menu bar, instead of the modeled
+        /// y=-50/-4. AppKit does this to borderless windows too, not only
+        /// titled ones.)
         ///
-        /// Letting AppKit move them silently desynchronizes the model from
-        /// reality: the windows sit tens of points below where the layout says
-        /// they are, so every hit test resolves the wrong zone (usually the
-        /// hollow interior, i.e. `Zone::Outside` → `hitTest:` nil) and the
-        /// entire frame goes inert — no drag, no resize, no close button.
-        /// Measured: `--region 756,0,756,491` on a 1512x982 display put all
-        /// three windows at y=33 instead of the modeled y=-50/-4.
-        ///
-        /// The mirror's title bar can now sit off-screen; that is fine and in
-        /// fact wanted, since the mask covers the mirror's whole frame anyway.
+        /// The prompt phase is unaffected: `center()` puts that window well
+        /// inside a screen, so there is nothing to constrain.
         #[unsafe(method(constrainFrameRect:toScreen:))]
         fn constrain_frame_rect(&self, rect: NSRect, _screen: Option<&NSScreen>) -> NSRect {
             rect
@@ -281,17 +301,16 @@ impl ShareWindow {
                 defer: false,
             ]
         };
-        // Windows live for the whole process (see the module docs); letting
-        // AppKit also release-on-close would double-free the mirror and free
-        // the contentView obs renders into.
+        // The window lives for the whole process (see the module docs); letting
+        // AppKit also release-on-close would double-free it and free the
+        // contentView obs renders into.
         unsafe { win.setReleasedWhenClosed(false) };
         Retained::into_super(win)
     }
 }
 
 // ---------------------------------------------------------------------------
-// Controller: notification + timer target (exists even with --no-frame,
-// because the mirror's close/activate notifications always need a receiver)
+// Controller: the OK action, the window's close notification, the command poll
 // ---------------------------------------------------------------------------
 
 define_class!(
@@ -303,38 +322,32 @@ define_class!(
     struct Controller;
 
     impl Controller {
-        #[unsafe(method(mirrorWillClose:))]
-        fn mirror_will_close(&self, _n: &NSNotification) {
-            // Closing the mirror is one of the two quit gestures (the other
-            // is the frame's X button). quit() never returns.
-            with_app(|app| app.events.quit());
-        }
-
-        #[unsafe(method(mirrorDidActivate:))]
-        fn mirror_did_activate(&self, _n: &NSNotification) {
-            on_mirror_activated();
-        }
-
-        #[unsafe(method(frameDidMove:))]
-        fn frame_did_move(&self, _n: &NSNotification) {
-            on_frame_moved();
-        }
-
-        #[unsafe(method(screenParamsChanged:))]
-        fn screen_params_changed(&self, _n: &NSNotification) {
-            on_screen_params_changed();
-        }
-
-        #[unsafe(method(moveTick:))]
-        fn move_tick(&self, _t: &NSTimer) {
-            on_move_tick();
-        }
-
         /// OK in the prompt phase: the user has pointed their meeting app at
         /// this window, so it can now become the mirror.
         #[unsafe(method(promptAccepted:))]
         fn prompt_accepted(&self, _sender: Option<&AnyObject>) {
             begin_mirror_phase();
+        }
+
+        /// The window is closing. Reachable only during the prompt phase (the
+        /// close button goes away with the title bar) and there it means the
+        /// user declined, which is a clean quit. `quit()` never returns.
+        #[unsafe(method(windowWillClose:))]
+        fn window_will_close(&self, _n: &NSNotification) {
+            with_app(|app| app.events.quit());
+        }
+
+        /// Command poll (see [`COMMAND_POLL_SECS`]).
+        #[unsafe(method(drainCommands:))]
+        fn drain_commands(&self, _t: &NSTimer) {
+            on_command_tick();
+        }
+
+        /// The desktop changed shape: a display was attached, detached,
+        /// rearranged or had its resolution changed.
+        #[unsafe(method(screenParamsChanged:))]
+        fn screen_params_changed(&self, _n: &NSNotification) {
+            on_screen_params_changed();
         }
     }
 );
@@ -346,26 +359,9 @@ impl Controller {
     }
 }
 
-/// The user selected the mirror in a window picker / clicked its Dock-less
-/// taskbar presence and macOS raised it: push it straight back to the bottom
-/// (mask at the very back, mirror inserted below the mask) so it never
-/// actually shows. Window refs are cloned out first so the ordering calls run
-/// outside the APP borrow (ordering can post further notifications).
-fn on_mirror_activated() {
-    let mut wins = None;
-    try_with_app(|app| {
-        // Not during the prompt phase: there the mirror is *supposed* to be
-        // frontmost and key so the user can find and pick it, and this handler
-        // would shove it to the back the instant it was activated.
-        if app.prompt_controls.is_empty() {
-            wins = Some((app.mask.clone(), app.mirror.clone()));
-        }
-    });
-    if let Some((mask, mirror)) = wins {
-        mask.orderBack(None);
-        mirror.orderWindow_relativeTo(NSWindowOrderingMode::Below, mask.windowNumber());
-    }
-}
+// ---------------------------------------------------------------------------
+// Prompt phase
+// ---------------------------------------------------------------------------
 
 define_class!(
     // SAFETY: NSButton subclassing with one documented override; no Drop impl
@@ -389,7 +385,7 @@ define_class!(
     }
 );
 
-/// Builds the prompt phase's controls into the mirror's content view and
+/// Builds the prompt phase's controls into the window's content view and
 /// returns them (the caller stores them as the phase flag).
 ///
 /// Plain AppKit controls rather than something hand-drawn: this is a window
@@ -424,10 +420,11 @@ fn install_prompt(
     // Return activates it, and AppKit paints it as the default button.
     button.setKeyEquivalent(&NSString::from_str("\r"));
 
-    // The region can be as small as geometry::MIN_REGION (64), far smaller
-    // than a comfortable dialog, so the layout degrades in two steps rather
-    // than letting a control overflow the client area: drop the label first,
-    // then let the button take the whole view.
+    // The content size is a constant now ([`PROMPT_SIZE`]), so the two
+    // degradation steps below are defensive rather than load-bearing: they cost
+    // a couple of comparisons and they mean shrinking that constant can never
+    // push a control outside the client area. Drop the label first, then let
+    // the button take the whole view.
     let btn_w = BTN_W.min(w - 2.0 * PAD).max(0.0);
     let btn_h = BTN_H.min(h - 2.0 * PAD).max(0.0);
     let room_for_label = w >= 220.0 && h >= LABEL_H + GAP + BTN_H + 2.0 * PAD;
@@ -447,8 +444,7 @@ fn install_prompt(
             &NSString::from_str("Share this window, then press OK"),
             mtm,
         );
-        // Centered, wrapping across the full width so a narrow-but-tall region
-        // still reads correctly.
+        // Centered, wrapping across the full width.
         label.setAlignment(objc2_app_kit::NSTextAlignment::Center);
         label.setFrame(NSRect::new(
             NSPoint::new(PAD, block_bottom + btn_h + GAP),
@@ -472,877 +468,196 @@ fn install_prompt(
     out
 }
 
-/// Prompt phase → mirror phase, on OK. The mirror window is REUSED, never
-/// recreated: the share the user just started in their meeting app is bound to
-/// this window's identity, and its size is left alone across the transition
-/// (a mid-share resize makes some apps letterbox instead of renegotiating).
-/// Only what is *inside* and *behind* it changes — the controls come out, obs
-/// takes the client area, and the mask and frame arrive around it.
+/// Prompt phase → mirror phase, on OK.
+///
+/// The window is REUSED, never recreated: the share the user just started in
+/// their meeting app is bound to this window's identity (its window number),
+/// and creating a second window — even an identical one — would turn that share
+/// into a share of a window that no longer exists. Everything below therefore
+/// mutates the window in place.
 fn begin_mirror_phase() {
-    // Staged in two borrows: the AppKit ordering below can post notifications
-    // straight back into handlers that borrow APP.
-    // Take the controls out and confirm we are actually in the prompt phase,
-    // in a borrow of its own: the style change below reworks the window's
-    // frame view and can post notifications straight back into handlers that
-    // borrow APP.
-    let mirror = {
+    // Stage 1, mutable: confirm we are actually still in the prompt phase and
+    // take the controls out. Its own borrow because everything after it can
+    // post AppKit notifications straight back into handlers that borrow APP.
+    // Draining the controls here is also the double-click guard: a second OK
+    // finds the vector empty and returns.
+    let window = {
         let mut out = None;
         try_with_app(|app| {
             if app.prompt_controls.is_empty() {
-                return; // already mirroring (double-click on OK)
+                return; // already mirroring
             }
             for c in app.prompt_controls.drain(..) {
                 c.removeFromSuperview();
             }
-            out = Some(app.mirror.clone());
+            out = Some(app.window.clone());
         });
         out
     };
-    let Some(mirror) = mirror else { return };
+    let Some(window) = window else { return };
 
-    // Drop the title bar. A window share captures the whole window frame, so
-    // a titled mirror puts its own title bar in the shared output — the client
+    // Drop the title bar. A window share captures the whole window frame, so a
+    // titled mirror would put its own caption in the shared output; the client
     // area is the only part that is the mirrored region. Borderless also means
-    // frame rect == content rect, which is why this must happen BEFORE the
-    // geometry below is computed (`adopt` derives the mirror's frame from the
-    // region via frameRectForContentRect) and before `mirror_ready` hands out
-    // the content view.
+    // frame rect == content rect, which is why this happens BEFORE the geometry
+    // below and before `mirror_ready` hands out the content view.
     //
     // setStyleMask keeps the same NSWindow — and, load-bearing here, the same
-    // window number — so the share the user just started stays bound to it.
-    mirror.setStyleMask(NSWindowStyleMask::Borderless);
+    // window number — so the share stays bound to it.
+    window.setStyleMask(NSWindowStyleMask::Borderless);
 
-    let staged = {
-        let mut out = None;
-        try_with_app(|app| {
-            // Give every window its real geometry, derived from the region:
-            // the prompt window was small and centred (and the user may have
-            // dragged it), so this is where the mirror both moves and resizes
-            // onto the region, and where the mask is sized to cover it exactly.
-            let adoption = adopt(app, app.region);
-            out = Some((
-                app.mask.clone(),
-                app.frame.clone(),
-                app.view.clone(),
-                adoption,
-            ));
-        });
-        out
-    };
-    let Some((mask, frame, view, adoption)) = staged else {
+    // Stage 2, read-only: the region to size the window to. Read from the model
+    // rather than captured at `run` time, because the shell may well have sent
+    // `move` while the prompt was up.
+    let Some((mtm, region)) = read_app(|app| (app.mtm, app.region)) else {
         return;
     };
-    apply_adoption(adoption);
 
-    // Mask to the very back, mirror directly below it — the arrangement that
-    // stops the capture photographing the mirror (plan §1).
-    mask.orderBack(None);
-    mirror.orderWindow_relativeTo(NSWindowOrderingMode::Below, mask.windowNumber());
+    // Park it: the region's size, at an origin past every display (see
+    // [`parked_region`] and the `constrainFrameRect:toScreen:` override, which
+    // is what makes an off-screen placement stick at all).
+    //
+    // Note what is NOT done here, and must never be: the window is not
+    // miniaturized and not ordered out. Either would take it out of the window
+    // server's compositing, its backing surface would stop being updated, and
+    // the meeting app's share would freeze on the last frame it saw. The window
+    // stays "visible" in AppKit's sense for the rest of the process — it simply
+    // sits where no display shows it.
+    park(&window, mtm, region);
 
-    if let Some(content) = mirror.contentView() {
+    // Content view last, and only now: the swapchain obs creates is sized from
+    // the view, so the view has to already be the region's size. The pointer
+    // stays valid forever — the view is retained by the window, the window by
+    // APP, and APP is never dropped.
+    if let Some(content) = window.contentView() {
         let handle = Retained::as_ptr(&content) as *mut NSView as *mut c_void;
-        with_app(|app| app.events.mirror_ready(handle));
-    }
-
-    // Frame last: its first draw pass reads APP, which is fully populated by
-    // the time the prompt phase can end.
-    if let Some(fw) = &frame {
-        fw.orderFrontRegardless();
-    }
-    if let Some(v) = &view {
-        v.setNeedsDisplay(true);
+        with_app(|app| {
+            // Set before the callback, so that anything the callback reaches
+            // back into (and any command tick after it) sees a consistent
+            // model: from here on this window is the mirror.
+            app.mirroring = true;
+            // `sharing_started` is NOT emitted here. main.rs emits it inside
+            // its `mirror_ready`, which is the first instant the claim is true
+            // (nothing is mirrored until the ObsDisplay exists) and is
+            // exactly-once by the ui contract. Emitting it here as well would
+            // put two `sharing_started` lines on the wire.
+            app.events.mirror_ready(handle);
+        });
     }
 }
 
-/// Live tick of a `performWindowDragWithEvent:` move: translate the frame
-/// window's new origin back into a region rect (same size — a move never
-/// resizes) and let the app follow cheaply; the mirror + mask windows follow
-/// on screen too. Programmatic `setFrame:` echoes are filtered two ways:
-/// `try_with_app` drops re-entrant posts, and `move_drag` gates posts that
-/// arrive outside a caption drag (e.g. our own adopt() after a resize).
-fn on_frame_moved() {
-    let mut follow = None;
-    try_with_app(|app| {
-        if !app.move_drag {
-            return;
+// ---------------------------------------------------------------------------
+// Commands from stdin
+// ---------------------------------------------------------------------------
+
+/// Nudge the event loop into draining the command queue.
+///
+/// A deliberate no-op on macOS: see [`COMMAND_POLL_SECS`] for why this platform
+/// polls instead. It exists because `ui::post_command` calls it unconditionally
+/// and because the Windows side genuinely needs it; the stdin thread must not
+/// have to know which platform it is running on.
+pub(super) fn wake() {}
+
+/// One tick of the command poll. Drains everything queued — a burst of `move`s
+/// from a border drag is handled in one pass — and applies each in order on
+/// this, the UI thread, which is the only thread allowed to run `AppEvents`.
+fn on_command_tick() {
+    for cmd in super::take_commands() {
+        match cmd {
+            // `quit`, or EOF on stdin (the parent died). Never returns.
+            Command::Quit => with_app(|app| app.events.quit()),
+            Command::Move(region) => apply_move(region),
+            Command::Obscure(mode) => {
+                with_app(|app| app.events.set_obscure(mode));
+                // The ack carries the mode that was actually stored, read back
+                // rather than echoed from the parsed command, so it can never
+                // claim a mode the renderer is not in. Obscure state lives in
+                // atomics read by the graphics thread, so there is nothing to
+                // wait for and nothing that can partially apply.
+                crate::status::emit_obscure(crate::obscure::mode());
+            }
+            // A line the parser refused. Answered here, in the position it
+            // arrived in, rather than from the reader thread — see
+            // `Command::Error` for why the ordering is load-bearing.
+            Command::Error(reason) => crate::status::emit_command_error(&reason),
         }
-        let (Some(frame), Some(layout)) = (app.frame.clone(), app.layout.as_ref()) else {
-            return;
-        };
-        let outer_now = cocoa_to_capture(app.mtm, frame.frame());
-        let (dx, dy) = (outer_now.x - layout.outer.x, outer_now.y - layout.outer.y);
-        if dx == 0 && dy == 0 {
-            return;
+    }
+}
+
+/// A `move` command: re-plan the capture, then make the window agree with it.
+fn apply_move(request: Rect) {
+    // `set_region` returns what was ACTUALLY applied — the request normalised to
+    // the mirror's minimum and to an even size — and that, never the request, is
+    // what both the window and the ack are built from, so the window and the
+    // canvas cannot disagree and the shell's border cannot drift off the real
+    // capture. `Err` means the request was refused and nothing changed.
+    let (result, target) = with_app(|app| match app.events.set_region(request) {
+        Ok(applied) => {
+            app.region = applied;
+            // During the prompt phase there is nothing to resize: the window is
+            // still the dialog the user is being asked to find and pick, and
+            // resizing it to the region (possibly tiny, possibly huge) would
+            // sabotage exactly that. `begin_mirror_phase` reads `app.region`
+            // when the time comes, so the move is not lost, only deferred.
+            let target = app.mirroring.then(|| (app.mtm, app.window.clone()));
+            (Ok(applied), target)
         }
-        let live = Rect { x: app.region.x + dx, y: app.region.y + dy, ..app.region };
-        app.events.region_moved(live);
-        follow = Some((app.mtm, app.mirror.clone(), app.mask.clone(), live));
+        // Nothing was touched, so there is nothing to move the window to.
+        Err(reason) => (Err(reason), None),
     });
-    if let Some((mtm, mirror, mask, live)) = follow {
-        let frame_rect = mirror.frameRectForContentRect(capture_to_cocoa(mtm, live));
-        mirror.setFrame_display(frame_rect, false);
-        mask.setFrame_display(frame_rect, false);
+
+    let applied = match result {
+        Ok(applied) => applied,
+        // Refused: no window change, and a `command_error` INSTEAD of the ack —
+        // echoing the unchanged region as `region_changed` would be
+        // indistinguishable from a successful move to that rect, and Clowd would
+        // snap its border back with no explanation.
+        Err(reason) => {
+            crate::status::emit_command_error(&reason);
+            return;
+        }
+    };
+
+    // Outside the borrow: `setFrame:` posts its notifications synchronously.
+    if let Some((mtm, window)) = target {
+        park(&window, mtm, applied);
     }
+
+    // Acked last, after the window has actually taken the new size — the move
+    // is not fully applied until then, and this line is what Clowd resizes its
+    // border to.
+    crate::status::emit_region_changed(applied);
 }
 
-/// Commit poller for caption drags (see `MOVE_POLL_SECS`). The frame
-/// window's *current* position is authoritative — the last didMove
-/// notification can predate the actual release.
-fn on_move_tick() {
-    if NSEvent::pressedMouseButtons() & 1 != 0 {
-        return; // left button still down: drag still running
-    }
-    let adoption = with_app(|app| {
-        if !app.move_drag {
-            return None; // stale tick racing the invalidate below
-        }
-        app.move_drag = false;
-        if let Some(t) = app.move_timer.take() {
-            t.invalidate();
-        }
-        let frame = app.frame.clone()?;
-        let layout = app.layout.as_ref()?;
-        let outer_now = cocoa_to_capture(app.mtm, frame.frame());
-        let (dx, dy) = (outer_now.x - layout.outer.x, outer_now.y - layout.outer.y);
-        let proposed = Rect { x: app.region.x + dx, y: app.region.y + dy, ..app.region };
-        let committed = app.events.region_committed(proposed);
-        Some(adopt(app, committed))
-    });
-    if let Some(a) = adoption {
-        // The pointer is still over the border it just dragged, so hand the
-        // open hand back — the drag session ate the mouseMoved: that would
-        // otherwise have done it.
-        NSCursor::openHandCursor().set();
-        apply_adoption(a);
-    }
-}
-
-/// Display configuration changed (resolution, monitor add/remove, Dock/menu
-/// bar geometry — spec: frame geometry is recomputed "on every
-/// move/resize/commit and display-config change", mirroring win32.rs's
-/// WM_DISPLAYCHANGE). Two things go stale at once: the work areas (the
-/// panel may now hide under a relocated Dock) and `primary_screen_height`
-/// (the capture↔Cocoa y-flip base — the windows' stale Cocoa frames no
-/// longer sit on the capture region being shared). Re-adopting the committed
-/// region recomputes both: `adopt` re-derives layout from fresh work areas
-/// and `apply_adoption` re-places mirror/mask/frame through the fresh flip.
+/// `NSApplicationDidChangeScreenParametersNotification`: a display was
+/// attached, detached, rearranged or resized.
+///
+/// Re-parks the mirror, which is what makes [`parked_region`]'s "recomputed on
+/// every placement" promise actually hold. Its only other callers are the OK
+/// transition and a `move`, so without this the parked origin would sit stale
+/// from one `move` to the next — and an external display arriving to the right
+/// of the built-in one extends the desktop straight over the parked window,
+/// putting a borderless, region-sized window full of live mirrored content on a
+/// real screen. Over the captured region that is the infinite corridor the
+/// parking exists to prevent; anywhere else it is still this process drawing on
+/// top of Clowd's own border and toolbar. The generous [`OFFSCREEN_MARGIN`] only
+/// buys headroom, and `constrainFrameRect:toScreen:` returning the rect verbatim
+/// means AppKit will not pull the window back on its own either.
+///
+/// Does nothing during the prompt phase: that window is meant to be on screen,
+/// where the user can find and click it. (win32.rs handles the equivalent
+/// WM_DISPLAYCHANGE.)
 fn on_screen_params_changed() {
-    let mut adoption = None;
-    try_with_app(|app| {
-        if app.move_drag || app.resize.is_some() {
-            // Mid-drag: don't yank windows out from under the pointer; the
-            // commit on release re-derives everything from fresh geometry.
-            return;
-        }
-        adoption = Some(adopt(app, app.region));
-    });
-    if let Some(a) = adoption {
-        apply_adoption(a);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Commit adoption
-// ---------------------------------------------------------------------------
-
-/// Window geometry to apply *after* the APP borrow is released: `setFrame:`
-/// posts its notifications synchronously and can trigger a synchronous
-/// display, so calling it while the cell is borrowed would make the echo
-/// handlers / drawRect: hit a locked RefCell.
-struct Adoption {
-    mirror: (Retained<NSWindow>, NSRect),
-    mask: (Retained<NSWindow>, NSRect),
-    frame: Option<(Retained<NSWindow>, NSRect, Retained<FrameView>)>,
-}
-
-/// Adopt a committed region (spec: "After any commit, adopt the returned
-/// region"): store it, recompute the frame layout (the panel may jump
-/// sides), and stage the mirror/mask/frame window moves.
-fn adopt(app: &mut App, committed: Rect) -> Adoption {
-    app.region = committed;
-    let mtm = app.mtm;
-    // The mask covers the mirror's whole window frame (title bar included) so
-    // no sliver of the mirror is ever visible.
-    let mirror_rect = app.mirror.frameRectForContentRect(capture_to_cocoa(mtm, committed));
-    let frame_upd = app.frame.as_ref().map(|fw| {
-        let layout = geometry::compute_layout(committed, &frame_spec(&app.cfg), &work_areas(mtm));
-        let rect = capture_to_cocoa(mtm, layout.outer);
-        app.layout = Some(layout);
-        (fw.clone(), rect, app.view.clone().expect("frame window implies view"))
-    });
-    Adoption {
-        mirror: (app.mirror.clone(), mirror_rect),
-        mask: (app.mask.clone(), mirror_rect),
-        frame: frame_upd,
-    }
-}
-
-fn apply_adoption(a: Adoption) {
-    a.mirror.0.setFrame_display(a.mirror.1, false);
-    a.mask.0.setFrame_display(a.mask.1, false);
-    if let Some((fw, rect, view)) = a.frame {
-        fw.setFrame_display(rect, false);
-        view.setNeedsDisplay(true);
-        // Cursor rects are keyed to the (possibly relocated) zone geometry.
-        fw.invalidateCursorRectsForView(&view);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// FrameView: the hollow accent frame (draw, hit-test, drag, cursors)
-// ---------------------------------------------------------------------------
-
-define_class!(
-    // SAFETY: NSView subclassing with only documented overrides; no Drop
-    // impl, () ivars (all state lives in APP — the view has process lifetime
-    // and there is exactly one).
-    #[unsafe(super(NSView))]
-    #[thread_kind = MainThreadOnly]
-    #[ivars = ()]
-    struct FrameView;
-
-    impl FrameView {
-        /// Flipped so view-local coordinates are top-left/y-down like capture
-        /// space: local = capture − layout.outer.origin, a pure translation,
-        /// which keeps every draw/hit/cursor computation in one space.
-        #[unsafe(method(isFlipped))]
-        fn is_flipped(&self) -> bool {
-            true
-        }
-
-        /// The frame floats without ever becoming key; the first click must
-        /// act (start a drag / press a button), not just get swallowed by
-        /// window activation.
-        #[unsafe(method(acceptsFirstMouse:))]
-        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
-            true
-        }
-
-        /// THE click-through mechanism (plan §6.2): returning nil for the
-        /// hollow interior (and anything else `Zone::Outside`) makes AppKit
-        /// route the event — and cursor management — to whatever window is
-        /// underneath, exactly as if the frame were not there.
-        ///
-        /// "Anything else" now includes the clear space around each handle:
-        /// DESIGN §3 makes the cutout gap a real hole, so `geometry::hit_test`
-        /// answers `Outside` there and this returns nil with no special case.
-        /// That is the same set of pixels `draw_frame` leaves unpainted, which
-        /// is the property worth having — a gap you can see the desktop
-        /// through behaves like a gap.
-        // method_id (not method): the return is a Retained object, which the
-        // macro autoreleases per the selector's (plain) method family.
-        #[unsafe(method_id(hitTest:))]
-        fn hit_test(&self, point: NSPoint) -> Option<Retained<NSView>> {
-            // `point` arrives in the superview's coordinate system.
-            let sup = unsafe { self.superview() };
-            let local = self.convertPoint_fromView(point, sup.as_deref());
-            // Resolved through the window's ACTUAL screen position rather than
-            // by offsetting `layout.outer`, so this agrees with `mouseDown:`
-            // (which measures the same way) by construction. The two must
-            // never disagree: a point this returns non-nil for but mouseDown:
-            // then classifies differently is a click that lands on the wrong
-            // zone or nothing at all.
-            let zone = self
-                .window_point_to_capture(self.convertPoint_toView(local, None))
-                .and_then(|p| {
-                    read_app(|app| {
-                        Some(geometry::hit_test(
-                            app.layout.as_ref()?,
-                            app.cfg.resizable,
-                            p,
-                        ))
-                    })
-                    .flatten()
-                });
-            match zone {
-                None | Some(Zone::Outside) => None,
-                Some(_) => Some(Retained::into_super(self.retain())),
-            }
-        }
-
-        #[unsafe(method(drawRect:))]
-        fn draw_rect(&self, _dirty: NSRect) {
-            draw_frame();
-        }
-
-        /// Per-zone cursors for the key-window case. Unreachable as long as
-        /// the frame window is borderless (such a window can never be key);
-        /// kept because it is the rect-shaped statement of the same zone →
-        /// cursor mapping `on_mouse_moved` applies point-wise, and it becomes
-        /// live the moment the frame is given a titled style. See
-        /// `FrameView::new` for the full cursor story.
-        #[unsafe(method(resetCursorRects))]
-        fn reset_cursor_rects(&self) {
-            reset_cursor_rects_impl(self);
-        }
-
-        #[unsafe(method(mouseMoved:))]
-        fn mouse_moved(&self, event: &NSEvent) {
-            on_mouse_moved(self, event);
-        }
-
-        #[unsafe(method(mouseDown:))]
-        fn mouse_down(&self, event: &NSEvent) {
-            on_mouse_down(self, event);
-        }
-
-        #[unsafe(method(mouseDragged:))]
-        fn mouse_dragged(&self, event: &NSEvent) {
-            on_mouse_dragged(self, event);
-        }
-
-        #[unsafe(method(mouseUp:))]
-        fn mouse_up(&self, event: &NSEvent) {
-            on_mouse_up(self, event);
-        }
-    }
-);
-
-impl FrameView {
-    fn new(mtm: MainThreadMarker) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(());
-        let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: NSRect::ZERO] };
-        // mouseMoved: is the ONLY cursor mechanism this window can use, and
-        // even it only reaches the screen while the app happens to be active.
-        // Both of AppKit's designated cursor paths are structurally
-        // unavailable here, for two different reasons:
-        //
-        //   * cursor rects (`resetCursorRects`) apply to the KEY window, and a
-        //     borderless window can never become key;
-        //   * `cursorUpdate:` needs the key window too, AND is documented as
-        //     never delivered for an `ActiveAlways` tracking area.
-        //
-        // mouseMoved: has neither restriction — measured: it IS delivered to
-        // this inactive, non-key window, with the correct zone — so the
-        // hit-test/cursor logic in `on_mouse_moved` is right and stays right.
-        //
-        // What it cannot beat is the WindowServer: only the ACTIVE app's
-        // cursor is drawn. Measured on macOS 26.6, isolated Accessory-policy
-        // test app, borderless non-key window, identical code, activation the
-        // only variable:
-        //
-        //   inactive -> +[NSCursor currentCursor] is our cursor, but
-        //               +[NSCursor currentSystemCursor] stays the 28x40 arrow.
-        //   active   -> currentSystemCursor becomes our cursor and the
-        //               per-zone feedback appears, non-key notwithstanding.
-        //
-        // `[NSCursor hide]` and `CGDisplayHideCursor` are ignored from an
-        // inactive app the same way, so there is no hide-and-draw-our-own
-        // fallback either. The same arrow-only behaviour is what macOS itself
-        // shows over any inactive app's window (an inactive TextEdit's text
-        // view hovers as an arrow, not an I-beam).
-        //
-        // So per-zone hover cursors are visible only while this app is active
-        // — e.g. straight after the prompt phase's OK. Making them always
-        // visible would mean activating the app and taking focus from
-        // whatever the user is actually working in, which an always-on
-        // overlay must not do. DESIGN §4 is therefore only partly satisfiable
-        // on macOS; a repaint-based hover affordance (highlighting the handle
-        // under the pointer) is the only feedback that works while inactive.
-        //
-        // InVisibleRect keeps the area auto-sized to the view.
-        let opts = NSTrackingAreaOptions::MouseMoved
-            | NSTrackingAreaOptions::ActiveAlways
-            | NSTrackingAreaOptions::InVisibleRect;
-        let owner: &AnyObject = &this;
-        let area = unsafe {
-            NSTrackingArea::initWithRect_options_owner_userInfo(
-                NSTrackingArea::alloc(),
-                NSRect::ZERO,
-                opts,
-                Some(owner),
-                None,
-            )
-        };
-        this.addTrackingArea(&area);
-        this
-    }
-
-    /// Pointer position of `event` in capture space. Deliberately via screen
-    /// coordinates (`convertPointToScreen`) rather than view-local ones: the
-    /// frame window itself moves/resizes mid-drag, so window-relative
-    /// positions would measure a moving target.
-    fn event_capture_point(&self, event: &NSEvent) -> Option<(i32, i32)> {
-        self.window_point_to_capture(event.locationInWindow())
-    }
-
-    /// Window-base coordinates (the space `locationInWindow` reports in) to
-    /// capture space, via the window's live screen position.
-    fn window_point_to_capture(&self, window_point: NSPoint) -> Option<(i32, i32)> {
-        let window = self.window()?;
-        let mtm = MainThreadMarker::new()?;
-        Some(cocoa_point_to_capture(
-            mtm,
-            window.convertPointToScreen(window_point),
-        ))
-    }
-}
-
-/// Whether this macOS has `+[NSCursor frameResizeCursorFromPosition:
-/// inDirections:]` (15+). It is a CLASS method, so `respondsToSelector:` has
-/// to be asked of the metaclass — asking the class itself tests for an
-/// *instance* method of that name and always answers no. Cached because it is
-/// consulted on every mouse move over a corner.
-fn frame_resize_cursors_available() -> bool {
-    static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        NSCursor::class()
-            .metaclass()
-            .responds_to(sel!(frameResizeCursorFromPosition:inDirections:))
-    })
-}
-
-/// Per-zone cursor (DESIGN §4).
-///
-/// The caption is the whole border now, and macOS has no public four-arrow
-/// move cursor, so it uses the platform's own "this drags" idiom rather than
-/// faking SizeAll: open hand on hover, closed hand while a drag is actually in
-/// flight.
-///
-/// The straight resize cursors are deprecated in favor of macOS 15's
-/// frameResizeCursor family, but that family is unavailable pre-15 and the
-/// deployment target here predates it; the deprecated singletons still render
-/// the correct arrows on every supported macOS. The DIAGONAL cursors are the
-/// one case with no pre-15 stand-in at all, so those are probed for at runtime
-/// and fall back to the crosshair.
-#[allow(deprecated)]
-fn cursor_for_zone(zone: Zone, dragging: bool) -> Retained<NSCursor> {
-    match zone {
-        Zone::Edge(Dir::E) | Zone::Edge(Dir::W) => NSCursor::resizeLeftRightCursor(),
-        Zone::Edge(Dir::N) | Zone::Edge(Dir::S) => NSCursor::resizeUpDownCursor(),
-        Zone::Corner(c) => corner_cursor(c),
-        Zone::Caption if dragging => NSCursor::closedHandCursor(),
-        Zone::Caption => NSCursor::openHandCursor(),
-        Zone::Button(_) | Zone::Outside => NSCursor::arrowCursor(),
-    }
-}
-
-#[allow(deprecated)] // crosshair fallback: see cursor_for_zone
-fn corner_cursor(corner: Cor) -> Retained<NSCursor> {
-    if !frame_resize_cursors_available() {
-        return NSCursor::crosshairCursor();
-    }
-    // Position names are visual (Top = the top edge on screen), which lines up
-    // with capture space's y-down corners directly.
-    let position = match corner {
-        Cor::NW => NSCursorFrameResizePosition::TopLeft,
-        Cor::NE => NSCursorFrameResizePosition::TopRight,
-        Cor::SW => NSCursorFrameResizePosition::BottomLeft,
-        Cor::SE => NSCursorFrameResizePosition::BottomRight,
-    };
-    // `All`: the region can grow or shrink from any corner — resize_region
-    // clamps at MIN_REGION rather than forbidding a direction.
-    NSCursor::frameResizeCursorFromPosition_inDirections(
-        position,
-        NSCursorFrameResizeDirections::All,
-    )
-}
-
-fn on_mouse_moved(view: &FrameView, event: &NSEvent) {
-    let Some(p) = view.event_capture_point(event) else { return };
-    let mut set: Option<Retained<NSCursor>> = None;
-    try_with_app(|app| {
-        let Some(l) = app.layout.as_ref() else { return };
-        let zone = geometry::hit_test(l, app.cfg.resizable, p);
-        let dragging = app.move_drag;
-        if matches!(zone, Zone::Outside) {
-            // Restore the arrow exactly once when leaving our band, then
-            // stop touching the cursor: over the hollow interior the app
-            // underneath owns it (hitTest: nil hands AppKit's cursor
-            // management to that window) and we must not fight it.
-            if !app.hover_outside {
-                app.hover_outside = true;
-                set = Some(NSCursor::arrowCursor());
-            }
-        } else {
-            app.hover_outside = false;
-            set = Some(cursor_for_zone(zone, dragging));
-        }
-    });
-    if let Some(c) = set {
-        c.set();
-    }
-}
-
-fn on_mouse_down(view: &FrameView, event: &NSEvent) {
-    let Some(p) = view.event_capture_point(event) else { return };
-    let start_window_drag = with_app(|app| {
-        let Some(l) = app.layout.as_ref() else { return false };
-        match geometry::hit_test(l, app.cfg.resizable, p) {
-            // One button today (close). Adding a second means matching on the
-            // index here and in `on_mouse_up`, and bumping PANEL_BUTTONS.
-            Zone::Button(_) => {
-                app.close_armed = true;
-                false
-            }
-            // Caption is now the ENTIRE border plus the panel background —
-            // resizing is the eight handles only (DESIGN §7), which is what
-            // let the old move-handle button go away. hit_test has already
-            // demoted Edge/Corner to Caption when !resizable.
-            Zone::Caption => {
-                app.move_drag = true;
-                let target: &AnyObject = &app.controller;
-                let timer = unsafe {
-                    NSTimer::scheduledTimerWithTimeInterval_target_selector_userInfo_repeats(
-                        MOVE_POLL_SECS,
-                        target,
-                        sel!(moveTick:),
-                        None,
-                        true,
-                    )
-                };
-                app.move_timer = Some(timer);
-                true
-            }
-            zone @ (Zone::Edge(_) | Zone::Corner(_)) => {
-                app.resize = Some(ResizeDrag { start: app.region, zone, origin: p });
-                false
-            }
-            Zone::Outside => false, // unreachable: hitTest: returned nil there
-        }
-    });
-    if start_window_drag {
-        // Closed hand for the duration: the native drag session swallows
-        // mouseMoved:, so `on_mouse_moved` never gets to switch it, and
-        // `on_move_tick` opens it again on release.
-        NSCursor::closedHandCursor().set();
-        // Outside the borrow: the native drag session may synchronously post
-        // its first willMove/didMove notifications.
-        if let Some(window) = view.window() {
-            window.performWindowDragWithEvent(event);
-        }
-    }
-}
-
-/// Hand-rolled resize loop (macOS has no native one for borderless windows):
-/// accumulate the drag delta from the mouseDown origin, run it through
-/// `geometry::resize_region`, and rubber-band the FRAME window only. The
-/// mirror/mask/scene are untouched until release — a resize implies
-/// `obs_reset_video` on commit, far too expensive per mouse delta
-/// (plan §6.3).
-fn on_mouse_dragged(view: &FrameView, event: &NSEvent) {
-    let Some(p) = view.event_capture_point(event) else { return };
-    let update = with_app(|app| {
-        let drag = app.resize.as_ref()?;
-        let live =
-            geometry::resize_region(drag.start, drag.zone, p.0 - drag.origin.0, p.1 - drag.origin.1);
-        let layout = geometry::compute_layout(live, &frame_spec(&app.cfg), &work_areas(app.mtm));
-        let rect = capture_to_cocoa(app.mtm, layout.outer);
-        // Publish the live layout so drawRect:/hitTest: track the rubber-band.
-        app.layout = Some(layout);
-        Some((app.frame.clone()?, rect, app.view.clone()?))
-    });
-    if let Some((fw, rect, v)) = update {
-        // display:true — synchronous redraw keeps the band glued to the
-        // cursor; safe here because the APP borrow is already released.
-        fw.setFrame_display(rect, true);
-        v.setNeedsDisplay(true);
-    }
-}
-
-fn on_mouse_up(view: &FrameView, event: &NSEvent) {
-    let Some(p) = view.event_capture_point(event) else { return };
-    let adoption = with_app(|app| {
-        if app.close_armed {
-            app.close_armed = false;
-            // Standard button semantics: fire only when released inside.
-            // Button 0 is close; see PANEL_BUTTONS.
-            if let Some(l) = app.layout.as_ref() {
-                if matches!(geometry::hit_test(l, app.cfg.resizable, p), Zone::Button(0)) {
-                    app.events.quit(); // -> ! (exit_process)
-                }
-            }
-        }
-        let drag = app.resize.take()?;
-        let live =
-            geometry::resize_region(drag.start, drag.zone, p.0 - drag.origin.0, p.1 - drag.origin.1);
-        let committed = app.events.region_committed(live);
-        Some(adopt(app, committed))
-    });
-    if let Some(a) = adoption {
-        apply_adoption(a);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Drawing
-// ---------------------------------------------------------------------------
-
-fn srgb(r: u8, g: u8, b: u8) -> Retained<NSColor> {
-    NSColor::colorWithSRGBRed_green_blue_alpha(
-        r as f64 / 255.0,
-        g as f64 / 255.0,
-        b as f64 / 255.0,
-        1.0,
-    )
-}
-
-/// Paint the frame: the two-tone ring with the handle cutouts taken out of
-/// it, the handles themselves, and the button panel with its close glyph.
-/// Everything is derived from the FrameLayout in capture space and translated
-/// by `outer.origin` into the (flipped) view, which is a pure translation
-/// because the view is `isFlipped`.
-fn draw_frame() {
-    let Some((layout, accent)) =
-        read_app(|app| app.layout.clone().map(|l| (l, app.cfg.accent))).flatten()
-    else {
-        return; // first display pass before APP is populated: draw nothing
-    };
-    // Always present inside drawRect:; without it nothing would render anyway,
-    // and we need it to scope the clip below.
-    let Some(ctx) = NSGraphicsContext::currentContext() else {
-        return;
-    };
-
-    let outer = layout.outer;
-    let local = |r: Rect| {
-        NSRect::new(
-            NSPoint::new((r.x - outer.x) as f64, (r.y - outer.y) as f64),
-            NSSize::new(r.w as f64, r.h as f64),
-        )
-    };
-    let accent_fill = srgb(accent.0, accent.1, accent.2);
-    let white = NSColor::whiteColor();
-
-    // --- The ring (DESIGN §1), minus the handle cutouts (§2).
-    //
-    // Two nested clips, which reduces the fills themselves to two plain rects:
-    //
-    //   1. band + hole, even-odd -> the ring annulus. This is also what keeps
-    //      the hollow interior unpainted, and the interior being unpainted on
-    //      a clear window is what makes it click-through.
-    //   2. band + every cutout, even-odd -> inside the annulus `band` is a
-    //      constant 1, so each cutout flips it to 0 and drops out.
-    //
-    // Clips intersect, so the result is exactly (band - hole) - cutouts.
-    //
-    // Doing this by winding alone — appending the cutouts to the *fill* path
-    // instead — would paint the parts of a cutout that hang into the hole or
-    // past the band, because a rect appended to an even-odd path flips parity
-    // everywhere it covers, not only where the ring is. §2 says that overhang
-    // is invisible; the clip is what makes that literally true rather than a
-    // claim about parity.
-    //
-    // Step 2 does rely on the cutouts being pairwise disjoint (an overlap
-    // would flip parity back to 1 and paint a speck inside the gap).
-    // `compute_layout` guarantees that: no cutout crosses the band's centre
-    // line on an axis it does not straddle, which is what stops the two
-    // corner cutouts along an edge, and the two opposite mid-edge cutouts
-    // across a narrow band, from ever meeting. `layout_cutouts_are_pairwise_disjoint`
-    // is the test that holds this end of the contract up.
-    ctx.saveGraphicsState();
-    let annulus = NSBezierPath::bezierPath();
-    annulus.appendBezierPathWithRect(local(layout.band));
-    annulus.appendBezierPathWithRect(local(layout.hole));
-    annulus.setWindingRule(NSWindingRule::EvenOdd);
-    annulus.addClip();
-    let cutouts = NSBezierPath::bezierPath();
-    cutouts.appendBezierPathWithRect(local(layout.band));
-    for h in &layout.handles {
-        cutouts.appendBezierPathWithRect(local(h.cutout));
-    }
-    cutouts.setWindingRule(NSWindingRule::EvenOdd);
-    cutouts.addClip();
-    // Accent over the whole ring, then white over its inner half. The two
-    // lines are `band - white_band` and `white_band - hole`; the clip has
-    // already removed the hole, so painting the inner rect on top of the outer
-    // one produces the same two lines with one fewer path.
-    accent_fill.setFill();
-    NSBezierPath::fillRect(local(layout.band));
-    white.setFill();
-    NSBezierPath::fillRect(local(layout.white_band));
-    ctx.restoreGraphicsState();
-
-    // --- Handles: three nested filled rects each, reading inward accent /
-    // white / accent (§2). Drawn after the clip is restored, because a handle
-    // sits in the middle of its own cutout — which the clip just removed.
-    for h in &layout.handles {
-        let (ring, core) = geometry::handle_layers(h.rect);
-        accent_fill.setFill();
-        NSBezierPath::fillRect(local(h.rect));
-        if let Some(ring) = ring {
-            white.setFill();
-            NSBezierPath::fillRect(local(ring));
-        }
-        if let Some(core) = core {
-            accent_fill.setFill();
-            NSBezierPath::fillRect(local(core));
-        }
-    }
-
-    // --- Panel (§5): a white outline over an accent fill, the same
-    // white-against-accent language as the border and for the same reason —
-    // it floats over arbitrary desktop content and needs its own contrast.
-    // Painting the whole panel white and then each button in accent gives the
-    // outline AND the inter-button hairlines in one step: both are just the
-    // white underneath showing through the gaps the buttons leave.
-    white.setFill();
-    NSBezierPath::fillRect(local(layout.panel));
-    accent_fill.setFill();
-    for b in &layout.buttons {
-        NSBezierPath::fillRect(local(*b));
-    }
-
-    // Close glyph: a white X inset into button 0. A stroked polyline, no icon
-    // resources (plan §6.1's GDI equivalent). The inset is a fraction of the
-    // button rather than a fixed margin so the X keeps its proportions if the
-    // button is ever DPI-scaled up; 0.3 reproduces the previous 9-of-30.
-    if let Some(btn) = layout.buttons.first() {
-        white.setStroke();
-        let glyph = NSBezierPath::bezierPath();
-        glyph.setLineWidth(2.0);
-        glyph.setLineCapStyle(NSLineCapStyle::Round);
-        let c = local(*btn);
-        let inset = c.size.width.min(c.size.height) * 0.3;
-        let (x0, y0) = (c.origin.x + inset, c.origin.y + inset);
-        let (x1, y1) = (
-            c.origin.x + c.size.width - inset,
-            c.origin.y + c.size.height - inset,
-        );
-        glyph.moveToPoint(NSPoint::new(x0, y0));
-        glyph.lineToPoint(NSPoint::new(x1, y1));
-        glyph.moveToPoint(NSPoint::new(x0, y1));
-        glyph.lineToPoint(NSPoint::new(x1, y0));
-        glyph.stroke();
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Cursor rects (key-window path)
-// ---------------------------------------------------------------------------
-
-/// `r` minus `cut`, as up to four non-overlapping rects (the slabs above,
-/// below, left and right of the overlap). Cursor rects only.
-///
-/// AppKit's cursor tracking is a flat list of rects with none of `hit_test`'s
-/// ordering: it has no equivalent of "the hole falls through" (§3 step 3) and
-/// none of "the cutout gap is a hole" (§3 step 5). Both have to be done by
-/// arithmetic here instead, so both go through this one helper.
-fn subtract(r: Rect, cut: Rect) -> Vec<Rect> {
-    let rect = |x1: i64, y1: i64, x2: i64, y2: i64| Rect {
-        x: x1 as i32,
-        y: y1 as i32,
-        w: (x2 - x1).max(0) as u32,
-        h: (y2 - y1).max(0) as u32,
-    };
-    let (rx1, ry1) = (r.x as i64, r.y as i64);
-    let (rx2, ry2) = (rx1 + r.w as i64, ry1 + r.h as i64);
-    let (hx1, hy1) = (cut.x as i64, cut.y as i64);
-    let (hx2, hy2) = (hx1 + cut.w as i64, hy1 + cut.h as i64);
-    // The overlap, clamped into `r`. Empty on either axis means `r` is clear
-    // of `cut` and survives whole.
-    let (ix1, iy1) = (rx1.max(hx1), ry1.max(hy1));
-    let (ix2, iy2) = (rx2.min(hx2), ry2.min(hy2));
-    if ix1 >= ix2 || iy1 >= iy2 {
-        return vec![r];
-    }
-    [
-        rect(rx1, ry1, rx2, iy1), // above
-        rect(rx1, iy2, rx2, ry2), // below
-        rect(rx1, iy1, ix1, iy2), // left of
-        rect(ix2, iy1, rx2, iy2), // right of
-    ]
-    .into_iter()
-    .filter(|s| s.w > 0 && s.h > 0)
-    .collect()
-}
-
-/// `rects` minus `cut`, piecewise. The inputs stay pairwise disjoint because
-/// [`subtract`] only ever carves pieces out of rects it is given.
-fn subtract_all(rects: Vec<Rect>, cut: Rect) -> Vec<Rect> {
-    rects.into_iter().flat_map(|r| subtract(r, cut)).collect()
-}
-
-/// Cursor rects for the key-window case. The frame window is borderless and
-/// so can never become key, which makes this unreachable today; it exists for
-/// completeness and must agree with the `mouseMoved:` path above, which is the
-/// one that actually runs (and, per `FrameView::new`, only reaches the screen
-/// while the app is active).
-///
-/// Built entirely from `layout.handles` and the layout's own rects. It used to
-/// re-derive the band's corner/edge subdivision by hand, which meant two
-/// copies of the hit-zone arithmetic that could drift apart; the handle rects
-/// now exist for exactly this.
-///
-/// It is nevertheless the one place `hit_test`'s ordering has to be restated
-/// as arithmetic, since a cursor-rect list has no ordering of its own. The
-/// shape it builds is `hit_test`'s answer, rect by rect:
-///
-/// ```text
-/// band − hole − every cutout          -> hand   (§3 steps 5, 6)
-/// each handle rect − hole             -> resize (§3 step 4; Caption if !resizable)
-/// panel, then each button             -> hand, arrow (§3 steps 1, 2)
-/// ```
-fn reset_cursor_rects_impl(view: &FrameView) {
-    let Some((layout, resizable)) =
-        read_app(|app| app.layout.clone().map(|l| (l, app.cfg.resizable))).flatten()
+    // Read out, then act outside the borrow: `setFrame:` posts notifications
+    // synchronously and can re-enter a handler that borrows APP, exactly as
+    // `apply_move` is careful about.
+    let Some((mtm, window, region, mirroring)) =
+        read_app(|app| (app.mtm, app.window.clone(), app.region, app.mirroring))
     else {
         return;
     };
-    let outer = layout.outer;
-    let local = |r: Rect| {
-        NSRect::new(
-            NSPoint::new(
-                (r.x as i64 - outer.x as i64) as f64,
-                (r.y as i64 - outer.y as i64) as f64,
-            ),
-            NSSize::new(r.w as f64, r.h as f64),
-        )
-    };
-    let add = |r: Rect, c: &NSCursor| {
-        if r.w > 0 && r.h > 0 {
-            view.addCursorRect_cursor(local(r), c);
-        }
-    };
-
-    // Added in REVERSE hit-test order: AppKit resolves overlapping cursor
-    // rects last-added-first, where `hit_test` is first-match-wins. So the
-    // caption ring goes down first, the handle rects over it, then the panel
-    // and its buttons on top.
-    let hand = NSCursor::openHandCursor();
-
-    // The Caption ring is `band − hole − every cutout` — the painted ring and
-    // nothing else (DESIGN §6). Both subtractions are explicit because the
-    // cursor-rect list has no ordering to lean on: without `− hole` the band
-    // would claim the cursor from the app underneath, and without `− cutouts`
-    // the visible gaps around the handles would claim it too, which is exactly
-    // the lie DESIGN §3 removed from `hit_test`.
-    let mut ring = subtract(layout.band, layout.hole);
-    for handle in &layout.handles {
-        ring = subtract_all(ring, handle.cutout);
-    }
-    for strip in ring {
-        add(strip, &hand);
-    }
-
-    // The handle RECT, not its cutout: the grab area is the painted square,
-    // 1:1 (§3). Minus the hole, because a handle is centred on the ring and so
-    // reaches `overhang_in` back inside the band's inner edge, where §3 step 3
-    // hands the click (and the cursor) to the app underneath. NOT clipped to
-    // the band, though — a handle overhangs it (§2) and `hit_test` resolves it
-    // out there, so the cursor has to follow it out there too.
-    //
-    // When `!resizable` a handle demotes to Caption rather than dropping out:
-    // it is still painted, and the whole painted frame drags.
-    for handle in &layout.handles {
-        let zone = if resizable {
-            match handle.kind {
-                HandleKind::Edge(d) => Zone::Edge(d),
-                HandleKind::Corner(c) => Zone::Corner(c),
-            }
-        } else {
-            Zone::Caption
-        };
-        let cursor = cursor_for_zone(zone, false);
-        for part in subtract(handle.rect, layout.hole) {
-            add(part, &cursor);
-        }
-    }
-
-    add(layout.panel, &hand);
-    let arrow = NSCursor::arrowCursor();
-    for btn in &layout.buttons {
-        add(*btn, &arrow);
+    if mirroring {
+        park(&window, mtm, region);
     }
 }
 
@@ -1350,134 +665,54 @@ fn reset_cursor_rects_impl(view: &FrameView) {
 // run()
 // ---------------------------------------------------------------------------
 
-pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
+pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
     // main.rs already created the shared NSApplication (Accessory policy)
     // before obs bootstrap; we only fetch it and run it.
     let mtm = MainThreadMarker::new()
         .expect("ui::run must be called on the main thread (AppKit requirement)");
     let nsapp = NSApplication::sharedApplication(mtm);
 
+    // Retained by the scheduled timer below (which the run loop retains) and,
+    // more simply, by this binding: `run` never returns, so nothing in this
+    // frame is ever dropped. That matters because NSNotificationCenter does not
+    // retain its observers.
     let controller = Controller::new(mtm);
 
-    // --- Mirror: the window meeting apps pick.
-    //
-    // In the prompt phase it is a small ordinary dialog the user has to find
-    // and click, so it is titled (the title is also what list-style pickers
-    // show) and centred rather than parked on the region — a window sized and
-    // placed like the final mirror is awkward to pick and can be mostly
-    // off-screen for an edge region. `begin_mirror_phase` gives it its real
-    // geometry, and strips the title bar, on OK.
-    //
-    // Titled + closable only for that phase: not miniaturizable (a minimized
-    // mirror stops presenting) and not resizable (its size is dictated by the
-    // region, never by the user). Skipping the prompt goes straight to the
-    // borderless form, since a window share captures the whole window frame
-    // and a caption would end up in the shared output either way.
-    let style = if cfg.prompt {
-        NSWindowStyleMask::Titled | NSWindowStyleMask::Closable
-    } else {
-        NSWindowStyleMask::Borderless
-    };
-    let initial_content = if cfg.prompt {
-        // 3:2, comfortably bigger than the message needs — it has to be easy
-        // to spot and click in a share picker, not compact.
-        NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(420.0, 280.0))
-    } else {
-        capture_to_cocoa(mtm, region) // content rect = region, in points
-    };
-    let mirror = ShareWindow::create(mtm, initial_content, style);
-    mirror.setTitle(&NSString::from_str(&cfg.title));
-    if cfg.prompt {
-        // Let AppKit place it: centred is the easiest thing to find and click.
-        mirror.center();
-    }
+    // The one window. Titled + closable for the prompt phase — the title is
+    // what list-style share pickers show, and closing it is a legitimate way to
+    // decline. Deliberately not miniaturizable (a minimized window stops being
+    // composited, which would freeze the share the moment it started) and not
+    // resizable (its size is dictated by the region, never by the user).
+    // Centred rather than placed on the region: a window sized and positioned
+    // like the final mirror is awkward to pick, and for a region at a screen
+    // edge would be largely off-screen.
+    let window = ShareWindow::create(
+        mtm,
+        NSRect::new(NSPoint::new(0.0, 0.0), PROMPT_SIZE),
+        NSWindowStyleMask::Titled | NSWindowStyleMask::Closable,
+    );
+    window.setTitle(&NSString::from_str(&cfg.title));
+    window.center();
 
-    // --- Mask: opaque, borderless, exactly covering the mirror's window
-    // frame (title bar included). Borderless windows can never become
-    // key/main, which is exactly what we want.
-    let mask = ShareWindow::create(mtm, mirror.frame(), NSWindowStyleMask::Borderless);
-    mask.setOpaque(true);
-    // Solid dark grey, matching the Windows implementation's 0x202020 (plan
-    // §1: any opaque color works).
-    mask.setBackgroundColor(Some(&srgb(0x20, 0x20, 0x20)));
-    mask.setHasShadow(false);
-
-    // --- Frame (optional): borderless, transparent, floating, following the
-    // user across Spaces and over fullscreen apps.
-    let (frame_win, view, layout) = if cfg.show_frame {
-        let layout = geometry::compute_layout(region, &frame_spec(&cfg), &work_areas(mtm));
-        let fw = ShareWindow::create(
-            mtm,
-            capture_to_cocoa(mtm, layout.outer),
-            NSWindowStyleMask::Borderless,
-        );
-        fw.setOpaque(false);
-        fw.setBackgroundColor(Some(&NSColor::clearColor()));
-        fw.setHasShadow(false);
-        // Above the menu bar (24) and the Dock (20), not merely above ordinary
-        // windows the way NSFloatingWindowLevel (3) is. The region is drawn
-        // wherever the user put it, and its border is inflated *outward*, so
-        // both routinely overlap the menu bar or Dock — at floating level the
-        // border silently vanishes behind them, leaving the shared area
-        // unmarked exactly where it is least obvious what is being shared.
-        // Pairing with `constrainFrameRect:toScreen:` (see ShareWindow) is what
-        // makes "the region can be anywhere on screen" actually true: the
-        // override lets us place the window there, this lets it be seen there.
-        fw.setLevel(NSStatusWindowLevel);
-        fw.setCollectionBehavior(
-            NSWindowCollectionBehavior::CanJoinAllSpaces
-                | NSWindowCollectionBehavior::FullScreenAuxiliary
-                // Stationary: Mission Control / Spaces transitions must not
-                // drag the border away from the region it marks.
-                | NSWindowCollectionBehavior::Stationary,
-        );
-        fw.setAcceptsMouseMovedEvents(true);
-        let v = FrameView::new(mtm);
-        fw.setContentView(Some(&v));
-        (Some(fw), Some(v), Some(layout))
-    } else {
-        (None, None, None)
-    };
-
-    // --- Notifications. Registered before any window is ordered on screen;
-    // the handlers no-op via try_with_app until APP is populated below.
+    // Registered before the window is ordered on screen. The handler borrows
+    // APP unconditionally, which is safe even though APP is populated a few
+    // lines further down: this notification can only be posted by a close, and
+    // nothing — user or code — can close a window that has not been shown yet.
     let center = NSNotificationCenter::defaultCenter();
     let observer: &AnyObject = &controller;
-    let mirror_obj: &AnyObject = &mirror;
+    let window_obj: &AnyObject = &window;
     unsafe {
         center.addObserver_selector_name_object(
             observer,
-            sel!(mirrorWillClose:),
+            sel!(windowWillClose:),
             Some(NSWindowWillCloseNotification),
-            Some(mirror_obj),
+            Some(window_obj),
         );
-        // Both notifications: which one fires first depends on how the
-        // mirror got raised (picker, Cmd-Tab, click), so re-assert on either.
-        center.addObserver_selector_name_object(
-            observer,
-            sel!(mirrorDidActivate:),
-            Some(NSWindowDidBecomeKeyNotification),
-            Some(mirror_obj),
-        );
-        center.addObserver_selector_name_object(
-            observer,
-            sel!(mirrorDidActivate:),
-            Some(NSWindowDidBecomeMainNotification),
-            Some(mirror_obj),
-        );
-        if let Some(fw) = &frame_win {
-            let frame_obj: &AnyObject = fw;
-            center.addObserver_selector_name_object(
-                observer,
-                sel!(frameDidMove:),
-                Some(NSWindowDidMoveNotification),
-                Some(frame_obj),
-            );
-        }
-        // Display-config changes (win32.rs handles the equivalent
-        // WM_DISPLAYCHANGE). Posted by the NSApplication, but observed with
-        // object=None: the shared-app pointer is the same either way and nil
-        // keeps this registration independent of activation policy quirks.
+        // Display-config changes, so the parked mirror can be moved back out of
+        // a desktop that grew over it (see `on_screen_params_changed`). Posted
+        // by the NSApplication, but observed with object=None: the shared-app
+        // pointer is the same either way and nil keeps this registration
+        // independent of activation-policy quirks.
         center.addObserver_selector_name_object(
             observer,
             sel!(screenParamsChanged:),
@@ -1486,68 +721,66 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
         );
     }
 
-    let content = mirror
+    let content = window
         .contentView()
         .expect("titled NSWindow always has a contentView");
+    let prompt_controls = install_prompt(mtm, &content, &controller);
 
-    // --- Phase split (ui/mod.rs). With the prompt on, the mirror opens as an
-    // ordinary front window carrying a message and an OK button, and nothing
-    // else exists yet; `begin_mirror_phase` does the rest when the user
-    // confirms. With it off we go straight to mirroring, which is the
-    // pre-prompt behaviour exactly.
-    let prompt_phase = cfg.prompt;
-    let prompt_controls = if prompt_phase {
-        let controls = install_prompt(mtm, &content, &controller);
-        // Key + front + activated: the whole point of this phase is that the
-        // window is easy to see and click in a share picker.
-        mirror.makeKeyAndOrderFront(None);
-        #[allow(deprecated)] // activate() is macOS 14+; this works everywhere.
-        nsapp.activateIgnoringOtherApps(true);
-        controls
-    } else {
-        mask.orderBack(None);
-        mirror.orderWindow_relativeTo(NSWindowOrderingMode::Below, mask.windowNumber());
-        // Hand the mirror's contentView to the app so it can create the
-        // ObsDisplay. Must happen after the mirror is shown (the swapchain
-        // needs a realized view) and strictly before NSApp.run(). The pointer
-        // stays valid forever: the view is retained by the mirror window,
-        // which is retained by APP, which is never dropped.
-        let handle = Retained::as_ptr(&content) as *mut NSView as *mut c_void;
-        events.mirror_ready(handle);
-        Vec::new()
-    };
+    // Key + front + activated: the whole point of this phase is that the window
+    // is easy to see and click, both directly and in a share picker.
+    window.makeKeyAndOrderFront(None);
+    #[allow(deprecated)] // activate() is macOS 14+; this works everywhere.
+    nsapp.activateIgnoringOtherApps(true);
+
+    // Only now is `initialized` true in both halves of what it promises: libobs
+    // is up (main.rs bootstrapped the mirror before calling us) AND the prompt
+    // window exists, is showing and is activated. Emitting it any earlier would
+    // race the shell's out-of-band reactions — looking the window up by title to
+    // point the user at it, for instance — against a window that does not exist
+    // yet. It cannot be emitted after `run` returns, because `run` never does.
+    crate::status::emit_initialized();
 
     *APP.0.borrow_mut() = Some(App {
         mtm,
         events,
-        cfg,
         region,
-        layout,
-        mirror,
-        mask,
-        frame: frame_win.clone(),
-        view: view.clone(),
-        controller,
-        move_drag: false,
-        move_timer: None,
-        resize: None,
-        close_armed: false,
-        hover_outside: true,
+        window,
+        mirroring: false,
         prompt_controls,
     });
 
-    // Order the frame front only now: its first draw pass reads APP. Held back
-    // entirely during the prompt phase — the region border marks a share that
-    // has not started yet, and it would sit over the window the user is being
-    // asked to pick.
-    if !prompt_phase {
-        if let Some(fw) = &frame_win {
-            fw.orderFrontRegardless();
-        }
-        if let Some(v) = &view {
-            v.setNeedsDisplay(true);
-        }
-    }
+    // Started after APP is populated. Strictly belt-and-braces — a timer can
+    // only fire from inside the run loop below — but it costs nothing and means
+    // the "APP exists before any callback" invariant holds by construction
+    // rather than by scheduling luck. The run loop retains the timer, and the
+    // timer retains the controller; neither is ever invalidated, because the
+    // poll has to keep working right up to the moment the process exits.
+    //
+    // Built and added by hand rather than with the `scheduledTimer...`
+    // convenience constructor, because that one installs the timer in
+    // NSDefaultRunLoopMode ONLY. During the prompt phase the window is titled
+    // with a live NSButton, so AppKit routinely pushes
+    // NSEventTrackingRunLoopMode — a held mouse-down on OK, a title-bar drag —
+    // and while that mode is current a default-mode timer does not fire at all.
+    // Since `wake()` is a no-op on this platform, this timer is the ONLY thing
+    // that ever calls `take_commands`, so every stdin command would stall for as
+    // long as the user held the mouse down: including `quit`, and including the
+    // EOF-synthesised `quit` that is this crate's orphan-safety mechanism. A
+    // caller that writes `quit` and waits for the process to exit would time out
+    // and kill the child instead. NSRunLoopCommonModes covers event tracking and
+    // modal panels as well as the default mode.
+    let target: &AnyObject = &controller;
+    let _timer = unsafe {
+        let timer = NSTimer::timerWithTimeInterval_target_selector_userInfo_repeats(
+            COMMAND_POLL_SECS,
+            target,
+            sel!(drainCommands:),
+            None,
+            true,
+        );
+        NSRunLoop::currentRunLoop().addTimer_forMode(&timer, NSRunLoopCommonModes);
+        timer
+    };
 
     nsapp.run();
     // run() only returns if something stops the app (nothing here does — all

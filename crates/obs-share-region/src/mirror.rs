@@ -6,6 +6,11 @@
 //! no audio devices, no encoders, no output, no webcam, no tracker. With no
 //! output the pipeline is just capture → compose → swapchain present, which is
 //! what makes the live mirror nearly free (SHARE_REGION_PLAN §1).
+//!
+//! What this module does NOT own is the pixels: the display's draw callback is
+//! `crate::obscure::draw`, which lives on the OBS graphics thread and keeps its
+//! own state in atomics. Nothing here is reachable from that thread, which is
+//! the invariant that lets `Mirror` stay a plain `&mut`-driven UI-thread type.
 
 use std::ffi::{c_void, CString};
 use std::fmt::Display;
@@ -19,7 +24,45 @@ use obs::video::VideoInfo;
 use obs_platform::region::{self, Rect, RegionPlan};
 use obs_platform::MonitorInfo;
 
-use crate::geometry;
+/// Floor on the region width/height accepted by `bootstrap` and `set_region`.
+/// A degenerate or one-pixel region would produce a canvas the swapchain and
+/// the scene math cannot meaningfully represent (and, on the Windows side, a
+/// mirror window smaller than its own minimum tracking size), so both the
+/// `--region` flag and the shell's `move` command are clamped rather than
+/// trusted. 64 px is the same floor the deleted interactive resize used, kept
+/// so the clamp behaviour does not change.
+const MIN_REGION: u32 = 64;
+
+/// The one place a requested region is turned into a region this process can
+/// actually mirror. Everything that reaches the wire as `sharing_started` or
+/// `region_changed`, and everything the platform layer sizes the window from,
+/// has been through here.
+///
+/// Two adjustments, both of which the caller learns about because the adjusted
+/// rect is what gets acked:
+///
+/// * The size is floored at [`MIN_REGION`], for the reasons on that constant.
+/// * The size is rounded DOWN to even, because `plan_region` forces the canvas
+///   even (`region.w * canvas_scale` masked with `& !1`) and the mirror window
+///   is sized from the region. An odd 801-px region would otherwise present an
+///   800-px-wide swapchain into an 801-px-wide window, and DXGI would stretch
+///   the mirror by 801/800 — a resampled, slightly soft picture — while the
+///   `region_changed` ack told Clowd to draw its border at 801. Rounding the
+///   region itself keeps the window, the canvas and the ack in one value
+///   domain, which is the property `AppEvents::set_region` is built on. (Odd
+///   sizes are easy to produce: Clowd computes the region from a border the
+///   user drags by hand.) Rounding down rather than up keeps a region that was
+///   just inside a display from being pushed a pixel past its edge.
+///
+/// Order matters: the floor is applied first and [`MIN_REGION`] is itself even,
+/// so the rounding can never take a size back below the floor.
+fn normalize_region(region: Rect) -> Rect {
+    Rect {
+        w: region.w.max(MIN_REGION) & !1,
+        h: region.h.max(MIN_REGION) & !1,
+        ..region
+    }
+}
 
 /// Runtime/obs failures exit 1. Never unwind: partial OBS state is never torn
 /// down (same invariant as obs-express — libobs shutdown is a known crash
@@ -37,19 +80,12 @@ fn fail_args(msg: impl Display) -> ! {
     obs_platform::exit_process(2)
 }
 
-/// The `obs_display` draw callback. Runs on **OBS's graphics thread**, not the
-/// UI thread — it must do nothing but render the main texture (mixing in any
-/// app logic here would race the UI thread over `Mirror`).
-unsafe extern "C" fn draw_mirror(_param: *mut c_void, _cx: u32, _cy: u32) {
-    unsafe { obs_sys::obs_render_main_texture() };
-}
-
 pub struct Mirror {
     context: ObsContext,
     scene: ObsScene,
     /// One display-capture source + scene item per planned (intersected)
     /// monitor, in `plan.items` order. Rebuilt only when the intersected
-    /// monitor set changes (commit path).
+    /// monitor set changes (see `set_region`).
     sources: Vec<ObsSource>,
     items: Vec<ObsSceneItem>,
     /// Created lazily by `attach_display` once the UI hands over the mirror
@@ -59,12 +95,18 @@ pub struct Mirror {
     /// config changes — the region math plans against this snapshot.
     monitors: Vec<MonitorInfo>,
     /// Indices into `monitors` of the currently planned items (the "monitor
-    /// set" the cheap move path compares against).
+    /// set" `set_region` compares against to decide whether the sources have
+    /// to be rebuilt or merely repositioned).
     monitor_set: Vec<usize>,
+    /// The region currently being mirrored, after normalisation. Only ever
+    /// written by a `set_region` that succeeded, so it is always a rect known
+    /// to intersect at least one monitor.
     region: Rect,
     /// Canvas in capture px (== ObsDisplay size, == reset_video base/output).
+    /// The plan's `canvas_scale` is deliberately not cached alongside it: it
+    /// only ever existed to keep the deleted cheap-drag path honest, and every
+    /// `set_region` re-plans from scratch anyway.
     canvas: (u32, u32),
-    canvas_scale: f64,
     fps: u32,
     show_cursor: bool,
 }
@@ -80,6 +122,14 @@ impl Mirror {
     /// intersects no monitor (caller input), exit 1 for everything else.
     /// `obs_platform::init_process()` must already have run (main.rs does it
     /// before the platform app setup).
+    ///
+    /// The `--region` rect goes through [`normalize_region`] exactly like a
+    /// `move` does, so the region reported by `sharing_started` is drawn from
+    /// the same value domain as every later `region_changed`. Without that, a
+    /// `--region 0,0,10,10` would be mirrored (and announced) at 10x10 — a size
+    /// no `move` command can ever reproduce, so a shell that echoed the region
+    /// it was given straight back would get a different one in return. Read the
+    /// applied rect back with [`Mirror::region`].
     pub fn bootstrap(region: Rect, fps: u32, show_cursor: bool) -> Mirror {
         // 1. Context (log/crash handlers were installed first thing in main).
         let context = match ObsContext::new("en-US") {
@@ -97,7 +147,11 @@ impl Mirror {
             context.add_data_path(libobs_data);
         }
 
-        // 3. Resolve the region against the live monitors.
+        // 3. Resolve the region against the live monitors. Normalised first,
+        //    so everything below — the canvas, the scene offsets, the region
+        //    this reports back — is built from the rect that will actually be
+        //    mirrored rather than the one that was asked for.
+        let region = normalize_region(region);
         let monitors = obs_platform::enumerate_monitors();
         if monitors.is_empty() {
             fail("No displays found");
@@ -159,14 +213,15 @@ impl Mirror {
             monitor_set,
             region,
             canvas: plan.canvas,
-            canvas_scale: plan.canvas_scale,
             fps,
             show_cursor,
         }
     }
 
-    /// Binds the obs display swapchain to the mirror window and registers the
-    /// render callback. Called once, from `AppEvents::mirror_ready`.
+    /// Binds the obs display swapchain to the mirror window and registers
+    /// `obscure::draw` as its render callback. Called once, from
+    /// `AppEvents::mirror_ready` — i.e. after the user pressed OK and the
+    /// prompt window became the (off-screen) mirror surface.
     pub fn attach_display(&mut self, window: *mut c_void) {
         // Safety: the UI layer hands us the mirror window's HWND / contentView
         // NSView*, which lives until the process exits (the mirror window is
@@ -178,64 +233,47 @@ impl Mirror {
         // Black backing where the texture does not cover (transient, e.g.
         // mid-resize before the swapchain catches up).
         display.set_background_color(0);
-        // Safety: draw_mirror only calls obs_render_main_texture (graphics
-        // thread; see its doc comment), and the null param is never read.
-        unsafe { display.add_draw_callback(draw_mirror, std::ptr::null_mut()) };
+        // Safety: `obscure::draw` runs on the graphics thread and touches only
+        // its own atomics and its own graphics resources — never `Mirror` —
+        // which is exactly why the param is null: the callback has no way to
+        // reach us even by accident. The obscure module also owns the frame
+        // counter that feeds the 1 Hz status line, so this must stay the only
+        // draw callback on the display.
+        unsafe { display.add_draw_callback(crate::obscure::draw, std::ptr::null_mut()) };
         self.display = Some(display);
     }
 
-    /// Cheap live path, called repeatedly during a move drag: the canvas size
-    /// and the source set are unchanged, so only the scene-item offsets move —
-    /// no reset_video, no source churn. If the drag has changed anything
-    /// structural (crossed onto/off a monitor, or off every monitor), do
-    /// nothing: the commit on release reconciles, and the last cheap update
-    /// simply lags a few frames behind the frame window.
-    pub fn move_region(&mut self, region: Rect) {
-        let plan = match region::plan_region(region, &self.monitors) {
-            Ok(p) => p,
-            Err(_) => return, // intersects nothing right now — commit decides
-        };
-        let same_set = plan.items.len() == self.monitor_set.len()
-            && plan
-                .items
-                .iter()
-                .zip(&self.monitor_set)
-                .all(|(i, &m)| i.monitor_index == m);
-        // canvas/canvas_scale can only differ if the set differs (same region
-        // size, same monitors ⇒ same scale ⇒ same canvas), but check anyway —
-        // this is the guard that keeps the cheap path cheap.
-        if !same_set || plan.canvas != self.canvas || plan.canvas_scale != self.canvas_scale {
-            return;
-        }
-        for (item, planned) in self.items.iter().zip(&plan.items) {
-            item.set_pos(planned.pos.0, planned.pos.1);
-        }
-        self.region = region;
+    /// The region currently being mirrored, i.e. the last rect this actually
+    /// applied. Read once after `bootstrap` so the rest of the process starts
+    /// from the normalised `--region` rather than the requested one.
+    pub fn region(&self) -> Rect {
+        self.region
     }
 
-    /// Full reconcile on drag release. Clamps to `geometry::MIN_REGION`; a
-    /// region that intersects no monitor keeps the previous region instead
-    /// (the UI adopts the returned rect, so the frame snaps back). Returns the
-    /// region actually applied.
-    pub fn commit_region(&mut self, region: Rect) -> Rect {
-        let mut region = Rect {
-            w: region.w.max(geometry::MIN_REGION),
-            h: region.h.max(geometry::MIN_REGION),
-            ..region
-        };
+    /// Full reconcile, driven by the shell's `move X,Y,W,H` stdin command
+    /// (there are no drags any more — Clowd owns the border and tells us where
+    /// it ended up). The request is [`normalize_region`]d, and `Ok` carries the
+    /// rect that was actually applied — which is what the caller acks back over
+    /// stdout as `region_changed`, so the shell always learns the real region,
+    /// not the requested one.
+    ///
+    /// `Err` means the request was refused and NOTHING changed: the previous
+    /// region is still being mirrored. The reason is worded for
+    /// `status::emit_command_error`, because a refusal has to be visible as a
+    /// refusal — echoing the unchanged region back as `region_changed` would be
+    /// indistinguishable on the wire from a successful move to that rect, and
+    /// Clowd (which resizes its border to whatever `region_changed` reports)
+    /// would see its border snap back with no explanation. This is reachable in
+    /// normal operation, not just from a nonsense request: `self.monitors` is
+    /// the snapshot taken at bootstrap, so after a display is unplugged or
+    /// rearranged a `move` onto the new layout is validated against the old one.
+    pub fn set_region(&mut self, region: Rect) -> Result<Rect, String> {
+        let region = normalize_region(region);
+        // Planned BEFORE anything is mutated, so a refusal is a clean no-op
+        // rather than a half-applied move that has to be unwound.
         let plan = match region::plan_region(region, &self.monitors) {
             Ok(p) => p,
-            Err(_) => {
-                // Revert to the previous region, which held ≥1 monitor by
-                // invariant (bootstrap validated it; every commit re-validates).
-                // Re-plan it rather than trusting stale item state: a rejected
-                // drag may still have run the cheap move path on the way out.
-                region = self.region;
-                match region::plan_region(region, &self.monitors) {
-                    Ok(p) => p,
-                    Err(e) => fail(format_args!("Region invariant broken: {e}")),
-                }
-            }
+            Err(e) => return Err(format!("move rejected: {e}")),
         };
 
         // Canvas first: reset_video is safe HERE, unlike in obs-express —
@@ -274,9 +312,8 @@ impl Mirror {
 
         self.region = region;
         self.canvas = plan.canvas;
-        self.canvas_scale = plan.canvas_scale;
         self.monitor_set = new_set;
-        region
+        Ok(region)
     }
 }
 
@@ -324,4 +361,49 @@ fn build_scene_items(
         items.push(item);
     }
     (sources, items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rect(w: u32, h: u32) -> Rect {
+        Rect {
+            x: 10,
+            y: -20,
+            w,
+            h,
+        }
+    }
+
+    /// Every rect that leaves `normalize_region` must be one the mirror can
+    /// actually present: at least `MIN_REGION` on both axes, and even, so that
+    /// the canvas `plan_region` computes (which is masked even) is the same
+    /// size as the window the platform layer builds from the region.
+    #[test]
+    fn normalize_region_is_a_fixed_point_of_the_canvas_math() {
+        for w in [1u32, 2, 63, 64, 65, 800, 801, 1919, 3840] {
+            for h in [1u32, 2, 63, 64, 65, 600, 601, 1081, 2160] {
+                let n = normalize_region(rect(w, h));
+                assert!(n.w >= MIN_REGION && n.h >= MIN_REGION, "{w}x{h} -> {n:?}");
+                assert_eq!((n.w % 2, n.h % 2), (0, 0), "{w}x{h} -> {n:?}");
+                // What `plan_region` would make of it at canvas_scale 1.0.
+                assert_eq!(((n.w & !1).max(2), (n.h & !1).max(2)), (n.w, n.h));
+                // Idempotent: re-sending an acked region must not move it again,
+                // or Clowd's border would creep by a pixel per round trip.
+                assert_eq!(normalize_region(n), n);
+                // Position is never touched — only a display change can move
+                // the region, and that is the shell's business, not ours.
+                assert_eq!((n.x, n.y), (10, -20));
+            }
+        }
+    }
+
+    /// The floor is applied before the rounding, so it cannot be rounded away.
+    #[test]
+    fn normalize_region_floor_survives_the_even_rounding() {
+        assert_eq!(normalize_region(rect(1, 1)).w, MIN_REGION);
+        assert_eq!(normalize_region(rect(MIN_REGION + 1, 1)).w, MIN_REGION);
+        assert_eq!(normalize_region(rect(2, 2)).h, MIN_REGION);
+    }
 }

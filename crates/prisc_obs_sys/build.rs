@@ -535,6 +535,10 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         // The libobs monotonic clock (util/platform.h): input-capture event
         // timestamps must share obs_get_video_frame_time's timebase.
         .allowlist_function("os_gettime_ns")
+        // Graphics API (graphics/graphics.h): effects, texrenders and sprite
+        // draws, used by obs-share-region's obscure renderer to post-process
+        // the composited canvas inside the display draw callback.
+        .allowlist_function("gs_.*")
         .allowlist_type("obs_.*")
         // Graphics types (graphics/graphics.h): gs_init_data / gs_window and
         // the GS_* enums, needed by obs_display_create (crates/obs display.rs).

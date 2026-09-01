@@ -125,10 +125,15 @@ objc2-foundation = { version = "0.3", features = [
     # NSScreen.screens iteration (ui/appkit.rs work_areas()).
     "NSArray",
     "NSEnumerator",
-    # The performWindowDrag commit poller (ui/appkit.rs): NSTimer +
-    # NSTimeInterval (declared in NSDate.h).
+    # The command poller (ui/appkit.rs): NSTimer + NSTimeInterval (declared in
+    # NSDate.h). NSRunLoop (and NSObjCRuntime, which declares NSRunLoopMode)
+    # come with it because the timer is added to NSRunLoopCommonModes by hand —
+    # the `scheduledTimer...` convenience constructor installs into the default
+    # mode only, where event tracking would stall the poll.
     "NSTimer",
     "NSDate",
+    "NSRunLoop",
+    "NSObjCRuntime",
     # Cursor hashing / sprite encode (platform/macos.rs): TIFF / PNG NSData
     # bytes, plus the empty properties NSDictionary the encode call takes.
     "NSData",

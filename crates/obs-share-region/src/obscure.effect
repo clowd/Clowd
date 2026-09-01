@@ -1,0 +1,232 @@
+/*
+ * Shader for the obscure modes of the region mirror (see src/obscure.rs).
+ *
+ * This string is embedded into the binary with include_str! and handed to
+ * gs_effect_create at runtime; there is no runtime asset path, so it must
+ * never be edited into something that only compiles on one backend. libobs
+ * compiles it to HLSL on Windows (D3D11) and cross-compiles the same source
+ * to GLSL / Metal elsewhere, and the cross-compiler is a token rewriter, not
+ * a real HLSL front end. Practical consequences that shape the code below:
+ *
+ *   - The view-projection uniform MUST be named exactly `ViewProj`. The effect
+ *     parser special-cases that name (libobs/graphics/effect-parser.c) and
+ *     wires the matrix up automatically; any other name is just an ordinary
+ *     uniform that nobody ever sets, and every vertex collapses to the origin.
+ *   - Texture sampling is rewritten by matching `<name>.Sample(` and scanning
+ *     to the closing paren. It copes with expressions, but every sample below
+ *     passes a plain local variable anyway so there is nothing to get wrong.
+ *   - smoothstep/length/dot/clamp/abs/max/min exist verbatim in GLSL;
+ *     saturate and lerp are rewritten by the translator. Nothing else exotic
+ *     is used.
+ *   - smoothstep is only ever called with edge0 < edge1: the result is
+ *     undefined otherwise in GLSL, so the 'inside is 1' convention is built
+ *     with an explicit 1.0 - smoothstep instead of swapped edges.
+ */
+
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+/* Blur only: one gaussian step in UV units, already multiplied by the
+ * direction of this pass, i.e. (1/width, 0) horizontally and (0, 1/height)
+ * vertically. Folding the direction into the uniform is what lets a single
+ * technique serve both passes. */
+uniform float2 dir;
+
+/* Hide only: converts (uv - 0.5) into icon space. Both components divide by
+ * the same pixels-per-icon-unit scale, so the icon keeps its aspect ratio on
+ * a non-square surface; see icon_uniforms() in obscure.rs. */
+uniform float2 iconScale;
+
+/* Hide only: the size of one output pixel in icon-space units, i.e. the
+ * antialiasing radius for every signed-distance edge. */
+uniform float px;
+
+/* Scale applied by the pass that writes into the display swapchain, and 1.0 in
+ * every intermediate pass. It exists for scRGB surfaces, whose unit is 80 nits,
+ * where SDR white is obs_get_video_sdr_white_level()/80 rather than 1.0; libobs'
+ * own default.effect carries the same uniform for the same reason. See
+ * present_multiplier() in obscure.rs. */
+uniform float multiplier;
+
+sampler_state linearClamp {
+	Filter   = Linear;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+sampler_state pointClamp {
+	Filter   = Point;
+	AddressU = Clamp;
+	AddressV = Clamp;
+};
+
+struct VertInOut {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertInOut VSDefault(VertInOut v_in)
+{
+	VertInOut v_out;
+	v_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	v_out.uv  = v_in.uv;
+	return v_out;
+}
+
+/* Straight linear-sampled blit. Used for the downsample step of both modes
+ * and for the final upsample of blur. Alpha is forced to 1.0 because the
+ * mirror surface is opaque by construction and a translucent canvas must not
+ * leak the desktop behind the mirror window. The multiplier is 1.0 for the
+ * downsample and only ever differs on the final, swapchain-bound draw. */
+float4 PSLinear(VertInOut v_in) : TARGET
+{
+	float4 rgba = image.Sample(linearClamp, v_in.uv);
+	return float4(rgba.rgb * multiplier, 1.0);
+}
+
+/* Point-sampled blit. This is the entire trick behind pixelate: the
+ * downsample already averaged each block, and sampling that small texture
+ * with a nearest filter on the way back up is what gives the blocks their
+ * hard edges instead of a smooth gradient. */
+float4 PSPoint(VertInOut v_in) : TARGET
+{
+	float4 rgba = image.Sample(pointClamp, v_in.uv);
+	return float4(rgba.rgb * multiplier, 1.0);
+}
+
+/* A 9-tap gaussian collapsed into 5 taps by letting the linear sampler do the
+ * pairwise averaging for us: the two off-centre taps sit between texels at
+ * 1.3846153846 and 3.2307692308, so each one returns the weighted sum of two
+ * neighbours for the price of one fetch. The weights sum to exactly 1.0, so
+ * the pass is energy preserving and repeated iterations do not darken or
+ * brighten the image. */
+float4 PSBlur(VertInOut v_in) : TARGET
+{
+	float2 o1 = dir * 1.3846153846;
+	float2 o2 = dir * 3.2307692308;
+
+	float2 uv0 = v_in.uv;
+	float2 uv1 = uv0 + o1;
+	float2 uv2 = uv0 - o1;
+	float2 uv3 = uv0 + o2;
+	float2 uv4 = uv0 - o2;
+
+	float4 c0 = image.Sample(linearClamp, uv0);
+	float4 c1 = image.Sample(linearClamp, uv1);
+	float4 c2 = image.Sample(linearClamp, uv2);
+	float4 c3 = image.Sample(linearClamp, uv3);
+	float4 c4 = image.Sample(linearClamp, uv4);
+
+	float3 rgb = c0.rgb * 0.2270270270;
+	rgb += c1.rgb * 0.3162162162;
+	rgb += c2.rgb * 0.3162162162;
+	rgb += c3.rgb * 0.0702702703;
+	rgb += c4.rgb * 0.0702702703;
+
+	return float4(rgb, 1.0);
+}
+
+/* Signed distance to the edge of a circle of radius r centred at the origin;
+ * negative inside. */
+float sdCircle(float2 p, float r)
+{
+	return length(p) - r;
+}
+
+/* Signed distance to the segment a..b, i.e. the distance to the nearest point
+ * on it. Subtracting a radius from the result turns it into a capsule. */
+float sdSegment(float2 p, float2 a, float2 b)
+{
+	float2 pa = p - a;
+	float2 ba = b - a;
+	float t = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+	float2 q = pa - ba * t;
+	return length(q);
+}
+
+/* 1 well inside the shape, 0 well outside, smoothly antialiased across one
+ * output pixel either side of the boundary. */
+float fillMask(float d, float aa)
+{
+	return 1.0 - smoothstep(-aa, aa, d);
+}
+
+/* Opaque black with a white 'hidden' eye drawn procedurally in the middle.
+ * Procedural rather than a bitmap because there is no runtime asset path and
+ * the surface can be any size: signed distance fields stay crisp at every
+ * scale for free.
+ *
+ * The eye outline is the vesica cut out by two unit circles offset above and
+ * below the origin; intersecting two signed distance fields is a max(), and
+ * stroking rather than filling it (abs(d) < halfWidth) is what turns the lens
+ * shape into an outline. The slash is drawn twice, first as a wide black
+ * capsule that carves a visible gap through the eye and then as a narrower
+ * white one inside that gap, which is what makes it read as 'on top of' the
+ * eye rather than merged into it. */
+float4 PSHide(VertInOut v_in) : TARGET
+{
+	float2 p = (v_in.uv - 0.5) * iconScale;
+
+	/* Never let the antialiasing radius collapse to zero: on an absurdly
+	 * large icon px underflows and smoothstep would divide by zero. */
+	float aa = max(px, 0.00001);
+
+	float2 up = float2(0.0, 0.75);
+	float eye = max(sdCircle(p - up, 1.0), sdCircle(p + up, 1.0));
+	float outline = fillMask(abs(eye) - 0.05, aa);
+	float pupil = fillMask(sdCircle(p, 0.16), aa);
+
+	float2 sa = float2(-0.62, -0.62);
+	float2 sb = float2(0.62, 0.62);
+	float slash = sdSegment(p, sa, sb);
+	float cut = fillMask(slash - 0.155, aa);
+	float mark = fillMask(slash - 0.075, aa);
+
+	float3 white = float3(1.0, 1.0, 1.0);
+	float3 black = float3(0.0, 0.0, 0.0);
+
+	float3 rgb = lerp(black, white, saturate(outline + pupil));
+	rgb = lerp(rgb, black, cut);
+	rgb = lerp(rgb, white, mark);
+
+	/* Hide always draws straight into the swapchain, so the multiplier is
+	 * never 1.0 by accident here: it is what keeps the card's white at SDR
+	 * white on an scRGB surface instead of 80 nits. */
+	return float4(rgb * multiplier, 1.0);
+}
+
+technique DrawLinear
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSLinear(v_in);
+	}
+}
+
+technique DrawPoint
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSPoint(v_in);
+	}
+}
+
+technique Blur
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSBlur(v_in);
+	}
+}
+
+technique Hide
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSHide(v_in);
+	}
+}
