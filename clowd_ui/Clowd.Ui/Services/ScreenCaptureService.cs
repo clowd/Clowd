@@ -227,7 +227,8 @@ namespace Clowd.UI
                     StandardErrorEncoding = Encoding.UTF8,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture, mode, video,
+                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture,
+                                                          SettingsRoot.Current.General, mode, video,
                                                           SettingsRoot.Current.General.LastSavePath))
                     psi.ArgumentList.Add(arg);
 
@@ -462,12 +463,13 @@ namespace Clowd.UI
     /// </summary>
     public static class CaptureArguments
     {
-        public static IReadOnlyList<string> Build(string sessionDir, SettingsCapture settings, CaptureMode mode,
-                                                  bool video = false, string lastSavePath = null)
+        public static IReadOnlyList<string> Build(string sessionDir, SettingsCapture settings, SettingsGeneral general,
+                                                  CaptureMode mode, bool video = false, string lastSavePath = null)
         {
-            // the overlay accent follows the OS (or the user's pick) and is contrast-corrected for
-            // the white text drawn on it — see SettingsCapture.GetEffectiveAccentColor, issue #48.
-            var accent = settings.GetEffectiveAccentColor();
+            // the accent follows the OS (or the user's pick) and is contrast-corrected for the white
+            // text drawn on it — see SettingsGeneral.GetEffectiveAccentColor, issue #48. It lives on
+            // General rather than Capture because the recording toolbar and border wear it too.
+            var accent = general.GetEffectiveAccentColor();
 
             var args = new List<string>
             {
@@ -552,9 +554,10 @@ namespace Clowd.UI
         }
 
         public static IReadOnlyList<string> BuildStandby(string sessionRoot, SettingsCapture settings,
-                                                          SettingsHotkey hotkeys, string lastSavePath = null)
+                                                          SettingsGeneral general, SettingsHotkey hotkeys,
+                                                          string lastSavePath = null)
         {
-            var args = new List<string>(Build(sessionRoot, settings, CaptureMode.Region, false, lastSavePath));
+            var args = new List<string>(Build(sessionRoot, settings, general, CaptureMode.Region, false, lastSavePath));
             // standby creates the per-capture directory itself; throwing (rather than shipping a
             // corrupt command line) lands in the supervisor's crash handling and its fallback.
             if (args[0] != "--session-dir")

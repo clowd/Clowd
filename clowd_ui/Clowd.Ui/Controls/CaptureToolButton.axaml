@@ -1,6 +1,7 @@
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:controls="using:Clowd.UI.Controls">
+                    xmlns:controls="using:Clowd.UI.Controls"
+                    xmlns:ui="using:Clowd">
 
     <!-- Styled to match the capture overlay's button panel 1:1 (clowd_capture):
          50x50 buttons (layout.rs:29), a fixed 26px icon slot with the glyph canvas-fitted
@@ -29,7 +30,8 @@
                         <!-- fixed 26px icon slot; the IconSize viewbox centers inside it so
                              per-icon canvas padding renders exactly like the overlay's
                              26px-rasterized SVGs -->
-                        <Viewbox Grid.Row="1"
+                        <Viewbox Name="_icon"
+                                 Grid.Row="1"
                                  Width="{TemplateBinding IconSize}"
                                  Height="{TemplateBinding IconSize}"
                                  HorizontalAlignment="Center"
@@ -39,7 +41,8 @@
                                   Fill="{TemplateBinding Foreground}"
                                   Stretch="Uniform" />
                         </Viewbox>
-                        <Viewbox Grid.Row="1"
+                        <Viewbox Name="_iconAlternate"
+                                 Grid.Row="1"
                                  Width="{TemplateBinding IconSize}"
                                  Height="{TemplateBinding IconSize}"
                                  HorizontalAlignment="Center"
@@ -64,6 +67,19 @@
                             </Transitions>
                         </Rectangle.Transitions>
                     </Rectangle>
+                    <!-- Source-toggle status light. Deliberately the LAST child and outside
+                         contentGrid: it reports whether the source is being captured, which is
+                         exactly the fact a user still needs when the button has been disabled (CAM
+                         mid-recording) — so neither the :disabled dimming nor the hover veil, both
+                         of which stop at contentGrid and at this rectangle respectively, may wash
+                         it out. It is the one thing on the tile that always renders at full
+                         strength. -->
+                    <Ellipse Name="_statusLight"
+                             Width="4"
+                             Height="4"
+                             Margin="0,5,5,0"
+                             HorizontalAlignment="Right"
+                             VerticalAlignment="Top" />
                 </Grid>
             </ControlTemplate>
         </Setter>
@@ -73,6 +89,25 @@
         </Style>
         <Style Selector="^[ShowHover=True]:pointerover /template/ Rectangle#_hover">
             <Setter Property="Opacity" Value="1" />
+        </Style>
+        <!-- an off toggle reads at a glance from across the desktop: the two glyphs differ by a
+             slash alone, so the off one is also dimmed. The LABEL is not — it stays opaque so the
+             button is still identifiable as MIC/SPK/CAM while it is off. -->
+        <Style Selector="^[SourceToggle=True][ShowAlternateIcon=False] /template/ Viewbox#_icon">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <!-- …and the same fact said a second way, for the glance that does not stop to read a
+             glyph. Only source toggles carry a light; red is off, green is capturing. -->
+        <Style Selector="^ /template/ Ellipse#_statusLight">
+            <Setter Property="IsVisible" Value="False" />
+            <Setter Property="Fill" Value="#E2504A" />
+        </Style>
+        <Style Selector="^[SourceToggle=True] /template/ Ellipse#_statusLight">
+            <Setter Property="IsVisible" Value="True" />
+        </Style>
+        <Style Selector="^[SourceToggle=True][ShowAlternateIcon=True] /template/ Ellipse#_statusLight">
+            <Setter Property="Fill" Value="#3FBF62" />
         </Style>
         <Style Selector="^:disabled /template/ Grid#contentGrid">
             <Setter Property="Opacity" Value="0.5" />
@@ -91,6 +126,96 @@
                     </KeyFrame>
                 </Animation>
             </Style.Animations>
+        </Style>
+    </ControlTheme>
+
+    <!-- The device-picker tab that hangs off a toggle tile (see CaptureToolPill). It meets the
+         tile edge-to-edge — the two corners on that edge are square, so the tab reads as part of
+         the tile rather than a separate control parked next to it — and its fill runs from lighter
+         than the panel where they meet out to the panel's own gray at the far edge, so the tab
+         catches the light along the seam and falls away from it. #373737 is
+         AppStyles.IdealBackgroundBrush (the panel backdrop the tiles show through); keep the two
+         in step, and #4A4A4A the same distance above it. Direction picks both the square corners
+         and the gradient's axis, so the whole thing turns with the strip. -->
+    <ControlTheme x:Key="{x:Type controls:CaptureToolPill}" TargetType="controls:CaptureToolPill">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Margin" Value="0" />
+
+        <!-- default is Direction=Bottom: square along the top, gradient running downwards -->
+        <Setter Property="CornerRadius" Value="0,0,6,6" />
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0" Color="#4A4A4A" />
+                <GradientStop Offset="1" Color="#373737" />
+            </LinearGradientBrush>
+        </Setter>
+
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Panel>
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}" />
+                    <Path Name="_chevron"
+                          Width="7"
+                          Height="4.5"
+                          HorizontalAlignment="Center"
+                          VerticalAlignment="Center"
+                          Data="M 0,0 L 4,4 L 8,0"
+                          Stretch="Uniform"
+                          Stroke="{TemplateBinding Foreground}"
+                          StrokeJoin="Round"
+                          StrokeLineCap="Round"
+                          StrokeThickness="1.3" />
+                    <Border Name="_hover"
+                            Background="#4DFFFFFF"
+                            CornerRadius="{TemplateBinding CornerRadius}">
+                        <Border.Transitions>
+                            <Transitions>
+                                <DoubleTransition Property="Opacity" Duration="0:0:0.2" Easing="ExponentialEaseOut" />
+                            </Transitions>
+                        </Border.Transitions>
+                    </Border>
+                </Panel>
+            </ControlTemplate>
+        </Setter>
+
+        <Style Selector="^ /template/ Border#_hover">
+            <Setter Property="Opacity" Value="0" />
+        </Style>
+        <Style Selector="^:pointerover /template/ Border#_hover">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^:disabled /template/ Path#_chevron">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+
+        <!-- A vertical strip hangs its tabs off the left or right instead: same shape and same
+             gradient, rotated a quarter turn. Rotation is clockwise, so the chevron's apex swings
+             left at +90 and right at -90. -->
+        <Style Selector="^[Direction=Right]">
+            <Setter Property="CornerRadius" Value="0,6,6,0" />
+            <Setter Property="Background">
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                    <GradientStop Offset="0" Color="#4A4A4A" />
+                    <GradientStop Offset="1" Color="#373737" />
+                </LinearGradientBrush>
+            </Setter>
+        </Style>
+        <Style Selector="^[Direction=Right] /template/ Path#_chevron">
+            <Setter Property="RenderTransform" Value="rotate(-90deg)" />
+        </Style>
+
+        <Style Selector="^[Direction=Left]">
+            <Setter Property="CornerRadius" Value="6,0,0,6" />
+            <Setter Property="Background">
+                <LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,0%">
+                    <GradientStop Offset="0" Color="#4A4A4A" />
+                    <GradientStop Offset="1" Color="#373737" />
+                </LinearGradientBrush>
+            </Setter>
+        </Style>
+        <Style Selector="^[Direction=Left] /template/ Path#_chevron">
+            <Setter Property="RenderTransform" Value="rotate(90deg)" />
         </Style>
     </ControlTheme>
 

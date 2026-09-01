@@ -56,6 +56,23 @@ namespace Clowd.UI.Controls
             set => SetValue(ShowAlternateIconProperty, value);
         }
 
+        /// <summary>
+        /// Marks this button as a capture-source toggle (MIC / SPK / CAM), which is a claim about
+        /// what it MEANS rather than how it looks: its two states are on and off, and the user has
+        /// to be able to read which from across the desktop. The theme spends two things on that —
+        /// a dimmed "off" glyph (the two glyphs otherwise differ by a slash alone, though the label
+        /// stays fully opaque so the button is still identifiable) and a red/green light in the
+        /// corner. <see cref="ShowAlternateIcon"/> is the state both of them read.
+        /// </summary>
+        public static readonly StyledProperty<bool> SourceToggleProperty =
+            AvaloniaProperty.Register<CaptureToolButton, bool>(nameof(SourceToggle));
+
+        public bool SourceToggle
+        {
+            get => GetValue(SourceToggleProperty);
+            set => SetValue(SourceToggleProperty, value);
+        }
+
         public static readonly StyledProperty<bool> ShowHoverProperty =
             AvaloniaProperty.Register<CaptureToolButton, bool>(nameof(ShowHover), true);
 
@@ -137,7 +154,9 @@ namespace Clowd.UI.Controls
         {
             if (newValue)
             {
-                Background = AppStyles.AccentBackgroundBrush;
+                // the capture accent, not the app theme's: these buttons are the overlay's button
+                // panel rendered in Avalonia, and they carry white labels on the fill.
+                Background = AppStyles.CaptureAccentBackgroundBrush;
             }
             else
             {

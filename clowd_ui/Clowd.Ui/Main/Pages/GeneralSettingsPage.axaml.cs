@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Config;
+using Clowd.UI.Helpers;
 
 namespace Clowd.UI.Pages
 {
@@ -23,6 +24,80 @@ namespace Clowd.UI.Pages
             InitializeAutoStart();
             InitializeContextMenu();
             InitializePermissions();
+            InitializeAccent();
+        }
+
+        // ---- Accent color (Appearance group) ----
+
+        /// <summary>
+        /// The accent picker. Hand-wired rather than generated because the swatch shows the
+        /// EFFECTIVE color — what the overlay and the recording toolbar will actually be drawn in,
+        /// after the contrast correction — while the picker opens on, and writes back, the raw
+        /// color the user chose. That split is what makes "Maintain minimum contrast" a control
+        /// with visible consequences: ticking it moves the swatch, and unticking it hands the
+        /// original color back rather than leaving a darkened one behind.
+        /// </summary>
+        private void InitializeAccent()
+        {
+            // no readable OS accent on macOS, so there is nothing for the checkbox to follow and
+            // the color below is always the user's own (SettingsGeneral.UseSystemAccentColor
+            // reports false there regardless of what is stored).
+            SystemAccentSetting.IsVisible = AccentColors.SystemAccentSupported;
+
+            AccentSwatchRow.PointerPressed += async (s, e) =>
+            {
+                var general = SettingsRoot.Current.General;
+                // the stored color, not the corrected one: reopening the picker should land on the
+                // swatch the user last chose, wherever the correction has since moved it.
+                general.AccentColor = await NiceDialog.ShowColorPromptAsync(
+                    TopLevel.GetTopLevel(this) as Window, general.AccentColor);
+            };
+
+            // three properties feed the swatch and none of them is the swatch's own binding source,
+            // so it is refreshed by hand. Tied to the visual tree like the other groups here: the
+            // settings object outlives this page.
+            AttachedToVisualTree += (s, e) =>
+            {
+                SettingsRoot.Current.General.PropertyChanged += OnAccentSettingChanged;
+                RenderAccent();
+            };
+
+            DetachedFromVisualTree += (s, e) =>
+                SettingsRoot.Current.General.PropertyChanged -= OnAccentSettingChanged;
+
+            RenderAccent();
+        }
+
+        private void OnAccentSettingChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName is null
+                or nameof(SettingsGeneral.AccentColor)
+                or nameof(SettingsGeneral.UseSystemAccentColor)
+                or nameof(SettingsGeneral.MaintainMinimumContrast))
+                Dispatcher.UIThread.Post(RenderAccent);
+        }
+
+        private void RenderAccent()
+        {
+            var general = SettingsRoot.Current.General;
+            var effective = general.GetEffectiveAccentColor();
+
+            AccentSwatch.Background = new Avalonia.Media.SolidColorBrush(effective);
+            AccentSwatchHex.Text = $"#{effective.R:X2}{effective.G:X2}{effective.B:X2}";
+
+            // following the system leaves nothing here to pick, so the row is disabled rather than
+            // hidden — it still reports which color is in force.
+            AccentColorSetting.IsEnabled = !general.UseSystemAccentColor;
+            AccentColorSetting.Opacity = general.UseSystemAccentColor ? 0.4 : 1.0;
+
+            var corrected = effective != general.AccentColor && !general.UseSystemAccentColor;
+            AccentColorCaption.Text = general.UseSystemAccentColor
+                ? "Currently following the Windows accent color."
+                : corrected
+                    ? $"Used by the capture overlay, and the recording toolbar and border. Darkened from "
+                      + $"#{general.AccentColor.R:X2}{general.AccentColor.G:X2}{general.AccentColor.B:X2} "
+                      + "so the white labels drawn on it stay readable."
+                    : "Used by the capture overlay, and the recording toolbar and border.";
         }
 
         // ---- Permissions group (macOS only) ----

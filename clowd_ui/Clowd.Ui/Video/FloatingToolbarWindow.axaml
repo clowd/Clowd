@@ -25,81 +25,124 @@
          GIF encoding lives on the Recents page and Live Draw was removed from
          clowd-rust. The primary and trailing buttons are moded by the code-behind:
          WAIT…/START -> PAUSE/RESUME once recording, CANCEL -> FINISH once recording
-         (a rolling recording can be stopped but not discarded from the strip). -->
-    <Border Name="RootBorder" Background="{x:Static ui:AppStyles.IdealBackgroundBrush}">
-        <StackPanel Name="MainPanel" Orientation="Horizontal">
+         (a rolling recording can be stopped but not discarded from the strip).
+         MIC/SPK/CAM each get a device picker: the tile toggles the source, and a small pill
+         floating just off the strip beside it opens the list of devices, so switching
+         microphone or camera never costs a trip to the settings window. A pill only appears
+         where there is more than one device to choose between (UpdateDevicePills) — with one
+         camera, or one microphone that "default" already points at, the tile's own click is
+         the whole interaction. The pills live in
+         PillLayer rather than in the strip — the tile grid is the overlay's look, and a rail
+         welded into it would read as another kind of button — and the lane they float in is
+         reserved by RootBorder's margin, which the code-behind moves to whichever side the
+         strip's placement left free (below a horizontal row, outboard of a vertical one). -->
+    <Panel Name="RootPanel">
+        <Border Name="RootBorder"
+                Margin="0,0,0,16"
+                Background="{x:Static ui:AppStyles.IdealBackgroundBrush}">
+            <StackPanel Name="MainPanel" Orientation="Horizontal">
 
-            <!-- drag handle: click rotates the toolbar, drag past 5px moves it (state machine in
-                 code-behind; pointer events are wired as tunnel handlers there because Button's
-                 class handler marks bubbling PointerPressed as handled). Shows FPS/timer text
-                 once recording statuses arrive, or PAUSED while paused. -->
-            <controls:CaptureToolButton Name="BtnDrag"
-                                        Cursor="SizeAll"
-                                        IconPath="{StaticResource IconToolNone}"
-                                        IsDragHandle="True"
-                                        Primary="True"
-                                        ShowHover="False"
-                                        Text="DRAG ME"
-                                        ToolTip.Tip="Click to Rotate, Drag to Move" />
+                <!-- drag handle: click rotates the toolbar, drag past 5px moves it (state machine in
+                     code-behind; pointer events are wired as tunnel handlers there because Button's
+                     class handler marks bubbling PointerPressed as handled). Shows FPS/timer text
+                     once recording statuses arrive, or PAUSED while paused. The move glyph becomes
+                     the Clowd mark once recording starts (UpdateDragIcon) — the strip is then a
+                     recording indicator far more often than something you reposition — and comes
+                     back while the pointer is over it, so the affordance is still there when wanted. -->
+                <controls:CaptureToolButton Name="BtnDrag"
+                                            Cursor="SizeAll"
+                                            IconPath="{StaticResource IconToolNone}"
+                                            IsDragHandle="True"
+                                            Primary="True"
+                                            ShowHover="False"
+                                            Text="DRAG ME"
+                                            ToolTip.Tip="Click to Rotate, Drag to Move" />
 
-            <Rectangle Width="3" Height="3" />
+                <Rectangle Width="3" Height="3" />
 
-            <!-- WAIT… -> START (page swaps the text via SetPrimaryText once obs-express is
-                 initialized) -> PAUSE/RESUME while recording (SetRecordingState/SetPausedState) -->
-            <controls:CaptureToolButton Name="BtnStart"
-                                        Click="StartButtonClicked"
-                                        IconPath="{StaticResource IconPlay}"
-                                        IconSize="16"
-                                        Primary="True"
-                                        PulseBackground="True"
-                                        Text="WAIT…" />
-            <Rectangle Width="3" Height="3" />
+                <!-- WAIT… -> START (page swaps the text via SetPrimaryText once obs-express is
+                     initialized) -> PAUSE/RESUME while recording (SetRecordingState/SetPausedState).
+                     The accent fill, the pulse and the button being pressable all arrive together,
+                     the moment the recorder is up: during WAIT a press does nothing (the page gates
+                     on _initialized), so the tile stays a plain panel-gray one rather than an accent
+                     tile pulsing an invitation it cannot honor. UpdatePrimaryState owns all three
+                     and runs in the constructor, which is why no initial state is declared here. -->
+                <controls:CaptureToolButton Name="BtnStart"
+                                            Click="StartButtonClicked"
+                                            IconPath="{StaticResource IconPlay}"
+                                            IconSize="16"
+                                            Text="WAIT…" />
+                <Rectangle Width="3" Height="3" />
 
-            <!-- ShowAlternateIcon (enabled glyph) tracks the capture toggle; the Overlay slot
-                 hosts the live audio level bar (code-behind) -->
-            <controls:CaptureToolButton Name="BtnMic"
-                                        Click="MicClicked"
-                                        IconPath="{StaticResource IconMicrophoneDisabled}"
-                                        IconPathAlternate="{StaticResource IconMicrophoneEnabled}"
-                                        IconSize="20.6"
-                                        Text="MIC"
-                                        ToolTip.Tip="Capture microphone" />
+                <!-- ShowAlternateIcon (enabled glyph) tracks the capture toggle; the Overlay slot
+                     hosts the live audio level bar (code-behind). SourceToggle adds the two things
+                     that make off/on read from a distance — a dimmed off glyph and a red/green
+                     light — since the two glyphs differ only by a slash. -->
+                <controls:CaptureToolButton Name="BtnMic"
+                                            Click="MicClicked"
+                                            SourceToggle="True"
+                                            IconPath="{StaticResource IconMicrophoneDisabled}"
+                                            IconPathAlternate="{StaticResource IconMicrophoneEnabled}"
+                                            Text="MIC"
+                                            ToolTip.Tip="Capture microphone" />
 
-            <controls:CaptureToolButton Name="BtnSpeaker"
-                                        Click="SpeakerClicked"
-                                        IconPath="{StaticResource IconSpeakerDisabled}"
-                                        IconPathAlternate="{StaticResource IconSpeakerEnabled}"
-                                        IconSize="21.7"
-                                        Text="SPK"
-                                        ToolTip.Tip="Capture speakers" />
+                <controls:CaptureToolButton Name="BtnSpeaker"
+                                            Click="SpeakerClicked"
+                                            SourceToggle="True"
+                                            IconPath="{StaticResource IconSpeakerDisabled}"
+                                            IconPathAlternate="{StaticResource IconSpeakerEnabled}"
+                                            IconSize="21.7"
+                                            Text="SPK"
+                                            ToolTip.Tip="Capture speakers" />
 
-            <!-- CAM: a pipeline element, not a runtime mute like MIC/SPK — the recorder can only
-                 add or drop the webcam source while it is still waiting, so the code-behind
-                 disables this button once recording starts. No level meter (nothing to meter). -->
-            <controls:CaptureToolButton Name="BtnWebcam"
-                                        Click="WebcamClicked"
-                                        IconPath="{StaticResource IconWebcamDisabled}"
-                                        IconPathAlternate="{StaticResource IconWebcamEnabled}"
-                                        IconSize="20.6"
-                                        Text="CAM"
-                                        ToolTip.Tip="Capture webcam as a second track (position it later in the video editor)" />
+                <!-- CAM: a pipeline element, not a runtime mute like MIC/SPK — the recorder can only
+                     add or drop the webcam source while it is still waiting, so the code-behind
+                     disables this button once recording starts. No level meter (nothing to meter). -->
+                <controls:CaptureToolButton Name="BtnWebcam"
+                                            Click="WebcamClicked"
+                                            SourceToggle="True"
+                                            IconPath="{StaticResource IconWebcamDisabled}"
+                                            IconPathAlternate="{StaticResource IconWebcamEnabled}"
+                                            Text="CAM"
+                                            ToolTip.Tip="Capture webcam as a second track (position it later in the video editor)" />
 
-            <controls:CaptureToolButton Name="BtnSettings"
-                                        Click="SettingsButtonClicked"
-                                        IconPath="{StaticResource IconSettings}"
-                                        IconSize="21.7"
-                                        Text="OPTIONS"
-                                        ToolTip.Tip="Recording settings (changing one before you start reloads the recorder)" />
+                <controls:CaptureToolButton Name="BtnSettings"
+                                            Click="SettingsButtonClicked"
+                                            IconPath="{StaticResource IconSettings}"
+                                            IconSize="21.7"
+                                            Text="OPTIONS"
+                                            ToolTip.Tip="Recording settings (changing one before you start reloads the recorder)" />
 
-            <!-- CANCEL until recording starts; FINISH (stop and save) afterwards -->
-            <controls:CaptureToolButton Name="BtnCancel"
-                                        Click="CancelButtonClicked"
-                                        IconPath="{StaticResource IconClose}"
-                                        IconSize="18"
-                                        Text="CANCEL"
-                                        ToolTip.Tip="Cancel recording" />
+                <!-- CANCEL until recording starts; FINISH (stop and save) afterwards -->
+                <controls:CaptureToolButton Name="BtnCancel"
+                                            Click="CancelButtonClicked"
+                                            IconPath="{StaticResource IconClose}"
+                                            IconSize="18"
+                                            Text="CANCEL"
+                                            ToolTip.Tip="Cancel recording" />
 
-        </StackPanel>
-    </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- The pills are positioned against their tiles at layout time (PlacePill) rather than
+             laid out in a panel of their own: they have to line up with tiles that live inside a
+             different container, and the strip rotates underneath them. Nothing else is in the
+             canvas, so it never blocks a click on the strip. -->
+        <Canvas Name="PillLayer">
+            <controls:CaptureToolPill Name="BtnMicDevice"
+                                      Click="MicDeviceClicked"
+                                      ToolTip.Tip="Choose the microphone to record" />
+
+            <!-- also never shown on macOS, where ScreenCaptureKit records the whole system mix and
+                 there is no output device to pick (same reason SpeakerDeviceId is [HiddenOnMacOS]). -->
+            <controls:CaptureToolPill Name="BtnSpeakerDevice"
+                                      Click="SpeakerDeviceClicked"
+                                      ToolTip.Tip="Choose the speakers to record" />
+
+            <controls:CaptureToolPill Name="BtnWebcamDevice"
+                                      Click="WebcamDeviceClicked"
+                                      ToolTip.Tip="Choose the camera to record" />
+        </Canvas>
+    </Panel>
 
 </Window>

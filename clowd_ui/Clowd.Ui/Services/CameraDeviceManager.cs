@@ -12,14 +12,20 @@ namespace Clowd.UI
     public sealed record CameraDeviceInfo(string DeviceId, string FriendlyName);
 
     /// <summary>
-    /// Camera enumeration (same API shape as <see cref="AudioDeviceManager"/>, different
-    /// mechanism): there is no managed cross-platform camera API, so the recorder does it. We spawn
-    /// obs-express with <c>--list-cameras</c>, which prints one JSON line
-    /// <c>{"type":"cameras","cameras":[{"id":"...","name":"..."}]}</c> and exits.
+    /// Camera enumeration (same API shape as <see cref="AudioDeviceManager"/>). Asks the platform
+    /// directly — AVFoundation on macOS, DirectShow on Windows — reproducing what OBS's own
+    /// enumerators do so the ids are the ids obs-express can open. See
+    /// <see cref="AvCaptureInterop"/> and <see cref="DirectShowInterop"/> for how each id is
+    /// derived, which is the part that has to stay faithful.
     ///
-    /// The result is cached for the life of the process — enumeration costs a process spawn, and
-    /// the settings dropdown asks for it every time it opens. Call <see cref="Refresh"/> to
-    /// re-enumerate after a hot-plug.
+    /// The fallback, and what this used to do exclusively, is spawning obs-express with
+    /// <c>--list-cameras</c>: authoritative, but measured at 5.2 s on macOS — not the process
+    /// spawn (libobs is up in 0.16 s) but something inside mac-avcapture's property callback,
+    /// while an AVFoundation discovery session answers the same question in under 0.1 s. It is
+    /// kept for the case the native path cannot answer at all.
+    ///
+    /// The result is cached for the life of the process; call <see cref="Refresh"/> to
+    /// re-enumerate after a hot-plug, which is now cheap enough to do on every dropdown.
     ///
     /// Nothing here throws: a missing binary, a recorder too old to know the flag, a timeout or
     /// unparseable output all come back as an empty list (logged). A user with no cameras and a
@@ -30,9 +36,12 @@ namespace Clowd.UI
         /// <summary>The recorder flag; it prints the camera list and exits without touching OBS.</summary>
         public const string ListCamerasFlag = "--list-cameras";
 
-        // enumeration opens each capture device long enough to read its name, which a wedged
-        // driver can stall; past this the child is killed and the user gets an empty list.
-        private static readonly TimeSpan EnumerateTimeout = TimeSpan.FromSeconds(5);
+        // the fallback spawn opens each capture device long enough to read its name, which a
+        // wedged driver can stall; past this the child is killed and the user gets an empty list.
+        // Generous because the floor is already ~5 s on a healthy machine (the old 5 s budget lost
+        // that race and reported "no cameras" on a machine that had one), and nothing waits on
+        // this synchronously — the app warms the cache at startup and the pickers read it.
+        private static readonly TimeSpan EnumerateTimeout = TimeSpan.FromSeconds(20);
 
         private static readonly object _lock = new();
         private static List<CameraDeviceInfo> _cache;
@@ -76,7 +85,31 @@ namespace Clowd.UI
         /// <summary>Off-thread <see cref="Refresh"/>.</summary>
         public static Task<List<CameraDeviceInfo>> RefreshAsync() => Task.Run(() => Refresh());
 
+        /// <summary>Asks the platform, falling back to the recorder when it cannot answer.
+        /// "No cameras" is an answer and is taken at face value; only a native path that failed
+        /// outright (null) falls through, so a machine with no camera does not pay for a spawn.</summary>
         private static List<CameraDeviceInfo> Enumerate()
+        {
+            var native = EnumerateNative();
+            if (native != null)
+                return native;
+
+            return EnumerateWithRecorder();
+        }
+
+        private static List<CameraDeviceInfo> EnumerateNative()
+        {
+            if (OperatingSystem.IsMacOS())
+                return AvCaptureInterop.GetCameras();
+
+            if (OperatingSystem.IsWindows())
+                return DirectShowInterop.GetCameras();
+
+            // no third platform ships a recorder either, so this ends at the same empty list.
+            return null;
+        }
+
+        private static List<CameraDeviceInfo> EnumerateWithRecorder()
         {
             var empty = new List<CameraDeviceInfo>();
 

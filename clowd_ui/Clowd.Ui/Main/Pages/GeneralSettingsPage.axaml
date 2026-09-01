@@ -133,6 +133,52 @@
                         <TextBlock Classes="Caption"
                                    Text="Choose the light or dark appearance, or follow the Windows setting." />
                     </StackPanel>
+
+                    <!-- The accent of the capture surfaces: the overlay, and the recording toolbar
+                         and border that are styled to match it. Lives here rather than on the
+                         Capture page because it is no longer the overlay's alone. The swatch shows
+                         the EFFECTIVE color (what will actually be drawn), which is what makes the
+                         contrast checkbox below legible as a control — see the code-behind. -->
+                    <StackPanel x:Name="SystemAccentSetting" Classes="Setting">
+                        <CheckBox x:Name="SystemAccentCheck" IsChecked="{Binding UseSystemAccentColor}">
+                            <TextBlock Text="Use system accent color" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   Text="Follow the accent color chosen in Windows settings instead of picking one here." />
+                    </StackPanel>
+
+                    <StackPanel x:Name="AccentColorSetting" Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Accent color" />
+                            <StackPanel x:Name="AccentSwatchRow"
+                                        Orientation="Horizontal"
+                                        Spacing="8"
+                                        Cursor="Hand">
+                                <Border x:Name="AccentSwatchOuter"
+                                        Width="24"
+                                        Height="24"
+                                        BorderBrush="Black"
+                                        BorderThickness="1"
+                                        CornerRadius="4">
+                                    <Border x:Name="AccentSwatch"
+                                            BorderBrush="White"
+                                            BorderThickness="1"
+                                            CornerRadius="3" />
+                                </Border>
+                                <TextBlock x:Name="AccentSwatchHex" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </StackPanel>
+                        <TextBlock x:Name="AccentColorCaption" Classes="Caption" TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <CheckBox x:Name="ContrastCheck" IsChecked="{Binding MaintainMinimumContrast}">
+                            <TextBlock Text="Maintain minimum contrast" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Darken the accent color until the white labels drawn on it stay readable. Turning this off uses your color exactly as picked, which may make those labels hard to read." />
+                    </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>
             <HeaderedContentControl Header="Behavior" Theme="{StaticResource GroupBox}">

@@ -175,7 +175,7 @@ namespace Clowd.UI
                         WorkingDirectory = Path.GetDirectoryName(binary),
                     };
                     foreach (var arg in CaptureArguments.BuildStandby(PathConstants.SessionData,
-                                 SettingsRoot.Current.Capture, SettingsRoot.Current.Hotkeys,
+                                 SettingsRoot.Current.Capture, SettingsRoot.Current.General, SettingsRoot.Current.Hotkeys,
                                  SettingsRoot.Current.General.LastSavePath))
                         psi.ArgumentList.Add(arg);
 
@@ -435,7 +435,7 @@ namespace Clowd.UI
                 lock (_stdinGate)
                 {
                     var args = CaptureArguments.BuildStandby(PathConstants.SessionData,
-                        SettingsRoot.Current.Capture, SettingsRoot.Current.Hotkeys,
+                        SettingsRoot.Current.Capture, SettingsRoot.Current.General, SettingsRoot.Current.Hotkeys,
                         SettingsRoot.Current.General.LastSavePath);
                     var fingerprint = JsonSerializer.Serialize(args);
                     if (!force && fingerprint == _lastSettings)

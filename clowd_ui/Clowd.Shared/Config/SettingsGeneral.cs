@@ -190,6 +190,65 @@ namespace Clowd.Config
             set => Set(ref _theme, value);
         }
 
+        /// <summary>
+        /// Follow the OS accent color instead of <see cref="AccentColor"/>. Reads as false wherever
+        /// there is no system accent to read (macOS), so the row it disables cannot get stuck grayed
+        /// out on a platform that hides this checkbox.
+        /// </summary>
+        [DisplayName("Use system accent color")]
+        [Description("Draw Clowd's capture surfaces in the accent color chosen in Windows settings")]
+        [HiddenOnMacOS]
+        public bool UseSystemAccentColor
+        {
+            get => _useSystemAccentColor && AccentColors.SystemAccentSupported;
+            set => Set(ref _useSystemAccentColor, value);
+        }
+
+        /// <summary>
+        /// The manually chosen accent. Stored exactly as picked: <see cref="MaintainMinimumContrast"/>
+        /// can be turned off and on again, and darkening on assignment would have thrown the
+        /// original away the first time it was on. The correction happens at the point of use, in
+        /// <see cref="GetEffectiveAccentColor"/>.
+        /// </summary>
+        [DisplayName("Accent color")]
+        [Description("Color of the crosshair, selection border and primary buttons in the capture overlay, " +
+                     "and of the recording toolbar and border.")]
+        [DisabledWhen(nameof(UseSystemAccentColor))]
+        public Color AccentColor
+        {
+            get => _accentColor;
+            set => Set(ref _accentColor, value);
+        }
+
+        /// <summary>
+        /// Whether the accent is darkened until white text on it is readable (WCAG AA, 4.5:1 — see
+        /// <see cref="AccentColors.EnsureContrastWithWhite"/>). On by default and worth leaving on:
+        /// every surface this color fills carries white labels and glyphs directly on top of it, and
+        /// a light accent leaves them unreadable (issue #48). Off is for someone who wants their
+        /// exact color and has decided they can live with that.
+        /// </summary>
+        [DisplayName("Maintain minimum contrast")]
+        [Description("Darken the accent color until the white labels drawn on it stay readable. " +
+                     "Turning this off uses your color exactly as picked, which may make those labels hard to read.")]
+        public bool MaintainMinimumContrast
+        {
+            get => _maintainMinimumContrast;
+            set => Set(ref _maintainMinimumContrast, value);
+        }
+
+        /// <summary>
+        /// The color the capture surfaces are actually drawn in: the OS accent when the user asked
+        /// for it and there is one to read, otherwise their own choice — darkened for legibility
+        /// unless <see cref="MaintainMinimumContrast"/> says not to. This is what the overlay is
+        /// launched with (<c>--accent-color</c>) and what <c>AppStyles.CaptureAccentColor</c>
+        /// paints the recording toolbar and border with, so all of them agree by construction.
+        /// </summary>
+        public Color GetEffectiveAccentColor()
+        {
+            var color = (UseSystemAccentColor ? AccentColors.GetSystemAccent() : null) ?? AccentColor;
+            return MaintainMinimumContrast ? AccentColors.EnsureContrastWithWhite(color) : color;
+        }
+
         [DisplayName("Tray icon click")]
         [Description("What a single click on the tray icon does. The right-click menu always offers everything.")]
         public TrayClickAction TrayClick
@@ -206,6 +265,9 @@ namespace Clowd.Config
             set => Set(ref _confirmClose, value);
         }
 
+        private bool _useSystemAccentColor = true;
+        private Color _accentColor = AccentColors.ClowdBlue;
+        private bool _maintainMinimumContrast = true;
         private string _lastSavePath;
         private string _mainWindowBounds;
         private string _language;
