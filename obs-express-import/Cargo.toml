@@ -116,6 +116,11 @@ objc2-app-kit = { version = "0.3", features = [
     "NSButton",
     "NSTextField",
     "NSButtonCell",
+    # The prompt's type ramp: a bold heading over a smaller supporting line
+    # (NSFont), the latter wrapping inside the text column (NSLineBreakMode,
+    # which the bindings gate on NSParagraphStyle).
+    "NSFont",
+    "NSParagraphStyle",
     # Cursor sprite capture (platform/macos.rs): representation ladder + the
     # PNG encode via representationUsingType:properties:.
     "NSImageRep",

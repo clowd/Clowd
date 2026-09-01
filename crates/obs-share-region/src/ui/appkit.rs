@@ -4,8 +4,47 @@
 //! window, then press OK"), and when the user accepts, that very same NSWindow
 //! — never a replacement, because the share the meeting app has just started is
 //! bound to this window's identity — sheds its title bar, takes the region's
-//! size, and is parked entirely off screen, where libobs paints the mirrored
-//! region into its contentView.
+//! size, and is parked so that exactly ONE POINT of it overlaps the corner of a
+//! display, where libobs paints the mirrored region into its contentView.
+//!
+//! # Why one point, and not fully off screen
+//!
+//! `ui/mod.rs` describes the Windows design: park the mirror outside every
+//! display's bounds, so the region's display capture cannot photograph it. That
+//! does not work on macOS, and the failure is silent in exactly the wrong way.
+//!
+//! A window that intersects no display is still listed by ScreenCaptureKit —
+//! `SCWindow.isOnScreen` is true and the frame is reported correctly, so the
+//! meeting app's picker shows it and the user can select it — but *starting a
+//! stream on it* fails with `SCStreamErrorDomain` -3811 ("failed to start
+//! stream due to audio/video capture failure"). Measured on macOS 15 against
+//! this very binary: the same window number captures fine while the prompt is
+//! on screen and fails the instant it is parked fully off, and a bare borderless
+//! window with no Metal layer at all fails the same way, so it is the placement
+//! and not the swapchain. One point of overlap with any display is enough to
+//! make the capture work again; zero is not.
+//!
+//! So the mirror keeps the smallest toehold on a display that ScreenCaptureKit
+//! will accept, and hangs off a corner for the rest. Everything but that single
+//! point is outside every display's bounds, so there is nothing for the region's
+//! display capture to photograph and no infinite corridor, and nothing lands on
+//! top of Clowd's border or toolbar.
+//!
+//! [`parked_region`] picks the corner: one that the window can hang off without
+//! straying onto a *second* display, preferring the bottom corners, where the
+//! surviving point is least likely to be in anyone's way. It is a real point on
+//! a real screen, though — see that function for what that does and does not
+//! cost.
+//!
+//! Z-order is a separate axis and is tidiness only: the parked window is
+//! `orderBack:`ed so that its one point sits behind every other window. It
+//! keeps the NORMAL window level while doing so, deliberately — see the
+//! ordering call in [`begin_mirror_phase`] for why a lower level is worse than
+//! useless here.
+//!
+//! Hiding the window by level ALONE — dropping it below the desktop wallpaper
+//! and leaving it fully on screen — was tried and does not work: the compositor
+//! still draws it over the wallpaper.
 //!
 //! There is deliberately no other UI here at all: no border, no handles, no
 //! buttons. The Clowd shell that spawns this process draws the border around
@@ -37,8 +76,9 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{define_class, msg_send, sel, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
     NSApplication, NSApplicationDidChangeScreenParametersNotification, NSBackingStoreType,
-    NSBezelStyle, NSButton, NSButtonType, NSEvent, NSScreen, NSTextField, NSView, NSWindow,
-    NSWindowStyleMask, NSWindowWillCloseNotification,
+    NSBezelStyle, NSButton, NSButtonType, NSColor, NSEvent, NSFont, NSLineBreakMode, NSScreen,
+    NSTextField, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask,
+    NSWindowWillCloseNotification,
 };
 use objc2_foundation::{
     NSNotification, NSNotificationCenter, NSPoint, NSRect, NSRunLoop, NSRunLoopCommonModes, NSSize,
@@ -50,12 +90,22 @@ use obs_platform::region::Rect;
 use super::{AppEvents, UiConfig};
 use crate::commands::Command;
 
-/// Content size of the prompt window, in points. 3:2 and comfortably bigger
-/// than the message needs: this window's whole job in that phase is to be easy
-/// to spot in a meeting app's share picker and easy to click, not to be
-/// compact. It is nothing to do with the region — the region's size only
-/// arrives on the window when the prompt is accepted.
-const PROMPT_SIZE: NSSize = NSSize::new(420.0, 280.0);
+/// Content size of the prompt window, in points. Comfortably bigger than the
+/// message needs: this window's whole job in that phase is to be easy to spot
+/// in a meeting app's share picker and easy to click, not to be compact. It is
+/// nothing to do with the region — the region's size only arrives on the window
+/// when the prompt is accepted. The same 460x188 as the Win32 prompt
+/// (`win32.rs`'s `PROMPT_CLIENT_W`/`_H`), so the two platforms present the same
+/// dialog at the same proportions.
+const PROMPT_SIZE: NSSize = NSSize::new(460.0, 188.0);
+
+/// Prompt phase (ui/mod.rs "PROMPT PHASE"): what the window's content view
+/// shows before it becomes the share surface. Heading + supporting line rather
+/// than one sentence, because the two say different things — what this window
+/// is, and what the user has to do with it. Same wording as win32.rs.
+const PROMPT_HEADING: &str = "Share this window";
+const PROMPT_SUBTITLE: &str = "Pick this window in your meeting app's share picker, then press OK.";
+const PROMPT_OK: &str = "OK";
 
 /// How often the controller drains `ui::take_commands`.
 ///
@@ -69,14 +119,13 @@ const PROMPT_SIZE: NSSize = NSSize::new(420.0, 280.0);
 /// frame-ish, which is nothing next to the mirror itself.
 const COMMAND_POLL_SECS: f64 = 0.03;
 
-/// How far past the right-hand edge of every display the parked mirror sits,
-/// in capture units (points).
+/// How much of the parked window stays on a display, in capture units (points).
 ///
-/// Any positive value would do — the window only has to miss every display —
-/// but a generous one means no rounding, no HiDPI backing-scale surprise and no
-/// display hot-plug race can leave a sliver of the mirror visible on a real
-/// screen, which would immediately show up as the capture photographing itself.
-const OFFSCREEN_MARGIN: i32 = 512;
+/// One, because ScreenCaptureKit demands a non-empty intersection with some
+/// display and this is the smallest one there is (see the module docs). Every
+/// other point of the window is outside every display, which is what keeps the
+/// mirror out of the region's display capture.
+const TOEHOLD: i32 = 1;
 
 // ---------------------------------------------------------------------------
 // Process-global state
@@ -190,41 +239,165 @@ fn cocoa_to_capture(mtm: MainThreadMarker, r: NSRect) -> Rect {
     }
 }
 
-/// Where the mirror lives once the prompt is accepted: `region`'s size, at an
-/// origin past the right-hand edge of every display.
+/// Which corner of a display the parked window hangs off, i.e. which single
+/// corner point of the display the window keeps covered.
 ///
-/// To the *right* rather than above or below because the desktop is a
-/// horizontal strip of displays in every normal arrangement, so one number —
-/// the largest right edge — puts the window clear of all of them regardless of
-/// how they are stacked vertically. The y is the union's top edge, which is
-/// arbitrary but keeps the window in a predictable place for anyone inspecting
-/// it with a window-list tool.
+/// Named in capture space, so "bottom" is the larger y — the same way a user
+/// would describe the screen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Corner {
+    BottomRight,
+    BottomLeft,
+    TopRight,
+    TopLeft,
+}
+
+/// Corner preference order.
+///
+/// Bottom corners first because the one point that stays visible is then at the
+/// bottom of the screen, out of the way of the menu bar and of most window
+/// chrome, and — on the usual bottom-anchored Dock — likely to be behind the
+/// Dock anyway. Right before left on each row for no stronger reason than that
+/// the bottom-right of the primary display is the emptiest corner of a typical
+/// desktop.
+const CORNER_ORDER: [Corner; 4] = [
+    Corner::BottomRight,
+    Corner::BottomLeft,
+    Corner::TopRight,
+    Corner::TopLeft,
+];
+
+/// Top-left origin of a `w` by `h` window hung off `corner` of display `m`,
+/// overlapping it by exactly [`TOEHOLD`] on both axes.
+///
+/// Each case pins the window's own opposite corner onto the display's corner
+/// point and lets the rest hang outward. Saturating throughout: a display at
+/// the far edge of i32 plus a large region must clamp rather than wrap into the
+/// middle of the desktop, which is the one arithmetic slip here that would put
+/// live mirrored content in the middle of a screen.
+fn corner_origin(corner: Corner, m: Rect, w: u32, h: u32) -> (i32, i32) {
+    let right = m.x.saturating_add(m.w as i32);
+    let bottom = m.y.saturating_add(m.h as i32);
+    // The window's leading edge when it hangs off a LEFT/TOP corner: its far
+    // edge lands TOEHOLD past the display's near edge.
+    let hang_left = m.x.saturating_add(TOEHOLD).saturating_sub(w as i32);
+    let hang_up = m.y.saturating_add(TOEHOLD).saturating_sub(h as i32);
+    // ...and when it hangs off a RIGHT/BOTTOM corner: its near edge starts
+    // TOEHOLD short of the display's far edge.
+    let hang_right = right.saturating_sub(TOEHOLD);
+    let hang_down = bottom.saturating_sub(TOEHOLD);
+
+    match corner {
+        Corner::BottomRight => (hang_right, hang_down),
+        Corner::BottomLeft => (hang_left, hang_down),
+        Corner::TopRight => (hang_right, hang_up),
+        Corner::TopLeft => (hang_left, hang_up),
+    }
+}
+
+/// Capture-space rectangle overlap, exclusive on the far edges (two displays
+/// laid edge to edge do not overlap). i64 throughout: virtual-desktop
+/// coordinates are signed and a span can leave i32.
+fn rects_overlap(a: Rect, b: Rect) -> bool {
+    let (ax2, ay2) = (a.x as i64 + a.w as i64, a.y as i64 + a.h as i64);
+    let (bx2, by2) = (b.x as i64 + b.w as i64, b.y as i64 + b.h as i64);
+    (a.x as i64) < bx2 && (b.x as i64) < ax2 && (a.y as i64) < by2 && (b.y as i64) < ay2
+}
+
+/// Where the mirror lives once the prompt is accepted: `region`'s size, hung
+/// off a display corner so that exactly one point of it is on a display and
+/// everything else is outside every display's bounds.
+///
+/// Choosing the corner is the whole job, because a corner is only usable if the
+/// window can hang off it into EMPTY SPACE. On a two-monitor desktop the inner
+/// corners are not empty at all — hanging off the right edge of the left
+/// monitor drops the mirror straight onto the right monitor, fully visible and
+/// squarely inside the other display's capture. So every (corner, display) pair
+/// is tried in [`CORNER_ORDER`] and the first one whose window touches no OTHER
+/// display wins.
+///
+/// If no pair is clean — a small desktop fully enclosed by a large region, say,
+/// or displays arranged in a ring — the pair that spills onto the fewest other
+/// displays is used. That is a deliberate ordering of harms: the toehold is
+/// what keeps the share alive at all, so it is never given up, while a spill is
+/// a visible mirror on some other screen. Ties keep [`CORNER_ORDER`], so the
+/// choice stays deterministic and a `move` cannot make the window wander
+/// between equally-bad corners.
+///
+/// What this costs, and it is not nothing: the surviving point IS on a real
+/// screen. The user can see it, and if their region happens to include that
+/// exact corner point the mirror will photograph it — a one-point-square
+/// infinite corridor in the very corner of the shared image. Bottom corners are
+/// preferred partly to make that as unlikely and as unobtrusive as possible.
 ///
 /// Recomputed on every placement rather than cached, because displays are
-/// hot-pluggable: an external monitor arriving to the right of the built-in one
-/// would otherwise extend the desktop over the parked mirror and re-introduce
-/// exactly the recursion the parking exists to prevent.
+/// hot-pluggable: the display this corner belongs to can be unplugged, and a
+/// stale origin then points into empty space — the one state in which the
+/// capture stops working entirely.
 fn parked_region(mtm: MainThreadMarker, region: Rect) -> Rect {
-    let screens = NSScreen::screens(mtm);
-    let mut right: Option<i32> = None;
-    let mut top: Option<i32> = None;
-    for screen in screens.iter() {
-        // `frame`, not `visibleFrame`: the menu bar and the Dock are still
-        // screen, and a window hiding under either is still on a display the
-        // capture can see.
-        let r = cocoa_to_capture(mtm, screen.frame());
-        let edge = r.x.saturating_add(r.w as i32);
-        right = Some(right.map_or(edge, |v| v.max(edge)));
-        top = Some(top.map_or(r.y, |v| v.min(r.y)));
+    // `frame`, not `visibleFrame`: the menu bar and the Dock are still screen,
+    // and a window under either is still on a display the capture can see. It
+    // is the display's real bounds that ScreenCaptureKit cares about.
+    let screens: Vec<Rect> = NSScreen::screens(mtm)
+        .iter()
+        .map(|s| cocoa_to_capture(mtm, s.frame()))
+        .collect();
+    choose_parked_rect(&screens, region)
+}
+
+/// The corner search itself, split out from [`parked_region`] so it can be
+/// tested against arbitrary display layouts — fetching the real ones needs a
+/// main thread and a window server, and the layouts worth testing (three in a
+/// row, negative origins, a display boxed in below) are not ones a test machine
+/// has.
+///
+/// Only `region`'s SIZE is read; the parked window's position has nothing to do
+/// with where the mirrored region is.
+fn choose_parked_rect(screens: &[Rect], region: Rect) -> Rect {
+    // No screens at all (headless CI, every display asleep): nothing can be
+    // captured in that state anyway, and the origin is still well defined.
+    if screens.is_empty() {
+        return Rect {
+            x: 0,
+            y: 0,
+            w: region.w,
+            h: region.h,
+        };
     }
-    Rect {
-        // No screens at all (headless CI, every display asleep): 0 + margin is
-        // still a well-defined place to put a window nobody can see.
-        x: right.unwrap_or(0).saturating_add(OFFSCREEN_MARGIN),
-        y: top.unwrap_or(0),
+
+    let mut best: Option<(usize, Rect)> = None;
+    for corner in CORNER_ORDER {
+        for (i, m) in screens.iter().enumerate() {
+            let (x, y) = corner_origin(corner, *m, region.w, region.h);
+            let candidate = Rect {
+                x,
+                y,
+                w: region.w,
+                h: region.h,
+            };
+            let spills = screens
+                .iter()
+                .enumerate()
+                .filter(|(j, other)| *j != i && rects_overlap(candidate, **other))
+                .count();
+            if spills == 0 {
+                return candidate;
+            }
+            // Strictly less-than, so the first candidate at a given score wins
+            // and CORNER_ORDER breaks every tie.
+            if best.is_none_or(|(seen, _)| spills < seen) {
+                best = Some((spills, candidate));
+            }
+        }
+    }
+    // `best` is populated by the first iteration above; the unwrap_or is for
+    // the compiler, not for a reachable state.
+    best.map(|(_, r)| r).unwrap_or(Rect {
+        x: 0,
+        y: 0,
         w: region.w,
         h: region.h,
-    }
+    })
 }
 
 /// Places the window at [`parked_region`] for `region`, sized to it.
@@ -236,8 +409,8 @@ fn parked_region(mtm: MainThreadMarker, region: Rect) -> Rect {
 /// the window's own conversion keeps that true even if the style ever changes.
 fn park(window: &NSWindow, mtm: MainThreadMarker, region: Rect) {
     let content = capture_to_cocoa(mtm, parked_region(mtm, region));
-    // display:false — there is no display to draw on, and the swapchain
-    // presents on the graphics thread regardless.
+    // display:false — one point of this window is on screen and it is behind
+    // everything, and the swapchain presents on the graphics thread regardless.
     window.setFrame_display(window.frameRectForContentRect(content), false);
 }
 
@@ -257,21 +430,23 @@ define_class!(
         /// Returns the proposed rect verbatim, opting this window out of
         /// AppKit's automatic frame constraining.
         ///
-        /// This is the single most load-bearing line in the file. AppKit's
-        /// default implementation shoves any window whose frame falls outside
-        /// the visible frame of a screen back onto that screen, and parking the
-        /// mirror off screen is precisely a request to place a window nowhere
-        /// near one. Without this override the `setFrame:` in [`park`] would be
-        /// silently rewritten to an on-screen rect, and the mirror would
-        /// reappear on a display — where the region's display capture would
-        /// photograph it, the mirror would show the capture of itself, and the
-        /// user would get the infinite corridor the whole off-screen design
-        /// exists to avoid. (Measured before the rewrite, when the same
-        /// override was protecting an on-screen window: `--region
-        /// 756,0,756,491` on a 1512x982 display had every window dragged to
-        /// y=33, the first pixel below the menu bar, instead of the modeled
-        /// y=-50/-4. AppKit does this to borderless windows too, not only
-        /// titled ones.)
+        /// AppKit's default implementation shoves any window whose frame falls
+        /// outside the VISIBLE frame of a screen — the screen minus the menu
+        /// bar and the Dock — back inside it. This is the single most
+        /// load-bearing line in the file, because [`parked_region`] is
+        /// precisely a request to put all but one point of a window outside
+        /// every display. Without the override AppKit would rewrite [`park`]'s
+        /// `setFrame:` into a fully on-screen rect, and a region-sized window
+        /// full of live mirrored content would appear in the middle of a
+        /// display — where the region's capture photographs it, and the user
+        /// gets the infinite corridor the parking exists to avoid. (Measured:
+        /// `--region 756,0,756,491` on a 1512x982 display had every window
+        /// dragged to y=33, the first pixel below the menu bar, instead of the
+        /// modelled origin. AppKit does this to borderless windows too, not
+        /// only titled ones.)
+        ///
+        /// The prompt phase is unaffected: `center()` puts that window well
+        /// inside a screen, so there is nothing to constrain.
         ///
         /// The prompt phase is unaffected: `center()` puts that window well
         /// inside a screen, so there is nothing to constrain.
@@ -388,29 +563,47 @@ define_class!(
 /// Builds the prompt phase's controls into the window's content view and
 /// returns them (the caller stores them as the phase flag).
 ///
-/// Plain AppKit controls rather than something hand-drawn: this is a window
-/// the user is about to hunt for in a picker, so it should look like an
-/// ordinary dialog, and the button gets focus ring, Return-key activation and
-/// accessibility for free.
+/// The shape is the Win32 prompt's (`win32.rs`, "prompt phase"): a heading and
+/// a supporting line stacked top-left, and the action button alone in the
+/// bottom-right corner. What is deliberately NOT copied is that dialog's
+/// hand-painted surface — no Clowd palette, no footer strip, no owner-drawn
+/// button. Windows had to paint those because its default dialog chrome is not
+/// dark; here the system's own appearance is already the right answer, and
+/// stock controls track the user's theme and accent colour for free.
+///
+/// Plain AppKit controls rather than anything hand-drawn for the same reason:
+/// this is a window the user is about to hunt for in a picker, so it should
+/// look like an ordinary dialog, and the button gets its focus ring,
+/// Return-key activation and accessibility from AppKit.
 fn install_prompt(
     mtm: MainThreadMarker,
     content: &NSView,
     controller: &Controller,
 ) -> Vec<Retained<NSView>> {
-    const PAD: f64 = 12.0;
-    const GAP: f64 = 14.0;
-    const LABEL_H: f64 = 34.0;
-    const BTN_W: f64 = 110.0;
-    const BTN_H: f64 = 32.0;
+    /// Text column inset, and how far below the top of the content view the
+    /// heading starts.
+    const PAD_X: f64 = 24.0;
+    const PAD_TOP: f64 = 26.0;
+    /// Gap between the heading and the supporting line.
+    const TEXT_GAP: f64 = 8.0;
+    const HEADING_PT: f64 = 19.0;
+    const SUBTITLE_PT: f64 = 13.0;
+    /// The OK button's inset from the bottom-right corner, and the width it is
+    /// grown to if its title alone would make it narrower.
+    const BTN_MARGIN: f64 = 20.0;
+    const BTN_MIN_W: f64 = 96.0;
 
     let bounds = content.bounds();
     let (w, h) = (bounds.size.width, bounds.size.height);
 
+    let mut out: Vec<Retained<NSView>> = Vec::new();
+
+    // -- OK, bottom right ---------------------------------------------------
     let target: &AnyObject = controller;
     let button = PromptButton::alloc(mtm).set_ivars(());
     let button: Retained<PromptButton> =
         unsafe { msg_send![super(button), initWithFrame: NSRect::ZERO] };
-    button.setTitle(&NSString::from_str("OK"));
+    button.setTitle(&NSString::from_str(PROMPT_OK));
     button.setBezelStyle(NSBezelStyle::Push);
     button.setButtonType(NSButtonType::MomentaryPushIn);
     unsafe {
@@ -420,51 +613,68 @@ fn install_prompt(
     // Return activates it, and AppKit paints it as the default button.
     button.setKeyEquivalent(&NSString::from_str("\r"));
 
-    // The content size is a constant now ([`PROMPT_SIZE`]), so the two
-    // degradation steps below are defensive rather than load-bearing: they cost
-    // a couple of comparisons and they mean shrinking that constant can never
-    // push a control outside the client area. Drop the label first, then let
-    // the button take the whole view.
-    let btn_w = BTN_W.min(w - 2.0 * PAD).max(0.0);
-    let btn_h = BTN_H.min(h - 2.0 * PAD).max(0.0);
-    let room_for_label = w >= 220.0 && h >= LABEL_H + GAP + BTN_H + 2.0 * PAD;
-
-    let mut out: Vec<Retained<NSView>> = Vec::new();
-
-    if btn_w < 40.0 || btn_h < 20.0 {
-        button.setFrame(bounds);
-    } else if room_for_label {
-        let block_h = LABEL_H + GAP + btn_h;
-        let block_bottom = ((h - block_h) / 2.0).max(PAD);
-        button.setFrame(NSRect::new(
-            NSPoint::new((w - btn_w) / 2.0, block_bottom),
-            NSSize::new(btn_w, btn_h),
-        ));
-        let label = NSTextField::labelWithString(
-            &NSString::from_str("Share this window, then press OK"),
-            mtm,
-        );
-        // Centered, wrapping across the full width.
-        label.setAlignment(objc2_app_kit::NSTextAlignment::Center);
-        label.setFrame(NSRect::new(
-            NSPoint::new(PAD, block_bottom + btn_h + GAP),
-            NSSize::new(w - 2.0 * PAD, LABEL_H),
-        ));
-        content.addSubview(&label);
-        // NSTextField : NSControl : NSView
-        out.push(Retained::into_super(Retained::into_super(label)));
-    } else {
-        button.setFrame(NSRect::new(
-            NSPoint::new((w - btn_w) / 2.0, (h - btn_h) / 2.0),
-            NSSize::new(btn_w, btn_h),
-        ));
-    }
-
+    // The height comes from the button itself rather than from a constant: the
+    // Push bezel is drawn at one natural height per control size, and forcing a
+    // taller frame on it stretches the artwork instead of making a bigger
+    // button. Only the width is ours, and only as a floor.
+    button.sizeToFit();
+    let natural = button.frame().size;
+    let btn_w = natural.width.max(BTN_MIN_W).min(w);
+    let btn_h = natural.height.min(h);
+    button.setFrame(NSRect::new(
+        NSPoint::new((w - BTN_MARGIN - btn_w).max(0.0), BTN_MARGIN.min(h - btn_h)),
+        NSSize::new(btn_w, btn_h),
+    ));
     content.addSubview(&button);
     // PromptButton : NSButton : NSControl : NSView
     out.push(Retained::into_super(Retained::into_super(
         Retained::into_super(button),
     )));
+
+    // -- heading + supporting line, top left --------------------------------
+    //
+    // Both are wrapping labels measured at the column width, and each is placed
+    // under whatever height it actually took, so a longer string (or a user
+    // running a larger system font) pushes the next line down instead of
+    // overlapping it.
+    let text_w = (w - 2.0 * PAD_X).max(1.0);
+    let mut add_label = |text: &str, font: Retained<NSFont>, color: Retained<NSColor>, top: f64| {
+        let label = NSTextField::labelWithString(&NSString::from_str(text), mtm);
+        label.setFont(Some(&font));
+        label.setTextColor(Some(&color));
+        label.setUsesSingleLineMode(false);
+        label.setLineBreakMode(NSLineBreakMode::ByWordWrapping);
+        label.setPreferredMaxLayoutWidth(text_w);
+        // A finite bound rather than f64::MAX: this only has to be taller than
+        // any wrap of two short strings, and infinities in AppKit geometry are
+        // a reliable way to get NaN back out.
+        let text_h = label
+            .sizeThatFits(NSSize::new(text_w, 10_000.0))
+            .height
+            .ceil();
+        label.setFrame(NSRect::new(
+            NSPoint::new(PAD_X, top - text_h),
+            NSSize::new(text_w, text_h),
+        ));
+        content.addSubview(&label);
+        // NSTextField : NSControl : NSView
+        out.push(Retained::into_super(Retained::into_super(label)));
+        top - text_h
+    };
+
+    let after_heading = add_label(
+        PROMPT_HEADING,
+        NSFont::boldSystemFontOfSize(HEADING_PT),
+        NSColor::labelColor(),
+        h - PAD_TOP,
+    );
+    add_label(
+        PROMPT_SUBTITLE,
+        NSFont::systemFontOfSize(SUBTITLE_PT),
+        NSColor::secondaryLabelColor(),
+        after_heading - TEXT_GAP,
+    );
+
     out
 }
 
@@ -513,16 +723,44 @@ fn begin_mirror_phase() {
         return;
     };
 
-    // Park it: the region's size, at an origin past every display (see
-    // [`parked_region`] and the `constrainFrameRect:toScreen:` override, which
-    // is what makes an off-screen placement stick at all).
+    // Send it to the back, BEFORE the geometry below: between this call and
+    // `park` the window is still at the prompt's centred origin, and a
+    // region-sized window there in front of everything is a full-size flash of
+    // live mirrored content over whatever the user is looking at — including,
+    // if the region is where the window is, one frame of the infinite corridor.
+    //
+    // Ordering, NOT a lower window level, even though the point of both would
+    // be "keep the one on-screen point out of the way". Any level below normal
+    // drops the window out of every
+    // `SCShareableContent.excludingDesktopWindows(true, …)` enumeration —
+    // measured: identical window, listed at level 0 and absent at level -20 —
+    // and that is how share pickers list windows. It costs nothing today (the
+    // user picks this window during the prompt phase, while it is still a
+    // normal front window, and the meeting app's stream stays bound to the
+    // window id afterwards) but it would silently break any app that
+    // re-enumerates mid-share, in exchange for hiding a single point.
+    window.orderBack(None);
+
+    // Follow the user across Spaces. A window belongs to the Space it was
+    // opened on, and ScreenCaptureKit's on-screen window list only contains the
+    // ACTIVE Space's windows — so without this, switching Spaces would drop the
+    // mirror out of the capture and freeze the meeting app's share until the
+    // user switched back. `Stationary` additionally keeps it from being dragged
+    // around by the Spaces-switch animation.
+    window.setCollectionBehavior(
+        NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::Stationary,
+    );
+
+    // Park it: the region's size, hung off a display corner with one point
+    // still on that display (see [`parked_region`] and the
+    // `constrainFrameRect:toScreen:` override, which is what makes such a
+    // placement stick at all).
     //
     // Note what is NOT done here, and must never be: the window is not
-    // miniaturized and not ordered out. Either would take it out of the window
-    // server's compositing, its backing surface would stop being updated, and
-    // the meeting app's share would freeze on the last frame it saw. The window
-    // stays "visible" in AppKit's sense for the rest of the process — it simply
-    // sits where no display shows it.
+    // miniaturized, not ordered out, and not moved off screen ENTIRELY. Any of
+    // those would take it out of the window server's compositing or out of
+    // ScreenCaptureKit's reach, and the meeting app's share would freeze on the
+    // last frame it saw — or, for the fully-off-screen case, never start.
     park(&window, mtm, region);
 
     // Content view last, and only now: the swapchain obs creates is sized from
@@ -635,18 +873,22 @@ fn apply_move(request: Rect) {
 /// Re-parks the mirror, which is what makes [`parked_region`]'s "recomputed on
 /// every placement" promise actually hold. Its only other callers are the OK
 /// transition and a `move`, so without this the parked origin would sit stale
-/// from one `move` to the next — and an external display arriving to the right
-/// of the built-in one extends the desktop straight over the parked window,
-/// putting a borderless, region-sized window full of live mirrored content on a
-/// real screen. Over the captured region that is the infinite corridor the
-/// parking exists to prevent; anywhere else it is still this process drawing on
-/// top of Clowd's own border and toolbar. The generous [`OFFSCREEN_MARGIN`] only
-/// buys headroom, and `constrainFrameRect:toScreen:` returning the rect verbatim
-/// means AppKit will not pull the window back on its own either.
+/// from one `move` to the next — and the corner it was chosen for is exactly
+/// what a display change takes away. Both failure directions are real: the
+/// display that corner belongs to can be unplugged, leaving the window over no
+/// display at all, which on this platform is a window a meeting app cannot
+/// capture (module docs) — the share goes dead and neither we nor the shell is
+/// told; or a new display can arrive in the empty space the window was hanging
+/// into, which puts a region-sized window of live mirrored content squarely on
+/// a real screen. `constrainFrameRect:toScreen:` returning the rect verbatim
+/// means AppKit will not pull it back on its own either.
 ///
-/// Does nothing during the prompt phase: that window is meant to be on screen,
-/// where the user can find and click it. (win32.rs handles the equivalent
-/// WM_DISPLAYCHANGE.)
+/// The window LEVEL needs no maintenance here — it is a property of the window,
+/// not of the screen layout, and survives any reconfiguration.
+///
+/// Does nothing during the prompt phase: that window is meant to be visible and
+/// wherever AppKit centred it, where the user can find and click it. (win32.rs
+/// handles the equivalent WM_DISPLAYCHANGE.)
 fn on_screen_params_changed() {
     // Read out, then act outside the borrow: `setFrame:` posts notifications
     // synchronously and can re-enter a handler that borrows APP, exactly as
@@ -787,4 +1029,168 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
     // exit paths go through events.quit()); treat a stop as a clean quit and
     // keep the "never shut libobs down" invariant via exit_process.
     obs_platform::exit_process(0)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+/// Corner selection is pure geometry, so it is tested without AppKit: the only
+/// thing `parked_region` adds on top of [`choose_parked_rect`] is fetching the
+/// screen rects, which needs a main thread and a window server.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rect(x: i32, y: i32, w: u32, h: u32) -> Rect {
+        Rect { x, y, w, h }
+    }
+
+    /// Points of `r` that lie inside `m`. The parked window must contribute
+    /// exactly one, on exactly one display.
+    fn overlap_area(r: Rect, m: Rect) -> i64 {
+        let x = (r.x.max(m.x) as i64)..((r.x as i64 + r.w as i64).min(m.x as i64 + m.w as i64));
+        let y = (r.y.max(m.y) as i64)..((r.y as i64 + r.h as i64).min(m.y as i64 + m.h as i64));
+        let (w, h) = (
+            (x.end - x.start).max(0),
+            (y.end - y.start).max(0),
+        );
+        w * h
+    }
+
+    /// The defining property, over a spread of layouts: the parked window
+    /// touches the desktop in exactly one point, on exactly one display.
+    #[test]
+    fn parked_window_keeps_exactly_a_one_point_toehold() {
+        let layouts: [&[Rect]; 5] = [
+            // Single laptop display.
+            &[rect(0, 0, 1512, 982)],
+            // Laptop with an external monitor to the right, tops aligned.
+            &[rect(0, 0, 1512, 982), rect(1512, 0, 1920, 1080)],
+            // External to the LEFT and slightly higher (negative origins).
+            &[rect(0, 0, 1512, 982), rect(-1920, -200, 1920, 1080)],
+            // Stacked vertically.
+            &[rect(0, 0, 1512, 982), rect(0, -1080, 1920, 1080)],
+            // Three in a row.
+            &[
+                rect(-1920, 0, 1920, 1080),
+                rect(0, 0, 1512, 982),
+                rect(1512, 0, 1920, 1080),
+            ],
+        ];
+        for screens in layouts {
+            for size in [(64u32, 64u32), (756, 490), (1512, 982), (3840, 2160)] {
+                let region = rect(0, 0, size.0, size.1);
+                let parked = choose_parked_rect(screens, region);
+                assert_eq!(
+                    (parked.w, parked.h),
+                    size,
+                    "parking must not resize the window"
+                );
+                let total: i64 = screens.iter().map(|m| overlap_area(parked, *m)).sum();
+                assert_eq!(
+                    total, 1,
+                    "layout {screens:?} region {size:?} -> {parked:?} covers {total} points"
+                );
+            }
+        }
+    }
+
+    /// On a plain single display the preferred corner is the bottom-right one,
+    /// with the window hanging down and to the right.
+    #[test]
+    fn single_display_prefers_the_bottom_right_corner() {
+        let screens = [rect(0, 0, 1512, 982)];
+        let parked = choose_parked_rect(&screens, rect(0, 0, 756, 490));
+        assert_eq!(parked, rect(1511, 981, 756, 490));
+    }
+
+    /// The inner corners of a side-by-side pair are unusable — hanging off the
+    /// left display's right edge drops the window onto the right display — so
+    /// the chosen corner must be an outer one, and the window must not land on
+    /// the second screen.
+    #[test]
+    fn side_by_side_displays_avoid_the_inner_corner() {
+        let screens = [rect(0, 0, 1512, 982), rect(1512, 0, 1920, 1080)];
+        let parked = choose_parked_rect(&screens, rect(0, 0, 756, 490));
+        // Bottom-right of the RIGHT-hand display is the first clean candidate.
+        assert_eq!(parked, rect(3431, 1079, 756, 490));
+        assert_eq!(overlap_area(parked, screens[1]), 1);
+        assert_eq!(overlap_area(parked, screens[0]), 0);
+    }
+
+    /// Each corner hangs the window the right way: the window's own opposite
+    /// corner lands on the display's corner point, and the rest goes outward.
+    /// This is what the search relies on, so it is checked per-corner rather
+    /// than only through whichever corner a layout happens to select.
+    #[test]
+    fn every_corner_hangs_outward_from_its_display_corner() {
+        let m = rect(100, 200, 1000, 800); // right = 1100, bottom = 1000
+        let (w, h) = (500u32, 400u32);
+        for (corner, expected) in [
+            // Near edge starts one point short of the far edge; hangs +x/+y.
+            (Corner::BottomRight, rect(1099, 999, w, h)),
+            // Far edge lands one point past the near edge; hangs -x, +y.
+            (Corner::BottomLeft, rect(-399, 999, w, h)),
+            (Corner::TopRight, rect(1099, -199, w, h)),
+            (Corner::TopLeft, rect(-399, -199, w, h)),
+        ] {
+            let (x, y) = corner_origin(corner, m, w, h);
+            assert_eq!(rect(x, y, w, h), expected, "{corner:?}");
+            // ...and every one of them keeps exactly the one-point toehold.
+            assert_eq!(overlap_area(rect(x, y, w, h), m), 1, "{corner:?}");
+        }
+    }
+
+    /// Bottom corners are preferred over top ones when both are clean.
+    #[test]
+    fn bottom_corners_win_over_top_corners() {
+        // One display, nothing around it: all four corners are clean, so the
+        // preference order alone decides, and it must land on a bottom one.
+        let screens = [rect(0, 0, 1512, 982)];
+        let parked = choose_parked_rect(&screens, rect(0, 0, 400, 300));
+        assert!(
+            parked.y > 0 && parked.y + parked.h as i32 > 982,
+            "expected a bottom corner, got {parked:?}"
+        );
+    }
+
+    /// A region so large that it swallows the whole desktop from every corner
+    /// cannot avoid spilling. The toehold is still never given up — that is
+    /// what keeps the share alive — and the choice stays deterministic.
+    #[test]
+    fn an_unavoidable_spill_still_keeps_the_toehold() {
+        // Two small displays close together, and a region far larger than the
+        // gap between them: every corner of either one hangs over the other.
+        let screens = [rect(0, 0, 200, 200), rect(300, 0, 200, 200)];
+        let parked = choose_parked_rect(&screens, rect(0, 0, 4000, 4000));
+        let touched: Vec<i64> = screens.iter().map(|m| overlap_area(parked, *m)).collect();
+        assert!(
+            touched.contains(&1),
+            "one display must still be touched by exactly one point: {touched:?}"
+        );
+        assert_eq!(choose_parked_rect(&screens, rect(0, 0, 4000, 4000)), parked);
+    }
+
+    /// No displays at all is not a crash, and the size still survives.
+    #[test]
+    fn no_displays_still_yields_a_defined_rect() {
+        let parked = choose_parked_rect(&[], rect(7, 9, 640, 480));
+        assert_eq!((parked.w, parked.h), (640, 480));
+    }
+
+    /// Parking is a pure function of (screens, size): re-parking the same
+    /// region must not walk the window from one corner to another, or a burst
+    /// of `move`s would make it wander.
+    #[test]
+    fn parking_is_deterministic() {
+        let screens = [rect(0, 0, 1512, 982), rect(1512, 0, 1920, 1080)];
+        let region = rect(100, 200, 756, 490);
+        let first = choose_parked_rect(&screens, region);
+        for _ in 0..8 {
+            assert_eq!(choose_parked_rect(&screens, region), first);
+        }
+        // ...and the region's own origin is irrelevant to where it parks.
+        assert_eq!(choose_parked_rect(&screens, rect(-50, 0, 756, 490)), first);
+    }
 }

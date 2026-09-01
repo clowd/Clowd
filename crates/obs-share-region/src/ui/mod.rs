@@ -25,24 +25,38 @@
 //! platform layer instead mutates the window in place: it strips the prompt
 //! controls, drops the title bar and border (a window share captures the whole
 //! window frame, so a caption would otherwise appear in the shared output),
-//! resizes the client area to exactly the region's size, MOVES THE WINDOW OFF
-//! SCREEN, and hands the client area to [`AppEvents::mirror_ready`]. From then
-//! on the window is only ever resized and moved in response to `move` commands
-//! arriving on stdin; nothing the user does touches it.
+//! resizes the client area to exactly the region's size, PUTS THE WINDOW WHERE
+//! NOTHING CAN PHOTOGRAPH IT, and hands the client area to
+//! [`AppEvents::mirror_ready`]. From then on the window is only ever resized and
+//! moved in response to `move` commands arriving on stdin; nothing the user does
+//! touches it.
 //!
-//! # Why off screen
+//! # Why the window has to hide, and how each platform hides it
 //!
-//! The mirror is fed by a display capture of the region. If the mirror window
-//! sits anywhere on a captured display, the capture photographs the mirror,
+//! The mirror is fed by a display capture of the region. If the mirror window is
+//! visible anywhere on a captured display, the capture photographs the mirror,
 //! which then shows the capture of itself, and so on — the infinite-corridor
-//! effect. The previous design fought this with a second, opaque "mask" window
-//! pinned exactly over the mirror to hide it from the capture, plus a third
-//! "frame" window drawing a border around the live region. Parking the window
-//! entirely outside every display's bounds removes the recursion at the source:
-//! there is nothing on screen to photograph, so there is nothing to mask. The
-//! window still exists, is still composited, and is still capturable by a
-//! *window* capture — which is exactly what the meeting app is doing — so the
-//! share keeps working while the pixels never re-enter the display capture.
+//! effect. The original design fought this with a second, opaque "mask" window
+//! pinned exactly over the mirror, plus a third "frame" window drawing a border
+//! around the live region; all three are gone.
+//!
+//! What replaced them is platform-specific, because the two window servers
+//! disagree about what is capturable:
+//!
+//! * **Windows** parks the window entirely outside the virtual desktop's
+//!   bounds. There is nothing on screen to photograph, and DWM keeps
+//!   compositing the window's redirection surface, so a *window* capture — what
+//!   the meeting app is doing — still works.
+//! * **macOS** cannot do that: ScreenCaptureKit refuses to start a stream on a
+//!   window that intersects no display, even though it lists the window and
+//!   reports it as on-screen. So the mirror stays on a display and is hidden by
+//!   window LEVEL instead, one step below the desktop wallpaper, which occludes
+//!   it for the user and for any display capture alike. See the module docs of
+//!   `ui/appkit.rs` for the measurements behind that.
+//!
+//! Either way the window still exists, is still composited, and is still
+//! capturable by a window capture, so the share keeps working while the pixels
+//! never re-enter the display capture.
 //!
 //! The border and the floating controls around the live region are drawn by the
 //! Clowd shell that spawns this process (Clowd.Ui/Video/BorderWindow and
