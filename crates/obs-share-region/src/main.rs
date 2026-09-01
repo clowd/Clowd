@@ -50,11 +50,19 @@
 //! ```text
 //!   {"type":"initialized"}                                  obs is up, prompt window is showing
 //!   {"type":"sharing_started","region":{"x","y","w","h"}}    user pressed OK; mirroring
+//!   {"type":"cancelled"}                                    exiting having never mirrored
 //!   {"type":"region_changed","region":{"x","y","w","h"}}     ack of `move` (region ACTUALLY applied)
 //!   {"type":"obscure","mode":"none|blur|pixelate|hide","strength":N}   ack of obscure/unobscure
 //!   {"type":"status","fps":29.9}                            1 Hz, only after sharing_started
 //!   {"type":"command_error","message":"..."}                a line was refused, or failed
 //! ```
+//!
+//! `sharing_started` and `cancelled` are mutually exclusive and exactly one of
+//! them is emitted per session: the first when the user accepts the prompt, the
+//! second on any exit that happens before that (the prompt's close button,
+//! Escape, `quit`, stdin EOF). Together they are how the shell decides whether
+//! to show its border and floating controls, which the exit code cannot tell it
+//! — a declined prompt and a finished share both exit 0.
 //!
 //! Both regions on the wire are in **capture space** — the same space as
 //! `--region` (Windows: physical px on the virtual desktop, X/Y may be
@@ -176,6 +184,23 @@ impl AppEvents for App {
     }
 
     fn quit(&mut self) -> ! {
+        // Every exit that is not a crash funnels through here — the close
+        // button, Escape, a `quit` command, EOF on stdin — which makes this the
+        // one place that can tell the shell how the session ended.
+        //
+        // The shell's whole decision is binary: put the border and the floating
+        // controls on screen, or don't. `sharing_started` is the yes; without a
+        // no there is nothing to pair it with, because the process exits 0
+        // whether the user shared or backed out of the prompt. So a session
+        // that never reached the mirror phase says so on its way out.
+        //
+        // `status::sharing()` rather than a flag of our own: it is set in
+        // `mirror_ready` in the same breath as `sharing_started` is emitted, so
+        // the two lines can never disagree about whether sharing began. Both
+        // this read and that write are on the UI thread.
+        if !status::sharing() {
+            status::emit_cancelled();
+        }
         obs_platform::exit_process(0)
     }
 }

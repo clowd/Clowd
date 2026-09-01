@@ -91,6 +91,22 @@ pub fn emit_obscure(mode: obscure::Mode) {
     }));
 }
 
+/// The process is exiting without ever having started mirroring: the user
+/// dismissed the prompt (the close button, Escape) or a `quit` arrived while
+/// it was still up.
+///
+/// It is the negative counterpart of [`emit_sharing_started`], and the pair is
+/// what lets the parent decide whether to put its own border and floating
+/// controls on screen. Waiting for the exit code instead would not do: the
+/// process exits 0 either way, so "the user shared" and "the user backed out"
+/// are indistinguishable from outside, and the parent would have to guess.
+///
+/// Emitted immediately before the exit, so it is the last protocol line of a
+/// declined session; after it the pipe closes.
+pub fn emit_cancelled() {
+    emit_json(serde_json::json!({ "type": "cancelled" }));
+}
+
 /// A stdin line was malformed, or the command it named failed. Never fatal:
 /// the process keeps mirroring and keeps reading commands.
 pub fn emit_command_error(msg: &str) {
@@ -105,6 +121,13 @@ pub fn emit_command_error(msg: &str) {
 /// [`emit_sharing_started`]).
 pub fn set_sharing(on: bool) {
     SHARING.store(on, Ordering::Relaxed);
+}
+
+/// Whether [`emit_sharing_started`] has already gone out, i.e. the user
+/// accepted the prompt. Read on the exit path to decide whether the session
+/// still owes the parent a [`emit_cancelled`] line.
+pub fn sharing() -> bool {
+    SHARING.load(Ordering::Relaxed)
 }
 
 /// Trailing-window frame rate behind the `fps` status field.
