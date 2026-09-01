@@ -215,7 +215,8 @@ namespace Clowd.UI
                 return;
 
             _initialized = true;
-            SetPrimaryText("START", waiting: false);
+            // the button says START; the border has room for the instruction that goes with it.
+            SetPrimaryText("START", waiting: false, borderText: "PRESS\nSTART");
 
             // the settings file carries the devices, never the capture toggles — those are mutes.
             ApplyCaptureMutes();
@@ -833,10 +834,11 @@ namespace Clowd.UI
         /// <summary>Mirrors the primary-button label onto the border overlay ("WAIT…" / "START").
         /// <paramref name="waiting"/> travels with it: the toolbar locks the button (and drops its
         /// pulse) for as long as the recorder is being built, which is precisely the WAIT label —
-        /// <see cref="StartRecording"/> would ignore a press then anyway.</summary>
-        private void SetPrimaryText(string text, bool waiting)
+        /// <see cref="StartRecording"/> would ignore a press then anyway. <paramref name="borderText"/>
+        /// overrides the overlay wording where the border has room to say more than the button.</summary>
+        private void SetPrimaryText(string text, bool waiting, string borderText = null)
         {
-            _border?.SetOverlayText(text);
+            _border?.SetOverlayText(borderText ?? text);
             _toolbar?.SetPrimaryText(text);
             _toolbar?.SetWaiting(waiting);
         }

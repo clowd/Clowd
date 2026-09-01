@@ -41,7 +41,7 @@ namespace Clowd.UI
             TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
 
             // matches the overlay the region was selected in, and is dark enough for the white
-            // WAIT…/START text stroked with it (AppStyles.CaptureAccentColor).
+            // overlay text stroked with it (AppStyles.CaptureAccentColor).
             var accent = new SolidColorBrush(AppStyles.CaptureAccentColor);
             AccentBorder.BorderBrush = accent;
             OverlayText.Stroke = accent;
@@ -73,12 +73,14 @@ namespace Clowd.UI
             ScalingChanged += OnScalingChanged;
         }
 
-        /// <summary>Sets the centered overlay text ("WAIT…"/"START"); null or empty hides it.</summary>
+        /// <summary>Sets the centered overlay text ("WAIT…"/"PRESS\nSTART"); null or empty hides
+        /// it. Newlines break it into centered lines, and the text is scaled down to fit a small
+        /// capture region rather than being clipped by it.</summary>
         public void SetOverlayText(string text)
         {
             var value = text ?? String.Empty;
             OverlayText.Text = value;
-            OverlayText.IsVisible = value.Length > 0;
+            OverlayBox.IsVisible = value.Length > 0;
         }
 
         private void OnOpened(object sender, EventArgs e)

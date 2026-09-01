@@ -23,12 +23,16 @@
             <Border Name="InnerBorder" BorderThickness="1" BorderBrush="White" Background="Transparent" />
         </Border>
 
-        <!-- 48pt overlay text ("WAIT…"/"START"): white glyphs with a real vector accent outline.
-             Stroke is set to the accent color in code-behind. -->
-        <controls:OutlinedTextBlock Name="OverlayText" IsVisible="False"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center"
-                                    FontSize="48" FontWeight="Black"
-                                    Fill="White" StrokeThickness="6" LetterSpacing="4" />
+        <!-- 48pt overlay text ("WAIT…"/"PRESS START"): white glyphs with a real vector accent
+             outline. Stroke is set to the accent color in code-behind. The Viewbox is DownOnly:
+             48pt is the cap, but a small capture region scales the text (outline and all) down
+             to fit inside the frame instead of clipping it. -->
+        <Viewbox Name="OverlayBox" IsVisible="False" Stretch="Uniform" StretchDirection="DownOnly" Margin="10"
+                 HorizontalAlignment="Center" VerticalAlignment="Center">
+            <controls:OutlinedTextBlock Name="OverlayText"
+                                        FontSize="48" FontWeight="Black"
+                                        Fill="White" StrokeThickness="6" LetterSpacing="4" />
+        </Viewbox>
 
     </Grid>
 
