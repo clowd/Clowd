@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -25,7 +27,8 @@ namespace Clowd.UI
     /// overlay's button panel (clowd_capture ui/gpu/panel.rs — Cascadia Code labels,
     /// canvas-fitted icons, transparent gaps; see CaptureToolButton.axaml for the mapping).
     /// Deliberately decoupled from VideoCapturePage — it only raises events and persists
-    /// the mic/speaker toggles; the page wires the events and drives state via the Set* methods.
+    /// the mic/speaker toggles (and the device ids its own pickers write); the page wires the
+    /// events and drives state via the Set* methods.
     /// On Windows WS_EX_NOACTIVATE keeps button clicks from stealing focus from the recorded app;
     /// on macOS a plain Avalonia window still activates the app on click (deferred, risk §6.11).
     /// </summary>
@@ -48,6 +51,20 @@ namespace Clowd.UI
         private readonly DispatcherTimer _saveDebounce;
         private readonly SettingsRecording _settings;
 
+        /// <summary>Long edge of a device-picker pill — it runs along the strip's stacking axis,
+        /// so it is the pill's width beside a horizontal row and its height beside a vertical one.</summary>
+        private const double PillLong = 28;
+
+        /// <summary>Short edge of a device-picker pill (the axis pointing away from the strip).</summary>
+        private const double PillShort = 13;
+
+
+        /// <summary>The lane the pills occupy outside the gray strip, reserved by
+        /// <see cref="RootBorder"/>'s margin. They meet the strip edge-to-edge, so the lane is
+        /// exactly one pill deep. Part of the window, so the placement math has to account for it —
+        /// see <see cref="PositionNearRegion"/>.</summary>
+        private const double PillLane = PillShort;
+
         private ScreenRect _region;
         private bool _micEnabled;
         private bool _spkEnabled;
@@ -55,6 +72,17 @@ namespace Clowd.UI
         private bool _hasStatusText;
         private bool _recording;
         private bool _paused;
+        // the recorder is still being built (or rebuilt): START cannot act yet, so it is locked
+        // and un-pulsed until VideoCapturePage says otherwise.
+        private bool _waiting = true;
+        // which side of the strip the device pills float on: Bottom under a horizontal row,
+        // Left/Right outboard of a vertical one (whichever side the placement cascade picked, so
+        // the pills never point back over the region being recorded).
+        private Dock _pillSide = Dock.Bottom;
+        // the cameras this strip knows about. Filled asynchronously (enumeration costs a process
+        // spawn) and replaced by the picker's refresh row; null until the first list lands, which
+        // is why the CAM pill starts hidden rather than guessing.
+        private List<CameraDeviceInfo> _cameras;
         // the last timer/FPS text, so the drag label can fall back to it when a pause ends
         private string _lastStatusText;
 
@@ -87,7 +115,26 @@ namespace Clowd.UI
             BtnDrag.AddHandler(PointerReleasedEvent, DragHandleReleased, RoutingStrategies.Tunnel);
             BtnDrag.PointerCaptureLost += DragHandleCaptureLost;
 
+            // hovering the handle is exactly when the move affordance is wanted back, so the
+            // recording mark yields to the arrows for as long as the pointer is on it.
+            BtnDrag.PointerEntered += (s, e) => UpdateDragIcon();
+            BtnDrag.PointerExited += (s, e) => UpdateDragIcon();
+
+            UpdateDevicePills();
+            // re-enumerate rather than take the process-wide cache: the strip opens long after the
+            // app did, and a camera plugged in since then is exactly the one being reached for.
+            // Native enumeration makes this ~60 ms, so it is affordable on every strip.
+            _ = LoadCamerasAsync(CameraDeviceManager.RefreshAsync());
+
+            UpdatePillLane();
             UpdateToolTipPlacement();
+            // the strip opens in the WAIT state: START locked, unaccented and still.
+            UpdatePrimaryState();
+
+            // the pills line up against tiles in a different container, so they are placed from
+            // the arranged bounds rather than laid out — which means re-placing after every pass
+            // that can move a tile (rotation, a label growing, a DPI change).
+            LayoutUpdated += (s, e) => UpdatePillPositions();
 
             // nothing in the settings graph saves itself, and the Recording page's auto-save only
             // attaches when that page is opened — the toolbar persists its own toggles (debounced).
@@ -99,6 +146,7 @@ namespace Clowd.UI
             };
 
             _settings = SettingsRoot.Current.Recording;
+            DisableCaptureWithoutDevice();
             _micEnabled = _settings.CaptureMicrophone;
             _spkEnabled = _settings.CaptureSpeaker;
             _camEnabled = IsWebcamCaptured(_settings);
@@ -130,20 +178,61 @@ namespace Clowd.UI
                 BtnStart.Text = text;
         }
 
+        /// <summary>Whether the recorder is still being built (the WAIT phase, and every respawn
+        /// after it). START is dead during it — <see cref="VideoCapturePage.StartRecording"/> gates
+        /// on the same flag — so the button says so instead of pulsing an invitation it cannot
+        /// honor.</summary>
+        public void SetWaiting(bool waiting)
+        {
+            _waiting = waiting;
+            UpdatePrimaryState();
+        }
+
+        /// <summary>
+        /// The primary button can only act once the recorder is up (START) or once frames are
+        /// flowing (PAUSE/RESUME) — and it only looks primary when it can. The accent fill and the
+        /// button being pressable are the same condition on purpose: a WAIT tile that reads as the
+        /// one thing to press, and then ignores the press, is worse than one that waits visibly.
+        /// The pulse is narrower still — it belongs to START alone, as an invitation, so it is
+        /// absent both while locked and on PAUSE.
+        /// </summary>
+        private void UpdatePrimaryState()
+        {
+            var live = _recording || !_waiting;
+
+            BtnStart.IsEnabled = live;
+            BtnStart.Primary = live;
+            BtnStart.PulseBackground = live && !_recording;
+        }
+
+        /// <summary>The drag handle wears the Clowd mark for the duration of a recording — the
+        /// strip is a status indicator far more of the time than it is something you reposition —
+        /// and the move arrows while the pointer is on it, which is the moment the affordance
+        /// matters. The mark's canvas has less padding than the tool glyphs, so it is drawn a
+        /// little smaller to carry the same weight in the shared 26px icon slot.</summary>
+        private void UpdateDragIcon()
+        {
+            var mark = _recording && !BtnDrag.IsPointerOver;
+            BtnDrag.IconPath = (Geometry)this.FindResource(mark ? "IconClowd" : "IconToolNone");
+            BtnDrag.IconSize = mark ? 22 : 26;
+        }
+
         /// <summary>Modes the strip for a rolling recording: the primary button becomes
         /// PAUSE (its pre-start pulse stops), the trailing CANCEL button becomes FINISH —
         /// a rolling recording can be stopped and saved, but no longer discarded from here —
-        /// and the CAM toggle locks (see <see cref="UpdateWebcamEnabled"/>).</summary>
+        /// the drag handle becomes the Clowd mark, and the CAM toggle and the three device
+        /// pickers lock (see <see cref="UpdateRecordingLocks"/>).</summary>
         public void SetRecordingState(bool recording)
         {
             _recording = recording;
-            UpdateWebcamEnabled();
+            UpdateRecordingLocks();
+            UpdatePrimaryState();
+            UpdateDragIcon();
 
             if (recording)
             {
                 BtnStart.Text = "PAUSE";
                 BtnStart.IconPath = (Geometry)this.FindResource("IconPause");
-                BtnStart.PulseBackground = false;
 
                 BtnCancel.Text = "FINISH";
                 BtnCancel.IconPath = (Geometry)this.FindResource("IconStop");
@@ -158,7 +247,6 @@ namespace Clowd.UI
 
                 BtnStart.Text = "START";
                 BtnStart.IconPath = (Geometry)this.FindResource("IconPlay");
-                BtnStart.PulseBackground = true;
 
                 BtnCancel.Text = "CANCEL";
                 BtnCancel.IconPath = (Geometry)this.FindResource("IconClose");
@@ -339,37 +427,52 @@ namespace Clowd.UI
             var shortEdge = Math.Min(panelWidth, panelHeight);
             var longEdge = Math.Max(panelWidth, panelHeight);
 
+            // the device pills sit in a lane outside the gray strip, always on the short-edge axis
+            // — so the window is one lane deeper than the strip, and every fits-here test below has
+            // to ask for the room the WINDOW needs, not the strip. Read off the margin rather than
+            // the constant: the lane is only reserved while there are pills in it.
+            var lane = _pillSide switch
+            {
+                Dock.Left => RootBorder.Margin.Left,
+                Dock.Right => RootBorder.Margin.Right,
+                _ => RootBorder.Margin.Bottom,
+            };
+            var winShort = shortEdge + (int)Math.Ceiling(lane * scaling);
+
             int indLeft, indTop;
 
-            if (bottomSpace >= shortEdge)
+            if (bottomSpace >= winShort)
             {
-                MainPanel.Orientation = Orientation.Horizontal;
+                // below the selection: the lane hangs further below, away from what is recorded.
+                SetLayout(Orientation.Horizontal, Dock.Bottom);
                 indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
-                indTop = Math.Min(workArea.Bottom, selection.Bottom + maxDistance + shortEdge) - shortEdge;
+                indTop = Math.Min(workArea.Bottom, selection.Bottom + maxDistance + winShort) - winShort;
             }
-            else if (rightSpace >= shortEdge)
+            else if (rightSpace >= winShort)
             {
-                MainPanel.Orientation = Orientation.Vertical;
-                indLeft = Math.Min(workArea.Right, selection.Right + maxDistance + shortEdge) - shortEdge;
+                // to the right of the selection: the lane goes further right, for the same reason.
+                SetLayout(Orientation.Vertical, Dock.Right);
+                indLeft = Math.Min(workArea.Right, selection.Right + maxDistance + winShort) - winShort;
                 indTop = selection.Bottom - longEdge;
             }
-            else if (leftSpace >= shortEdge)
+            else if (leftSpace >= winShort)
             {
-                MainPanel.Orientation = Orientation.Vertical;
-                indLeft = Math.Max(selection.Left - maxDistance - shortEdge, workArea.Left);
+                SetLayout(Orientation.Vertical, Dock.Left);
+                indLeft = Math.Max(selection.Left - maxDistance - winShort, workArea.Left);
                 indTop = selection.Bottom - longEdge;
             }
             else // inside capture rect
             {
-                MainPanel.Orientation = Orientation.Horizontal;
+                SetLayout(Orientation.Horizontal, Dock.Bottom);
                 indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
                 // keep the gap measured from the placeable bottom edge, so a full-height
                 // selection lands above the dock/taskbar rather than flush against it.
-                indTop = Math.Min(selection.Bottom, workArea.Bottom) - shortEdge - maxDistance * 2;
+                indTop = Math.Min(selection.Bottom, workArea.Bottom) - winShort - maxDistance * 2;
             }
 
-            var horizontalSize = MainPanel.Orientation == Orientation.Horizontal ? longEdge : shortEdge;
-            var verticalSize = MainPanel.Orientation == Orientation.Horizontal ? shortEdge : longEdge;
+            // window, not strip: indLeft/indTop are where the whole thing goes, lane included.
+            var horizontalSize = MainPanel.Orientation == Orientation.Horizontal ? longEdge : winShort;
+            var verticalSize = MainPanel.Orientation == Orientation.Horizontal ? winShort : longEdge;
 
             if (indLeft < workArea.Left)
                 indLeft = workArea.Left;
@@ -386,6 +489,113 @@ namespace Clowd.UI
                 indTop = workArea.Bottom - verticalSize;
 
             Position = new PixelPoint(indLeft, indTop);
+        }
+
+        /// <summary>The one place the strip's axis and its pill lane are set, so everything that
+        /// hangs off them follows both the automatic placement cascade and a click on the drag
+        /// handle. (The tooltip side used to follow only the latter, leaving auto-rotated strips
+        /// with their tips on the wrong edge.)</summary>
+        private void SetLayout(Orientation orientation, Dock pillSide)
+        {
+            // a horizontal strip has only one sensible lane; a vertical one is told which side the
+            // placement cascade left free.
+            if (orientation == Orientation.Horizontal)
+                pillSide = Dock.Bottom;
+            else if (pillSide == Dock.Bottom)
+                pillSide = Dock.Right;
+
+            if (MainPanel.Orientation == orientation && _pillSide == pillSide)
+                return;
+
+            MainPanel.Orientation = orientation;
+            _pillSide = pillSide;
+            UpdatePillLane();
+            UpdateToolTipPlacement();
+        }
+
+        /// <summary>
+        /// Reserves the lane the pills float in and shapes them for it: the lane is a margin on
+        /// whichever side of the gray strip is free, and each pill lies along the strip's stacking
+        /// axis (wide and short below a horizontal row, narrow and tall beside a vertical column)
+        /// with its chevron facing out of the strip.
+        /// </summary>
+        private void UpdatePillLane()
+        {
+            var horizontal = MainPanel.Orientation == Orientation.Horizontal;
+
+            foreach (var pill in PillLayer.Children.OfType<CaptureToolPill>())
+            {
+                pill.Width = horizontal ? PillLong : PillShort;
+                pill.Height = horizontal ? PillShort : PillLong;
+                pill.Direction = _pillSide;
+            }
+
+            ApplyPillLane();
+            UpdatePillPositions();
+        }
+
+        /// <summary>Reserves the lane, on the side the placement cascade left free — but only while
+        /// something is actually in it. A strip whose sources each have exactly one device (or one
+        /// that is already recording) shows no pills at all, and an empty lane is not merely wasted
+        /// window: it is transparent, so it would read as the strip hovering above where it sits,
+        /// and it would still swallow clicks meant for what is underneath.</summary>
+        private void ApplyPillLane()
+        {
+            var lane = PillLayer.Children.OfType<CaptureToolPill>().Any(p => p.IsVisible) ? PillLane : 0;
+
+            RootBorder.Margin = _pillSide switch
+            {
+                Dock.Left => new Thickness(lane, 0, 0, 0),
+                Dock.Right => new Thickness(0, 0, lane, 0),
+                _ => new Thickness(0, 0, 0, lane),
+            };
+        }
+
+        /// <summary>Butts each pill up against the tile it belongs to, on the lane side — they
+        /// share an edge, which is what the pill's two square corners are for. Runs off every
+        /// layout pass, so it is deliberately arithmetic only: no measure, no allocation.</summary>
+        private void UpdatePillPositions()
+        {
+            PlacePill(BtnMicDevice, BtnMic);
+            PlacePill(BtnSpeakerDevice, BtnSpeaker);
+            PlacePill(BtnWebcamDevice, BtnWebcam);
+        }
+
+        private void PlacePill(CaptureToolPill pill, Control tile)
+        {
+            if (!pill.IsVisible)
+                return;
+
+            // the tile lives inside RootBorder/MainPanel, the pill in the canvas over the whole
+            // window: nothing lines them up but this translation.
+            var origin = tile.TranslatePoint(default, PillLayer);
+            if (origin == null)
+                return;
+
+            var at = origin.Value;
+            var bounds = tile.Bounds;
+            // the theme's Width/Height, not the arranged Bounds: this runs from LayoutUpdated, and
+            // reading a size that this pass is still producing would place the pill one frame late.
+            var width = MainPanel.Orientation == Orientation.Horizontal ? PillLong : PillShort;
+            var height = MainPanel.Orientation == Orientation.Horizontal ? PillShort : PillLong;
+
+            switch (_pillSide)
+            {
+                case Dock.Left:
+                    Canvas.SetLeft(pill, at.X - width);
+                    Canvas.SetTop(pill, at.Y + (bounds.Height - height) / 2);
+                    break;
+
+                case Dock.Right:
+                    Canvas.SetLeft(pill, at.X + bounds.Width);
+                    Canvas.SetTop(pill, at.Y + (bounds.Height - height) / 2);
+                    break;
+
+                default:
+                    Canvas.SetLeft(pill, at.X + (bounds.Width - width) / 2);
+                    Canvas.SetTop(pill, at.Y + bounds.Height);
+                    break;
+            }
         }
 
         /// <summary>
@@ -410,7 +620,8 @@ namespace Clowd.UI
                 ? PlacementMode.Bottom
                 : PlacementMode.Right;
 
-            foreach (var btn in MainPanel.Children.OfType<CaptureToolButton>())
+            // the device pills carry tips of their own, and sit in the canvas rather than the strip.
+            foreach (var btn in MainPanel.Children.OfType<Button>().Concat(PillLayer.Children.OfType<Button>()))
             {
                 ToolTip.SetPlacement(btn, placement);
 
@@ -478,10 +689,10 @@ namespace Clowd.UI
             {
                 // click without drag: rotate horizontal ⇄ vertical in place (top-left anchored;
                 // SizeToContent re-lays the strip out along the new axis)
-                MainPanel.Orientation = MainPanel.Orientation == Orientation.Horizontal
+                // the lane keeps the side it was last given; only the axis flips.
+                SetLayout(MainPanel.Orientation == Orientation.Horizontal
                     ? Orientation.Vertical
-                    : Orientation.Horizontal;
-                UpdateToolTipPlacement();
+                    : Orientation.Horizontal, _pillSide);
             }
 
             e.Handled = true;
@@ -534,63 +745,438 @@ namespace Clowd.UI
 
         private void MicClicked(object sender, RoutedEventArgs e)
         {
-            _micEnabled = !_micEnabled;
-            BtnMic.ShowAlternateIcon = _micEnabled;
-            _settings.CaptureMicrophone = _micEnabled;
-            QueueSettingsSave();
-            UpdateMeterVisibility();
-            MicToggled?.Invoke(this, _micEnabled);
+            // a click is the moment a device that appeared since the strip opened (AirPods
+            // connecting, a camera plugged in) has to be noticed, and the audit is a cheap
+            // enumeration.
+            UpdateDevicePills();
+
+            if (!_micEnabled && !HasDevice(CaptureSource.Microphone))
+            {
+                TurnOnWithDevice(CaptureSource.Microphone);
+                return;
+            }
+
+            SetMicEnabled(!_micEnabled);
         }
 
         private void SpeakerClicked(object sender, RoutedEventArgs e)
         {
-            _spkEnabled = !_spkEnabled;
-            BtnSpeaker.ShowAlternateIcon = _spkEnabled;
-            _settings.CaptureSpeaker = _spkEnabled;
-            QueueSettingsSave();
-            UpdateMeterVisibility();
-            SpeakerToggled?.Invoke(this, _spkEnabled);
+            UpdateDevicePills();
+
+            if (!_spkEnabled && !HasDevice(CaptureSource.Speaker))
+            {
+                TurnOnWithDevice(CaptureSource.Speaker);
+                return;
+            }
+
+            SetSpeakerEnabled(!_spkEnabled);
         }
 
         /// <summary>
         /// CAM toggle. Unlike MIC/SPK this is not a mute: the recorder builds (or drops) a whole
         /// webcam source and a second encoder for it, which it will only do while it is still
-        /// waiting — hence <see cref="UpdateWebcamEnabled"/> locking the button once frames flow.
-        /// Turning it on with no camera chosen — or with composition off, which leaves the camera no
-        /// track to be recorded into — would silently record nothing (the settings file writes an
-        /// empty device id), so that click opens the recording settings page instead of ticking a
-        /// box with no effect.
+        /// waiting — hence <see cref="UpdateRecordingLocks"/> locking the button once frames flow.
+        /// Turning it on with no camera chosen opens the camera picker (as MIC/SPK do); with
+        /// composition off there is no second video track for a camera to live in, which no
+        /// dropdown can fix, so that one click still goes to the settings page.
         /// </summary>
         private void WebcamClicked(object sender, RoutedEventArgs e)
         {
             if (_recording)
                 return;
 
-            if (!_camEnabled && (!_settings.EnableComposition || String.IsNullOrEmpty(_settings.WebcamDeviceId)))
+            UpdateDevicePills();
+
+            if (!_camEnabled && !_settings.EnableComposition)
             {
-                // nothing to turn on yet: send the user to the settings page to pick a camera or
-                // switch composition on, rather than tick a dead box. The page's own handler owns
-                // the navigation (the toolbar never touches PageManager).
+                // the page's own handler owns the navigation (the toolbar never touches PageManager).
                 SettingsClicked?.Invoke(this, EventArgs.Empty);
                 return;
             }
 
-            _camEnabled = !_camEnabled;
-            BtnWebcam.ShowAlternateIcon = _camEnabled;
-            _settings.CaptureWebcam = _camEnabled;
-            QueueSettingsSave();
-            WebcamToggled?.Invoke(this, _camEnabled);
+            if (!_camEnabled && !HasDevice(CaptureSource.Webcam))
+            {
+                TurnOnWithDevice(CaptureSource.Webcam);
+                return;
+            }
+
+            SetWebcamEnabled(!_camEnabled);
         }
 
-        /// <summary>The recorder can only add or remove the webcam source (and its track-1 encoder)
-        /// before recording starts — there is no live equivalent of the audio mutes — so the button
-        /// is disabled for the duration and says why.</summary>
-        private void UpdateWebcamEnabled()
+        /// <summary>
+        /// Turning a source on that has nothing to record from. With exactly one device there is no
+        /// choice to put to the user — adopt it and let the click through. Otherwise ask, and let
+        /// the pick complete the turn-on; that also covers having no device at all, where the menu
+        /// is what says so (and, for cameras, what offers to look again).
+        /// </summary>
+        private void TurnOnWithDevice(CaptureSource source)
         {
+            var only = SingleDevice(source);
+            if (only != null)
+                PickDevice(source, only, enable: true);
+            else
+                OpenDeviceMenu(source, enableOnPick: true);
+        }
+
+        private void SetMicEnabled(bool enabled)
+        {
+            _micEnabled = enabled;
+            BtnMic.ShowAlternateIcon = enabled;
+            _settings.CaptureMicrophone = enabled;
+            QueueSettingsSave();
+            UpdateMeterVisibility();
+            MicToggled?.Invoke(this, enabled);
+        }
+
+        private void SetSpeakerEnabled(bool enabled)
+        {
+            _spkEnabled = enabled;
+            BtnSpeaker.ShowAlternateIcon = enabled;
+            _settings.CaptureSpeaker = enabled;
+            QueueSettingsSave();
+            UpdateMeterVisibility();
+            SpeakerToggled?.Invoke(this, enabled);
+        }
+
+        private void SetWebcamEnabled(bool enabled)
+        {
+            _camEnabled = enabled;
+            BtnWebcam.ShowAlternateIcon = enabled;
+            _settings.CaptureWebcam = enabled;
+            QueueSettingsSave();
+            WebcamToggled?.Invoke(this, enabled);
+        }
+
+        /// <summary>Everything the recorder fixes when frames start flowing: the webcam is a
+        /// pipeline element rather than a mute (there is no live equivalent of the audio mutes), and
+        /// the device ids are read when the pipeline is built, so neither can change mid-recording.
+        /// CAM is disabled and says why — it has a label to say it under; the device pills simply go
+        /// (see <see cref="UpdateDevicePills"/>). MIC/SPK themselves stay live: those really are
+        /// mutes.</summary>
+        private void UpdateRecordingLocks()
+        {
+            // MIC/SPK stay live while recording — they are mutes — but only where the recorder
+            // actually built a source to mute. With no device there is nothing to unmute, and the
+            // picker that would fix that is frozen too, so the toggle locks with it rather than
+            // lighting up over silence.
+            BtnMic.IsEnabled = !_recording || HasDevice(CaptureSource.Microphone);
+            BtnSpeaker.IsEnabled = !_recording || HasDevice(CaptureSource.Speaker);
+
             BtnWebcam.IsEnabled = !_recording;
             ToolTip.SetTip(BtnWebcam, _recording
                 ? "The webcam can't be turned on or off once recording has started"
                 : "Capture webcam as a second track (position it later in the video editor)");
+
+            UpdateDevicePills();
+        }
+
+        // -- device pickers (the pill floating beside each toggle) --
+
+        /// <summary>The three sources the strip toggles, each with a device behind it.</summary>
+        private enum CaptureSource
+        {
+            Microphone,
+            Speaker,
+            Webcam,
+        }
+
+        private void MicDeviceClicked(object sender, RoutedEventArgs e)
+            => OpenDeviceMenu(CaptureSource.Microphone, enableOnPick: false);
+
+        private void SpeakerDeviceClicked(object sender, RoutedEventArgs e)
+            => OpenDeviceMenu(CaptureSource.Speaker, enableOnPick: false);
+
+        private void WebcamDeviceClicked(object sender, RoutedEventArgs e)
+            => OpenDeviceMenu(CaptureSource.Webcam, enableOnPick: false);
+
+        /// <summary>
+        /// Whether <paramref name="source"/> has a device that can actually be recorded right now.
+        /// A stored id for a device that has since been unplugged counts as none: the recorder
+        /// would open nothing and the user would find that out after the recording, not before.
+        /// </summary>
+        private bool HasDevice(CaptureSource source) => source switch
+        {
+            CaptureSource.Microphone => HasAudioDevice(_settings.MicrophoneDeviceId, AudioDeviceManager.GetMicrophones()),
+            // there is no output device to pick on macOS — ScreenCaptureKit hands over the whole
+            // system mix — so speaker capture is never blocked on one there.
+            CaptureSource.Speaker => OperatingSystem.IsMacOS()
+                || HasAudioDevice(_settings.SpeakerDeviceId, AudioDeviceManager.GetSpeakers()),
+            // cameras are never enumerated here — a click has to answer immediately — so this
+            // reads the list the strip already has. Until it lands a stored id is taken at face
+            // value; after it does, an id no longer among them is no device (DisableCaptureWithout-
+            // Device runs again at that point, which is what makes the deferred check count).
+            _ => !String.IsNullOrEmpty(_settings.WebcamDeviceId)
+                 && (_cameras == null || _cameras.Any(c => c.DeviceId == _settings.WebcamDeviceId)),
+        };
+
+        private static bool HasAudioDevice(string deviceId, List<AudioDeviceInfo> devices)
+        {
+            // "default" is a pointer at whichever device the OS currently favours, and the
+            // enumerator always offers it — so on a machine with no inputs at all it would read as
+            // a selection and earn a track of silence. It only counts while something backs it.
+            if (!devices.Any(d => d.DeviceId != AudioDeviceManager.DefaultDeviceId))
+                return false;
+
+            return !String.IsNullOrEmpty(deviceId) && devices.Any(d => d.DeviceId == deviceId);
+        }
+
+        /// <summary>
+        /// The devices the user could actually choose between — which is not what the menu lists.
+        /// "default" is a pointer at one of the others, never an alternative to them: with a single
+        /// microphone attached, "Default" and that microphone ARE that microphone, so a source with
+        /// one real device has nothing to pick and gets no pill. (The menu still offers "default"
+        /// when it opens at all — following the system default is a real preference once there is
+        /// more than one device to follow.)
+        /// </summary>
+        private List<string> RealDeviceIds(CaptureSource source)
+        {
+            switch (source)
+            {
+                case CaptureSource.Microphone:
+                case CaptureSource.Speaker:
+                    var audio = source == CaptureSource.Speaker
+                        ? AudioDeviceManager.GetSpeakers()
+                        : AudioDeviceManager.GetMicrophones();
+                    return audio.Select(d => d.DeviceId)
+                                .Where(id => id != AudioDeviceManager.DefaultDeviceId)
+                                .ToList();
+
+                default:
+                    // null (not enumerated yet) is not "no cameras" — it is "we cannot say", which
+                    // an empty list expresses well enough for both callers: no pill, and no
+                    // shortcut, so a click opens the menu that does the waiting.
+                    return _cameras?.Select(c => c.DeviceId).ToList() ?? new List<string>();
+            }
+        }
+
+        /// <summary>The only device <paramref name="source"/> could record from, or null when there
+        /// is a choice to make (or nothing to choose).</summary>
+        private string SingleDevice(CaptureSource source)
+        {
+            var ids = RealDeviceIds(source);
+            return ids.Count == 1 ? ids[0] : null;
+        }
+
+        /// <summary>
+        /// A picker only earns its pill when there is a choice to make with it — more than one
+        /// device behind it, and a recording that has not started. Otherwise the tile's own click is
+        /// the whole interaction and a chevron would promise something that does not exist. Audio is
+        /// enumerated here and now (a local call), so this also catches a device that has appeared
+        /// since the strip opened, every time it runs.
+        /// </summary>
+        private void UpdateDevicePills()
+        {
+            // once frames are flowing the device ids are fixed: VideoCapturePage drops a settings
+            // change while IsRecording, so a picker could only write a value the recording will
+            // never use. That is worth removing rather than graying out — a disabled control
+            // suggests some state in which it works, and there is none until this recording ends.
+            var pickable = !_recording;
+
+            BtnMicDevice.IsVisible = pickable && RealDeviceIds(CaptureSource.Microphone).Count > 1;
+            // never on macOS: ScreenCaptureKit hands over the whole system mix, so there is no
+            // output device to choose (the same reason SpeakerDeviceId is [HiddenOnMacOS]).
+            BtnSpeakerDevice.IsVisible = pickable && !OperatingSystem.IsMacOS()
+                && RealDeviceIds(CaptureSource.Speaker).Count > 1;
+            BtnWebcamDevice.IsVisible = pickable && RealDeviceIds(CaptureSource.Webcam).Count > 1;
+
+            ApplyPillLane();
+            UpdatePillPositions();
+        }
+
+        /// <summary>Takes the camera list the recorder produced, and lets the CAM pill appear (or
+        /// stay away) now that there is something to count.</summary>
+        private async Task LoadCamerasAsync(Task<List<CameraDeviceInfo>> pending)
+        {
+            try
+            {
+                _cameras = await pending;
+            }
+            catch (Exception ex)
+            {
+                // CameraDeviceManager never throws, so this is a task-scheduling failure only.
+                Debug.WriteLine("Failed to list cameras for the toolbar: " + ex);
+                _cameras = new List<CameraDeviceInfo>();
+            }
+
+            // the camera half of the open-time audit could not run in the constructor: there was no
+            // list to check the stored id against yet. This is that moment.
+            DisableCaptureWithoutDevice();
+            UpdateDevicePills();
+        }
+
+        /// <summary>
+        /// A capture toggle that survived from a previous session pointing at a device that is no
+        /// longer there is a promise the recording cannot keep — it would come back with a silent
+        /// track, or no track at all. Runs while the strip is being built (before the recorder is
+        /// spawned, so the settings file it reads already agrees) — which is also why it writes the
+        /// settings rather than only the buttons — and again when the camera list lands, since the
+        /// webcam's id has nothing to be checked against until then.
+        /// </summary>
+        private void DisableCaptureWithoutDevice()
+        {
+            var changed = false;
+
+            if (_settings.CaptureMicrophone && !HasDevice(CaptureSource.Microphone))
+            {
+                _settings.CaptureMicrophone = false;
+                changed = true;
+            }
+
+            if (_settings.CaptureSpeaker && !HasDevice(CaptureSource.Speaker))
+            {
+                _settings.CaptureSpeaker = false;
+                changed = true;
+            }
+
+            // composition being off is not a missing device — the camera rows are merely gated,
+            // and the user's tick is still what they will get back when they switch it on again.
+            if (_settings.CaptureWebcam && _settings.EnableComposition && !HasDevice(CaptureSource.Webcam))
+            {
+                _settings.CaptureWebcam = false;
+                changed = true;
+            }
+
+            if (changed)
+                QueueSettingsSave();
+        }
+
+        /// <summary>
+        /// Drops the device picker for <paramref name="source"/> off that source's pill, or off the
+        /// tile itself when there is no pill — a source with no device at all has none, and the
+        /// menu is then the only thing that can say so.
+        /// <paramref name="enableOnPick"/> is set when the menu was opened by a turn-on that had
+        /// nowhere to record from: choosing a device then completes the click the user made.
+        /// Opening the same menu from the pill is a device change only and leaves the toggle alone.
+        /// </summary>
+        private void OpenDeviceMenu(CaptureSource source, bool enableOnPick)
+        {
+            var pill = PillFor(source);
+            var anchor = pill.IsVisible ? (Control)pill : TileFor(source);
+            var flyout = new MenuFlyout
+            {
+                // the free edge, same reasoning (and the same two cases) as the tooltips
+                Placement = MainPanel.Orientation == Orientation.Horizontal
+                    ? PlacementMode.BottomEdgeAlignedLeft
+                    : PlacementMode.RightEdgeAlignedTop,
+            };
+
+            if (source == CaptureSource.Webcam)
+                // …and again on every open, so the list is current without the user having to ask
+                // for a refresh. This is what replaced the explicit "Refresh camera list" row.
+                FillCameraMenu(flyout, CameraDeviceManager.RefreshAsync(), enableOnPick);
+            else
+                FillAudioMenu(flyout, source, enableOnPick);
+
+            flyout.ShowAt(anchor);
+        }
+
+        private CaptureToolPill PillFor(CaptureSource source) => source switch
+        {
+            CaptureSource.Microphone => BtnMicDevice,
+            CaptureSource.Speaker => BtnSpeakerDevice,
+            _ => BtnWebcamDevice,
+        };
+
+        private CaptureToolButton TileFor(CaptureSource source) => source switch
+        {
+            CaptureSource.Microphone => BtnMic,
+            CaptureSource.Speaker => BtnSpeaker,
+            _ => BtnWebcam,
+        };
+
+        /// <summary>Audio enumeration is a local call (WASAPI / CoreAudio), so the menu is built
+        /// complete. A stored device that is no longer connected is simply absent, leaving nothing
+        /// checked — which is the truth: it is not what would be recorded.</summary>
+        private void FillAudioMenu(MenuFlyout flyout, CaptureSource source, bool enableOnPick)
+        {
+            var isSpeaker = source == CaptureSource.Speaker;
+            var devices = isSpeaker ? AudioDeviceManager.GetSpeakers() : AudioDeviceManager.GetMicrophones();
+            var current = isSpeaker ? _settings.SpeakerDeviceId : _settings.MicrophoneDeviceId;
+
+            // "default" alone is not an offer: it would point at nothing, and picking it would
+            // turn the source on to record silence.
+            if (!devices.Any(d => d.DeviceId != AudioDeviceManager.DefaultDeviceId))
+            {
+                flyout.Items.Add(new MenuItem { Header = isSpeaker ? "No speakers found" : "No microphones found", IsEnabled = false });
+                return;
+            }
+
+            foreach (var device in devices)
+                flyout.Items.Add(DeviceItem(device.FriendlyName, device.DeviceId, current, source, enableOnPick));
+        }
+
+        /// <summary>The enumeration is off-thread (a native call, but a click must never wait on
+        /// one), so the menu opens on a placeholder and fills itself when the list lands. That is
+        /// usually the same frame; it is visible only on the recorder fallback path.</summary>
+        private void FillCameraMenu(MenuFlyout flyout, Task<List<CameraDeviceInfo>> pending, bool enableOnPick)
+        {
+            flyout.Items.Add(new MenuItem { Header = "Looking for cameras…", IsEnabled = false });
+            _ = FillCameraMenuAsync(flyout, pending, enableOnPick);
+        }
+
+        private async Task FillCameraMenuAsync(MenuFlyout flyout, Task<List<CameraDeviceInfo>> pending, bool enableOnPick)
+        {
+            // shares the strip's one camera list, so an enumeration that lands while the menu is
+            // open also settles whether the CAM pill belongs there at all.
+            await LoadCamerasAsync(pending);
+            var cameras = _cameras;
+
+            // the menu may have been dismissed (or the whole window closed) while the recorder was
+            // listing devices; refilling a detached flyout is harmless, and nothing here reopens it.
+            flyout.Items.Clear();
+
+            if (cameras.Count == 0)
+                flyout.Items.Add(new MenuItem { Header = "No cameras found", IsEnabled = false });
+
+            foreach (var camera in cameras)
+                flyout.Items.Add(DeviceItem(camera.FriendlyName, camera.DeviceId, _settings.WebcamDeviceId, CaptureSource.Webcam, enableOnPick));
+        }
+
+        private MenuItem DeviceItem(string header, string deviceId, string currentId, CaptureSource source, bool enableOnPick)
+        {
+            var item = new MenuItem
+            {
+                Header = header,
+                // radio rather than a checkmark: exactly one device is recorded per source, and
+                // the group makes the menu say so on its own.
+                ToggleType = MenuItemToggleType.Radio,
+                GroupName = "clowdToolbarDevice" + source,
+                IsChecked = deviceId == currentId,
+            };
+            item.Click += (s, e) => PickDevice(source, deviceId, enableOnPick);
+            return item;
+        }
+
+        /// <summary>Applies a device chosen from one of the pickers. Writing the settings property
+        /// is the whole of it — VideoCapturePage turns the change into a <c>configure</c> on the
+        /// waiting recorder, exactly as it does for the settings page — plus the deferred turn-on
+        /// when this menu only opened because the source had no device to record from.</summary>
+        private void PickDevice(CaptureSource source, string deviceId, bool enable)
+        {
+            switch (source)
+            {
+                case CaptureSource.Microphone:
+                    _settings.MicrophoneDeviceId = deviceId;
+                    if (enable && !_micEnabled)
+                        SetMicEnabled(true);
+                    break;
+
+                case CaptureSource.Speaker:
+                    _settings.SpeakerDeviceId = deviceId;
+                    if (enable && !_spkEnabled)
+                        SetSpeakerEnabled(true);
+                    break;
+
+                default:
+                    // the device first, so the toggle that follows is already backed by a camera —
+                    // the settings file writes an empty webcam_device for either half missing.
+                    _settings.WebcamDeviceId = deviceId;
+                    if (enable && !_camEnabled)
+                        SetWebcamEnabled(true);
+                    break;
+            }
+
+            QueueSettingsSave();
         }
 
         // -- audio level meters (visible only while that source is enabled, WPF parity) --
@@ -605,7 +1191,7 @@ namespace Clowd.UI
             // label row when the meter peaks, jiggling the button content
             var fill = new Rectangle
             {
-                Fill = AppStyles.AccentBackgroundBrush,
+                Fill = AppStyles.CaptureAccentBackgroundBrush,
                 RenderTransformOrigin = new RelativePoint(0.5, 1, RelativeUnit.Relative),
                 RenderTransform = new ScaleTransform(1, 0),
             };

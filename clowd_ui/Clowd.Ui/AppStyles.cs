@@ -7,6 +7,7 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Avalonia.Styling;
+using Clowd.Config;
 
 namespace Clowd
 {
@@ -77,6 +78,23 @@ namespace Clowd
         }
 
         public static IBrush AccentBackgroundBrush => new SolidColorBrush(AccentColor);
+
+        /// <summary>
+        /// The accent of the capture surfaces — the overlay's button panel, and the C# windows
+        /// styled to match it (the recording toolbar, the recording border, the scrolling-capture
+        /// status strip). Not <see cref="AccentColor"/>: that one follows the Semi theme and themes
+        /// the ordinary app UI, while this is the OS accent (or the user's pick) put through
+        /// <see cref="AccentColors.EnsureContrastWithWhite"/> — the same value
+        /// <see cref="CaptureArguments"/> hands the overlay as <c>--accent-color</c>, so a Clowd
+        /// window sitting beside the overlay is painted the same blue rather than a near-miss.
+        ///
+        /// The correction is not cosmetic. Every one of these surfaces draws white glyphs and
+        /// labels directly on the accent fill, which a light accent leaves unreadable (issue #48).
+        /// </summary>
+        public static Color CaptureAccentColor
+            => SettingsRoot.Current?.General?.GetEffectiveAccentColor() ?? AccentColors.Default;
+
+        public static IBrush CaptureAccentBackgroundBrush => new SolidColorBrush(CaptureAccentColor);
 
         public static IBrush IdealBackgroundBrush => new SolidColorBrush(Color.FromRgb(55, 55, 55));
 

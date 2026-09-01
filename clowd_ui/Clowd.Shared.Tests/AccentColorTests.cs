@@ -61,35 +61,70 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void GetEffectiveAccentColor_UsesTheChosenColorWhenNotFollowingTheSystem()
         {
-            var settings = new SettingsCapture { UseSystemAccentColor = false, AccentColor = Color.FromRgb(0x00, 0x40, 0x00) };
+            var settings = new SettingsGeneral { UseSystemAccentColor = false, AccentColor = Color.FromRgb(0x00, 0x40, 0x00) };
 
             Assert.Equal(Color.FromRgb(0x00, 0x40, 0x00), settings.GetEffectiveAccentColor());
         }
 
         [Fact]
-        public void AccentColor_IsContrastCorrectedOnAssignment()
+        public void AccentColor_IsStoredExactlyAsPicked()
         {
-            var settings = new SettingsCapture { UseSystemAccentColor = false, AccentColor = Colors.White };
+            // the correction happens where the color is used, not on assignment: turning
+            // MaintainMinimumContrast off has to be able to give the original back.
+            var settings = new SettingsGeneral { UseSystemAccentColor = false, AccentColor = Colors.White };
 
-            // what the settings page shows in its swatch is what the overlay gets
-            Assert.Equal(settings.AccentColor, settings.GetEffectiveAccentColor());
-            Assert.True(AccentColors.ContrastWithWhite(settings.AccentColor) >= AccentColors.MinimumContrastWithWhite);
+            Assert.Equal(Colors.White, settings.AccentColor);
         }
 
         [Fact]
-        public void EffectiveAccentColor_IsAlwaysLegible()
+        public void GetEffectiveAccentColor_CorrectsAColorTooLightForWhiteText()
+        {
+            var settings = new SettingsGeneral { UseSystemAccentColor = false, AccentColor = Colors.White };
+
+            Assert.NotEqual(settings.AccentColor, settings.GetEffectiveAccentColor());
+            Assert.True(AccentColors.ContrastWithWhite(settings.GetEffectiveAccentColor()) >= AccentColors.MinimumContrastWithWhite);
+        }
+
+        [Fact]
+        public void GetEffectiveAccentColor_HandsBackTheRawColorWhenContrastIsNotMaintained()
+        {
+            var settings = new SettingsGeneral
+            {
+                UseSystemAccentColor = false,
+                AccentColor = Colors.White,
+                MaintainMinimumContrast = false,
+            };
+
+            // the user asked for exactly their color, illegible or not
+            Assert.Equal(Colors.White, settings.GetEffectiveAccentColor());
+        }
+
+        [Fact]
+        public void EffectiveAccentColor_IsAlwaysLegibleByDefault()
         {
             // whatever the platform hands back (system accent or the stored color), the overlay
             // never receives something white text cannot sit on.
-            var settings = new SettingsCapture();
+            var settings = new SettingsGeneral();
 
+            Assert.True(settings.MaintainMinimumContrast);
             Assert.True(AccentColors.ContrastWithWhite(settings.GetEffectiveAccentColor()) >= AccentColors.MinimumContrastWithWhite);
+        }
+
+        [Fact]
+        public void DefaultAccent_IsClowdBlueCorrectedToTheDocumentedValue()
+        {
+            // the stored default is the raw legacy blue; correcting it at use has to land exactly on
+            // the value the capturer compiles in as its own --accent-color default.
+            var settings = new SettingsGeneral { UseSystemAccentColor = false };
+
+            Assert.Equal(AccentColors.ClowdBlue, settings.AccentColor);
+            Assert.Equal(AccentColors.Default, settings.GetEffectiveAccentColor());
         }
 
         [Fact]
         public void UseSystemAccentColor_IsOffWhereThereIsNoSystemAccent()
         {
-            var settings = new SettingsCapture { UseSystemAccentColor = true };
+            var settings = new SettingsGeneral { UseSystemAccentColor = true };
 
             Assert.Equal(AccentColors.SystemAccentSupported, settings.UseSystemAccentColor);
             Assert.Equal(OperatingSystem.IsWindows(), AccentColors.SystemAccentSupported);

@@ -145,6 +145,7 @@ namespace Clowd.UI
                 _toolbar.SpeakerToggled += (s, enabled) => _obs?.SetSpeakerMute(!enabled);
                 _toolbar.WebcamToggled += (s, enabled) => OnWebcamToggled(enabled);
                 _toolbar.SetPrimaryText("WAIT…");
+                _toolbar.SetWaiting(true);
                 _toolbar.ShowNear(region);
 
                 // subscribed before the first spawn so a change made during WAIT is not lost.
@@ -171,7 +172,7 @@ namespace Clowd.UI
         {
             _initializing = true;
             _initialized = false;
-            SetPrimaryText("WAIT…");
+            SetPrimaryText("WAIT…", waiting: true);
             // a respawned capturer with audio removed never emits levels again — clear the
             // stale meters rather than freezing the last values through the WAIT phase.
             _toolbar?.SetAudioLevels(null, null);
@@ -214,7 +215,7 @@ namespace Clowd.UI
                 return;
 
             _initialized = true;
-            SetPrimaryText("START");
+            SetPrimaryText("START", waiting: false);
 
             // the settings file carries the devices, never the capture toggles — those are mutes.
             ApplyCaptureMutes();
@@ -829,11 +830,15 @@ namespace Clowd.UI
                 _pendingShutdown = null;
         }
 
-        /// <summary>Mirrors the primary-button label onto the border overlay ("WAIT…" / "START").</summary>
-        private void SetPrimaryText(string text)
+        /// <summary>Mirrors the primary-button label onto the border overlay ("WAIT…" / "START").
+        /// <paramref name="waiting"/> travels with it: the toolbar locks the button (and drops its
+        /// pulse) for as long as the recorder is being built, which is precisely the WAIT label —
+        /// <see cref="StartRecording"/> would ignore a press then anyway.</summary>
+        private void SetPrimaryText(string text, bool waiting)
         {
             _border?.SetOverlayText(text);
             _toolbar?.SetPrimaryText(text);
+            _toolbar?.SetWaiting(waiting);
         }
 
         private void OnStatusReceived(object sender, ObsStatus status)

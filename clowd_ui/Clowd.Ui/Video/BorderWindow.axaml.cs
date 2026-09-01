@@ -40,7 +40,9 @@ namespace Clowd.UI
 
             TransparencyLevelHint = new[] { WindowTransparencyLevel.Transparent };
 
-            var accent = new SolidColorBrush(AppStyles.AccentColor);
+            // matches the overlay the region was selected in, and is dark enough for the white
+            // WAIT…/START text stroked with it (AppStyles.CaptureAccentColor).
+            var accent = new SolidColorBrush(AppStyles.CaptureAccentColor);
             AccentBorder.BorderBrush = accent;
             OverlayText.Stroke = accent;
 

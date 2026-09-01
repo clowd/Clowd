@@ -106,6 +106,12 @@ namespace Clowd
                 // unlike the registry-backed managers above it stays off the UI thread.
                 _ = Task.Run(() => SparsePackageManager.Sync(SettingsRoot.Current.General.RegisterExplorerContextMenu));
 
+                // warm the camera list so the first picker to open has one without waiting. Cheap
+                // now that enumeration is native (~60 ms), but it also covers the fallback path,
+                // where it is the difference between a warm cache and a 5 s stall in front of the
+                // user (see CameraDeviceManager).
+                _ = CameraDeviceManager.GetCamerasAsync();
+
                 SettingsRoot.Current.General.PropertyChanged += (s, e) =>
                 {
                     if (e.PropertyName == nameof(SettingsGeneral.Theme))
