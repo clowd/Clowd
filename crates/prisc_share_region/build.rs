@@ -33,7 +33,7 @@ fn main() {
 /// has to FIND in a meeting app's picker, and pickers list a window by its icon
 /// and title, so the icon is functional here rather than decorative.
 ///
-/// Deliberately this crate's build script and no other: obs-share-region is the
+/// Deliberately this crate's build script and no other: clowd_share_region is the
 /// only binary in the workspace that is a Clowd-branded user-facing window.
 /// `rustc-link-arg-bins` keeps the .res on this crate's own bin link line.
 ///
@@ -67,7 +67,7 @@ fn build_windows() {
     std::fs::write(&rc_path, rc_source).expect("write icon.rc");
 
     let rc_exe = find_rc_exe().expect(
-        "rc.exe not found: the Windows SDK is required to build obs-share-region's app icon",
+        "rc.exe not found: the Windows SDK is required to build clowd_share_region's app icon",
     );
     let status = std::process::Command::new(&rc_exe)
         .arg("/nologo")

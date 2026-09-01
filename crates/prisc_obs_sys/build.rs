@@ -210,7 +210,7 @@ fn mac_emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
     // is package-scoped: it applies to obs-sys's tests/benches but does NOT
     // propagate to dependents, so every executable-producing consumer repeats
     // these in its own build script (obs-express, obs-platform, obs,
-    // obs-share-region). Even an empty harness dies in dyld without them:
+    // clowd_share_region). Even an empty harness dies in dyld without them:
     // libobs's install name and its FFmpeg/x264 references are all @rpath.
     println!(
         "cargo:rustc-link-arg=-Wl,-rpath,{}",
@@ -536,7 +536,7 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         // timestamps must share obs_get_video_frame_time's timebase.
         .allowlist_function("os_gettime_ns")
         // Graphics API (graphics/graphics.h): effects, texrenders and sprite
-        // draws, used by obs-share-region's obscure renderer to post-process
+        // draws, used by clowd_share_region's obscure renderer to post-process
         // the composited canvas inside the display draw callback.
         .allowlist_function("gs_.*")
         .allowlist_type("obs_.*")

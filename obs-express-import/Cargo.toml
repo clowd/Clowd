@@ -5,7 +5,7 @@ members = [
     "crates/obs",
     "crates/obs-platform",
     "crates/obs-express",
-    "crates/obs-share-region",
+    "crates/clowd-share-region",
     "crates/ffmpeg-sys",
     "crates/vid2gif",
 ]

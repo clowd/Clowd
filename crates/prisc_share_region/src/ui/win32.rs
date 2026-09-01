@@ -1251,7 +1251,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             hbrBackground: HBRUSH::default(),
             lpszMenuName: PCWSTR::null(),
-            lpszClassName: w!("obs_share_region_mirror"),
+            lpszClassName: w!("clowd_share_region_mirror"),
         };
         if RegisterClassW(&wc) == 0 {
             fatal("RegisterClassW");
@@ -1269,7 +1269,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
         let title_w: Vec<u16> = cfg.title.encode_utf16().chain(Some(0)).collect();
         let mirror = CreateWindowExW(
             MIRROR_EX_STYLE,
-            w!("obs_share_region_mirror"),
+            w!("clowd_share_region_mirror"),
             PCWSTR(title_w.as_ptr()),
             MIRROR_STYLE,
             CW_USEDEFAULT,

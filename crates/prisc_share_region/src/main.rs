@@ -1,4 +1,4 @@
-//! `obs-share-region`: mirrors a rectangular screen region into an ordinary
+//! `clowd_share_region`: mirrors a rectangular screen region into an ordinary
 //! window, so meeting apps that can only share "a whole screen" or "one window"
 //! can be pointed at that window and effectively share a region.
 //!

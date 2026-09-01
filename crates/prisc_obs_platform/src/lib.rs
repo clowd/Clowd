@@ -1,6 +1,6 @@
 //! Shared platform layer (SHARE_REGION_PLAN §4.3): monitor enumeration, obs
 //! paths, display-capture settings and region math, extracted from obs-express
-//! so every binary in the workspace (obs-express, obs-share-region) uses the
+//! so every binary in the workspace (obs-express, clowd_share_region) uses the
 //! same primitives. Both platform modules expose identical public signatures
 //! (DESIGN §2.2) and are re-exported at the crate root; shared,
 //! platform-neutral types and the pure monitor-matching logic live here.

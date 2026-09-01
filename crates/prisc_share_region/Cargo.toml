@@ -1,5 +1,5 @@
 [package]
-name = "obs-share-region"
+name = "clowd_share_region"
 version = "0.1.0"
 edition = "2021"
 
