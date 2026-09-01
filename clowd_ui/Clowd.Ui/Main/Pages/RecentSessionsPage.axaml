@@ -302,6 +302,9 @@
                                                     <MenuItem Header="Upload" Click="UploadItemClicked" IsVisible="{Binding CanUpload}" />
                                                     <MenuItem Header="Show in folder" Click="ShowInFolderClicked" IsVisible="{Binding CanShowInFolder}"
                                                               IsEnabled="{Binding IsIdle}" />
+                                                    <!-- the same toggle as the row's star, in the words a menu wants:
+                                                         what clicking it does, not what the entry currently is. -->
+                                                    <MenuItem Header="{Binding StarMenuHeader}" Click="ToggleStarClicked" />
                                                     <MenuItem Header="Delete" Click="DeleteItemClicked" />
                                                 </ContextMenu>
                                             </Grid.ContextMenu>
@@ -529,9 +532,9 @@
                                                                 ToolTip.Tip="Upload"
                                                                 AutomationProperties.Name="Upload">
                                                             <Viewbox>
-                                                                <!-- the Clowd mark, the same "upload" affordance the editor's toolbar
-                                                                     uses; a 16px canvas (AppStyles icon table). -->
-                                                                <Path Width="16" Height="16" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconClowd}" />
+                                                                <!-- the paper plane, the same "upload" affordance the editor's toolbar
+                                                                     uses; a 24px canvas (AppStyles icon table). -->
+                                                                <Path Width="24" Height="24" Fill="{DynamicResource SemiColorText1}" Data="{StaticResource IconUpload}" />
                                                             </Viewbox>
                                                         </Button>
                                                         <Button Classes="rowAction"

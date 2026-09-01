@@ -158,9 +158,17 @@ namespace Clowd
             set
             {
                 if (Set(value))
+                {
                     OnPropertyChanged(nameof(StarTooltip));
+                    OnPropertyChanged(nameof(StarMenuHeader));
+                }
             }
         }
+
+        /// <summary>What the context menu offers for the star — the action it would take, not the
+        /// state the entry is in, which is how a menu item is read.</summary>
+        [JsonIgnore]
+        public string StarMenuHeader => Starred ? "Unfavorite" : "Favorite";
 
         /// <summary>What the row's star explains when hovered — including the retention promise,
         /// which is the half of this feature nothing else on the row says out loud.</summary>

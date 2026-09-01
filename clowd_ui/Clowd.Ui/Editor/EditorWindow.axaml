@@ -258,7 +258,7 @@
                 Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{Binding CommandUpload}"
-                IconPath="{StaticResource IconClowd}"
+                IconPath="{StaticResource IconUpload}"
                 ToolTip.Tip="Upload&#10;Right-click to choose upload destination." />
 
             <controls:ToolButton

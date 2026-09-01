@@ -14,6 +14,7 @@ namespace Clowd
     public enum ResourceIcon
     {
         IconClowd,
+        IconUpload,
         IconPhoto,
         IconVideo,
         IconCopy,
@@ -131,6 +132,7 @@ namespace Clowd
         private static readonly Dictionary<ResourceIcon, IconInfo> _iconInfo = new()
         {
             { ResourceIcon.IconClowd, new IconInfo(16, 16) },
+            { ResourceIcon.IconUpload, new IconInfo(24, 24) },
             { ResourceIcon.IconPhoto, new IconInfo(26, 26) },
             { ResourceIcon.IconVideo, new IconInfo(26, 26) },
             { ResourceIcon.IconCopy, new IconInfo(30, 30) },
