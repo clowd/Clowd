@@ -44,8 +44,9 @@
 
                 <!-- drag handle: click rotates the toolbar, drag past 5px moves it (state machine in
                      code-behind; pointer events are wired as tunnel handlers there because Button's
-                     class handler marks bubbling PointerPressed as handled). Shows FPS/timer text
-                     once recording statuses arrive, or PAUSED while paused. The move glyph becomes
+                     class handler marks bubbling PointerPressed as handled). Becomes a zeroed
+                     timer the moment recording starts and then carries the FPS/timer text the
+                     statuses bring, or PAUSED while paused. The move glyph becomes
                      the Clowd mark once recording starts (UpdateDragIcon) — the strip is then a
                      recording indicator far more often than something you reposition — and comes
                      back while the pointer is over it, so the affordance is still there when wanted. -->
