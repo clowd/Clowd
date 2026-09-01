@@ -68,6 +68,28 @@ namespace Clowd.UI.Helpers
         }
 
         /// <summary>
+        /// A yes/no prompt carrying a verification checkbox (the "don't ask again" opt-out). The
+        /// returned <c>Verified</c> is the state of that checkbox when the dialog closed; it is
+        /// up to the caller to decide whether a cancel should still honour it.
+        /// </summary>
+        public static async Task<VerifiableResult> ShowVerifiableDialogAsync(
+            Visual parent,
+            NiceDialogIcon icon,
+            string content,
+            string mainInstruction,
+            string trueTxt,
+            string falseTxt,
+            string verificationTxt)
+        {
+            var dialog = new MessageDialog(icon, content, mainInstruction, trueTxt, falseTxt, verificationTxt: verificationTxt);
+            var result = await ShowWindowAsync(dialog, GetOwnerWindow(parent), () => dialog.Result);
+            return new VerifiableResult(result == true, dialog.IsVerificationChecked);
+        }
+
+        /// <summary>The outcome of a prompt that carried a verification checkbox.</summary>
+        public readonly record struct VerifiableResult(bool Result, bool Verified);
+
+        /// <summary>
         /// A prompt with two ways to say yes and one to back out: the affirmative button (which is
         /// the default-focused one, so it should be the safer of the two), an alternate beside it,
         /// and a cancel. Escape and Cmd+W resolve to <see cref="MessageDialogChoice.Cancel"/>.

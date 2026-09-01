@@ -472,12 +472,18 @@ namespace Clowd
         {
             if (SettingsRoot.Current?.General?.ConfirmClose == true)
             {
-                // the WPF TaskDialog "don't ask me again" verification checkbox is not ported;
-                // the prompt can be disabled in General settings instead.
-                if (await NiceDialog.ShowDialogAsync(null, NiceDialogIcon.Warning,
-                        "If you close Clowd, it will stop any in-progress uploads and you will be unable to upload anything new.",
-                        "Are you sure you wish to close Clowd?", "Close Clowd", "Cancel"))
+                var prompt = await NiceDialog.ShowVerifiableDialogAsync(null, NiceDialogIcon.Warning,
+                    "If you close Clowd, it will stop any in-progress uploads and you will be unable to upload anything new.",
+                    "Are you sure you wish to close Clowd?", "Close Clowd", "Cancel",
+                    "Don't ask again");
+
+                if (prompt.Result)
                 {
+                    // only honoured when the exit goes ahead: ticking the box and then backing out
+                    // should not silently disable the prompt. ExitApp writes the settings file.
+                    if (prompt.Verified)
+                        SettingsRoot.Current.General.ConfirmClose = false;
+
                     ExitApp();
                 }
             }

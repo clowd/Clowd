@@ -35,13 +35,19 @@ namespace Clowd.UI.Dialogs
         /// Escape, Cmd+W and the negative button all leave it <see cref="MessageDialogChoice.Cancel"/>.</summary>
         public MessageDialogChoice Choice { get; private set; } = MessageDialogChoice.Cancel;
 
+        /// <summary>
+        /// State of the optional verification checkbox (the "don't ask again" opt-out of the WPF
+        /// TaskDialog), false when the caller asked for no checkbox.
+        /// </summary>
+        public bool IsVerificationChecked => VerificationCheck.IsChecked == true;
+
         public MessageDialog() : this(NiceDialogIcon.None, "", null, "OK", null)
         { }
 
         public MessageDialog(NiceDialogIcon icon, string content, string mainInstruction,
                              string trueTxt, string falseTxt,
                              NiceDialogIcon footerIcon = NiceDialogIcon.None, string footerTxt = null,
-                             string altTxt = null)
+                             string altTxt = null, string verificationTxt = null)
         {
             InitializeComponent();
             Icon = AppStyles.AppIcon;
@@ -80,6 +86,12 @@ namespace Clowd.UI.Dialogs
                 FalseButton.Content = falseTxt;
                 FalseButton.IsVisible = true;
                 FalseButton.Click += (_, _) => CloseWithResult(MessageDialogChoice.Cancel);
+            }
+
+            if (!string.IsNullOrWhiteSpace(verificationTxt))
+            {
+                VerificationCheck.Content = verificationTxt;
+                VerificationCheck.IsVisible = true;
             }
 
             if (!string.IsNullOrWhiteSpace(footerTxt))
