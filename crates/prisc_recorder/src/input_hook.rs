@@ -104,6 +104,13 @@ impl InputState {
     /// Whether `vk` is currently recorded as down. Used by the macOS
     /// flags-changed path, which has to decide per key whether a shared
     /// modifier bit clearing is a release it still owes an event for.
+    ///
+    /// Windows has no such path — `WH_KEYBOARD_LL` reports real up/down edges
+    /// for modifiers like any other key — so there the method is genuinely
+    /// unused outside the tests, which dead-code analysis does not count. The
+    /// allow is narrowed to those targets rather than blanket, so that dropping
+    /// the last macOS caller still warns.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn is_down(&self, vk: u32) -> bool {
         let (word, bit) = (vk as usize / 64 % 4, vk % 64);
         self.keys[word].load(Ordering::Relaxed) & (1 << bit) != 0
