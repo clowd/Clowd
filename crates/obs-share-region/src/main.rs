@@ -46,10 +46,16 @@ struct Cli {
     #[arg(long, value_name = "HEX", default_value = "#2F7CAE", value_parser = parse_hex_color)]
     accent_color: (u8, u8, u8),
 
-    /// Thickness of the border's accent line, in logical (DPI-independent) px.
-    /// The white hairline inside it is always 1 logical px; both are scaled by
-    /// the display's DPI and snapped to whole device pixels.
-    #[arg(long, default_value = "2", value_parser = clap::value_parser!(u32).range(1..=32))]
+    /// TOTAL border thickness in logical (DPI-independent) px — not the accent
+    /// line alone, which is what this flag used to mean. The total is split
+    /// into an inner white hairline and an outer accent line, each a whole
+    /// number of device pixels once DPI-scaled: 2+2 at 100%, 2+3 at 125%, 3+3
+    /// at 150%. The odd pixel always goes to the accent, so the accent is never
+    /// thinner than the hairline. Four is the floor simply because each line
+    /// needs at least one device pixel at every scale we support; the resize
+    /// handles have their own, larger floor and do not track this value
+    /// (crates/obs-share-region/DESIGN.md §2).
+    #[arg(long, default_value = "4", value_parser = clap::value_parser!(u32).range(4..=32))]
     border: u32,
 
     /// Do not capture the cursor (passed through to the display capture source).

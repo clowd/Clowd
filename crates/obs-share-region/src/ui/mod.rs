@@ -18,6 +18,9 @@ use obs_platform::region::Rect;
 pub struct UiConfig {
     pub title: String,
     pub accent: (u8, u8, u8),
+    /// Total border thickness in logical px (`--border`, min 4). The platform
+    /// layer scales it to the region's DPI and splits it into the white
+    /// hairline and accent line — see `geometry::FrameSpec` and DESIGN.md §1.
     pub border: u32,
     pub resizable: bool,
     pub show_frame: bool,

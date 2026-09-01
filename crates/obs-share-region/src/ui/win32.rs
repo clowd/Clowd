@@ -3,13 +3,18 @@
 //! capture space throughout, which on Windows is physical pixels on the
 //! virtual desktop: `obs_platform::init_process()` opted the process into
 //! per-monitor-v2 DPI awareness before any window exists, so client px ==
-//! screen px == capture units and no scaling happens anywhere in this file.
+//! screen px == capture units and no COORDINATE scaling happens anywhere in
+//! this file. The frame's design measurements are the exception and are meant
+//! to be: border, handles and buttons are logical sizes that must be
+//! multiplied by dpi/96 to land on capture units — see `frame_spec`.
 //!
 //! Uses the `windows` crate (0.62) rather than obs-express's `windows-sys`,
 //! per plan §5.2. All windows and the `App` state live for the whole process
 //! (exit only ever happens through `AppEvents::quit` →
 //! `obs_platform::exit_process`), which is why the `Box<App>` is deliberately
-//! leaked and no handle is ever destroyed or freed here.
+//! leaked and no window handle is ever destroyed or freed here. The one GDI
+//! object that is ever released is the glyph pen, which `set_glyph_pen`
+//! replaces on a DPI change.
 
 use std::ffi::c_void;
 use std::mem;
@@ -20,11 +25,12 @@ use windows::Win32::Foundation::{
 };
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, CombineRgn, CreateFontIndirectW, CreatePen, CreateRectRgn, CreateSolidBrush,
-    DeleteObject, EndPaint, EnumDisplayMonitors, FillRect, GetDC, GetMonitorInfoW, GetStockObject,
-    GetSysColor, GetSysColorBrush, GetTextExtentPoint32W, InvalidateRect, LineTo, MonitorFromRect,
-    MoveToEx, ReleaseDC, SelectObject, SetBkColor, SetTextColor, SetWindowRgn, COLOR_BTNFACE,
-    COLOR_BTNTEXT, DEFAULT_GUI_FONT, HBRUSH, HDC, HFONT, HMONITOR, HPEN, MONITORINFO,
-    MONITOR_DEFAULTTONEAREST, PAINTSTRUCT, PS_SOLID, RGN_DIFF, RGN_OR,
+    DeleteObject, EndPaint, EnumDisplayMonitors, ExcludeClipRect, FillRect, GetDC, GetMonitorInfoW,
+    GetStockObject, GetSysColor, GetSysColorBrush, GetTextExtentPoint32W, InvalidateRect, LineTo,
+    MonitorFromRect, MoveToEx, ReleaseDC, RestoreDC, SaveDC, SelectObject, SetBkColor,
+    SetTextColor, SetWindowRgn, COLOR_BTNFACE, COLOR_BTNTEXT, DEFAULT_GUI_FONT, HBRUSH, HDC, HFONT,
+    HMONITOR, HPEN, HRGN, MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT, PS_SOLID, RGN_DIFF,
+    RGN_OR,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::HiDpi::{
@@ -35,16 +41,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, Se
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
     GetWindowLongPtrW, GetWindowRect, IsDialogMessageW, LoadCursorW, RegisterClassW, SendMessageW,
-    SetForegroundWindow, SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos, ShowWindow,
-    TranslateMessage, BS_DEFPUSHBUTTON, CW_USEDEFAULT, GWLP_USERDATA, GWL_STYLE, HICON, HMENU,
-    HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCAPTION, HTCLIENT, HTLEFT, HTRIGHT, HTTOP,
-    HTTOPLEFT, HTTOPRIGHT, HTTRANSPARENT, HWND_BOTTOM, HWND_TOP, IDCANCEL, IDC_ARROW, IDOK,
-    MINMAXINFO, MSG, NONCLIENTMETRICSW, SPI_GETNONCLIENTMETRICS, SWP_FRAMECHANGED, SWP_NOACTIVATE,
-    SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE, WDA_EXCLUDEFROMCAPTURE,
-    WINDOWPOS, WINDOW_EX_STYLE,
+    SetCursor, SetForegroundWindow, SetWindowDisplayAffinity, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, TranslateMessage, BS_DEFPUSHBUTTON, CW_USEDEFAULT, GWLP_USERDATA, GWL_STYLE, HICON,
+    HMENU, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTCAPTION, HTCLIENT, HTLEFT, HTRIGHT, HTTOP,
+    HTTOPLEFT, HTTOPRIGHT, HTTRANSPARENT, HWND_BOTTOM, HWND_TOP, IDCANCEL, IDC_ARROW, IDC_SIZEALL,
+    IDOK, MINMAXINFO, MSG, NONCLIENTMETRICSW, SPI_GETNONCLIENTMETRICS, SWP_FRAMECHANGED,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW, SW_HIDE,
+    WDA_EXCLUDEFROMCAPTURE, WINDOWPOS, WINDOW_EX_STYLE,
     WINDOW_STYLE, WM_CLOSE, WM_COMMAND, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DISPLAYCHANGE,
     WM_DPICHANGED, WM_ENTERSIZEMOVE, WM_ERASEBKGND, WM_EXITSIZEMOVE, WM_GETMINMAXINFO,
-    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_NCHITTEST, WM_PAINT, WM_SETFONT, WM_SIZE,
+    WM_LBUTTONDOWN, WM_LBUTTONUP, WM_NCHITTEST, WM_PAINT, WM_SETCURSOR, WM_SETFONT, WM_SIZE,
     WM_WINDOWPOSCHANGED, WM_WINDOWPOSCHANGING, WNDCLASSW, WNDCLASS_STYLES, WS_CAPTION, WS_CHILD,
     WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_OVERLAPPED, WS_POPUP, WS_SYSMENU,
     WS_TABSTOP, WS_VISIBLE,
@@ -53,7 +59,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use obs_platform::region::Rect;
 
 use crate::geometry::{
-    compute_layout, hit_test, BorderSpec, Cor, Dir, FrameLayout, Zone, MIN_REGION,
+    compute_layout, handle_layers, hit_test, Cor, Dir, FrameLayout, FrameSpec, Zone, BASE_BUTTON,
+    MIN_REGION,
 };
 
 use super::{AppEvents, UiConfig};
@@ -82,12 +89,23 @@ const OVERLAY_EX_STYLE: WINDOW_EX_STYLE =
 const FRAME_EX_STYLE: WINDOW_EX_STYLE =
     WINDOW_EX_STYLE(WS_EX_TOOLWINDOW.0 | WS_EX_TOPMOST.0 | WS_EX_NOACTIVATE.0);
 
-/// Glyphs (plan: "no icon resources"): 2px white polylines inside the 30px
-/// buttons. X glyph box = button inset by 10 on each side; the four-arrow
-/// glyph is a cross with `ARROW_HEAD`-px chevron heads.
+/// Number of buttons in the frame's panel. One (close) today; `FrameSpec`
+/// lays out N, so a second is a change to this constant plus a `Zone::Button`
+/// arm in WM_LBUTTONDOWN/WM_LBUTTONUP and a glyph in `paint_frame`.
+const PANEL_BUTTONS: u32 = 1;
+
+/// Glyph (plan: "no icon resources"): a white X polyline inside the close
+/// button. Both numbers are stated at 100% and scale with the button — the
+/// stroke via `glyph_pen_width`, the box as a FRACTION of the button side.
+///
+/// Neither may stay fixed now that `spec.button` is DPI-scaled (DESIGN §5). A
+/// fixed 10px inset drawn into the 90px button of a 300% display leaves an X
+/// spanning 78% of it instead of the intended 40%, and inverts outright once
+/// the button is under 20px; a fixed 2px pen draws a hairline cross in a 60px
+/// button at 200%. 0.3 is appkit's fraction, within a pixel of the old fixed
+/// 10-of-30 margin at 100%.
 const GLYPH_PEN_WIDTH: i32 = 2;
-const X_GLYPH_INSET: i32 = 10;
-const ARROW_HEAD: i32 = 4;
+const X_GLYPH_INSET_FRAC: f64 = 0.3;
 
 /// Prompt phase (ui/mod.rs "PROMPT PHASE"): what the mirror's client area
 /// shows before it becomes the share surface.
@@ -139,13 +157,13 @@ struct App {
     /// live during a move drag, recomputed from the in-drag rect during a
     /// resize drag, recomputed from scratch on commit/display change.
     layout: FrameLayout,
-    /// The DPI-scaled border thickness the current `layout` was built with.
+    /// Every DPI-scaled measurement the current `layout` was built with.
     /// Cached rather than recomputed per use so paint and layout can never
-    /// disagree — and so a resize drag keeps one constant thickness even if
-    /// the rubber band crosses a monitor with a different scale (the band
+    /// disagree — and so a resize drag keeps one constant band thickness even
+    /// if the rubber band crosses a monitor with a different scale (that
     /// thickness is baked into `drag_insets` at WM_ENTERSIZEMOVE). Rebuilt in
     /// `apply_layout`, the single place the layout is built from scratch.
-    border: BorderSpec,
+    spec: FrameSpec,
     mirror: HWND,
     /// Null for the whole prompt phase — the mask does not exist yet. That
     /// null is also what disarms the mirror's Z-order pin (see
@@ -175,45 +193,32 @@ struct App {
     /// WM_EXITSIZEMOVE) on the frame.
     in_size_move: bool,
     /// Outer-rect → region insets captured at drag start. They are constant
-    /// for the whole drag (the cluster cannot change sides mid-drag because
+    /// for the whole drag (the panel cannot change sides mid-drag because
     /// the window rect is driven natively), which is what makes
     /// outer-rect → region translation a pure offset.
     drag_insets: OuterInsets,
     /// Mouse captured on the close button (press seen, release pending).
     close_pressed: bool,
-    /// Ring + cluster fills for WM_PAINT. The accent used to be the frame
-    /// class's background brush, painted for free by BeginPaint's erase, but
-    /// a two-tone ring cannot be produced that way — see `paint_frame`.
+    /// Ring, handle and panel fills for WM_PAINT. The accent used to be the
+    /// frame class's background brush, painted for free by BeginPaint's erase,
+    /// but a two-tone ring cannot be produced that way — see `paint_frame`.
     accent_brush: HBRUSH,
     white_brush: HBRUSH,
-    /// Cluster background (darker accent) for WM_PAINT.
-    cluster_brush: HBRUSH,
-    /// 2px white pen for the X / four-arrow glyphs.
+    /// White pen for the close glyph, `glyph_pen_width(spec)` thick. Owned
+    /// here rather than created once at startup because the width is
+    /// DPI-derived: it is recreated alongside `spec`, in `apply_layout`.
     glyph_pen: HPEN,
 }
 
 /// Distances from the frame window's outer rect to the region's edges.
-/// Derived from `FrameLayout` fields only (see `layout_region`) — never
-/// hand-inlined border/cluster arithmetic.
+/// Derived from `FrameLayout` fields only (`outer` and `region`) — never
+/// hand-inlined border/handle/panel arithmetic.
 #[derive(Clone, Copy, Default)]
 struct OuterInsets {
     left: i32,
     top: i32,
     right: i32,
     bottom: i32,
-}
-
-/// The region a `FrameLayout` was computed for: `hole` is the region
-/// inflated by exactly 1 slack unit per side (geometry.rs contract, plan
-/// §6.4 rounding slack), so deflating it by 1 recovers the region. This is
-/// the single place that slack constant is assumed.
-fn layout_region(l: &FrameLayout) -> Rect {
-    Rect {
-        x: l.hole.x + 1,
-        y: l.hole.y + 1,
-        w: l.hole.w.saturating_sub(2),
-        h: l.hole.h.saturating_sub(2),
-    }
 }
 
 /// Effective DPI of the monitor the region sits on. Taken from the *rect*
@@ -239,17 +244,35 @@ unsafe fn region_dpi(region: Rect) -> u32 {
     }
 }
 
-/// The border's two lines at the region's current scale. `accent_logical` is
-/// `UiConfig::border` — the ACCENT line's thickness in logical px; the white
-/// hairline is always `geometry::LOGICAL_WHITE`. Capture space on Windows is
-/// physical px, so this scaling is real: at 150% a logical (1, 2) design
-/// becomes (2, 3) device px.
-unsafe fn border_spec(region: Rect, accent_logical: u32) -> BorderSpec {
-    BorderSpec::scaled(region_dpi(region) as f64 / 96.0, accent_logical)
+/// Every DPI-derived frame measurement at the region's current scale.
+/// `border_logical` is `UiConfig::border` — the TOTAL border thickness in
+/// logical px, which `FrameSpec` splits into the inner white hairline and the
+/// outer accent line. Capture space on Windows is physical px, so this
+/// scaling is real: at 150% a logical 4 becomes 6 device px (3 + 3), the
+/// handle 9, the button 45. On macOS the same call is made with scale 1.0.
+unsafe fn frame_spec(region: Rect, border_logical: u32) -> FrameSpec {
+    FrameSpec::scaled(
+        region_dpi(region) as f64 / 96.0,
+        border_logical,
+        PANEL_BUTTONS,
+    )
+}
+
+/// Stroke width for the close glyph, in device px.
+///
+/// Derived from `spec.button` rather than from a second DPI reading: the pen
+/// has to stay proportional to the square it is drawn inside, and the button
+/// is that square already scaled and rounded exactly once — a second
+/// `round(2 * dpi/96)` here could disagree with the button's own rounding at
+/// the same DPI. Floored at the design's 2px, which is already the thinnest
+/// stroke that reads as an X.
+fn glyph_pen_width(spec: &FrameSpec) -> i32 {
+    let scale = spec.button as f64 / BASE_BUTTON as f64;
+    ((GLYPH_PEN_WIDTH as f64 * scale).round() as i32).max(GLYPH_PEN_WIDTH)
 }
 
 fn region_insets(l: &FrameLayout) -> OuterInsets {
-    let r = layout_region(l);
+    let r = l.region;
     OuterInsets {
         left: r.x - l.outer.x,
         top: r.y - l.outer.y,
@@ -270,25 +293,6 @@ fn region_from_outer(ins: &OuterInsets, rc: &RECT) -> Rect {
         y,
         w: ((rc.right - ins.right) - x).max(1) as u32,
         h: ((rc.bottom - ins.bottom) - y).max(1) as u32,
-    }
-}
-
-/// Rigid translation of every layout rect — the cheap live-move path (shape
-/// is unchanged, only the origin moves). This list must name EVERY rect in
-/// FrameLayout: one left behind stays at the old origin and is painted there
-/// for the rest of the drag.
-fn translate_layout(l: &mut FrameLayout, dx: i32, dy: i32) {
-    for r in [
-        &mut l.outer,
-        &mut l.band,
-        &mut l.white_band,
-        &mut l.hole,
-        &mut l.cluster,
-        &mut l.move_btn,
-        &mut l.close_btn,
-    ] {
-        r.x += dx;
-        r.y += dy;
     }
 }
 
@@ -314,7 +318,9 @@ fn fatal(what: &str) -> ! {
 }
 
 /// Per-monitor work areas (screen minus taskbar/appbars) in capture space,
-/// for the geometry layer's cluster placement scoring.
+/// for the geometry layer's panel placement cascade (DESIGN §5). The WORK
+/// area, not the full monitor rect, is what keeps the panel out from under the
+/// taskbar.
 fn work_areas() -> Vec<Rect> {
     unsafe extern "system" fn enum_proc(
         hmonitor: HMONITOR,
@@ -425,41 +431,110 @@ unsafe fn place_mask(mask: HWND, mirror: HWND, region: Rect) {
     );
 }
 
-/// SetWindowRgn = (band ∪ cluster) − hole, in window coords relative to
-/// `origin` (the frame window's current top-left). Pixels outside the region
-/// are neither painted nor hit-tested, which is what makes the interior
-/// click-through with no further code. The system takes ownership of the
-/// region handle on success; the temporaries are deleted here.
+/// SetWindowRgn = `(band − hole − every cutout) ∪ every handle rect ∪ panel`,
+/// in window coords relative to `origin` (the frame window's current
+/// top-left). Pixels outside the region are neither painted nor hit-tested,
+/// which is what makes the interior click-through with no further code.
+///
+/// **This is exactly what `paint_frame` writes**, term for term: it fills
+/// `band − hole` as two `fill_ring` calls with every cutout `ExcludeClipRect`ed
+/// away, then each handle rect whole, then the panel. The equality is the point
+/// — see "Why the region cannot exceed the painted area" in DESIGN §6. The
+/// frame is a plain `WS_POPUP` with a NULL class brush, so a pixel inside the
+/// region that no `WM_PAINT` writes is undefined: it keeps whatever the screen
+/// held when the region last changed, and it smears as the frame is dragged.
+/// There is no such thing here as a free invisible hit area.
+///
+/// Three things about the shape are load-bearing (DESIGN §6):
+///
+/// - The cutouts are **subtracted**. They are the visible gaps around the
+///   handles; per §3 the hit surface is the painted surface, so a gap you can
+///   see the desktop through is click-through, like the hollow interior.
+/// - Handle rects are unioned back in **after** that subtraction, because a
+///   cutout contains its handle and would otherwise delete it. They are
+///   unioned rather than assumed inside `band` because a handle overhangs it
+///   (§2), and after the `− hole` because a handle is centred on the ring and
+///   so reaches back inside the band's inner edge — it is painted there, so it
+///   must be in the region there. (`hit_test` still answers `Outside` on that
+///   sliver, ranking the hole first; the region only has to cover what is
+///   painted, not what is grabbable.)
+/// - `− hole` is applied BEFORE the panel is unioned in, so it clips the band
+///   without touching the panel. In §5's last-resort placement the panel sits
+///   inside the region, and a panel unioned in first would be deleted by that
+///   subtraction — neither painted nor hit-testable, even though `hit_test`
+///   ranks it first. That failure mode is invisible until a region fills the
+///   work area, which is why the order is spelled out here.
+///
+/// The system takes ownership of the region handle on success; every
+/// temporary is deleted here.
 unsafe fn apply_frame_region(frame: HWND, l: &FrameLayout, origin: (i32, i32)) {
-    let b = win_rect(&l.band, origin);
-    let c = win_rect(&l.cluster, origin);
-    let h = win_rect(&l.hole, origin);
-    let band = CreateRectRgn(b.left, b.top, b.right, b.bottom);
-    let cluster = CreateRectRgn(c.left, c.top, c.right, c.bottom);
-    let hole = CreateRectRgn(h.left, h.top, h.right, h.bottom);
-    CombineRgn(Some(band), Some(band), Some(cluster), RGN_OR);
-    CombineRgn(Some(band), Some(band), Some(hole), RGN_DIFF);
-    let _ = DeleteObject(cluster.into());
-    let _ = DeleteObject(hole.into());
-    if SetWindowRgn(frame, Some(band), true) == 0 {
+    let rgn = |r: &Rect| {
+        let q = win_rect(r, origin);
+        CreateRectRgn(q.left, q.top, q.right, q.bottom)
+    };
+    // Accumulated in place into `acc`, the one HRGN that ends up owned by the
+    // system (or deleted below); every other HRGN here is transient and dies
+    // inside `merge`.
+    let acc = rgn(&l.band);
+    let merge = |src: HRGN, mode| {
+        CombineRgn(Some(acc), Some(acc), Some(src), mode);
+        let _ = DeleteObject(src.into());
+    };
+    merge(rgn(&l.hole), RGN_DIFF);
+    // Two passes, not one interleaved loop: every subtraction must land before
+    // any union, or a later cutout could eat a handle already unioned in. The
+    // cutouts happen to be pairwise disjoint (geometry.rs pins it), so one
+    // loop would work today — but the shape should not depend on that.
+    for h in &l.handles {
+        merge(rgn(&h.cutout), RGN_DIFF);
+    }
+    for h in &l.handles {
+        merge(rgn(&h.rect), RGN_OR);
+    }
+    merge(rgn(&l.panel), RGN_OR);
+    if SetWindowRgn(frame, Some(acc), true) == 0 {
         // Failure means the system did NOT take ownership.
-        let _ = DeleteObject(band.into());
+        let _ = DeleteObject(acc.into());
+    }
+}
+
+/// Swaps in a glyph pen of `width`, deleting the one it replaces.
+///
+/// Safe to call from `apply_layout` and only from there: the old pen is
+/// selected into a DC exactly for the duration of `paint_frame`, which
+/// deselects it before returning and never calls back into layout. Deleting a
+/// currently-selected GDI object silently fails and leaks, so that ordering is
+/// the whole contract. A failed CreatePen leaves the existing pen in place
+/// rather than dropping to a null one — a mis-scaled X still reads, a null pen
+/// selects nothing and draws the default 1px black.
+unsafe fn set_glyph_pen(app: *mut App, width: i32) {
+    let pen = CreatePen(PS_SOLID, width, colorref(0xff, 0xff, 0xff));
+    if pen.0.is_null() {
+        return;
+    }
+    let old = (*app).glyph_pen;
+    (*app).glyph_pen = pen;
+    if !old.0.is_null() {
+        let _ = DeleteObject(old.into());
     }
 }
 
 /// Recomputes the frame layout from the authoritative region and re-applies
-/// window rect + region + paint. The cluster may jump sides here (that is
+/// window rect + region + paint. The panel may jump sides here (that is
 /// the point of recomputing).
 ///
-/// The BorderSpec is refreshed first, not just carried over: it is
-/// DPI-derived, and every caller of this function is a moment where the DPI
-/// may have changed under us — a commit that landed the region on another
-/// monitor, a WM_DPICHANGED, a display-topology change. Refreshing here
-/// rather than at each call site means the spec and the layout are always
-/// built from the same reading.
+/// The FrameSpec is refreshed first, not just carried over: it is DPI-derived,
+/// and every caller of this function is a moment where the DPI may have
+/// changed under us — a commit that landed the region on another monitor, a
+/// WM_DPICHANGED, a display-topology change. Refreshing here rather than at
+/// each call site means the spec and the layout are always built from the same
+/// reading. The glyph pen goes with it: its width is a function of the spec,
+/// and a pen left at 100% would draw a hairline X in a 200% button.
 unsafe fn apply_layout(app: *mut App) {
-    (*app).border = border_spec((*app).region, (*app).cfg.border);
-    (*app).layout = compute_layout((*app).region, (*app).border, &(*app).work_areas);
+    let spec = frame_spec((*app).region, (*app).cfg.border);
+    (*app).spec = spec;
+    set_glyph_pen(app, glyph_pen_width(&spec));
+    (*app).layout = compute_layout((*app).region, &spec, &(*app).work_areas);
     let outer = (*app).layout.outer;
     let _ = SetWindowPos(
         (*app).frame,
@@ -491,32 +566,16 @@ unsafe fn line(hdc: HDC, x0: i32, y0: i32, x1: i32, y1: i32) {
     let _ = LineTo(hdc, x1, y1);
 }
 
-/// White X inside the close button.
+/// White X inside the close button. The inset is a FRACTION of the button
+/// side, not a fixed margin, so the glyph keeps its proportions now that the
+/// button is DPI-scaled (`spec.button`, DESIGN §5) — see X_GLYPH_INSET_FRAC.
 unsafe fn draw_x_glyph(hdc: HDC, r: &RECT) {
-    let (l, t) = (r.left + X_GLYPH_INSET, r.top + X_GLYPH_INSET);
-    let (rt, b) = (r.right - X_GLYPH_INSET, r.bottom - X_GLYPH_INSET);
+    let side = (r.right - r.left).min(r.bottom - r.top);
+    let inset = ((side as f64 * X_GLYPH_INSET_FRAC).round() as i32).max(0);
+    let (l, t) = (r.left + inset, r.top + inset);
+    let (rt, b) = (r.right - inset, r.bottom - inset);
     line(hdc, l, t, rt, b);
     line(hdc, rt, t, l, b);
-}
-
-/// White four-arrow (SizeAll-style) cross inside the move button.
-unsafe fn draw_move_glyph(hdc: HDC, r: &RECT) {
-    let cx = (r.left + r.right) / 2;
-    let cy = (r.top + r.bottom) / 2;
-    let arm = ((r.right - r.left) / 2 - 5).max(ARROW_HEAD + 1);
-    let hd = ARROW_HEAD;
-    // Cross.
-    line(hdc, cx - arm, cy, cx + arm, cy);
-    line(hdc, cx, cy - arm, cx, cy + arm);
-    // Chevron heads at the four tips.
-    line(hdc, cx - arm, cy, cx - arm + hd, cy - hd);
-    line(hdc, cx - arm, cy, cx - arm + hd, cy + hd);
-    line(hdc, cx + arm, cy, cx + arm - hd, cy - hd);
-    line(hdc, cx + arm, cy, cx + arm - hd, cy + hd);
-    line(hdc, cx, cy - arm, cx - hd, cy - arm + hd);
-    line(hdc, cx, cy - arm, cx + hd, cy - arm + hd);
-    line(hdc, cx, cy + arm, cx - hd, cy + arm - hd);
-    line(hdc, cx, cy + arm, cx + hd, cy + arm - hd);
 }
 
 /// Fills the ring `outer` − `inner` as four non-overlapping strips. FrameRect
@@ -563,18 +622,44 @@ unsafe fn fill_ring(hdc: HDC, outer: &RECT, inner: &RECT, brush: HBRUSH) {
 }
 
 /// Paints the whole frame explicitly. The band no longer paints itself: the
-/// ring is two-tone now (Clowd's BorderWindow — reading outward from the
-/// captured region, a white hairline then the accent line), and a single
-/// class background brush can only produce one colour, so the frame class
-/// brush is NULL and every pixel of the window region is written here.
+/// ring is two-tone (Clowd's BorderWindow — reading outward from the captured
+/// region, a white hairline then the accent line), and a single class
+/// background brush can only produce one colour, so the frame class brush is
+/// NULL and every pixel of the window region is written here.
 ///
-/// The three fills tile the window region — (band ∪ cluster) − hole —
-/// exactly: accent = band − white_band, white = white_band − hole, plus the
-/// cluster. The white ring is computed from white_band/hole directly rather
-/// than leaning on SetWindowRgn to clip it away from the hole: the window
-/// region is rebuilt on a different schedule (mid-drag rubber band), and a
-/// border pixel landing inside the captured area is exactly the artifact the
-/// hole's slack unit exists to prevent.
+/// Paint order is ring → handles → panel, which is NOT hit-test order
+/// (DESIGN §3); each layer sits on top of the one before it and the handles
+/// are drawn into the gaps the ring just left.
+///
+/// **Cutouts are removed with `ExcludeClipRect`, not by subdividing the ring.**
+/// GDI has no even-odd fill for a set of rects, so the two honest options are
+/// (a) decompose `band − hole − cutouts` into strips by hand or (b) clip.
+/// Clipping wins on three counts: it needs no second copy of the cutout
+/// arithmetic that `compute_layout` already owns; it handles the parts of a
+/// cutout that hang into the hole or past the band for free, where the strip
+/// decomposition would have to intersect each cutout with each strip; and it
+/// does not depend on the cutouts being pairwise disjoint the way an even-odd
+/// path does (they are — geometry.rs pins it — but not needing the guarantee
+/// is strictly better). `fill_ring`'s strip decomposition is kept underneath
+/// for the reason it always existed: one write per pixel, no flicker between
+/// the two lines on a partial repaint.
+///
+/// The white ring is computed from white_band/hole directly rather than
+/// leaning on SetWindowRgn to clip it away from the hole: the window region is
+/// rebuilt on a different schedule (mid-drag rubber band), and a border pixel
+/// landing inside the captured area is exactly the artifact the hole's slack
+/// units exist to prevent.
+///
+/// **Every pixel this writes is in the window region, and vice versa.** The
+/// three terms below — `band − hole` minus the excluded cutouts, then each
+/// handle rect, then the panel — are literally the three terms
+/// `apply_frame_region` combines. That equality is not tidiness: the frame is a
+/// plain WS_POPUP with a NULL class brush, so a pixel inside the region that
+/// nothing here writes keeps whatever the screen held when the region last
+/// changed and smears as the frame is dragged. DESIGN §6 works through why the
+/// alternatives (a layered window, or painting the gap) are worse, and §3's
+/// smaller grab target is the price this constraint charges. If a term is ever
+/// added to one of these two functions, it belongs in the other.
 unsafe fn paint_frame(app: *mut App, hwnd: HWND) {
     let mut ps = PAINTSTRUCT::default();
     let hdc = BeginPaint(hwnd, &mut ps);
@@ -582,22 +667,78 @@ unsafe fn paint_frame(app: *mut App, hwnd: HWND) {
         return;
     }
     // Translate by the *live* window origin, not layout.outer: mid-resize
-    // the two can differ (cluster side jump) and the window region above was
+    // the two can differ (panel side jump) and the window region above was
     // built with the same origin, so paint and region always agree.
     let origin = frame_origin(hwnd);
-    let band = win_rect(&(*app).layout.band, origin);
-    let white_band = win_rect(&(*app).layout.white_band, origin);
-    let hole = win_rect(&(*app).layout.hole, origin);
-    fill_ring(hdc, &band, &white_band, (*app).accent_brush);
-    fill_ring(hdc, &white_band, &hole, (*app).white_brush);
-    let cluster = win_rect(&(*app).layout.cluster, origin);
-    FillRect(hdc, &cluster, (*app).cluster_brush);
-    let old = SelectObject(hdc, (*app).glyph_pen.into());
-    let close = win_rect(&(*app).layout.close_btn, origin);
-    let mv = win_rect(&(*app).layout.move_btn, origin);
-    draw_x_glyph(hdc, &close);
-    draw_move_glyph(hdc, &mv);
-    SelectObject(hdc, old);
+    // Every GDI handle is copied out BEFORE the borrow of `layout` below, so
+    // nothing reads through the raw `*mut App` while that reference is alive.
+    // (No call in this function dispatches messages, so the wndproc cannot be
+    // reentered here either — but the two rules are cheap to keep together.)
+    let (accent_brush, white_brush, glyph_pen) =
+        ((*app).accent_brush, (*app).white_brush, (*app).glyph_pen);
+    let l = &(*app).layout;
+
+    // --- Ring (DESIGN §1) minus the handle cutouts (§2).
+    //
+    // Gated on SaveDC succeeding: with no way to restore the clip afterwards
+    // the excluded cutouts would also swallow the handles painted below, so
+    // the failure mode is deliberately "ring overpaints the gaps" rather than
+    // "no visible resize handles" (unusable). Since DESIGN §6 that fallback is
+    // very nearly free: the window region already excludes the cutouts, so GDI
+    // clips the overpaint away and the gaps stay gaps.
+    let saved = SaveDC(hdc);
+    if saved != 0 {
+        for h in &l.handles {
+            let c = win_rect(&h.cutout, origin);
+            // ExcludeClipRect's rect is half-open on right/bottom, the same
+            // convention FillRect and `win_rect` use, so the clipped-away area
+            // is exactly the cutout and not a pixel more.
+            ExcludeClipRect(hdc, c.left, c.top, c.right, c.bottom);
+        }
+    }
+    let band = win_rect(&l.band, origin);
+    let white_band = win_rect(&l.white_band, origin);
+    let hole = win_rect(&l.hole, origin);
+    fill_ring(hdc, &band, &white_band, accent_brush);
+    fill_ring(hdc, &white_band, &hole, white_brush);
+    // Restore before the handles: each one sits in the middle of the cutout
+    // that was just clipped away. SaveDC/RestoreDC rather than
+    // SelectClipRgn(None) because BeginPaint's DC arrives clipped to the
+    // update region, and dropping that clip would repaint the whole frame on
+    // every partial expose.
+    if saved != 0 {
+        let _ = RestoreDC(hdc, saved);
+    }
+
+    // --- Handles: three nested filled rects each, reading inward accent /
+    // white / accent (§2). Either inner layer can be absent at a degenerate
+    // size, which is what the Options mean.
+    for h in &l.handles {
+        FillRect(hdc, &win_rect(&h.rect, origin), accent_brush);
+        let (white, core) = handle_layers(h.rect);
+        if let Some(white) = white {
+            FillRect(hdc, &win_rect(&white, origin), white_brush);
+        }
+        if let Some(core) = core {
+            FillRect(hdc, &win_rect(&core, origin), accent_brush);
+        }
+    }
+
+    // --- Panel (§5): white first, then each button in accent. That single
+    // pair of fills produces both the panel's white outline AND the hairlines
+    // between buttons — the buttons are already inset by `spec.outline` and
+    // spaced by it, so both are just the white underneath showing through.
+    FillRect(hdc, &win_rect(&l.panel, origin), white_brush);
+    for b in &l.buttons {
+        FillRect(hdc, &win_rect(b, origin), accent_brush);
+    }
+    // Close glyph on button 0 (see PANEL_BUTTONS).
+    if let Some(close) = l.buttons.first() {
+        let old = SelectObject(hdc, glyph_pen.into());
+        draw_x_glyph(hdc, &win_rect(close, origin));
+        SelectObject(hdc, old);
+    }
+
     let _ = EndPaint(hwnd, &ps);
 }
 
@@ -1012,11 +1153,26 @@ unsafe extern "system" fn frame_proc(
         WM_NCHITTEST => {
             let p = lparam_point(lparam);
             let code: isize = match hit_test(&(*app).layout, (*app).cfg.resizable, p) {
-                // Belt-and-braces: the window region already excludes these
-                // pixels, so this normally never fires.
+                // The window region excludes almost everything `hit_test`
+                // calls Outside — the hollow interior, the cutout gaps, the
+                // ground outside the band — so this rarely fires. It is not
+                // dead, though: a handle is centred on the ring and so is
+                // PAINTED a few units into the hole (hence in the region),
+                // while §3 step 3 deliberately falls through there. That
+                // sliver sits in the clearance margin just outside the
+                // captured area, and HTTRANSPARENT is exactly right for it —
+                // the app underneath outranks a resize target.
                 Zone::Outside => HTTRANSPARENT as isize,
-                Zone::Caption | Zone::MoveHandle => HTCAPTION as isize,
-                Zone::CloseButton => HTCLIENT as isize,
+                // The whole border (and the panel background) drags now that
+                // resizing is the eight handles only — DESIGN §7, which is
+                // what let the dedicated move-handle button go away. HTCAPTION
+                // is still what runs the native move loop; the SizeAll cursor
+                // that should go with it does NOT come from this code, hence
+                // WM_SETCURSOR below.
+                Zone::Caption => HTCAPTION as isize,
+                // Buttons are ours to handle: HTCLIENT keeps WM_LBUTTONDOWN
+                // coming to us instead of starting a caption drag.
+                Zone::Button(_) => HTCLIENT as isize,
                 Zone::Edge(Dir::W) => HTLEFT as isize,
                 Zone::Edge(Dir::E) => HTRIGHT as isize,
                 Zone::Edge(Dir::N) => HTTOP as isize,
@@ -1028,13 +1184,33 @@ unsafe extern "system" fn frame_proc(
             };
             LRESULT(code)
         }
+        // The eight resize cursors come free from the HT* codes above, but
+        // HTCAPTION yields a plain arrow — and the border is now a pure drag
+        // affordance, so it has to read as one (DESIGN §4). Only the caption
+        // is claimed: everything else falls through to DefWindowProc, which
+        // maps the HT* code to its standard cursor (and, for HTCLIENT, to the
+        // class's IDC_ARROW over the panel buttons).
+        //
+        // The low word of lparam is the hit-test code from the WM_NCHITTEST
+        // the system just ran; loading the shared system cursor per hover is a
+        // cached lookup, not a resource allocation, so it needs no cache here.
+        WM_SETCURSOR if (lparam.0 & 0xffff) as u32 == HTCAPTION => {
+            match LoadCursorW(None, IDC_SIZEALL) {
+                Ok(cur) => {
+                    SetCursor(Some(cur));
+                    LRESULT(1) // TRUE: cursor set, stop further processing
+                }
+                Err(_) => DefWindowProcW(hwnd, msg, wparam, lparam),
+            }
+        }
         // Close button: classic press-capture-release-inside pattern, so a
-        // drag off the button cancels the close.
+        // drag off the button cancels the close. Button 0 is close; see
+        // PANEL_BUTTONS.
         WM_LBUTTONDOWN => {
             let (cx, cy) = lparam_point(lparam);
             let origin = frame_origin(hwnd);
             let p = (cx + origin.0, cy + origin.1);
-            if hit_test(&(*app).layout, (*app).cfg.resizable, p) == Zone::CloseButton {
+            if hit_test(&(*app).layout, (*app).cfg.resizable, p) == Zone::Button(0) {
                 (*app).close_pressed = true;
                 let _ = SetCapture(hwnd);
             }
@@ -1047,7 +1223,7 @@ unsafe extern "system" fn frame_proc(
                 let (cx, cy) = lparam_point(lparam);
                 let origin = frame_origin(hwnd);
                 let p = (cx + origin.0, cy + origin.1);
-                if hit_test(&(*app).layout, (*app).cfg.resizable, p) == Zone::CloseButton {
+                if hit_test(&(*app).layout, (*app).cfg.resizable, p) == Zone::Button(0) {
                     (*app).events.quit();
                 }
             }
@@ -1092,7 +1268,12 @@ unsafe extern "system" fn frame_proc(
                     h: cur.h,
                 };
                 if moved != cur {
-                    translate_layout(&mut (*app).layout, moved.x - cur.x, moved.y - cur.y);
+                    // FrameLayout::translate, not a local rect list: it shifts
+                    // EVERY rect the layout carries — handles, cutouts, panel,
+                    // buttons and `region` included — so nothing can be left
+                    // behind at the old origin and painted (or hit-tested)
+                    // there for the rest of the drag.
+                    (*app).layout.translate(moved.x - cur.x, moved.y - cur.y);
                     (*app).region = moved;
                     (*app).events.region_moved(moved);
                     place_mirror((*app).mirror, moved);
@@ -1118,8 +1299,8 @@ unsafe extern "system" fn frame_proc(
                     // disagree with the region the drag is actually implying
                     // the moment it crosses a scale boundary. The commit path
                     // (apply_layout) picks up the new scale.
-                    (*app).layout =
-                        compute_layout(implied, (*app).border, &(*app).work_areas);
+                    let spec = (*app).spec;
+                    (*app).layout = compute_layout(implied, &spec, &(*app).work_areas);
                     apply_frame_region(hwnd, &(*app).layout, (rc.left, rc.top));
                     let _ = InvalidateRect(Some(hwnd), None, true);
                 }
@@ -1131,9 +1312,9 @@ unsafe extern "system" fn frame_proc(
         // produce a degenerate canvas on commit). Mid-drag this MUST use the
         // same insets as WM_SIZE/WM_EXITSIZEMOVE (drag_insets, captured at
         // WM_ENTERSIZEMOVE): WM_SIZE overwrites `layout` with the live
-        // rubber-band layout, whose cluster can jump sides and change the
+        // rubber-band layout, whose panel can jump sides and change the
         // inset sums — a constraint computed from that would let the implied
-        // region dip below MIN_REGION (or over-restrict) by the cluster span.
+        // region dip below MIN_REGION (or over-restrict) by the panel span.
         WM_GETMINMAXINFO => {
             let ins = if (*app).in_size_move {
                 (*app).drag_insets
@@ -1152,16 +1333,17 @@ unsafe extern "system" fn frame_proc(
             LRESULT(0)
         }
         // The window region is in physical px and the process is per-monitor
-        // aware, so the region's own coordinates do not scale — but the
-        // BORDER does: a new monitor scale is a new BorderSpec, which changes
-        // the band thickness and therefore the entire layout, not just the
-        // shape. apply_layout rebuilds the spec, the layout, the window rect,
-        // the region and the paint, in that order.
+        // aware, so the region's own coordinates do not scale — but every
+        // frame measurement does: a new monitor scale is a new FrameSpec,
+        // which changes the band thickness, the handle size, the button size
+        // and therefore the entire layout, not just the shape. apply_layout
+        // rebuilds the spec, the glyph pen, the layout, the window rect, the
+        // region and the paint, in that order.
         WM_DPICHANGED => {
             apply_layout(app);
             LRESULT(0)
         }
-        // Monitor topology changed: work areas moved, the cluster may need
+        // Monitor topology changed: work areas moved, the panel may need
         // a new side.
         WM_DISPLAYCHANGE => {
             (*app).work_areas = work_areas();
@@ -1333,8 +1515,8 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
         );
 
         let areas = work_areas();
-        let border = border_spec(region, cfg.border);
-        let layout = compute_layout(region, border, &areas);
+        let spec = frame_spec(region, cfg.border);
+        let layout = compute_layout(region, &spec, &areas);
 
         // Created hidden, roughly placed; exact client placement (which
         // needs the window's own DPI) happens below via place_prompt /
@@ -1391,7 +1573,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             region,
             work_areas: areas,
             layout,
-            border,
+            spec,
             mirror,
             // Both created by enter_mirror_phase, which for the prompt phase
             // does not run until the user presses OK.
@@ -1408,12 +1590,10 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             close_pressed: false,
             accent_brush: CreateSolidBrush(colorref(ar, ag, ab)),
             white_brush: CreateSolidBrush(colorref(0xff, 0xff, 0xff)),
-            cluster_brush: CreateSolidBrush(colorref(
-                (ar as u32 * 2 / 3) as u8,
-                (ag as u32 * 2 / 3) as u8,
-                (ab as u32 * 2 / 3) as u8,
-            )),
-            glyph_pen: CreatePen(PS_SOLID, GLYPH_PEN_WIDTH, colorref(0xff, 0xff, 0xff)),
+            // Built at the startup spec's width; `apply_layout` replaces it
+            // whenever the spec is rebuilt (DPI change, display change,
+            // commit onto another monitor).
+            glyph_pen: CreatePen(PS_SOLID, glyph_pen_width(&spec), colorref(0xff, 0xff, 0xff)),
         }));
 
         SetWindowLongPtrW(mirror, GWLP_USERDATA, app as isize);

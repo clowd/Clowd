@@ -3,8 +3,8 @@
 //! meeting apps pick; libobs paints into its contentView), an opaque
 //! borderless *mask* pinned exactly over it at the back of the Z-order (so
 //! the capture never photographs the mirror — no recursion), and a floating
-//! hollow *frame* whose custom NSView draws the accent band + handle cluster
-//! and drives move/resize.
+//! hollow *frame* whose custom NSView draws the two-tone band, its resize
+//! handles and the button panel, and drives move/resize.
 //!
 //! Threading: everything here runs on the main thread. `main.rs` created the
 //! NSApplication (Accessory policy) before obs bootstrap; we only fetch the
@@ -24,13 +24,19 @@
 use std::cell::RefCell;
 use std::ffi::c_void;
 
+use std::sync::OnceLock;
+
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
-use objc2::{define_class, msg_send, sel, AllocAnyThread, MainThreadMarker, MainThreadOnly, Message};
+use objc2::{
+    define_class, msg_send, sel, AllocAnyThread, ClassType, MainThreadMarker, MainThreadOnly,
+    Message,
+};
 use objc2_app_kit::{
     NSApplication, NSApplicationDidChangeScreenParametersNotification, NSBackingStoreType,
-    NSBezelStyle, NSBezierPath, NSButton, NSButtonType, NSColor, NSCursor, NSEvent, NSLineCapStyle,
-    NSScreen, NSStatusWindowLevel,
+    NSBezelStyle, NSBezierPath, NSButton, NSButtonType, NSColor, NSCursor,
+    NSCursorFrameResizeDirections, NSCursorFrameResizePosition, NSEvent, NSGraphicsContext,
+    NSLineCapStyle, NSScreen, NSStatusWindowLevel,
     NSTextField,
     NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindingRule, NSWindow,
     NSWindowCollectionBehavior, NSWindowDidBecomeKeyNotification,
@@ -44,7 +50,7 @@ use objc2_foundation::{
 use obs_platform::region::Rect;
 
 use super::{AppEvents, UiConfig};
-use crate::geometry::{self, Dir, FrameLayout, Zone};
+use crate::geometry::{self, Cor, Dir, FrameLayout, HandleKind, Zone};
 
 /// How often the move-commit poller checks `NSEvent::pressedMouseButtons`.
 /// `performWindowDragWithEvent:` gives no end-of-drag callback (spec), so a
@@ -186,7 +192,12 @@ fn cocoa_point_to_capture(mtm: MainThreadMarker, p: NSPoint) -> (i32, i32) {
     (p.x.round() as i32, (ph - p.y).round() as i32)
 }
 
-/// The border's two lines in capture units.
+/// Number of buttons in the frame's panel. One (close) today; `FrameSpec`
+/// lays out N, so a second is a change to this constant plus a `Zone::Button`
+/// arm in `on_mouse_down`/`on_mouse_up` and a glyph in `draw_frame`.
+const PANEL_BUTTONS: u32 = 1;
+
+/// Every DPI-derived frame measurement, in capture units.
 ///
 /// Capture space on macOS is CG points, which are already the
 /// DPI-independent unit — a 1-point line is one device pixel on a 1x display
@@ -195,12 +206,13 @@ fn cocoa_point_to_capture(mtm: MainThreadMarker, p: NSPoint) -> (i32, i32) {
 /// widths land on whole device pixels at 1x and 2x alike. This is the whole
 /// difference from Windows, where capture units are physical pixels and the
 /// same design has to be multiplied by dpi/96.
-fn border_spec(cfg: &UiConfig) -> geometry::BorderSpec {
-    geometry::BorderSpec::scaled(1.0, cfg.border)
+fn frame_spec(cfg: &UiConfig) -> geometry::FrameSpec {
+    geometry::FrameSpec::scaled(1.0, cfg.border, PANEL_BUTTONS)
 }
 
-/// Work areas for the cluster placement scoring (spec `compute_layout`):
-/// `visibleFrame` already excludes the menu bar and the Dock.
+/// Work areas for the panel placement cascade (DESIGN §5): `visibleFrame`
+/// already excludes the menu bar and the Dock, which is exactly the rect the
+/// cascade wants — the panel must not land under either.
 fn work_areas(mtm: MainThreadMarker) -> Vec<Rect> {
     NSScreen::screens(mtm)
         .iter()
@@ -597,6 +609,10 @@ fn on_move_tick() {
         Some(adopt(app, committed))
     });
     if let Some(a) = adoption {
+        // The pointer is still over the border it just dragged, so hand the
+        // open hand back — the drag session ate the mouseMoved: that would
+        // otherwise have done it.
+        NSCursor::openHandCursor().set();
         apply_adoption(a);
     }
 }
@@ -605,7 +621,7 @@ fn on_move_tick() {
 /// bar geometry — spec: frame geometry is recomputed "on every
 /// move/resize/commit and display-config change", mirroring win32.rs's
 /// WM_DISPLAYCHANGE). Two things go stale at once: the work areas (the
-/// cluster may now hide under a relocated Dock) and `primary_screen_height`
+/// panel may now hide under a relocated Dock) and `primary_screen_height`
 /// (the capture↔Cocoa y-flip base — the windows' stale Cocoa frames no
 /// longer sit on the capture region being shared). Re-adopting the committed
 /// region recomputes both: `adopt` re-derives layout from fresh work areas
@@ -640,7 +656,7 @@ struct Adoption {
 }
 
 /// Adopt a committed region (spec: "After any commit, adopt the returned
-/// region"): store it, recompute the frame layout (the cluster may jump
+/// region"): store it, recompute the frame layout (the panel may jump
 /// sides), and stage the mirror/mask/frame window moves.
 fn adopt(app: &mut App, committed: Rect) -> Adoption {
     app.region = committed;
@@ -649,7 +665,7 @@ fn adopt(app: &mut App, committed: Rect) -> Adoption {
     // no sliver of the mirror is ever visible.
     let mirror_rect = app.mirror.frameRectForContentRect(capture_to_cocoa(mtm, committed));
     let frame_upd = app.frame.as_ref().map(|fw| {
-        let layout = geometry::compute_layout(committed, border_spec(&app.cfg), &work_areas(mtm));
+        let layout = geometry::compute_layout(committed, &frame_spec(&app.cfg), &work_areas(mtm));
         let rect = capture_to_cocoa(mtm, layout.outer);
         app.layout = Some(layout);
         (fw.clone(), rect, app.view.clone().expect("frame window implies view"))
@@ -706,6 +722,13 @@ define_class!(
         /// hollow interior (and anything else `Zone::Outside`) makes AppKit
         /// route the event — and cursor management — to whatever window is
         /// underneath, exactly as if the frame were not there.
+        ///
+        /// "Anything else" now includes the clear space around each handle:
+        /// DESIGN §3 makes the cutout gap a real hole, so `geometry::hit_test`
+        /// answers `Outside` there and this returns nil with no special case.
+        /// That is the same set of pixels `draw_frame` leaves unpainted, which
+        /// is the property worth having — a gap you can see the desktop
+        /// through behaves like a gap.
         // method_id (not method): the return is a Retained object, which the
         // macro autoreleases per the selector's (plain) method family.
         #[unsafe(method_id(hitTest:))]
@@ -742,9 +765,12 @@ define_class!(
             draw_frame();
         }
 
-        /// Per-zone cursors for the key-window case; the tracking-area
-        /// mouseMoved: path below covers the (usual) non-key case, where
-        /// AppKit disables cursor rects.
+        /// Per-zone cursors for the key-window case. Unreachable as long as
+        /// the frame window is borderless (such a window can never be key);
+        /// kept because it is the rect-shaped statement of the same zone →
+        /// cursor mapping `on_mouse_moved` applies point-wise, and it becomes
+        /// live the moment the frame is given a titled style. See
+        /// `FrameView::new` for the full cursor story.
         #[unsafe(method(resetCursorRects))]
         fn reset_cursor_rects(&self) {
             reset_cursor_rects_impl(self);
@@ -776,10 +802,45 @@ impl FrameView {
     fn new(mtm: MainThreadMarker) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(());
         let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: NSRect::ZERO] };
-        // ActiveAlways is the load-bearing option: the frame window normally
-        // never becomes key, and cursor rects only work for key windows, so
-        // hover cursor feedback comes from tracking-area mouseMoved events
-        // instead. InVisibleRect keeps the area auto-sized to the view.
+        // mouseMoved: is the ONLY cursor mechanism this window can use, and
+        // even it only reaches the screen while the app happens to be active.
+        // Both of AppKit's designated cursor paths are structurally
+        // unavailable here, for two different reasons:
+        //
+        //   * cursor rects (`resetCursorRects`) apply to the KEY window, and a
+        //     borderless window can never become key;
+        //   * `cursorUpdate:` needs the key window too, AND is documented as
+        //     never delivered for an `ActiveAlways` tracking area.
+        //
+        // mouseMoved: has neither restriction — measured: it IS delivered to
+        // this inactive, non-key window, with the correct zone — so the
+        // hit-test/cursor logic in `on_mouse_moved` is right and stays right.
+        //
+        // What it cannot beat is the WindowServer: only the ACTIVE app's
+        // cursor is drawn. Measured on macOS 26.6, isolated Accessory-policy
+        // test app, borderless non-key window, identical code, activation the
+        // only variable:
+        //
+        //   inactive -> +[NSCursor currentCursor] is our cursor, but
+        //               +[NSCursor currentSystemCursor] stays the 28x40 arrow.
+        //   active   -> currentSystemCursor becomes our cursor and the
+        //               per-zone feedback appears, non-key notwithstanding.
+        //
+        // `[NSCursor hide]` and `CGDisplayHideCursor` are ignored from an
+        // inactive app the same way, so there is no hide-and-draw-our-own
+        // fallback either. The same arrow-only behaviour is what macOS itself
+        // shows over any inactive app's window (an inactive TextEdit's text
+        // view hovers as an arrow, not an I-beam).
+        //
+        // So per-zone hover cursors are visible only while this app is active
+        // — e.g. straight after the prompt phase's OK. Making them always
+        // visible would mean activating the app and taking focus from
+        // whatever the user is actually working in, which an always-on
+        // overlay must not do. DESIGN §4 is therefore only partly satisfiable
+        // on macOS; a repaint-based hover affordance (highlighting the handle
+        // under the pointer) is the only feedback that works while inactive.
+        //
+        // InVisibleRect keeps the area auto-sized to the view.
         let opts = NSTrackingAreaOptions::MouseMoved
             | NSTrackingAreaOptions::ActiveAlways
             | NSTrackingAreaOptions::InVisibleRect;
@@ -817,21 +878,64 @@ impl FrameView {
     }
 }
 
-// The classic resize cursors are deprecated in favor of macOS 15's
-// frameResizeCursor family, but that family is unavailable pre-15 and the
-// deployment target here predates it; the deprecated singletons still render
-// the correct arrows on every supported macOS.
+/// Whether this macOS has `+[NSCursor frameResizeCursorFromPosition:
+/// inDirections:]` (15+). It is a CLASS method, so `respondsToSelector:` has
+/// to be asked of the metaclass — asking the class itself tests for an
+/// *instance* method of that name and always answers no. Cached because it is
+/// consulted on every mouse move over a corner.
+fn frame_resize_cursors_available() -> bool {
+    static AVAILABLE: OnceLock<bool> = OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        NSCursor::class()
+            .metaclass()
+            .responds_to(sel!(frameResizeCursorFromPosition:inDirections:))
+    })
+}
+
+/// Per-zone cursor (DESIGN §4).
+///
+/// The caption is the whole border now, and macOS has no public four-arrow
+/// move cursor, so it uses the platform's own "this drags" idiom rather than
+/// faking SizeAll: open hand on hover, closed hand while a drag is actually in
+/// flight.
+///
+/// The straight resize cursors are deprecated in favor of macOS 15's
+/// frameResizeCursor family, but that family is unavailable pre-15 and the
+/// deployment target here predates it; the deprecated singletons still render
+/// the correct arrows on every supported macOS. The DIAGONAL cursors are the
+/// one case with no pre-15 stand-in at all, so those are probed for at runtime
+/// and fall back to the crosshair.
 #[allow(deprecated)]
-fn cursor_for_zone(zone: Zone) -> Retained<NSCursor> {
+fn cursor_for_zone(zone: Zone, dragging: bool) -> Retained<NSCursor> {
     match zone {
         Zone::Edge(Dir::E) | Zone::Edge(Dir::W) => NSCursor::resizeLeftRightCursor(),
         Zone::Edge(Dir::N) | Zone::Edge(Dir::S) => NSCursor::resizeUpDownCursor(),
-        // macOS has no public diagonal resize cursors; crosshair is the
-        // closest stock shape (spec).
-        Zone::Corner(_) => NSCursor::crosshairCursor(),
-        Zone::MoveHandle => NSCursor::openHandCursor(),
-        Zone::CloseButton | Zone::Caption | Zone::Outside => NSCursor::arrowCursor(),
+        Zone::Corner(c) => corner_cursor(c),
+        Zone::Caption if dragging => NSCursor::closedHandCursor(),
+        Zone::Caption => NSCursor::openHandCursor(),
+        Zone::Button(_) | Zone::Outside => NSCursor::arrowCursor(),
     }
+}
+
+#[allow(deprecated)] // crosshair fallback: see cursor_for_zone
+fn corner_cursor(corner: Cor) -> Retained<NSCursor> {
+    if !frame_resize_cursors_available() {
+        return NSCursor::crosshairCursor();
+    }
+    // Position names are visual (Top = the top edge on screen), which lines up
+    // with capture space's y-down corners directly.
+    let position = match corner {
+        Cor::NW => NSCursorFrameResizePosition::TopLeft,
+        Cor::NE => NSCursorFrameResizePosition::TopRight,
+        Cor::SW => NSCursorFrameResizePosition::BottomLeft,
+        Cor::SE => NSCursorFrameResizePosition::BottomRight,
+    };
+    // `All`: the region can grow or shrink from any corner — resize_region
+    // clamps at MIN_REGION rather than forbidding a direction.
+    NSCursor::frameResizeCursorFromPosition_inDirections(
+        position,
+        NSCursorFrameResizeDirections::All,
+    )
 }
 
 fn on_mouse_moved(view: &FrameView, event: &NSEvent) {
@@ -840,6 +944,7 @@ fn on_mouse_moved(view: &FrameView, event: &NSEvent) {
     try_with_app(|app| {
         let Some(l) = app.layout.as_ref() else { return };
         let zone = geometry::hit_test(l, app.cfg.resizable, p);
+        let dragging = app.move_drag;
         if matches!(zone, Zone::Outside) {
             // Restore the arrow exactly once when leaving our band, then
             // stop touching the cursor: over the hollow interior the app
@@ -851,7 +956,7 @@ fn on_mouse_moved(view: &FrameView, event: &NSEvent) {
             }
         } else {
             app.hover_outside = false;
-            set = Some(cursor_for_zone(zone));
+            set = Some(cursor_for_zone(zone, dragging));
         }
     });
     if let Some(c) = set {
@@ -864,14 +969,17 @@ fn on_mouse_down(view: &FrameView, event: &NSEvent) {
     let start_window_drag = with_app(|app| {
         let Some(l) = app.layout.as_ref() else { return false };
         match geometry::hit_test(l, app.cfg.resizable, p) {
-            Zone::CloseButton => {
+            // One button today (close). Adding a second means matching on the
+            // index here and in `on_mouse_up`, and bumping PANEL_BUTTONS.
+            Zone::Button(_) => {
                 app.close_armed = true;
                 false
             }
-            // MoveHandle behaves exactly like the caption band for dragging
-            // (it differs only in cursor). hit_test has already demoted
-            // Edge/Corner to Caption when !resizable.
-            Zone::Caption | Zone::MoveHandle => {
+            // Caption is now the ENTIRE border plus the panel background —
+            // resizing is the eight handles only (DESIGN §7), which is what
+            // let the old move-handle button go away. hit_test has already
+            // demoted Edge/Corner to Caption when !resizable.
+            Zone::Caption => {
                 app.move_drag = true;
                 let target: &AnyObject = &app.controller;
                 let timer = unsafe {
@@ -894,6 +1002,10 @@ fn on_mouse_down(view: &FrameView, event: &NSEvent) {
         }
     });
     if start_window_drag {
+        // Closed hand for the duration: the native drag session swallows
+        // mouseMoved:, so `on_mouse_moved` never gets to switch it, and
+        // `on_move_tick` opens it again on release.
+        NSCursor::closedHandCursor().set();
         // Outside the borrow: the native drag session may synchronously post
         // its first willMove/didMove notifications.
         if let Some(window) = view.window() {
@@ -914,7 +1026,7 @@ fn on_mouse_dragged(view: &FrameView, event: &NSEvent) {
         let drag = app.resize.as_ref()?;
         let live =
             geometry::resize_region(drag.start, drag.zone, p.0 - drag.origin.0, p.1 - drag.origin.1);
-        let layout = geometry::compute_layout(live, border_spec(&app.cfg), &work_areas(app.mtm));
+        let layout = geometry::compute_layout(live, &frame_spec(&app.cfg), &work_areas(app.mtm));
         let rect = capture_to_cocoa(app.mtm, layout.outer);
         // Publish the live layout so drawRect:/hitTest: track the rubber-band.
         app.layout = Some(layout);
@@ -934,8 +1046,9 @@ fn on_mouse_up(view: &FrameView, event: &NSEvent) {
         if app.close_armed {
             app.close_armed = false;
             // Standard button semantics: fire only when released inside.
+            // Button 0 is close; see PANEL_BUTTONS.
             if let Some(l) = app.layout.as_ref() {
-                if matches!(geometry::hit_test(l, app.cfg.resizable, p), Zone::CloseButton) {
+                if matches!(geometry::hit_test(l, app.cfg.resizable, p), Zone::Button(0)) {
                     app.events.quit(); // -> ! (exit_process)
                 }
             }
@@ -964,15 +1077,23 @@ fn srgb(r: u8, g: u8, b: u8) -> Retained<NSColor> {
     )
 }
 
-/// Paint the accent band ring, the darker handle cluster, and the two white
-/// glyphs (X, four-arrow move). Everything is derived from the FrameLayout in
-/// capture space and translated by `outer.origin` into the (flipped) view.
+/// Paint the frame: the two-tone ring with the handle cutouts taken out of
+/// it, the handles themselves, and the button panel with its close glyph.
+/// Everything is derived from the FrameLayout in capture space and translated
+/// by `outer.origin` into the (flipped) view, which is a pure translation
+/// because the view is `isFlipped`.
 fn draw_frame() {
     let Some((layout, accent)) =
         read_app(|app| app.layout.clone().map(|l| (l, app.cfg.accent))).flatten()
     else {
         return; // first display pass before APP is populated: draw nothing
     };
+    // Always present inside drawRect:; without it nothing would render anyway,
+    // and we need it to scope the clip below.
+    let Some(ctx) = NSGraphicsContext::currentContext() else {
+        return;
+    };
+
     let outer = layout.outer;
     let local = |r: Rect| {
         NSRect::new(
@@ -980,84 +1101,178 @@ fn draw_frame() {
             NSSize::new(r.w as f64, r.h as f64),
         )
     };
+    let accent_fill = srgb(accent.0, accent.1, accent.2);
+    let white = NSColor::whiteColor();
 
-    // The border is two concentric rings, mirroring Clowd's BorderWindow: the
-    // accent line outside, a white hairline inside it, the captured region
-    // within that. Each is one even-odd path (outer rect + inner rect), so the
-    // interior stays unpainted — the window background is clear, which is what
-    // makes the hole click-through.
+    // --- The ring (DESIGN §1), minus the handle cutouts (§2).
     //
-    // Drawn outermost-first, but they do not overlap by construction
-    // (white_band is the shared edge), so the order is presentational only.
-    let ring = |outer: Rect, inner: Rect| {
-        let path = NSBezierPath::bezierPath();
-        path.appendBezierPathWithRect(local(outer));
-        path.appendBezierPathWithRect(local(inner));
-        path.setWindingRule(NSWindingRule::EvenOdd);
-        path.fill();
-    };
-    srgb(accent.0, accent.1, accent.2).setFill();
-    ring(layout.band, layout.white_band);
-    NSColor::whiteColor().setFill();
-    ring(layout.white_band, layout.hole);
-
-    // Cluster: a darker shade of the accent so the buttons read as controls.
-    let darker = |c: u8| (c as f64 * 0.55) as u8;
-    srgb(darker(accent.0), darker(accent.1), darker(accent.2)).setFill();
-    NSBezierPath::fillRect(local(layout.cluster));
-
-    // Glyphs: simple white polylines, ~2 px, round caps (plan §6.1's GDI
-    // equivalent — no icon resources).
-    NSColor::whiteColor().setStroke();
-    let glyphs = NSBezierPath::bezierPath();
-    glyphs.setLineWidth(2.0);
-    glyphs.setLineCapStyle(NSLineCapStyle::Round);
-
-    // Close: an X inset into its button square.
-    let c = local(layout.close_btn);
-    let inset = 9.0;
-    let (x0, y0) = (c.origin.x + inset, c.origin.y + inset);
-    let (x1, y1) = (
-        c.origin.x + c.size.width - inset,
-        c.origin.y + c.size.height - inset,
-    );
-    glyphs.moveToPoint(NSPoint::new(x0, y0));
-    glyphs.lineToPoint(NSPoint::new(x1, y1));
-    glyphs.moveToPoint(NSPoint::new(x0, y1));
-    glyphs.lineToPoint(NSPoint::new(x1, y0));
-
-    // Move: a four-arrow cross centered in its button square.
-    let m = local(layout.move_btn);
-    let (cx, cy) = (
-        m.origin.x + m.size.width / 2.0,
-        m.origin.y + m.size.height / 2.0,
-    );
-    let arm = m.size.width.min(m.size.height) / 2.0 - 6.0;
-    let head = 4.0;
-    glyphs.moveToPoint(NSPoint::new(cx - arm, cy));
-    glyphs.lineToPoint(NSPoint::new(cx + arm, cy));
-    glyphs.moveToPoint(NSPoint::new(cx, cy - arm));
-    glyphs.lineToPoint(NSPoint::new(cx, cy + arm));
-    // Arrowheads: chevrons at the four line ends. (bx, by) points from the
-    // tip back toward the center; the two wings are that vector rotated ±90°.
-    for ((tx, ty), (bx, by)) in [
-        ((cx + arm, cy), (-head, 0.0)), // E
-        ((cx - arm, cy), (head, 0.0)),  // W
-        ((cx, cy + arm), (0.0, -head)), // S (flipped view: +y is down)
-        ((cx, cy - arm), (0.0, head)),  // N
-    ] {
-        glyphs.moveToPoint(NSPoint::new(tx + bx - by, ty + by + bx));
-        glyphs.lineToPoint(NSPoint::new(tx, ty));
-        glyphs.lineToPoint(NSPoint::new(tx + bx + by, ty + by - bx));
+    // Two nested clips, which reduces the fills themselves to two plain rects:
+    //
+    //   1. band + hole, even-odd -> the ring annulus. This is also what keeps
+    //      the hollow interior unpainted, and the interior being unpainted on
+    //      a clear window is what makes it click-through.
+    //   2. band + every cutout, even-odd -> inside the annulus `band` is a
+    //      constant 1, so each cutout flips it to 0 and drops out.
+    //
+    // Clips intersect, so the result is exactly (band - hole) - cutouts.
+    //
+    // Doing this by winding alone — appending the cutouts to the *fill* path
+    // instead — would paint the parts of a cutout that hang into the hole or
+    // past the band, because a rect appended to an even-odd path flips parity
+    // everywhere it covers, not only where the ring is. §2 says that overhang
+    // is invisible; the clip is what makes that literally true rather than a
+    // claim about parity.
+    //
+    // Step 2 does rely on the cutouts being pairwise disjoint (an overlap
+    // would flip parity back to 1 and paint a speck inside the gap).
+    // `compute_layout` guarantees that: no cutout crosses the band's centre
+    // line on an axis it does not straddle, which is what stops the two
+    // corner cutouts along an edge, and the two opposite mid-edge cutouts
+    // across a narrow band, from ever meeting. `layout_cutouts_are_pairwise_disjoint`
+    // is the test that holds this end of the contract up.
+    ctx.saveGraphicsState();
+    let annulus = NSBezierPath::bezierPath();
+    annulus.appendBezierPathWithRect(local(layout.band));
+    annulus.appendBezierPathWithRect(local(layout.hole));
+    annulus.setWindingRule(NSWindingRule::EvenOdd);
+    annulus.addClip();
+    let cutouts = NSBezierPath::bezierPath();
+    cutouts.appendBezierPathWithRect(local(layout.band));
+    for h in &layout.handles {
+        cutouts.appendBezierPathWithRect(local(h.cutout));
     }
-    glyphs.stroke();
+    cutouts.setWindingRule(NSWindingRule::EvenOdd);
+    cutouts.addClip();
+    // Accent over the whole ring, then white over its inner half. The two
+    // lines are `band - white_band` and `white_band - hole`; the clip has
+    // already removed the hole, so painting the inner rect on top of the outer
+    // one produces the same two lines with one fewer path.
+    accent_fill.setFill();
+    NSBezierPath::fillRect(local(layout.band));
+    white.setFill();
+    NSBezierPath::fillRect(local(layout.white_band));
+    ctx.restoreGraphicsState();
+
+    // --- Handles: three nested filled rects each, reading inward accent /
+    // white / accent (§2). Drawn after the clip is restored, because a handle
+    // sits in the middle of its own cutout — which the clip just removed.
+    for h in &layout.handles {
+        let (ring, core) = geometry::handle_layers(h.rect);
+        accent_fill.setFill();
+        NSBezierPath::fillRect(local(h.rect));
+        if let Some(ring) = ring {
+            white.setFill();
+            NSBezierPath::fillRect(local(ring));
+        }
+        if let Some(core) = core {
+            accent_fill.setFill();
+            NSBezierPath::fillRect(local(core));
+        }
+    }
+
+    // --- Panel (§5): a white outline over an accent fill, the same
+    // white-against-accent language as the border and for the same reason —
+    // it floats over arbitrary desktop content and needs its own contrast.
+    // Painting the whole panel white and then each button in accent gives the
+    // outline AND the inter-button hairlines in one step: both are just the
+    // white underneath showing through the gaps the buttons leave.
+    white.setFill();
+    NSBezierPath::fillRect(local(layout.panel));
+    accent_fill.setFill();
+    for b in &layout.buttons {
+        NSBezierPath::fillRect(local(*b));
+    }
+
+    // Close glyph: a white X inset into button 0. A stroked polyline, no icon
+    // resources (plan §6.1's GDI equivalent). The inset is a fraction of the
+    // button rather than a fixed margin so the X keeps its proportions if the
+    // button is ever DPI-scaled up; 0.3 reproduces the previous 9-of-30.
+    if let Some(btn) = layout.buttons.first() {
+        white.setStroke();
+        let glyph = NSBezierPath::bezierPath();
+        glyph.setLineWidth(2.0);
+        glyph.setLineCapStyle(NSLineCapStyle::Round);
+        let c = local(*btn);
+        let inset = c.size.width.min(c.size.height) * 0.3;
+        let (x0, y0) = (c.origin.x + inset, c.origin.y + inset);
+        let (x1, y1) = (
+            c.origin.x + c.size.width - inset,
+            c.origin.y + c.size.height - inset,
+        );
+        glyph.moveToPoint(NSPoint::new(x0, y0));
+        glyph.lineToPoint(NSPoint::new(x1, y1));
+        glyph.moveToPoint(NSPoint::new(x0, y1));
+        glyph.lineToPoint(NSPoint::new(x1, y0));
+        glyph.stroke();
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Cursor rects (key-window path)
 // ---------------------------------------------------------------------------
 
-#[allow(deprecated)] // resize cursors: see cursor_for_zone
+/// `r` minus `cut`, as up to four non-overlapping rects (the slabs above,
+/// below, left and right of the overlap). Cursor rects only.
+///
+/// AppKit's cursor tracking is a flat list of rects with none of `hit_test`'s
+/// ordering: it has no equivalent of "the hole falls through" (§3 step 3) and
+/// none of "the cutout gap is a hole" (§3 step 5). Both have to be done by
+/// arithmetic here instead, so both go through this one helper.
+fn subtract(r: Rect, cut: Rect) -> Vec<Rect> {
+    let rect = |x1: i64, y1: i64, x2: i64, y2: i64| Rect {
+        x: x1 as i32,
+        y: y1 as i32,
+        w: (x2 - x1).max(0) as u32,
+        h: (y2 - y1).max(0) as u32,
+    };
+    let (rx1, ry1) = (r.x as i64, r.y as i64);
+    let (rx2, ry2) = (rx1 + r.w as i64, ry1 + r.h as i64);
+    let (hx1, hy1) = (cut.x as i64, cut.y as i64);
+    let (hx2, hy2) = (hx1 + cut.w as i64, hy1 + cut.h as i64);
+    // The overlap, clamped into `r`. Empty on either axis means `r` is clear
+    // of `cut` and survives whole.
+    let (ix1, iy1) = (rx1.max(hx1), ry1.max(hy1));
+    let (ix2, iy2) = (rx2.min(hx2), ry2.min(hy2));
+    if ix1 >= ix2 || iy1 >= iy2 {
+        return vec![r];
+    }
+    [
+        rect(rx1, ry1, rx2, iy1), // above
+        rect(rx1, iy2, rx2, ry2), // below
+        rect(rx1, iy1, ix1, iy2), // left of
+        rect(ix2, iy1, rx2, iy2), // right of
+    ]
+    .into_iter()
+    .filter(|s| s.w > 0 && s.h > 0)
+    .collect()
+}
+
+/// `rects` minus `cut`, piecewise. The inputs stay pairwise disjoint because
+/// [`subtract`] only ever carves pieces out of rects it is given.
+fn subtract_all(rects: Vec<Rect>, cut: Rect) -> Vec<Rect> {
+    rects.into_iter().flat_map(|r| subtract(r, cut)).collect()
+}
+
+/// Cursor rects for the key-window case. The frame window is borderless and
+/// so can never become key, which makes this unreachable today; it exists for
+/// completeness and must agree with the `mouseMoved:` path above, which is the
+/// one that actually runs (and, per `FrameView::new`, only reaches the screen
+/// while the app is active).
+///
+/// Built entirely from `layout.handles` and the layout's own rects. It used to
+/// re-derive the band's corner/edge subdivision by hand, which meant two
+/// copies of the hit-zone arithmetic that could drift apart; the handle rects
+/// now exist for exactly this.
+///
+/// It is nevertheless the one place `hit_test`'s ordering has to be restated
+/// as arithmetic, since a cursor-rect list has no ordering of its own. The
+/// shape it builds is `hit_test`'s answer, rect by rect:
+///
+/// ```text
+/// band − hole − every cutout          -> hand   (§3 steps 5, 6)
+/// each handle rect − hole             -> resize (§3 step 4; Caption if !resizable)
+/// panel, then each button             -> hand, arrow (§3 steps 1, 2)
+/// ```
 fn reset_cursor_rects_impl(view: &FrameView) {
     let Some((layout, resizable)) =
         read_app(|app| app.layout.clone().map(|l| (l, app.cfg.resizable))).flatten()
@@ -1065,53 +1280,69 @@ fn reset_cursor_rects_impl(view: &FrameView) {
         return;
     };
     let outer = layout.outer;
-    let local = |x: i64, y: i64, w: i64, h: i64| {
+    let local = |r: Rect| {
         NSRect::new(
-            NSPoint::new((x - outer.x as i64) as f64, (y - outer.y as i64) as f64),
-            NSSize::new(w.max(0) as f64, h.max(0) as f64),
+            NSPoint::new(
+                (r.x as i64 - outer.x as i64) as f64,
+                (r.y as i64 - outer.y as i64) as f64,
+            ),
+            NSSize::new(r.w as f64, r.h as f64),
         )
     };
-    let add = |r: NSRect, c: &NSCursor| {
-        if r.size.width > 0.0 && r.size.height > 0.0 {
-            view.addCursorRect_cursor(r, c);
+    let add = |r: Rect, c: &NSCursor| {
+        if r.w > 0 && r.h > 0 {
+            view.addCursorRect_cursor(local(r), c);
         }
     };
 
-    let move_btn = layout.move_btn;
-    add(
-        local(move_btn.x as i64, move_btn.y as i64, move_btn.w as i64, move_btn.h as i64),
-        &NSCursor::openHandCursor(),
-    );
-    let close_btn = layout.close_btn;
-    add(
-        local(close_btn.x as i64, close_btn.y as i64, close_btn.w as i64, close_btn.h as i64),
-        &NSCursor::arrowCursor(),
-    );
+    // Added in REVERSE hit-test order: AppKit resolves overlapping cursor
+    // rects last-added-first, where `hit_test` is first-match-wins. So the
+    // caption ring goes down first, the handle rects over it, then the panel
+    // and its buttons on top.
+    let hand = NSCursor::openHandCursor();
 
-    if resizable {
-        // Mirrors hit_test's band subdivision: corner squares of side
-        // max(CORNER_GRAB, band thickness), edge strips between them. Only
-        // the cursor shape depends on this — behavior stays with hit_test —
-        // so the small duplication is acceptable.
-        let (bx, by) = (layout.band.x as i64, layout.band.y as i64);
-        let (bw, bh) = (layout.band.w as i64, layout.band.h as i64);
-        // Ring thickness t = band inflation (1+border) − hole inflation (1)
-        // = border; hit_test's corner grab is max(CORNER_GRAB, 1+border) =
-        // max(CORNER_GRAB, t+1), NOT max(CORNER_GRAB, t) — using t here
-        // would disagree with the hit zones by 1 px whenever border >= 16.
-        let t = (layout.hole.y as i64 - by).max(0);
-        let s = (geometry::CORNER_GRAB as i64).max(t + 1);
-        let cross = NSCursor::crosshairCursor();
-        add(local(bx, by, s, s), &cross); // NW
-        add(local(bx + bw - s, by, s, s), &cross); // NE
-        add(local(bx, by + bh - s, s, s), &cross); // SW
-        add(local(bx + bw - s, by + bh - s, s, s), &cross); // SE
-        let ud = NSCursor::resizeUpDownCursor();
-        add(local(bx + s, by, bw - 2 * s, t), &ud); // N
-        add(local(bx + s, by + bh - t, bw - 2 * s, t), &ud); // S
-        let lr = NSCursor::resizeLeftRightCursor();
-        add(local(bx, by + s, t, bh - 2 * s), &lr); // W
-        add(local(bx + bw - t, by + s, t, bh - 2 * s), &lr); // E
+    // The Caption ring is `band − hole − every cutout` — the painted ring and
+    // nothing else (DESIGN §6). Both subtractions are explicit because the
+    // cursor-rect list has no ordering to lean on: without `− hole` the band
+    // would claim the cursor from the app underneath, and without `− cutouts`
+    // the visible gaps around the handles would claim it too, which is exactly
+    // the lie DESIGN §3 removed from `hit_test`.
+    let mut ring = subtract(layout.band, layout.hole);
+    for handle in &layout.handles {
+        ring = subtract_all(ring, handle.cutout);
+    }
+    for strip in ring {
+        add(strip, &hand);
+    }
+
+    // The handle RECT, not its cutout: the grab area is the painted square,
+    // 1:1 (§3). Minus the hole, because a handle is centred on the ring and so
+    // reaches `overhang_in` back inside the band's inner edge, where §3 step 3
+    // hands the click (and the cursor) to the app underneath. NOT clipped to
+    // the band, though — a handle overhangs it (§2) and `hit_test` resolves it
+    // out there, so the cursor has to follow it out there too.
+    //
+    // When `!resizable` a handle demotes to Caption rather than dropping out:
+    // it is still painted, and the whole painted frame drags.
+    for handle in &layout.handles {
+        let zone = if resizable {
+            match handle.kind {
+                HandleKind::Edge(d) => Zone::Edge(d),
+                HandleKind::Corner(c) => Zone::Corner(c),
+            }
+        } else {
+            Zone::Caption
+        };
+        let cursor = cursor_for_zone(zone, false);
+        for part in subtract(handle.rect, layout.hole) {
+            add(part, &cursor);
+        }
+    }
+
+    add(layout.panel, &hand);
+    let arrow = NSCursor::arrowCursor();
+    for btn in &layout.buttons {
+        add(*btn, &arrow);
     }
 }
 
@@ -1174,7 +1405,7 @@ pub fn run(region: Rect, cfg: UiConfig, mut events: Box<dyn AppEvents>) -> ! {
     // --- Frame (optional): borderless, transparent, floating, following the
     // user across Spaces and over fullscreen apps.
     let (frame_win, view, layout) = if cfg.show_frame {
-        let layout = geometry::compute_layout(region, border_spec(&cfg), &work_areas(mtm));
+        let layout = geometry::compute_layout(region, &frame_spec(&cfg), &work_areas(mtm));
         let fw = ShareWindow::create(
             mtm,
             capture_to_cocoa(mtm, layout.outer),
