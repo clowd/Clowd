@@ -41,9 +41,17 @@ serde_json = "1"
 windows = { version = "0.62", features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    # Antialiased rounded shapes and text for the share-region prompt's own
+    # painting (ui/win32.rs): plain GDI has neither.
+    "Win32_Graphics_GdiPlus",
+    # DwmSetWindowAttribute: dark window chrome, the Win11 Mica backdrop and the
+    # caption/border colours that stand in for it elsewhere.
+    "Win32_Graphics_Dwm",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",
+    # WM_MOUSELEAVE: the prompt's own hover tracking for its OK button.
+    "Win32_UI_Controls",
     # GetModuleHandleW: the HINSTANCE for RegisterClassW/CreateWindowExW.
     "Win32_System_LibraryLoader",
     # ExitProcess / GetCurrentThreadId (obs-platform exit_process, input hooks).

@@ -12,7 +12,8 @@
 //! # The one window
 //!
 //! The only user interface this process has is a prompt: a small ordinary
-//! titled window whose client area says "Share this window, then press OK".
+//! titled window, dark-chromed to match the Clowd shell, whose client area
+//! says "Share this window" over an OK button.
 //! The user points their meeting app's share picker at it, then presses OK.
 //! From that moment the SAME window — never a new one, because the share the
 //! meeting app just started is bound to that window's identity (its HWND /
