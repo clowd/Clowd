@@ -69,6 +69,13 @@ namespace Clowd.UI
         private bool _micEnabled;
         private bool _spkEnabled;
         private bool _camEnabled;
+        /// <summary>What the drag handle reads before the first status of a recording arrives.
+        /// Statuses are 1 Hz, so leaving DRAG ME there parks the pre-recording label under a
+        /// recording that is already rolling; this is the same mm:ss shape VideoCapturePage
+        /// formats, so the first real status replaces it rather than changing the label's
+        /// appearance.</summary>
+        private const string ZeroStatusText = "00:00";
+
         private bool _hasStatusText;
         private bool _recording;
         private bool _paused;
@@ -237,6 +244,11 @@ namespace Clowd.UI
                 BtnCancel.Text = "FINISH";
                 BtnCancel.IconPath = (Geometry)this.FindResource("IconStop");
                 BtnCancel.IconSize = 15.2;
+
+                // the icon flips to the Clowd mark on this same call; without this the label
+                // lags a second behind it on DRAG ME.
+                if (!_hasStatusText)
+                    BtnDrag.Text = ZeroStatusText;
             }
             else
             {
@@ -250,6 +262,8 @@ namespace Clowd.UI
                 BtnCancel.Text = "CANCEL";
                 BtnCancel.IconPath = (Geometry)this.FindResource("IconClose");
                 BtnCancel.IconSize = 18;
+
+                BtnDrag.Text = "DRAG ME";
             }
         }
 
@@ -268,19 +282,19 @@ namespace Clowd.UI
 
             // on resume the next status message (≤1 s away) takes over again; until then show the
             // last timer text rather than a stale PAUSED.
-            BtnDrag.Text = paused ? "PAUSED" : (_lastStatusText ?? "DRAG ME");
+            BtnDrag.Text = paused ? "PAUSED" : (_lastStatusText ?? ZeroStatusText);
         }
 
-        /// <summary>Sets the drag handle's status text (timer / FPS); null or empty restores
-        /// "DRAG ME" (which also remains until the first status arrives — WPF parity). While
-        /// paused the label stays PAUSED and the text is only remembered for the resume.</summary>
+        /// <summary>Sets the drag handle's status text (timer / FPS); null or empty falls back to
+        /// a zeroed timer while recording and to "DRAG ME" before it. While paused the label stays
+        /// PAUSED and the text is only remembered for the resume.</summary>
         public void SetStatusText(string text)
         {
             _hasStatusText = !String.IsNullOrEmpty(text);
             _lastStatusText = _hasStatusText ? text : null;
 
             if (!_paused)
-                BtnDrag.Text = _hasStatusText ? text : "DRAG ME";
+                BtnDrag.Text = _hasStatusText ? text : (_recording ? ZeroStatusText : "DRAG ME");
         }
 
         /// <summary>

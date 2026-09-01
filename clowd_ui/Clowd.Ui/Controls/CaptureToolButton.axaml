@@ -131,12 +131,14 @@
 
     <!-- The device-picker tab that hangs off a toggle tile (see CaptureToolPill). It meets the
          tile edge-to-edge — the two corners on that edge are square, so the tab reads as part of
-         the tile rather than a separate control parked next to it — and its fill runs from lighter
-         than the panel where they meet out to the panel's own gray at the far edge, so the tab
-         catches the light along the seam and falls away from it. #373737 is
-         AppStyles.IdealBackgroundBrush (the panel backdrop the tiles show through); keep the two
-         in step, and #4A4A4A the same distance above it. Direction picks both the square corners
-         and the gradient's axis, so the whole thing turns with the strip. -->
+         the tile rather than a separate control parked next to it — and its fill runs the other
+         way from the tiles': darkest where the two meet, brightening out to the free edge, so the
+         seam reads as the tab sitting under the tile and catching light as it emerges. #373737 is
+         AppStyles.IdealBackgroundBrush (the panel backdrop the tiles show through); the seam sits
+         BELOW it at #262626 — that contrast against the tile is what makes the tab visible at all
+         — and the far edge well above it at #8A8A8A. Neither end matches the panel on purpose. Direction
+         picks both the square corners and the gradient's axis, so the whole thing turns with the
+         strip. -->
     <ControlTheme x:Key="{x:Type controls:CaptureToolPill}" TargetType="controls:CaptureToolPill">
         <Setter Property="Foreground" Value="White" />
         <Setter Property="Cursor" Value="Hand" />
@@ -146,8 +148,9 @@
         <Setter Property="CornerRadius" Value="0,0,6,6" />
         <Setter Property="Background">
             <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                <GradientStop Offset="0" Color="#4A4A4A" />
-                <GradientStop Offset="1" Color="#373737" />
+                <GradientStop Offset="0" Color="#262626" />
+                <GradientStop Offset="0.5" Color="#4A4A4A" />
+                <GradientStop Offset="1" Color="#8A8A8A" />
             </LinearGradientBrush>
         </Setter>
 
@@ -196,8 +199,9 @@
             <Setter Property="CornerRadius" Value="0,6,6,0" />
             <Setter Property="Background">
                 <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
-                    <GradientStop Offset="0" Color="#4A4A4A" />
-                    <GradientStop Offset="1" Color="#373737" />
+                    <GradientStop Offset="0" Color="#262626" />
+                    <GradientStop Offset="0.5" Color="#4A4A4A" />
+                    <GradientStop Offset="1" Color="#8A8A8A" />
                 </LinearGradientBrush>
             </Setter>
         </Style>
@@ -209,8 +213,9 @@
             <Setter Property="CornerRadius" Value="6,0,0,6" />
             <Setter Property="Background">
                 <LinearGradientBrush StartPoint="100%,0%" EndPoint="0%,0%">
-                    <GradientStop Offset="0" Color="#4A4A4A" />
-                    <GradientStop Offset="1" Color="#373737" />
+                    <GradientStop Offset="0" Color="#262626" />
+                    <GradientStop Offset="0.5" Color="#4A4A4A" />
+                    <GradientStop Offset="1" Color="#8A8A8A" />
                 </LinearGradientBrush>
             </Setter>
         </Style>
