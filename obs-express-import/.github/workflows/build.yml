@@ -115,7 +115,7 @@ jobs:
           # target/release/deps needs the runtime DLLs (assembled in
           # target/release) on PATH.
           $env:PATH = "$(Resolve-Path target/release);$env:PATH"
-          cargo test --release -p obs-express
+          cargo test --release -p obs-express -p obs-platform -p clowd_share_region
           # vid2gif links the bundled FFmpeg DLLs; its tests are fully
           # self-contained (repo fixtures + generated raw inputs + a GIF
           # byte-stream validator). ffmpeg-sys verifies linkage + ABI version.
@@ -135,7 +135,7 @@ jobs:
           if (Test-Path target/release/data)        { Copy-Item -Recurse target/release/data $dist }
           # vid2gif links the FFmpeg DLLs directly; it is a hard shipping
           # requirement on every platform (no separate ffmpeg.exe needed).
-          foreach ($required in @("obs-express.exe","obs.dll","vid2gif.exe","avcodec-61.dll","avfilter-10.dll")) {
+          foreach ($required in @("obs-express.exe","clowd_share_region.exe","obs.dll","vid2gif.exe","avcodec-61.dll","avfilter-10.dll")) {
             if (-not (Test-Path "$dist/$required")) {
               Write-Host "::error::required binary missing from dist: $required"
               exit 1
@@ -272,7 +272,7 @@ jobs:
         # preserved.
         if: matrix.arch == 'arm64'
         run: |
-          cargo test --release -p obs-express ${{ matrix.target_flag }}
+          cargo test --release -p obs-express -p obs-platform -p clowd_share_region ${{ matrix.target_flag }}
           # vid2gif links the FFmpeg dylibs directly — its integration tests
           # are self-contained (repo fixtures + generated raw video inputs).
           cargo test --release -p vid2gif ${{ matrix.target_flag }}
@@ -300,6 +300,7 @@ jobs:
 
           # 1. Executables
           cp "$outdir/obs-express" "$dist/"
+          cp "$outdir/clowd_share_region" "$dist/"
           [ -f "$outdir/obs-ffmpeg-mux" ] && cp "$outdir/obs-ffmpeg-mux" "$dist/" || true
           cp "$outdir/vid2gif" "$dist/"
 
@@ -349,6 +350,7 @@ jobs:
             codesign --force --sign - "$bin" 2>/dev/null || true
           }
           relocate "$dist/obs-express"
+          relocate "$dist/clowd_share_region"
           [ -f "$dist/obs-ffmpeg-mux" ] && relocate "$dist/obs-ffmpeg-mux" || true
           relocate "$dist/vid2gif"
           # Plugin binaries are dlopen'd by obs-express; @executable_path in them

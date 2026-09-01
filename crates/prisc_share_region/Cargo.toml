@@ -1,0 +1,23 @@
+[package]
+name = "clowd_share_region"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+obs = { workspace = true }
+obs-sys = { workspace = true }
+obs-platform = { workspace = true }
+clap = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+ctrlc = { workspace = true }
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = { workspace = true }
+objc2-app-kit = { workspace = true }
+objc2-foundation = { workspace = true }

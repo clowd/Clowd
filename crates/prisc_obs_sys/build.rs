@@ -192,7 +192,7 @@ fn write_build_marker(marker: &Path, targets: &[&str]) {
     std::fs::write(marker, targets.join(" ")).expect("Failed to write build marker");
 }
 
-fn mac_emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
+fn mac_emit_link_directives(obs_src: &Path, obs_build: &Path, config: &str) {
     let framework_search = obs_build.join("libobs").join(config);
     assert!(
         framework_search.join("libobs.framework").exists(),
@@ -206,10 +206,41 @@ fn mac_emit_link_directives(_obs_src: &Path, obs_build: &Path, config: &str) {
     );
     println!("cargo:rustc-link-lib=framework=libobs");
 
+    // rpaths so this crate's own test harness can launch. `cargo:rustc-link-arg`
+    // is package-scoped: it applies to obs-sys's tests/benches but does NOT
+    // propagate to dependents, so every executable-producing consumer repeats
+    // these in its own build script (obs-express, obs-platform, obs,
+    // clowd_share_region). Even an empty harness dies in dyld without them:
+    // libobs's install name and its FFmpeg/x264 references are all @rpath.
+    println!(
+        "cargo:rustc-link-arg=-Wl,-rpath,{}",
+        framework_search.display()
+    );
+    if let Some(deps_lib) = mac_find_obs_deps_lib(obs_src) {
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", deps_lib.display());
+    }
+
     // Export paths so downstream crates can locate frameworks and plugins at runtime
     println!("cargo:framework_search={}", framework_search.display());
     println!("cargo:obs_build_dir={}", obs_build.display());
     println!("cargo:obs_build_config={config}");
+}
+
+/// The prebuilt obs-deps `lib` dir (FFmpeg et al.) — same probe as the
+/// downstream build scripts, but rooted at the obs-studio checkout we already
+/// hold rather than walking up from OUT_DIR.
+fn mac_find_obs_deps_lib(obs_src: &Path) -> Option<PathBuf> {
+    let deps_dir = obs_src.join(".deps");
+    for entry in std::fs::read_dir(&deps_dir).ok()?.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("obs-deps-") && !name.contains("qt6") {
+            let lib = entry.path().join("lib");
+            if lib.exists() {
+                return Some(lib);
+            }
+        }
+    }
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -504,13 +535,21 @@ fn generate_bindings(manifest_dir: &Path, obs_src: &Path, obs_build: &Path) {
         // The libobs monotonic clock (util/platform.h): input-capture event
         // timestamps must share obs_get_video_frame_time's timebase.
         .allowlist_function("os_gettime_ns")
+        // Graphics API (graphics/graphics.h): effects, texrenders and sprite
+        // draws, used by clowd_share_region's obscure renderer to post-process
+        // the composited canvas inside the display draw callback.
+        .allowlist_function("gs_.*")
         .allowlist_type("obs_.*")
+        // Graphics types (graphics/graphics.h): gs_init_data / gs_window and
+        // the GS_* enums, needed by obs_display_create (crates/obs display.rs).
+        .allowlist_type("gs_.*")
         .allowlist_type("signal_handler_t")
         .allowlist_type("calldata_t")
         .allowlist_type("video_.*")
         .allowlist_type("audio_.*")
         .allowlist_type("speaker_layout")
         .allowlist_var("OBS_.*")
+        .allowlist_var("GS_.*")
         .allowlist_var("VIDEO_.*")
         .allowlist_var("AUDIO_.*")
         // Track-count limits: obs-express asserts its own constants against

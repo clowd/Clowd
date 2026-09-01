@@ -1,22 +1,15 @@
-//! macOS platform implementation (DESIGN §2.2). Ports the pre-refactor
-//! CoreGraphics logic behind the new platform signatures. Monitor bounds are
-//! CG points (§1.1 capture space).
-
-use std::env;
-use std::ffi::CStr;
-use std::path::Path;
+//! macOS platform implementation (DESIGN §2.2) — the recorder-specific
+//! remainder: cursor/mouse sampling and audio/webcam helpers. The monitor /
+//! paths / display-capture layer moved to the shared `obs-platform` crate
+//! (SHARE_REGION_PLAN §4.3). Coordinates are CG points (§1.1 capture space).
 
 use obs::data::ObsData;
+use objc2_core_graphics::{CGEvent, CGEventSource, CGEventSourceStateID, CGMouseButton};
 
 use crate::cursor_sprite::SpriteEvent;
 
-use super::{CursorKind, CursorState, MonitorInfo, MouseInfo, ObsPaths};
+use super::{CursorKind, CursorState, MouseInfo};
 
-/// `platform` field of the input-capture header (wire contract).
-pub const PLATFORM_NAME: &str = "macos";
-
-pub const GRAPHICS_MODULE: &CStr = c"libobs-metal.dylib";
-pub const DISPLAY_CAPTURE_ID: &str = "screen_capture";
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "coreaudio_input_capture";
 /// Webcam capture source (`--webcam` / `--list-cameras`): AVFoundation. The
 /// async ("macos-avcapture") variant rather than the fast path: it delivers
@@ -26,158 +19,17 @@ pub const WEBCAM_SOURCE_ID: &str = "macos-avcapture";
 /// (an `AVCaptureDevice.uniqueID`).
 pub const WEBCAM_DEVICE_KEY: &str = "device";
 
-extern "C" {
-    fn CGGetActiveDisplayList(
-        max_displays: u32,
-        active_displays: *mut u32,
-        display_count: *mut u32,
-    ) -> i32;
-    fn CGDisplayBounds(display: u32) -> CGRect;
-    fn CGMainDisplayID() -> u32;
-    fn CGDisplayCreateUUIDFromDisplayID(display: u32) -> *const std::ffi::c_void;
-    fn CGDisplayCopyDisplayMode(display: u32) -> *mut std::ffi::c_void;
-    fn CGDisplayModeGetPixelWidth(mode: *mut std::ffi::c_void) -> usize;
-    fn CGDisplayModeGetWidth(mode: *mut std::ffi::c_void) -> usize;
-    fn CGDisplayModeRelease(mode: *mut std::ffi::c_void);
-    fn CFUUIDCreateString(
-        allocator: *const std::ffi::c_void,
-        uuid: *const std::ffi::c_void,
-    ) -> *const std::ffi::c_void;
-    fn CFRelease(cf: *const std::ffi::c_void);
-
-    /// `CGEventCreate(NULL)` snapshots the current event state; its location is
-    /// the cursor position in global display coordinates (points).
-    fn CGEventCreate(source: *const std::ffi::c_void) -> *const std::ffi::c_void;
-    fn CGEventGetLocation(event: *const std::ffi::c_void) -> CGPoint;
-    /// Reads button state without an event tap, so no Accessibility /
-    /// Input Monitoring permission is involved.
-    fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
-    /// Whether the cursor is currently drawn. Deprecated since 10.9 but still
-    /// the only public answer, and it needs no permission — the alternative is
-    /// private CGS SPI.
-    fn CGCursorIsVisible() -> bool;
-}
-
-/// `kCGEventSourceStateCombinedSessionState` — the session's combined state,
-/// which includes synthesized clicks (the closest analogue to Win32's
-/// `GetAsyncKeyState`).
-const CG_EVENT_SOURCE_STATE_COMBINED_SESSION: i32 = 0;
-const CG_MOUSE_BUTTON_LEFT: u32 = 0;
-const CG_MOUSE_BUTTON_RIGHT: u32 = 1;
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct CGPoint {
-    x: f64,
-    y: f64,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct CGSize {
-    width: f64,
-    height: f64,
-}
-
-#[repr(C)]
-#[derive(Debug, Copy, Clone)]
-struct CGRect {
-    origin: CGPoint,
-    size: CGSize,
-}
-
-fn cfstring_to_string(cfstr: *const std::ffi::c_void) -> String {
-    if cfstr.is_null() {
-        return String::new();
-    }
-    extern "C" {
-        fn CFStringGetLength(the_string: *const std::ffi::c_void) -> isize;
-        fn CFStringGetCString(
-            the_string: *const std::ffi::c_void,
-            buffer: *mut u8,
-            buffer_size: isize,
-            encoding: u32,
-        ) -> bool;
-    }
-    unsafe {
-        let len = CFStringGetLength(cfstr);
-        let mut buf = vec![0u8; (len as usize + 1) * 4];
-        let ok = CFStringGetCString(cfstr, buf.as_mut_ptr(), buf.len() as isize, 0x08000100); // kCFStringEncodingUTF8
-        if ok {
-            let s = CStr::from_ptr(buf.as_ptr() as *const _);
-            s.to_string_lossy().into_owned()
-        } else {
-            String::new()
+/// `CGEvent::new(None)` (CGEventCreate) snapshots the current event state; its
+/// location is the cursor position in global display coordinates (points).
+/// The `CFRetained` handle follows the CF Create rule and releases on drop.
+fn cursor_location() -> (f64, f64) {
+    match CGEvent::new(None) {
+        Some(event) => {
+            let p = CGEvent::location(Some(&event));
+            (p.x, p.y)
         }
+        None => (0.0, 0.0),
     }
-}
-
-/// No-op on macOS.
-pub fn init_process() {}
-
-pub fn enumerate_monitors() -> Vec<MonitorInfo> {
-    let mut monitors = Vec::new();
-    let mut display_ids = [0u32; 32];
-    let mut count: u32 = 0;
-
-    let ret = unsafe { CGGetActiveDisplayList(32, display_ids.as_mut_ptr(), &mut count) };
-    if ret != 0 {
-        return monitors;
-    }
-
-    let main_display = unsafe { CGMainDisplayID() };
-
-    for &display_id in display_ids.iter().take(count as usize) {
-        let bounds = unsafe { CGDisplayBounds(display_id) };
-
-        // Retina backing scale = current mode pixel width / point width; SCK
-        // captures at the same mode's pixel resolution.
-        let scale = unsafe {
-            let mode = CGDisplayCopyDisplayMode(display_id);
-            if mode.is_null() {
-                1.0
-            } else {
-                let px = CGDisplayModeGetPixelWidth(mode) as f64;
-                let pt = CGDisplayModeGetWidth(mode) as f64;
-                CGDisplayModeRelease(mode);
-                if px > 0.0 && pt > 0.0 {
-                    px / pt
-                } else {
-                    1.0
-                }
-            }
-        };
-
-        let uuid_ref = unsafe { CGDisplayCreateUUIDFromDisplayID(display_id) };
-        let uuid = if !uuid_ref.is_null() {
-            let cfstr = unsafe { CFUUIDCreateString(std::ptr::null(), uuid_ref) };
-            let s = cfstring_to_string(cfstr);
-            if !cfstr.is_null() {
-                unsafe { CFRelease(cfstr) };
-            }
-            unsafe { CFRelease(uuid_ref) };
-            s
-        } else {
-            format!("{display_id}")
-        };
-
-        monitors.push(MonitorInfo {
-            id: uuid,
-            alt_id: Some(display_id.to_string()),
-            x: bounds.origin.x as i32,
-            y: bounds.origin.y as i32,
-            width: bounds.size.width as u32,
-            height: bounds.size.height as u32,
-            scale,
-            is_primary: display_id == main_display,
-        });
-    }
-
-    monitors
-}
-
-pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
-    super::match_monitor(id, &enumerate_monitors())
 }
 
 /// Cursor position in global display points (the same space as
@@ -188,22 +40,19 @@ pub fn find_monitor(id: &str) -> Option<MonitorInfo> {
 /// density-independent, so the highlight needs no DPI compensation here (the
 /// region planner separately scales points → canvas pixels).
 pub fn get_mouse_info() -> MouseInfo {
-    let pressed = unsafe {
-        CGEventSourceButtonState(CG_EVENT_SOURCE_STATE_COMBINED_SESSION, CG_MOUSE_BUTTON_LEFT)
-            || CGEventSourceButtonState(
-                CG_EVENT_SOURCE_STATE_COMBINED_SESSION,
-                CG_MOUSE_BUTTON_RIGHT,
-            )
-    };
+    // `CombinedSessionState` is the session's combined state, which includes
+    // synthesized clicks (the closest analogue to Win32's `GetAsyncKeyState`).
+    // `CGEventSourceButtonState` reads it without an event tap, so no
+    // Accessibility / Input Monitoring permission is involved.
+    let pressed = CGEventSource::button_state(
+        CGEventSourceStateID::CombinedSessionState,
+        CGMouseButton::Left,
+    ) || CGEventSource::button_state(
+        CGEventSourceStateID::CombinedSessionState,
+        CGMouseButton::Right,
+    );
 
-    let event = unsafe { CGEventCreate(std::ptr::null()) };
-    let (x, y) = if event.is_null() {
-        (0.0, 0.0)
-    } else {
-        let p = unsafe { CGEventGetLocation(event) };
-        unsafe { CFRelease(event) };
-        (p.x, p.y)
-    };
+    let (x, y) = cursor_location();
 
     MouseInfo {
         x,
@@ -217,18 +66,16 @@ pub fn get_mouse_info() -> MouseInfo {
 /// classified cursor shape (see [`cursor_shape`] for how that is identified
 /// and why it is cheap enough to do here, on the graphics thread).
 pub fn get_cursor_state() -> CursorState {
-    let event = unsafe { CGEventCreate(std::ptr::null()) };
-    let (x, y) = if event.is_null() {
-        (0.0, 0.0)
-    } else {
-        let p = unsafe { CGEventGetLocation(event) };
-        unsafe { CFRelease(event) };
-        (p.x, p.y)
-    };
+    let (x, y) = cursor_location();
     // Checked before classifying: a hidden cursor still has a shape, and
     // reporting it would make the editor composite a pointer over content
     // where macOS was drawing nothing.
-    let kind = if unsafe { CGCursorIsVisible() } {
+    //
+    // `CGCursorIsVisible` is deprecated since 10.9 but still the only public
+    // answer, and it needs no permission — the alternative is private CGS SPI.
+    #[allow(deprecated)]
+    let visible = objc2_core_graphics::CGCursorIsVisible();
+    let kind = if visible {
         cursor_shape::current()
     } else {
         CursorKind::Hidden
@@ -277,7 +124,15 @@ mod cursor_shape {
     use std::sync::{Mutex, OnceLock};
     use std::time::{Duration, Instant};
 
-    use super::{CGPoint, CGSize, CursorKind};
+    use objc2::rc::{autoreleasepool, AutoreleaseSafe, Retained};
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{
+        NSApplication, NSApplicationActivationPolicy, NSBitmapImageFileType, NSBitmapImageRep,
+        NSCursor, NSImage, NSImageRep,
+    };
+    use objc2_foundation::NSDictionary;
+
+    use super::CursorKind;
     use crate::cursor_sprite::{RawSprite, SpriteEvent, SpritePixels};
 
     /// How stale a sample may get when the seed is unavailable. At 60 fps this
@@ -285,31 +140,14 @@ mod cursor_shape {
     const RESAMPLE_INTERVAL: Duration = Duration::from_millis(100);
 
     const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
-    /// `NSApplicationActivationPolicyProhibited` — no Dock icon, no menu bar.
-    const ACTIVATION_POLICY_PROHIBITED: isize = 2;
 
-    // Linked by build.rs (AppKit + libobjc), like the CoreGraphics symbols above.
+    // `CGSCurrentCursorSeed` is private CGS SPI, so no ecosystem crate binds
+    // it; `dlsym` (libSystem) is the only way to reach it.
     extern "C" {
-        fn objc_autoreleasePoolPush() -> *mut c_void;
-        fn objc_autoreleasePoolPop(pool: *mut c_void);
-        fn objc_getClass(name: *const c_char) -> *mut c_void;
-        fn sel_registerName(name: *const c_char) -> *mut c_void;
-        fn objc_msgSend();
         fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     }
 
-    type Msg0Ptr = unsafe extern "C" fn(*mut c_void, *mut c_void) -> *mut c_void;
-    type Msg0Len = unsafe extern "C" fn(*mut c_void, *mut c_void) -> usize;
-    type Msg1Isize = unsafe extern "C" fn(*mut c_void, *mut c_void, isize) -> bool;
-    type Msg1Usize = unsafe extern "C" fn(*mut c_void, *mut c_void, usize) -> *mut c_void;
-    type Msg2UsizePtr =
-        unsafe extern "C" fn(*mut c_void, *mut c_void, usize, *mut c_void) -> *mut c_void;
-    /// NSPoint/NSSize are two doubles — returned in registers on both arm64
-    /// and x86_64, so plain `objc_msgSend` (not `_stret`) is the right call.
-    type Msg0Point = unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGPoint;
-    type Msg0Size = unsafe extern "C" fn(*mut c_void, *mut c_void) -> CGSize;
-
-    /// Runs `f` inside an autorelease pool.
+    /// Runs `f` inside an autorelease pool (`objc2::rc::autoreleasepool`).
     ///
     /// Nothing here executes on an AppKit-managed thread — the tick callback is
     /// libobs's graphics thread — so there is no ambient pool to catch what
@@ -318,78 +156,8 @@ mod cursor_shape {
     /// size; without a pool each capture strands them. Measured at ~750 KB per
     /// cursor change on macOS 15.7, which over a long recording is unbounded
     /// growth rather than a fixed overhead.
-    fn autoreleased<T>(f: impl FnOnce() -> T) -> T {
-        let pool = unsafe { objc_autoreleasePoolPush() };
-        let out = f();
-        unsafe { objc_autoreleasePoolPop(pool) };
-        out
-    }
-
-    unsafe fn class(name: &str) -> *mut c_void {
-        let n = CString::new(name).unwrap();
-        objc_getClass(n.as_ptr())
-    }
-
-    unsafe fn selector(name: &str) -> *mut c_void {
-        let n = CString::new(name).unwrap();
-        sel_registerName(n.as_ptr())
-    }
-
-    /// `[obj sel]` returning an object pointer.
-    unsafe fn msg(obj: *mut c_void, sel: &str) -> *mut c_void {
-        if obj.is_null() {
-            return std::ptr::null_mut();
-        }
-        let f: Msg0Ptr = std::mem::transmute(objc_msgSend as *const ());
-        f(obj, selector(sel))
-    }
-
-    /// `[obj sel]` returning an NSUInteger.
-    unsafe fn msg_len(obj: *mut c_void, sel: &str) -> usize {
-        if obj.is_null() {
-            return 0;
-        }
-        let f: Msg0Len = std::mem::transmute(objc_msgSend as *const ());
-        f(obj, selector(sel))
-    }
-
-    /// `[obj sel:index]`, returning an object pointer.
-    unsafe fn msg_idx(obj: *mut c_void, sel: &str, index: usize) -> *mut c_void {
-        if obj.is_null() {
-            return std::ptr::null_mut();
-        }
-        let f: Msg1Usize = std::mem::transmute(objc_msgSend as *const ());
-        f(obj, selector(sel), index)
-    }
-
-    /// `[obj sel:int arg2:obj]`, returning an object pointer.
-    unsafe fn msg2(obj: *mut c_void, sel: &str, arg1: usize, arg2: *mut c_void) -> *mut c_void {
-        if obj.is_null() {
-            return std::ptr::null_mut();
-        }
-        let f: Msg2UsizePtr = std::mem::transmute(objc_msgSend as *const ());
-        f(obj, selector(sel), arg1, arg2)
-    }
-
-    /// `[obj sel]` returning an NSPoint.
-    unsafe fn msg_point(obj: *mut c_void, sel: &str) -> CGPoint {
-        if obj.is_null() {
-            return CGPoint { x: 0.0, y: 0.0 };
-        }
-        let f: Msg0Point = std::mem::transmute(objc_msgSend as *const ());
-        f(obj, selector(sel))
-    }
-
-    /// `[obj sel]` returning an NSSize.
-    unsafe fn msg_size(obj: *mut c_void, sel: &str) -> CGSize {
-        if obj.is_null() {
-            return CGSize {
-                width: 0.0,
-                height: 0.0,
-            };
-        }
-        let f: Msg0Size = std::mem::transmute(objc_msgSend as *const ());
-        f(obj, selector(sel))
+    fn autoreleased<T, F: FnOnce() -> T + AutoreleaseSafe>(f: F) -> T {
+        autoreleasepool(|_| f())
     }
 
     /// AppKit needs an `NSApplication` to exist before `+[NSCursor
@@ -402,37 +170,40 @@ mod cursor_shape {
     /// acquire a Dock icon or menu bar by side effect.
     fn ensure_appkit() {
         static INIT: OnceLock<()> = OnceLock::new();
-        INIT.get_or_init(|| unsafe {
-            let app = msg(class("NSApplication"), "sharedApplication");
-            if !app.is_null() {
-                let f: Msg1Isize = std::mem::transmute(objc_msgSend as *const ());
-                f(
-                    app,
-                    selector("setActivationPolicy:"),
-                    ACTIVATION_POLICY_PROHIBITED,
-                );
-            }
+        INIT.get_or_init(|| {
+            // objc2 gates `NSApplication` behind `MainThreadMarker`, but this
+            // runs on the OBS graphics thread — where the pre-objc2 msgSend
+            // always made this call, measured safe (module doc). Mint the
+            // marker unchecked off-main rather than introduce a panic or skip
+            // path the hand-rolled version did not have.
+            let mtm = MainThreadMarker::new()
+                .unwrap_or_else(|| unsafe { MainThreadMarker::new_unchecked() });
+            let app = NSApplication::sharedApplication(mtm);
+            // The success flag was always ignored (the raw msgSend result was
+            // dropped); keep that.
+            let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Prohibited);
         });
     }
 
-    /// FNV-1a over an `NSCursor`'s image bytes. `None` when the cursor, its
-    /// image, or the encode is unavailable.
-    unsafe fn hash_cursor(cursor: *mut c_void) -> Option<u64> {
-        let data = msg(msg(cursor, "image"), "TIFFRepresentation");
-        let bytes = msg(data, "bytes") as *const u8;
-        let len = msg_len(data, "length");
-        if bytes.is_null() || len == 0 {
+    /// FNV-1a over an `NSCursor`'s image bytes. `None` when the image or the
+    /// encode is unavailable.
+    fn hash_cursor(cursor: &NSCursor) -> Option<u64> {
+        let data = cursor.image().TIFFRepresentation()?;
+        // SAFETY: the freshly encoded NSData is not mutated while the slice is
+        // borrowed.
+        let bytes = unsafe { data.as_bytes_unchecked() };
+        if bytes.is_empty() {
             return None;
         }
         let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-        for i in 0..len {
-            h ^= *bytes.add(i) as u64;
+        for &b in bytes {
+            h ^= b as u64;
             h = h.wrapping_mul(0x1000_0000_01b3);
         }
         Some(h)
     }
 
-    /// Stock `NSCursor` class selectors paired with the wire kind they mean.
+    /// Stock `NSCursor` class methods paired with the wire kind they mean.
     ///
     /// Only unambiguous mappings are listed. macOS has no stock cursor for
     /// `Wait`/`AppStarting` (the beachball is not an `NSCursor`), `Help`,
@@ -440,22 +211,28 @@ mod cursor_shape {
     /// only as private SPI, so `SizeNwse`/`SizeNesw` are unreachable too —
     /// anything unmatched falls through to `Custom`, which is exactly what
     /// those cases are from the wire contract's point of view.
-    const STOCK: [(&str, CursorKind); 14] = [
-        ("arrowCursor", CursorKind::Arrow),
-        ("IBeamCursor", CursorKind::IBeam),
-        ("IBeamCursorForVerticalLayout", CursorKind::IBeam),
-        ("crosshairCursor", CursorKind::Cross),
-        ("pointingHandCursor", CursorKind::Hand),
-        ("operationNotAllowedCursor", CursorKind::No),
-        ("resizeLeftRightCursor", CursorKind::SizeWe),
-        ("resizeUpDownCursor", CursorKind::SizeNs),
-        ("resizeLeftCursor", CursorKind::SizeWe),
-        ("resizeRightCursor", CursorKind::SizeWe),
-        ("resizeUpCursor", CursorKind::SizeNs),
-        ("resizeDownCursor", CursorKind::SizeNs),
+    //
+    // The `resize*Cursor` set is deprecated in favor of the directional
+    // variants, but the deprecated ones are what running apps still set, so
+    // the table must keep matching their images.
+    type StockCursorFn = fn() -> Retained<NSCursor>;
+    #[allow(deprecated)]
+    const STOCK: [(StockCursorFn, CursorKind); 14] = [
+        (NSCursor::arrowCursor, CursorKind::Arrow),
+        (NSCursor::IBeamCursor, CursorKind::IBeam),
+        (NSCursor::IBeamCursorForVerticalLayout, CursorKind::IBeam),
+        (NSCursor::crosshairCursor, CursorKind::Cross),
+        (NSCursor::pointingHandCursor, CursorKind::Hand),
+        (NSCursor::operationNotAllowedCursor, CursorKind::No),
+        (NSCursor::resizeLeftRightCursor, CursorKind::SizeWe),
+        (NSCursor::resizeUpDownCursor, CursorKind::SizeNs),
+        (NSCursor::resizeLeftCursor, CursorKind::SizeWe),
+        (NSCursor::resizeRightCursor, CursorKind::SizeWe),
+        (NSCursor::resizeUpCursor, CursorKind::SizeNs),
+        (NSCursor::resizeDownCursor, CursorKind::SizeNs),
         // The pan cursors are the closest thing macOS has to SizeAll.
-        ("openHandCursor", CursorKind::SizeAll),
-        ("closedHandCursor", CursorKind::SizeAll),
+        (NSCursor::openHandCursor, CursorKind::SizeAll),
+        (NSCursor::closedHandCursor, CursorKind::SizeAll),
     ];
 
     /// Hashes of the stock cursors, built once (~7 ms) on first classify.
@@ -464,18 +241,17 @@ mod cursor_shape {
         TABLE.get_or_init(|| {
             ensure_appkit();
             autoreleased(|| {
-            let mut out = Vec::with_capacity(STOCK.len());
-            for (sel, kind) in STOCK {
-                let cursor = unsafe { msg(class("NSCursor"), sel) };
-                if let Some(h) = unsafe { hash_cursor(cursor) } {
-                    // First mapping wins, so the aliases above cannot displace
-                    // the canonical kind for a shared image.
-                    if !out.iter().any(|(hh, _)| *hh == h) {
-                        out.push((h, kind));
+                let mut out = Vec::with_capacity(STOCK.len());
+                for (cursor_fn, kind) in STOCK {
+                    if let Some(h) = hash_cursor(&cursor_fn()) {
+                        // First mapping wins, so the aliases above cannot
+                        // displace the canonical kind for a shared image.
+                        if !out.iter().any(|(hh, _)| *hh == h) {
+                            out.push((h, kind));
+                        }
                     }
                 }
-            }
-            out
+                out
             })
         })
     }
@@ -501,15 +277,17 @@ mod cursor_shape {
     fn classify() -> CursorKind {
         ensure_appkit();
         let table = stock_table();
-        let hash = autoreleased(|| unsafe { hash_cursor(msg(class("NSCursor"), "currentSystemCursor")) });
+        // `currentSystemCursor` deprecation: see the `None` arm below.
+        #[allow(deprecated)]
+        let hash = autoreleased(|| NSCursor::currentSystemCursor().and_then(|c| hash_cursor(&c)));
         match hash {
             Some(h) => table
                 .iter()
                 .find(|(hh, _)| *hh == h)
                 .map(|(_, k)| *k)
                 .unwrap_or(CursorKind::Custom),
-            // No readable image: report the fallback kind rather than invent a
-            // shape.
+            // No cursor or no readable image: report the fallback kind rather
+            // than invent a shape.
             //
             // This is the path Apple has signposted. `currentSystemCursor` is
             // deprecated, and the AppKit header is unusually blunt about it —
@@ -556,9 +334,6 @@ mod cursor_shape {
         });
         kind
     }
-
-    /// `NSBitmapImageRepFileTypePNG`.
-    const BITMAP_FILE_TYPE_PNG: usize = 4;
 
     /// Sprite-side twin of [`Cache`]: its own seed snapshot, so classify and
     /// sprite capture can be called independently without stealing each
@@ -623,31 +398,42 @@ mod cursor_shape {
     /// cursors are plain alpha bitmaps: `mask` is always `None`.
     fn capture_sprite(kind: CursorKind) -> Option<RawSprite> {
         ensure_appkit();
-        autoreleased(|| unsafe {
-            let cursor = msg(class("NSCursor"), "currentSystemCursor");
-            let image = msg(cursor, "image");
-            let size = msg_size(image, "size");
-            let rep = pick_rep(image, size.width * target_backing_scale())?;
+        autoreleased(|| {
+            // `currentSystemCursor` deprecation: see `classify`.
+            #[allow(deprecated)]
+            let cursor = NSCursor::currentSystemCursor()?;
+            let image = cursor.image();
+            let size = image.size();
+            let rep = pick_rep(&image, size.width * target_backing_scale())?;
+            // Cursor reps are bitmap reps in practice; anything else has no
+            // `representationUsingType:` (the raw msgSend this replaces would
+            // have thrown on it), so a failed downcast is a failed capture.
+            let rep = rep.downcast::<NSBitmapImageRep>().ok()?;
 
-            let png = msg2(
-                rep,
-                "representationUsingType:properties:",
-                BITMAP_FILE_TYPE_PNG,
-                std::ptr::null_mut(),
-            );
-            let bytes = msg(png, "bytes") as *const u8;
-            let len = msg_len(png, "length");
-            if bytes.is_null() || len == 0 {
+            // The empty properties dictionary is the typed spelling of the nil
+            // the ObjC API accepts: no encode options either way.
+            // SAFETY: an empty dictionary trivially has correctly-typed
+            // contents.
+            let png = unsafe {
+                rep.representationUsingType_properties(
+                    NSBitmapImageFileType::PNG,
+                    &NSDictionary::new(),
+                )
+            }?;
+            // SAFETY: the freshly encoded NSData is not mutated while the
+            // slice is borrowed.
+            let bytes = unsafe { png.as_bytes_unchecked() };
+            if bytes.is_empty() {
                 return None;
             }
-            let w = msg_len(rep, "pixelsWide") as u32;
-            let h = msg_len(rep, "pixelsHigh") as u32;
+            let w = rep.pixelsWide() as u32;
+            let h = rep.pixelsHigh() as u32;
             if w == 0 || h == 0 {
                 return None;
             }
             // hotSpot is in points; the sprite is pixel-sized, so scale by the
             // chosen representation's pixels-per-point ratio.
-            let hot = msg_point(cursor, "hotSpot");
+            let hot = cursor.hotSpot();
             let sx = if size.width > 0.0 {
                 w as f64 / size.width
             } else {
@@ -664,7 +450,7 @@ mod cursor_shape {
                 h,
                 hotx: (hot.x * sx).round() as i32,
                 hoty: (hot.y * sy).round() as i32,
-                bmp: SpritePixels::Png(std::slice::from_raw_parts(bytes, len).to_vec()),
+                bmp: SpritePixels::Png(bytes.to_vec()),
                 mask: None,
             })
         })
@@ -674,7 +460,7 @@ mod cursor_shape {
     /// `canvas_scale` — the factor the canvas (and therefore the sprite) is
     /// sized by.
     fn target_backing_scale() -> f64 {
-        super::enumerate_monitors()
+        obs_platform::enumerate_monitors()
             .iter()
             .map(|m| m.scale)
             .fold(1.0f64, f64::max)
@@ -689,52 +475,26 @@ mod cursor_shape {
     /// which is the largest: a 10x sprite for a cursor the OS draws at 17x23.
     /// Selecting explicitly is what keeps `RawSprite::w/h` honest about being
     /// physical pixels.
-    unsafe fn pick_rep(image: *mut c_void, target_px: f64) -> Option<*mut c_void> {
-        let reps = msg(image, "representations");
-        let count = msg_len(reps, "count");
+    fn pick_rep(image: &NSImage, target_px: f64) -> Option<Retained<NSImageRep>> {
+        let reps = image.representations();
+        let count = reps.count();
         if count == 0 {
             return None;
         }
-        let mut best: Option<(*mut c_void, f64)> = None;
+        let mut best: Option<(Retained<NSImageRep>, f64)> = None;
         for i in 0..count {
-            let rep = msg_idx(reps, "objectAtIndex:", i);
-            if rep.is_null() {
-                continue;
-            }
-            let w = msg_len(rep, "pixelsWide") as f64;
+            let rep = reps.objectAtIndex(i);
+            let w = rep.pixelsWide() as f64;
             if w <= 0.0 {
                 continue;
             }
             let delta = (w - target_px).abs();
-            if best.is_none_or(|(_, b)| delta < b) {
+            if best.as_ref().is_none_or(|(_, b)| delta < *b) {
                 best = Some((rep, delta));
             }
         }
         best.map(|(rep, _)| rep)
     }
-}
-
-/// The input-capture header's per-monitor `scale`. On macOS coordinates are
-/// points, so the Retina backing scale already stored on the monitor is the
-/// right density factor.
-pub fn monitor_display_scale(m: &MonitorInfo) -> f64 {
-    m.scale
-}
-
-pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
-    let settings = ObsData::new();
-    settings.set_int("type", 0);
-    settings.set_string("display_uuid", &m.id);
-    settings.set_bool("show_cursor", show_cursor);
-    settings
-}
-
-/// Partial `obs_source_update` payload toggling cursor capture on an existing
-/// display source (mac-capture applies it live).
-pub fn cursor_update_settings(show_cursor: bool) -> ObsData {
-    let settings = ObsData::new();
-    settings.set_bool("show_cursor", show_cursor);
-    settings
 }
 
 /// Source id + settings for a speaker (output) capture source. Must be called
@@ -779,36 +539,4 @@ pub fn webcam_settings(device_id: &str) -> ObsData {
 /// exist here — compensation is always unity.
 pub fn speaker_compensation_gain(_device_id: &str) -> f32 {
     1.0
-}
-
-pub fn default_obs_paths(exe_dir: &Path) -> ObsPaths {
-    // Base plugin dir. A bundled `obs-plugins` dir next to the executable (the
-    // relocatable release layout) wins; otherwise honour the OBS_PLUGIN_PATH
-    // override, then the absolute path baked in by build.rs (dev builds run
-    // against the OBS build tree in place — §2.4).
-    let base = env::var("OBS_PLUGIN_PATH").unwrap_or_else(|_| {
-        let bundled = exe_dir.join("obs-plugins");
-        if bundled.is_dir() {
-            bundled.to_string_lossy().into_owned()
-        } else {
-            env!("OBS_PLUGIN_DIR").to_string()
-        }
-    });
-    let module_bin = format!("{base}/%module%/RelWithDebInfo/%module%.plugin/Contents/MacOS");
-    let module_data = match env::var("OBS_PLUGIN_DATA_PATH") {
-        Ok(v) => format!("{v}/%module%"),
-        Err(_) => format!("{base}/%module%/RelWithDebInfo/%module%.plugin/Contents/Resources"),
-    };
-    // libobs core data is framework-embedded on macOS; only an explicit
-    // override registers an extra data path.
-    let libobs_data = env::var("OBS_DATA_PATH").ok().map(std::path::PathBuf::from);
-    ObsPaths {
-        module_bin,
-        module_data,
-        libobs_data,
-    }
-}
-
-pub fn exit_process(code: i32) -> ! {
-    unsafe { libc::_exit(code) }
 }

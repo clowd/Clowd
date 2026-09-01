@@ -1477,9 +1477,8 @@ mod console_ctrl {
     use std::sync::{mpsc, OnceLock};
     use std::time::Duration;
 
-    use windows_sys::core::BOOL;
-    use windows_sys::Win32::Foundation::TRUE;
-    use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+    use windows::core::BOOL;
+    use windows::Win32::System::Console::SetConsoleCtrlHandler;
 
     use crate::commands::Command;
 
@@ -1499,7 +1498,7 @@ mod console_ctrl {
 
     pub fn install(tx: mpsc::Sender<Command>) {
         let _ = QUIT_TX.set(tx);
-        if unsafe { SetConsoleCtrlHandler(Some(handler), TRUE) } == 0 {
+        if unsafe { SetConsoleCtrlHandler(Some(handler), true) }.is_err() {
             eprintln!("Warning: failed to install console signal handler");
         }
     }

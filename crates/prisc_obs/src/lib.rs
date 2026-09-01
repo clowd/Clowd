@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod context;
 pub mod data;
+pub mod display;
 pub mod encoder;
 pub mod error;
 pub mod log;
