@@ -237,7 +237,6 @@ namespace Clowd.UI
                 BtnCancel.Text = "FINISH";
                 BtnCancel.IconPath = (Geometry)this.FindResource("IconStop");
                 BtnCancel.IconSize = 15.2;
-                ToolTip.SetTip(BtnCancel, "Stop and save the recording");
             }
             else
             {
@@ -251,7 +250,6 @@ namespace Clowd.UI
                 BtnCancel.Text = "CANCEL";
                 BtnCancel.IconPath = (Geometry)this.FindResource("IconClose");
                 BtnCancel.IconSize = 18;
-                ToolTip.SetTip(BtnCancel, "Cancel recording");
             }
         }
 
@@ -850,8 +848,8 @@ namespace Clowd.UI
         /// <summary>Everything the recorder fixes when frames start flowing: the webcam is a
         /// pipeline element rather than a mute (there is no live equivalent of the audio mutes), and
         /// the device ids are read when the pipeline is built, so neither can change mid-recording.
-        /// CAM is disabled and says why — it has a label to say it under; the device pills simply go
-        /// (see <see cref="UpdateDevicePills"/>). MIC/SPK themselves stay live: those really are
+        /// CAM is simply disabled, and the device pills go with it (see
+        /// <see cref="UpdateDevicePills"/>). MIC/SPK themselves stay live: those really are
         /// mutes.</summary>
         private void UpdateRecordingLocks()
         {
@@ -863,9 +861,6 @@ namespace Clowd.UI
             BtnSpeaker.IsEnabled = !_recording || HasDevice(CaptureSource.Speaker);
 
             BtnWebcam.IsEnabled = !_recording;
-            ToolTip.SetTip(BtnWebcam, _recording
-                ? "The webcam can't be turned on or off once recording has started"
-                : "Capture webcam as a second track (position it later in the video editor)");
 
             UpdateDevicePills();
         }

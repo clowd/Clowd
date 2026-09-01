@@ -83,8 +83,7 @@
                                             SourceToggle="True"
                                             IconPath="{StaticResource IconMicrophoneDisabled}"
                                             IconPathAlternate="{StaticResource IconMicrophoneEnabled}"
-                                            Text="MIC"
-                                            ToolTip.Tip="Capture microphone" />
+                                            Text="MIC" />
 
                 <controls:CaptureToolButton Name="BtnSpeaker"
                                             Click="SpeakerClicked"
@@ -92,8 +91,7 @@
                                             IconPath="{StaticResource IconSpeakerDisabled}"
                                             IconPathAlternate="{StaticResource IconSpeakerEnabled}"
                                             IconSize="21.7"
-                                            Text="SPK"
-                                            ToolTip.Tip="Capture speakers" />
+                                            Text="SPK" />
 
                 <!-- CAM: a pipeline element, not a runtime mute like MIC/SPK — the recorder can only
                      add or drop the webcam source while it is still waiting, so the code-behind
@@ -103,23 +101,20 @@
                                             SourceToggle="True"
                                             IconPath="{StaticResource IconWebcamDisabled}"
                                             IconPathAlternate="{StaticResource IconWebcamEnabled}"
-                                            Text="CAM"
-                                            ToolTip.Tip="Capture webcam as a second track (position it later in the video editor)" />
+                                            Text="CAM" />
 
                 <controls:CaptureToolButton Name="BtnSettings"
                                             Click="SettingsButtonClicked"
                                             IconPath="{StaticResource IconSettings}"
                                             IconSize="21.7"
-                                            Text="OPTIONS"
-                                            ToolTip.Tip="Recording settings (changing one before you start reloads the recorder)" />
+                                            Text="OPTIONS" />
 
                 <!-- CANCEL until recording starts; FINISH (stop and save) afterwards -->
                 <controls:CaptureToolButton Name="BtnCancel"
                                             Click="CancelButtonClicked"
                                             IconPath="{StaticResource IconClose}"
                                             IconSize="18"
-                                            Text="CANCEL"
-                                            ToolTip.Tip="Cancel recording" />
+                                            Text="CANCEL" />
 
             </StackPanel>
         </Border>
