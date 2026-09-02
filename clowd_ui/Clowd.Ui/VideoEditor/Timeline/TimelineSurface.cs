@@ -1048,6 +1048,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 case MediaContent media:
                     RenderFilmstrip(context, palette, project, item, media, body);
                     break;
+                case BackgroundContent background:
+                    RenderBackgroundMesh(context, background, body);
+                    break;
                 case CursorContent cursor:
                     RenderCursorActivity(context, palette, project, item, cursor, body);
                     break;
@@ -1075,9 +1078,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                     (glyph, label) = (TimelineIcons.Find("IconImage"),
                         System.IO.Path.GetFileName(image.Path));
                     break;
-                // no in-body preview above for a wallpaper, deliberately: that switch decodes
-                // something that changes across the row (a filmstrip, a waveform, the capture's
-                // activity), and a backdrop is by definition the thing that does not.
+                // the name over the mesh RenderBackgroundMesh laid down: the colors say which
+                // wallpaper at a glance, the name says which one exactly (Big Sur Teal and Big Sur
+                // Violet are two blues at card size).
                 case BackgroundContent background:
                     (glyph, label) = (TimelineIcons.Find("IconBackground"), BackgroundLabel(background));
                     break;
@@ -1277,6 +1280,66 @@ namespace Clowd.UI.VideoEditor.Timeline
             public bool Left { get; }
 
             public Rect Rect { get; }
+        }
+
+        /// <summary>
+        /// The wallpaper card's body: the chosen background's own colors, in the arrangement the
+        /// canvas shows them, as a gradient mesh across the card — so which backdrop is on the
+        /// track reads off the timeline at a glance rather than off the card's text alone.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This is the one in-body preview that does not change across the card: every other one
+        /// (a filmstrip, a waveform, a capture's activity) draws what varies over the item's span,
+        /// and a backdrop is by definition the thing that does not. What it says instead is
+        /// <b>which</b> wallpaper the item holds, which is the whole of that item's content.
+        /// </para>
+        /// <para>
+        /// It is one stretched draw of a 6x4 image (see <see cref="BackgroundMesh"/>), so nothing
+        /// here is rebuilt per zoom, per scroll or per item, and an animated style costs a card no
+        /// clock: the mesh is the loop's opening frame and the timeline stays still.
+        /// </para>
+        /// <para>
+        /// It covers the card edge to edge, where the input rows fade their previews out under
+        /// the label to keep a clean stretch of fill behind the text. A wallpaper card is the one
+        /// place that trade goes the other way: the colors ARE the card's content, and the row
+        /// fill they would be cleared down to is a flat green that means nothing here. The label
+        /// rides the mesh, over a shadow rather than a hole (see the scrim below).
+        /// </para>
+        /// </remarks>
+        private void RenderBackgroundMesh(DrawingContext context, BackgroundContent background, Rect body)
+        {
+            var mesh = BackgroundMesh.Get(background.Style, background.Theme);
+            if (mesh == null)
+                return; // no artwork to sample: the card keeps its plain row fill
+
+            // the same filtering the filmstrip asks for: bilinear on a 6x4 image would crease
+            // along the cell diagonals, and creases are the one thing a mesh must not have.
+            using (context.PushRenderOptions(new RenderOptions { BitmapInterpolationMode = BitmapInterpolationMode.HighQuality }))
+            using (context.PushClip(new RoundedRect(body, ItemCornerRadius)))
+            {
+                context.DrawImage(mesh, BackgroundMesh.Source, body);
+
+                // A wallpaper can be pale (Mono, Peach Cream) and the card label is white in both
+                // themes, so the label's own stretch is shaded rather than cleared: the mesh still
+                // covers the whole card, it is simply darker where the text crosses it. The scrim
+                // is black rather than the row fill for exactly that reason — a green stretch
+                // would read as body showing through, a shadow reads as the label's own.
+                var scrimWidth = Math.Min(body.Width,
+                    LabelStartX(body) - body.X + GlyphSize + 5 + LabelTextWidth(BackgroundLabel(background))
+                        + LabelFadeWidth);
+                var scrim = new LinearGradientBrush
+                {
+                    StartPoint = new RelativePoint(body.X, 0, RelativeUnit.Absolute),
+                    EndPoint = new RelativePoint(body.X + scrimWidth, 0, RelativeUnit.Absolute),
+                    GradientStops =
+                    {
+                        new GradientStop(Color.FromArgb(96, 0, 0, 0), 0),
+                        new GradientStop(Colors.Transparent, 1),
+                    },
+                };
+                context.FillRectangle(scrim, new Rect(body.X, body.Y, scrimWidth, body.Height));
+            }
         }
 
         private void RenderFilmstrip(DrawingContext context, TimelinePalette palette, Project project,

@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
         Converted from the WPF VectorIcons.xaml: every x:Shared="False" Path resource is now a
         StreamGeometry (path data verbatim). Per-icon Width/Height/Opacity metadata lives in
@@ -239,13 +239,14 @@
          editor's add-keyboard-track button — the same glyph the timeline's keys row carries -->
     <StreamGeometry x:Key="IconKeyboard">M 3 6 C 1.895 6 1 6.895 1 8 L 1 17 C 1 18.105 1.895 19 3 19 L 21 19 C 22.105 19 23 18.105 23 17 L 23 8 C 23 6.895 22.105 6 21 6 L 3 6 z M 3 8 L 21 8 L 21 17 L 3 17 L 3 8 z M 5 10 L 5 12 L 7 12 L 7 10 L 5 10 z M 8 10 L 8 12 L 10 12 L 10 10 L 8 10 z M 11 10 L 11 12 L 13 12 L 13 10 L 11 10 z M 14 10 L 14 12 L 16 12 L 16 10 L 14 10 z M 17 10 L 17 12 L 19 12 L 19 10 L 17 10 z M 5 13 L 5 15 L 7 15 L 7 13 L 5 13 z M 8 13 L 8 15 L 16 15 L 16 13 L 8 13 z M 17 13 L 17 15 L 19 15 L 19 13 L 17 13 z</StreamGeometry>
 
-    <!-- icons8 "Picture" (24x24, ink 2..23 x 4..20, the same box IconImage fills): a framed
-         landscape print with a curled top and bottom edge; the video editor's add-background-track
-         button and the glyph its timeline rows carry. Deliberately a curled print rather than a
-         second flat frame, so it does not read as IconImage at 18px in the strip right under it.
-         The two subpaths wind opposite ways, so nonzero and even-odd agree and no F0/F1 prefix is
-         needed: the mountain is punched out of the frame either way. -->
-    <StreamGeometry x:Key="IconBackground">M23,18.006c0,0,0-10.131,0-12.131s-1.498-1.921-2-1.835c-1.522,0.261-4.988,0.897-8.5,0.955C8.988,4.937,5.522,4.301,4,4.04 C3.498,3.954,2,3.875,2,5.875s0,12.131,0,12.131c0,1-0.213,2.485,2,1.835c1.568-0.284,4.991-0.781,8.5-0.826 c3.509,0.045,6.932,0.542,8.5,0.826C23.213,20.491,23,19.006,23,18.006z M12,16c-2.698,0-5.387,0.279-7.357,0.549L9,10.4l2,2.5L14,9 l5.56,7.577C17.575,16.3,14.794,16,12,16z</StreamGeometry>
+    <!-- icons8 "Wallpaper" (24x24, ink 3..21 square): a rounded card with a paint stroke punched
+         out of it; the video editor's add-background-track button and the glyph its timeline rows
+         carry. The source glyph is a 16x20 portrait card, redrawn here as an 18x18 square so the
+         button matches the rest of the strip, with the stroke scaled 0.88 about the centre to keep
+         the original's ~4px margin inside the frame. The two subpaths wind opposite ways, so
+         nonzero and even-odd agree and no F0/F1 prefix is needed: the stroke is punched out of the
+         card either way. -->
+    <StreamGeometry x:Key="IconBackground">M 5 3 C 3.895 3 3 3.895 3 5 L 3 19 C 3 20.105 3.895 21 5 21 L 19 21 C 20.105 21 21 20.105 21 19 L 21 5 C 21 3.895 20.105 3 19 3 L 5 3 z M 8.48 6.72 C 8.48 6.72 11.117 7.358 11.627 8.243 C 12.137 9.127 11.789 10.284 10.85 10.826 C 9.91 11.368 8.99 11.124 8.48 10.24 C 7.97 9.356 8.48 6.72 8.48 6.72 z M 12.95 11.208 C 14.614 13.636 16.355 16.803 15.52 17.28 C 14.341 17.954 12.766 15.045 11.05 12.66 C 11.278 12.581 11.507 12.476 11.727 12.352 C 12.237 12.053 12.651 11.665 12.95 11.208 z</StreamGeometry>
 
     <!-- Video-effect picker tiles (hand-authored, 24x24, fill-only even-odd paths). One family:
          every tile keeps the same viewfinder frame, and what happens inside it is the effect —
