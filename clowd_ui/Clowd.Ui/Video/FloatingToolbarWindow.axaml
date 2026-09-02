@@ -37,8 +37,9 @@
          reserved by RootBorder's margin, which the code-behind moves to whichever side the
          strip's placement left free (below a horizontal row, outboard of a vertical one).
          One markup, two profiles (FloatingToolbarProfile): everything below is the recording
-         strip, and a share-region session collapses all of it but DRAG, BLUR and CANCEL — see
-         the constructor for why the two halves are built separately rather than merely hidden. -->
+         strip, and a share-region session collapses all of it but DRAG, HIDE, RESIZE and
+         CANCEL — see the constructor for why the two halves are built separately rather than
+         merely hidden. -->
     <Panel Name="RootPanel">
         <Border Name="RootBorder"
                 Margin="0,0,0,16"
@@ -49,10 +50,14 @@
                      code-behind; pointer events are wired as tunnel handlers there because Button's
                      class handler marks bubbling PointerPressed as handled). Becomes a zeroed
                      timer the moment recording starts and then carries the FPS/timer text the
-                     statuses bring, or PAUSED while paused. The move glyph becomes
-                     the Clowd mark once recording starts (UpdateDragIcon) — the strip is then a
-                     recording indicator far more often than something you reposition — and comes
-                     back while the pointer is over it, so the affordance is still there when wanted. -->
+                     statuses bring, or PAUSED while paused. The glyph rests on the Clowd mark and
+                     trades it for the move arrows while the pointer is over the tile (UpdateDragIcon)
+                     — the strip is its own identity far more often than something you reposition,
+                     and the affordance is wanted exactly when you reach for it. The one exception is
+                     a recording strip before its first frame, which wears the arrows outright: that
+                     tile is the only thing inviting you to move the strip clear of what you are
+                     about to record. IconToolNone below is that pre-start state; the code-behind
+                     seeds the real one at the end of the constructor. -->
                 <controls:CaptureToolButton Name="BtnDrag"
                                             Cursor="SizeAll"
                                             IconPath="{StaticResource IconToolNone}"
@@ -77,24 +82,50 @@
                                             IconSize="16"
                                             Text="WAIT…" />
 
-                <!-- ShareRegion profile only (hidden for a recording, which has nothing to
-                     obscure): toggles the helper's blur over the mirrored region. It is slotted
-                     into the primary tile's own cell — after START, before the 3px gap that
-                     follows it — so neither strip pays for the other: the recording strip keeps
-                     its DRAG|3|START|3|… rhythm untouched, and once the share profile collapses
-                     START and the four middle tiles the same markup reads DRAG|3|BLUR|3|CANCEL.
-                     SourceToggle because this is an on/off source in exactly the sense MIC/SPK
-                     are — it buys the dimmed-off glyph and the red/green light, which is the
-                     only thing that reads "the meeting is seeing through this" from across the
-                     room. The tile can also be retired outright (SetBlurAvailable) when the
-                     helper reports its GPU effect failed to build. -->
-                <controls:CaptureToolButton Name="BtnBlur"
-                                            Click="BlurClicked"
-                                            IconPath="{StaticResource IconEffectNone}"
-                                            IconPathAlternate="{StaticResource IconEffectBlur}"
+                <!-- ShareRegion profile only (both hidden for a recording, which has neither a
+                     region to obscure nor one to move). They are slotted into the primary tile's
+                     own cell — after START, before the 3px gap that follows it — so neither strip
+                     pays for the other: the recording strip keeps its DRAG|3|START|3|… rhythm
+                     untouched, and once the share profile collapses START and the four middle
+                     tiles the same markup reads DRAG|3|HIDE RESIZE|3|CANCEL. IsVisible="False" on
+                     both is load-bearing rather than tidy — InitializeRecordingControls hides
+                     nothing, so a tile that defaulted to visible would simply appear on the
+                     recording strip; InitializeShareControls is the only thing that un-hides them.
+
+                     HIDE obscures the mirrored region using the style configured in the Capture
+                     settings (blur / pixelate / black card). SourceToggle because this is an
+                     on/off source in exactly the sense MIC/SPK are — it buys the dimmed-off glyph
+                     and the red/green light, which is the only thing that reads "the meeting is
+                     seeing through this" from across the room. The polarity follows the other
+                     source toggles rather than the tile's own name: the LIT / alternate glyph and
+                     the green light mean the meeting CAN see the screen, so hiding dims the tile
+                     and turns the light red. The label instead names what a press will DO — "HIDE"
+                     while visible, "SHOW" while hidden — matching START/PAUSE and CANCEL/FINISH on
+                     this same strip. SetHidden is the only writer of either. The tile can also be
+                     retired outright (SetObscureAvailable) when the helper reports its GPU effect
+                     failed to build.
+
+                     RESIZE enters the move/resize mode: a hit-testable overlay (ShareResizeWindow)
+                     appears over the region and the next press of this tile commits the new
+                     rectangle. Not a SourceToggle — nothing is flowing or muted here, so a
+                     red/green light would be a lie; the accent fill the page latches via
+                     SetResizeState is the "mode is on" signal instead. It deliberately does not
+                     flip itself on click: the page owns the transition and may refuse it. -->
+                <controls:CaptureToolButton Name="BtnHide"
+                                            Click="HideClicked"
+                                            IconPath="{StaticResource IconEyeOffBoxed}"
+                                            IconPathAlternate="{StaticResource IconEyeBoxed}"
                                             IsVisible="False"
                                             SourceToggle="True"
-                                            Text="BLUR" />
+                                            Text="HIDE"
+                                            ToolTip.Tip="Hide the shared region from viewers" />
+
+                <controls:CaptureToolButton Name="BtnResize"
+                                            Click="ResizeClicked"
+                                            IconPath="{StaticResource IconResizeRegion}"
+                                            IsVisible="False"
+                                            Text="RESIZE"
+                                            ToolTip.Tip="Move or resize the shared region" />
 
                 <Rectangle Width="3" Height="3" />
 

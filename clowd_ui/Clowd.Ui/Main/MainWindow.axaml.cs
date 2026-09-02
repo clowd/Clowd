@@ -117,6 +117,8 @@ namespace Clowd.UI
                 SettingsPageTab.SettingsCapture => GetCaptureIntroText(),
                 SettingsPageTab.SettingsRecording =>
                     "Recording settings apply to your next recording. If a recording is waiting to start, changes are applied to it automatically. Changes made while a recording is in progress take effect only after it finishes.",
+                SettingsPageTab.SettingsShareRegion =>
+                    "A shared region mirrors part of your screen into a window a meeting app can share. The obscure settings apply immediately, including to a region you are sharing right now; the frame rate applies to the next region you share.",
                 SettingsPageTab.SettingsEditor =>
                     "Choose how editor sessions are restored and cleaned up, set the canvas appearance, or reset saved drawing-tool preferences.",
                 SettingsPageTab.SettingsUploads =>
@@ -159,6 +161,7 @@ namespace Clowd.UI
                 SettingsPageTab.SettingsHotkeys => CreateFactoryPage(getWindow, SettingsRoot.Current.Hotkeys),
                 SettingsPageTab.SettingsCapture => CreateFactoryPage(getWindow, SettingsRoot.Current.Capture),
                 SettingsPageTab.SettingsRecording => CreateFactoryPage(getWindow, SettingsRoot.Current.Recording),
+                SettingsPageTab.SettingsShareRegion => CreateFactoryPage(getWindow, SettingsRoot.Current.ShareRegion),
                 SettingsPageTab.SettingsEditor => CreateFactoryPage(getWindow, SettingsRoot.Current.Editor),
                 SettingsPageTab.SettingsUploads => CreateUploadsPage(),
                 SettingsPageTab.About => new AboutPage(),

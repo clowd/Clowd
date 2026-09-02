@@ -9,15 +9,19 @@ namespace Clowd.UI
 {
     /// <summary>
     /// Click-through accent frame drawn around the region being recorded (design §4.2). A plain
-    /// topmost transparent Window (not SystemThemedWindow): the 2px accent + 1px white inner
+    /// topmost transparent Window (not SystemThemedWindow): the 3px accent + 2px white inner
     /// border are inflated OUTSIDE the capture region so no border pixel can ever appear in the
     /// recording, and the window is made input-invisible natively (WS_EX_TRANSPARENT + layered +
     /// WM_NCHITTEST->HTTRANSPARENT on Windows; setIgnoresMouseEvents: on macOS).
     /// </summary>
     public partial class BorderWindow : Window
     {
-        // 2px accent + 1px white inner line, in logical px.
-        private const int BorderLogicalWidth = 3;
+        // 3px accent + 2px white inner line, in logical px. These two are the source of truth for BOTH
+        // the outward inflation and the drawn thickness (see ApplyGeometry) — they used to be three
+        // unlinked copies of one number and nothing in the build caught a mismatch.
+        private const int AccentLogicalWidth = 3;
+        private const int InnerLogicalWidth = 2;
+        private const int BorderLogicalWidth = AccentLogicalWidth + InnerLogicalWidth;
 
         // The capture region in the platform capture coordinate space (§1.1): physical px in
         // virtual-desktop coordinates on Windows, CG points on macOS — which is also exactly what
@@ -77,16 +81,30 @@ namespace Clowd.UI
         /// <summary>
         /// Moves the frame onto a new region, re-deriving the whole geometry (edge suppression
         /// included, since the region may have crossed onto another monitor) from the window's
-        /// current scaling. Nothing calls this yet: it exists because moving or resizing a shared
-        /// region is a deferred follow-up, and it is the entire border-side cost of it — the frame
-        /// is a function of the region, so a setter is the whole feature here.
+        /// current scaling. The frame is purely a function of the region, so a setter is the whole
+        /// border-side cost of the share-region resize mode.
         ///
-        /// What that follow-up must NOT do is make this window hit-testable so the frame itself can
-        /// be grabbed. It is click-through by construction (WS_EX_TRANSPARENT + layered +
-        /// HTTRANSPARENT, setIgnoresMouseEvents: on macOS), and that is the property that lets it
-        /// hang over a region the user is still working in. Grab handles belong to a NEW sibling
-        /// window that takes input and calls this — never to a flag that switches this one's
-        /// transparency off, because there is no state in which the border wants clicks.
+        /// Every caller is ShareRegionPage. Resize mode is a swap (addendum 8.1): this window is
+        /// hidden for the whole of it and ShareResizeWindow draws the frame the user watches follow
+        /// their pointer, so what re-homes the border is the APPLIED region, written here just
+        /// before it is shown again. The page does also call this once per accepted drag step, but
+        /// on a window nobody can see, and only to stop the hidden border's idea of the region from
+        /// drifting arbitrarily far from the live one; nothing visible depends on that write.
+        ///
+        /// The grab handles are NOT here: they live in ShareResizeWindow, a separate hit-testable
+        /// sibling that takes the input and reports the drag to the page. This window stays
+        /// click-through in every mode, and the reasons are mechanical rather than a matter of
+        /// taste:
+        ///
+        /// - WindowNativeExtensions.AddExStyles registers an anonymous, unretained lambda with
+        ///   Win32Properties.AddWindowStylesCallback. No equivalent delegate can ever be handed to
+        ///   RemoveWindowStylesCallback, and removing a callback would not un-apply bits already on
+        ///   the HWND anyway, so any runtime attempt to clear WS_EX_TRANSPARENT can be silently
+        ///   re-OR'd back on by the next Avalonia style re-application.
+        /// - WS_EX_LAYERED must stay live (with SetLayeredFullyOpaque) or the window is never
+        ///   repainted at all, so the ex-style mask is not something to toggle casually.
+        /// - Focusable="False" plus WS_EX_NOACTIVATE are exactly right for a passive frame and
+        ///   exactly wrong for a window that must hold pointer capture through a drag.
         /// </summary>
         public void SetRegion(ScreenRect region)
         {
@@ -107,6 +125,31 @@ namespace Clowd.UI
             var value = text ?? String.Empty;
             OverlayText.Text = value;
             OverlayBox.IsVisible = value.Length > 0;
+        }
+
+        /// <summary>
+        /// Shows or hides the struck-through eye at the center of the region: the mark that the
+        /// people watching a shared region are currently NOT seeing what is inside the frame.
+        /// <para>
+        /// This glyph renders INSIDE the region — the same place <see cref="SetOverlayText"/>'s
+        /// words land, and the reason that method is off-limits to a share session. What makes it
+        /// safe here is the one state it is shown in: it goes up only while the helper is
+        /// obscuring the mirror, so the pixels it is drawn on are pixels nobody in the meeting is
+        /// being shown. The caller owns that pairing, and must take the glyph down in the same step
+        /// it stops obscuring — a stale eye would sit in the picture the meeting IS seeing, saying
+        /// the opposite of the truth.
+        /// </para>
+        /// <para>
+        /// It is worth being precise about "not seeing": <c>hide</c> replaces the region outright,
+        /// but <c>blur</c> and <c>pixelate</c> only degrade it, so under those two the glyph does
+        /// reach the meeting as a large soft shape. That is the intended reading — the region is
+        /// obscured and something is deliberately covering it — rather than a leak, because the
+        /// glyph carries no information the obscure mode was hiding.
+        /// </para>
+        /// </summary>
+        public void SetHiddenIndicator(bool hidden)
+        {
+            HiddenBox.IsVisible = hidden;
         }
 
         private void OnOpened(object sender, EventArgs e)
@@ -172,8 +215,10 @@ namespace Clowd.UI
             Width = (_region.Width + l + r) / toCapture;
             Height = (_region.Height + t + b2) / toCapture;
 
-            AccentBorder.BorderThickness = new Thickness(left ? 2 : 0, top ? 2 : 0, right ? 2 : 0, bottom ? 2 : 0);
-            InnerBorder.BorderThickness = new Thickness(left ? 1 : 0, top ? 1 : 0, right ? 1 : 0, bottom ? 1 : 0);
+            AccentBorder.BorderThickness = new Thickness(left ? AccentLogicalWidth : 0, top ? AccentLogicalWidth : 0,
+                                                         right ? AccentLogicalWidth : 0, bottom ? AccentLogicalWidth : 0);
+            InnerBorder.BorderThickness = new Thickness(left ? InnerLogicalWidth : 0, top ? InnerLogicalWidth : 0,
+                                                        right ? InnerLogicalWidth : 0, bottom ? InnerLogicalWidth : 0);
         }
     }
 }

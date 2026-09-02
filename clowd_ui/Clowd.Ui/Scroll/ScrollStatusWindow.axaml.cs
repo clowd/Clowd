@@ -29,9 +29,14 @@ namespace Clowd.UI
         private const int WidthLogical = 300;
         private const int HeightLogical = 50;
 
-        // breathing room between the strip and the region, matching the border window's own
-        // outward inflation so the two never touch.
-        private const int GapLogical = 8;
+        // Breathing room between the strip and the region, in logical px. The border window
+        // inflates itself outward by ceil(BorderLogicalWidth * scaling) + 1, which is now roughly
+        // 6 logical px — the frame draws a 3px accent over a 2px inner line, where it used to draw
+        // 2px over 1px for roughly 4. This constant is an independent copy of that clearance and
+        // does NOT track it: BorderWindow's constants are private to that file and nothing in the
+        // build catches a divergence, so it is set deliberately wider than the inflation to leave
+        // real clear space between the frame and the strip rather than merely avoiding an overlap.
+        private const int GapLogical = 10;
 
         public event EventHandler FinishClicked;
         public event EventHandler CancelClicked;

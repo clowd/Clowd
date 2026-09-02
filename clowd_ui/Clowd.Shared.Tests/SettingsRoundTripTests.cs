@@ -55,6 +55,8 @@ namespace Clowd.Shared.Tests
             original.Capture.ScreenshotWithCursor = false;
             original.Capture.RoundedWindowCorners = false;
             original.Capture.TipsMode = CapturerTipsMode.Off; // enum by name (non-default)
+            original.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Pixelate; // enum by name (non-default)
+            original.ShareRegion.ObscureStrength = 77;
             original.Capture.ObscuredWindowDetectionThreshold = 0.55; // invariant double
             original.Editor.StartupPadding = 42;
 
@@ -94,6 +96,10 @@ namespace Clowd.Shared.Tests
             Assert.False(loaded.Capture.ScreenshotWithCursor);
             Assert.False(loaded.Capture.RoundedWindowCorners);
             Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
+            // the share-region obscure pair rides the already-registered JsonStringEnumConverter, so
+            // the style persists as the member name "Pixelate" and needs no converter of its own.
+            Assert.Equal(ShareRegionObscureStyle.Pixelate, loaded.ShareRegion.ObscureStyle);
+            Assert.Equal(77, loaded.ShareRegion.ObscureStrength);
             Assert.Equal(0.55, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.Equal(42, loaded.Editor.StartupPadding);
 
@@ -340,6 +346,56 @@ namespace Clowd.Shared.Tests
 
             // the lowercase member name is the --quality value vid2gif accepts
             Assert.Equal("fair", loaded.Recording.GifQuality.ToString().ToLowerInvariant());
+        }
+
+        [Fact]
+        public void ShareRegionObscureOptions_DefaultToBlurAtSeventyFive_ForASettingsFileThatPredatesThem()
+        {
+            // a settings file written before the shared-region section existed has no ShareRegion
+            // object at all. The binder must leave both compiled-in defaults alone rather
+            // than writing a zeroed value over them. The strength is the load-bearing half: 0 is a
+            // legal int, and ShareRegionProtocol.BuildObscureCommand clamps strength to 1..100, so a
+            // remembered 0 goes out as "obscure blur 1" — an invisible blur the user believes is on.
+            // (Blur is also member 0, so its assertion cannot tell a real default from a zeroed one;
+            // it is here to pin the documented default, and the strength catches the zeroing.)
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Capture": {
+                    "TipsMode": "Off",
+                    "ScreenshotWithCursor": false
+                  }
+                }
+                """);
+
+            var loaded = SettingsService.Load(_path);
+
+            // the section really did bind — without this the two assertions below would also pass
+            // for a file the binder skipped entirely, which is a different test.
+            Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
+            Assert.False(loaded.Capture.ScreenshotWithCursor);
+
+            Assert.Equal(ShareRegionObscureStyle.Blur, loaded.ShareRegion.ObscureStyle);
+            Assert.Equal(75, loaded.ShareRegion.ObscureStrength);
+        }
+
+        [Fact]
+        public void ShareRegionObscureUsesStrength_IsFalseOnlyForHide()
+        {
+            // [DisabledWhen] binds to this derived bool to grey out the strength row, and it is
+            // [Browsable(false)] — there is no row of its own, so nothing in the generated settings
+            // page fails visibly if it stops tracking the style. Hide is the one mode the helper's
+            // obscure command takes no strength for.
+            var settings = new SettingsRoot();
+
+            settings.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Blur;
+            Assert.True(settings.ShareRegion.ObscureUsesStrength);
+
+            settings.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Pixelate;
+            Assert.True(settings.ShareRegion.ObscureUsesStrength);
+
+            settings.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Hide;
+            Assert.False(settings.ShareRegion.ObscureUsesStrength);
         }
 
         [Fact]

@@ -24,6 +24,8 @@ namespace Clowd.Config
 
         public SettingsRecording Recording { get; set; } = new SettingsRecording();
 
+        public SettingsShareRegion ShareRegion { get; set; } = new SettingsShareRegion();
+
         public SettingsEditor Editor { get; set; } = new SettingsEditor();
 
         public SettingsVideoEditor VideoEditor { get; set; } = new SettingsVideoEditor();

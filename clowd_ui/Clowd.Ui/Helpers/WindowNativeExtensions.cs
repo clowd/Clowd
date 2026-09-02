@@ -21,11 +21,32 @@ namespace Clowd.UI.Helpers
         private const int HTTRANSPARENT = -1;
         private const uint LWA_ALPHA = 0x00000002;
 
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOACTIVATE = 0x0010;
+
         /// <summary>
         /// Injects extra Win32 extended styles into the window at style-application time via
         /// Avalonia's <see cref="Win32Properties.AddWindowStylesCallback"/>. Must be called
         /// before Show() so the styles are in place from the first frame.
         /// </summary>
+        /// <remarks>
+        /// This is a one-way door, and the shape of the call is why. The callback registered here
+        /// is an anonymous lambda that nothing retains, so no equal delegate instance can ever be
+        /// handed back to <see cref="Win32Properties.RemoveWindowStylesCallback"/>; and even if one
+        /// could, removing a styles callback does not un-apply the bits it already OR'd onto the
+        /// HWND. Clearing such a bit by hand with SetWindowLongPtr is equally futile: the next time
+        /// Avalonia re-applies window styles (a resize, a state change, a DPI change) it runs the
+        /// surviving callbacks again and silently re-ORs the old mask back on.
+        /// <para>
+        /// So a style added through this method is permanent for the life of the window. Any window
+        /// that needs a <em>togglable</em> extended style must not use this overload at all — it
+        /// must register a retained instance-method callback that reads a mutable field, so every
+        /// style re-application re-asserts the window's current desire rather than a mask captured
+        /// once at construction.
+        /// </para>
+        /// </remarks>
         public static void AddExStyles(Window window, uint exStyles)
         {
             if (!OperatingSystem.IsWindows())
@@ -74,6 +95,48 @@ namespace Clowd.UI.Helpers
         }
 
         /// <summary>
+        /// Re-asserts a topmost window above its topmost peers WITHOUT activating it or moving it.
+        /// Used when a second topmost window is shown over an existing one (the share-region resize
+        /// overlay over the floating toolbar): the tile that ends resize mode must not end up
+        /// underneath it — there is no keyboard escape from that mode. No-op off Windows and macOS.
+        /// </summary>
+        /// <remarks>
+        /// On Windows, among topmost peers the later Show() wins. A SetWindowPos is deterministic
+        /// where a Topmost=false/true bounce goes through Avalonia's window-style path and can
+        /// re-apply styles as a side effect.
+        /// <para>
+        /// On macOS the sibling is activatable and already sits at NSStatusWindowLevel (it calls
+        /// <see cref="SetCanCoverMenuBar"/>), so front-ordering within one level would not hold: a
+        /// window that becomes key orders itself to the front of its own level, so a same-level
+        /// toolbar would sink again on the first click into the overlay. This window is therefore
+        /// lifted one level above it and front-ordered with orderFrontRegardless, which raises
+        /// without making the app active or this window key. As with HWND_TOPMOST on Windows, the
+        /// raise then stands for the life of the window.
+        /// </para>
+        /// </remarks>
+        public static void RaiseTopmostNoActivate(Window window)
+        {
+            var handle = window?.TryGetPlatformHandle();
+            if (handle == null)
+                return;
+
+            if (OperatingSystem.IsWindows())
+            {
+                if (handle.Handle != IntPtr.Zero)
+                    SetWindowPos(handle.Handle, HWND_TOPMOST, 0, 0, 0, 0,
+                                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+            else if (OperatingSystem.IsMacOS())
+            {
+                if (handle is IMacOSTopLevelPlatformHandle mac && mac.NSWindow != IntPtr.Zero)
+                {
+                    objc_msgSend(mac.NSWindow, sel_registerName("setLevel:"), AboveOverlayWindowLevel);
+                    objc_msgSend(mac.NSWindow, sel_registerName("orderFrontRegardless"));
+                }
+            }
+        }
+
+        /// <summary>
         /// macOS click-through: NSWindow setIgnoresMouseEvents:YES via objc_msgSend on the
         /// window's <see cref="IMacOSTopLevelPlatformHandle"/>. Call from the window's Opened
         /// handler (the NSWindow must exist). Untested here — compile-guarded per design §4.2.
@@ -90,6 +153,10 @@ namespace Clowd.UI.Helpers
         // NSStatusWindowLevel — one above NSMainMenuWindowLevel (24), same level the Rust
         // capturer overlay uses.
         private const nint NSStatusWindowLevel = 25;
+
+        // One above that, for a window that must stay clickable over an overlay window which can
+        // itself become key (RaiseTopmostNoActivate).
+        private const nint AboveOverlayWindowLevel = NSStatusWindowLevel + 1;
 
         // CanJoinAllSpaces | Stationary | IgnoresCycle | FullScreenAuxiliary
         private const nuint OverlayCollectionBehavior = (1 << 0) | (1 << 4) | (1 << 6) | (1 << 8);
@@ -116,10 +183,18 @@ namespace Clowd.UI.Helpers
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetLayeredWindowAttributes(IntPtr hWnd, uint crKey, byte bAlpha, uint dwFlags);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+                                                int X, int Y, int cx, int cy, uint uFlags);
+
         private const string LibObjC = "/usr/lib/libobjc.A.dylib";
 
         [DllImport(LibObjC)]
         private static extern IntPtr sel_registerName([MarshalAs(UnmanagedType.LPStr)] string name);
+
+        [DllImport(LibObjC, EntryPoint = "objc_msgSend")]
+        private static extern void objc_msgSend(IntPtr receiver, IntPtr selector);
 
         // ObjC BOOL is a signed char — marshal as I1, not the 4-byte Win32 BOOL default.
         [DllImport(LibObjC, EntryPoint = "objc_msgSend")]

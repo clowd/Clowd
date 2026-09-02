@@ -15,12 +15,13 @@
          WS_EX_TRANSPARENT ex-style + WM_NCHITTEST->HTTRANSPARENT hook applied in code-behind. -->
     <Grid IsHitTestVisible="False">
 
-        <!-- 2px accent frame with a 1px white inner line. The window is positioned/sized so both
+        <!-- 3px accent frame with a 2px white inner line. The window is positioned/sized so both
              lines (plus >=1 physical px of slack) sit entirely OUTSIDE the recorded region.
-             Thicknesses are set per-edge in code-behind: edges flush with a monitor edge are
+             Thicknesses are set per-edge in code-behind from AccentLogicalWidth/InnerLogicalWidth,
+             which always overwrite the values below: edges flush with a monitor edge are
              suppressed entirely (issue #56). -->
-        <Border Name="AccentBorder" BorderThickness="2">
-            <Border Name="InnerBorder" BorderThickness="1" BorderBrush="White" Background="Transparent" />
+        <Border Name="AccentBorder" BorderThickness="3">
+            <Border Name="InnerBorder" BorderThickness="2" BorderBrush="White" Background="Transparent" />
         </Border>
 
         <!-- 48pt overlay text ("WAIT…"/"PRESS START"): white glyphs with a real vector accent
@@ -32,6 +33,22 @@
             <controls:OutlinedTextBlock Name="OverlayText"
                                         FontSize="48" FontWeight="Black"
                                         Fill="White" StrokeThickness="6" LetterSpacing="4" />
+        </Viewbox>
+
+        <!-- The struck-through eye, shown while the region is obscured for the people watching it
+             (SetHiddenIndicator). Like the text above it renders INSIDE the region, which is only
+             safe for exactly this state: what it marks is that the viewers are NOT seeing these
+             pixels. Plain white, no accent outline — unlike the overlay text, which needs one to
+             stay legible over whatever the region happens to contain, this glyph sits on an
+             obscured region and is read as a shape rather than as letters. Scales down with the
+             region rather than being clipped by a small one, and never takes a click: the whole
+             Grid is IsHitTestVisible="False" and the window is click-through natively besides. -->
+        <Viewbox Name="HiddenBox" IsVisible="False" Stretch="Uniform" StretchDirection="DownOnly" Margin="10"
+                 Opacity="0.4" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Path Name="HiddenIcon"
+                  Data="{StaticResource IconEyeOff}"
+                  Width="128" Height="128" Stretch="Uniform"
+                  Fill="White" />
         </Viewbox>
 
     </Grid>

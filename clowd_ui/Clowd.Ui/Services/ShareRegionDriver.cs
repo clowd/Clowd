@@ -348,10 +348,26 @@ namespace Clowd.UI
         /// <summary>
         /// Moves/resizes the shared area without disturbing the mirror window, which is what keeps
         /// the meeting app's share alive (the alternative — a new process — would hand it a window
-        /// handle nobody is watching). Wired up ahead of the UI that will use it: resizing a live
-        /// share is a deferred follow-up and nothing calls this yet.
+        /// handle nobody is watching). The caller is <c>ShareRegionPage</c>'s resize mode, which
+        /// writes exactly one <c>move</c> when the user leaves the mode.
         /// <para>The helper answers with <c>region_changed</c> carrying the region it ACTUALLY
-        /// applied after its own clamping, which arrives as <see cref="RegionChanged"/>.</para>
+        /// applied after its own clamping, which arrives as <see cref="RegionChanged"/>. That clamp
+        /// floors each side at 64 px and then rounds it DOWN to an even number (<c>mirror.rs:59-65</c>),
+        /// so the applied rect is routinely a pixel or two smaller than the requested one. Callers
+        /// must reflow the border, the toolbar and their own idea of the region from the ack, never
+        /// from the rect they asked for.</para>
+        /// <para>A REFUSED move answers <c>command_error</c> and emits no <c>region_changed</c> at
+        /// all (<c>mirror.rs:270</c>, <c>win32.rs:1104</c>), so a caller that waits only on
+        /// <see cref="RegionChanged"/> waits forever. This is reachable in ordinary operation and not
+        /// merely on a malformed command: the helper plans the move against the monitor snapshot it
+        /// took at bootstrap and never re-enumerates it, so a rect that lies on a display attached
+        /// after the share started is refused even though it is on screen right now.</para>
+        /// <para>There is NO per-move pending counter here — deliberately unlike
+        /// <see cref="ShareRegionProtocol.NoteObscureSent"/> for the obscure commands — and the acks
+        /// carry no request id, so one move's answer cannot be told from another's. Callers must
+        /// therefore keep exactly ONE move in flight and pair it with their own timeout: a refusal
+        /// that is missed or mis-attributed is indistinguishable from an ack that has not landed
+        /// yet.</para>
         /// </summary>
         public void MoveRegion(ScreenRect region)
         {
