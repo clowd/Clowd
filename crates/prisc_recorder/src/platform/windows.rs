@@ -3,22 +3,38 @@
 //! paths / display-capture layer moved to the shared `obs-platform` crate
 //! (SHARE_REGION_PLAN §4.3).
 
+use std::collections::HashMap;
+use std::ffi::c_void;
 use std::mem;
+use std::sync::{Mutex, OnceLock};
 
 use obs::data::ObsData;
-use windows::Win32::Foundation::POINT;
-use windows::Win32::Graphics::Gdi::{MonitorFromPoint, MONITOR_DEFAULTTONEAREST};
+use windows::core::{w, BOOL, PCWSTR, PWSTR};
+use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT};
+use windows::Win32::Graphics::Dwm::{
+    DwmGetWindowAttribute, DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DWMWINDOWATTRIBUTE,
+};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromPoint, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+};
+use windows::Win32::System::Threading::{
+    GetCurrentProcessId, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+    PROCESS_QUERY_LIMITED_INFORMATION,
+};
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_DEFAULT};
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetCursorInfo, GetCursorPos, LoadCursorW, CURSORINFO, CURSOR_SHOWING, IDC_APPSTARTING,
-    IDC_ARROW, IDC_CROSS, IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL,
-    IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_UPARROW, IDC_WAIT,
+    EnumWindows, FindWindowExW, GetClassNameW, GetCursorInfo, GetCursorPos, GetWindowLongPtrW,
+    GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed,
+    LoadCursorW, CURSORINFO, CURSOR_SHOWING, GWL_EXSTYLE, GWL_STYLE, IDC_APPSTARTING, IDC_ARROW,
+    IDC_CROSS, IDC_HAND, IDC_HELP, IDC_IBEAM, IDC_NO, IDC_PERSON, IDC_PIN, IDC_SIZEALL,
+    IDC_SIZENESW, IDC_SIZENS, IDC_SIZENWSE, IDC_SIZEWE, IDC_UPARROW, IDC_WAIT, WS_CAPTION,
+    WS_EX_LAYERED, WS_VISIBLE,
 };
 
 use crate::cursor_sprite::SpriteEvent;
 
-use super::{CursorKind, CursorState, MouseInfo};
+use super::{CursorKind, CursorState, MouseInfo, WindowInfo};
 
 pub const AUDIO_INPUT_CAPTURE_ID: &str = "wasapi_input_capture";
 /// Webcam capture source (`--webcam` / `--list-cameras`): DirectShow.
@@ -683,9 +699,313 @@ mod endpoint_volume {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Window enumeration (--window-capture)
+// ---------------------------------------------------------------------------
+
+/// Minimum dimension (physical px) for a window to be worth reporting. Below
+/// this a "window" is a helper surface the editor could not draw anyway, and
+/// each one costs a wire id out of the session's identity budget.
+const MIN_WINDOW_SIZE: i32 = 25;
+
+/// Window classes that are never a real application window: the desktop
+/// itself, the shell chrome, and the immersive-shell surfaces (Start, Search,
+/// taskbar hover previews) that come and go while a recording runs. Ported
+/// wholesale from Clowd's `win_walker.rs` — each entry is there because it
+/// showed up as a phantom window in practice. Kept sorted for `binary_search`
+/// (ASCII case-sensitive).
+const BLACKLISTED_CLASSES: &[&str] = &[
+    "ApplicationManager_ImmersiveShellWindow",
+    "EdgeUiInputWndClass",
+    "Immersive Chrome Container",
+    "ImmersiveBackgroundWindow",
+    "ImmersiveLauncher",
+    "LauncherTipWndClass",
+    "MetroGhostWindow",
+    "ModeInputWnd",
+    "NativeHWNDHost",
+    "Progman",
+    "SearchPane",
+    // NB: `Shell_Dialog` sorts before `Shell_Dim` ('a' < 'm'). Clowd's
+    // win_walker.rs has these two transposed, which makes its own
+    // `binary_search` miss `Shell_Dim` entirely — the sortedness test below
+    // exists so this copy cannot drift the same way.
+    "Shell_Dialog",
+    "Shell_Dim",
+    "Shell_TrayWnd",
+    "Snapped Desktop",
+    "TaskListThumbnailWnd",
+    "Touch Tooltip Window",
+    "Windows.UI.Core.CoreWindow",
+    "WorkerW",
+];
+
+/// Per-pid executable name cache for [`enumerate_windows`]. Resolving a name
+/// costs an `OpenProcess` + `QueryFullProcessImageNameW` round trip, and the
+/// enumerator runs up to once per rendered frame over every on-screen window —
+/// without the cache that is the dominant cost of a poll. A pid's image name
+/// cannot change while the process lives. A recycled pid can outlive its entry
+/// and mislabel `app`; nothing corrects that within a session, which is
+/// acceptable for a display label but is the reason `app` is not part of any
+/// identity decision (the sidecar keys windows on `(handle, pid)`).
+fn process_name_cache() -> &'static Mutex<HashMap<u32, String>> {
+    static CACHE: OnceLock<Mutex<HashMap<u32, String>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn process_name(pid: u32) -> String {
+    if let Ok(cache) = process_name_cache().lock() {
+        if let Some(name) = cache.get(&pid) {
+            return name.clone();
+        }
+    }
+
+    // PROCESS_QUERY_LIMITED_INFORMATION is the right-sized access: it is
+    // granted for processes at a higher integrity level (elevated apps), where
+    // PROCESS_QUERY_INFORMATION would be denied and every such window would
+    // report an empty `app`.
+    let name = unsafe {
+        match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(handle) => {
+                // Comfortably past MAX_PATH: a long-path executable would
+                // otherwise fail the query outright and report no `app` at all.
+                let mut buf = [0u16; 1024];
+                let mut len = buf.len() as u32;
+                let ok = QueryFullProcessImageNameW(
+                    handle,
+                    PROCESS_NAME_WIN32,
+                    PWSTR(buf.as_mut_ptr()),
+                    &mut len,
+                )
+                .is_ok();
+                let _ = CloseHandle(handle);
+                if ok {
+                    let full = String::from_utf16_lossy(&buf[..len as usize]);
+                    // Just the file name: the editor labels windows, it does
+                    // not resolve paths (and a full path leaks the user's
+                    // install layout into the sidecar).
+                    full.rsplit(['\\', '/']).next().unwrap_or("").to_string()
+                } else {
+                    String::new()
+                }
+            }
+            Err(_) => String::new(),
+        }
+    };
+
+    if let Ok(mut cache) = process_name_cache().lock() {
+        cache.insert(pid, name.clone());
+    }
+    name
+}
+
+/// Reads a fixed-size `DwmGetWindowAttribute` value; `None` when DWM declines
+/// (composition off, or the window is already gone).
+unsafe fn dwm_attribute<T: Copy + Default>(hwnd: HWND, attribute: DWMWINDOWATTRIBUTE) -> Option<T> {
+    let mut value = T::default();
+    DwmGetWindowAttribute(
+        hwnd,
+        attribute,
+        &mut value as *mut T as *mut c_void,
+        mem::size_of::<T>() as u32,
+    )
+    .ok()
+    .map(|_| value)
+}
+
+fn window_text(hwnd: HWND) -> String {
+    let mut buf = [0u16; 512];
+    let len = unsafe { GetWindowTextW(hwnd, &mut buf) };
+    if len <= 0 {
+        return String::new();
+    }
+    String::from_utf16_lossy(&buf[..len as usize])
+}
+
+fn window_class(hwnd: HWND) -> String {
+    let mut buf = [0u16; 256];
+    let len = unsafe { GetClassNameW(hwnd, &mut buf) };
+    if len <= 0 {
+        return String::new();
+    }
+    String::from_utf16_lossy(&buf[..len as usize])
+}
+
+/// True when `hwnd` hosts a live UWP app. A `ApplicationFrameWindow` whose
+/// app has been terminated lingers as an uncloaked, correctly-sized phantom;
+/// the presence of a `Windows.UI.Core.CoreWindow` child is what separates the
+/// two (`win_walker.rs`'s check, kept for the same reason).
+fn has_core_window_child(hwnd: HWND) -> bool {
+    unsafe {
+        FindWindowExW(
+            Some(hwnd),
+            None,
+            w!("Windows.UI.Core.CoreWindow"),
+            PCWSTR::null(),
+        )
+        .is_ok_and(|child| !child.is_invalid())
+    }
+}
+
+/// The bounds a user would actually point at.
+///
+/// Maximized windows are special-cased to the monitor *work area*: DWM reports
+/// a maximized window's extended frame bounds as the full monitor rect, so
+/// without this every maximized window overhangs the taskbar. Otherwise the
+/// extended frame bounds win over `GetWindowRect`, which includes the
+/// invisible resize border (~7 px a side on Win10+).
+fn true_bounds(hwnd: HWND) -> Option<RECT> {
+    unsafe {
+        if IsZoomed(hwnd).as_bool() {
+            let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            let mut mi = MONITORINFO {
+                cbSize: mem::size_of::<MONITORINFO>() as u32,
+                ..Default::default()
+            };
+            if GetMonitorInfoW(hmon, &mut mi).as_bool() {
+                return Some(mi.rcWork);
+            }
+        }
+        match dwm_attribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS) {
+            Some(r) => Some(r),
+            None => {
+                let mut r = RECT::default();
+                GetWindowRect(hwnd, &mut r).ok()?;
+                Some(r)
+            }
+        }
+    }
+}
+
+/// Classifies one top-level window, returning `None` for everything that is
+/// not a real, visible application window.
+///
+/// The filter set is ported from Clowd's `win_walker.rs`, whose ordering and
+/// membership are load-bearing: `IsWindowVisible && !IsIconic && !cloaked`
+/// alone admits a large population of windows that draw nothing a user would
+/// call a window — transparent full-screen overlays, popup menus, IME hosts,
+/// legacy shims. A one-shot picker shows such an artifact once; this runs up
+/// to 60 times a second, so each one would be written to the sidecar hundreds
+/// of times.
+///
+/// Deliberately NOT filtered: `WS_EX_TOOLWINDOW`. That is the alt-tab
+/// convention, and it is the wrong question here — a floating tool palette
+/// (Photoshop panels, Electron/Qt secondary windows, IDE float docks) is
+/// plainly visible in the recording and must be tracked. The class blacklist
+/// removes the taskbar and tooltips without that collateral.
+fn describe_window(hwnd: HWND, self_pid: u32) -> Option<WindowInfo> {
+    unsafe {
+        if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {
+            return None;
+        }
+
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE) as u32;
+        let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+        if style & WS_VISIBLE.0 == 0 {
+            return None;
+        }
+        // Layered without a caption = a transparent overlay (Discord/Steam/
+        // NVIDIA overlays, Rainmeter, magnifiers, annotation tools). These are
+        // desktop-sized and topmost, so left in they would sit at z:0 and
+        // shift every real window's stacking order.
+        if style & WS_CAPTION.0 == 0 && ex_style & WS_EX_LAYERED.0 != 0 {
+            return None;
+        }
+
+        // Nonzero = cloaked. Absent (DWM composition off) counts as visible.
+        // NOTE: DWM cloaks asynchronously, so switching virtual desktops mid
+        // recording emits a brief burst of rows for the outgoing desktop's
+        // windows before they cloak. `win_walker.rs` additionally consults
+        // IVirtualDesktopManager; that needs COM on this thread and the
+        // transient is self-correcting within a poll or two, so it is left out.
+        if dwm_attribute::<u32>(hwnd, DWMWA_CLOAKED).unwrap_or(0) != 0 {
+            return None;
+        }
+
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == 0 || pid == self_pid {
+            return None;
+        }
+
+        let rect = true_bounds(hwnd)?;
+        let (w, h) = (rect.right - rect.left, rect.bottom - rect.top);
+        if w < MIN_WINDOW_SIZE || h < MIN_WINDOW_SIZE {
+            return None;
+        }
+
+        let class = window_class(hwnd);
+        if BLACKLISTED_CLASSES.binary_search(&class.as_str()).is_ok() {
+            return None;
+        }
+
+        // Titleless top-level windows are overwhelmingly not windows: popup
+        // menus and combo dropdowns (class #32768), `Default IME`,
+        // `MSCTFIME UI`, `Chrome Legacy Window`, DDE helpers. Menus are the
+        // costly case — they sit at the top of the z-order and appear and
+        // vanish constantly, so each one would renumber every tracked window.
+        let title = window_text(hwnd);
+        if title.is_empty() {
+            return None;
+        }
+
+        if class == "ApplicationFrameWindow" && !has_core_window_child(hwnd) {
+            return None;
+        }
+
+        Some(WindowInfo {
+            id: hwnd.0 as usize as u64,
+            pid,
+            x: rect.left,
+            y: rect.top,
+            w: w as u32,
+            h: h as u32,
+            title,
+            app: process_name(pid),
+        })
+    }
+}
+
+unsafe extern "system" fn enum_window_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+    let collector = &mut *(lparam.0 as *mut (Vec<WindowInfo>, u32));
+    if let Some(info) = describe_window(hwnd, collector.1) {
+        collector.0.push(info);
+    }
+    BOOL(1) // keep enumerating
+}
+
+/// Visible top-level windows, topmost first — `EnumWindows` walks the
+/// top-level z-order front to back, and the filter in [`describe_window`]
+/// preserves that order.
+///
+/// Coordinates are physical pixels (the process is per-monitor-v2 DPI aware),
+/// i.e. the §1.1 capture space, so no conversion happens here.
+pub fn enumerate_windows() -> Vec<WindowInfo> {
+    let mut collector: (Vec<WindowInfo>, u32) = (Vec::new(), unsafe { GetCurrentProcessId() });
+    let lparam = LPARAM(&mut collector as *mut (Vec<WindowInfo>, u32) as isize);
+    // A failed enumeration (the callback never returns FALSE, so this only
+    // fires if the window list changed underneath us) yields whatever was
+    // collected: the next poll re-reads the world anyway.
+    let _ = unsafe { EnumWindows(Some(enum_window_proc), lparam) };
+    collector.0
+}
+
 #[cfg(test)]
 mod tests {
-    use super::compensation_gain_from_db;
+    use super::{compensation_gain_from_db, BLACKLISTED_CLASSES};
+
+    #[test]
+    fn the_class_blacklist_is_sorted_for_binary_search() {
+        // `describe_window` looks entries up with `binary_search`, which
+        // silently misses on an unsorted slice — a new class added in the
+        // wrong place would just stop filtering.
+        let mut sorted = BLACKLISTED_CLASSES.to_vec();
+        sorted.sort_unstable();
+        assert_eq!(sorted, BLACKLISTED_CLASSES);
+        for class in BLACKLISTED_CLASSES {
+            assert!(BLACKLISTED_CLASSES.binary_search(class).is_ok(), "{class}");
+        }
+    }
 
     #[test]
     fn compensation_inverts_the_master_volume() {

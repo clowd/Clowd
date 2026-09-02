@@ -27,13 +27,15 @@ pub fn emit_simple(msg_type: &str) {
 
 /// `tracks` is the optional per-track stream map (same shape as in
 /// `started_recording`); omitted entirely when None so consumers that key on
-/// field presence keep their previous value. `input_capture` is the sidecar
-/// path when `--input-capture` is active — also key-omitted when absent.
+/// field presence keep their previous value. `input_capture` and
+/// `window_capture` are the JSONL sidecar paths when those flags are active —
+/// also key-omitted when absent.
 pub fn emit_stopped_recording(
     code: i64,
     error: Option<String>,
     tracks: Option<serde_json::Value>,
     input_capture: Option<&std::path::Path>,
+    window_capture: Option<&std::path::Path>,
 ) {
     let mut msg = serde_json::json!({
         "type": "stopped_recording",
@@ -46,6 +48,9 @@ pub fn emit_stopped_recording(
     }
     if let Some(path) = input_capture {
         msg["input_capture"] = serde_json::json!(path.to_string_lossy());
+    }
+    if let Some(path) = window_capture {
+        msg["window_capture"] = serde_json::json!(path.to_string_lossy());
     }
     emit_json(msg);
 }

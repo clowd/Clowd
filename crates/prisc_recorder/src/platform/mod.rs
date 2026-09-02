@@ -103,6 +103,36 @@ impl CursorKind {
     }
 }
 
+/// One on-screen top-level window, sampled by `--window-capture`.
+///
+/// Windows are reported topmost-first (the platform z-order), and the bounds
+/// are the *visible* frame in the platform capture coordinate space — the same
+/// space as `MonitorInfo::x/y`, `CursorState::x/y` and `--region`. On Windows
+/// that means the DWM extended frame bounds (physical px) rather than
+/// `GetWindowRect`, whose invisible resize border would inflate every window by
+/// several pixels; on macOS it is `kCGWindowBounds` (points, top-left origin —
+/// the same convention as `CGDisplayBounds`).
+#[derive(Debug, Clone)]
+pub struct WindowInfo {
+    /// Platform window identity, stable while the window lives (Windows:
+    /// `HWND`; macOS: `CGWindowID`). Handles ARE recycled after a window is
+    /// destroyed, which is why the window-capture identity map keys on
+    /// `(id, pid)` rather than this alone.
+    pub id: u64,
+    /// Owning process id, the second half of that identity key.
+    pub pid: u32,
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+    /// Window title as the user sees it; may be empty (a titleless window, or
+    /// — on macOS — no Screen Recording permission).
+    pub title: String,
+    /// Executable file name (Windows) or application name (macOS); empty when
+    /// it cannot be resolved.
+    pub app: String,
+}
+
 /// One sample of the cursor for input capture: hotspot position in the
 /// platform capture coordinate space (same space as `MonitorInfo::x/y` and
 /// `--region`) plus the classified cursor shape.
