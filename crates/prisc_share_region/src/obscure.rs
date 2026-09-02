@@ -261,10 +261,11 @@ fn iterations(strength: u32) -> u32 {
     (1 + strength / 25).clamp(1, 4)
 }
 
-/// Half-extent of the hide icon in its own coordinate space: the eye plus the
-/// overhanging slash fit inside +/-0.78, and the margin keeps the antialiasing
-/// of the outermost cap off the edge of the icon box.
-const ICON_EXTENT: f32 = 0.82;
+/// Half-extent of the hide icon in its own coordinate space: the icon is the
+/// 24x24 "visibility off" glyph scaled so one icon unit is 12 glyph units, and
+/// its widest part — the eye, spanning x 1..23 — reaches +/-0.917. The margin
+/// keeps the antialiasing of that edge off the edge of the icon box.
+const ICON_EXTENT: f32 = 0.95;
 
 /// The hide icon is drawn at a quarter of the shorter surface dimension, but
 /// never smaller than this. The mirror surface is normally hundreds of pixels

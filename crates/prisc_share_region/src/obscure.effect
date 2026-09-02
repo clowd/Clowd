@@ -151,18 +151,25 @@ float fillMask(float d, float aa)
 	return 1.0 - smoothstep(-aa, aa, d);
 }
 
-/* Opaque black with a white 'hidden' eye drawn procedurally in the middle.
- * Procedural rather than a bitmap because there is no runtime asset path and
- * the surface can be any size: signed distance fields stay crisp at every
- * scale for free.
+/* Opaque black with a white 'eye with a strike through it' drawn
+ * procedurally in the middle. Procedural rather than a bitmap because there is
+ * no runtime asset path and the surface can be any size: signed distance
+ * fields stay crisp at every scale for free.
  *
- * The eye outline is the vesica cut out by two unit circles offset above and
- * below the origin; intersecting two signed distance fields is a max(), and
- * stroking rather than filling it (abs(d) < halfWidth) is what turns the lens
- * shape into an outline. The slash is drawn twice, first as a wide black
- * capsule that carves a visible gap through the eye and then as a narrower
- * white one inside that gap, which is what makes it read as 'on top of' the
- * eye rather than merged into it. */
+ * The geometry follows the usual 24x24 'visibility off' glyph, expressed in
+ * icon units where 1.0 is half of that box (one icon unit = 12 glyph units):
+ *
+ *   - the almond is the vesica cut out by two circles offset above and below
+ *     the origin, sized to span x 1..23 and y 4..20 of the glyph box;
+ *   - the eye is that almond with a circle of radius 5 punched out of it
+ *     (intersecting with the complement of a field is max(a, -b)), which is
+ *     what makes the outline thick at the corners and thin at the lids, plus
+ *     a filled pupil of radius 3 unioned back into the hole;
+ *   - the slash is a capsule of radius 1 along the box diagonal, drawn twice:
+ *     first as a wider black capsule that carves a gap through the eye, then
+ *     as the radius-1 white one inside that gap, which is what makes it read
+ *     as 'on top of' the eye rather than merged into it.
+ */
 float4 PSHide(VertInOut v_in) : TARGET
 {
 	float2 p = (v_in.uv - 0.5) * iconScale;
@@ -171,21 +178,23 @@ float4 PSHide(VertInOut v_in) : TARGET
 	 * large icon px underflows and smoothstep would divide by zero. */
 	float aa = max(px, 0.00001);
 
-	float2 up = float2(0.0, 0.75);
-	float eye = max(sdCircle(p - up, 1.0), sdCircle(p + up, 1.0));
-	float outline = fillMask(abs(eye) - 0.05, aa);
-	float pupil = fillMask(sdCircle(p, 0.16), aa);
+	/* R - offset is the almond's half height (8/12) and R*R - offset*offset
+	 * its half width squared (11/12 squared). */
+	float2 up = float2(0.0, 0.2969);
+	float almond = max(sdCircle(p - up, 0.9636), sdCircle(p + up, 0.9636));
+	float eye = max(almond, -sdCircle(p, 0.4167));
+	float pupil = sdCircle(p, 0.25);
 
-	float2 sa = float2(-0.62, -0.62);
-	float2 sb = float2(0.62, 0.62);
+	float2 sa = float2(-0.7, -0.7);
+	float2 sb = float2(0.7, 0.7);
 	float slash = sdSegment(p, sa, sb);
-	float cut = fillMask(slash - 0.155, aa);
-	float mark = fillMask(slash - 0.075, aa);
+	float cut = fillMask(slash - 0.1667, aa);
+	float mark = fillMask(slash - 0.0833, aa);
 
 	float3 white = float3(1.0, 1.0, 1.0);
 	float3 black = float3(0.0, 0.0, 0.0);
 
-	float3 rgb = lerp(black, white, saturate(outline + pupil));
+	float3 rgb = lerp(black, white, saturate(fillMask(eye, aa) + fillMask(pupil, aa)));
 	rgb = lerp(rgb, black, cut);
 	rgb = lerp(rgb, white, mark);
 
