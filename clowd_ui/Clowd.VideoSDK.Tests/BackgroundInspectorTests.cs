@@ -373,7 +373,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("ember", Live(session, id).Theme);
 
             // a sibling generative style: same palette namespace, so the pick is still the pick
-            vm.BackgroundStyle = Style("layered-waves");
+            vm.BackgroundStyle = Style("stacked-waves");
             Assert.Equal("ember", vm.BackgroundTheme.Value);
             Assert.Equal("ember", Live(session, id).Theme);
 
@@ -469,15 +469,72 @@ namespace Clowd.VideoSDK.Tests
                 vm.BackgroundThemeOptions.Select(o => o.Value).ToArray());
         }
 
+        // ---------------------------------------------------------------- the solid style
+
+        /// <summary>The solid style puts a color well where a wallpaper's theme row goes: it
+        /// offers no themes, so the two are never both up, and the well writes the item.</summary>
+        [Fact]
+        public void PickingTheSolidStyle_SwapsTheThemeRowForAColorWell()
+        {
+            var (session, vm, id) = NewInspector();
+            Assert.False(vm.ShowBackgroundColor);
+            Assert.True(vm.BackgroundThemesVisible);
+
+            vm.BackgroundStyle = Style(BackgroundCatalog.SolidStyle);
+            Assert.True(vm.ShowBackgroundColor);
+            Assert.False(vm.BackgroundThemesVisible);
+            Assert.Empty(vm.BackgroundThemeOptions);
+            // a fresh background carries Clowd blue, so the well opens on what is drawn
+            Assert.Equal(BackgroundContent.DefaultColor, vm.BackgroundColorHex);
+
+            vm.BackgroundColorHex = "#FF112233";
+            Assert.Equal("#FF112233", Live(session, id).Color);
+            Assert.Equal(BackgroundCatalog.SolidStyle, Live(session, id).Style);
+
+            // and it goes again when a wallpaper is picked
+            vm.BackgroundStyle = Style("monterey");
+            Assert.False(vm.ShowBackgroundColor);
+            Assert.True(vm.BackgroundThemesVisible);
+        }
+
+        /// <summary>A half-typed color stays in the box without reaching the model, and the color
+        /// survives a trip through a wallpaper style — the stickiness the theme keeps.</summary>
+        [Fact]
+        public void AHalfTypedColorIsNotWritten_AndThePickSurvivesAnotherStyle()
+        {
+            var (session, vm, id) = NewInspector(BackgroundCatalog.SolidStyle);
+            vm.BackgroundColorHex = "#FF00FF00";
+            Assert.Equal("#FF00FF00", Live(session, id).Color);
+
+            vm.BackgroundColorHex = "#FF00F";
+            Assert.Equal("#FF00F", vm.BackgroundColorHex);
+            Assert.Equal("#FF00FF00", Live(session, id).Color);
+
+            vm.BackgroundColorHex = "#FF00FF00";
+            vm.BackgroundStyle = Style("gradient");
+            Assert.Equal("#FF00FF00", Live(session, id).Color);
+            vm.BackgroundStyle = Style(BackgroundCatalog.SolidStyle);
+            Assert.Equal("#FF00FF00", vm.BackgroundColorHex);
+        }
+
         /// <summary>Every one of the panel's pairs has to be drawable, or a tile is a black box: the
-        /// tile hands exactly these two ids to the same renderer the composer calls.</summary>
+        /// tile hands exactly these two ids to the same renderer the composer calls. The solid
+        /// style is the one tile with no scene behind it — it draws the color instead, and the
+        /// tile passes the panel's own down.</summary>
         [Fact]
         public void EveryTileThePickerCanShow_HasArtworkBehindIt()
         {
             foreach (var option in SelectedItemViewModel.BackgroundStyleOptions)
             {
-                Assert.NotNull(BackgroundRenderer.GetScene(option.Value, null));
                 var style = BackgroundCatalog.Find(option.Value);
+                if (style.IsSolid)
+                {
+                    Assert.Null(BackgroundRenderer.GetScene(option.Value, null));
+                    Assert.Empty(style.Themes);
+                    continue;
+                }
+
+                Assert.NotNull(BackgroundRenderer.GetScene(option.Value, null));
                 foreach (var theme in style.Themes)
                     Assert.NotNull(BackgroundRenderer.GetScene(option.Value, theme.Id));
             }

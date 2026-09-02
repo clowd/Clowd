@@ -22,13 +22,13 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>The BGRA bytes of a style drawn to fill a black W x H bitmap at a project time.</summary>
         internal static byte[] RenderPixels(string style, string theme, double timeSeconds, int w = W, int h = H,
-            double speed = 1.0)
+            double speed = 1.0, string color = null)
         {
             using var bitmap = new SKBitmap(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
             using (var canvas = new SKCanvas(bitmap))
             {
                 canvas.Clear(SKColors.Black);
-                BackgroundRenderer.Draw(canvas, SKRect.Create(0, 0, w, h), style, theme, timeSeconds, speed);
+                BackgroundRenderer.Draw(canvas, SKRect.Create(0, 0, w, h), style, theme, timeSeconds, speed, color);
                 canvas.Flush();
             }
             return bitmap.Bytes.ToArray();
@@ -256,6 +256,38 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0.0, BackgroundRenderer.PhaseOf(style, 37 * Sec));
         }
 
+        /// <summary>The solid style has no scene to fetch: the entry point every tile and the
+        /// composer share fills the destination with the color it is handed, and falls back to
+        /// Clowd blue for a color it cannot read.</summary>
+        [Fact]
+        public void Solid_style_draws_the_color_it_is_handed()
+        {
+            var red = RenderPixels(BackgroundCatalog.SolidStyle, null, 0, color: "#FFFF0000");
+            Assert.Equal(1, DistinctColors(red));
+            var px = Px(red, 10, 10);
+            Assert.Equal((0, 0, 255, 255), (px.B, px.G, px.R, px.A));
+
+            var fallback = RenderPixels(BackgroundCatalog.SolidStyle, null, 0);
+            Assert.Equal(fallback, RenderPixels(BackgroundCatalog.SolidStyle, "no-such-theme", 37, color: "  "));
+            var blue = Px(fallback, 10, 10);
+            Assert.Equal((0xF0, 0xAF, 0x00, 255), (blue.B, blue.G, blue.R, blue.A));
+
+            Assert.Equal(SKColor.Parse("#FF00AFF0"), BackgroundRenderer.SolidColorOf(null));
+            Assert.Equal(SKColor.Parse("#FF00AFF0"), BackgroundRenderer.SolidColorOf("nonsense"));
+            Assert.Equal(SKColor.Parse("#8012AB34"), BackgroundRenderer.SolidColorOf("#8012AB34"));
+
+            // opacity fades the fill the way it fades a scene: half over black is half the color
+            using var bitmap = new SKBitmap(W, H, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using (var canvas = new SKCanvas(bitmap))
+            {
+                canvas.Clear(SKColors.Black);
+                BackgroundRenderer.DrawSolid(canvas, SKRect.Create(0, 0, W, H), SKColors.Red, 0.5);
+                canvas.Flush();
+            }
+            var faded = Px(bitmap.Bytes.ToArray(), 32, 32);
+            Assert.InRange(faded.R, 126, 130);
+        }
+
         [Fact]
         public void Phase_is_an_integer_tick_function_of_project_time()
         {
@@ -310,7 +342,7 @@ namespace Clowd.VideoSDK.Tests
         public void Cover_placement_is_resolution_independent()
         {
             // The 128 render box-downsampled 2x2 must match the 64 render: same picture, more pixels.
-            foreach (var (style, theme) in new[] { ("gradient", "sunrise"), ("layered-waves", "source"), ("explode", null) })
+            foreach (var (style, theme) in new[] { ("gradient", "sunrise"), ("stacked-waves", "source"), ("explode", null) })
             {
                 var small = RenderPixels(style, theme, 0, 64, 64);
                 var large = RenderPixels(style, theme, 0, 128, 128);
@@ -382,7 +414,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Opacity_halves_the_color_and_fades_the_art_as_one()
         {
-            var scene = BackgroundRenderer.GetScene("layered-waves", "source");
+            var scene = BackgroundRenderer.GetScene("stacked-waves", "source");
             var dest = SKRect.Create(0, 0, W, H);
             var full = RenderScene(scene, 0, dest, 1.0);
             var half = RenderScene(scene, 0, dest, 0.5);

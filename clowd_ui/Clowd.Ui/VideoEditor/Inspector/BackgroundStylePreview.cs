@@ -70,6 +70,12 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly StyledProperty<string> ThemeNameProperty =
             AvaloniaProperty.Register<BackgroundStylePreview, string>(nameof(ThemeName));
 
+        /// <summary>The <c>BackgroundContent.Color</c> to fill with, read only by the solid style
+        /// — the one style with no artwork, whose tile is the item's own color. Null draws
+        /// <c>BackgroundContent.DefaultColor</c>, so a tile is never blank.</summary>
+        public static readonly StyledProperty<string> ColorProperty =
+            AvaloniaProperty.Register<BackgroundStylePreview, string>(nameof(Color));
+
         /// <summary>
         /// Whether the tiles under this control are on show, as an inherited attached property the
         /// BACKGROUND section sets from <c>ShowBackground</c>.
@@ -115,7 +121,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             // StyleNameProperty is deliberately absent: it also joins and leaves the shared clock,
             // so it is handled in OnPropertyChanged rather than invalidating twice
             // (ClickHighlightPreview leaves its own Animation property out for the same reason).
-            AffectsRender<BackgroundStylePreview>(ThemeNameProperty);
+            AffectsRender<BackgroundStylePreview>(ThemeNameProperty, ColorProperty);
         }
 
         /// <summary>How much faster than real time the tiles play. The source wallpapers loop over
@@ -143,6 +149,12 @@ namespace Clowd.UI.VideoEditor.Inspector
         {
             get => GetValue(ThemeNameProperty);
             set => SetValue(ThemeNameProperty, value);
+        }
+
+        public string Color
+        {
+            get => GetValue(ColorProperty);
+            set => SetValue(ColorProperty, value);
         }
 
         protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -195,7 +207,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             _drawnFrame = sheet == null ? -1 : frame;
             context.Custom(sheet != null
                 ? new TileDrawOperation(new Rect(Bounds.Size), sheet, frame)
-                : new TileDrawOperation(new Rect(Bounds.Size), style, ThemeName, seconds));
+                : new TileDrawOperation(new Rect(Bounds.Size), style, ThemeName, seconds, Color));
         }
 
         /// <summary>
@@ -391,16 +403,18 @@ namespace Clowd.UI.VideoEditor.Inspector
         {
             private readonly string _style;
             private readonly string _theme;
+            private readonly string _color;
             private readonly double _timeSeconds;
             private readonly SKImage _sheet;
             private readonly int _frame;
 
-            public TileDrawOperation(Rect bounds, string style, string theme, double timeSeconds)
+            public TileDrawOperation(Rect bounds, string style, string theme, double timeSeconds, string color)
             {
                 Bounds = bounds;
                 _style = style;
                 _theme = theme;
                 _timeSeconds = timeSeconds;
+                _color = color;
             }
 
             /// <summary>Draws frame <paramref name="frame"/> of <paramref name="sheet"/> instead of
@@ -452,7 +466,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                     if (_sheet != null)
                         DrawSheetFrame(canvas, dest);
                     else
-                        BackgroundRenderer.Draw(canvas, dest, _style, _theme, _timeSeconds);
+                        BackgroundRenderer.Draw(canvas, dest, _style, _theme, _timeSeconds, 1.0, _color);
                 }
                 finally
                 {

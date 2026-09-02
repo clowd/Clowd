@@ -1,4 +1,5 @@
 using System;
+using Clowd.VideoSDK.Model;
 using SkiaSharp;
 
 namespace Clowd.VideoSDK.Composition
@@ -103,18 +104,55 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>
+        /// The solid style's whole picture: <paramref name="dest"/> filled flat with
+        /// <paramref name="color"/> at <paramref name="opacity"/>. Its own entry point rather
+        /// than a branch inside <see cref="DrawScene"/> because there is no scene involved — the
+        /// color comes off the item, not out of the library — and every consumer that draws a
+        /// wallpaper (the composer, the picker tiles) needs the same two lines for it.
+        /// </summary>
+        public static void DrawSolid(SKCanvas canvas, SKRect dest, SKColor color, double opacity = 1.0)
+        {
+            if (canvas == null || dest.Width <= 0 || dest.Height <= 0 || opacity <= 0)
+                return;
+
+            using var paint = new SKPaint
+            {
+                IsAntialias = true,
+                Color = color.WithAlpha(AlphaByte(opacity * color.Alpha / 255.0)),
+            };
+            canvas.DrawRect(dest, paint);
+        }
+
+        /// <summary>A <c>BackgroundContent.Color</c> string as a color, with
+        /// <see cref="BackgroundContent.DefaultColor"/> (Clowd blue) for a null or unparseable
+        /// one — so a solid background always draws something.</summary>
+        public static SKColor SolidColorOf(string color)
+        {
+            if (!string.IsNullOrWhiteSpace(color) && SKColor.TryParse(color, out var parsed))
+                return parsed;
+            return SKColor.Parse(BackgroundContent.DefaultColor);
+        }
+
+        /// <summary>
         /// Convenience for inspector tiles and flyouts: resolves both ids (unknown ones draw
         /// the defaults, never nothing), turns seconds into ticks with
         /// <c>(long)Math.Round(timeSeconds * TimeSpan.TicksPerSecond)</c>, and goes through the
         /// same <see cref="PhaseOf(BackgroundStyle, long, double)"/> and <see cref="DrawScene"/> the
         /// composer uses — so a tile fed the playhead's project seconds shows the frame the
-        /// preview shows. A plain canvas draw with no context assumptions: an Avalonia-leased
+        /// preview shows. <paramref name="color"/> is the item's own fill and is read only by the
+        /// solid style, which has no artwork and ignores everything else. A plain canvas draw with no context assumptions: an Avalonia-leased
         /// canvas and a <c>WriteableBitmap</c>-backed surface are both fine.
         /// </summary>
         public static void Draw(SKCanvas canvas, SKRect dest, string style, string theme, double timeSeconds,
-            double animationSpeed = 1.0)
+            double animationSpeed = 1.0, string color = null)
         {
             var resolved = BackgroundCatalog.Find(BackgroundCatalog.ResolveStyle(style));
+            if (resolved.IsSolid)
+            {
+                DrawSolid(canvas, dest, SolidColorOf(color));
+                return;
+            }
+
             var scene = GetScene(resolved.Id, theme);
             if (scene == null)
                 return;

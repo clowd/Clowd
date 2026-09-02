@@ -114,15 +114,16 @@ namespace Clowd.VideoSDK.Composition
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Two kinds of style live here. An <b>authored-theme</b> style (Big Sur, Monterey, Gradient,
-    /// Explode) ships one file per theme and draws it as-is. A <b>generative</b> style (the six
-    /// Haikei-derived drawings) ships one file and offers it in its own colors (<c>source</c>,
+    /// Three kinds of style live here. An <b>authored-theme</b> style (Big Sur, Monterey,
+    /// Gradient, Explode) ships one file per theme and draws it as-is. A <b>generative</b> style
+    /// (the five Haikei-derived drawings) ships one file and offers it in its own colors (<c>source</c>,
     /// the default, so a project written before palettes existed is pixel-identical) plus one
     /// theme per entry of the shared <see cref="Palettes"/> table, recolored through a
     /// <see cref="CursorPackPalette"/> the way the cursor packs are. Each generative row states
     /// which of the file's own colors plays which role in a palette, so adding a palette is one
-    /// line here and it appears under all six styles; nothing in the draw path ever looks at a
-    /// palette id.
+    /// line here and it appears under all five styles; nothing in the draw path ever looks at a
+    /// palette id. The <b>solid</b> style ships nothing at all: it has no file, no theme and no
+    /// palette, and the picture it stands for is the color the item carries.
     /// </para>
     /// <para>
     /// Ids are wire contract and resolve leniently: an unknown style is the default style, an
@@ -136,6 +137,17 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>The style <c>BackgroundContent.Style</c> defaults to, and what an unknown
         /// style id resolves to.</summary>
         public const string DefaultStyle = "big-sur";
+
+        /// <summary>The id of the one style that draws no artwork, only the item's own color
+        /// (<see cref="BackgroundStyle.IsSolid"/>). Named here because the editor's color row and
+        /// the timeline card both ask "is this the solid one" without wanting to know how the
+        /// catalog stores that.</summary>
+        public const string SolidStyle = "solid";
+
+        /// <summary>Whether a stored style id draws a flat color rather than a wallpaper, with the
+        /// id resolved first — so an unknown id answers for the style that is actually drawn.</summary>
+        public static bool IsSolid(string styleId)
+            => Find(ResolveStyle(styleId))?.IsSolid ?? false;
 
         /// <summary>Every style, in picker order (the order of <c>BackgroundContent.Styles</c>).</summary>
         public static IReadOnlyList<BackgroundStyle> Styles { get; }
@@ -240,8 +252,8 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>The seven roles a generative style's colors are cast in: a ground and a ramp
         /// that runs from the lightest, most forward layer (<see cref="Ramp0"/>) to the deepest
-        /// (<see cref="Ramp5"/>). Seven because Layered Waves, the deepest style, stacks a ground
-        /// and six waves; a shallower style uses the subset its row names.</summary>
+        /// (<see cref="Ramp5"/>). Seven because Stacked Waves, the deepest style, stacks six waves
+        /// over a ground; a shallower style uses the subset its row names.</summary>
         internal enum Swatch
         {
             Background = 0,
@@ -296,10 +308,6 @@ namespace Clowd.VideoSDK.Composition
 
         private static readonly GenerativeStyle[] GenerativeStyles =
         {
-            new GenerativeStyle("layered-waves", "Layered Waves", "layered-waves/source.svg", 0,
-                (0x001220, Swatch.Background), (0xFA7268, Swatch.Ramp0), (0xF16367, Swatch.Ramp1),
-                (0xE85467, Swatch.Ramp2), (0xDE4467, Swatch.Ramp3), (0xD23467, Swatch.Ramp4),
-                (0xC62368, Swatch.Ramp5)),
             // No ground rect in this file: its first wave covers the canvas, so every slot is a
             // ramp entry.
             new GenerativeStyle("stacked-waves", "Stacked Waves", "stacked-waves/source.svg", 0,
@@ -344,9 +352,9 @@ namespace Clowd.VideoSDK.Composition
             return specs;
         }
 
-        /// <summary>The styles in picker order: the authored-theme four, then the generative six
-        /// — static ones first, the three loops last so the picker groups them. This order is the
-        /// one <c>BackgroundContent.Styles</c> spells out literally.</summary>
+        /// <summary>The styles in picker order: the authored-theme four, then the solid fill and
+        /// the generative five — static ones first, the three loops last so the picker groups
+        /// them. This order is the one <c>BackgroundContent.Styles</c> spells out literally.</summary>
         private static BackgroundStyle[] BuildStyles()
         {
             var generative = GenerativeStyles.ToDictionary(g => g.Id, StringComparer.Ordinal);
@@ -395,7 +403,15 @@ namespace Clowd.VideoSDK.Composition
                 {
                     Authored(null, null, "explode/explode.svg"),
                 }),
-                Generative("layered-waves"),
+                // The one row with no artwork: its picture is the item's own color, so it has a
+                // single unnamed colorway (no theme to pick, exactly as Explode) and a null
+                // asset, which is what IsSolid reads. It sits where a wallpaper sits in the
+                // picker because it is one more answer to the same question — what is behind the
+                // recording — and the inspector swaps the THEME row for a color well under it.
+                new BackgroundStyle(SolidStyle, "Solid Color", 0, new[]
+                {
+                    new BackgroundTheme(null, null, asset: null, palette: null),
+                }),
                 Generative("stacked-waves"),
                 Generative("layered-steps"),
                 Generative("moving-blob"),

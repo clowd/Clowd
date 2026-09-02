@@ -14,9 +14,9 @@ namespace Clowd.VideoSDK.Composition
     /// <remarks>
     /// <para>
     /// Two caches on the <c>FrameComposer.ImageCache</c> pattern (one lock, null cached for a
-    /// missing resource, unbounded): parsed SVGs by asset path, so each of the six generative
+    /// missing resource, unbounded): parsed SVGs by asset path, so each of the five generative
     /// files is parsed once and recolored per theme, and scenes by (style, theme). At most
-    /// 4 + 2 + 10 + 1 + 6 x 7 = 59 entries, and only those a project actually draws.
+    /// 4 + 2 + 10 + 1 + 1 + 5 x 7 = 53 entries, and only those a project actually draws.
     /// </para>
     /// <para>
     /// Lazy on purpose, where <c>CursorAssets</c> builds its table eagerly: a project with no
@@ -104,6 +104,11 @@ namespace Clowd.VideoSDK.Composition
 
         private static BackgroundScene Load(BackgroundTheme spec)
         {
+            // the solid style has no file to load: its picture is the item's color, which the
+            // composer and the pickers fill themselves (BackgroundStyle.IsSolid)
+            if (spec.Asset == null)
+                return null;
+
             var parsed = GetParsed(spec.Asset);
             return parsed == null ? null : new SvgBackgroundScene(parsed.Recolor(spec.Palette));
         }
