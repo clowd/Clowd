@@ -185,12 +185,18 @@ namespace Clowd.UI.VideoEditor
                 return;
 
             if (_player != null)
+            {
                 _player.FrameSource.FrameArrived -= OnFrameArrived;
+                _player.StateChanged -= OnPlayerStateChanged;
+            }
 
             _player = player;
 
             if (_player != null)
+            {
                 _player.FrameSource.FrameArrived += OnFrameArrived;
+                _player.StateChanged += OnPlayerStateChanged;
+            }
 
             RequestRender();
         }
@@ -229,6 +235,24 @@ namespace Clowd.UI.VideoEditor
             }
 
             RequestRender();
+        }
+
+        /// <summary>The poster normally leaves with the first decoded frame, but a project whose
+        /// every video track is hidden (a session saved that way) opens with no video pipeline at
+        /// all, so no frame ever arrives — the poster would sit there as a phantom of the hidden
+        /// picture, at the recording's own size rather than the item's. Once the open lands,
+        /// a player with nothing to decode retires the poster itself.</summary>
+        private void OnPlayerStateChanged(object sender, PlayerState state)
+        {
+            if (_sawFirstFrame || !ReferenceEquals(sender, _player))
+                return;
+            if (state is PlayerState.Idle or PlayerState.Opening or PlayerState.Failed)
+                return;
+            if (_player.FrameSource.HasVideoStreams)
+                return;
+
+            _sawFirstFrame = true;
+            Dispatcher.UIThread.Post(() => PosterImage.IsVisible = false);
         }
 
         /// <summary>Sets the screen frame size in pixels once the media is open.</summary>
@@ -326,6 +350,7 @@ namespace Clowd.UI.VideoEditor
             if (_player != null)
             {
                 _player.FrameSource.FrameArrived -= OnFrameArrived;
+                _player.StateChanged -= OnPlayerStateChanged;
                 _player = null;
             }
 
