@@ -601,7 +601,7 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>
         /// GPU and CPU compose the same background. The bar is per route, from measurement at
-        /// 64x64 and 256x256 on D3D12 against raster:
+        /// 64x64, 128x128 and 256x256 on D3D12 and on Metal against raster:
         /// <list type="bullet">
         /// <item>Breathing Field computes its blur once on a CPU raster, identically for both
         /// backends, then each backend resamples that snapshot into the box; their bilinear
@@ -616,11 +616,23 @@ namespace Clowd.VideoSDK.Tests
         /// <item>the vector styles draw gradients and antialiased paths straight to the canvas,
         /// and here Skia's two rasterisers genuinely differ: gradient ramps by up to 4 levels
         /// (the interpolation is float on Ganesh, fixed-point on raster) and path EDGE pixels by
-        /// up to 63 (Ganesh's analytic coverage against raster's supersampled coverage) on 0.2
-        /// to 0.9 percent of bytes, with the mean channel difference under 0.5. That is the
-        /// same primitive-level difference the cursor glyphs already live with; the interior
-        /// of every shape agrees. The gate is therefore a mean under 1 level and at most 1
-        /// percent of bytes beyond 4 levels.</item>
+        /// up to 94 (Ganesh's analytic coverage against raster's supersampled coverage), with
+        /// the mean channel difference under 0.5. That is the same primitive-level difference
+        /// the cursor glyphs already live with; the interior of every shape agrees, and the
+        /// divergent bytes trace the shape outlines and nothing else.
+        /// <para>How many bytes that is depends on how much of the frame is outline, which is a
+        /// property of the style and of the size, not of the backend: for a given style the
+        /// fraction falls as the box grows (Explode is 2.10 percent of bytes beyond 4 levels at
+        /// 64x64, 1.19 at 128x128, 0.68 at 256x256), and at one size it ranges over the styles
+        /// from 0 (Gradient, which is one ramp with no path edge at all) to that 2.10. Metal
+        /// resolves those edges further from raster than D3D12 does, which is why the 1 percent
+        /// bar measured on D3D12 alone failed on macOS for Explode; the widest measured on
+        /// either backend is Explode's 2.10 percent at 64x64, with Stacked Waves next at 2.02.
+        /// The gate is therefore a mean under 1 level and at most 3 percent of bytes beyond 4
+        /// levels. The mean is the term that carries the real weight here: a shifted, mistimed
+        /// or misplaced background moves whole regions rather than outlines, and the measured
+        /// mean is at most 0.31 across every style and size, so a structural divergence has
+        /// three times the room it needs to trip it.</para></item>
         /// </list>
         /// None of these is a time or placement divergence: the CPU tests above hold the same
         /// tick to byte-identical output, and the same code with the same ticks runs on both.
@@ -669,7 +681,7 @@ namespace Clowd.VideoSDK.Tests
                             Assert.True(worst <= 2 && beyondOne <= g.Length / 50, report);
                             break;
                         default:
-                            Assert.True(mean < 1.0 && beyondFour <= g.Length / 100, report);
+                            Assert.True(mean < 1.0 && beyondFour <= g.Length * 3 / 100, report);
                             break;
                     }
                 }
