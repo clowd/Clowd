@@ -100,6 +100,11 @@ namespace Clowd.VideoSDK.Composition
             _cuts = cuts ?? new Dictionary<(Guid, int), SkipRangeSchedule>();
         }
 
+        /// <summary>Whether any video stream is registered — false when the open project has no
+        /// visible video item (every video track hidden, or none at all), in which case
+        /// <see cref="FrameArrived"/> will never fire.</summary>
+        public bool HasVideoStreams => _sinks.Count > 0;
+
         private void OnFrameCompleted() => FrameArrived?.Invoke();
 
         /// <summary>
