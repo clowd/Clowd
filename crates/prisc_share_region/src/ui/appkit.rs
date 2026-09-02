@@ -69,6 +69,7 @@
 //! under obs before `quit` runs.
 
 use std::cell::RefCell;
+use std::cmp;
 use std::ffi::c_void;
 
 use objc2::rc::Retained;
@@ -414,6 +415,112 @@ fn park(window: &NSWindow, mtm: MainThreadMarker, region: Rect) {
     window.setFrame_display(window.frameRectForContentRect(content), false);
 }
 
+/// Places the PROMPT window: its own size, centred on the region and clamped
+/// into the visible frame of the screen the region is on
+/// ([`super::centre_prompt_on`]).
+///
+/// Only the position follows the region; the size is left exactly as created
+/// (PROMPT_SIZE), because the prompt is a dialog to read and click, not a
+/// preview — at the mirror's minimum region size a region-sized one would be
+/// unreadable and near-unclickable. The region's SIZE reaches the window only
+/// at [`begin_mirror_phase`].
+///
+/// `frame`, not the content rect: the window still has its title bar here, and
+/// what has to end up on the screen is the whole window, chrome included.
+///
+/// Nothing constrains this afterwards — `constrainFrameRect:toScreen:` is
+/// overridden to the identity (see [`ShareWindow`]) — so the clamp inside
+/// `centre_prompt_on` is the only thing keeping the prompt on a screen. That is
+/// deliberate: it clamps to the region's screen, where AppKit would have been
+/// free to pick another.
+fn place_prompt(window: &NSWindow, mtm: MainThreadMarker, region: Rect) {
+    let frame = window.frame();
+    let Some(bounds) = prompt_screen(mtm, region) else {
+        // No screens at all (every display asleep, or a headless session).
+        // There is nowhere to be sensible about; AppKit's own centring is as
+        // good an answer as any and cannot fail.
+        window.center();
+        return;
+    };
+    let w = frame.size.width.round().max(0.0) as i32;
+    let h = frame.size.height.round().max(0.0) as i32;
+    let (x, y) = super::centre_prompt_on(region, bounds, w, h);
+    let placed = capture_to_cocoa(
+        mtm,
+        Rect {
+            x,
+            y,
+            w: w as u32,
+            h: h as u32,
+        },
+    );
+    // display:false — the window has not been ordered on screen yet at the one
+    // call site, so there is nothing to redraw.
+    window.setFrame_display(placed, false);
+}
+
+/// The visible frame — screen minus the menu bar and the Dock — of the screen
+/// the prompt should open on, in capture space. `None` only when there are no
+/// screens at all.
+///
+/// `visibleFrame`, unlike the `frame` [`parked_region`] uses, because these two
+/// want opposite things from a screen: parking cares where the capture can see,
+/// so the menu bar and the Dock are still screen; the prompt has to be read and
+/// clicked, so the area either of them covers is not usable.
+fn prompt_screen(mtm: MainThreadMarker, region: Rect) -> Option<Rect> {
+    let screens: Vec<Rect> = NSScreen::screens(mtm)
+        .iter()
+        .map(|s| cocoa_to_capture(mtm, s.visibleFrame()))
+        .collect();
+    choose_prompt_screen(&screens, region)
+}
+
+/// The screen the region is most on, split out from [`prompt_screen`] so it can
+/// be tested against arbitrary layouts (fetching the real ones needs a main
+/// thread and a window server).
+///
+/// Most overlap wins, so a region straddling two displays takes the one it is
+/// mostly on. Centre distance breaks the zero-overlap case — a region that
+/// intersects no screen, which the app core rejects before the window exists
+/// but which a screen hot-unplug between the two moments could still produce —
+/// and ties keep the first screen, i.e. the primary, so the choice is
+/// deterministic.
+fn choose_prompt_screen(screens: &[Rect], region: Rect) -> Option<Rect> {
+    screens
+        .iter()
+        .copied()
+        // `min_by_key` returns the FIRST minimum, which is what makes ties
+        // resolve to the primary; `max_by_key` would return the last.
+        .min_by_key(|s| {
+            (
+                cmp::Reverse(overlap_area(*s, region)),
+                centre_distance_sq(*s, region),
+            )
+        })
+}
+
+/// Area of the intersection of two capture-space rects, 0 when they miss.
+/// i128: both spans can approach the full u32 range, and their product leaves
+/// i64.
+fn overlap_area(a: Rect, b: Rect) -> i128 {
+    let (ax2, ay2) = (a.x as i64 + a.w as i64, a.y as i64 + a.h as i64);
+    let (bx2, by2) = (b.x as i64 + b.w as i64, b.y as i64 + b.h as i64);
+    let w = (ax2.min(bx2) - (a.x as i64).max(b.x as i64)).max(0) as i128;
+    let h = (ay2.min(by2) - (a.y as i64).max(b.y as i64)).max(0) as i128;
+    w * h
+}
+
+/// Squared distance between two rects' centres — squared because only the
+/// ORDER is ever used and a square root would only cost precision. i128 for the
+/// same reason as [`overlap_area`].
+fn centre_distance_sq(a: Rect, b: Rect) -> i128 {
+    let acx = a.x as i128 + a.w as i128 / 2;
+    let acy = a.y as i128 + a.h as i128 / 2;
+    let bcx = b.x as i128 + b.w as i128 / 2;
+    let bcy = b.y as i128 + b.h as i128 / 2;
+    (acx - bcx).pow(2) + (acy - bcy).pow(2)
+}
+
 // ---------------------------------------------------------------------------
 // ShareWindow: an NSWindow that stays exactly where it is put
 // ---------------------------------------------------------------------------
@@ -445,11 +552,10 @@ define_class!(
         /// modelled origin. AppKit does this to borderless windows too, not
         /// only titled ones.)
         ///
-        /// The prompt phase is unaffected: `center()` puts that window well
-        /// inside a screen, so there is nothing to constrain.
-        ///
-        /// The prompt phase is unaffected: `center()` puts that window well
-        /// inside a screen, so there is nothing to constrain.
+        /// The prompt phase relies on the same identity for the opposite
+        /// reason: [`place_prompt`] clamps that window into the visible frame
+        /// of the REGION's screen, and AppKit's constraining would have been
+        /// free to move it to another one.
         #[unsafe(method(constrainFrameRect:toScreen:))]
         fn constrain_frame_rect(&self, rect: NSRect, _screen: Option<&NSScreen>) -> NSRect {
             rect
@@ -925,16 +1031,18 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
     // decline. Deliberately not miniaturizable (a minimized window stops being
     // composited, which would freeze the share the moment it started) and not
     // resizable (its size is dictated by the region, never by the user).
-    // Centred rather than placed on the region: a window sized and positioned
-    // like the final mirror is awkward to pick, and for a region at a screen
-    // edge would be largely off-screen.
+    // Prompt-sized rather than region-sized — a window sized like the final
+    // mirror is awkward to pick, and at the mirror's minimum region size it
+    // would be unreadable — but placed ON the region by `place_prompt` below,
+    // because that is where the user is looking and, on a multi-display desktop,
+    // the screen they expect to be asked on.
     let window = ShareWindow::create(
         mtm,
         NSRect::new(NSPoint::new(0.0, 0.0), PROMPT_SIZE),
         NSWindowStyleMask::Titled | NSWindowStyleMask::Closable,
     );
     window.setTitle(&NSString::from_str(&cfg.title));
-    window.center();
+    place_prompt(&window, mtm, region);
 
     // Registered before the window is ordered on screen. The handler borrows
     // APP unconditionally, which is safe even though APP is populated a few
@@ -1046,18 +1154,6 @@ mod tests {
         Rect { x, y, w, h }
     }
 
-    /// Points of `r` that lie inside `m`. The parked window must contribute
-    /// exactly one, on exactly one display.
-    fn overlap_area(r: Rect, m: Rect) -> i64 {
-        let x = (r.x.max(m.x) as i64)..((r.x as i64 + r.w as i64).min(m.x as i64 + m.w as i64));
-        let y = (r.y.max(m.y) as i64)..((r.y as i64 + r.h as i64).min(m.y as i64 + m.h as i64));
-        let (w, h) = (
-            (x.end - x.start).max(0),
-            (y.end - y.start).max(0),
-        );
-        w * h
-    }
-
     /// The defining property, over a spread of layouts: the parked window
     /// touches the desktop in exactly one point, on exactly one display.
     #[test]
@@ -1087,7 +1183,7 @@ mod tests {
                     size,
                     "parking must not resize the window"
                 );
-                let total: i64 = screens.iter().map(|m| overlap_area(parked, *m)).sum();
+                let total: i128 = screens.iter().map(|m| overlap_area(parked, *m)).sum();
                 assert_eq!(
                     total, 1,
                     "layout {screens:?} region {size:?} -> {parked:?} covers {total} points"
@@ -1164,7 +1260,7 @@ mod tests {
         // gap between them: every corner of either one hangs over the other.
         let screens = [rect(0, 0, 200, 200), rect(300, 0, 200, 200)];
         let parked = choose_parked_rect(&screens, rect(0, 0, 4000, 4000));
-        let touched: Vec<i64> = screens.iter().map(|m| overlap_area(parked, *m)).collect();
+        let touched: Vec<i128> = screens.iter().map(|m| overlap_area(parked, *m)).collect();
         assert!(
             touched.contains(&1),
             "one display must still be touched by exactly one point: {touched:?}"
@@ -1192,5 +1288,36 @@ mod tests {
         }
         // ...and the region's own origin is irrelevant to where it parks.
         assert_eq!(choose_parked_rect(&screens, rect(-50, 0, 756, 490)), first);
+    }
+
+    /// Which screen the prompt opens on, over the layouts that make the choice
+    /// non-trivial.
+    #[test]
+    fn prompt_screen_follows_the_region() {
+        // Laptop plus an external monitor to the right.
+        let screens = [rect(0, 0, 1512, 982), rect(1512, 0, 1920, 1080)];
+
+        // Squarely on the external one.
+        assert_eq!(
+            choose_prompt_screen(&screens, rect(2000, 300, 400, 300)),
+            Some(screens[1])
+        );
+        // Squarely on the laptop.
+        assert_eq!(
+            choose_prompt_screen(&screens, rect(100, 100, 400, 300)),
+            Some(screens[0])
+        );
+        // Straddling the seam, mostly on the external: most overlap wins.
+        assert_eq!(
+            choose_prompt_screen(&screens, rect(1412, 100, 400, 300)),
+            Some(screens[1])
+        );
+        // On no screen at all (a display unplugged under us): nearest centre.
+        assert_eq!(
+            choose_prompt_screen(&screens, rect(4000, 300, 100, 100)),
+            Some(screens[1])
+        );
+        // No screens: the caller falls back to AppKit's own centring.
+        assert_eq!(choose_prompt_screen(&[], rect(0, 0, 100, 100)), None);
     }
 }

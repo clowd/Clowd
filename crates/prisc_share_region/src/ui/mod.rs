@@ -6,16 +6,24 @@
 //! # Lifecycle: two phases, one window
 //!
 //! PROMPT PHASE. `run` creates a single ordinary window — titled, frontmost,
-//! activated — SMALL and wherever the platform cares to put it, whose client
-//! area shows "Share this window, then press OK" and an OK button. That is the
-//! entire user interface of this process, and at this point there is no obs
-//! display attached to anything: the user is being asked to point their meeting
-//! app's share picker at a window that is plainly visible and clickable, which
-//! is the only thing the picker flows in most conferencing apps (macOS'
-//! click-to-pick UIs especially) can reliably target. Small and unplaced rather
-//! than region-shaped because it has to be easy to find and click: a window
-//! already sized and positioned like the final mirror is awkward to pick, and
-//! for a region at a screen edge would be largely off-screen.
+//! activated — SMALL and centred on the region, whose client area shows "Share
+//! this window, then press OK" and an OK button. That is the entire user
+//! interface of this process, and at this point there is no obs display
+//! attached to anything: the user is being asked to point their meeting app's
+//! share picker at a window that is plainly visible and clickable, which is the
+//! only thing the picker flows in most conferencing apps (macOS' click-to-pick
+//! UIs especially) can reliably target.
+//!
+//! Small rather than region-shaped because it has to be easy to find and click:
+//! a window sized like the final mirror is awkward to pick, and at the mirror's
+//! minimum region size unreadable. Placed on the region rather than left
+//! wherever the window manager cascades it because that is where the user is
+//! looking — they have just drawn that rectangle — and on a multi-display
+//! desktop an unplaced prompt can open on a screen they are not even watching.
+//! [`centre_prompt_on`] does the arithmetic for both platforms: the window is
+//! centred on the region's centre and then clamped whole into the usable area
+//! of the region's display, so a tiny region, or one against a screen edge,
+//! still gets a fully visible and fully clickable prompt beside it.
 //!
 //! MIRROR PHASE (entered when the user presses OK). The SAME window is reused —
 //! never recreated — because the share the user just started in the meeting app
@@ -132,6 +140,45 @@ pub trait AppEvents {
     fn quit(&mut self) -> !;
 }
 
+/// Top-left for a `w` x `h` prompt window: centred on `region`, then pushed
+/// whole inside `bounds`. Both rects and the result are in capture space
+/// (see "Coordinate space" above); `bounds` is the usable area of the display
+/// the prompt is going to (Windows: the monitor's work area; macOS: the
+/// screen's visible frame), so the clamp also keeps the window clear of the
+/// taskbar / menu bar and Dock.
+///
+/// Centred ON the region, not fitted INSIDE it: the region is frequently
+/// smaller than the prompt and frequently at a screen edge, so containment has
+/// no answer for most regions while a centre has one for all of them. The clamp
+/// is what makes that safe — every pixel of the window lands in `bounds`, so
+/// all of it is visible and clickable.
+///
+/// i64 throughout: a region near the far edge of capture space plus its own
+/// size overflows i32, and capture space genuinely carries large and negative
+/// coordinates (displays left of and above the primary).
+pub(crate) fn centre_prompt_on(region: Rect, bounds: Rect, w: i32, h: i32) -> (i32, i32) {
+    let cx = region.x as i64 + region.w as i64 / 2;
+    let cy = region.y as i64 + region.h as i64 / 2;
+    let right = bounds.x as i64 + bounds.w as i64;
+    let bottom = bounds.y as i64 + bounds.h as i64;
+    (
+        clamp_span(cx - w as i64 / 2, w as i64, bounds.x as i64, right),
+        clamp_span(cy - h as i64 / 2, h as i64, bounds.y as i64, bottom),
+    )
+}
+
+/// `v` moved so that `v..v + size` lies inside `lo..hi`, then narrowed back to
+/// i32 — which cannot truncate, because the result is one of `lo`, `hi - size`
+/// or `v`, and the first two came from i32 rects.
+///
+/// `lo` wins when the window is larger than the span, because the parts the
+/// user needs — the title bar, and the OK button on the side the text reads
+/// from — sit nearer the top-left than the bottom-right, and pinning the far
+/// edge would push both off screen.
+fn clamp_span(v: i64, size: i64, lo: i64, hi: i64) -> i32 {
+    v.min(hi - size).max(lo) as i32
+}
+
 /// Commands parsed off stdin, waiting for the UI thread to pick them up —
 /// including the lines that failed to parse, which travel as `Command::Error`
 /// so that every protocol response is written by this one thread, in the order
@@ -196,3 +243,82 @@ pub use win32::run;
 mod appkit;
 #[cfg(target_os = "macos")]
 pub use appkit::run;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 1920x1080 with a 40px taskbar along the bottom.
+    fn work() -> Rect {
+        Rect {
+            x: 0,
+            y: 0,
+            w: 1920,
+            h: 1040,
+        }
+    }
+
+    fn rect(x: i32, y: i32, w: u32, h: u32) -> Rect {
+        Rect { x, y, w, h }
+    }
+
+    #[test]
+    fn centres_on_a_region_with_room_around_it() {
+        // 400x300 region centred at (1000, 600); a 460x220 prompt centres there
+        // too and touches no edge.
+        let placed = centre_prompt_on(rect(800, 450, 400, 300), work(), 460, 220);
+        assert_eq!(placed, (1000 - 230, 600 - 110));
+    }
+
+    #[test]
+    fn centres_on_a_region_smaller_than_the_prompt() {
+        // The prompt overhangs the region on every side, which is the point: it
+        // is placed AT the region, not inside it.
+        let placed = centre_prompt_on(rect(900, 500, 40, 40), work(), 460, 220);
+        assert_eq!(placed, (920 - 230, 520 - 110));
+    }
+
+    #[test]
+    fn pushes_a_corner_region_fully_into_the_bounds() {
+        // Top-left corner: the centred prompt would start at negative
+        // coordinates and hang off two edges.
+        let placed = centre_prompt_on(rect(0, 0, 100, 100), work(), 460, 220);
+        assert_eq!(placed, (0, 0));
+
+        // Bottom-right corner: now it is the far edges that overflow, and the
+        // clamp must respect the taskbar the work area excludes.
+        let placed = centre_prompt_on(rect(1820, 940, 100, 100), work(), 460, 220);
+        assert_eq!(placed, (1920 - 460, 1040 - 220));
+    }
+
+    #[test]
+    fn clamps_into_a_display_left_of_the_primary() {
+        // Capture space has negative coordinates; the clamp is to the display
+        // the region is on, not to the primary.
+        let left = rect(-1920, 0, 1920, 1040);
+        let placed = centre_prompt_on(rect(-1920, 0, 100, 100), left, 460, 220);
+        assert_eq!(placed, (-1920, 0));
+    }
+
+    #[test]
+    fn pins_the_near_edge_when_the_prompt_is_larger_than_the_bounds() {
+        // Degenerate but reachable on a small or heavily-scaled display: keep
+        // the title bar and the near edge on screen, not the far corner.
+        let tiny = rect(10, 20, 200, 100);
+        let placed = centre_prompt_on(rect(50, 50, 10, 10), tiny, 460, 220);
+        assert_eq!(placed, (10, 20));
+    }
+
+    #[test]
+    fn does_not_overflow_at_the_far_edge_of_capture_space() {
+        // An i32::MAX-ish origin plus the region's own size: the i64 math has to
+        // clamp rather than wrap round to a negative coordinate.
+        let placed = centre_prompt_on(
+            rect(i32::MAX - 10, i32::MAX - 10, 4000, 4000),
+            work(),
+            460,
+            220,
+        );
+        assert_eq!(placed, (1920 - 460, 1040 - 220));
+    }
+}

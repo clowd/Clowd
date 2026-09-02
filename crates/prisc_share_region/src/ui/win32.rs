@@ -10,8 +10,9 @@
 //! client px == screen px == capture units and no COORDINATE scaling happens
 //! anywhere in this file. The prompt's own measurements are the one exception
 //! and are meant to be: every metric in its layout and every font size is
-//! authored at 96 dpi and passed through `scale`/`scalef` at the window's own
-//! DPI. They stop mattering the instant the prompt is accepted, because from
+//! authored at 96 dpi and passed through `scale`/`scalef` — at the window's own
+//! DPI while painting, and at the DPI of the REGION's monitor while placing it,
+//! which is where it is about to be. They stop mattering the instant the prompt is accepted, because from
 //! then on the window is a bare `WS_POPUP` sized to the region in capture px.
 //!
 //! Uses the `windows` crate (0.62) rather than obs-express's `windows-sys`.
@@ -34,7 +35,8 @@ use windows::Win32::Graphics::Dwm::{
 };
 use windows::Win32::Graphics::Gdi::{
     BeginPaint, BitBlt, CreateCompatibleBitmap, CreateCompatibleDC, DeleteDC, DeleteObject,
-    EndPaint, InvalidateRect, SelectObject, HBRUSH, HDC, PAINTSTRUCT, SRCCOPY,
+    EndPaint, GetMonitorInfoW, InvalidateRect, MonitorFromRect, SelectObject, HBRUSH, HDC,
+    MONITORINFO, MONITOR_DEFAULTTONEAREST, PAINTSTRUCT, SRCCOPY,
 };
 use windows::Win32::Graphics::GdiPlus::{
     FillModeAlternate, GdipAddPathArcI, GdipAddPathRectangleI, GdipClosePathFigure, GdipCreateFont,
@@ -49,7 +51,9 @@ use windows::Win32::Graphics::GdiPlus::{
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Controls::WM_MOUSELEAVE;
-use windows::Win32::UI::HiDpi::{AdjustWindowRectExForDpi, GetDpiForWindow};
+use windows::Win32::UI::HiDpi::{
+    AdjustWindowRectExForDpi, GetDpiForMonitor, GetDpiForWindow, MDT_EFFECTIVE_DPI,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     ReleaseCapture, SetCapture, SetFocus, TrackMouseEvent, TME_LEAVE, TRACKMOUSEEVENT, VK_SPACE,
 };
@@ -58,12 +62,12 @@ use windows::Win32::UI::WindowsAndMessaging::{
     GetSystemMetrics, GetWindowLongPtrW, IsDialogMessageW, LoadCursorW, LoadIconW, PostMessageW,
     RegisterClassW, SetForegroundWindow, SetWindowLongPtrW, SetWindowPos, TranslateMessage,
     CW_USEDEFAULT, GWLP_USERDATA, GWL_EXSTYLE, GWL_STYLE, HWND_TOP, IDCANCEL, IDC_ARROW, IDOK, MSG,
-    SET_WINDOW_POS_FLAGS, SM_CXVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
-    SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SWP_SHOWWINDOW,
-    WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_DISPLAYCHANGE,
-    WM_DPICHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_PAINT,
-    WM_SIZE, WNDCLASSW, WNDCLASS_STYLES, WS_CAPTION, WS_EX_TOOLWINDOW, WS_OVERLAPPED, WS_POPUP,
-    WS_SYSMENU, WS_VISIBLE,
+    SET_WINDOW_POS_FLAGS, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
+    SM_YVIRTUALSCREEN, SWP_FRAMECHANGED, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SWP_SHOWWINDOW, WINDOW_EX_STYLE, WINDOW_STYLE, WM_APP, WM_CLOSE, WM_COMMAND, WM_DESTROY,
+    WM_DISPLAYCHANGE, WM_DPICHANGED, WM_ERASEBKGND, WM_KEYDOWN, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    WM_MOUSEMOVE, WM_PAINT, WM_SIZE, WNDCLASSW, WNDCLASS_STYLES, WS_CAPTION, WS_EX_TOOLWINDOW,
+    WS_OVERLAPPED, WS_POPUP, WS_SYSMENU, WS_VISIBLE,
 };
 
 use obs_platform::region::Rect;
@@ -134,10 +138,11 @@ const PROMPT_SUBTITLE: &str = "Pick this window in your meeting app's share pick
 const PROMPT_OK: &str = "OK";
 
 /// The prompt window's CLIENT size, in *logical* px (scaled to its monitor's
-/// DPI by `place_prompt`). Deliberately unrelated to the region: the prompt is
-/// a dialog the user reads and clicks, not a preview, and at the mirror's
-/// minimum region size a region-sized one would be unreadable and near-
-/// unclickable. The region's size arrives only at the OK transition.
+/// DPI by `place_prompt`). Deliberately unrelated to the region's SIZE: the
+/// prompt is a dialog the user reads and clicks, not a preview, and at the
+/// mirror's minimum region size a region-sized one would be unreadable and
+/// near-unclickable. (Its POSITION does follow the region — see
+/// `place_prompt`.) The region's size arrives only at the OK transition.
 const PROMPT_CLIENT_W: i32 = 460;
 const PROMPT_CLIENT_H: i32 = 188;
 
@@ -426,30 +431,86 @@ fn scalef(dpi: u32, v: f32) -> f32 {
     v * dpi as f32 / 96.0
 }
 
-/// Sizes the prompt window: PROMPT_CLIENT_W x PROMPT_CLIENT_H logical px scaled
-/// to this window's DPI, then grown by the caption/border metrics at that DPI so
-/// the *client* comes out the intended size. SWP_NOMOVE is the point — it keeps
-/// whatever cascade position CW_USEDEFAULT chose, which is the spec ("small and
-/// wherever the OS wants it"). The region's size and position arrive only at
-/// `strip_mirror_frame`.
-unsafe fn place_prompt(mirror: HWND) {
-    let dpi = GetDpiForWindow(mirror);
+/// The work area (screen minus taskbar) of the display the region is on, in
+/// capture space, and that display's effective DPI.
+///
+/// MONITOR_DEFAULTTONEAREST answers the two cases a containment test cannot: a
+/// region straddling two displays (the one it overlaps most wins) and a region
+/// that intersects none (rejected by the app core before the window exists, but
+/// a lookup must still return something rather than a null monitor).
+///
+/// The DPI is the monitor's, not `GetDpiForWindow`'s: the window has not been
+/// moved to that monitor yet, so its own DPI is still whichever monitor
+/// CW_USEDEFAULT dropped it on, and on a mixed-DPI desktop sizing the prompt
+/// from that would come out at the wrong scale for where it is about to land.
+///
+/// Both queries fall back rather than fail. A prompt at 96 dpi somewhere on the
+/// virtual desktop is a cosmetic miss; a prompt that never appears is a share
+/// the user cannot start at all.
+unsafe fn region_monitor(region: Rect) -> (Rect, u32) {
+    let rc = RECT {
+        left: region.x,
+        top: region.y,
+        right: region.x.saturating_add(region.w as i32),
+        bottom: region.y.saturating_add(region.h as i32),
+    };
+    let monitor = MonitorFromRect(&rc, MONITOR_DEFAULTTONEAREST);
+
+    let mut mi = MONITORINFO {
+        cbSize: mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    let work = if GetMonitorInfoW(monitor, &mut mi).as_bool() {
+        let w = mi.rcWork;
+        Rect {
+            x: w.left,
+            y: w.top,
+            w: (w.right - w.left).max(0) as u32,
+            h: (w.bottom - w.top).max(0) as u32,
+        }
+    } else {
+        Rect {
+            x: GetSystemMetrics(SM_XVIRTUALSCREEN),
+            y: GetSystemMetrics(SM_YVIRTUALSCREEN),
+            w: GetSystemMetrics(SM_CXVIRTUALSCREEN).max(0) as u32,
+            h: GetSystemMetrics(SM_CYVIRTUALSCREEN).max(0) as u32,
+        }
+    };
+
+    let mut dpi_x = 0u32;
+    let mut dpi_y = 0u32;
+    let dpi = match GetDpiForMonitor(monitor, MDT_EFFECTIVE_DPI, &mut dpi_x, &mut dpi_y) {
+        Ok(()) if dpi_x != 0 => dpi_x,
+        _ => 96,
+    };
+
+    (work, dpi)
+}
+
+/// Sizes AND places the prompt window: PROMPT_CLIENT_W x PROMPT_CLIENT_H
+/// logical px scaled to the DPI of the region's display, grown by the
+/// caption/border metrics at that DPI so the *client* comes out the intended
+/// size, and centred on the region ([`super::centre_prompt_on`]).
+///
+/// Placed rather than left where CW_USEDEFAULT cascaded it: the user is being
+/// asked about a specific rectangle they just drew, and they are looking at it,
+/// so the dialog belongs there and not on whatever monitor the window manager
+/// happened to pick. Only the position follows the region — the SIZE is still
+/// the fixed prompt box, because at the mirror's minimum region size a
+/// region-sized dialog would be unreadable and near-unclickable. The region's
+/// size reaches the window only at `strip_mirror_frame`.
+unsafe fn place_prompt(mirror: HWND, region: Rect) {
+    let (work, dpi) = region_monitor(region);
     let mut rc = RECT {
         left: 0,
         top: 0,
-        right: PROMPT_CLIENT_W * dpi as i32 / 96,
-        bottom: PROMPT_CLIENT_H * dpi as i32 / 96,
+        right: scale(dpi, PROMPT_CLIENT_W),
+        bottom: scale(dpi, PROMPT_CLIENT_H),
     };
     let _ = AdjustWindowRectExForDpi(&mut rc, MIRROR_STYLE, false, MIRROR_EX_STYLE, dpi);
-    let _ = SetWindowPos(
-        mirror,
-        None,
-        0,
-        0,
-        rc.right - rc.left,
-        rc.bottom - rc.top,
-        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
-    );
+    let (w, h) = (rc.right - rc.left, rc.bottom - rc.top);
+    let (x, y) = super::centre_prompt_on(region, work, w, h);
+    let _ = SetWindowPos(mirror, None, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 /// Where each piece of the prompt goes, in client px. Produced by
@@ -1081,9 +1142,17 @@ unsafe extern "system" fn mirror_proc(
             LRESULT(0)
         }
         // Prompt phase only. The prompt's client box is a LOGICAL size scaled to
-        // the window's DPI, so dragging it onto a differently-scaled monitor has
-        // to re-run `place_prompt`; the SetWindowPos that does sends WM_SIZE,
-        // which re-centres the controls at the new size.
+        // the DPI of the region's display, so a scale change on that display
+        // (or the user dragging the window off it) has to re-run `place_prompt`;
+        // the SetWindowPos that does sends WM_SIZE, which re-centres the
+        // controls at the new size.
+        //
+        // Re-running it also pulls the window back to the region, which is the
+        // intent: this arm exists because the geometry it computed is stale, and
+        // that geometry is a position as much as a size. It cannot ping-pong,
+        // because `place_prompt` reads the DPI of the REGION's monitor and lands
+        // the window on that same monitor — so the move it makes either changes
+        // no DPI at all or converges on the first bounce.
         //
         // The message stops mattering the moment the prompt is accepted, which
         // is why this arm is gated rather than unconditional. From then on the
@@ -1097,7 +1166,7 @@ unsafe extern "system" fn mirror_proc(
         // the paint reads, so the repaint `layout_prompt` triggers already draws
         // at the new scale.
         WM_DPICHANGED if (*app).prompt_active => {
-            place_prompt(hwnd);
+            place_prompt(hwnd, (*app).region);
             LRESULT(0)
         }
         // Mirror phase only. The desktop changed shape — a monitor was plugged
@@ -1257,11 +1326,12 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
             fatal("RegisterClassW");
         }
 
-        // The prompt opens small and wherever the OS puts it — CW_USEDEFAULT is
-        // literally "you decide", and x=CW_USEDEFAULT makes the system ignore y,
-        // so both are passed for clarity. The size here is provisional: the
-        // exact client size needs the window's own DPI, which only exists once
-        // the window does, so `place_prompt` fixes it up below.
+        // Both the position and the size here are provisional and neither is
+        // ever seen: the window is created without WS_VISIBLE, and `place_prompt`
+        // below replaces both before it is shown, centring it on the region at
+        // the DPI of the region's display. CW_USEDEFAULT (x=CW_USEDEFAULT makes
+        // the system ignore y, so both are passed for clarity) only avoids
+        // asserting a position that is about to be overwritten anyway.
         //
         // `cfg` is consumed right here and not stored: its one field is the
         // title, which the window itself owns from this call on (pickers list a
@@ -1309,7 +1379,7 @@ pub fn run(region: Rect, cfg: UiConfig, events: Box<dyn AppEvents>) -> ! {
         // PROMPT PHASE (ui/mod.rs). Size first — the prompt's layout is derived
         // from the client rect, and until the user presses OK that rect is the
         // small PROMPT_CLIENT_* box, not the region.
-        place_prompt(mirror);
+        place_prompt(mirror, region);
         begin_prompt(app);
         // Front and activated: the whole point of this phase is a window the
         // user can see and click in a meeting app's share picker.
