@@ -16,6 +16,7 @@ namespace Clowd
         SettingsHotkeys,
         SettingsCapture,
         SettingsRecording,
+        SettingsShareRegion,
         SettingsEditor,
         SettingsUploads,
         About,

@@ -32,8 +32,8 @@ namespace Clowd.UI
         /// CANCEL/FINISH, plus the three device-picker pills and the audio level meters.</summary>
         Recording,
 
-        /// <summary>The share-region strip: DRAG, BLUR, CANCEL and nothing else. No settings are
-        /// read or written, no devices are enumerated and no pills are shown.</summary>
+        /// <summary>The share-region strip: DRAG, HIDE, RESIZE, CANCEL and nothing else. No
+        /// settings are read or written, no devices are enumerated and no pills are shown.</summary>
         ShareRegion,
     }
 
@@ -51,8 +51,13 @@ namespace Clowd.UI
     /// on macOS a plain Avalonia window still activates the app on click (deferred, risk §6.11).
     /// The same chassis also serves a share-region session
     /// (<see cref="FloatingToolbarProfile.ShareRegion"/>), which keeps the drag handle, the status
-    /// label and the placement cascade but replaces the recording controls with a single BLUR
-    /// toggle — see the constructor.
+    /// label and the placement cascade but replaces the recording controls with two tiles — HIDE,
+    /// which obscures the mirrored region, and RESIZE, which enters the move/resize mode — see the
+    /// constructor. The share tiles are the one place this strip is not purely optimistic: HIDE
+    /// repaints itself on click and lets the helper's ack confirm it, while RESIZE does not flip
+    /// itself at all, because <see cref="ShareRegionPage"/> owns that transition and can refuse it.
+    /// <see cref="UpdateShareLocks"/> is the only writer of either tile's IsEnabled, so a mode
+    /// ending can never re-enable a tile that was permanently retired.
     /// </summary>
     public partial class FloatingToolbarWindow : Window
     {
@@ -70,11 +75,17 @@ namespace Clowd.UI
         /// opened the settings page because no camera has been picked yet.</summary>
         public event EventHandler<bool> WebcamToggled;
 
-        /// <summary>Raised by the BLUR tile with the state it just flipped to (share profile only).
-        /// The tile has already been repainted when this fires — the helper's ack is confirmation,
-        /// not permission, and a mirrored region that keeps showing through for a round trip while
-        /// the button waits to be told it may light up reads as a dead button.</summary>
-        public event EventHandler<bool> BlurToggled;
+        /// <summary>Raised by the HIDE tile with the state it just flipped to: true means the region
+        /// should now be HIDDEN from viewers. The tile has already repainted itself — the helper's ack
+        /// is confirmation, not permission, and a mirrored region that keeps showing through for a
+        /// round trip while the button waits to be told it may light up reads as a dead button.</summary>
+        public event EventHandler<bool> HideToggled;
+
+        /// <summary>Raised by the RESIZE tile with the state it is ASKING for (true = enter resize mode).
+        /// Unlike <see cref="HideToggled"/> this is NOT optimistic: the tile does not flip itself, because
+        /// the page owns the transition and may refuse it (closing, not sharing, driver gone). The page
+        /// answers with <see cref="SetResizeState"/>.</summary>
+        public event EventHandler<bool> ResizeToggled;
 
         /// <summary>Which strip was built. Fixed at construction — see
         /// <see cref="FloatingToolbarProfile"/>.</summary>
@@ -115,11 +126,20 @@ namespace Clowd.UI
         private bool _hasStatusText;
 
         // share profile: whether the helper is currently obscuring the mirrored region, and
-        // whether it can at all. _blurAvailable only ever goes false — the helper's GPU effect
+        // whether it can at all. _obscureAvailable only ever goes false — the helper's GPU effect
         // failure is permanent for the life of that process — so the tile is retired, not
-        // toggled off (SetBlurAvailable).
-        private bool _blurEnabled;
-        private bool _blurAvailable = true;
+        // toggled off (SetObscureAvailable).
+        private bool _hidden;                    // the helper is obscuring the region
+        private bool _obscureAvailable = true;   // only ever goes false: the GPU failure is permanent
+
+        // share profile: the resize mode's two flags, both owned by ShareRegionPage and pushed in
+        // through SetResizeState. They are separate because they end at different moments — the
+        // overlay comes down (_resizeActive false) as soon as the user commits, but the move is
+        // still in flight (_resizeBusy true) until the helper acks the new rectangle or the page's
+        // backstop timer fires, and re-entering the mode during that window would put a second
+        // move on the wire. UpdateShareLocks is where both turn into IsEnabled.
+        private bool _resizeActive;              // resize mode is on
+        private bool _resizeBusy;                // a move is in flight; nothing may re-enter
 
         // one-shot timer behind ShowStatusBlip; built lazily because only the share strip has
         // anything to say this way. While it runs the label belongs to the blip and incoming
@@ -197,7 +217,7 @@ namespace Clowd.UI
             BtnDrag.PointerCaptureLost += DragHandleCaptureLost;
 
             // hovering the handle is exactly when the move affordance is wanted back, so the
-            // recording mark yields to the arrows for as long as the pointer is on it.
+            // Clowd mark yields to the arrows for as long as the pointer is on it.
             BtnDrag.PointerEntered += (s, e) => UpdateDragIcon();
             BtnDrag.PointerExited += (s, e) => UpdateDragIcon();
 
@@ -225,6 +245,10 @@ namespace Clowd.UI
                 InitializeRecordingControls();
             else
                 InitializeShareControls();
+
+            // Seed the handle glyph: the markup's arrows are only right for a recording strip that
+            // has not started, and a share strip has no start to wait for — it opens on the mark.
+            UpdateDragIcon();
         }
 
         /// <summary>
@@ -273,7 +297,7 @@ namespace Clowd.UI
         }
 
         /// <summary>
-        /// The share half: three tiles (DRAG, BLUR, CANCEL) and an empty pill lane.
+        /// The share half: four tiles (DRAG, HIDE, RESIZE, CANCEL) and an empty pill lane.
         /// The pills are the trap here. <see cref="CaptureToolPill"/> is visible by default and the
         /// ONLY thing that ever hides one is <see cref="UpdateDevicePills"/>, which this profile
         /// never calls — so without the explicit hiding below the share strip would carry three
@@ -289,9 +313,32 @@ namespace Clowd.UI
             BtnMic.IsVisible = false;
             BtnSpeaker.IsVisible = false;
             BtnWebcam.IsVisible = false;
-            BtnSettings.IsVisible = false;
 
-            BtnBlur.IsVisible = true;
+            // OPTIONS stays: it is the same tile the recording strip carries and does the same job,
+            // only pointed at the Shared Region settings page instead of the Recording one (the page
+            // picks the tab; this window just raises SettingsClicked). Worth having here for the
+            // reason the recording strip has it — the settings that matter to a live share, the
+            // obscure style and strength, are exactly the ones you want to reach WHILE looking at
+            // the thing they change.
+
+            // …and the two share tiles, which the markup declares hidden so that they cannot leak
+            // onto the recording strip (InitializeRecordingControls hides nothing). Un-hidden HERE,
+            // in the constructor, rather than when the session comes up: PositionNearRegion is not
+            // re-run on a layout change (LayoutUpdated only re-places the pills) and bails outright
+            // once the user has moved the strip, so a tile that appeared after ShowNear would widen
+            // the strip without the placement cascade ever getting a chance to re-centre it.
+            BtnHide.IsVisible = true;
+            BtnResize.IsVisible = true;
+
+            // seed the HIDE tile the same way InitializeRecordingControls seeds MIC/SPK/CAM —
+            // push the cached field at the tile — except through SetHidden, so the glyph, the
+            // light and the label can never be set from anywhere but the one funnel. Without this
+            // the tile inherits the markup's ShowAlternateIcon=false, which under this polarity
+            // is the dimmed crossed-eye and a RED light: the strip would open claiming the region
+            // is hidden while the helper is mirroring it in the clear, which is the one lie this
+            // tile must never tell. A session starts un-hidden, and _hidden says so; passing the
+            // field rather than a literal false keeps the two from ever drifting apart.
+            SetHidden(_hidden);
 
             BtnMicDevice.IsVisible = false;
             BtnSpeakerDevice.IsVisible = false;
@@ -357,9 +404,17 @@ namespace Clowd.UI
         /// little smaller to carry the same weight in the shared 26px icon slot.</summary>
         private void UpdateDragIcon()
         {
-            var mark = _recording && !BtnDrag.IsPointerOver;
-            BtnDrag.IconPath = (Geometry)this.FindResource(mark ? "IconClowd" : "IconToolNone");
-            BtnDrag.IconSize = mark ? 22 : 26;
+            // The Clowd mark is the resting state, and hovering the tile trades it for the four-way
+            // arrows: the strip is its own identity far more of the time than it is something
+            // anyone repositions, and the affordance is wanted exactly when the pointer is on it.
+            //
+            // The one exception is a recording strip that has not started yet. There the tile is
+            // the only thing on screen inviting the user to move the strip clear of what they are
+            // about to record, so it wears the arrows outright until the first frame — after which
+            // it joins the rule above.
+            var move = BtnDrag.IsPointerOver || (IsRecordingProfile && !_recording);
+            BtnDrag.IconPath = (Geometry)this.FindResource(move ? "IconToolNone" : "IconClowd");
+            BtnDrag.IconSize = move ? 26 : 22;
         }
 
         /// <summary>Modes the strip for a rolling recording: the primary button becomes
@@ -445,57 +500,119 @@ namespace Clowd.UI
                 BtnDrag.Text = _hasStatusText ? text : (_recording ? ZeroStatusText : "DRAG ME");
         }
 
-        // -- BLUR (share profile) --
+        // -- HIDE / RESIZE (share profile) --
 
         /// <summary>
-        /// Pushes the obscure state onto the tile without raising <see cref="BlurToggled"/> — the
-        /// authoritative direction, for the helper's acks. Two of those matter: the ack for a
+        /// Pushes the obscure state onto the HIDE tile without raising <see cref="HideToggled"/> —
+        /// the authoritative direction, for the helper's acks. Two of those matter: the ack for a
         /// toggle the user just made (a no-op repaint, and cheap insurance that the strip agrees
         /// with the process actually drawing the frames), and the UNSOLICITED
         /// <c>obscure/none</c> the helper emits when its GPU effect fails to build — a retraction
-        /// of a blur the user asked for and can currently see is on. Pair that one with
-        /// <see cref="SetBlurAvailable"/>(false): the failure is permanent for that process.
+        /// of an obscure the user asked for and can currently see is on. Pair that one with
+        /// <see cref="SetObscureAvailable"/>(false): the failure is permanent for that process.
+        /// This is the SINGLE funnel for the tile's glyph and label: the initial seed in
+        /// <see cref="InitializeShareControls"/>, the click path, the ack path and the retirement
+        /// path all route through it, so no other line anywhere assigns either.
+        /// The two say different things on purpose. The lit / alternate glyph (and, through
+        /// SourceToggle, the green light) means the meeting CAN see the screen, which is the same
+        /// reading MIC and SPK carry and the only one that works from across a room. The LABEL
+        /// names what a press will do — "HIDE" while visible, "SHOW" while hidden — matching
+        /// START/PAUSE and CANCEL/FINISH on this same strip.
         /// </summary>
-        public void SetBlurEnabled(bool on)
+        public void SetHidden(bool hidden)
         {
-            _blurEnabled = on;
-            BtnBlur.ShowAlternateIcon = on;
+            _hidden = hidden;
+            BtnHide.ShowAlternateIcon = !hidden;
+            BtnHide.Text = hidden ? "SHOW" : "HIDE";
         }
 
         /// <summary>
-        /// Retires (or restores) the BLUR tile. Called with false when the helper says its effect
-        /// pipeline is gone, which it never rebuilds — so this is a permanent retirement rather
-        /// than a temporary lock, and the tile stays visible-but-dead on purpose: a button that
-        /// vanishes mid-session reads as a bug, and the strip re-laying itself out around the gap
-        /// would move CANCEL under the pointer.
+        /// Retires the HIDE tile permanently. Called with false when the helper says its obscure
+        /// effect failed to build, which it never retries — so this is a retirement rather than a
+        /// temporary lock, and the tile stays visible-but-dead on purpose: a button that vanishes
+        /// mid-session reads as a bug, and the strip re-laying itself out around the gap would move
+        /// CANCEL under the pointer.
         /// The only notice is a blip on the status label. Never a dialog: this can land in the
         /// middle of a live meeting the user is presenting to, where a modal is both a
         /// screen-sharing embarrassment and a thing they cannot dismiss without losing their place.
+        /// Goes through <see cref="UpdateShareLocks"/> rather than writing IsEnabled directly, so
+        /// leaving resize mode can never silently re-enable a tile that was retired while it ran.
         /// </summary>
-        public void SetBlurAvailable(bool available)
+        public void SetObscureAvailable(bool available)
         {
-            _blurAvailable = available;
-            BtnBlur.IsEnabled = available;
+            _obscureAvailable = available;
+            UpdateShareLocks();
 
             if (available)
                 return;
 
             // whatever the user last asked for, nothing is being obscured now — say so, so the
             // dead tile is not left lit over a region that is being mirrored in the clear.
-            SetBlurEnabled(false);
-            ShowStatusBlip("NO BLUR");
+            SetHidden(false);
+            ShowStatusBlip("NO HIDE");
         }
 
-        private void BlurClicked(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Authoritative resize-tile state, owned by the page.
+        /// <paramref name="active"/> latches the accent fill and locks HIDE — the region is already
+        /// being obscured for the duration of the mode, so a HIDE press would be commanding the one
+        /// thing that is not the user's to command right now.
+        /// <paramref name="busy"/> means a move is in flight: RESIZE is un-pressable and HIDE stays
+        /// locked even though the overlay is already gone, because the page has not yet heard which
+        /// rectangle the helper actually applied.
+        /// Touches neither <c>_obscureAvailable</c> nor <c>_hidden</c>, so the HIDE tile comes back
+        /// exactly as it was — including still retired, if it was retired mid-mode.
+        /// </summary>
+        public void SetResizeState(bool active, bool busy)
         {
-            // IsEnabled already blocks this once the tile is retired; the check is here because
-            // the consequence of getting it wrong is a blur command to a helper that has told us
-            // it cannot honor one, and the strip would then be lit over a clear region.
-            if (!_blurAvailable)
+            _resizeActive = active;
+            _resizeBusy = busy;
+
+            // the accent fill is this tile's whole "the mode is on" signal: it is not a SourceToggle,
+            // so there is no light and no dimmed-off glyph to carry it.
+            BtnResize.Primary = active;
+
+            UpdateShareLocks();
+        }
+
+        /// <summary>The one place the share strip's enable rules live, mirroring
+        /// <see cref="UpdateRecordingLocks"/>. Both owners — the permanent obscure retirement and
+        /// the transient resize mode — are ANDed here rather than each writing IsEnabled, so
+        /// neither can clobber the other: a resize that ends after the helper retired the effect
+        /// must not hand the user back a HIDE tile that cannot work.</summary>
+        private void UpdateShareLocks()
+        {
+            BtnHide.IsEnabled = _obscureAvailable && !_resizeActive && !_resizeBusy;
+            BtnResize.IsEnabled = !_resizeBusy;
+        }
+
+        private void HideClicked(object sender, RoutedEventArgs e)
+        {
+            // IsEnabled already blocks all three of these; the checks are here because the
+            // consequence of getting one wrong is an obscure command to a helper that has told us
+            // it cannot honor one (leaving the strip lit over a clear region), or a command racing
+            // the obscure state the resize mode is holding on the region's behalf.
+            if (!_obscureAvailable || _resizeActive || _resizeBusy)
                 return;
 
-            SetBlurEnabled(!_blurEnabled);
-            BlurToggled?.Invoke(this, _blurEnabled);
+            SetHidden(!_hidden);
+            HideToggled?.Invoke(this, _hidden);
+        }
+
+        /// <summary>
+        /// Asks the page to enter or leave resize mode. Deliberately does NOT flip any local state:
+        /// entering the mode means hiding the region, showing an overlay and taking over the
+        /// obscure state, all of which the page can legitimately refuse (it is closing, the share
+        /// never started, the helper died), and a tile that had already latched itself accent would
+        /// then be permanently out of step with a mode that never began. The page answers with
+        /// <see cref="SetResizeState"/>, which is the only writer of the tile's appearance.
+        /// </summary>
+        private void ResizeClicked(object sender, RoutedEventArgs e)
+        {
+            if (IsRecordingProfile || _resizeBusy)
+                return;
+
+            ResizeToggled?.Invoke(this, !_resizeActive);
         }
 
         /// <summary>
@@ -505,8 +622,12 @@ namespace Clowd.UI
         /// region is being mirrored into a meeting. Statuses arriving meanwhile are still recorded
         /// (see <see cref="SetStatusText"/>), just not painted, so the blip is not overwritten a
         /// few hundred milliseconds after it appears.
+        /// Public because the share page needs the same surface for the things only it knows about
+        /// ("NO MOVE" when the helper refuses a resize, "LIVE" when the obscure effect dies while a
+        /// resize is running) — and a dialog over a live presentation is exactly what must not
+        /// happen.
         /// </summary>
-        private void ShowStatusBlip(string text)
+        public void ShowStatusBlip(string text)
         {
             if (_statusBlip == null)
             {
@@ -551,6 +672,40 @@ namespace Clowd.UI
             }
 
             // position after the size-to-content layout pass so Bounds is real
+            Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
+        }
+
+        /// <summary>
+        /// Follows a region that MOVED — the share session's resize mode, once the helper has acked
+        /// the rectangle it actually applied. Deliberately not <see cref="ShowNear"/>: that resets
+        /// <c>_manuallyPositioned</c>, so using it here would yank a strip the user had placed by
+        /// hand back into the cascade every time they nudged the region.
+        /// A hand-placed strip therefore keeps its position, with one exception — if the moved
+        /// region now covers the strip's own window rect, the placement is dropped and the cascade
+        /// re-runs. A strip sitting inside a mirrored region is being broadcast into the meeting for
+        /// the rest of the session, and that beats honouring where it was put.
+        /// </summary>
+        public void UpdateRegion(ScreenRect region)
+        {
+            if (region == null)
+                return;
+
+            _region = region;
+
+            if (_manuallyPositioned)
+            {
+                var scaling = OperatingSystem.IsMacOS() ? 1.0 : RenderScaling;
+                var w = (int)Math.Ceiling(Bounds.Width * scaling);
+                var h = (int)Math.Ceiling(Bounds.Height * scaling);
+                var self = new ScreenRect(Position.X, Position.Y, Math.Max(w, 1), Math.Max(h, 1));
+                if (!self.IntersectsWith(region))
+                    return;
+
+                // the moved region now covers the strip: being mirrored into the meeting beats being
+                // where the user put it.
+                _manuallyPositioned = false;
+            }
+
             Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
         }
 
