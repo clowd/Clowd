@@ -32,7 +32,9 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>The artwork's path under <c>Composition/Backgrounds/Art/</c> with <c>/</c>
         /// separators, e.g. <c>big-sur/teal.svg</c> or <c>moving-blob/source.svg</c>. Every asset
-        /// is an SVG parsed into a live scene; nothing in the library ships as a raster.</summary>
+        /// is an SVG parsed into a live scene; nothing in the library ships as a raster. Null for
+        /// the one style that has no artwork at all (see <see cref="BackgroundStyle.IsSolid"/>),
+        /// whose picture is the item's own color.</summary>
         internal string Asset { get; }
 
         /// <summary>The recoloring that turns the stored file's colors into this theme's, or null
@@ -59,6 +61,10 @@ namespace Clowd.VideoSDK.Composition
             // stored theme stays null (the CursorAssets.Variants contract) — and a style that
             // later gains a second colorway becomes pickable by adding a row, not by a lookup change.
             Themes = specs.Length >= 2 ? Array.AsReadOnly(specs) : Array.Empty<BackgroundTheme>();
+            // "no artwork" is the whole of what makes a style solid, so it is read off the row
+            // rather than stated twice: a style with one colorway and no file has nothing to draw
+            // but the color the item carries.
+            IsSolid = specs.Length == 1 && specs[0].Asset == null;
         }
 
         /// <summary>The wire value stored in <c>BackgroundContent.Style</c>.</summary>
@@ -81,6 +87,15 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>True when the art moves with time; the phase handed to the scene is always 0
         /// otherwise.</summary>
         public bool IsAnimated => PeriodSeconds > 0;
+
+        /// <summary>
+        /// True for the one style that draws no artwork: a flat fill of the item's own
+        /// <c>BackgroundContent.Color</c>. Every consumer that would otherwise ask for a scene
+        /// (the composer, the picker tiles, the timeline mesh) branches on this and fills a
+        /// rectangle instead — <see cref="BackgroundRenderer.GetScene"/> answers null for it, as
+        /// it does for any row with no file behind it.
+        /// </summary>
+        public bool IsSolid { get; }
 
         /// <summary>The themes the picker shows, in picker order — empty when the style offers
         /// nothing to pick, in which case the stored theme is null.</summary>
