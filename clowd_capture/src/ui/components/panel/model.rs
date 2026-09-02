@@ -130,8 +130,8 @@ impl PanelFeatures {
 /// Which strip of buttons the panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelButtonSet {
-    /// The capture strip: UPLOAD / EDIT / VIDEO / SHARE / SCROLL / OCR /
-    /// COPY / SAVE / RESET / EXIT (SCROLL and OCR are Windows-only).
+    /// The capture strip: UPLOAD / EDIT / VIDEO / SHARE / SCROLL /
+    /// COPY / SAVE / OCR / RESET / EXIT (SCROLL and OCR are Windows-only).
     Normal,
     /// The strip shown while the OCR overlay owns the selection.
     Ocr,
@@ -187,8 +187,8 @@ pub struct ButtonDef {
     /// `captureButtonDetail::underlineIndex`.
     pub underline_idx: usize,
     /// True for the accent-colored primary buttons (UPLOAD, EDIT,
-    /// VIDEO, SCROLL, OCR, COPY, SAVE); false for the gray secondary
-    /// buttons (RESET, BACK, EXIT). See `captureButtonDetails[i].primary`
+    /// VIDEO, SHARE, SCROLL, COPY, SAVE); false for the gray secondary
+    /// buttons (OCR, RESET, BACK, EXIT). See `captureButtonDetails[i].primary`
     /// at DxScreenCapture.cpp:52-60.
     pub primary: bool,
     /// Index into [`PANEL_ICONS`] of this button's icon, which is also
@@ -216,8 +216,10 @@ pub struct ButtonDef {
 ///
 /// SHARE and SCROLL sit after VIDEO because they are the other "hand off
 /// to a capture driver" actions — SHARE first, since like VIDEO it hands
-/// the region to a live helper rather than producing a file; OCR follows
-/// them as the other "do something smarter than a bitmap" action.
+/// the region to a live helper rather than producing a file. OCR sits
+/// last of the actions, immediately left of RESET, and is gray rather
+/// than accented: it does not finish the capture the way the accented
+/// buttons do, it swaps the strip for a second round of decisions.
 ///
 /// A slice (`&[ButtonDef]`) rather than a fixed-size array so the
 /// per-element `#[cfg]` doesn't have to be mirrored in a length
@@ -234,9 +236,9 @@ pub struct ButtonDef {
 ///      panel — and therefore this lookup — only exists once something is.
 ///   4: SCROLL — L   (0x4C), underlined on the fifth char because
 ///      S, C and R already belong to SAVE, COPY and RESET
-///   5: OCR    — O   (0x4F)
-///   6: COPY   — C   (0x43)
-///   7: SAVE   — S   (0x53)
+///   5: COPY   — C   (0x43)
+///   6: SAVE   — S   (0x53)
+///   7: OCR    — O   (0x4F)
 ///   8: RESET  — R   (0x52)
 ///   9: EXIT   — X   (0x58), underlined on the second char
 const NORMAL_DEFS: &[ButtonDef] = &[
@@ -281,14 +283,6 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         svg_bytes: super::assets::SVG_SCROLL,
     },
     ButtonDef {
-        command: Command::Ocr,
-        label: "OCR",
-        underline_idx: 0,
-        primary: true,
-        icon_id: ICON_OCR,
-        svg_bytes: super::assets::SVG_OCR,
-    },
-    ButtonDef {
         command: Command::Copy,
         label: "COPY",
         underline_idx: 0,
@@ -303,6 +297,14 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         primary: true,
         icon_id: ICON_SAVE,
         svg_bytes: super::assets::SVG_SAVE,
+    },
+    ButtonDef {
+        command: Command::Ocr,
+        label: "OCR",
+        underline_idx: 0,
+        primary: false,
+        icon_id: ICON_OCR,
+        svg_bytes: super::assets::SVG_OCR,
     },
     ButtonDef {
         command: Command::Reset,
