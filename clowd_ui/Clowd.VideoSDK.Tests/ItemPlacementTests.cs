@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using Clowd.UI.VideoEditor;
 using Clowd.VideoSDK.Composition;
+using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
 using SkiaSharp;
@@ -776,6 +777,177 @@ namespace Clowd.VideoSDK.Tests
             var (rx, ry) = GizmoMath.RotateAbout(cx - w / 2, cy - h / 2, cx, cy, rotation);
             Assert.Equal(avx, rx, 6);
             Assert.Equal(avy, ry, 6);
+        }
+
+        /// <summary>
+        /// A wallpaper is boxed like a solid, not like a picture: <c>FrameComposer.DrawBackground</c>
+        /// sizes it <c>Scale * canvasWidth</c> by <c>(ScaleY ?? Scale) * canvasHeight</c> and
+        /// cover-fits the art into that box, reading neither <c>Transform.Aspect</c> nor
+        /// <c>Transform.Crop</c>. So the gizmo must not read them either — routing a background
+        /// through <c>AspectMath.DisplayAspect</c> would box a 1:1 preset as a square over a 16:9
+        /// painting, hanging the handles and the hit-test 420 px off the pixels on each side while
+        /// a corner drag resized against a ratio nothing draws. The inspector never writes either
+        /// field for a wallpaper (it offers no aspect tile, fit mode or crop; the item is
+        /// permanently free-sized instead, see <see cref="BackgroundInspectorTests"/>), so the
+        /// only way they reach a background is a hand-edited or older project file, and the
+        /// placement has to shrug them off exactly as the composer does. The two fields the
+        /// composer DOES read, Scale and ScaleY, are the ones the free resize writes, and they
+        /// move the box on their own.
+        /// </summary>
+        [Fact]
+        public void A_background_ignores_an_aspect_preset_and_a_crop_exactly_as_the_composer_does()
+        {
+            var project = NewProject();
+            var track = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Back", Order = 0 };
+            var item = new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = track.Id,
+                TimelineStartTicks = 0,
+                DurationTicks = 5 * TimeSpan.TicksPerSecond,
+                Content = new BackgroundContent(),
+                Transform = new ModelTransform(),
+            };
+            project.Tracks.Add(track);
+            project.Items.Add(item);
+
+            Assert.True(ItemPlacement.TryResolve(project, item, 1920, 1080, out var plain));
+            Assert.Equal(1920, plain.W, 6);
+            Assert.Equal(1080, plain.H, 6);
+
+            // the 1:1 tile's state, which the panel does not offer for a wallpaper but a
+            // hand-edited or older project may still carry: the box must not move
+            item.Transform.Aspect = 1.0;
+            item.Transform.ScaleY = null;
+            Assert.True(ItemPlacement.TryResolve(project, item, 1920, 1080, out var squared));
+            Assert.Equal(1920, squared.W, 6);
+            Assert.Equal(1080, squared.H, 6);
+
+            // nor a stretch into that ratio
+            item.Transform.AspectStretch = true;
+            Assert.True(ItemPlacement.TryResolve(project, item, 1920, 1080, out var stretchedTo));
+            Assert.Equal(1920, stretchedTo.W, 6);
+            Assert.Equal(1080, stretchedTo.H, 6);
+
+            // and neither may a crop
+            item.Transform.Aspect = null;
+            item.Transform.AspectStretch = false;
+            item.Transform.Crop = new CropRect { Left = 0.25 };
+            Assert.True(ItemPlacement.TryResolve(project, item, 1920, 1080, out var cropped));
+            Assert.Equal(1920, cropped.W, 6);
+            Assert.Equal(1080, cropped.H, 6);
+
+            // ScaleY, which DrawBackground does read, moves the height on its own …
+            item.Transform.Crop = null;
+            item.Transform.ScaleY = 0.5;
+            Assert.True(ItemPlacement.TryResolve(project, item, 1920, 1080, out var squashed));
+            Assert.Equal(1920, squashed.W, 6);
+            Assert.Equal(540, squashed.H, 6);
+
+            // … and Scale the width on its own: the two axes are independent, which is the
+            // free (aspect-unlocked) resize a wallpaper is permanently in
+            item.Transform.Scale = 0.25;
+            Assert.True(ItemPlacement.TryResolve(project, item, 1920, 1080, out var narrowed));
+            Assert.Equal(480, narrowed.W, 6);
+            Assert.Equal(540, narrowed.H, 6);
+        }
+
+        /// <summary>
+        /// A wallpaper added the way the tool-strip adds one starts at the size of the video: it
+        /// exactly fills the output canvas, whatever the canvas ratio (a 16:9 and a 9:16 output
+        /// both get a frame-covering backdrop, because its natural size is the frame itself).
+        /// The transform it is born with is the free-resize state written out in full, an
+        /// explicit height with no ratio held, so the editor reads it as Unlocked without
+        /// converting anything, and the explicit height is the very one the composer would have
+        /// derived: <c>(ScaleY ?? Scale) * canvasHeight</c> is the canvas height either way.
+        /// </summary>
+        [Fact]
+        public void A_new_background_exactly_fills_the_canvas()
+        {
+            foreach (var (w, h) in new[] { (1920, 1080), (1080, 1920), (1000, 1000) })
+            {
+                var project = NewProject();
+                project.Output.WidthPx = w;
+                project.Output.HeightPx = h;
+                var session = new EditorSession(project, null, null);
+
+                var item = session.AddBackground(0, 5 * TimeSpan.TicksPerSecond);
+                Assert.NotNull(item);
+
+                var transform = item.Transform;
+                Assert.NotNull(transform);
+                Assert.Equal(1.0, transform.Scale);
+                Assert.Equal(1.0, transform.ScaleY);
+                Assert.Equal(0.5, transform.X);
+                Assert.Equal(0.5, transform.Y);
+                Assert.Null(transform.Aspect);
+                Assert.False(transform.AspectStretch);
+                Assert.Null(transform.Crop);
+
+                Assert.True(ItemPlacement.TryResolve(session.Project, item, w, h, out var placed));
+                Assert.Equal(0, placed.X, 6);
+                Assert.Equal(0, placed.Y, 6);
+                Assert.Equal(w, placed.W, 6);
+                Assert.Equal(h, placed.H, 6);
+
+                // the same box the default transform would have placed: the explicit height
+                // changes how the editor reads the item, not where anything is drawn
+                item.Transform = new ModelTransform();
+                Assert.True(ItemPlacement.TryResolve(session.Project, item, w, h, out var derived));
+                Assert.Equal(placed, derived);
+            }
+        }
+
+        /// <summary>
+        /// A wallpaper's Width % and Height % are fractions of the output canvas, stored as such
+        /// (<c>Transform.Scale</c> and <c>Transform.ScaleY</c>, which <c>DrawBackground</c>
+        /// multiplies by the canvas width and height), never baked into pixels. So changing the
+        /// output resolution rewrites nothing on the item: a 100% x 100% backdrop still reads
+        /// 100% x 100% and simply becomes the new canvas, and a 120% x 80% one keeps those two
+        /// numbers and is re-drawn at 120% x 80% of the new frame, in both landscape and
+        /// portrait. Verified through <c>EditorSession.SetOutputSize</c>, the very edit the
+        /// resolution picker makes.
+        /// </summary>
+        [Fact]
+        public void A_background_keeps_its_canvas_fractions_across_a_resolution_change()
+        {
+            var session = new EditorSession(NewProject(), null, null);
+            var full = session.AddBackground(0, 5 * TimeSpan.TicksPerSecond);
+            var squashed = session.AddBackground(0, 5 * TimeSpan.TicksPerSecond);
+            session.EditItem(squashed.Id, i =>
+            {
+                i.Transform.Scale = 1.2;
+                i.Transform.ScaleY = 0.8;
+            });
+
+            foreach (var (w, h) in new[] { (1920, 1080), (1280, 720), (1080, 1920), (640, 640) })
+            {
+                Assert.True(session.SetOutputSize(w, h) || (w == 1920 && h == 1080));
+                Assert.Equal(w, session.Project.Output.WidthPx);
+                Assert.Equal(h, session.Project.Output.HeightPx);
+
+                // the stored numbers are untouched by the resize …
+                var liveFull = session.Project.Items.First(i => i.Id == full.Id);
+                var liveSquashed = session.Project.Items.First(i => i.Id == squashed.Id);
+                Assert.Equal(1.0, liveFull.Transform.Scale);
+                Assert.Equal(1.0, liveFull.Transform.ScaleY);
+                Assert.Equal(1.2, liveSquashed.Transform.Scale);
+                Assert.Equal(0.8, liveSquashed.Transform.ScaleY);
+                Assert.Equal((0.5, 0.5), (liveSquashed.Transform.X, liveSquashed.Transform.Y));
+
+                // … and the boxes are those fractions of whatever the canvas now is
+                Assert.True(ItemPlacement.TryResolve(session.Project, liveFull, w, h, out var fullBox));
+                Assert.Equal(0, fullBox.X, 6);
+                Assert.Equal(0, fullBox.Y, 6);
+                Assert.Equal(w, fullBox.W, 6);
+                Assert.Equal(h, fullBox.H, 6);
+
+                Assert.True(ItemPlacement.TryResolve(session.Project, liveSquashed, w, h, out var squashedBox));
+                Assert.Equal(1.2 * w, squashedBox.W, 6);
+                Assert.Equal(0.8 * h, squashedBox.H, 6);
+                Assert.Equal(w / 2.0 - 0.6 * w, squashedBox.X, 6);
+                Assert.Equal(h / 2.0 - 0.4 * h, squashedBox.Y, 6);
+            }
         }
 
         // ------------------------------------------------------------------------------- helpers

@@ -33,7 +33,11 @@ public sealed class Transform
     /// Item height as a fraction of the canvas height, or null — the default — to keep the
     /// content's own aspect ratio. Only set when the user unlocks the aspect ratio in the editor
     /// and sizes the two axes apart; a recording, a webcam and an import all want the lock, so the
-    /// common case writes nothing to the project file at all.
+    /// common case writes nothing to the project file at all. The one content that carries it
+    /// from birth is a <see cref="BackgroundContent"/>: a wallpaper has no ratio of its own (the
+    /// composer cover-fits it into whatever box it is given), so the editor keeps it permanently
+    /// unlocked and <c>EditorSession.AddBackground</c> seeds <c>ScaleY = 1</c>, which draws the
+    /// same canvas-filling box a null would while naming the free-sizing state explicitly.
     ///
     /// For text, where <see cref="Scale"/> multiplies the natural block width instead of mapping to
     /// a canvas fraction, this multiplies the natural block height the same way: ScaleY is to the

@@ -193,6 +193,47 @@ namespace Clowd.UI.VideoEditor.Inspector
         public static readonly NamedOption DefaultClickAnimationOption =
             FindOption(ClickAnimationOptions, "none");
 
+        /// <summary>The wallpaper styles the picker offers, in the catalog's own picker order and
+        /// under the catalog's own display names. No label dictionary of the panel's own, unlike
+        /// the cursor styles above: a background style is a piece of artwork the SDK ships, so its
+        /// name belongs beside the art, and the timeline card reads the same one.</summary>
+        public static readonly IReadOnlyList<NamedOption> BackgroundStyleOptions =
+            BuildBackgroundStyleOptions();
+
+        private static IReadOnlyList<NamedOption> BuildBackgroundStyleOptions()
+        {
+            var styles = BackgroundCatalog.Styles;
+            var options = new List<NamedOption>(styles.Count);
+            foreach (var style in styles)
+                options.Add(new NamedOption(style.Id, style.Label));
+            return options;
+        }
+
+        /// <summary>The theme tiles for each style that has more than one, keyed by style — built
+        /// once off <see cref="BackgroundStyle.Themes"/>, which is empty for a style with a single
+        /// colorway, so such a style has no entry here and shows no second row (see
+        /// <see cref="BackgroundThemesVisible"/>). The same shape as
+        /// <see cref="CursorVariantOptionsByStyle"/> and for the same reason.</summary>
+        private static readonly Dictionary<string, IReadOnlyList<NamedOption>> BackgroundThemeOptionsByStyle
+            = BuildBackgroundThemeOptions();
+
+        private static Dictionary<string, IReadOnlyList<NamedOption>> BuildBackgroundThemeOptions()
+        {
+            var byStyle = new Dictionary<string, IReadOnlyList<NamedOption>>(StringComparer.OrdinalIgnoreCase);
+            foreach (var style in BackgroundCatalog.Styles)
+            {
+                var themes = style.Themes;
+                if (themes.Count < 2)
+                    continue;
+
+                var options = new List<NamedOption>(themes.Count);
+                foreach (var theme in themes)
+                    options.Add(new NamedOption(theme.Id, theme.Label));
+                byStyle[style.Id] = options;
+            }
+            return byStyle;
+        }
+
         /// <summary>A keystroke-filter picker entry: the model's enum beside the label the menu
         /// shows — the same singleton discipline as <see cref="SpeedOption"/>, so reference
         /// equality selects the row.</summary>
@@ -443,6 +484,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private bool _showZoomEffect;
         private bool _showCursorTrack;
         private bool _showKeyboardTrack;
+        private bool _showBackground;
         private bool _showRamp;
         private double _speedFactor = 2.0;
         private bool _speedPitchCorrect = true;
@@ -464,6 +506,11 @@ namespace Clowd.UI.VideoEditor.Inspector
         private string _surroundColorHex = HexOfArgb(Surround.DefaultShadowColor);
         private double _surroundSize;
         private double _surroundDistance;
+
+        private string _backgroundStyle = BackgroundCatalog.DefaultStyle;
+
+        /// <summary>Null until the user picks one: the style's own default theme.</summary>
+        private string _backgroundTheme;
 
         private string _cursorStyle = "vision";
 
@@ -584,7 +631,8 @@ namespace Clowd.UI.VideoEditor.Inspector
         public string ScaleLabel => _hasScaleY ? "Width" : "Size";
 
         /// <summary>The second size row, shown only while the item carries an explicit height
-        /// (<c>Transform.ScaleY</c>) — the Stretch fit mode, or a free edge-handle resize.</summary>
+        /// (<c>Transform.ScaleY</c>) — the Stretch fit mode, or a free edge-handle resize — and
+        /// always for a wallpaper, which is free-sized for life (see <see cref="Sync"/>).</summary>
         public bool ShowScaleHeight => _showScale && _hasScaleY;
 
         public bool ShowMask => _showMask;
@@ -618,6 +666,9 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>The keystroke overlay's type/timing section.</summary>
         public bool ShowKeyboardTrack => _showKeyboardTrack;
+
+        /// <summary>The wallpaper item's style/theme section.</summary>
+        public bool ShowBackground => _showBackground;
 
         public bool ShowTrackHidden => _showTrackHidden;
 
@@ -680,7 +731,9 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>Item height as a fraction of the canvas height. Only meaningful — and only
         /// shown — while the item already carries an explicit height; an item whose height follows
-        /// the content stores no <c>ScaleY</c> at all and this field is inert.</summary>
+        /// the content stores no <c>ScaleY</c> at all and this field is inert. A wallpaper is the
+        /// exception: it is offered the field whether or not the model has the height yet, and a
+        /// write here is what gives it one.</summary>
         public double ScaleHeight
         {
             get => _scaleHeight;
@@ -1106,6 +1159,15 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// selects its preset — or Custom, which is <b>sticky</b> when its ratio equals a preset's
         /// (the user's tile choice is honored, not re-guessed) — and nothing means Original.
         /// A hand-made crop never lights a tile: the crop is the user's, applied after the ratio.
+        ///
+        /// A wallpaper is Unlocked unconditionally. It has no ratio of its own (the composer
+        /// cover-fits the art into whatever box Scale/ScaleY give it) and the panel offers it no
+        /// aspect tile at all, so the free two-axis resize is not a choice it could make or
+        /// unmake: it is the only state the item has. <c>EditorSession.AddBackground</c> seeds
+        /// the explicit height that spells that state in the model, and the rule here covers a
+        /// background that lacks one (a hand-edited or older project file) so it still reads as
+        /// free, which is what puts the edge handles on the gizmo: the window forwards
+        /// <see cref="AspectUnlocked"/> to <c>TransformGizmoControl.FreeResize</c>.
         /// </summary>
         private void SyncAspect(Item item)
         {
@@ -1113,7 +1175,12 @@ namespace Clowd.UI.VideoEditor.Inspector
             var stretch = _aspectStretch;
 
             var transform = item?.Transform;
-            if (transform?.ScaleY != null)
+            if (item?.Content is BackgroundContent)
+            {
+                tile = AspectTile.Unlocked;
+                stretch = false;
+            }
+            else if (transform?.ScaleY != null)
             {
                 tile = AspectTile.Unlocked;
             }
@@ -1608,6 +1675,70 @@ namespace Clowd.UI.VideoEditor.Inspector
                     return;
 
                 EditZoom("sel:zoomy", z => z.FocusY = value);
+            }
+        }
+
+        // ---------------------------------------------------------------------- background
+
+        /// <summary>
+        /// The wallpaper's style, as one of <see cref="BackgroundStyleOptions"/>. Written per item
+        /// rather than per row (see <see cref="EditBackground"/>): the split halves of a backdrop
+        /// are two independent items, and changing the wallpaper partway through the video is a
+        /// real edit rather than an accident. <c>origin: this</c>, because this setter mirrors its
+        /// own dependents by hand and must skip its own echo.
+        /// </summary>
+        public NamedOption BackgroundStyle
+        {
+            get => FindOption(BackgroundStyleOptions, _backgroundStyle);
+            set
+            {
+                if (value == null || _syncing || value.Value == _backgroundStyle)
+                    return;
+
+                _backgroundStyle = value.Value;
+                OnPropertyChanged(nameof(BackgroundStyle));
+                // the theme row belongs to the style above it: which tiles it offers, whether it
+                // is there at all, and which of them reads as picked all change with the style
+                OnPropertyChanged(nameof(BackgroundThemeOptions));
+                OnPropertyChanged(nameof(BackgroundThemesVisible));
+                OnPropertyChanged(nameof(BackgroundTheme));
+                EditBackground("sel:bgstyle", b => b.Style = value.Value);
+            }
+        }
+
+        /// <summary>The theme tiles the picked style offers — empty for a style that has only one
+        /// look (Explode), which is when the row is not shown at all.</summary>
+        public IReadOnlyList<NamedOption> BackgroundThemeOptions =>
+            BackgroundThemeOptionsByStyle.TryGetValue(_backgroundStyle ?? "", out var options)
+                ? options
+                : Array.Empty<NamedOption>();
+
+        /// <summary>Whether the theme row is on show: only for a style with more than one theme to
+        /// choose between.</summary>
+        public bool BackgroundThemesVisible => BackgroundThemeOptions.Count > 0;
+
+        /// <summary>
+        /// Which of the style's themes is drawn. The stored value is deliberately left alone when
+        /// the style changes — a project remembers "ember" across a trip through another style, and
+        /// the six generated-palette styles share one theme namespace, so the palette a user picked
+        /// on Moving Blob is still picked when they come back from Layered Waves. The getter
+        /// resolves whatever is stored against the style actually picked, so a theme that style
+        /// does not offer reads as its default exactly as the compositor draws it. Writing a reset
+        /// on every style change would look identical and would burn an undo entry the user did not
+        /// ask for.
+        /// </summary>
+        public NamedOption BackgroundTheme
+        {
+            get => FindOption(BackgroundThemeOptions,
+                BackgroundCatalog.ResolveTheme(_backgroundStyle, _backgroundTheme));
+            set
+            {
+                if (value == null || _syncing || value.Value == _backgroundTheme)
+                    return;
+
+                _backgroundTheme = value.Value;
+                OnPropertyChanged(nameof(BackgroundTheme));
+                EditBackground("sel:bgtheme", b => b.Theme = value.Value);
             }
         }
 
@@ -2369,7 +2500,25 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // which key off isPicture below) stay away from it.
                 var isCursor = item?.Content is CursorContent;
                 var visual = item != null && !isAudio && !isEffect && !isCursor;
-                var isPicture = visual && item.Content is MediaContent or ImageContent;
+                // a wallpaper is picture-shaped in most of the ways the panel cares about: it is
+                // placed and sized by its Transform, and it takes a mask and a surround.
+                // (The video-effect section stays off without an edit here: _showEffect is gated
+                // on MediaContent separately.)
+                var isPicture = visual && item.Content is MediaContent or ImageContent or BackgroundContent;
+                // ...but NOT an aspect preset, a fit mode or a crop, which is the one place it
+                // parts company with a real picture. A wallpaper has no ratio of its own:
+                // FrameComposer's DrawBackground boxes it by Scale/ScaleY against the canvas and
+                // cover-fits the art into that box, reading neither Transform.Aspect nor
+                // Transform.Crop (its own doc says so), so "which ratio" and "fill or stretch"
+                // are not choices for this content, and offering them would write state nothing
+                // draws while ItemPlacement.ContentAspect moved the gizmo off the composed
+                // pixels. The whole ASPECT RATIO + fit mode + CROP block (one section in the
+                // panel, gated on ShowCrop) therefore stays away from a wallpaper. What the
+                // block's "Unlocked" tile would have granted, the free two-axis resize with the
+                // gizmo's edge handles, a wallpaper has permanently instead: SyncAspect reads it
+                // as Unlocked without a tile ever being offered, so the section is not needed as
+                // the route to that state either.
+                var isCroppable = isPicture && item.Content is not BackgroundContent;
 
                 Set(ref _hasSelection, item != null, nameof(HasSelection));
                 Set(ref _showTransform, visual, nameof(ShowTransform));
@@ -2379,7 +2528,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _showRotation, visual && item.Content is not KeyboardContent,
                     nameof(ShowRotation));
                 Set(ref _showMask, isPicture, nameof(ShowMask));
-                Set(ref _showCrop, isPicture, nameof(ShowCrop));
+                Set(ref _showCrop, isCroppable, nameof(ShowCrop));
                 Set(ref _showText, isText, nameof(ShowText));
                 Set(ref _showAudio, isAudio, nameof(ShowAudio));
                 Set(ref _showTransitions, visual, nameof(ShowTransitions));
@@ -2388,6 +2537,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _showZoomEffect, item?.Content is ZoomContent, nameof(ShowZoomEffect));
                 Set(ref _showCursorTrack, isCursor, nameof(ShowCursorTrack));
                 Set(ref _showKeyboardTrack, item?.Content is KeyboardContent, nameof(ShowKeyboardTrack));
+                Set(ref _showBackground, item?.Content is BackgroundContent, nameof(ShowBackground));
                 // the eye stays: hiding an effect row is how the effect is turned off
                 Set(ref _showTrackHidden, item != null && !isAudio, nameof(ShowTrackHidden));
                 Set(ref _showTrackMuted, isAudio, nameof(ShowTrackMuted));
@@ -2449,6 +2599,23 @@ namespace Clowd.UI.VideoEditor.Inspector
                     OnPropertyChanged(nameof(CursorVariantsVisible));
                 }
 
+                if (item?.Content is BackgroundContent background)
+                {
+                    // resolved, not stored: a style id this build does not know (an older project,
+                    // or one a newer editor wrote) is drawn as the default style, and the panel
+                    // must agree with the picture — the tile that reads as picked, the theme row
+                    // that appears under it and the theme that resolves inside it are then all the
+                    // ones the composer is using. Also covers a null style.
+                    Set(ref _backgroundStyle, BackgroundCatalog.ResolveStyle(background.Style),
+                        nameof(BackgroundStyle));
+                    Set(ref _backgroundTheme, background.Theme, nameof(BackgroundTheme));
+                    // the theme row is derived from the style, and nothing here raises dependents
+                    // on its own: which tiles it offers and whether it is there at all both move
+                    // with the style just read back
+                    OnPropertyChanged(nameof(BackgroundThemeOptions));
+                    OnPropertyChanged(nameof(BackgroundThemesVisible));
+                }
+
                 if (item?.Content is KeyboardContent keyboard)
                 {
                     Set(ref _keyboardFontSize, keyboard.FontSize, nameof(KeyboardFontSize));
@@ -2494,8 +2661,19 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _positionX, transform.X, nameof(PositionX));
                 Set(ref _positionY, transform.Y, nameof(PositionY));
                 Set(ref _scale, transform.Scale, nameof(Scale));
-                Set(ref _hasScaleY, transform.ScaleY != null, nameof(ShowScaleHeight));
-                Set(ref _scaleHeight, transform.ScaleY ?? _scaleHeight, nameof(ScaleHeight));
+                // A wallpaper always offers both Width % and Height %: it is permanently
+                // free-sized (see SyncAspect), and the two are canvas fractions the composer
+                // reads directly (DrawBackground boxes it at Scale * canvasWidth by
+                // (ScaleY ?? Scale) * canvasHeight), so 100% x 100% is the output canvas at any
+                // resolution and the numbers survive a resolution change untouched. AddBackground
+                // seeds the explicit height; a file without one shows the height the composer
+                // falls back to, Scale, so the row tells the truth about what is drawn, and the
+                // first edit of it writes ScaleY for real.
+                var isBackground = item?.Content is BackgroundContent;
+                Set(ref _hasScaleY, transform.ScaleY != null || isBackground, nameof(ShowScaleHeight));
+                Set(ref _scaleHeight,
+                    transform.ScaleY ?? (isBackground ? transform.Scale : _scaleHeight),
+                    nameof(ScaleHeight));
                 OnPropertyChanged(nameof(ShowScaleHeight));
                 OnPropertyChanged(nameof(ScaleLabel));
                 Set(ref _rotation, transform.Rotation, nameof(Rotation));
@@ -2521,7 +2699,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 SyncAspect(item);
 
                 // crop mode only means anything while a croppable picture is selected
-                if (!isPicture)
+                if (!isCroppable)
                     CropModeActive = false;
 
                 if (item?.Content is TextContent text)
@@ -2649,6 +2827,24 @@ namespace Clowd.UI.VideoEditor.Inspector
             {
                 if (i.Content is ZoomContent zoom)
                     edit(zoom);
+            }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
+        }
+
+        /// <summary>The wallpaper write, content-guarded on both sides like
+        /// <see cref="EditZoom"/>: the section's bindings stay live while it is hidden, so a stale
+        /// write must find nothing to do rather than throw at a pointer handler. Single-item,
+        /// unlike the overlay writes: the segments of a split background are not the pieces of one
+        /// continuous capture, they are separate backdrops the user may well want to differ.</summary>
+        private void EditBackground(string coalesceKey, Action<BackgroundContent> edit)
+        {
+            var item = SelectedItem;
+            if (item?.Content is not BackgroundContent)
+                return;
+
+            _session.EditItem(item.Id, i =>
+            {
+                if (i.Content is BackgroundContent background)
+                    edit(background);
             }, $"{coalesceKey}:{item.Id}", structural: false, origin: this);
         }
 
@@ -3009,6 +3205,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             MediaContent => onAudioTrack ? "Audio" : "Video",
             TextContent => "Text",
             ImageContent => "Image",
+            BackgroundContent => "Background",
             SolidContent => "Color",
             SpeedContent => "Speed",
             ZoomContent => "Zoom",

@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Clowd.Drawing;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 
@@ -1009,6 +1010,30 @@ namespace Clowd.UI.VideoEditor.Timeline
             context.DrawLine(pen, new Point(x, 0), new Point(x, Bounds.Height));
         }
 
+        /// <summary>The name a wallpaper card carries: the style's display name on its own when
+        /// the style offers no themes or the item sits on the style's default one, and
+        /// "style theme" otherwise ("Big Sur", "Big Sur Teal", "Monterey Dark", "Moving Blob
+        /// Ember"). Read through the catalog's own resolution rather than off the stored ids, so a
+        /// style or theme this build does not know reads as the one the composer actually draws;
+        /// the labels are the catalog's, never the source art's own titles, which are not display
+        /// copy.</summary>
+        private static string BackgroundLabel(BackgroundContent background)
+        {
+            var style = BackgroundCatalog.Find(BackgroundCatalog.ResolveStyle(background.Style));
+            var themes = style.Themes;
+            var themeId = BackgroundCatalog.ResolveTheme(style.Id, background.Theme);
+            if (themes.Count == 0 || themeId == null ||
+                String.Equals(themeId, themes[0].Id, StringComparison.OrdinalIgnoreCase))
+                return style.Label;
+
+            foreach (var theme in themes)
+            {
+                if (String.Equals(theme.Id, themeId, StringComparison.OrdinalIgnoreCase))
+                    return style.Label + " " + theme.Label;
+            }
+            return style.Label;
+        }
+
         private void RenderItem(DrawingContext context, TimelinePalette palette, Project project,
             Track track, TimelineRow row, Item item, Rect body, bool selected, bool evenRow)
         {
@@ -1049,6 +1074,12 @@ namespace Clowd.UI.VideoEditor.Timeline
                 case ImageContent image:
                     (glyph, label) = (TimelineIcons.Find("IconImage"),
                         System.IO.Path.GetFileName(image.Path));
+                    break;
+                // no in-body preview above for a wallpaper, deliberately: that switch decodes
+                // something that changes across the row (a filmstrip, a waveform, the capture's
+                // activity), and a backdrop is by definition the thing that does not.
+                case BackgroundContent background:
+                    (glyph, label) = (TimelineIcons.Find("IconBackground"), BackgroundLabel(background));
                     break;
                 case SpeedContent speed:
                     (glyph, label) = (TimelineIcons.SpeedometerGeometry,

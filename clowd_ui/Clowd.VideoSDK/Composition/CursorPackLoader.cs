@@ -15,11 +15,18 @@ namespace Clowd.VideoSDK.Composition
     /// a "no entry" bar, the macOS spinner's own four — is not in the map and passes through.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The two families reach a palette from opposite directions. A ful1e5 pack draws every cursor
     /// in placeholder colors (<c>#00FF00</c> body, <c>#0000FF</c> outline, <c>#FF0000</c> accent)
     /// and ships a <c>render.json</c> naming the real color of each per theme, so its map is those
     /// three keys. Neon ships one folder per color instead, all the same drawing; one of them is
     /// stored and the rest are its map, keyed on that stored theme's own colors.
+    /// </para>
+    /// <para>
+    /// The background library reuses this class unchanged: each generative wallpaper's palette
+    /// themes are a map from the file's own fills to a shared swatch table (see
+    /// <see cref="BackgroundCatalog"/>), applied to flat fills and gradient stops alike.
+    /// </para>
     /// </remarks>
     internal sealed class CursorPackPalette
     {

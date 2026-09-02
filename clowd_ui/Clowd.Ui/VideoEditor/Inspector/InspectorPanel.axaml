@@ -537,7 +537,13 @@
                     </DockPanel>
 
                     <DockPanel Classes="row" IsVisible="{Binding ShowScaleHeight}">
-                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <!--  the same 100% the Width row resets to: for a wallpaper that is the
+                              output canvas (100% x 100% is the insertion size), and for an
+                              unlocked picture it is the canvas height, the one value the axis has
+                              a defined default at.  -->
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <controls:ResetDefaultButton CurrentValue="{Binding ScaleHeight, Mode=TwoWay}" DefaultValue="1" />
+                        </Panel>
                         <TextBlock Classes="label" Text="Height" />
                         <controls:SpinnerTextBox
                             DisplayScale="100"
@@ -893,6 +899,127 @@
                             Suffix="%"
                             Value="{Binding CornerRadius, Mode=TwoWay}" />
                     </DockPanel>
+                </StackPanel>
+
+                <!--  the wallpaper. Tiles rather than a drop-down for the same reason the cursor
+                      styles are tiles: the styles differ only in how they look, so a list of names
+                      would make the user try them one at a time. Each tile draws its own artwork
+                      through the compositor's own BackgroundRenderer, so what the tile shows is
+                      what the render will paint, and the three animated styles move in their tiles
+                      exactly as they will move in the picture. Placed after SHAPE and before TEXT
+                      so the panel keeps reading "where it sits / what shape it is / what it is".
+
+                      TilesLive is those tiles' second gate, and it has to be stated here: hiding
+                      a section does not detach what is inside it, so without it the animated
+                      tiles would keep a timer and their invalidations running, unseen, for the
+                      rest of the session. It inherits from here down into both ListBoxes.  -->
+                <StackPanel
+                    Classes="section"
+                    insp:BackgroundStylePreview.TilesLive="{Binding ShowBackground}"
+                    IsVisible="{Binding ShowBackground}">
+                    <DockPanel>
+                        <TextBlock Classes="section" Text="BACKGROUND" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  a wide swatch over its name, not the cursor tiles' 22px icon beside it:
+                          a wallpaper is a field, and a square crop of one says nothing. The
+                          ItemsSource is assigned in code-behind, like the cursor style list and
+                          for the same reason (compiled bindings are off, there is no x:DataType).  -->
+                    <ListBox
+                        x:Name="listBackgroundStyle"
+                        Margin="0,0,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                        SelectedItem="{Binding BackgroundStyle, Mode=TwoWay}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    Margin="6,5,6,5"
+                                    Spacing="5"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <!--  clipped and rounded here rather than in the control: the
+                                          swatch is a slice of a full-bleed field, so it has no
+                                          shape of its own to keep  -->
+                                    <Border
+                                        Height="34"
+                                        ClipToBounds="True"
+                                        CornerRadius="3">
+                                        <insp:BackgroundStylePreview StyleName="{Binding Value}" />
+                                    </Border>
+                                    <TextBlock
+                                        Classes="tileText"
+                                        HorizontalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!--  the theme row gets its own sub-header, exactly as the cursor colorways
+                          do: which palette a style is drawn in is its own subject, not one more
+                          style tile. Header and tiles show and hide together, and both are absent
+                          rather than single-tiled for a style that has only one look.  -->
+                    <DockPanel Margin="0,8,0,0" IsVisible="{Binding BackgroundThemesVisible}">
+                        <TextBlock Classes="section" Text="THEME" />
+                        <Rectangle Classes="sectionRule" />
+                    </DockPanel>
+
+                    <!--  Neither the tiles nor the pick are bound: the tile list is swapped
+                          wholesale whenever the style changes, and a ListBox drops a selection
+                          whose item is not in the incoming list. A SelectedItem binding cannot
+                          put it back, because the view model's resolved theme has not changed
+                          across the swap and so raises nothing the binding would re-push. The
+                          code-behind assigns the two in order (RefreshBackgroundThemes) so the
+                          pick is re-taken after every swap, and reads the user's own pick back
+                          off SelectionChanged.  -->
+                    <ListBox
+                        x:Name="listBackgroundTheme"
+                        Margin="0,4,-4,-4"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        IsVisible="{Binding BackgroundThemesVisible}"
+                        ItemContainerTheme="{StaticResource PickerTile}"
+                        ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <UniformGrid Columns="2" />
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel
+                                    Margin="6,5,6,5"
+                                    Spacing="5"
+                                    ToolTip.Tip="{Binding Label}">
+                                    <Border
+                                        Height="34"
+                                        ClipToBounds="True"
+                                        CornerRadius="3">
+                                        <!--  the tile needs both levels: the style off the list's
+                                              own DataContext, the theme off the item  -->
+                                        <insp:BackgroundStylePreview
+                                            Still="True"
+                                            StyleName="{Binding $parent[ListBox].DataContext.BackgroundStyle.Value}"
+                                            ThemeName="{Binding Value}" />
+                                    </Border>
+                                    <TextBlock
+                                        Classes="tileText"
+                                        HorizontalAlignment="Center"
+                                        Text="{Binding Label}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
                 </StackPanel>
 
                 <!--  text  -->

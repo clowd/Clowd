@@ -142,6 +142,7 @@ namespace Clowd.UI.VideoEditor
         public RelayCommand CommandRedo { get; }
         public RelayCommand CommandAddText { get; }
         public RelayCommand CommandAddImage { get; }
+        public RelayCommand CommandAddBackground { get; }
         public RelayCommand CommandAddZoomEffect { get; }
         public RelayCommand CommandAddSpeedEffect { get; }
         public RelayCommand CommandAddCursorTrack { get; }
@@ -193,6 +194,7 @@ namespace Clowd.UI.VideoEditor
             };
             CommandAddText = new RelayCommand { Executed = _ => AddText(), Text = "Add _Text" };
             CommandAddImage = new RelayCommand { Executed = _ => _ = AddImageAsync(), Text = "Add _Image" };
+            CommandAddBackground = new RelayCommand { Executed = _ => AddBackground(), Text = "Add _Background" };
             CommandAddZoomEffect = new RelayCommand { Executed = _ => AddZoomEffect(), Text = "Add _Zoom" };
             CommandAddSpeedEffect = new RelayCommand
             {
@@ -1081,6 +1083,27 @@ namespace Clowd.UI.VideoEditor
             }
 
             var item = _editor.AddImage(picked[0], PlayheadTicks, AddedItemDurationTicks);
+            if (item != null)
+                RevealNewItem(item);
+        }
+
+        /// <summary>Adds a wallpaper on a fresh row behind the picture. Unlike the image button
+        /// there is no file to pick and no playhead to respect: a backdrop that started halfway
+        /// through the video would be a mistake every time, so it is laid across the whole project
+        /// and trimmed afterwards if that is really what was wanted. Every press adds another one,
+        /// each in front of the last but still behind everything else, so the newest is the one
+        /// that can be seen.</summary>
+        private void AddBackground()
+        {
+            if (!CanAddToProject)
+                return;
+
+            // an empty edit has no duration to span, so the backdrop takes the same five seconds
+            // every other add uses and is stretched later with the material that arrives after it.
+            // An item spanning exactly [0, duration) does not extend the project: GetDurationTicks
+            // counts the same items, so this is a fixed point rather than a feedback loop.
+            var duration = Math.Max(_editor.DurationTicks, AddedItemDurationTicks);
+            var item = _editor.AddBackground(0, duration);
             if (item != null)
                 RevealNewItem(item);
         }

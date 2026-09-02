@@ -25,6 +25,15 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
+    <!-- The background wallpaper library, read by BackgroundAssets: one folder per style id
+         (hyphenated, so the on-disk layout is the catalog's ids one for one — hence the same
+         explicit LogicalName and both-separator fold as the cursor packs above). Every file is
+         an SVG parsed live by BackgroundSvgReader. -->
+    <EmbeddedResource Include="Composition\Backgrounds\Art\**\*.svg">
+      <LogicalName>Clowd.VideoSDK.Composition.Backgrounds.Art.$([System.String]::Copy('%(RecursiveDir)').Replace('\','.').Replace('/','.'))%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup>
     <!-- 7.1.1 is the FFmpeg.AutoGen series generated against FFmpeg 7.1
          (avcodec 61 / avformat 61 / avutil 59 / swscale 8 / swresample 5) — the exact
          majors of the DLLs shipped in the obs-express folder. FFmpegLoader asserts the

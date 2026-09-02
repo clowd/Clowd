@@ -1179,6 +1179,51 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>
+        /// Adds a wallpaper from the embedded library (<see cref="Composition.BackgroundCatalog"/>)
+        /// on a <b>new</b> video row behind the picture: a backdrop is the surface everything else
+        /// sits on, so it never lands on an existing row and never goes through
+        /// <see cref="FindOrCreateFreeVideoTrack"/>, which hunts the frontmost free row. The item
+        /// starts at the size of the video, i.e. the whole canvas (a wallpaper has no intrinsic
+        /// size and cover-fits whatever box it is given), rather than <see cref="AddImage"/>'s
+        /// half width: an image arrives as an object to place, a background arrives already
+        /// covering the frame, which is the state a shrunken recording is then revealed against.
+        /// Returns the live item, or null when rolled back.
+        /// </summary>
+        public Item AddBackground(long startTicks, long durationTicks, object origin = null)
+        {
+            Item created = null;
+            var committed = Mutate("Add Background", ProjectChangeKind.Structural, null, origin, p =>
+            {
+                created = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = InsertBackgroundTrack(p).Id,
+                    TimelineStartTicks = startTicks,
+                    DurationTicks = durationTicks,
+                    // Content takes its own defaults: style "big-sur", theme null (the style's
+                    // own default), speed 1.
+                    Content = new BackgroundContent(),
+                    // The transform is the default placement (centered, Scale 1) with the height
+                    // written out explicitly instead of left to derive. FrameComposer.DrawBackground
+                    // boxes a wallpaper at Scale * canvasWidth by (ScaleY ?? Scale) * canvasHeight,
+                    // so ScaleY = 1 draws the very same canvas-filling box a null would; what the
+                    // explicit value changes is the editor's reading of the item. A background has
+                    // no aspect ratio of its own (the art is cover-fitted into whatever box it is
+                    // given) and offers no aspect preset, so it lives permanently in the state the
+                    // inspector's "Unlocked" tile puts a picture in: an explicit height, no ratio
+                    // held, both axes sized apart. That state is spelled "ScaleY set, Aspect null"
+                    // throughout the editor (SelectedItemViewModel.SyncAspect, the gizmo's free
+                    // corner resize, the Width and Height rows), and seeding it here means a
+                    // freshly added background is already in it, with nothing for the panel to
+                    // convert on first selection.
+                    Transform = new Transform { ScaleY = 1.0 },
+                };
+                p.Items.Add(created);
+            });
+            return committed ? created : null;
+        }
+
+        /// <summary>
         /// Adds a speed effect item on <b>the</b> speed row — found by content, created above
         /// everything when the project has none, and shared by every later speed change: a second
         /// one goes in the gap between the existing items, not on a second row. The item is placed
@@ -2042,6 +2087,42 @@ namespace Clowd.VideoSDK.Editing
             }
 
             var created = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = name, Order = order };
+            project.Tracks.Add(created);
+            return created;
+        }
+
+        /// <summary>
+        /// Adds the row a new background lands on: behind every non-background row, and in front
+        /// of every background row already there. The second half of that is the whole reason this
+        /// is not simply "order 0" — a wallpaper covers the canvas, so a second one placed behind
+        /// the first would be completely occluded and the button would read as doing nothing. A
+        /// background row is a video row whose earliest item is a <see cref="BackgroundContent"/>,
+        /// the same predicate the timeline classifies rows by. Only where a row is <i>created</i>:
+        /// nothing pins it there afterwards, and dragging a backdrop in front of the picture is a
+        /// legitimate edit.
+        /// </summary>
+        private static Track InsertBackgroundTrack(Project project)
+        {
+            var backgroundOrders = project.Tracks
+                .Where(t => t.Kind == TrackKind.Video && project.Items
+                    .Where(i => i.TrackId == t.Id)
+                    .OrderBy(i => i.TimelineStartTicks).ThenBy(i => i.Id)
+                    .FirstOrDefault()?.Content is BackgroundContent)
+                .Select(t => t.Order).ToList();
+
+            // no backgrounds yet: the backmost slot of the whole project, which pushes everything
+            // (audio and the speed row included) up one. Shifting every track rather than only the
+            // video ones is InsertVideoTrackOnTop's idiom and the only stable one — Reorder
+            // renumbers the blocks contiguously on the next move, so a negative or fractional
+            // Order would simply be erased.
+            var order = backgroundOrders.Count > 0 ? backgroundOrders.Max() + 1 : 0;
+            foreach (var track in project.Tracks)
+            {
+                if (track.Order >= order)
+                    track.Order++;
+            }
+
+            var created = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Background", Order = order };
             project.Tracks.Add(created);
             return created;
         }

@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Clowd.VideoSDK.Composition;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
@@ -35,6 +36,10 @@ namespace Clowd.UI.VideoEditor
         private CompositionPlayer _player;
         private EditorSession _session;
         private Project _project;
+
+        /// <summary>Whether the current snapshot holds a looping wallpaper on a visible row — the
+        /// preview's repaint gate for the playhead (see <see cref="PositionTicks"/>).</summary>
+        private bool _animatedBackground;
         private Size _videoPixelSize;
         private long _positionTicks;
         private int _renderPending;
@@ -159,6 +164,16 @@ namespace Clowd.UI.VideoEditor
 
                 _positionTicks = value;
                 InvalidateArrange();
+
+                // An animated wallpaper is the one thing on the canvas whose picture changes with
+                // the playhead alone. Everything else that moves does so because a decoded frame
+                // arrived, and OnFrameArrived is what repaints for it — so a project that is only a
+                // backdrop (or a stretch of one with no footage under it) would play and scrub with
+                // a frozen loop without this. Gated on the project rather than repainting on every
+                // position change, because that is thirty full composes a second bought for nothing
+                // when there is no wallpaper to move.
+                if (_animatedBackground)
+                    RequestRender();
             }
         }
 
@@ -185,6 +200,9 @@ namespace Clowd.UI.VideoEditor
         public void SetProject(Project project)
         {
             _project = project;
+            // read once per snapshot rather than per playhead move: every edit hands us a fresh
+            // project, so this is exactly as current as the picture is
+            _animatedBackground = BackgroundCatalog.ProjectHasAnimatedBackground(project);
             RequestRender();
         }
 

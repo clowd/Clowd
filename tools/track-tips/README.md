@@ -1,7 +1,7 @@
 # Track tip demo GIFs
 
 The looping demos shown in the rich flyouts behind the add-track buttons on the video editor's left
-tool strip (Video, Audio, Image, Text, Zoom, Speed, Cursor, Keyboard). Each flyout is a header, a
+tool strip (Video, Audio, Image, Text, Background, Zoom, Speed, Cursor, Keyboard). Each flyout is a header, a
 one or two sentence description, a demo GIF, and, when the button is disabled, the reason why.
 
 This folder holds the generator. The GIFs are never hand-edited: change `generate.py`, re-run it,
@@ -27,7 +27,7 @@ file just hides the demo area, so the app builds and runs with or without the GI
 
 - Python 3 with Pillow: `pip3 install Pillow` (any Pillow 10+ works; 11 was used).
 - Run from the repo root:
-  - `python3 tools/track-tips/generate.py` regenerates all eight into the assets folder.
+  - `python3 tools/track-tips/generate.py` regenerates all nine into the assets folder.
   - `python3 tools/track-tips/generate.py speed cursor` regenerates only the GIFs whose names contain
     those words.
   - `python3 tools/track-tips/generate.py --sheet /tmp/contact.png` also writes a review contact
@@ -85,8 +85,11 @@ it and 1x after, so it has a few more frames and its own path code.
   the Audio row (green waveform), block gutters with the faint hatch.
 - New rows go where `TimelineRowLayout` puts them: Speed pinned at the top above a hatched gutter;
   Zoom, Text, Image and an imported clip above Screen; Cursor and Keys glued directly above Screen and
-  spanning the whole recording (with motion / click blips and key blips); imported audio in the audio
-  block under Audio.
+  spanning the whole recording (with motion / click blips and key blips); Background under Screen,
+  because the video block composites bottom up and a backdrop draws behind the recording; imported
+  audio in the audio block under Audio.
+- A row name that does not fit the 34px header column is condensed rather than left to spill over the
+  items next to it (`fitted_text`); "Background" is the only one so far that needs it.
 - Item labels use the editor's own formats: `200%` (zoom), `2x` (speed), `photo.png`, `clip`,
   `music`, `Hello!`, `Cursor`, `Keys`.
 
@@ -96,7 +99,8 @@ it and 1x after, so it has a few more frames and its own path code.
   (228,228,230), header text (140,140,140).
 - Row kind colours, exactly as `TimelinePalette.cs` (dark variant): recording / video accent
   (84,169,255), audio (52,140,108), text (118,92,176), image (176,122,52), speed (184,70,92),
-  zoom (46,136,150), cursor (158,74,158), keyboard (132,144,56). Playhead (240,82,82). Selection
+  zoom (46,136,150), cursor (158,74,158), keyboard (132,144,56), background (64,142,76). Playhead
+  (240,82,82). Selection
   outline in the accent. Waveform ink (226,244,236), cursor motion blips (246,228,246), key blips
   (246,248,226). Speed's stopwatch tints rose while it runs fast.
 - The thing the tool adds must be the obvious focal point: added preview elements are large and
@@ -106,8 +110,13 @@ it and 1x after, so it has a few more frames and its own path code.
   logical px is unreadable and should be omitted.
 - Smooth, eased motion; no jitter; clean loop (hold at the end, restart from the same first frame).
 - Encoding: one shared 255-colour palette across all frames (median cut on a strip of every frame),
-  no dither, `optimize=True`, loop forever. Target under about 200 KB per GIF; zoom and speed run a
-  little over because every frame changes across the whole canvas, which is acceptable.
+  no dither, `optimize=True`, loop forever. Target under about 200 KB per GIF; zoom, speed and
+  background run a little over (roughly 206 to 225 KB) because every frame changes across the whole
+  canvas, which is acceptable. Anything much past that is a warning that something in the demo is
+  repainting the full canvas for no story reason: `optimize=True` can only drop the pixels a frame
+  shares with the one before it, so a backdrop that moves under everything else costs more than the
+  motion is worth. The background demo hit 296 KB while its mesh gradient drifted, and its still
+  mesh reads the same at 504x288 for 72 KB less.
 
 ## Copy rules (flyout text)
 
@@ -135,3 +144,8 @@ it and 1x after, so it has a few more frames and its own path code.
   travels to the button, presses it, and an orchid click ring expands.
 - `track-keyboard.gif`: a Keys row spanning the recording with key blips; large `Ctrl + C` then
   `Ctrl + V` keycaps pop up at the bottom of the frame.
+- `track-background.gif`: a Background row appears under Screen with a `Big Sur` item that opens out
+  from the playhead across the whole project; the recording shrinks toward the middle of the canvas,
+  rounded and shadowed, uncovering a still mesh wallpaper in the Big Sur artwork's colours (still
+  because Big Sur is one of the library's static styles, and because a moving backdrop repaints the
+  whole canvas every frame - see the size note under Style rules).

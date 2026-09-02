@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <title>Sunset Mesh</title>
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8a83c"/>
+      <stop offset="0.5" stop-color="#f2694b"/>
+      <stop offset="1" stop-color="#d8405c"/>
+    </linearGradient>
+    <radialGradient id="b0" gradientUnits="userSpaceOnUse" cx="240" cy="140" r="900">
+      <stop offset="0" stop-color="#ffd27a" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#ffd27a" stop-opacity="0.427"/>
+      <stop offset="1" stop-color="#ffd27a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="b1" gradientUnits="userSpaceOnUse" cx="1360" cy="760" r="820">
+      <stop offset="0" stop-color="#ff5f6d" stop-opacity="0.9"/>
+      <stop offset="0.45" stop-color="#ff5f6d" stop-opacity="0.405"/>
+      <stop offset="1" stop-color="#ff5f6d" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="b2" gradientUnits="userSpaceOnUse" cx="1420" cy="980" r="620">
+      <stop offset="0" stop-color="#fff0d4" stop-opacity="0.85"/>
+      <stop offset="0.45" stop-color="#fff0d4" stop-opacity="0.383"/>
+      <stop offset="1" stop-color="#fff0d4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="b3" gradientUnits="userSpaceOnUse" cx="120" cy="940" r="700">
+      <stop offset="0" stop-color="#c9364f" stop-opacity="0.8"/>
+      <stop offset="0.45" stop-color="#c9364f" stop-opacity="0.36"/>
+      <stop offset="1" stop-color="#c9364f" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="b4" gradientUnits="userSpaceOnUse" cx="820" cy="460" r="520">
+      <stop offset="0" stop-color="#ff8c4a" stop-opacity="0.45"/>
+      <stop offset="0.45" stop-color="#ff8c4a" stop-opacity="0.203"/>
+      <stop offset="1" stop-color="#ff8c4a" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="grain" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="3" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+    </filter>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#base)"/>
+  <circle cx="240" cy="140" r="900" fill="url(#b0)"/>
+  <circle cx="1360" cy="760" r="820" fill="url(#b1)"/>
+  <circle cx="1420" cy="980" r="620" fill="url(#b2)"/>
+  <circle cx="120" cy="940" r="700" fill="url(#b3)"/>
+  <circle cx="820" cy="460" r="520" fill="url(#b4)"/>
+
+  <rect width="1600" height="1000" filter="url(#grain)" opacity="0.05" style="mix-blend-mode:overlay"/>
+</svg>

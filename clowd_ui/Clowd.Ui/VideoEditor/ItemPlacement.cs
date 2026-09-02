@@ -167,9 +167,11 @@ namespace Clowd.UI.VideoEditor
         /// <summary>
         /// The drawn height/width of an item's content, or null when it is unknown or draws nothing.
         /// Media takes the probed stream dimensions (the decoded frame may be a proxy, but a proxy
-        /// keeps the aspect), images the file header, a solid the canvas itself — resolved through
-        /// the same <see cref="AspectMath.DisplayAspect"/> the composer draws with, so an aspect
-        /// preset, a stretch and a crop all land the gizmo exactly on the pixels.
+        /// keeps the aspect) and images the file header, both resolved through the same
+        /// <see cref="AspectMath.DisplayAspect"/> the composer draws with, so an aspect preset, a
+        /// stretch and a crop all land the gizmo exactly on the pixels. A solid and a wallpaper
+        /// take the canvas ratio raw, because their composer paths take the canvas as their
+        /// natural size and read neither an aspect preset nor a crop.
         /// </summary>
         public static double? ContentAspect(Project project, Item item, double canvasWidth, double canvasHeight)
         {
@@ -194,8 +196,21 @@ namespace Clowd.UI.VideoEditor
                 }
 
                 case SolidContent:
-                    // FrameComposer.DrawSolid: no intrinsic picture, so the natural size is the
-                    // canvas (and crop does not apply to it at all).
+                case BackgroundContent:
+                    // FrameComposer.DrawSolid and DrawBackground share one box rule: neither has an
+                    // intrinsic picture, so the natural size is the canvas itself and the default
+                    // transform fills the frame. Deliberately raw rather than routed through
+                    // DisplayAspect, because neither composer path reads Transform.Aspect or
+                    // Transform.Crop — a wallpaper is cover-fitted ("slice") into whatever rect the
+                    // Scale/ScaleY box gives it. Asking DisplayAspect here would inflate the gizmo
+                    // to a ratio the renderer never draws (a 1:1 preset on a 16:9 canvas would box
+                    // a square gizmo over a 16:9 painting), so the aspect and crop rows are kept
+                    // away from both content kinds in the inspector instead — see
+                    // SelectedItemViewModel.Sync's isCroppable. A wallpaper is instead permanently
+                    // free-sized (SyncAspect reads it as Unlocked), and this raw ratio is exactly
+                    // right for that: with ScaleY null the height it implies is Scale * canvasH,
+                    // the very (ScaleY ?? Scale) fallback DrawBackground draws, and with ScaleY set
+                    // Compose takes the explicit height and never consults it.
                     return canvasWidth > 0 ? canvasHeight / canvasWidth : null;
 
                 case KeyboardContent keyboard:
@@ -341,8 +356,58 @@ namespace Clowd.UI.VideoEditor
     /// positions are read in, so the gizmo moving under the pointer mid-drag cannot corrupt a
     /// delta); the canvas rectangle is the letterboxed video rect in that same space.
     /// </summary>
+    /// <summary>How the gizmo's corner handles size an item; see <see cref="GizmoMath.CornerMode"/>.</summary>
+    internal enum CornerResizeMode
+    {
+        /// <summary>Uniform: the height follows the content's own ratio, only Scale is written.</summary>
+        ContentAspect,
+        /// <summary>Uniform against the box as it stands: Scale and ScaleY move together.</summary>
+        BoxAspect,
+        /// <summary>Each axis on its own: Scale and ScaleY are written from the pointer apart.</summary>
+        Free,
+    }
+
     internal static class GizmoMath
     {
+        /// <summary>
+        /// A wallpaper is free-sized by what it is, not by a tile the user picked: it has no ratio
+        /// of its own (FrameComposer.DrawBackground cover-fits the art into whatever box
+        /// Scale/ScaleY give it) and the inspector offers it no aspect section, so "Unlocked" is
+        /// the only state it can be in. The inspector reads that off the content
+        /// (SelectedItemViewModel.SyncAspect), and the gizmo reads it off the content too, from
+        /// the very same predicate, rather than waiting on the flag the window forwards between
+        /// the two: that forwarding rides on a PropertyChanged that fires only when the tile
+        /// changes, and a wallpaper must offer all eight handles and a free corner from the
+        /// instant it is selected, whether it was just added (ScaleY seeded by
+        /// EditorSession.AddBackground) or came out of an older project file without one.
+        /// </summary>
+        public static bool IsFreeByContent(Item item) => item?.Content is BackgroundContent;
+
+        /// <summary>
+        /// What a corner drag does to the item, decided once per drag from the item itself and
+        /// the inspector's Unlocked flag, so the drag code has one switch to make rather than a
+        /// chain of guards to keep in order (which is exactly what a corner that held its ratio on
+        /// an item with all eight handles showing looked like).
+        ///
+        /// A wallpaper is <see cref="CornerResizeMode.Free"/> whatever the flag says (see
+        /// <see cref="IsFreeByContent"/>). A picture is free only while it is on the Unlocked tile
+        /// AND carries the explicit height that tile writes: the height is the model's own
+        /// spelling of the state, so its absence with the flag still up is a stale flag, and the
+        /// drag keeps the content's ratio rather than trusting it. A picture with an explicit
+        /// height but a ratio tile in force (the Stretch fit mode) keeps the box as it stands:
+        /// both scales move together, so a 16:9 stretch stays 16:9 under the drag.
+        /// </summary>
+        public static CornerResizeMode CornerMode(bool freeResizeTile, Item item)
+        {
+            if (IsFreeByContent(item))
+                return CornerResizeMode.Free;
+
+            if (item?.Transform?.ScaleY is null)
+                return CornerResizeMode.ContentAspect;
+
+            return freeResizeTile ? CornerResizeMode.Free : CornerResizeMode.BoxAspect;
+        }
+
         /// <summary>Body drag: the pointer delta since the press, as a normalized center. Clamped
         /// to the canvas exactly as the inspector's own Position spinners are, so the two cannot
         /// disagree about how far off-frame an item may go.</summary>

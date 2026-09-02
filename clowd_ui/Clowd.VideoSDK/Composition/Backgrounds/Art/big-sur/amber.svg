@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 1440" preserveAspectRatio="xMidYMid slice">
+  <title>Big Sur — Amber</title>
+  <defs>
+    <linearGradient id="g1" gradientUnits="userSpaceOnUse" x1="16.6" y1="189.3" x2="96.4" y2="1102.1"><stop offset="0" stop-color="#ce2665"/><stop offset="1" stop-color="#ffc6f3"/></linearGradient>
+    <linearGradient id="g2" gradientUnits="userSpaceOnUse" x1="46" y1="162.9" x2="290.4" y2="1029.2"><stop offset="0" stop-color="#cc204d"/><stop offset="1" stop-color="#eb6dac"/></linearGradient>
+    <linearGradient id="g3" gradientUnits="userSpaceOnUse" x1="18.2" y1="669.6" x2="8.5" y2="313.3"><stop offset="0" stop-color="#ed9cbb"/><stop offset="1" stop-color="#df4984"/></linearGradient>
+    <linearGradient id="g3o" gradientUnits="userSpaceOnUse" x1="63" y1="555.8" x2="399" y2="3521.8"><stop offset="0" stop-color="#ff00ff" stop-opacity="0"/><stop offset="1" stop-color="#ff00ff"/></linearGradient>
+    <linearGradient id="g4" gradientUnits="userSpaceOnUse" x1="-49.4" y1="-42.1" x2="1757.6" y2="1497.7"><stop offset="0" stop-color="#e55f77"/><stop offset="1" stop-color="#f6e8ee"/></linearGradient>
+    <linearGradient id="g5" gradientUnits="userSpaceOnUse" x1="188.3" y1="406.8" x2="588.7" y2="1271.9"><stop offset="0" stop-color="#f0ccf8"/><stop offset="0.694" stop-color="#ecb475"/><stop offset="1" stop-color="#ebb663"/></linearGradient>
+    <radialGradient id="g5o" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="matrix(348 -525.4 11037.2 2312.8 12306.9 2918.5)"><stop offset="0" stop-color="#f5ff6b"/><stop offset="1" stop-color="#f5ff6b" stop-opacity="0"/></radialGradient>
+    <linearGradient id="g6" gradientUnits="userSpaceOnUse" x1="-0" y1="-2.5" x2="6.7" y2="518.6"><stop offset="0" stop-color="#e87444"/><stop offset="1" stop-color="#e98d48"/></linearGradient>
+    <linearGradient id="g7" gradientUnits="userSpaceOnUse" x1="-518.3" y1="1218.2" x2="-208.7" y2="490.5"><stop offset="0" stop-color="#be1a2c"/><stop offset="1" stop-color="#e5733f"/></linearGradient>
+  </defs>
+  <rect x="852.2" y="-2.2" width="1712.3" height="1021.9" fill="url(#g1)"/>
+  <path d="m 1406.4,-2.2 c 0,0 217.9,34 321,71.2 82.6,29.8 150.9,93.2 234.5,120.4 103.1,33.7 219,15.3 321.5,50.8 101.5,35.1 281.2,157.1 281.2,157.1 L 2560,1440 H 0 V 0 Z" fill="url(#g2)"/>
+  <path d="m 420.9,-2.2 c 0,0 400.3,20.1 552.7,63.2 101.6,28.7 292.8,121 292.8,121 174.6,72.1 299.6,30.3 491.7,74.7 158.8,36.7 311.6,108.7 471.2,146.7 112.1,26.7 224.1,53.1 335.3,78.3 V 1441.3 H -2.2 V -2.2 Z" fill="url(#g3)"/>
+  <path d="m 420.9,-2.2 c 0,0 400.3,20.1 552.7,63.2 101.6,28.7 292.8,121 292.8,121 174.6,72.1 299.6,30.3 491.7,74.7 158.8,36.7 311.6,108.7 471.2,146.7 112.1,26.7 224.1,53.1 335.3,78.3 V 1441.3 H -2.2 V -2.2 Z" fill="url(#g3o)"/>
+  <path d="m 0,0 c 0,0 706.9,196.6 1069.9,237.7 86.6,9.8 120.7,-0.5 206.4,15.3 117.5,21.7 273.7,88.4 390.7,112.2 140.8,28.6 285.9,10 424.9,46.3 111.9,29.1 269,83.5 383.7,97.7 53.3,6.6 88.9,-4.8 88.9,-4.8 V 1441.3 H -2.2 Z" fill="url(#g4)"/>
+  <path d="m 0,203.9 c 0,0 1520.2,137.9 2257.3,323.8 106.5,26.9 309.4,113.5 309.4,113.5 V 1441.3 H 0 Z" fill="url(#g5)"/>
+  <path d="m 0,203.9 c 0,0 1520.2,137.9 2257.3,323.8 106.5,26.9 309.4,113.5 309.4,113.5 V 1441.3 H 0 Z" fill="url(#g5o)"/>
+  <path d="m 420.9,-2.2 c 0,0 262.4,49.9 384.5,101.5 152.3,64.4 272.3,192.3 425,256 96.4,40.2 207.2,37 303.7,77 87.2,36.1 153.5,116 243.4,144.8 70.4,22.6 153.8,-12 221,18.7 100.1,45.8 132.9,192.4 236.1,230.7 64.4,23.9 138.1,-25.5 205.6,-13 44.9,8.3 124.4,57.2 124.4,57.2 V 1441.3 H -2.2 V -2.2 Z" fill="url(#g6)"/>
+  <path d="m -2.2,203.9 c 0,0 332.3,327.3 537.7,429.3 312.4,155.1 695.3,115.9 1014.4,256.8 305,134.7 834.6,551.3 834.6,551.3 H -2.2 Z" fill="url(#g7)"/>
+</svg>

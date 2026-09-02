@@ -28,7 +28,7 @@ import math
 import os
 import sys
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 LW, LH = 252, 144
 SS = 4
@@ -56,6 +56,7 @@ SPEED_KIND = (184, 70, 92)
 ZOOM_KIND = (46, 136, 150)
 CURSOR_KIND = (158, 74, 158)
 KEYS_KIND = (132, 144, 56)
+BACKGROUND_KIND = (64, 142, 76)  # TimelinePalette's dark background row, #408E4C
 ITEM_LABEL = (240, 240, 240)
 WAVE = (226, 244, 236)
 CURSOR_MOTION = (246, 228, 246)
@@ -330,6 +331,23 @@ def waveform(d, box, seed=0.0, amp=1.0):
         x += 1.4
 
 
+def fitted_text(d, x, ymid, s, f, fill, max_w):
+    """Left-aligned, vertically centred text that is condensed rather than allowed to run past
+    max_w logical px. The header column is only 34px wide in this miniature, so a long row name
+    like "Background" would otherwise spill over the row's items; squeezing it a little keeps the
+    editor's real track name readable and inside its own column."""
+    w = f.getlength(s) / SS
+    if w <= max_w:
+        text(d, (x, ymid), s, f, fill, anchor="lm")
+        return
+    # render the line on its own, then scale it horizontally into the space there is
+    hh = int(round(f.size * 1.6)) + 2
+    strip = Image.new("L", (int(math.ceil(f.getlength(s))) + 2, hh), 0)
+    ImageDraw.Draw(strip).text((0, hh / 2), s, font=f, fill=255, anchor="lm")
+    strip = strip.resize((max(1, int(round(P(max_w)))), hh), Image.LANCZOS)
+    d._image.paste(Image.new("RGB", strip.size, fill), (int(round(P(x))), int(round(P(ymid))) - hh // 2), strip)
+
+
 def header_cell(d, y0, y1, name, fill, alpha=1.0):
     rect(d, (0, y0, HEADER_W, y1), fill=fill)
     if alpha > 0.05 and y1 - y0 > 4.5:
@@ -338,7 +356,7 @@ def header_cell(d, y0, y1, name, fill, alpha=1.0):
         for k in range(2):
             for j in range(3):
                 ellipse(d, (2.2 + k * 1.8, (y0 + y1) / 2 - 2 + j * 1.8, 3.2 + k * 1.8, (y0 + y1) / 2 - 1 + j * 1.8), fill=col)
-        text(d, (8, (y0 + y1) / 2 + 0.3), name, F_HEADER, mix(fill, HEADER_TEXT, alpha), anchor="lm")
+        fitted_text(d, 8, (y0 + y1) / 2 + 0.3, name, F_HEADER, mix(fill, HEADER_TEXT, alpha), HEADER_W - 10)
 
 
 class Timeline:
@@ -404,13 +422,17 @@ def audio_painter(d, box, gi, thumb):
 
 
 def base_rows(tl, new_row=None, new_pos="above_screen"):
-    """The common family layout: [Speed] / [new] / Screen / gap / Audio / [new audio]."""
+    """The common family layout: [Speed] / [new] / Screen / [new background] / gap / Audio /
+    [new audio]. "below_screen" is the backmost layer: rows composite bottom up in the video
+    block, so a backdrop that draws behind the recording sits under the Screen row."""
     if new_row is not None and new_pos == "speed":
         tl.rows.append(new_row)
     if new_row is not None and new_pos == "above_screen":
         tl.rows.append(new_row)
     tl.add("Screen", R_VIDEO, ACCENT, "video",
            items=[(x_of_sec(0), x_of_sec(12), None, screen_painter, 1.0)])
+    if new_row is not None and new_pos == "below_screen":
+        tl.rows.append(new_row)
     tl.add("Audio", R_AUDIO, AUDIO, "audio",
            items=[(x_of_sec(0), x_of_sec(12), None, audio_painter, 1.0)])
     if new_row is not None and new_pos == "audio":
@@ -823,6 +845,143 @@ def gif_keyboard():
     return overlay_row_demo("Keys", KEYS_KIND, "Keys", preview, blips)
 
 
+# ---- 9. background ---------------------------------------------------------------------------
+# The Big Sur artwork's own colours, sampled on a 7x5 grid from
+# Composition/Backgrounds/Art/big-sur/default.webp: hot pink across the top left, blue in the top
+# right corner, orange and amber down the right edge, deep purple in the bottom left. The demo
+# rebuilds the mesh from those hues rather than embedding a 2560x1440 bitmap, which also lets the
+# blobs drift so the backdrop reads as a layer of its own rather than a flat colour behind the
+# recording. Each entry is (x, y, drift radius, drift phase offset, colour), positions relative
+# to the canvas.
+MESH_BLOBS = [
+    (0.05, 0.12, 0.05, 0.00, (253, 59, 115)),   # hot pink, top left
+    (0.30, 0.03, 0.05, 0.55, (255, 83, 97)),    # red along the top
+    (0.70, 0.02, 0.06, 0.33, (77, 121, 235)),   # blue, over the top right half
+    (1.00, 0.16, 0.05, 0.72, (50, 141, 237)),   # blue, the corner itself
+    (0.86, 0.50, 0.06, 0.61, (255, 92, 62)),    # orange down the right edge
+    (0.99, 0.88, 0.05, 0.17, (253, 179, 83)),   # amber, bottom right
+    (0.45, 0.62, 0.07, 0.82, (250, 51, 96)),    # red through the middle
+    (0.02, 0.92, 0.05, 0.46, (126, 12, 178)),   # deep purple, bottom left
+    (0.55, 1.00, 0.06, 0.09, (214, 33, 92)),    # magenta along the bottom
+]
+MESH_GRID = (56, 28)
+
+
+def mesh_wallpaper(phase):
+    """One frame of the backdrop: a soft mesh gradient built by inverse distance weighting between
+    the drifting blob centres. It is computed on a coarse grid and scaled up, which is what a mesh
+    gradient looks like anyway and is cheap enough to redraw for every frame of the sweep."""
+    gw, gh = MESH_GRID
+    img = Image.new("RGB", (gw, gh))
+    px = img.load()
+    pts = []
+    for (bx, by, r, off, col) in MESH_BLOBS:
+        a = (phase + off) * 2 * math.pi
+        pts.append((bx + math.cos(a) * r, by + math.sin(a) * r * 0.8, col))
+    aspect = CAN_W / CAN_H          # the canvas is 2:1, so x distances count double
+    for y in range(gh):
+        fy = (y + 0.5) / gh
+        for x in range(gw):
+            fx = (x + 0.5) / gw
+            wsum, acc = 0.0, [0.0, 0.0, 0.0]
+            for (bx, by, col) in pts:
+                dx, dy = (fx - bx) * aspect, fy - by
+                w = 1.0 / ((dx * dx + dy * dy) ** 1.5 + 0.0016)
+                wsum += w
+                for k in range(3):
+                    acc[k] += col[k] * w
+            px[x, y] = tuple(int(v / wsum) for v in acc)
+    return img.resize((int(P(CAN_W)), int(P(CAN_H))), Image.BICUBIC)
+
+
+def paste_card(frame, src, box, radius, shadow=0.0):
+    """Pastes an image into the preview as a rounded card with an optional soft drop shadow, the
+    way the compositor draws a picture item that no longer fills the whole canvas."""
+    x0, y0, x1, y1 = box
+    w, h = max(1, int(round(P(x1 - x0)))), max(1, int(round(P(y1 - y0))))
+    if shadow > 0.01:
+        layer = Image.new("L", frame.size, 0)
+        ImageDraw.Draw(layer).rounded_rectangle((P(x0 - 0.3), P(y0 + 0.8), P(x1 + 0.3), P(y1 + 1.8)),
+                                                radius=P(radius + 0.3), fill=int(190 * shadow))
+        layer = layer.filter(ImageFilter.GaussianBlur(P(1.6)))
+        frame.paste(Image.new("RGB", frame.size, (10, 10, 12)), (0, 0), layer)
+    card = src.resize((w, h), Image.LANCZOS)
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, w - 1, h - 1), radius=P(radius), fill=255)
+    frame.paste(card, (int(round(P(x0))), int(round(P(y0)))), mask)
+
+
+def gif_background():
+    frames = []
+    thumb = thumb_of(render_desktop()[0])
+    # One mesh, computed once and reused for every frame. The wallpaper deliberately does not
+    # drift: a drifting mesh changes every pixel of the backdrop on every frame, which defeats the
+    # inter-frame diffing save_gif's optimize=True relies on and cost this demo about 72 KB on its
+    # own, pushing it half again over the family's size target for motion nobody reads at 504x288.
+    # It is also the truer picture, because the row this demo builds is labelled Big Sur, which is
+    # one of the still styles; only three of the twelve animate at all.
+    wall_still = mesh_wallpaper(0.0)
+    for i in range(N):
+        pop, sweep, settled = phases(i)
+        # the recording keeps playing while the playhead crosses the item: its content scrolls
+        desktop, _ = render_desktop(content_scroll=round(sweep * 22, 1))
+        # and it shrinks toward the middle of the canvas, uncovering the backdrop behind it
+        shrink = back_out(min(1.0, max(0.0, (sweep - 0.04) / 0.5)))
+        scale = lerp(1.0, 0.58, shrink)
+        img = new_frame()
+        wall = None
+        if pop > 0:
+            wall = wall_still
+            paste_card(img, wall, CANVAS, 2.0)
+        cx, cy = (CANVAS[0] + CANVAS[2]) / 2, (CANVAS[1] + CANVAS[3]) / 2
+        vw, vh = CAN_W * scale, CAN_H * scale
+        paste_card(img, desktop, (cx - vw / 2, cy - vh / 2, cx + vw / 2, cy + vh / 2),
+                   lerp(2.0, 2.8, shrink), shadow=shrink)
+        d = ImageDraw.Draw(img)
+        # the new item is selected and it fills the canvas, so its gizmo hugs the frame; it fades
+        # out as playback starts, the way the zoom demo's reticle does
+        vis = pop * (1.0 - ease_in_out(min(1.0, max(0.0, sweep / 0.2))))
+        if vis > 0.03:
+            gz = (CANVAS[0] + 0.4, CANVAS[1] + 0.4, CANVAS[2] - 0.4, CANVAS[3] - 0.4)
+            col = mix(PREVIEW_BG, ACCENT, vis)
+            rect(d, gz, outline=col, width=0.6)
+            for hx in (gz[0], gz[2]):
+                for hy in (gz[1], gz[3]):
+                    rect(d, (hx - 1.3, hy - 1.3, hx + 1.3, hy + 1.3),
+                         fill=mix(PREVIEW_BG, (255, 255, 255), vis), outline=col, width=0.4)
+
+        def painter(dd, box, gi, th, wall=wall):
+            # the row's own green card, carrying a chip of the wallpaper and the theme name the
+            # editor labels a background item with
+            rrect(dd, box, 1.5, fill=BACKGROUND_KIND)
+            bx0, by0, bx1, by1 = box
+            chip_w = min(9.5, bx1 - bx0 - 2.4)
+            if wall is not None and chip_w > 3 and by1 - by0 > 3:
+                chip = wall.resize((int(P(chip_w)), int(P(by1 - by0 - 1.6))), Image.LANCZOS)
+                m = Image.new("L", chip.size, 0)
+                ImageDraw.Draw(m).rounded_rectangle((0, 0, chip.size[0] - 1, chip.size[1] - 1),
+                                                    radius=P(0.8), fill=255)
+                dd._image.paste(chip, (int(P(bx0 + 1.2)), int(P(by0 + 0.8))), m)
+            if bx1 - bx0 > 30:
+                text(dd, (bx0 + 3.4 + chip_w, (by0 + by1) / 2 + 0.3), "Big Sur", F_ITEM,
+                     ITEM_LABEL, anchor="lm")
+
+        # Unlike the other card rows, a backdrop is added over the whole project rather than at the
+        # playhead (EditorSession.AddBackground spans 0..duration), so the item opens out from the
+        # playhead to both ends of the row instead of growing rightward from its start.
+        pe = ease_out(min(1.0, pop))
+        anchor = x_of_sec(ITEM_T0)
+        tl = Timeline()
+        new_row = dict(name="Background", h=R_CARD, fill=BACKGROUND_KIND, block="video",
+                       grow=min(1.0, pop * 1.4),
+                       items=[(lerp(anchor, x_of_sec(0), pe), lerp(anchor, x_of_sec(12), pe),
+                               None, painter, 1.0)] if pop > 0 else [])
+        base_rows(tl, new_row, "below_screen")
+        tl.draw(d, sweep_playhead(pop, sweep), thumb, selected=new_row if pop >= 1 else None)
+        frames.append(finish(img))
+    return frames
+
+
 GIFS = {
     "track-video.gif": gif_video,
     "track-audio.gif": gif_audio,
@@ -832,6 +991,7 @@ GIFS = {
     "track-speed.gif": gif_speed,
     "track-cursor.gif": gif_cursor,
     "track-keyboard.gif": gif_keyboard,
+    "track-background.gif": gif_background,
 }
 
 
@@ -840,7 +1000,7 @@ def contact_sheet(all_frames, path, per=5):
     cell_w, cell_h, pad, label_h = OUT_W // 2, OUT_H // 2, 8, 18
     sheet = Image.new("RGB", (pad + per * (cell_w + pad), pad + len(names) * (cell_h + label_h + pad)), (60, 60, 64))
     d = ImageDraw.Draw(sheet)
-    f = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 12)
+    f = font(12 / SS, bold=True)   # 12px: the sheet is not supersampled, so undo the P() scale
     for r, name in enumerate(names):
         frames = all_frames[name]
         y = pad + r * (cell_h + label_h + pad)

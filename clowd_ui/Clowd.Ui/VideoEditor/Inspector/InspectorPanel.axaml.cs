@@ -45,6 +45,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             ddKeyFilter.ItemsSource = SelectedItemViewModel.KeystrokeFilterOptions;
             listCursorStyle.ItemsSource = SelectedItemViewModel.CursorStyleOptions;
             listCursorClick.ItemsSource = SelectedItemViewModel.ClickAnimationOptions;
+            listBackgroundStyle.ItemsSource = SelectedItemViewModel.BackgroundStyleOptions;
+            // the theme row's tiles and its pick are both driven from RefreshBackgroundThemes
+            // rather than bound; the user's own pick comes back through here. Guarded, because
+            // every programmatic swap raises this too and an unguarded write-back would store a
+            // theme the user never chose (and burn an undo entry) each time the style changed.
+            listBackgroundTheme.SelectionChanged += (_, _) =>
+            {
+                if (_pushingBackgroundTheme || _vm == null)
+                    return;
+                if (listBackgroundTheme.SelectedItem is SelectedItemViewModel.NamedOption pick)
+                    _vm.BackgroundTheme = pick;
+                else
+                    // a wallpaper is always drawn in some theme, so the row is never allowed to
+                    // sit there with nothing highlighted: take the view model's answer back
+                    RefreshBackgroundThemes();
+            };
 
             // enum reset-dot defaults live here, not in XAML: an attribute would be the string
             // "None", which neither equality nor the reset write-back can hand to an enum binding.
@@ -117,6 +133,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             RefreshColorWells();
             RefreshTransitionDefaults();
             RefreshTrackIcons();
+            RefreshBackgroundThemes();
         }
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -135,6 +152,10 @@ namespace Clowd.UI.VideoEditor.Inspector
                     break;
                 case nameof(SelectedItemViewModel.ShowKeyboardTrack):
                     RefreshTransitionDefaults();
+                    break;
+                case nameof(SelectedItemViewModel.BackgroundThemeOptions):
+                case nameof(SelectedItemViewModel.BackgroundTheme):
+                    RefreshBackgroundThemes();
                     break;
                 case nameof(SelectedItemViewModel.TrackHidden):
                 case nameof(SelectedItemViewModel.TrackMuted):
@@ -183,6 +204,47 @@ namespace Clowd.UI.VideoEditor.Inspector
             var keys = _vm?.ShowKeyboardTrack == true;
             dotEntryKind.DefaultValue = keys ? TransitionKind.SlideUp : TransitionKind.None;
             dotExitKind.DefaultValue = keys ? TransitionKind.Fade : TransitionKind.None;
+        }
+
+        /// <summary>
+        /// Whether the theme row's selection is being pushed from the view model rather than
+        /// picked by the user, so <c>SelectionChanged</c> knows not to write it back.
+        /// </summary>
+        private bool _pushingBackgroundTheme;
+
+        /// <summary>
+        /// The wallpaper theme tiles and which of them reads as picked, assigned together and in
+        /// that order.
+        ///
+        /// This is code rather than a pair of bindings because the two are not independent: each
+        /// style owns its own tile list (Monterey offers two, Gradient ten) and they share no
+        /// entries, so swapping the list drops the ListBox's selection every time the style
+        /// changes or the selection moves to a background on another style. A SelectedItem
+        /// binding cannot restore it: the view model's resolved theme is unchanged across the
+        /// swap (both items may store null and resolve to their style's default), so nothing
+        /// raises, and even the deliberate Options-then-Theme raise order in the BackgroundStyle
+        /// setter only re-publishes a value the binding already holds. The row would then sit
+        /// there with ten tiles and none of them highlighted while the composer draws one.
+        ///
+        /// Assigning both here makes the order unconditional, and the reference check keeps a
+        /// same-style selection move from rebuilding containers (which would restart the animated
+        /// tiles' previews for no reason).
+        /// </summary>
+        private void RefreshBackgroundThemes()
+        {
+            _pushingBackgroundTheme = true;
+            try
+            {
+                var options = _vm?.BackgroundThemeOptions;
+                if (!ReferenceEquals(listBackgroundTheme.ItemsSource, options))
+                    listBackgroundTheme.ItemsSource = options;
+
+                listBackgroundTheme.SelectedItem = _vm?.BackgroundTheme;
+            }
+            finally
+            {
+                _pushingBackgroundTheme = false;
+            }
         }
 
         /// <summary>The hide/mute buttons flip their glyphs with the state (eye/eye-off,
