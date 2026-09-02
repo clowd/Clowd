@@ -77,6 +77,11 @@ objc2-core-foundation = { version = "0.3", features = [
     "CFCGTypes",
     "CFString",
     "CFUUID",
+    # Window capture (platform/macos.rs): CGWindowListCopyWindowInfo hands back
+    # a CFArray of CFDictionary window descriptions whose values are CFNumbers.
+    "CFArray",
+    "CFDictionary",
+    "CFNumber",
     # Input hook (input_hook.rs): the event tap's CFMachPort + run-loop plumbing;
     # CFDate gates CFRunLoopRunInMode (CFTimeInterval lives in CFDate.h).
     "CFMachPort",
@@ -93,6 +98,9 @@ objc2-core-graphics = { version = "0.3", features = [
     # CGCursorIsVisible (cursor sampling): deprecated since 10.9 but still the
     # only public answer; the binding also needs `libc` (boolean_t return).
     "CGRemoteOperation",
+    # CGWindowListCopyWindowInfo + the kCGWindow* description keys: the
+    # --window-capture enumerator (platform/macos.rs).
+    "CGWindow",
     "libc",
 ] }
 objc2-app-kit = { version = "0.3", features = [

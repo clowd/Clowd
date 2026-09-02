@@ -23,7 +23,7 @@ pub struct Cli {
         "output", "region", "monitor", "fps", "crf", "max_width", "max_height",
         "hw_accel", "low_cpu", "no_cursor", "tracker", "tracker_color", "pause",
         "speaker", "microphone", "speaker_volume_compensation", "settings",
-        "webcam", "multi_track", "input_capture",
+        "webcam", "multi_track", "input_capture", "window_capture",
     ])]
     pub list_cameras: bool,
 
@@ -48,6 +48,13 @@ pub struct Cli {
     /// Session-fixed, like --output; the parent directory must exist.
     #[arg(long)]
     pub input_capture: Option<PathBuf>,
+
+    /// Record the live geometry of every on-screen window intersecting the
+    /// capture region to a JSONL sidecar at this path, in coordinates relative
+    /// to that region. Session-fixed, like --input-capture; the parent
+    /// directory must exist.
+    #[arg(long)]
+    pub window_capture: Option<PathBuf>,
 
     /// Capture region "X,Y,W,H" in the platform capture coordinate space
     /// (Windows: physical px, virtual desktop; macOS: CG points).
@@ -160,23 +167,35 @@ impl Cli {
             _ => {}
         }
 
-        // Same parent-dir rule as --output: fail fast (exit 2) rather than
-        // discovering an unwritable sidecar path mid-pipeline.
-        if let Some(ref path) = self.input_capture {
+        // Same parent-dir rule as --output for both JSONL sidecars: fail fast
+        // (exit 2) rather than discovering an unwritable sidecar path
+        // mid-pipeline.
+        for (flag, path) in [
+            ("--input-capture", self.input_capture.as_ref()),
+            ("--window-capture", self.window_capture.as_ref()),
+        ] {
+            let Some(path) = path else { continue };
             match path.parent() {
                 Some(p) if !p.as_os_str().is_empty() && !p.is_dir() => {
                     return Err(format!(
-                        "--input-capture parent directory does not exist: '{}'",
+                        "{flag} parent directory does not exist: '{}'",
                         p.display()
                     ));
                 }
                 None => {
-                    return Err(format!(
-                        "--input-capture is not a file path: '{}'",
-                        path.display()
-                    ));
+                    return Err(format!("{flag} is not a file path: '{}'", path.display()));
                 }
                 _ => {}
+            }
+        }
+
+        // Two sidecars writing the same file would interleave two different
+        // wire formats into one stream.
+        if let (Some(a), Some(b)) = (self.input_capture.as_ref(), self.window_capture.as_ref()) {
+            if a == b {
+                return Err(
+                    "--input-capture and --window-capture must be different files".to_string(),
+                );
             }
         }
 
@@ -305,6 +324,65 @@ mod tests {
         // The jsonl sidecar itself does not require --multi-track.
         let cli = parse(&["--output", "a.mp4", "--input-capture", "input.jsonl"]).unwrap();
         assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn window_capture_mirrors_input_capture() {
+        // Same parent-dir rule...
+        let cli = parse(&[
+            "--output",
+            "a.mp4",
+            "--window-capture",
+            "Z:/definitely/not/a/real/dir/windows.jsonl",
+        ])
+        .unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--window-capture"), "{err}");
+
+        // ...same session-fixed placement: coexists with --settings and
+        // --multi-track, rejected by --list-cameras.
+        assert!(parse(&[
+            "--output",
+            "a.mp4",
+            "--settings",
+            "s.json",
+            "--multi-track",
+            "--window-capture",
+            "windows.jsonl",
+        ])
+        .is_ok());
+        assert!(parse(&["--list-cameras", "--window-capture", "windows.jsonl"]).is_err());
+
+        // Both sidecars together is the expected pairing.
+        let cli = parse(&[
+            "--output",
+            "a.mp4",
+            "--input-capture",
+            "input.jsonl",
+            "--window-capture",
+            "windows.jsonl",
+        ])
+        .unwrap();
+        assert!(cli.validate().is_ok());
+        assert_eq!(
+            cli.window_capture.as_deref(),
+            Some(std::path::Path::new("windows.jsonl"))
+        );
+    }
+
+    #[test]
+    fn the_two_sidecars_must_not_share_a_file() {
+        let cli = parse(&[
+            "--output",
+            "a.mp4",
+            "--input-capture",
+            "both.jsonl",
+            "--window-capture",
+            "both.jsonl",
+        ])
+        .unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("different files"), "{err}");
     }
 
     #[test]

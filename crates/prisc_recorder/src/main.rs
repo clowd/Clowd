@@ -13,6 +13,7 @@ mod status;
 mod tracker;
 mod tracks;
 mod webcam;
+mod window_capture;
 
 use clap::Parser;
 

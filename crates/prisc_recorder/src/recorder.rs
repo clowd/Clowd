@@ -36,6 +36,7 @@ use crate::status::{self, LevelPeaks, RecordingClock};
 use crate::tracker::{self, MouseTracker};
 use crate::tracks::{self, AudioTrack, MAX_AUDIO_TRACKS};
 use crate::webcam::{self, Webcam};
+use crate::window_capture::WindowCapture;
 
 /// Overall deadline waiting for the OBS stop signal after `quit` (§1.4).
 const STOP_DEADLINE: Duration = Duration::from_secs(30);
@@ -197,6 +198,23 @@ fn apply_speaker_compensation(sources: &[ObsSource], devices: &[String]) {
 }
 
 pub struct Recorder {
+    // ---- Sidecars first: DECLARATION ORDER IS DROP ORDER. ----
+    // Both hold a raw `*mut obs_output_t` that background threads (the
+    // input-capture writer, the window-capture poller) dereference for the
+    // pause gate. Declared below `output` they would be dropped *after* the
+    // `ObsOutput` that owns that pointer, so a panic unwind through the run
+    // loop could leave a thread calling `obs_output_paused` on freed memory —
+    // their Drops must run, and stop those threads, while the output is still
+    // alive. Nothing here is touched by construction order (the struct literal
+    // is by name), so this placement costs nothing.
+    /// `--input-capture`: JSONL sidecar of cursor/mouse/key state (hooks +
+    /// tick sampler + writer thread). Session-fixed; `configure` never touches
+    /// it. Every exit path must `close()` it before `emit_stopped_recording`.
+    input_capture: Option<InputCapture>,
+    /// `--window-capture`: JSONL sidecar of per-window geometry relative to
+    /// the capture region (tick clock + poll thread). Session-fixed like
+    /// `input_capture`, and closed on the same exit paths.
+    window_capture: Option<WindowCapture>,
     output: ObsOutput,
     speakers: Vec<ObsSource>,
     /// Device ids parallel to `speakers`, for volume compensation.
@@ -232,10 +250,6 @@ pub struct Recorder {
     /// (the output type cannot change once created), so `configure` never
     /// touches it.
     multi_track: bool,
-    /// `--input-capture`: JSONL sidecar of cursor/mouse/key state (hooks +
-    /// tick sampler + writer thread). Session-fixed; `configure` never touches
-    /// it. Every exit path must `close()` it before `emit_stopped_recording`.
-    input_capture: Option<InputCapture>,
     /// One encoder per audio track, in output track order; each reads the
     /// libobs mixer of its own index. Single-track mode always has exactly
     /// one (mixer 0).
@@ -578,6 +592,25 @@ impl Recorder {
             None => None,
         };
 
+        // Window-capture sidecar (--window-capture): same construction rules
+        // as the input-capture one (needs the output pointer for the pause
+        // gate, no video-reset interaction), writing its own file.
+        let window_capture = match cli.window_capture {
+            Some(ref path) => {
+                match WindowCapture::new(
+                    path,
+                    capture_region,
+                    plan.canvas_scale,
+                    plan.canvas,
+                    output.as_ptr(),
+                ) {
+                    Ok(wc) => Some(wc),
+                    Err(e) => fail(format_args!("Failed to start window capture: {e}")),
+                }
+            }
+            None => None,
+        };
+
         // 10. Signals → command-loop injection.
         let (cmd_tx, cmd_rx) = mpsc::channel::<Command>();
         let start_tx = cmd_tx.clone();
@@ -613,6 +646,7 @@ impl Recorder {
             webcam_from_cli,
             multi_track,
             input_capture,
+            window_capture,
             audio_encoders,
             audio_tracks,
             _sig_start: sig_start,
@@ -707,6 +741,9 @@ impl Recorder {
                         if let Some(ref ic) = self.input_capture {
                             ic.on_output_started(self.settings.fps);
                         }
+                        if let Some(ref wc) = self.window_capture {
+                            wc.on_output_started(self.settings.fps);
+                        }
                         let mut started_msg = serde_json::json!({
                             "type": "started_recording",
                             "tracks": self.tracks_json(),
@@ -714,6 +751,10 @@ impl Recorder {
                         if let Some(ref ic) = self.input_capture {
                             started_msg["input_capture"] =
                                 serde_json::json!(ic.path().to_string_lossy());
+                        }
+                        if let Some(ref wc) = self.window_capture {
+                            started_msg["window_capture"] =
+                                serde_json::json!(wc.path().to_string_lossy());
                         }
                         status::emit_json(started_msg);
                         let c = Arc::new(RecordingClock::new());
@@ -773,6 +814,9 @@ impl Recorder {
                         if let Some(ref ic) = self.input_capture {
                             ic.close();
                         }
+                        if let Some(ref wc) = self.window_capture {
+                            wc.close();
+                        }
                         let mut stopped_msg = serde_json::json!({
                             "type": "stopped_recording",
                             "code": 0,
@@ -782,6 +826,10 @@ impl Recorder {
                         if let Some(ref ic) = self.input_capture {
                             stopped_msg["input_capture"] =
                                 serde_json::json!(ic.path().to_string_lossy());
+                        }
+                        if let Some(ref wc) = self.window_capture {
+                            stopped_msg["window_capture"] =
+                                serde_json::json!(wc.path().to_string_lossy());
                         }
                         status::emit_json(stopped_msg);
                         platform::exit_process(0);
@@ -1301,17 +1349,21 @@ impl Recorder {
             if let Some(handle) = levels_handle.take() {
                 let _ = handle.join();
             }
-            // Exit paths skip Drop: close the sidecar before the final line.
+            // Exit paths skip Drop: close the sidecars before the final line.
             if let Some(ref ic) = self.input_capture {
                 ic.close();
             }
-            // No tracks object: nothing was ever recorded. The sidecar path
-            // still reports (the file exists — the parent may want it gone).
+            if let Some(ref wc) = self.window_capture {
+                wc.close();
+            }
+            // No tracks object: nothing was ever recorded. The sidecar paths
+            // still report (the files exist — the parent may want them gone).
             status::emit_stopped_recording(
                 -4,
                 self.output.get_last_error(),
                 None,
                 self.input_capture.as_ref().map(|ic| ic.path()),
+                self.window_capture.as_ref().map(|wc| wc.path()),
             );
             platform::exit_process(1);
         }
@@ -1356,6 +1408,9 @@ impl Recorder {
         if let Some(ref ic) = self.input_capture {
             ic.close();
         }
+        if let Some(ref wc) = self.window_capture {
+            wc.close();
+        }
         let error = if code == 0 {
             None
         } else {
@@ -1366,6 +1421,7 @@ impl Recorder {
             error,
             Some(self.tracks_json()),
             self.input_capture.as_ref().map(|ic| ic.path()),
+            self.window_capture.as_ref().map(|wc| wc.path()),
         );
         platform::exit_process(if code == 0 { 0 } else { 1 })
     }
