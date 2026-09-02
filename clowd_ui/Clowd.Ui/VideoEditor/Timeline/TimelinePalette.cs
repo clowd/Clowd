@@ -156,6 +156,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         private IBrush _audioFill;
         private IBrush _textFill;
         private IBrush _imageFill;
+        private IBrush _backgroundFill;
         private IBrush _speedFill;
         private IBrush _zoomFill;
         private IBrush _cursorFill;
@@ -169,6 +170,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Audio => _audioFill,
             TimelineRowKind.Text => _textFill,
             TimelineRowKind.Image => _imageFill,
+            TimelineRowKind.Background => _backgroundFill,
             TimelineRowKind.Speed => _speedFill,
             TimelineRowKind.Zoom => _zoomFill,
             TimelineRowKind.Cursor => _cursorFill,
@@ -337,6 +339,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             var cursor = dark ? Color.FromRgb(158, 74, 158) : Color.FromRgb(182, 92, 182);
             var keyboard = dark ? Color.FromRgb(132, 144, 56) : Color.FromRgb(152, 166, 70);
 
+            // the backdrop row. Green is the one clear gap left in the video block (blue accent,
+            // violet text, amber image, teal zoom, orchid cursor, olive keys), and the only hue it
+            // shares a family with is the audio rows', which live in their own block below the
+            // gutter and can never sit next to it.
+            var background = dark ? Color.FromRgb(64, 142, 76) : Color.FromRgb(78, 162, 92);
+
             var playheadColor = dark ? Color.FromRgb(240, 82, 82) : Color.FromRgb(212, 48, 48);
 
             var surfaceColor = dark ? Color.FromRgb(30, 30, 32) : Color.FromRgb(232, 233, 236);
@@ -377,6 +385,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 _audioFill = new SolidColorBrush(audio, dark ? 0.85 : 0.9),
                 _textFill = new SolidColorBrush(text, dark ? 0.85 : 0.9),
                 _imageFill = new SolidColorBrush(image, dark ? 0.85 : 0.9),
+                _backgroundFill = new SolidColorBrush(background, dark ? 0.85 : 0.9),
                 _speedFill = new SolidColorBrush(speed, dark ? 0.85 : 0.9),
                 _zoomFill = new SolidColorBrush(zoom, dark ? 0.85 : 0.9),
                 _cursorFill = new SolidColorBrush(cursor, dark ? 0.85 : 0.9),

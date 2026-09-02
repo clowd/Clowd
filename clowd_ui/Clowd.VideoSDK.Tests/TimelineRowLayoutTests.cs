@@ -78,6 +78,48 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(TimelineRowKind.Video, TimelineRowLayout.KindOf(empty, null));
         }
 
+        /// <summary>A wallpaper row is a video track like a text or image row, classified by its
+        /// content alone; the kind is what gives it the card height rather than the filmstrip's.</summary>
+        [Fact]
+        public void KindOf_classifies_a_background_row_and_gives_it_a_card_height()
+        {
+            var track = NewTrack(TrackKind.Video, 0, "Background");
+            var items = new[] { NewItem(track, new BackgroundContent()) };
+
+            Assert.Equal(TimelineRowKind.Background, TimelineRowLayout.KindOf(track, items));
+            Assert.Equal(26d, TimelineRowLayout.HeightOf(TimelineRowKind.Background));
+            Assert.Equal(TimelineRowBlock.Video, TimelineRowLayout.BlockOf(TimelineRowKind.Background));
+            Assert.False(TimelineRowLayout.IsInputOverlay(TimelineRowKind.Background));
+        }
+
+        /// <summary>A background added behind everything is the BOTTOM row of the video block: the
+        /// block is drawn highest layer first, and Order 0 is the backmost layer.</summary>
+        [Fact]
+        public void Build_puts_a_backmost_background_at_the_bottom_of_the_video_block()
+        {
+            var background = NewTrack(TrackKind.Video, 0, "Background");
+            var screen = NewTrack(TrackKind.Video, 1, "Screen");
+            var mic = NewTrack(TrackKind.Audio, 2, "Microphone");
+            var project = new Project
+            {
+                Output = new OutputSettings { WidthPx = 1920, HeightPx = 1080, FpsNum = 30, FpsDen = 1, SampleRate = 48000 },
+                Tracks = new List<Track> { background, screen, mic },
+            };
+            project.Items = new List<Item>
+            {
+                NewItem(background, new BackgroundContent()),
+                NewItem(screen, Media()),
+                NewItem(mic, Media()),
+            };
+
+            var rows = TimelineRowLayout.Build(project);
+
+            Assert.Equal(new[] { screen.Id, background.Id, mic.Id }, rows.Select(r => r.TrackId).ToArray());
+            Assert.Equal(new[] { TimelineRowKind.Video, TimelineRowKind.Background, TimelineRowKind.Audio },
+                rows.Select(r => r.Kind).ToArray());
+            Assert.Equal(new[] { 56d, 26d, 36d }, rows.Select(r => r.Height).ToArray());
+        }
+
         [Fact]
         public void KindOf_audio_track_wins_over_content()
         {

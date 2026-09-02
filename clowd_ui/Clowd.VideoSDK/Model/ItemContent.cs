@@ -7,7 +7,7 @@ namespace Clowd.VideoSDK.Model;
 /// <summary>
 /// What fills an <see cref="Item"/>'s span. Polymorphic on a <c>$type</c> discriminator
 /// (<c>media</c> / <c>text</c> / <c>image</c> / <c>solid</c> / <c>speed</c> / <c>zoom</c> /
-/// <c>cursor</c> / <c>keyboard</c>) via System.Text.Json's built-in
+/// <c>cursor</c> / <c>keyboard</c> / <c>background</c>) via System.Text.Json's built-in
 /// polymorphism, which the source-generated <see cref="ProjectJsonContext"/> supports. The
 /// discriminator strings are wire contract — renaming a class is free, renaming a discriminator
 /// breaks every saved project.
@@ -21,6 +21,7 @@ namespace Clowd.VideoSDK.Model;
 [JsonDerivedType(typeof(ZoomContent), "zoom")]
 [JsonDerivedType(typeof(CursorContent), "cursor")]
 [JsonDerivedType(typeof(KeyboardContent), "keyboard")]
+[JsonDerivedType(typeof(BackgroundContent), "background")]
 public abstract class ItemContent
 {
     /// <summary>Deep copy, used by <see cref="TimelineOps.Split"/> so the two halves never share
@@ -103,6 +104,61 @@ public sealed class SolidContent : ItemContent
     public string Color { get; set; }
 
     public override ItemContent Clone() => new SolidContent { Color = Color };
+}
+
+/// <summary>
+/// A wallpaper drawn from the SDK's embedded library (see <c>BackgroundCatalog</c>): a
+/// <see cref="Style"/> — one piece of artwork, or one family of them — and the <see cref="Theme"/>
+/// it is drawn in. Picture content like an image, placed by the item's <see cref="Item.Transform"/>
+/// exactly as a <see cref="SolidContent"/> is: its natural size is the canvas, so the default
+/// transform fills the frame at every output aspect and the art cover-fits (<c>xMidYMid slice</c>)
+/// inside that box. Three of the styles are animated loops whose phase is a pure function of the
+/// project time the composer is asked for, so the preview and the export show the same frame at
+/// the same instant.
+/// </summary>
+public sealed class BackgroundContent : ItemContent
+{
+    /// <summary>The style ids the editor offers, in menu order — the wire values stored in
+    /// <see cref="Style"/>, so they are permanent. Big Sur first because it is the default; the
+    /// three animated styles last so the picker groups them. Kept as a literal here rather than
+    /// read off the catalog because the model never references the composition layer; a test
+    /// asserts the two lists agree so they cannot drift. An unrecognized value draws the default
+    /// style rather than nothing.</summary>
+    public static readonly IReadOnlyList<string> Styles = new[]
+    {
+        "big-sur", "monterey", "gradient", "explode", "layered-waves", "stacked-waves",
+        "layered-steps", "moving-blob", "moving-corners", "breathing-field",
+    };
+
+    /// <summary>The range <see cref="AnimationSpeed"/> is validated to, and what the editor's
+    /// spinner offers: a quarter to quadruple is as far as a wallpaper loop stays a wallpaper
+    /// rather than a strobe or a still.</summary>
+    public const double MinAnimationSpeed = 0.25;
+
+    public const double MaxAnimationSpeed = 4.0;
+
+    /// <summary>One of <see cref="Styles"/>.</summary>
+    public string Style { get; set; } = "big-sur";
+
+    /// <summary>Which of the style's themes to draw (<c>BackgroundCatalog</c>), or null for its
+    /// default — which is the only sensible value for a style that offers none (Explode), and is
+    /// why no project written before a style gained themes needs migrating. A value the style does
+    /// not offer falls back to its default rather than drawing nothing; the same semantics as
+    /// <see cref="CursorContent.Variant"/>.</summary>
+    public string Theme { get; set; }
+
+    /// <summary>Playback-rate multiplier on an animated style's loop, validated to
+    /// <see cref="MinAnimationSpeed"/>..<see cref="MaxAnimationSpeed"/>: 2 runs a 60 s loop in
+    /// 30 s of project time. Composes with (does not replace) whatever a speed effect does to the
+    /// project clock. Ignored by the static styles.</summary>
+    public double AnimationSpeed { get; set; } = 1.0;
+
+    public override ItemContent Clone() => new BackgroundContent
+    {
+        Style = Style,
+        Theme = Theme,
+        AnimationSpeed = AnimationSpeed,
+    };
 }
 
 /// <summary>A playback-speed effect: while the item is active the whole output plays at

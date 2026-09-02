@@ -12,6 +12,7 @@ clowd_ui/Clowd.Ui/Assets/credits.json    text eol=lf
 *.ico   binary
 *.cur   binary
 *.png   binary
+*.webp  binary
 *.gif   binary
 *.ttf   binary
 *.onnx  binary

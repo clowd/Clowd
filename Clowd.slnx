@@ -9,4 +9,5 @@
   <Project Path="clowd_ui/Clowd.VideoSDK/Clowd.VideoSDK.csproj" />
   <Project Path="clowd_ui/Clowd.VideoSDK.Tests/Clowd.VideoSDK.Tests.csproj" />
   <Project Path="clowd_ui/CursorGenerator/CursorGenerator.csproj" />
+  <Project Path="tools/background-tiles/BackgroundTiles.csproj" />
 </Solution>

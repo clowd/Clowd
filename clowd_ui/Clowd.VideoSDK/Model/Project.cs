@@ -79,6 +79,23 @@ public sealed class Project
     /// sort by their track's position, then start time, then Id. Call after mutating the model so
     /// serialization and iteration order are deterministic. Normalization never rejects anything —
     /// that is <see cref="Validate"/>'s job.
+    ///
+    /// One value is canonicalized too, and it is the only content-specific rule in here, so do not
+    /// "tidy" it back out: a <see cref="BackgroundContent"/> item gets the explicit height
+    /// (<see cref="Transform.ScaleY"/>) it would otherwise derive, copied from <see cref="Transform.Scale"/>.
+    /// That is exactly the number the composer already draws for a missing one
+    /// (FrameComposer.DrawBackground boxes the height at <c>(ScaleY ?? Scale) * canvasHeight</c>),
+    /// so the fill changes no pixel; what it changes is the editor's model of the item. A wallpaper
+    /// is permanently free-sized (it has no ratio of its own), and the editor spells that state as
+    /// "ScaleY set". <c>EditorSession.AddBackground</c> seeds it for a new item; a project saved
+    /// before that seed existed carries a null, and with a null every write of Scale alone (the
+    /// inspector's Width row, the gizmo's side handles) silently moved the drawn height along with
+    /// the width while the Height row went on showing the old number. Filling it here, where the
+    /// session normalizes a project before taking its first undo snapshot, makes a legacy item
+    /// identical to a fresh one everywhere, instead of behaving alike only where a special case
+    /// remembered to cover it. Idempotent: a height already present, whatever its value, is left
+    /// alone, and nothing in this method nulls one, so the other callers (timeline ops, the
+    /// recording bootstrap) can run it any number of times.
     /// </summary>
     public void Normalize()
     {
@@ -89,6 +106,17 @@ public sealed class Project
 
         foreach (var source in Sources)
             source.Streams ??= new List<SourceStream>();
+
+        foreach (var item in Items)
+        {
+            if (item.Content is BackgroundContent)
+            {
+                // a null transform is the default placement (centered, Scale 1); materializing it
+                // draws the same frame and gives the height somewhere to live
+                var transform = item.Transform ??= new Transform();
+                transform.ScaleY ??= transform.Scale;
+            }
+        }
 
         Tracks.Sort((a, b) =>
         {
@@ -228,6 +256,19 @@ public sealed class Project
                         errors.Add($"Item {item.Id} has a keyboard linger {keyboard.LingerMs}ms outside 0..10000.");
                     if (keyboard.PauseBreakMs < 0 || keyboard.PauseBreakMs > 10000)
                         errors.Add($"Item {item.Id} has a keyboard pause break {keyboard.PauseBreakMs}ms outside 0..10000.");
+                    break;
+
+                case BackgroundContent background:
+                    // picture content like the default branch below, so the audio-row rule is
+                    // restated here. Style/Theme are deliberately not checked: an id this build
+                    // does not know (a project written by a newer one, a retired theme) resolves
+                    // to the default when drawn, the same way CursorContent's do, so the project
+                    // still opens instead of failing validation over a wallpaper.
+                    if (track is { Kind: TrackKind.Audio })
+                        errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on audio track {track.Id}.");
+                    // negated comparison so NaN fails the check rather than sailing through.
+                    if (!(background.AnimationSpeed >= BackgroundContent.MinAnimationSpeed && background.AnimationSpeed <= BackgroundContent.MaxAnimationSpeed))
+                        errors.Add($"Item {item.Id} has a background animation speed {background.AnimationSpeed} outside {BackgroundContent.MinAnimationSpeed}..{BackgroundContent.MaxAnimationSpeed}.");
                     break;
 
                 default:

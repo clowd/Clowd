@@ -490,6 +490,25 @@
                     </ToolTip.Tip>
                 </controls:ToolButton>
 
+                <controls:ToolButton
+                    x:Name="btnAddBackground"
+                    Padding="6"
+                    Command="{Binding CommandAddBackground}"
+                    IconPath="{StaticResource IconBackground}"
+                    ToolTip.HorizontalOffset="6"
+                    ToolTip.Placement="Right"
+                    ToolTip.ShowOnDisabled="True">
+                    <ToolTip.Tip>
+                        <ToolTip Theme="{StaticResource TrackTipToolTipTheme}">
+                            <ve:TrackTip
+                                x:Name="tipAddBackground"
+                                DemoName="background"
+                                Description="Lays a wallpaper on a new track behind everything else, so a shrunken recording sits on a backdrop instead of black. Pick the style in the properties panel, then move, resize and round it off like any other picture."
+                                Header="Add Background Track" />
+                        </ToolTip>
+                    </ToolTip.Tip>
+                </controls:ToolButton>
+
                 <!--  undo/redo dock to the bottom of the strip, below the tool buttons  -->
                 <controls:ToolButton
                     Padding="6"

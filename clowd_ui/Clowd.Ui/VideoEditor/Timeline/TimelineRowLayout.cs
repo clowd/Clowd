@@ -20,6 +20,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         Zoom,
         Cursor,
         Keyboard,
+        Background,
     }
 
     /// <summary>The three reorder blocks the rows stack in; see <see cref="TimelineRowLayout.BlockOf"/>.</summary>
@@ -69,6 +70,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Image rows show an icon and the file name.</summary>
         public const double ImageRowHeight = 26;
 
+        /// <summary>Background rows show an icon and the wallpaper's name. The artwork itself is
+        /// on the canvas, not in the row, so there is nothing a taller row could draw.</summary>
+        public const double BackgroundRowHeight = 26;
+
         /// <summary>Effect rows (speed and zoom) show a glyph and a factor label — a card row,
         /// nothing to draw taller.</summary>
         public const double EffectRowHeight = 26;
@@ -91,6 +96,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             TimelineRowKind.Audio => AudioRowHeight,
             TimelineRowKind.Text => TextRowHeight,
             TimelineRowKind.Image => ImageRowHeight,
+            TimelineRowKind.Background => BackgroundRowHeight,
             TimelineRowKind.Speed => EffectRowHeight,
             TimelineRowKind.Zoom => EffectRowHeight,
             TimelineRowKind.Cursor => InputOverlayRowHeight,
@@ -99,8 +105,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         };
 
         /// <summary>Which of the three reorder blocks a row kind lays out in: the pinned speed
-        /// row, the video block (everything that composites, the zoom and input-overlay rows
-        /// included), or the audio block. <see cref="Build"/> stacks the blocks in that order with
+        /// row, the video block (everything that composites, the zoom, background and
+        /// input-overlay rows included), or the audio block. <see cref="Build"/> stacks the blocks in that order with
         /// a <see cref="BlockGap"/> between them, and <c>TimelineReorder</c> never lets a drag
         /// cross from one into another.</summary>
         public static TimelineRowBlock BlockOf(TimelineRowKind kind) => kind switch
@@ -119,7 +125,8 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>
         /// Classifies a row: audio tracks are audio; an effect track is a speed or zoom row by its
         /// earliest item's content; a video track takes its kind from its earliest item's content
-        /// (cursor overlay, keyboard overlay, text card, still image, otherwise media).
+        /// (cursor overlay, keyboard overlay, text card, still image, wallpaper, otherwise
+        /// media).
         /// Order-independent — the earliest item wins
         /// however <paramref name="trackItems"/> arrives — and an empty track falls back to
         /// <see cref="TimelineRowKind.Video"/>, which is the row a media clip dropped onto it would
@@ -145,6 +152,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 KeyboardContent => TimelineRowKind.Keyboard,
                 TextContent => TimelineRowKind.Text,
                 ImageContent => TimelineRowKind.Image,
+                BackgroundContent => TimelineRowKind.Background,
                 _ => TimelineRowKind.Video,
             };
         }

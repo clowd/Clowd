@@ -179,6 +179,12 @@ namespace Clowd.VideoSDK.Composition
                     DrawSolid(target, solid, transform, fx, opacity, canvasWidth, canvasHeight);
                     break;
 
+                case BackgroundContent background:
+                    // the same project-time clock the cursor spinner reads; see DrawBackground
+                    DrawBackground(target, item, background, timeTicks, transform, fx, opacity,
+                        canvasWidth, canvasHeight);
+                    break;
+
                 case TextContent text:
                     DrawText(target, text, transform, fx, opacity, canvasWidth, canvasHeight, textScale);
                     break;
@@ -1031,6 +1037,93 @@ namespace Clowd.VideoSDK.Composition
             finally
             {
                 target.RestoreToCount(save);
+            }
+        }
+
+        // --------------------------------------------------------------------------- background
+
+        /// <summary>
+        /// A wallpaper from the embedded library, boxed like a solid and decorated like a
+        /// picture. The box follows <see cref="DrawSolid"/>'s rule (Scale is a fraction of the
+        /// canvas width, ScaleY or Scale a fraction of its height) rather than a picture's
+        /// intrinsic aspect: a wallpaper's natural size is the frame itself, so the default
+        /// transform covers every output aspect and never goes stale when the output resolution
+        /// changes. Inside the box the art is cover-fitted and clipped by
+        /// <see cref="BackgroundRenderer.DrawScene"/> (<c>xMidYMid slice</c>, the only
+        /// preserveAspectRatio the library uses). <see cref="Transform.Aspect"/> and
+        /// <see cref="Transform.Crop"/> are ignored as they are for solids; rotation, masks and
+        /// the wipe band come from <see cref="ApplyClips"/>; the surround runs through the same
+        /// two-pass loop as <see cref="DrawPicture"/>, so a shrunk background casts a shadow
+        /// exactly like an image. <see cref="Item.Effect"/> (blur, matting) does not apply,
+        /// again as for solids.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// <b>Time.</b> The loop phase is <see cref="BackgroundRenderer.PhaseOf(BackgroundStyle, long, double)"/>
+        /// of the very <paramref name="timeTicks"/> this method receives: project-timeline
+        /// 100ns ticks, global (not item-local), already un-warped from speed effects. Both
+        /// consumers hand <see cref="Compose"/> exactly that value (the render maps its frame
+        /// grid through <c>warp.ToProject</c>, the preview reads the player's project-time
+        /// position; each clamps to <c>duration - 1</c>), and the phase is an integer modulo of
+        /// it, so a scrub to any tick shows the export's frame for that tick. Global rather than
+        /// <c>timeTicks - TimelineStartTicks</c> so splitting or start-trimming the item never
+        /// jumps the animation, the policy <see cref="DrawCursorItem"/> already uses for its
+        /// spinner frames.
+        /// </para>
+        /// <para>
+        /// <b>Cost.</b> Everything per (style, theme) is parsed once and cached process-wide by
+        /// the renderer: a still replays one <see cref="SKPicture"/> recorded in viewBox space,
+        /// a loop walks a few pre-parsed shapes with the phase, Big Sur draws one raster image.
+        /// The per-frame work here is a rect placement and a canvas transform.
+        /// </para>
+        /// </remarks>
+        private static void DrawBackground(SKCanvas target, Item item, BackgroundContent background,
+            long timeTicks, Transform transform, ItemEffects fx, double opacity,
+            int canvasWidth, int canvasHeight)
+        {
+            // unknown or retired ids resolve to the defaults, never to nothing (the
+            // CursorContent rule: a project from a newer build still opens and draws)
+            var style = BackgroundCatalog.Find(BackgroundCatalog.ResolveStyle(background.Style));
+            var scene = BackgroundRenderer.GetScene(style.Id,
+                BackgroundCatalog.ResolveTheme(style.Id, background.Theme));
+            if (scene == null)
+                return;
+
+            double destW = transform.Scale * canvasWidth;
+            double destH = (transform.ScaleY ?? transform.Scale) * canvasHeight;
+            var rect = PlaceRect(transform, fx, destW, destH, canvasWidth, canvasHeight);
+            if (rect.Width <= 0 || rect.Height <= 0)
+                return;
+
+            double phase = BackgroundRenderer.PhaseOf(style, timeTicks, background.AnimationSpeed);
+
+            using var decoration = SurroundMath.CreateDecoration(
+                item.Surround, SurroundMath.ReferenceExtent(rect));
+
+            // pass 0 paints the decoration (skipped when there is none), pass 1 the wallpaper;
+            // the same loop as DrawPicture, for the same reasons (see its comments)
+            for (int pass = decoration != null ? 0 : 1; pass <= 1; pass++)
+            {
+                int save = target.Save();
+                try
+                {
+                    if (pass == 0)
+                    {
+                        using var layer = new SKPaint
+                        {
+                            ImageFilter = decoration,
+                            Color = SKColors.White.WithAlpha(AlphaByte(opacity)),
+                        };
+                        target.SaveLayer(layer);
+                    }
+
+                    ApplyClips(target, transform, fx, rect);
+                    BackgroundRenderer.DrawScene(target, rect, scene, phase, pass == 0 ? 1 : opacity);
+                }
+                finally
+                {
+                    target.RestoreToCount(save);
+                }
             }
         }
 

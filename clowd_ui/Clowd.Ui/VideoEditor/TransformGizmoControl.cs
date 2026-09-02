@@ -98,6 +98,7 @@ namespace Clowd.UI.VideoEditor
         private double _rotation;
         private bool _cropMode;
         private bool _freeResize;
+        private bool _freeByContent; // a wallpaper: free-sized whatever _freeResize says
         private bool _widthOnly;
 
         /// <summary>Smallest fraction of the source picture a crop drag can leave on either axis —
@@ -207,6 +208,14 @@ namespace Clowd.UI.VideoEditor
         /// appear and the corners size each axis on its own; any other tile keeps four corner
         /// handles that preserve the item's current box ratio (the content's own, or whatever an
         /// explicit height has made it). The inspector owns this flag; the gizmo only reads it.
+        ///
+        /// A wallpaper does not go through this flag at all. It is on the Unlocked tile for life
+        /// (the inspector reads a <see cref="BackgroundContent"/> as Unlocked without offering the
+        /// tile, see <c>SelectedItemViewModel.SyncAspect</c>), and the gizmo reads that off the
+        /// item in <see cref="SetTarget"/> through <see cref="GizmoMath.IsFreeByContent"/>. The
+        /// window forwards this flag on a PropertyChanged that fires only when the tile changes,
+        /// so a gizmo that waited on it could show a wallpaper four locked corners, or eight
+        /// handles whose corners still held a ratio, depending on what was selected before.
         /// </summary>
         public bool FreeResize
         {
@@ -240,6 +249,7 @@ namespace Clowd.UI.VideoEditor
                 _scaleDenominatorPx = placed.ScaleDenominatorPx;
                 _scaleDenominatorYPx = placed.ScaleDenominatorYPx;
                 _widthOnly = current?.Content is KeyboardContent;
+                _freeByContent = GizmoMath.IsFreeByContent(current);
                 // a bottom-anchored block is drawn upright whatever Transform.Rotation says
                 // (see FrameComposer.DrawKeyboard), so the chrome must not render-rotate away
                 // from it — and with _rotation pinned to 0, the side-handle drag stays on the
@@ -251,6 +261,7 @@ namespace Clowd.UI.VideoEditor
             {
                 _rotation = 0;
                 _widthOnly = false;
+                _freeByContent = false;
             }
 
             // The whole control (outline, handles, hit area) rotates the way the composer rotates
@@ -507,6 +518,13 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
+            // What a corner does is decided in one place (GizmoMath.CornerMode) from the item and
+            // the inspector's flag, and the chain below only asks which answer it got: a wallpaper
+            // is free by content, a picture is free by tile plus explicit height, anything else
+            // holds a ratio. The two edge-handle cases come first because they are not corner
+            // drags at all: each writes its own axis whatever the corner mode is.
+            var cornerMode = GizmoMath.CornerMode(_freeResize, item);
+
             // a horizontal edge handle: width only, the height untouched.
             if (_dragHandle is HandleLeft or HandleRight)
             {
@@ -559,8 +577,11 @@ namespace Clowd.UI.VideoEditor
                     });
                 }
             }
-            // a corner in free-resize (Unlocked) sizes each axis on its own …
-            else if (_freeResize && item.Transform?.ScaleY is not null)
+            // a corner in free-resize sizes each axis on its own. A wallpaper lands here whether or
+            // not it carries an explicit height (AddBackground seeds it, an older file may not):
+            // its height denominator is the canvas either way, and ResizeFree writes the height it
+            // lacks.
+            else if (cornerMode == CornerResizeMode.Free)
             {
                 var (scaleX, scaleY, x, y) = GizmoMath.ResizeFree(pux, puy, _resizeAnchor.X, _resizeAnchor.Y,
                     _dragRight, _dragDown, _pressDenominatorPx, _pressDenominatorYPx,
@@ -585,7 +606,7 @@ namespace Clowd.UI.VideoEditor
             // … but with a ratio tile in force (an explicit height that is NOT free), the corners
             // preserve the box as it stands: both scales move together, so a 16:9 stretch stays
             // 16:9 under the drag.
-            else if (item.Transform?.ScaleY is not null)
+            else if (cornerMode == CornerResizeMode.BoxAspect)
             {
                 var boxAspect = _pressItemRect.Width > 0
                     ? _pressItemRect.Height / _pressItemRect.Width
@@ -819,8 +840,9 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>Edge handles appear only in crop mode (every edge crops on its own) or free
-        /// resize (the Unlocked tile) — a ratio-holding item resizes by its corners alone.</summary>
-        private bool ShowEdgeHandles => _cropMode || _freeResize;
+        /// resize (the Unlocked tile, or a wallpaper, which is free by content); a ratio-holding
+        /// item resizes by its corners alone.</summary>
+        private bool ShowEdgeHandles => _cropMode || _freeResize || _freeByContent;
 
         /// <summary>
         /// The handle positions in this control's coordinates, paired with their Handle* index.
