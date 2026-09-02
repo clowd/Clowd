@@ -84,6 +84,15 @@ namespace Clowd.UI
                 return false;
             }
 
+            if (ShareRegionPage.ActiveInstance != null)
+            {
+                // restarting would kill the mirror window a meeting app is bound to, and the
+                // one-HWND invariant means it cannot be handed back afterwards: the user would have
+                // to re-point their meeting app at a new window, mid-call, with no idea why.
+                reason = "a region is being shared";
+                return false;
+            }
+
             if (ScreenCapturePage.IsCaptureActive)
             {
                 reason = "a capture is in progress";

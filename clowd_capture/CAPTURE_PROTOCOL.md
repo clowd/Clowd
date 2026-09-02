@@ -47,10 +47,12 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-cursor` | flag | cursor on | Start with the captured cursor hidden (user toggles with `M`). |
 | `--no-rounded-corners` | flag | rounded on | Keep window selections square. By default a selection made by picking a window (hover + click, `W`, `--capture-mode window`) takes on that window's OS corner radius: the dashed border is drawn rounded and the corner pixels are transparent in the copied / saved image and in `cropped.png`. Dragged, moved or resized selections are always square. The radius is asked of the OS where possible (DWM on Windows 11; the window server's own corner mask on macOS) with a per-version table as fallback — `src/system/corners.rs`. `desktop.png` is never rounded. |
 | `--no-upload` | flag | UPLOAD shown | Hide the UPLOAD button — in the capture strip *and* the OCR strip — and drop its `U` accelerator. |
+| `--no-share` | flag | SHARE shown | Hide the SHARE button and drop its `H` accelerator. Not the opposite of `--share`: that is a mode which never shows the strip, so the two are sent together whenever the user has trimmed the button away but started a share from the shell's tray item or hotkey. |
 | `--no-scroll-capture` | flag | SCROLL shown | Hide the SCROLL button and drop its `L` accelerator. Windows-only button; the flag parses everywhere. |
 | `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |
+| `--share` | flag | off | Share-region picker: first confirmed selection dispatches the SHARE action immediately, skipping the panel. Requires `--session-dir`. The same auto-dispatch shape as `--video`, and mutually exclusive with it: passing both is rejected by clap as a malformed command line, like any other bad flag, because the first confirmed selection cannot be both a recording region and a mirror region. Without the flag the SHARE action is still reachable — from its button on the capture strip. |
 | `--filename-pattern` | .NET date-format string | `yyyy-MM-dd HH-mm-ss` | Name the SAVE dialog opens with, rendered against the local clock at the moment SAVE is pressed and uniquified against `--save-dir` (`name`, `name (1)`, …). Mirrors the shell's "Filename pattern" setting, so a capture saved from the overlay is named exactly as one saved from the editor (`src/filename_pattern.rs`, matching `PathConstants.GetFreePatternFileName`). Month/day names render in English and the timezone specifiers (`z`, `K`) are passed through as literals — neither can appear in a pattern that names a file. A pattern that renders to nothing, or to something the OS cannot spell, falls back to `yyyyMMdd_HHmmss_fff`; an extension typed into it is stripped. |
 | `--save-dir` | path | none | Folder the SAVE dialog opens in and uniquifies the suggested name against. The shell passes `General.LastSavePath` when it exists. Omit = the dialog opens wherever the OS last left it and the name is not uniquified. |
 | `--shell-pid` | pid | none | The shell's process id, so the overlay can hand its foreground rights back as the cycle ends (§2.5). Process-level: the shell knows its own id, and the capturer never outlives it, so the two cannot disagree. Omit in standalone runs. |
@@ -147,6 +149,7 @@ configuration has exactly one path.
 | SELECT-COLOR | `action.txt` only | `select-color #RRGGBB` |
 | VIDEO | `cropped.png` (poster frame), `action.txt` | `video X,Y,W,H [R]` |
 | SCROLL | `action.txt` only | `scroll X,Y,W,H PX,PY HWND` |
+| SHARE | `action.txt` only | `share X,Y,W,H` |
 | OCR-UPLOAD | `ocr.txt`, `action.txt` | `ocr-upload` |
 | COPY / SAVE | none — handled inside the capturer (clipboard / save dialog, named per `--filename-pattern`) | — |
 | OCR-COPY / OCR-SEARCH | none — handled inside the capturer (clipboard / browser launch) | — |
@@ -178,7 +181,7 @@ these files:
 3. OCR-UPLOAD: `ocr.txt` first, then **`action.txt` last**. Its appearance is
    the completion signal; no PNGs and no `session.json` — the recognized text
    is the entire payload, and the shell uploads it as a text paste.
-4. SELECT-COLOR / SCROLL: `action.txt` only.
+4. SELECT-COLOR / SCROLL / SHARE: `action.txt` only.
 5. Neither `session.json` nor `action.txt` present = the capture was
    canceled; the shell deletes the pre-created directory.
 
@@ -203,6 +206,20 @@ window handle under that point, or `0` when the walker could not resolve one
 poster frame: the driver produces every image plus the `session.json` for
 the stitched result, so `action.txt` is the whole overlay payload. macOS
 never emits this marker.
+
+The SHARE marker is the leading rect of the VIDEO marker and nothing else —
+same space, same grammar, no radius and no poster. The shell hands it
+straight to `clowd_share_region --region X,Y,W,H`, a long-lived helper that
+mirrors the rectangle into a borderless window a meeting app can pick out of
+its share picker; the pixels are read live off the screen for as long as the
+share lasts, so there is no frame worth photographing at selection time and
+no session to open when it ends. The helper normalises what it is handed
+(each side forced to at least 64 px and made even) and reports the region it
+actually applied, so unlike VIDEO — which obs-express takes literally — the
+rect here is a request. It is emitted two ways: by the SHARE button on the
+capture strip (accelerator `H`), and by `--share`, which auto-dispatches the
+same action the moment a selection is confirmed — the twin of the VIDEO
+button and `--video`.
 
 The OCR markers come from a second action panel the overlay shows once it has
 recognized text inside the selection (Windows only — like SCROLL, the button
@@ -237,7 +254,7 @@ Constants in `src/system/mod.rs`; keep in sync with
 
 | Code | Meaning |
 |---|---|
-| 0 | Every normal outcome — edit, upload, color, video, copy, save, OCR copy/search/upload, **and cancel**. The shell distinguishes them by the session files, not the code. |
+| 0 | Every normal outcome — edit, upload, color, video, share, copy, save, OCR copy/search/upload, **and cancel**. The shell distinguishes them by the session files, not the code. |
 | 3 | `EXIT_NO_SCREEN_PERMISSION` — the OS has not granted screen capture (macOS Screen Recording). The shell shows the permission dialog instead of a crash report. |
 | 4 | `EXIT_CAPTURE_FAILED` — the desktop screenshot itself failed. The reason is in stderr/`capture.log`, not a stack trace. |
 

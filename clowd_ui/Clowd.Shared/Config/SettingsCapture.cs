@@ -33,6 +33,23 @@ namespace Clowd.Config
         }
 
         /// <summary>
+        /// Whether the capture overlay offers SHARE. Trims the button and its H accelerator only —
+        /// the action itself stays reachable from the tray item and the Share Region hotkey, which
+        /// dispatch it without ever raising the panel. Same division as
+        /// <see cref="UploadButtonEnabled"/>, which hides the strip's UPLOAD while the shell's
+        /// "Upload File…" tray item stays (clowd_capture PanelFeatures, over <c>--no-share</c>).
+        /// </summary>
+        [Category("Optional features")]
+        [DisplayName("Share region")]
+        [Description("Show the SHARE button in the capture window, which mirrors the selected region " +
+                     "into a window a meeting app can share")]
+        public bool ShareRegionEnabled
+        {
+            get => _shareRegionEnabled;
+            set => Set(ref _shareRegionEnabled, value);
+        }
+
+        /// <summary>
         /// Whether the capture overlay offers SCROLL. On both platforms: the driver
         /// (<c>clowd_scroll_driver</c>) has a Win32 and a macOS backend, and the overlay shows the
         /// button wherever this is on.
@@ -200,6 +217,7 @@ namespace Clowd.Config
         private bool _obscuredWindowPeek = true;
         private bool _roundedWindowCorners = true;
         private bool _uploadButtonEnabled = true;
+        private bool _shareRegionEnabled = true;
         private bool _scrollingCaptureEnabled = true;
         private bool _scrollCaptureRewindToTop = true;
         private bool _ocrEnabled = true;

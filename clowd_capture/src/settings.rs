@@ -111,8 +111,18 @@ pub struct CapturerSettings {
     /// instead of waiting for a panel click. The VIDEO panel button still
     /// works in normal mode.
     pub video_mode: bool,
-    /// Which of the optional panel buttons (UPLOAD / SCROLL / OCR) the
-    /// user has left switched on — see [`PanelFeatures`]. Everything on
+    /// When true, the shell launched the overlay specifically to pick a
+    /// region to mirror into a shareable window (the Share Region hotkey /
+    /// tray). Behaves exactly like [`Self::video_mode`] — the first
+    /// captured selection auto-dispatches `Command::Share` — but writes a
+    /// marker-only payload, because a share needs the rectangle and nothing
+    /// else. The SHARE panel button still works in normal mode, and this
+    /// mode is unaffected by the switch that hides it
+    /// ([`PanelFeatures::share`]) — no panel is shown here to hide it from.
+    /// Mutually exclusive with [`Self::video_mode`].
+    pub share_mode: bool,
+    /// Which of the optional panel buttons (UPLOAD / SHARE / SCROLL / OCR)
+    /// the user has left switched on — see [`PanelFeatures`]. Everything on
     /// by default, so a standalone run shows the full strip.
     pub panel_features: PanelFeatures,
     /// Benchmark mode: tear the cycle down as soon as the overlay's first
@@ -149,6 +159,7 @@ impl Default for CapturerSettings {
             session_dir: None,
             capture_mode: CaptureMode::default(),
             video_mode: false,
+            share_mode: false,
             panel_features: PanelFeatures::ALL,
             bench_startup: false,
             filename_pattern: DEFAULT_FILENAME_PATTERN.to_string(),
@@ -242,11 +253,34 @@ pub struct CliArgs {
     #[arg(long)]
     pub video: bool,
 
+    /// Open the overlay in share mode: as soon as a region is selected,
+    /// write the SHARE action and exit (the shell then starts mirroring
+    /// that region into a window a meeting app can share).
+    /// Requires `--session-dir`.
+    ///
+    /// `conflicts_with` rather than a runtime check because the two modes
+    /// disagree about what the first confirmed selection *is* — a recording
+    /// region or a mirror region — and there is no sensible way to pick one
+    /// on the user's behalf. clap reports it the same way it reports every
+    /// other malformed command line — usage text on stderr, its own
+    /// non-zero exit — so the shell needs no new failure path for it.
+    #[arg(long, conflicts_with = "video")]
+    pub share: bool,
+
     /// Hide the UPLOAD button (both the capture strip's and the OCR
     /// strip's — a user who turned uploading off did not mean "except
     /// for text").
     #[arg(long)]
     pub no_upload: bool,
+
+    /// Hide the SHARE button. Not the opposite of `--share`, which is a
+    /// mode: this hides the strip's button and its accelerator, while
+    /// `--share` never shows the strip at all. Passing both is therefore
+    /// not a contradiction — the shell does it whenever the user has
+    /// trimmed the button away but invoked the share action from the tray
+    /// or a hotkey.
+    #[arg(long)]
+    pub no_share: bool,
 
     /// Hide the SCROLL (scrolling capture) button.
     #[arg(long)]
@@ -303,8 +337,10 @@ impl CliArgs {
             session_dir: self.session_dir,
             capture_mode: self.capture_mode,
             video_mode: self.video,
+            share_mode: self.share,
             panel_features: PanelFeatures {
                 upload: !self.no_upload,
+                share: !self.no_share,
                 scroll_capture: !self.no_scroll_capture,
                 ocr: !self.no_ocr,
             },
@@ -357,10 +393,32 @@ mod tests {
         assert_eq!(from_cli.session_dir, default.session_dir);
         assert_eq!(from_cli.capture_mode, default.capture_mode);
         assert_eq!(from_cli.video_mode, default.video_mode);
+        assert_eq!(from_cli.share_mode, default.share_mode);
         assert_eq!(from_cli.panel_features, default.panel_features);
         assert_eq!(from_cli.bench_startup, default.bench_startup);
         assert_eq!(from_cli.filename_pattern, default.filename_pattern);
         assert_eq!(from_cli.save_directory, default.save_directory);
+    }
+
+    /// The two auto-dispatch modes are off by a bare command line, each
+    /// flag turns on exactly its own mode, and asking for both is a
+    /// command-line error rather than a silent win for one of them: the
+    /// first confirmed selection cannot be both a recording region and a
+    /// mirror region.
+    #[test]
+    fn video_and_share_modes_are_mutually_exclusive() {
+        let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
+        assert!(!bare.video_mode && !bare.share_mode);
+
+        let video = CliArgs::parse_from(["clowd_capture", "--video"]).into_settings();
+        assert!(video.video_mode && !video.share_mode);
+
+        let share = CliArgs::parse_from(["clowd_capture", "--share"]).into_settings();
+        assert!(share.share_mode && !share.video_mode);
+
+        assert!(CliArgs::try_parse_from(["clowd_capture", "--video", "--share"]).is_err());
+        // Order must not matter — clap reports the conflict either way.
+        assert!(CliArgs::try_parse_from(["clowd_capture", "--share", "--video"]).is_err());
     }
 
     /// The optional-button flags are opt-OUT: a bare command line shows
@@ -370,11 +428,12 @@ mod tests {
         let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
         assert_eq!(bare.panel_features, PanelFeatures::ALL);
 
-        let none = CliArgs::parse_from(["clowd_capture", "--no-upload", "--no-scroll-capture", "--no-ocr"]).into_settings();
+        let none = CliArgs::parse_from(["clowd_capture", "--no-upload", "--no-share", "--no-scroll-capture", "--no-ocr"]).into_settings();
         assert_eq!(
             none.panel_features,
             PanelFeatures {
                 upload: false,
+                share: false,
                 scroll_capture: false,
                 ocr: false,
             }
@@ -382,7 +441,18 @@ mod tests {
 
         let no_ocr = CliArgs::parse_from(["clowd_capture", "--no-ocr"]).into_settings();
         assert!(!no_ocr.panel_features.ocr);
-        assert!(no_ocr.panel_features.upload && no_ocr.panel_features.scroll_capture);
+        assert!(no_ocr.panel_features.upload && no_ocr.panel_features.scroll_capture && no_ocr.panel_features.share);
+
+        let no_share = CliArgs::parse_from(["clowd_capture", "--no-share"]).into_settings();
+        assert!(!no_share.panel_features.share);
+        assert!(no_share.panel_features.upload && no_share.panel_features.scroll_capture && no_share.panel_features.ocr);
+
+        // `--no-share` hides the button; `--share` is a mode that never shows the
+        // strip. The shell sends both when a trimmed-away button meets a tray or
+        // hotkey invocation, so they must coexist rather than conflict.
+        let both = CliArgs::parse_from(["clowd_capture", "--share", "--no-share"]).into_settings();
+        assert!(both.share_mode);
+        assert!(!both.panel_features.share);
     }
 
     /// Rounded corners are on by a bare command line and `--no-rounded-corners`

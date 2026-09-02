@@ -366,6 +366,82 @@ fn scroll_action_point(point: ScreenPoint, monitors: &[MonitorInfo]) -> (i32, i3
     }
 }
 
+/// Write a SHARE action payload: an `action.txt` = `share X,Y,W,H` marker
+/// and nothing else. `clowd_share_region` mirrors live pixels off the
+/// screen for as long as the share lasts, so there is nothing for the
+/// overlay to photograph: no `cropped.png` (a poster would only ever show
+/// the instant the user let go of the mouse) and no `session.json` (a
+/// share produces no artifact to open afterwards). The marker alone is
+/// both the payload and the completion signal — the shape
+/// [`write_scroll_action`] already uses.
+///
+/// The shell reads the rect and hands it to `clowd_share_region --region
+/// X,Y,W,H`, which mirrors that rectangle into a borderless window a
+/// meeting app can pick out of its share picker. The helper normalises
+/// what it is given (each side forced to at least 64 px and made even) and
+/// reports back the region it actually applied, so the numbers here are a
+/// request rather than a contract — unlike the VIDEO marker, which
+/// obs-express takes literally.
+///
+/// The rect is emitted in the platform capture coordinate space (DESIGN
+/// §1.1), through the very same mapping the `video` marker's leading rect
+/// uses: physical virtual-desktop pixels (origin possibly negative) on
+/// Windows, CG points on macOS. That is deliberate — `--region` on
+/// `clowd_share_region` and `--region` on obs-express are the same space,
+/// so a rect that records correctly also shares correctly.
+pub fn write_share_action(session_dir: &Path, selection: ScreenRect, monitors: &[MonitorInfo]) -> ActionResult {
+    match write_share_action_inner(session_dir, selection, monitors) {
+        Ok(action_path) => {
+            log::info!("share action written to {:?}", action_path);
+            ActionResult::Success
+        }
+        Err(e) => {
+            log::error!("share action write failed: {e:#}");
+            ActionResult::Failed(format!("Failed to write share action: {e}"))
+        }
+    }
+}
+
+fn write_share_action_inner(session_dir: &Path, selection: ScreenRect, monitors: &[MonitorInfo]) -> anyhow::Result<PathBuf> {
+    // Line first, directory second — the scroll writer's rule: a selection
+    // that clamps to nothing must fail before any directory appears, so the
+    // shell never sees a half-populated session dir.
+    let line = share_action_line(selection, monitors)?;
+    std::fs::create_dir_all(session_dir)?;
+    let action_path = session_dir.join(ACTION_FILE);
+    std::fs::write(&action_path, line)?;
+    Ok(action_path)
+}
+
+/// The exact `action.txt` line for a SHARE action, including its trailing
+/// newline. Split out from the writer for the same reason
+/// [`scroll_action_line`] is: the wire format is a contract with
+/// `CaptureSessionDispatcher`, and it should be testable without touching
+/// the filesystem.
+///
+/// The selection is clamped to the virtual desktop first, as every other
+/// writer clamps to the desktop bitmap. A window snap reports unclamped DWM
+/// frame bounds, and the mirror would faithfully reproduce the off-screen
+/// band as undefined black — a permanent dead margin in whatever the
+/// meeting is looking at.
+///
+/// It is then grown to the same 2×2 minimum the VIDEO marker guarantees.
+/// The drag arms as soon as EITHER axis crosses the threshold, so a fast
+/// horizontal flick really does produce a 300×1 sliver, and the shell's
+/// rect parser rejects W or H < 2 — dropping the marker, deleting the
+/// session directory and leaving the user with no share and no message.
+/// The helper widens further to its own 64 px / even floor and reports
+/// what it applied, so this step exists only to clear the shell's bar.
+fn share_action_line(selection: ScreenRect, monitors: &[MonitorInfo]) -> anyhow::Result<String> {
+    let desktop = virtual_desktop_bounds(monitors);
+    let selection = selection
+        .intersection(&desktop)
+        .ok_or_else(|| anyhow!("selection {:?} does not intersect desktop bounds {:?}", selection, desktop))?;
+    let selection = ensure_min_video_size(selection, desktop)?;
+    let (x, y, w, h) = video_action_rect(selection, monitors);
+    Ok(format!("share {x},{y},{w},{h}\n"))
+}
+
 /// Write an OCR-UPLOAD action payload: `ocr.txt` holding the recognized
 /// text and an `action.txt` = `ocr-upload` marker written LAST, so its
 /// appearance is the completion signal (the same rule
@@ -803,6 +879,93 @@ mod tests {
             std::fs::read_to_string(dir.join(ACTION_FILE)).unwrap(),
             "scroll 0,0,640,480 10,20 -1\n"
         );
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The `share` marker is a wire contract with
+    /// `CaptureSessionDispatcher`: one line, the verb plus one rect group,
+    /// trailing newline. The rect grammar is the `video` marker's leading
+    /// group verbatim, so the two can be parsed by the same code.
+    #[test]
+    fn share_action_line_format() {
+        let line = share_action_line(ScreenRect::from_xy_size(100, 200, 800, 600), &[monitor(0, 0, 1920, 1080)]).unwrap();
+        assert_eq!(line, "share 100,200,800,600\n");
+    }
+
+    /// A drag arms as soon as EITHER axis crosses the threshold, so a fast
+    /// horizontal flick really does hand this a 1 px tall selection. The
+    /// shell's rect parser rejects W or H < 2 and would then delete the
+    /// session directory without telling anyone, so the marker is grown to
+    /// the same 2x2 minimum the VIDEO marker guarantees.
+    #[test]
+    fn share_action_line_grows_slivers_to_the_contract_minimum() {
+        let line = share_action_line(ScreenRect::from_xy_size(100, 200, 300, 1), &[monitor(0, 0, 1920, 1080)]).unwrap();
+        assert_eq!(line, "share 100,200,300,2\n");
+
+        let line = share_action_line(ScreenRect::from_xy_size(100, 200, 1, 300), &[monitor(0, 0, 1920, 1080)]).unwrap();
+        assert_eq!(line, "share 100,200,2,300\n");
+    }
+
+    /// A monitor left of / above the primary makes the origin negative, and
+    /// `clowd_share_region` takes negative x/y happily (`allow_hyphen_values`).
+    /// The desktop clamp must not mistake negative for off-screen.
+    #[test]
+    fn share_action_line_negative_virtual_desktop() {
+        let line = share_action_line(
+            ScreenRect::from_xy_size(-1920, -300, 1000, 900),
+            &[monitor(-1920, -1080, 1920, 1080), monitor(0, 0, 1920, 1080)],
+        )
+        .unwrap();
+        assert_eq!(line, "share -1920,-300,1000,900\n");
+    }
+
+    /// A window snapped at a monitor edge reports frame bounds that hang off
+    /// the desktop; mirroring those would put a permanent black band in the
+    /// meeting, so the rect is clamped before it goes on the wire.
+    #[test]
+    fn share_action_clamps_selection_to_desktop() {
+        let line = share_action_line(ScreenRect::from_xy_size(1800, 900, 400, 400), &[monitor(0, 0, 1920, 1080)]).unwrap();
+        assert_eq!(line, "share 1800,900,120,180\n");
+    }
+
+    #[test]
+    fn share_action_fully_off_desktop_fails() {
+        let monitors = [monitor(0, 0, 1920, 1080)];
+        assert!(share_action_line(ScreenRect::from_xy_size(2000, 0, 100, 100), &monitors).is_err());
+
+        // …and the failure reaches the caller as a retry/cancel-able
+        // ActionResult, leaving no session directory behind.
+        let dir = temp_session_dir();
+        let result = write_share_action(&dir, ScreenRect::from_xy_size(2000, 0, 100, 100), &monitors);
+        match result {
+            ActionResult::Failed(msg) => assert!(msg.starts_with("Failed to write share action:"), "unexpected message: {msg}"),
+            _ => panic!("expected Failed"),
+        }
+        assert!(!dir.exists());
+    }
+
+    /// The whole payload is one file: like SCROLL, the shell keys the
+    /// completion of a SHARE off `action.txt` alone — there is no poster
+    /// frame and no `session.json`, because a live mirror produces neither.
+    #[test]
+    fn share_action_writes_only_action_txt() {
+        let dir = temp_session_dir();
+        let result = write_share_action(&dir, ScreenRect::from_xy_size(0, 0, 640, 480), &[monitor(0, 0, 1920, 1080)]);
+        assert!(matches!(result, ActionResult::Success));
+
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| {
+                e.unwrap()
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        assert_eq!(names, vec![ACTION_FILE.to_string()]);
+        assert_eq!(std::fs::read_to_string(dir.join(ACTION_FILE)).unwrap(), "share 0,0,640,480\n");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

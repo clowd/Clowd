@@ -134,7 +134,7 @@ namespace Clowd.UI
                 _border.SetOverlayText("WAIT…");
                 _border.Show();
 
-                _toolbar = new FloatingToolbarWindow();
+                _toolbar = new FloatingToolbarWindow(FloatingToolbarProfile.Recording);
                 _toolbar.StartClicked += (s, e) => StartRecording();
                 _toolbar.PauseToggleClicked += (s, e) => TogglePauseRecording();
                 _toolbar.FinishClicked += (s, e) => FinishRecording();

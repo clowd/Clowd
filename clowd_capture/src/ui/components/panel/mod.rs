@@ -6,14 +6,15 @@
 //!
 //! The panel shows one of two strips at a time — see
 //! [`model::PanelButtonSet`]:
-//!   * `Normal`, the capture strip (UPLOAD / EDIT / VIDEO / SCROLL / OCR
-//!     / COPY / SAVE / RESET / EXIT; SCROLL and OCR are Windows-only), and
+//!   * `Normal`, the capture strip (UPLOAD / EDIT / VIDEO / SHARE / SCROLL
+//!     / OCR / COPY / SAVE / RESET / EXIT; SCROLL and OCR are
+//!     Windows-only), and
 //!   * `Ocr`, the strip that replaces it while recognized text is lifted
 //!     off the selection (UPLOAD / SEARCH / COPY / BACK / EXIT).
 //!
 //! They have different lengths, so every entry point takes the set as a
 //! parameter — and a second one, [`model::PanelFeatures`], because the
-//! shell can switch UPLOAD / SCROLL / OCR off (SettingsCapture's "Optional
+//! shell can switch UPLOAD / SHARE / SCROLL / OCR off (SettingsCapture's "Optional
 //! features"), which narrows either strip further. Each strip is
 //! positioned by the same algorithm with its own width, so the shorter OCR
 //! strip re-centers under the selection on a swap — the re-click hazard

@@ -94,6 +94,7 @@ fn main() -> anyhow::Result<()> {
         args.session_dir = None;
         args.capture_mode = settings::CaptureMode::Region;
         args.video = false;
+        args.share = false;
     }
 }
 

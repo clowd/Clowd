@@ -139,7 +139,8 @@ namespace Clowd.UI
     /// (CAPTURE_PROTOCOL.md). Mirrors the WPF CaptureWindow callback dispatch: a completed
     /// capture (session.json present) loads the session, names it "Screenshot" and opens the
     /// editor or the upload flow depending on the action.txt marker; a SELECT-COLOR capture
-    /// (action.txt only) opens the color viewer; an OCR-UPLOAD capture (an "ocr-upload" marker
+    /// (action.txt only) opens the color viewer; a SHARE capture (a "share x,y,w,h" marker, no
+    /// files) starts a region share; an OCR-UPLOAD capture (an "ocr-upload" marker
     /// plus an ocr.txt sidecar, no image) uploads the recognized text as a paste; a canceled
     /// capture (neither file) deletes the pre-created session directory. COPY/SAVE are handled
     /// inside the capturer itself and never produce a session.
@@ -163,22 +164,24 @@ namespace Clowd.UI
         /// </summary>
         internal const int ExitCodeNoScreenPermission = 3;
 
-        public async void Open(CaptureMode mode, bool video = false)
+        public async void Open(CaptureMode mode, RegionIntent intent = RegionIntent.Capture)
         {
             if (!Dispatcher.UIThread.CheckAccess())
             {
-                Dispatcher.UIThread.Post(() => Open(mode, video));
+                Dispatcher.UIThread.Post(() => Open(mode, intent));
                 return;
             }
 
             // Never launch either capturer until the shell has established that screen capture is
             // permitted. Normal screenshots then wake the supervised standby process; when it
             // cannot take the capture — warm mode off, faulted, or mid-restart — TryCapture
-            // returns false and the classic one-shot spawn below runs instead. Video always
-            // retains its separate one-shot lifetime/protocol.
+            // returns false and the classic one-shot spawn below runs instead. Video and share
+            // always retain their separate one-shot lifetime/protocol: the standby process was
+            // spawned without --video/--share and would happily service the request as a plain
+            // screenshot, silently turning "pick a region to record/share" into a screenshot.
             if (!await EnsureScreenRecordingPermissionAsync())
                 return;
-            if (!video && CaptureStandbySupervisor.TryCapture(mode))
+            if (intent == RegionIntent.Capture && CaptureStandbySupervisor.TryCapture(mode))
                 return;
 
             // Only one capturer overlay at a time, whichever process owns it: this stops a
@@ -228,7 +231,7 @@ namespace Clowd.UI
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
                 foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture,
-                                                          SettingsRoot.Current.General, mode, video,
+                                                          SettingsRoot.Current.General, mode, intent,
                                                           SettingsRoot.Current.General.LastSavePath))
                     psi.ArgumentList.Add(arg);
 
@@ -338,6 +341,13 @@ namespace Clowd.UI
                     // VideoCapturePage has its own single-instance guard.
                     PageManager.Current.GetVideoCapturePage()
                         .Open(result.Region, result.CornerRadius, result.SessionDir);
+                    break;
+                case CaptureAction.Share:
+                    // same hand-off as Video, minus the directory: a share produces no files at
+                    // all, so ProcessFinishedSession has already deleted the session dir and the
+                    // region is the entire payload (the OcrUpload arm below is the precedent for
+                    // an action whose directory is gone by the time it is dispatched).
+                    PageManager.Current.GetShareRegionPage().Open(result.Region);
                     break;
                 case CaptureAction.Scroll:
                     // same hand-off as Video: the scroll page runs its own (much longer)
@@ -464,7 +474,8 @@ namespace Clowd.UI
     public static class CaptureArguments
     {
         public static IReadOnlyList<string> Build(string sessionDir, SettingsCapture settings, SettingsGeneral general,
-                                                  CaptureMode mode, bool video = false, string lastSavePath = null)
+                                                  CaptureMode mode, RegionIntent intent = RegionIntent.Capture,
+                                                  string lastSavePath = null)
         {
             // the accent follows the OS (or the user's pick) and is contrast-corrected for the white
             // text drawn on it — see SettingsGeneral.GetEffectiveAccentColor, issue #48. It lives on
@@ -517,6 +528,12 @@ namespace Clowd.UI
             if (!settings.UploadButtonEnabled)
                 args.Add("--no-upload");
 
+            // Hides the SHARE button, and nothing more: a share started from the tray item or the
+            // hotkey arrives as RegionIntent.Share below, which never raises the panel — so the two
+            // flags are sent together rather than being treated as a contradiction.
+            if (!settings.ShareRegionEnabled)
+                args.Add("--no-share");
+
             if (!settings.ScrollingCaptureEnabled)
                 args.Add("--no-scroll-capture");
 
@@ -545,10 +562,20 @@ namespace Clowd.UI
                 args.Add(lastSavePath);
             }
 
-            // the overlay was launched specifically to pick a recording region: a confirmed
-            // selection immediately dispatches the video action (DESIGN §3.1).
-            if (video)
-                args.Add("--video");
+            // the overlay was launched specifically to pick a recording (or sharing) region: a
+            // confirmed selection immediately dispatches that action rather than offering the
+            // overlay's usual buttons (DESIGN §3.1). The two flags are mutually exclusive on the
+            // capturer's own command line (clap `conflicts_with`), which is exactly why the intent
+            // arrives here as one enum and not as two independent booleans.
+            switch (intent)
+            {
+                case RegionIntent.Video:
+                    args.Add("--video");
+                    break;
+                case RegionIntent.Share:
+                    args.Add("--share");
+                    break;
+            }
 
             return args;
         }
@@ -557,7 +584,11 @@ namespace Clowd.UI
                                                           SettingsGeneral general, SettingsHotkey hotkeys,
                                                           string lastSavePath = null)
         {
-            var args = new List<string>(Build(sessionRoot, settings, general, CaptureMode.Region, false, lastSavePath));
+            // RegionIntent.Capture, always: a standby capturer serves ordinary screenshots and
+            // nothing else — the video/share intents keep their own one-shot lifetime precisely
+            // because their flags cannot be added to a process that is already running.
+            var args = new List<string>(Build(sessionRoot, settings, general, CaptureMode.Region,
+                                              RegionIntent.Capture, lastSavePath));
             // standby creates the per-capture directory itself; throwing (rather than shipping a
             // corrupt command line) lands in the supervisor's crash handling and its fallback.
             if (args[0] != "--session-dir")
@@ -588,6 +619,7 @@ namespace Clowd.UI
         Upload,
         SelectColor,
         Video,
+        Share,
         Scroll,
         OcrUpload,
     }
@@ -595,8 +627,9 @@ namespace Clowd.UI
     /// <summary>A finished, non-canceled capture. <see cref="Session"/> is set for
     /// Edit/Upload; <see cref="Color"/> for SelectColor; <see cref="Region"/> and
     /// <see cref="SessionDir"/> for Video and Scroll, which additionally carry
-    /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>; <see cref="Text"/> for
-    /// OcrUpload, which carries no session at all.</summary>
+    /// <see cref="ScrollPoint"/> and <see cref="TargetHwnd"/>; <see cref="Region"/> alone for
+    /// Share, whose directory is already deleted; <see cref="Text"/> for OcrUpload, which carries
+    /// no session at all.</summary>
     public sealed class CaptureResult
     {
         public CaptureAction Action { get; init; }
@@ -635,9 +668,11 @@ namespace Clowd.UI
         /// with <see cref="SessionManager"/>), renamed to "Screenshot" and returned with the
         /// action from the action.txt marker (missing marker = Edit). An action.txt of
         /// "select-color #RRGGBB" without a session carries just the picked color; the
-        /// directory is deleted. An "ocr-upload" marker carries its text in an ocr.txt sidecar,
-        /// which is read out before the directory is deleted. Otherwise the capture was
-        /// canceled: the pre-created directory is deleted and null is returned.
+        /// directory is deleted. A "share x,y,w,h" marker carries just the region to mirror, and
+        /// its directory is deleted too — a share writes no files. An "ocr-upload" marker carries
+        /// its text in an ocr.txt sidecar, which is read out before the directory is deleted.
+        /// Otherwise the capture was canceled: the pre-created directory is deleted and null is
+        /// returned.
         /// </summary>
         public static CaptureResult ProcessFinishedSession(string sessionDir)
         {
@@ -703,6 +738,30 @@ namespace Clowd.UI
 
                 Debug.WriteLine("Unparseable video action: " + action);
                 DeleteSessionDir(sessionDir);
+                return null;
+            }
+
+            // a "share x,y,w,h" marker means the overlay confirmed a region to mirror into a
+            // window a meeting app can share (CAPTURE_PROTOCOL.md §1.2). The rect is bit-for-bit
+            // the same grammar and coordinate space as the video marker's leading rect, so it goes
+            // through the same parser — and unlike video and scroll, the directory is deleted right
+            // here: a share produces no files whatsoever (no poster frame, no session.json, nothing
+            // written later), so keeping the directory alive for a page that will never look at it
+            // would just leak one per share. The OcrUpload branch below does the same for the same
+            // reason. NOTE this branch must exist at all: the fall-through at the bottom of this
+            // method deletes the directory and returns null for any marker it does not recognise,
+            // so an unhandled "share" marker would silently discard the user's selection.
+            const string sharePrefix = "share";
+            if (action != null && action.StartsWith(sharePrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var region = ParseRegion(action.Substring(sharePrefix.Length).Trim());
+
+                DeleteSessionDir(sessionDir);
+
+                if (region != null)
+                    return new CaptureResult { Action = CaptureAction.Share, Region = region };
+
+                Debug.WriteLine("Unparseable share action: " + action);
                 return null;
             }
 
@@ -813,8 +872,8 @@ namespace Clowd.UI
             return region;
         }
 
-        /// <summary>Parses the "x,y,w,h" rect of a video or scroll action (invariant ints, x/y may
-        /// be negative in virtual-desktop space). Returns null when unparseable.</summary>
+        /// <summary>Parses the "x,y,w,h" rect of a video, share or scroll action (invariant ints,
+        /// x/y may be negative in virtual-desktop space). Returns null when unparseable.</summary>
         private static ScreenRect ParseRegion(string rect)
         {
             var parts = rect.Split(',');
