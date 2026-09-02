@@ -7,7 +7,7 @@
 //! The panel shows one of two strips at a time — see
 //! [`model::PanelButtonSet`]:
 //!   * `Normal`, the capture strip (UPLOAD / EDIT / VIDEO / SHARE / SCROLL
-//!     / OCR / COPY / SAVE / RESET / EXIT; SCROLL and OCR are
+//!     / COPY / SAVE / OCR / RESET / EXIT; SCROLL and OCR are
 //!     Windows-only), and
 //!   * `Ocr`, the strip that replaces it while recognized text is lifted
 //!     off the selection (UPLOAD / SEARCH / COPY / BACK / EXIT).
