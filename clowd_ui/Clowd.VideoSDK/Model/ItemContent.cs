@@ -126,7 +126,7 @@ public sealed class BackgroundContent : ItemContent
     /// style rather than nothing.</summary>
     public static readonly IReadOnlyList<string> Styles = new[]
     {
-        "big-sur", "monterey", "gradient", "explode", "layered-waves", "stacked-waves",
+        "big-sur", "monterey", "gradient", "explode", "solid", "stacked-waves",
         "layered-steps", "moving-blob", "moving-corners", "breathing-field",
     };
 
@@ -136,6 +136,10 @@ public sealed class BackgroundContent : ItemContent
     public const double MinAnimationSpeed = 0.25;
 
     public const double MaxAnimationSpeed = 4.0;
+
+    /// <summary>Clowd blue as <c>#AARRGGBB</c> — what a fresh <c>solid</c> background is filled
+    /// with, and what an unparseable <see cref="Color"/> falls back to.</summary>
+    public const string DefaultColor = "#FF00AFF0";
 
     /// <summary>One of <see cref="Styles"/>.</summary>
     public string Style { get; set; } = "big-sur";
@@ -147,6 +151,13 @@ public sealed class BackgroundContent : ItemContent
     /// <see cref="CursorContent.Variant"/>.</summary>
     public string Theme { get; set; }
 
+    /// <summary>The fill color of the <c>solid</c> style, as <c>#AARRGGBB</c> (or
+    /// <c>#RRGGBB</c>), the form every other model color takes. Ignored by every style that has
+    /// artwork, and kept across a trip through one so a user who tries a wallpaper and comes back
+    /// finds the color they picked. An unparseable value draws <see cref="DefaultColor"/> rather
+    /// than nothing.</summary>
+    public string Color { get; set; } = DefaultColor;
+
     /// <summary>Playback-rate multiplier on an animated style's loop, validated to
     /// <see cref="MinAnimationSpeed"/>..<see cref="MaxAnimationSpeed"/>: 2 runs a 60 s loop in
     /// 30 s of project time. Composes with (does not replace) whatever a speed effect does to the
@@ -157,6 +168,7 @@ public sealed class BackgroundContent : ItemContent
     {
         Style = Style,
         Theme = Theme,
+        Color = Color,
         AnimationSpeed = AnimationSpeed,
     };
 }

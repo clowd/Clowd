@@ -54,11 +54,16 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>A project holding exactly one background item on one visible track.</summary>
         private static (Project Project, Item Item) OneBackground(string style, string theme = null,
-            double speed = 1.0, int w = W, int h = H)
+            double speed = 1.0, int w = W, int h = H, string color = null)
         {
             var p = NewProject(w, h);
-            var item = AddItem(p, AddVideoTrack(p),
-                new BackgroundContent { Style = style, Theme = theme, AnimationSpeed = speed });
+            var item = AddItem(p, AddVideoTrack(p), new BackgroundContent
+            {
+                Style = style,
+                Theme = theme,
+                AnimationSpeed = speed,
+                Color = color ?? BackgroundContent.DefaultColor,
+            });
             return (p, item);
         }
 
@@ -119,6 +124,12 @@ namespace Clowd.VideoSDK.Tests
         public static IEnumerable<object[]> AllStyles()
             => BackgroundCatalog.Styles.Select(s => new object[] { s.Id });
 
+        /// <summary>The styles that draw artwork — everything but the solid fill, whose whole
+        /// picture is one color and which therefore fails every "this is a picture" sweep by
+        /// design (see <see cref="Solid_style_fills_the_box_with_the_items_color"/>).</summary>
+        public static IEnumerable<object[]> ArtStyles()
+            => BackgroundCatalog.Styles.Where(s => !s.IsSolid).Select(s => new object[] { s.Id });
+
         public static IEnumerable<object[]> AnimatedStyles()
             => BackgroundCatalog.Styles.Where(s => s.IsAnimated).Select(s => new object[] { s.Id });
 
@@ -128,7 +139,7 @@ namespace Clowd.VideoSDK.Tests
         // ------------------------------------------------------------------------------ drawing
 
         [Theory]
-        [MemberData(nameof(AllStyles))]
+        [MemberData(nameof(ArtStyles))]
         public void Default_transform_fills_the_whole_canvas(string style)
         {
             var (p, _) = OneBackground(style);
@@ -158,7 +169,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Scale_half_paints_only_the_centered_box()
         {
-            var (p, item) = OneBackground("layered-waves");
+            var (p, item) = OneBackground("stacked-waves");
             item.Transform.Scale = 0.5; // 32x32 centered on 64x64
 
             var px = Render(p, 0);
@@ -308,7 +319,7 @@ namespace Clowd.VideoSDK.Tests
         {
             // the 128 render box-downsampled 2x2 matches the 64 render: the item box is
             // canvas-relative and the cover matrix inside it scales with the box
-            foreach (var (style, theme) in new[] { ("gradient", "sunrise"), ("layered-waves", "source"), ("explode", null) })
+            foreach (var (style, theme) in new[] { ("gradient", "sunrise"), ("stacked-waves", "source"), ("explode", null) })
             {
                 var (small, _) = OneBackground(style, theme);
                 var (large, _) = OneBackground(style, theme, w: 128, h: 128);
@@ -447,6 +458,43 @@ namespace Clowd.VideoSDK.Tests
             var centre = Px(px, W / 2, H / 2);
             Assert.Equal((0, 255, 0), (centre.R, centre.G, centre.B));
             Assert.False(IsBlack(Px(px, 2, 2))); // the wallpaper shows around the solid
+        }
+
+        /// <summary>The solid style draws no artwork at all: the very box a wallpaper would have
+        /// covered, filled flat with the item's own color. A missing or unparseable color is
+        /// Clowd blue rather than nothing, and an alpha composites over what is behind.</summary>
+        [Fact]
+        public void Solid_style_fills_the_box_with_the_items_color()
+        {
+            var (p, item) = OneBackground(BackgroundCatalog.SolidStyle, color: "#FFFF0000");
+            var px = Render(p, 5 * Sec);
+            for (int i = 0; i < px.Length; i += 4)
+                Assert.Equal((0, 0, 255, 255), (px[i], px[i + 1], px[i + 2], px[i + 3]));
+
+            // the default color is Clowd blue, and an unparseable one falls back to it
+            var (blue, _) = OneBackground(BackgroundCatalog.SolidStyle);
+            var (bad, _) = OneBackground(BackgroundCatalog.SolidStyle, color: "not-a-color");
+            var expected = Render(blue, 0);
+            var centre = Px(expected, W / 2, H / 2);
+            Assert.Equal((0x00, 0xAF, 0xF0), (centre.R, centre.G, centre.B));
+            Assert.Equal(expected, Render(bad, 0));
+
+            // and it is boxed like any other background: half scale paints the centered half
+            ((BackgroundContent)item.Content).Color = "#FFFF0000";
+            item.Transform.Scale = 0.5;
+            item.Transform.ScaleY = 0.5;
+            var half = Render(p, 0);
+            Assert.True(IsBlack(Px(half, 2, 2)));
+            var inside = Px(half, 32, 32);
+            Assert.Equal((0, 0, 255), (inside.B, inside.G, inside.R));
+
+            // a translucent fill composites rather than replacing: half red over black
+            ((BackgroundContent)item.Content).Color = "#80FF0000";
+            item.Transform.Scale = 1.0;
+            item.Transform.ScaleY = 1.0;
+            var faded = Px(Render(p, 0), 32, 32);
+            Assert.InRange(faded.R, 126, 130);
+            Assert.Equal(0, faded.G);
         }
 
         // -------------------------------------------------------------------------------- time

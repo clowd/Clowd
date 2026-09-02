@@ -150,7 +150,7 @@ namespace Clowd.VideoSDK.Tests
         [InlineData("big-sur", "default", "teal")]
         [InlineData("monterey", "light", "dark")]
         [InlineData("gradient", "sunrise", "abyss")]
-        [InlineData("layered-waves", "source", "midnight")]
+        [InlineData("stacked-waves", "source", "midnight")]
         [InlineData("moving-blob", "ember", "forest")]
         public void Themes_of_one_style_differ(string style, string first, string second)
             => Assert.NotEqual(BackgroundSwatch.Grid(style, first), BackgroundSwatch.Grid(style, second));
@@ -166,6 +166,31 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(BackgroundSwatch.Grid("big-sur", "default"),
                 BackgroundSwatch.Grid("big-sur", "no-such-theme"));
             Assert.Equal(BackgroundSwatch.Grid("BIG-SUR", "TEAL"), BackgroundSwatch.Grid("big-sur", "teal"));
+        }
+
+        /// <summary>The solid style's card is its own color in every cell — no artwork is sampled,
+        /// and an alpha is blended against the black ground the sampler clears to, exactly as the
+        /// composer blends it against the canvas.</summary>
+        [Fact]
+        public void Solid_style_grids_are_the_items_own_color()
+        {
+            var blue = BackgroundSwatch.Grid(BackgroundCatalog.SolidStyle, null, "#FF00AFF0");
+            Assert.Equal(Cells, blue.Length);
+            Assert.Equal(new[] { 0x00AFF0u }, blue.Distinct().ToArray());
+
+            // no color, a blank one and an unparseable one all draw Clowd blue
+            Assert.Equal(blue, BackgroundSwatch.Grid(BackgroundCatalog.SolidStyle, null));
+            Assert.Equal(blue, BackgroundSwatch.Grid(BackgroundCatalog.SolidStyle, null, "not-a-color"));
+
+            Assert.Equal(new[] { 0xFF0000u },
+                BackgroundSwatch.Grid(BackgroundCatalog.SolidStyle, "no-such-theme", "#FFFF0000").Distinct().ToArray());
+            // half-transparent white over the black ground is mid grey
+            Assert.Equal(new[] { 0x808080u },
+                BackgroundSwatch.Grid(BackgroundCatalog.SolidStyle, null, "#80FFFFFF").Distinct().ToArray());
+
+            // and the color is read only there: a wallpaper ignores it
+            Assert.Equal(BackgroundSwatch.Grid("big-sur", "teal"),
+                BackgroundSwatch.Grid("big-sur", "teal", "#FFFF0000"));
         }
 
         /// <summary>The cache is asked for the same grid on every repaint of every card; it hands

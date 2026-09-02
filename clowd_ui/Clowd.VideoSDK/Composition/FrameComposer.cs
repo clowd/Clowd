@@ -1043,7 +1043,8 @@ namespace Clowd.VideoSDK.Composition
         // --------------------------------------------------------------------------- background
 
         /// <summary>
-        /// A wallpaper from the embedded library, boxed like a solid and decorated like a
+        /// A wallpaper from the embedded library — or, for the one style that ships none, a flat
+        /// fill of the item's own color — boxed like a solid and decorated like a
         /// picture. The box follows <see cref="DrawSolid"/>'s rule (Scale is a fraction of the
         /// canvas width, ScaleY or Scale a fraction of its height) rather than a picture's
         /// intrinsic aspect: a wallpaper's natural size is the frame itself, so the default
@@ -1084,9 +1085,13 @@ namespace Clowd.VideoSDK.Composition
             // unknown or retired ids resolve to the defaults, never to nothing (the
             // CursorContent rule: a project from a newer build still opens and draws)
             var style = BackgroundCatalog.Find(BackgroundCatalog.ResolveStyle(background.Style));
-            var scene = BackgroundRenderer.GetScene(style.Id,
-                BackgroundCatalog.ResolveTheme(style.Id, background.Theme));
-            if (scene == null)
+            // the solid style has no artwork: its picture is the item's own color, filled into the
+            // very box a wallpaper would have covered, so it is decorated, clipped and faded by
+            // everything below exactly as one is
+            var scene = style.IsSolid
+                ? null
+                : BackgroundRenderer.GetScene(style.Id, BackgroundCatalog.ResolveTheme(style.Id, background.Theme));
+            if (scene == null && !style.IsSolid)
                 return;
 
             double destW = transform.Scale * canvasWidth;
@@ -1118,7 +1123,11 @@ namespace Clowd.VideoSDK.Composition
                     }
 
                     ApplyClips(target, transform, fx, rect);
-                    BackgroundRenderer.DrawScene(target, rect, scene, phase, pass == 0 ? 1 : opacity);
+                    if (style.IsSolid)
+                        BackgroundRenderer.DrawSolid(target, rect,
+                            BackgroundRenderer.SolidColorOf(background.Color), pass == 0 ? 1 : opacity);
+                    else
+                        BackgroundRenderer.DrawScene(target, rect, scene, phase, pass == 0 ? 1 : opacity);
                 }
                 finally
                 {

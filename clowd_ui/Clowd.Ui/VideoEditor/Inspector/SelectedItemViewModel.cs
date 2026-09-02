@@ -511,6 +511,7 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         /// <summary>Null until the user picks one: the style's own default theme.</summary>
         private string _backgroundTheme;
+        private string _backgroundColorHex = BackgroundContent.DefaultColor;
 
         private string _cursorStyle = "vision";
 
@@ -1702,6 +1703,8 @@ namespace Clowd.UI.VideoEditor.Inspector
                 OnPropertyChanged(nameof(BackgroundThemeOptions));
                 OnPropertyChanged(nameof(BackgroundThemesVisible));
                 OnPropertyChanged(nameof(BackgroundTheme));
+                // and the color row, which stands in the theme row's place for the solid style
+                OnPropertyChanged(nameof(ShowBackgroundColor));
                 EditBackground("sel:bgstyle", b => b.Style = value.Value);
             }
         }
@@ -1721,7 +1724,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// Which of the style's themes is drawn. The stored value is deliberately left alone when
         /// the style changes — a project remembers "ember" across a trip through another style, and
         /// the six generated-palette styles share one theme namespace, so the palette a user picked
-        /// on Moving Blob is still picked when they come back from Layered Waves. The getter
+        /// on Moving Blob is still picked when they come back from Stacked Waves. The getter
         /// resolves whatever is stored against the style actually picked, so a theme that style
         /// does not offer reads as its default exactly as the compositor draws it. Writing a reset
         /// on every style change would look identical and would burn an undo entry the user did not
@@ -1739,6 +1742,32 @@ namespace Clowd.UI.VideoEditor.Inspector
                 _backgroundTheme = value.Value;
                 OnPropertyChanged(nameof(BackgroundTheme));
                 EditBackground("sel:bgtheme", b => b.Theme = value.Value);
+            }
+        }
+
+        /// <summary>Whether the color row is on show: only for the one style that draws no
+        /// artwork (<see cref="BackgroundCatalog.SolidStyle"/>), where the color IS the picture.
+        /// It stands where the theme row stands for a wallpaper, and the two are never both on
+        /// show — the solid style offers no themes.</summary>
+        public bool ShowBackgroundColor => BackgroundCatalog.IsSolid(_backgroundStyle);
+
+        /// <summary>The solid style's fill, as <c>#RRGGBB</c> or <c>#AARRGGBB</c>. Half-typed
+        /// values stay in the box without reaching the model, like <see cref="TextColorHex"/>, and
+        /// the stored color survives a trip through a wallpaper style untouched — the same
+        /// stickiness <see cref="BackgroundTheme"/> keeps, and for the same reason.</summary>
+        public string BackgroundColorHex
+        {
+            get => _backgroundColorHex;
+            set
+            {
+                if (!Set(ref _backgroundColorHex, value) || _syncing)
+                    return;
+
+                if (!IsHexColor(value))
+                    return;
+
+                var color = value.Trim();
+                EditBackground("sel:bgcolor", b => b.Color = color);
             }
         }
 
@@ -2609,11 +2638,14 @@ namespace Clowd.UI.VideoEditor.Inspector
                     Set(ref _backgroundStyle, BackgroundCatalog.ResolveStyle(background.Style),
                         nameof(BackgroundStyle));
                     Set(ref _backgroundTheme, background.Theme, nameof(BackgroundTheme));
+                    Set(ref _backgroundColorHex, background.Color ?? BackgroundContent.DefaultColor,
+                        nameof(BackgroundColorHex));
                     // the theme row is derived from the style, and nothing here raises dependents
                     // on its own: which tiles it offers and whether it is there at all both move
                     // with the style just read back
                     OnPropertyChanged(nameof(BackgroundThemeOptions));
                     OnPropertyChanged(nameof(BackgroundThemesVisible));
+                    OnPropertyChanged(nameof(ShowBackgroundColor));
                 }
 
                 if (item?.Content is KeyboardContent keyboard)

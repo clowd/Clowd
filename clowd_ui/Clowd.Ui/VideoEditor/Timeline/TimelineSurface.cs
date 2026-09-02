@@ -1309,7 +1309,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// </remarks>
         private void RenderBackgroundMesh(DrawingContext context, BackgroundContent background, Rect body)
         {
-            var mesh = BackgroundMesh.Get(background.Style, background.Theme);
+            var mesh = BackgroundMesh.Get(background.Style, background.Theme, background.Color);
             if (mesh == null)
                 return; // no artwork to sample: the card keeps its plain row fill
 

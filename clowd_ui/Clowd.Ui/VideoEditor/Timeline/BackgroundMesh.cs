@@ -38,22 +38,27 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         /// <summary>The mesh for a (style, theme) pair, or null when there is no artwork to
         /// sample — in which case the card keeps its plain row fill. Ids resolve through the
-        /// catalog, so the key is the pair actually drawn.</summary>
-        public static Bitmap Get(string style, string theme)
+        /// catalog, so the key is the pair actually drawn. <paramref name="color"/> is the item's
+        /// own fill and is read only by the solid style, whose card is that one color; it is part
+        /// of the key there, so two solid backgrounds of different colors are two meshes rather
+        /// than one shared by both.</summary>
+        public static Bitmap Get(string style, string theme, string color = null)
         {
             var styleId = BackgroundCatalog.ResolveStyle(style);
-            var key = (styleId, BackgroundCatalog.ResolveTheme(styleId, theme) ?? String.Empty);
+            var key = BackgroundCatalog.IsSolid(styleId)
+                ? (styleId, color ?? String.Empty)
+                : (styleId, BackgroundCatalog.ResolveTheme(styleId, theme) ?? String.Empty);
             if (Cache.TryGetValue(key, out var cached))
                 return cached;
 
-            var bitmap = Build(styleId, theme);
+            var bitmap = Build(styleId, theme, color);
             Cache[key] = bitmap;
             return bitmap;
         }
 
-        private static Bitmap Build(string style, string theme)
+        private static Bitmap Build(string style, string theme, string color)
         {
-            var cells = BackgroundSwatch.Grid(style, theme);
+            var cells = BackgroundSwatch.Grid(style, theme, color);
             if (cells == null)
                 return null;
 

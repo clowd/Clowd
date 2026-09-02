@@ -25,13 +25,19 @@ namespace Clowd.VideoSDK.Tests
             SKRect.Create(0, 0, 900, 600),     // the haikei-derived eight
         };
 
-        /// <summary>Every (style, spec) row, including the unnamed one of a style with no themes.</summary>
+        /// <summary>Every (style, spec) row that has artwork behind it, including the unnamed one
+        /// of a style with no themes. The solid style is not one of them: it ships no file, and
+        /// every sweep here is about the files (they load, they parse, they resample) — what the
+        /// solid style draws instead is its own test, <see cref="The_solid_style_has_no_artwork"/>,
+        /// and the renderer's and composer's own.</summary>
         public static IEnumerable<object[]> AllSpecs()
-            => BackgroundCatalog.Styles.SelectMany(s => s.Specs.Select(t => new object[] { s.Id, t.Id }));
+            => BackgroundCatalog.Styles.Where(s => !s.IsSolid)
+                .SelectMany(s => s.Specs.Select(t => new object[] { s.Id, t.Id }));
 
         /// <summary>Every distinct SVG file, with the style that owns it.</summary>
         public static IEnumerable<object[]> AllSvgAssets()
             => BackgroundCatalog.Styles.SelectMany(s => s.Specs.Select(t => t.Asset))
+                .Where(a => a != null)
                 .Where(a => a.EndsWith(".svg", StringComparison.Ordinal))
                 .Distinct()
                 .Select(a => new object[] { a });
@@ -46,6 +52,43 @@ namespace Clowd.VideoSDK.Tests
         {
             Assert.Equal(BackgroundCatalog.Styles.Select(s => s.Id).ToArray(), BackgroundContent.Styles.ToArray());
             Assert.Equal(BackgroundCatalog.DefaultStyle, new BackgroundContent().Style);
+        }
+
+        /// <summary>The one style with no library artwork: a single unnamed colorway (so the
+        /// picker shows no theme row over it), no file to load and no scene to draw — the color
+        /// the item carries is its whole picture, and every consumer branches on
+        /// <see cref="BackgroundStyle.IsSolid"/> rather than on the id.</summary>
+        [Fact]
+        public void The_solid_style_has_no_artwork()
+        {
+            var solid = BackgroundCatalog.Find(BackgroundCatalog.SolidStyle);
+            Assert.True(solid.IsSolid);
+            Assert.Equal("Solid Color", solid.Label);
+            Assert.Empty(solid.Themes);
+            Assert.Null(Assert.Single(solid.Specs).Asset);
+            Assert.False(solid.IsAnimated);
+            Assert.Null(BackgroundRenderer.GetScene(BackgroundCatalog.SolidStyle, null));
+            Assert.Null(BackgroundCatalog.ResolveTheme(BackgroundCatalog.SolidStyle, "midnight"));
+
+            // and it is the only one: every other row has a file behind it
+            Assert.Equal(new[] { BackgroundCatalog.SolidStyle },
+                BackgroundCatalog.Styles.Where(s => s.IsSolid).Select(s => s.Id).ToArray());
+            Assert.True(BackgroundCatalog.IsSolid("SOLID"));
+            Assert.False(BackgroundCatalog.IsSolid("big-sur"));
+            // an unknown id resolves to the (wallpaper) default before it is asked
+            Assert.False(BackgroundCatalog.IsSolid("no-such-style"));
+        }
+
+        /// <summary>The retired style is gone from the library, not merely hidden: nothing
+        /// resolves to it and its artwork is no longer embedded.</summary>
+        [Fact]
+        public void Layered_waves_is_retired()
+        {
+            Assert.Null(BackgroundCatalog.Find("layered-waves"));
+            Assert.DoesNotContain("layered-waves", BackgroundContent.Styles);
+            Assert.False(BackgroundAssets.ResourceExists("layered-waves/source.svg"));
+            // and a project that still names it opens and draws the default
+            Assert.Equal(BackgroundCatalog.DefaultStyle, BackgroundCatalog.ResolveStyle("layered-waves"));
         }
 
         [Fact]
@@ -180,7 +223,7 @@ namespace Clowd.VideoSDK.Tests
         public void Generative_styles_offer_source_then_every_palette()
         {
             var paletteIds = BackgroundCatalog.PaletteRows.Select(p => p.Id).ToArray();
-            foreach (var id in new[] { "layered-waves", "stacked-waves", "layered-steps", "moving-blob", "moving-corners", "breathing-field" })
+            foreach (var id in new[] { "stacked-waves", "layered-steps", "moving-blob", "moving-corners", "breathing-field" })
             {
                 var style = BackgroundCatalog.Find(id);
                 Assert.Equal(new[] { "source" }.Concat(paletteIds).ToArray(), style.Themes.Select(t => t.Id).ToArray());
@@ -190,7 +233,6 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Theory]
-        [InlineData("layered-waves")]
         [InlineData("stacked-waves")]
         [InlineData("layered-steps")]
         [InlineData("moving-blob")]
@@ -277,7 +319,7 @@ namespace Clowd.VideoSDK.Tests
         [Fact]
         public void Only_monterey_dark_needs_isolation()
         {
-            foreach (var style in BackgroundCatalog.Styles)
+            foreach (var style in BackgroundCatalog.Styles.Where(s => !s.IsSolid))
             {
                 foreach (var spec in style.Specs)
                 {

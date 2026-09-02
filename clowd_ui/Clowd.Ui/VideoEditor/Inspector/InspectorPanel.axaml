@@ -953,7 +953,12 @@
                                         Height="34"
                                         ClipToBounds="True"
                                         CornerRadius="3">
-                                        <insp:BackgroundStylePreview StyleName="{Binding Value}" />
+                                        <!--  the colour comes off the panel, not the tile's own
+                                              item: only the solid style reads it, and its tile is
+                                              a preview of what that pick would draw  -->
+                                        <insp:BackgroundStylePreview
+                                            Color="{Binding $parent[ListBox].DataContext.BackgroundColorHex}"
+                                            StyleName="{Binding Value}" />
                                     </Border>
                                     <TextBlock
                                         Classes="tileText"
@@ -963,6 +968,44 @@
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>
+
+                    <!--  the solid style's own row, where a wallpaper's THEME row goes: that style
+                          ships no artwork, so the colour is the whole of what it draws. The two are
+                          never both up — a style either offers themes or is the solid one.  -->
+                    <DockPanel Classes="row" IsVisible="{Binding ShowBackgroundColor}">
+                        <Panel Classes="dot" DockPanel.Dock="Left" />
+                        <TextBlock Classes="label" Text="Color" />
+                        <Border
+                            x:Name="backgroundColorWell"
+                            Width="120"
+                            Height="22"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1"
+                            Cursor="Hand">
+                            <StackPanel
+                                Margin="6,0,0,0"
+                                HorizontalAlignment="Left"
+                                Orientation="Horizontal"
+                                Spacing="6">
+                                <Border
+                                    Width="14"
+                                    Height="14"
+                                    VerticalAlignment="Center"
+                                    BorderBrush="White"
+                                    BorderThickness="1">
+                                    <Rectangle x:Name="backgroundColorSwatch" Fill="White" />
+                                </Border>
+                                <TextBlock
+                                    x:Name="txtBackgroundColorHex"
+                                    VerticalAlignment="Center"
+                                    Foreground="#CCCCCC"
+                                    Text="#FF00AFF0" />
+                            </StackPanel>
+                        </Border>
+                    </DockPanel>
 
                     <!--  the theme row gets its own sub-header, exactly as the cursor colorways
                           do: which palette a style is drawn in is its own subject, not one more

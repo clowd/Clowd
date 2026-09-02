@@ -66,10 +66,19 @@ namespace Clowd.VideoSDK.Composition
         /// not know describes the wallpaper it actually draws; null only when the embedded file
         /// is missing, which the catalog tests rule out for every row. Safe to call from any
         /// thread; the array is a copy the caller may keep.
+        ///
+        /// <paramref name="color"/> is the item's own <c>BackgroundContent.Color</c> and is read
+        /// only by the solid style, whose grid is that one color in every cell (over black, so a
+        /// translucent fill reads on the card as it composes on the canvas). Nothing is cached for
+        /// it: the grid is per item rather than per catalog row, and filling 24 cells costs less
+        /// than the lookup would.
         /// </summary>
-        public static uint[] Grid(string style, string theme)
+        public static uint[] Grid(string style, string theme, string color = null)
         {
             var resolved = BackgroundCatalog.Find(BackgroundCatalog.ResolveStyle(style));
+            if (resolved.IsSolid)
+                return Flat(BackgroundRenderer.SolidColorOf(color));
+
             var key = (resolved.Id, BackgroundCatalog.ResolveTheme(resolved.Id, theme) ?? string.Empty);
 
             lock (Sync)
@@ -81,6 +90,21 @@ namespace Clowd.VideoSDK.Composition
                 }
                 return (uint[])cells?.Clone();
             }
+        }
+
+        /// <summary>One color in every cell, composited over the black ground the sampler clears
+        /// to, so an alpha the composer would blend is blended here too.</summary>
+        private static uint[] Flat(SKColor color)
+        {
+            double a = color.Alpha / 255.0;
+            uint rgb = ((uint)Math.Round(color.Red * a) << 16)
+                | ((uint)Math.Round(color.Green * a) << 8)
+                | (uint)Math.Round(color.Blue * a);
+
+            var cells = new uint[Columns * Rows];
+            for (int i = 0; i < cells.Length; i++)
+                cells[i] = rgb;
+            return cells;
         }
 
         /// <summary>Draws the wallpaper once and folds it into the cell grid; null when there is
