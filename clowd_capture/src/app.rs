@@ -22,7 +22,7 @@ use crate::render::window::{set_hardware_cursor_visible, WindowHandle, WindowSet
 use crate::render::worker::WorkerSetup;
 use crate::selection::{clamp_to_nearest_monitor, dpi_at_point, hit_test, move_and_crop, resize_with_clamp, DragMode, Hittest};
 use crate::session_output::{
-    write_color_action, write_ocr_upload_action, write_scroll_action, write_session, write_video_action, SessionAction,
+    write_color_action, write_ocr_upload_action, write_scroll_action, write_session, write_share_action, write_video_action, SessionAction,
 };
 use crate::settings::{CaptureMode, CapturerSettings};
 use crate::sync::{Latch, VisibleLatch};
@@ -111,6 +111,15 @@ pub struct CaptureCycle {
     /// once, regardless of which capture path (drag / keyboard / preselect)
     /// fired (DESIGN §3.3).
     video_dispatched: bool,
+    /// One-shot guard for `--share` mode, the exact twin of
+    /// [`Self::video_dispatched`]: set the first time a selection becomes
+    /// captured so `Command::Share` is auto-dispatched exactly once no
+    /// matter which capture path (drag / keyboard / preselect) fired. Its
+    /// own flag rather than a shared one because the two modes are
+    /// mutually exclusive at the CLI but nothing downstream depends on
+    /// that, and a single guard would silently couple them if that ever
+    /// changed.
+    share_dispatched: bool,
     /// Monotonic per-cycle OCR request id. Bumped on every dispatch AND on
     /// every BACK/cancel, so a late result from a superseded request is
     /// discarded on pickup: BACK leaves the same cycle alive, so the result
@@ -168,6 +177,9 @@ pub enum CycleAction {
     Upload,
     SelectColor,
     Video,
+    /// `--share` mode: the picked region was handed to the shell to mirror
+    /// into a window a meeting app can share.
+    Share,
     Scroll,
     Copy,
     Save,
@@ -610,6 +622,7 @@ impl App {
             }),
             pending_preselect,
             video_dispatched: false,
+            share_dispatched: false,
             ocr_req: 0,
             ocr_job: None,
             ocr_ready: None,
@@ -1065,18 +1078,32 @@ impl App {
         self.on_captured(event_loop, window_id);
     }
 
-    /// Auto-dispatch `Command::Video` the first time a selection becomes
-    /// captured, when the overlay was launched with `--video`. Called from
+    /// Auto-dispatch `Command::Video` (`--video`) or `Command::Share`
+    /// (`--share`) the first time a selection becomes captured. Called from
     /// both captured-transition sites (mouse-release drag-select and the
-    /// keyboard/preselect `finalize_selection` path) so video mode works
-    /// for every entry path (DESIGN §3.3).
+    /// keyboard/preselect `finalize_selection` path) so the shell-driven
+    /// modes work for every entry path (DESIGN §3.3).
+    ///
+    /// The command is decided and its guard set before anything is
+    /// dispatched, because `dispatch_command` wants `&mut self` and the
+    /// guards live behind the `cycle` borrow. The two modes are mutually
+    /// exclusive on the command line (`--share` conflicts with `--video`),
+    /// so the ordering below is a formality rather than a precedence rule.
     fn on_captured(&mut self, event_loop: &ActiveEventLoop, window_id: WindowId) {
         let Some(cycle) = self.cycle.as_mut() else {
             return;
         };
-        if cycle.settings.video_mode && !cycle.video_dispatched {
+        let auto = if cycle.settings.video_mode && !cycle.video_dispatched {
             cycle.video_dispatched = true;
-            self.dispatch_command(Command::Video, event_loop, window_id);
+            Some(Command::Video)
+        } else if cycle.settings.share_mode && !cycle.share_dispatched {
+            cycle.share_dispatched = true;
+            Some(Command::Share)
+        } else {
+            None
+        };
+        if let Some(command) = auto {
+            self.dispatch_command(command, event_loop, window_id);
         }
     }
 
@@ -1433,6 +1460,43 @@ impl App {
                     ActionResult::Canceled => self.show_all_windows(),
                     ActionResult::Failed(msg) => {
                         if xdialog::show_message_retry_cancel("Clowd Capture", "Video Capture Failed", &msg, ErrorIcon).unwrap_or(false) {
+                            self.show_all_windows();
+                        } else {
+                            self.finish_cycle(event_loop, CycleAction::Canceled);
+                        }
+                    }
+                }
+            }
+            Command::Share => {
+                // The twin of Command::Video above, minus the pixels. A
+                // share marker carries the selection and nothing else, so
+                // there is no desktop-buffer requirement here: what the
+                // meeting sees is mirrored live off the screen by
+                // `clowd_share_region`, long after this overlay is gone.
+                // Without a --session-dir there is no shell listening —
+                // ignore, exactly as Video does.
+                let Some(session_dir) = cycle.settings.session_dir.clone() else {
+                    log::info!("command Share ignored: no --session-dir provided");
+                    return;
+                };
+                hide_overlay_for_action(&self.windows);
+                let result = match cycle.input.selection {
+                    Some(sel) => write_share_action(&session_dir, sel, &self.monitors),
+                    None => ActionResult::Failed("No selection".into()),
+                };
+                match result {
+                    ActionResult::Success => self.finish_cycle(event_loop, CycleAction::Share),
+                    ActionResult::Canceled => self.show_all_windows(),
+                    ActionResult::Failed(msg) => {
+                        if xdialog::show_message_retry_cancel("Clowd Capture", "Share Region Failed", &msg, ErrorIcon).unwrap_or(false) {
+                            // Unlatch before re-showing, which VIDEO does not have to do: its
+                            // retry can go back through the panel's VIDEO tile, while SHARE is
+                            // auto-dispatch only (no panel button, by design). Leaving the
+                            // one-shot guard set would make Retry a dead end — the overlay comes
+                            // back and no re-selection can ever dispatch Share again.
+                            if let Some(c) = self.cycle.as_mut() {
+                                c.share_dispatched = false;
+                            }
                             self.show_all_windows();
                         } else {
                             self.finish_cycle(event_loop, CycleAction::Canceled);

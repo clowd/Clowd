@@ -46,6 +46,7 @@ pub const PANEL_ICONS: &[&[u8]] = &[
     super::assets::SVG_BACK,
     super::assets::SVG_OCR,
     super::assets::SVG_SCROLL,
+    super::assets::SVG_SHARE,
 ];
 
 // Named indices into `PANEL_ICONS`. Hand-writing the numbers at each
@@ -63,13 +64,15 @@ pub const ICON_SEARCH: usize = 7;
 pub const ICON_BACK: usize = 8;
 pub const ICON_OCR: usize = 9;
 pub const ICON_SCROLL: usize = 10;
+pub const ICON_SHARE: usize = 11;
 
 /// Which of the optional panel buttons the shell has left switched on.
 ///
 /// The capture strip grew past what fits comfortably under a small
-/// selection, so UPLOAD, SCROLL and OCR became opt-out (SettingsCapture's
-/// "Optional features" section, carried in over `--no-upload` /
-/// `--no-scroll-capture` / `--no-ocr` and the matching `show` fields).
+/// selection, so UPLOAD, SHARE, SCROLL and OCR became opt-out
+/// (SettingsCapture's "Optional features" section, carried in over
+/// `--no-upload` / `--no-share` / `--no-scroll-capture` / `--no-ocr` and
+/// the matching `show` fields).
 /// EDIT / VIDEO / COPY / SAVE / RESET / EXIT are deliberately NOT
 /// configurable — they are the capturer's reason to exist, and a strip
 /// that can be emptied is a strip that can strand a captured selection.
@@ -82,6 +85,13 @@ pub struct PanelFeatures {
     /// switch, because both are "hand this to the upload provider" and a
     /// user who turned uploading off did not mean "except for text".
     pub upload: bool,
+    /// SHARE in the capture strip. Switches off the button and its
+    /// accelerator only — NOT the action: `--share` still auto-dispatches
+    /// it, because that mode never shows the panel and is reached by the
+    /// shell's own tray item and hotkey, which the user invoked
+    /// deliberately. Same division as UPLOAD, whose switch trims the strip
+    /// while the shell's "Upload File…" tray item stays.
+    pub share: bool,
     /// SCROLL in the capture strip.
     pub scroll_capture: bool,
     /// OCR in the capture strip. Switching it off makes the OCR strip
@@ -99,6 +109,7 @@ impl PanelFeatures {
     /// Everything on — the default, and what standalone runs use.
     pub const ALL: Self = Self {
         upload: true,
+        share: true,
         scroll_capture: true,
         ocr: true,
     };
@@ -108,6 +119,7 @@ impl PanelFeatures {
     pub fn allows(self, command: Command) -> bool {
         match command {
             Command::Upload | Command::OcrUpload => self.upload,
+            Command::Share => self.share,
             Command::ScrollCapture => self.scroll_capture,
             Command::Ocr => self.ocr,
             _ => true,
@@ -118,8 +130,8 @@ impl PanelFeatures {
 /// Which strip of buttons the panel is showing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PanelButtonSet {
-    /// The capture strip: UPLOAD / EDIT / VIDEO / SCROLL / OCR / COPY /
-    /// SAVE / RESET / EXIT (SCROLL and OCR are Windows-only).
+    /// The capture strip: UPLOAD / EDIT / VIDEO / SHARE / SCROLL / OCR /
+    /// COPY / SAVE / RESET / EXIT (SCROLL and OCR are Windows-only).
     Normal,
     /// The strip shown while the OCR overlay owns the selection.
     Ocr,
@@ -202,9 +214,10 @@ pub struct ButtonDef {
 
 /// The capture-mode panel buttons in C++ order.
 ///
-/// SCROLL sits after VIDEO because it is the other "hand off to a
-/// capture driver" action; OCR follows it as the other "do something
-/// smarter than a bitmap" action.
+/// SHARE and SCROLL sit after VIDEO because they are the other "hand off
+/// to a capture driver" actions — SHARE first, since like VIDEO it hands
+/// the region to a live helper rather than producing a file; OCR follows
+/// them as the other "do something smarter than a bitmap" action.
 ///
 /// A slice (`&[ButtonDef]`) rather than a fixed-size array so the
 /// per-element `#[cfg]` doesn't have to be mirrored in a length
@@ -214,13 +227,18 @@ pub struct ButtonDef {
 ///   0: UPLOAD — U   (0x55)
 ///   1: EDIT   — E
 ///   2: VIDEO  — V   (0x56)
-///   3: SCROLL — L   (0x4C), underlined on the fifth char because
+///   3: SHARE  — H   (0x48), underlined on the second char because every
+///      other letter of SHARE is spoken for (S=SAVE, A/R/E=EDIT, RESET).
+///      'h' is also the pre-capture color-sampler key, which does not
+///      collide: that branch only runs while nothing is captured, and the
+///      panel — and therefore this lookup — only exists once something is.
+///   4: SCROLL — L   (0x4C), underlined on the fifth char because
 ///      S, C and R already belong to SAVE, COPY and RESET
-///   4: OCR    — O   (0x4F)
-///   5: COPY   — C   (0x43)
-///   6: SAVE   — S   (0x53)
-///   7: RESET  — R   (0x52)
-///   8: EXIT   — X   (0x58), underlined on the second char
+///   5: OCR    — O   (0x4F)
+///   6: COPY   — C   (0x43)
+///   7: SAVE   — S   (0x53)
+///   8: RESET  — R   (0x52)
+///   9: EXIT   — X   (0x58), underlined on the second char
 const NORMAL_DEFS: &[ButtonDef] = &[
     ButtonDef {
         command: Command::Upload,
@@ -245,6 +263,14 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         primary: true,
         icon_id: ICON_VIDEO,
         svg_bytes: super::assets::SVG_VIDEO,
+    },
+    ButtonDef {
+        command: Command::Share,
+        label: "SHARE",
+        underline_idx: 1,
+        primary: true,
+        icon_id: ICON_SHARE,
+        svg_bytes: super::assets::SVG_SHARE,
     },
     ButtonDef {
         command: Command::ScrollCapture,
@@ -351,8 +377,8 @@ const OCR_DEFS: &[ButtonDef] = &[
 /// `PanelLayout`'s fixed rect array and of the renderer's per-button
 /// hover state.
 ///
-/// Computed from the tables rather than hand-written (it would be 9 on
-/// Windows and 8 on macOS today) so adding a button to either set can
+/// Computed from the tables rather than hand-written (it would be 10 on
+/// Windows and 9 on macOS today) so adding a button to either set can
 /// never overflow the array.
 pub const MAX_PANEL_BUTTONS: usize = const_max(NORMAL_DEFS.len(), OCR_DEFS.len());
 
@@ -401,14 +427,15 @@ mod tests {
     /// All eight on/off combinations of the three switches, so the
     /// invariants below are checked against every strip the shell can ask
     /// for rather than just the extremes.
-    const FEATURE_COMBINATIONS: [PanelFeatures; 8] = {
-        let mut out = [PanelFeatures::ALL; 8];
+    const FEATURE_COMBINATIONS: [PanelFeatures; 16] = {
+        let mut out = [PanelFeatures::ALL; 16];
         let mut i = 0;
-        while i < 8 {
+        while i < 16 {
             out[i] = PanelFeatures {
                 upload: i & 1 != 0,
                 scroll_capture: i & 2 != 0,
                 ocr: i & 4 != 0,
+                share: i & 8 != 0,
             };
             i += 1;
         }
@@ -485,10 +512,12 @@ mod tests {
     fn switched_off_buttons_lose_their_accelerator() {
         let off = PanelFeatures {
             upload: false,
+            share: false,
             scroll_capture: false,
             ocr: false,
         };
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'u'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'h'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'l'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'o'), None);
         // UPLOAD is one switch across both strips — text is still an upload.

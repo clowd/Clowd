@@ -22,7 +22,8 @@ namespace Clowd.UI
         // The capture region in the platform capture coordinate space (§1.1): physical px in
         // virtual-desktop coordinates on Windows, CG points on macOS — which is also exactly what
         // Avalonia PixelPoint positioning uses on each platform, so no unit conversion here.
-        private readonly ScreenRect _region;
+        // Not readonly only because of SetRegion; nothing else reassigns it.
+        private ScreenRect _region;
 
         // satisfies the XAML compiler's runtime-loader check (AVLN3001); a border window is only
         // ever constructed with a real capture region.
@@ -73,9 +74,34 @@ namespace Clowd.UI
             ScalingChanged += OnScalingChanged;
         }
 
+        /// <summary>
+        /// Moves the frame onto a new region, re-deriving the whole geometry (edge suppression
+        /// included, since the region may have crossed onto another monitor) from the window's
+        /// current scaling. Nothing calls this yet: it exists because moving or resizing a shared
+        /// region is a deferred follow-up, and it is the entire border-side cost of it — the frame
+        /// is a function of the region, so a setter is the whole feature here.
+        ///
+        /// What that follow-up must NOT do is make this window hit-testable so the frame itself can
+        /// be grabbed. It is click-through by construction (WS_EX_TRANSPARENT + layered +
+        /// HTTRANSPARENT, setIgnoresMouseEvents: on macOS), and that is the property that lets it
+        /// hang over a region the user is still working in. Grab handles belong to a NEW sibling
+        /// window that takes input and calls this — never to a flag that switches this one's
+        /// transparency off, because there is no state in which the border wants clicks.
+        /// </summary>
+        public void SetRegion(ScreenRect region)
+        {
+            _region = region ?? throw new ArgumentNullException(nameof(region));
+            ApplyGeometry(RenderScaling);
+        }
+
         /// <summary>Sets the centered overlay text ("WAIT…"/"PRESS\nSTART"); null or empty hides
         /// it. Newlines break it into centered lines, and the text is scaled down to fit a small
-        /// capture region rather than being clipped by it.</summary>
+        /// capture region rather than being clipped by it.
+        /// This text renders INSIDE the region, so it belongs only to sessions with a window in
+        /// which nothing is being captured yet: a recording clears it before frames flow, and a
+        /// share session — whose region is mirrored continuously from the moment the helper starts
+        /// — has no such window and must never call it, or the words go into the meeting.
+        /// ScrollCapturePage.cs:86-91 documents the same constraint for the same reason.</summary>
         public void SetOverlayText(string text)
         {
             var value = text ?? String.Empty;

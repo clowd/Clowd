@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -75,11 +74,6 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         // has already forced; this is only a backstop against blocking disposal forever.
         private static readonly TimeSpan PumpDrainTimeout = TimeSpan.FromSeconds(5);
 
-        // libobs is chatty on stderr for the life of the process; an hours-long recording
-        // must not accumulate unboundedly (§4.2).
-        private const int MaxLogLines = 1000;
-        private const int MaxLogChars = 256 * 1024;
-
         /// <summary>Raised on the UI thread for every <c>status</c> message while recording.</summary>
         public event EventHandler<ObsStatus> StatusReceived;
 
@@ -112,9 +106,10 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         // recording_paused / recording_resumed).
         private TaskCompletionSource<bool> _pauseTcs;
 
-        private readonly object _logLock = new();
-        private readonly Queue<string> _log = new();
-        private int _logChars;
+        // libobs is chatty on stderr for the life of the process; an hours-long recording
+        // must not accumulate unboundedly (§4.2). The caps stay obs-express's own numbers even
+        // though the buffer itself is now shared code — the other drivers keep theirs.
+        private readonly HelperProcessLog _log = new(maxLines: 1000, maxChars: 256 * 1024);
 
         private Process _proc;
         private Task _stdoutPump;
@@ -131,26 +126,21 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             if (_proc != null)
                 throw new InvalidOperationException("InitializeAsync may only be called once per ObsCapturer.");
 
-            var psi = new ProcessStartInfo(exePath)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = Path.GetDirectoryName(exePath),
-                RedirectStandardInput = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-            };
-            foreach (var arg in args)
-                psi.ArgumentList.Add(arg);
-
-            Debug.WriteLine("Starting recording process: " + exePath + " " + String.Join(" ", args));
-            _proc = Process.Start(psi);
-            if (_proc == null)
-                throw new InvalidOperationException("Failed to start recording process: " + exePath);
-
-            // .NET's stdin writer does not auto-flush by default — without this, "start"/"quit"
-            // would sit in the writer's buffer forever (hang → kill → unfinalized mp4).
-            _proc.StandardInput.AutoFlush = true;
+            // The shared spawn, not a hand-rolled ProcessStartInfo: same redirection of all three
+            // streams, same CreateNoWindow, same working directory (the binary's own folder, where
+            // libobs and its plugins live), same InvalidOperationException when the spawn fails, and
+            // the same AutoFlush that keeps "start"/"quit" from sitting in the writer's buffer
+            // forever (hang → kill → unfinalized mp4).
+            //
+            // ONE DELIBERATE BEHAVIOUR CHANGE, not an accident of the move: HelperProcess.Start pins
+            // all three streams to UTF-8. This class set no encodings at all, so on Windows .NET
+            // decoded and encoded the redirected streams with the console code page — a legacy OEM
+            // one — which silently mangled every byte outside it in both directions. A
+            // "configure <path>" naming a user directory the OEM page cannot spell (any non-Latin
+            // account name) was already reaching the recorder corrupted, and libobs's UTF-8 stderr
+            // was already landing as mojibake in the logs attached to Sentry. Fixing that is part of
+            // the point of the move, so do not "restore" the old unencoded streams.
+            _proc = HelperProcess.Start(exePath, args);
 
             _stdoutPump = Task.Run(PumpStdoutAsync);
             _stderrPump = Task.Run(PumpStderrAsync);
@@ -268,32 +258,14 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
 
         /// <summary>The most recent non-JSON stdout + stderr output (bounded ring buffer),
         /// for the error-log file written on <see cref="CriticalError"/>.</summary>
-        public string GetLog()
-        {
-            lock (_logLock)
-                return String.Join(Environment.NewLine, _log);
-        }
+        public string GetLog() => _log.GetLog();
 
         /// <summary>Stows the recent recorder output on <paramref name="ex"/> (under
         /// <see cref="SentryConfig.ProcessLogKey"/>) so whichever layer ultimately reports it —
         /// usually a <c>video.*</c> catch several frames up the page — attaches the log to the
         /// Sentry event. A bare "exited unexpectedly" or "timed out" is undiagnosable without
         /// libobs's stderr (CLOWD-Z, CLOWD-C).</summary>
-        private Exception AttachProcessLog(Exception ex)
-        {
-            try
-            {
-                var log = GetLog();
-                if (log.Length > 0 && !ex.Data.Contains(SentryConfig.ProcessLogKey))
-                    ex.Data[SentryConfig.ProcessLogKey] = log;
-            }
-            catch
-            {
-                // Exception.Data may be read-only for exotic exception types
-            }
-
-            return ex;
-        }
+        private Exception AttachProcessLog(Exception ex) => _log.Attach(ex);
 
         /// <summary>Awaits a protocol ack, replacing the bare <c>WaitAsync</c> timeout with one
         /// that names the message that never came, and attaching the recorder's recent output to
@@ -373,18 +345,7 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         /// disposing it closes the stdio streams, which faults a parked <c>ReadLineAsync</c>
         /// instead of ending it at EOF. The pumps end on their own once the process is gone, so
         /// the timeout only matters if the child left an inherited handle to its stdout open.</summary>
-        private async Task JoinPumpsAsync()
-        {
-            var pumps = new[] { _stdoutPump, _stderrPump };
-            try
-            {
-                await Task.WhenAll(Array.FindAll(pumps, p => p != null)).WaitAsync(PumpDrainTimeout);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine("Recording pumps did not drain before disposal: " + ex.Message);
-            }
-        }
+        private Task JoinPumpsAsync() => HelperProcess.JoinPumpsAsync(PumpDrainTimeout, _stdoutPump, _stderrPump);
 
         private async Task PumpStdoutAsync()
         {
@@ -714,18 +675,6 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             }
         }
 
-        private void AppendLog(string line)
-        {
-            if (String.IsNullOrEmpty(line))
-                return;
-
-            lock (_logLock)
-            {
-                _log.Enqueue(line);
-                _logChars += line.Length;
-                while (_log.Count > MaxLogLines || _logChars > MaxLogChars)
-                    _logChars -= _log.Dequeue().Length;
-            }
-        }
+        private void AppendLog(string line) => _log.Append(line);
     }
 }

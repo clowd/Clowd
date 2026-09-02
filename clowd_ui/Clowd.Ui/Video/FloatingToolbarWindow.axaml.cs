@@ -20,6 +20,24 @@ using Clowd.UI.Helpers;
 namespace Clowd.UI
 {
     /// <summary>
+    /// Which session the strip is being built for. This is a CONSTRUCTION choice, not a mode the
+    /// strip can be switched into later: the recording profile owns settings the share profile
+    /// must never touch (it seeds itself from <see cref="SettingsRecording"/>, audits the capture
+    /// toggles against the attached devices and writes the result back), so the two halves are
+    /// built by different code paths rather than by hiding buttons after the fact.
+    /// </summary>
+    public enum FloatingToolbarProfile
+    {
+        /// <summary>The full recording strip: DRAG, START/PAUSE, MIC, SPK, CAM, OPTIONS,
+        /// CANCEL/FINISH, plus the three device-picker pills and the audio level meters.</summary>
+        Recording,
+
+        /// <summary>The share-region strip: DRAG, BLUR, CANCEL and nothing else. No settings are
+        /// read or written, no devices are enumerated and no pills are shown.</summary>
+        ShareRegion,
+    }
+
+    /// <summary>
     /// The floating recording toolbar. Behavior ports the WPF FloatingButtonWindow +
     /// VideoCaptureWindow button strip (drag handle rotates on click / moves on drag with a 5px
     /// threshold, manual interaction disables auto-placement, below → right → left → inside
@@ -31,6 +49,10 @@ namespace Clowd.UI
     /// events and drives state via the Set* methods.
     /// On Windows WS_EX_NOACTIVATE keeps button clicks from stealing focus from the recorded app;
     /// on macOS a plain Avalonia window still activates the app on click (deferred, risk §6.11).
+    /// The same chassis also serves a share-region session
+    /// (<see cref="FloatingToolbarProfile.ShareRegion"/>), which keeps the drag handle, the status
+    /// label and the placement cascade but replaces the recording controls with a single BLUR
+    /// toggle — see the constructor.
     /// </summary>
     public partial class FloatingToolbarWindow : Window
     {
@@ -48,8 +70,22 @@ namespace Clowd.UI
         /// opened the settings page because no camera has been picked yet.</summary>
         public event EventHandler<bool> WebcamToggled;
 
+        /// <summary>Raised by the BLUR tile with the state it just flipped to (share profile only).
+        /// The tile has already been repainted when this fires — the helper's ack is confirmation,
+        /// not permission, and a mirrored region that keeps showing through for a round trip while
+        /// the button waits to be told it may light up reads as a dead button.</summary>
+        public event EventHandler<bool> BlurToggled;
+
+        /// <summary>Which strip was built. Fixed at construction — see
+        /// <see cref="FloatingToolbarProfile"/>.</summary>
+        private readonly FloatingToolbarProfile _profile;
+
         private readonly DispatcherTimer _saveDebounce;
-        private readonly SettingsRecording _settings;
+
+        /// <summary>The recording settings this strip mirrors and persists. Null on a share strip:
+        /// nothing there reads or writes settings, and a null here is what makes that structural
+        /// rather than a promise (see <see cref="InitializeRecordingControls"/>).</summary>
+        private SettingsRecording _settings;
 
         /// <summary>Long edge of a device-picker pill — it runs along the strip's stacking axis,
         /// so it is the pill's width beside a horizontal row and its height beside a vertical one.</summary>
@@ -77,6 +113,20 @@ namespace Clowd.UI
         private const string ZeroStatusText = "00:00";
 
         private bool _hasStatusText;
+
+        // share profile: whether the helper is currently obscuring the mirrored region, and
+        // whether it can at all. _blurAvailable only ever goes false — the helper's GPU effect
+        // failure is permanent for the life of that process — so the tile is retired, not
+        // toggled off (SetBlurAvailable).
+        private bool _blurEnabled;
+        private bool _blurAvailable = true;
+
+        // one-shot timer behind ShowStatusBlip; built lazily because only the share strip has
+        // anything to say this way. While it runs the label belongs to the blip and incoming
+        // statuses are recorded but not painted.
+        private DispatcherTimer _statusBlip;
+        private bool _blipHolding;
+
         private bool _recording;
         private bool _paused;
         // the recorder is still being built (or rebuilt): START cannot act yet, so it is locked
@@ -105,8 +155,32 @@ namespace Clowd.UI
         private Control _micBar, _spkBar;
         private Rectangle _micFill, _spkFill;
 
+        /// <summary>
+        /// Satisfies the XAML compiler's runtime-loader check (AVLN3001) and nothing else, exactly
+        /// as <see cref="BorderWindow"/> does. Deliberately NOT a parameterless ctor that defaults
+        /// to <see cref="FloatingToolbarProfile.Recording"/>: this window's recording half mutates
+        /// the user's settings on construction (it unticks capture toggles whose devices are gone
+        /// and queues a save) and spawns a camera enumeration, so a caller that merely forgot to
+        /// say which strip it wanted would silently get all of that. Make them say it.
+        /// </summary>
+        [Obsolete("Runtime-loader signature only — use FloatingToolbarWindow(FloatingToolbarProfile).", error: true)]
         public FloatingToolbarWindow()
         {
+            throw new NotSupportedException("FloatingToolbarWindow requires a profile.");
+        }
+
+        /// <summary>
+        /// Builds the strip in two halves. The CHASSIS below is everything both profiles need —
+        /// the window styles, the drag-handle state machine, the pill lane, the tooltip anchoring
+        /// and the placement hooks — and the recording controls are a separate pass that a share
+        /// session never runs. The split is not tidiness: the recording half reads and REWRITES
+        /// the user's recording settings and enumerates cameras, and a share session doing either
+        /// would be a toolbar for one feature quietly editing the configuration of another.
+        /// </summary>
+        public FloatingToolbarWindow(FloatingToolbarProfile profile)
+        {
+            _profile = profile;
+
             InitializeComponent();
 
             // gray panel backdrop (#373737) comes from RootBorder's XAML background;
@@ -127,16 +201,8 @@ namespace Clowd.UI
             BtnDrag.PointerEntered += (s, e) => UpdateDragIcon();
             BtnDrag.PointerExited += (s, e) => UpdateDragIcon();
 
-            UpdateDevicePills();
-            // re-enumerate rather than take the process-wide cache: the strip opens long after the
-            // app did, and a camera plugged in since then is exactly the one being reached for.
-            // Native enumeration makes this ~60 ms, so it is affordable on every strip.
-            _ = LoadCamerasAsync(CameraDeviceManager.RefreshAsync());
-
             UpdatePillLane();
             UpdateToolTipPlacement();
-            // the strip opens in the WAIT state: START locked, unaccented and still.
-            UpdatePrimaryState();
 
             // the pills line up against tiles in a different container, so they are placed from
             // the arranged bounds rather than laid out — which means re-placing after every pass
@@ -145,6 +211,7 @@ namespace Clowd.UI
 
             // nothing in the settings graph saves itself, and the Recording page's auto-save only
             // attaches when that page is opened — the toolbar persists its own toggles (debounced).
+            // Inert on a share strip: nothing there ever starts it.
             _saveDebounce = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
             _saveDebounce.Tick += (s, e) =>
             {
@@ -152,6 +219,27 @@ namespace Clowd.UI
                 SaveSettings();
             };
 
+            ScalingChanged += (s, e) => Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
+
+            if (profile == FloatingToolbarProfile.Recording)
+                InitializeRecordingControls();
+            else
+                InitializeShareControls();
+        }
+
+        /// <summary>
+        /// The recording half: everything that touches <see cref="SettingsRecording"/>, the device
+        /// managers or the level meters. What the constructor used to do inline (the settings read
+        /// moved to the front, which is the one ordering change); it lives behind a profile check
+        /// now because every line of it has a side effect a share session
+        /// must not pay — <see cref="DisableCaptureWithoutDevice"/> rewrites the user's capture
+        /// toggles and queues a save, the camera load spawns an enumeration, and the settings
+        /// subscription outlives anything the share strip would unsubscribe.
+        /// </summary>
+        private void InitializeRecordingControls()
+        {
+            // first, and before anything that can await: LoadCamerasAsync's continuation calls
+            // DisableCaptureWithoutDevice, which reads this.
             _settings = SettingsRoot.Current.Recording;
             DisableCaptureWithoutDevice();
             _micEnabled = _settings.CaptureMicrophone;
@@ -160,6 +248,16 @@ namespace Clowd.UI
             BtnMic.ShowAlternateIcon = _micEnabled;
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
             BtnWebcam.ShowAlternateIcon = _camEnabled;
+
+            // re-enumerate rather than take the process-wide cache: the strip opens long after the
+            // app did, and a camera plugged in since then is exactly the one being reached for.
+            // Native enumeration makes this ~60 ms, so it is affordable on every strip.
+            _ = LoadCamerasAsync(CameraDeviceManager.RefreshAsync());
+
+            UpdateDevicePills();
+
+            // the strip opens in the WAIT state: START locked, unaccented and still.
+            UpdatePrimaryState();
 
             (_micBar, _micFill) = BuildMeterBar();
             (_spkBar, _spkFill) = BuildMeterBar();
@@ -172,15 +270,52 @@ namespace Clowd.UI
             // back over the user's choice. Subscribed after the meter bars exist — the handler
             // refreshes them.
             _settings.PropertyChanged += OnSettingsChanged;
-
-            ScalingChanged += (s, e) => Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
         }
+
+        /// <summary>
+        /// The share half: three tiles (DRAG, BLUR, CANCEL) and an empty pill lane.
+        /// The pills are the trap here. <see cref="CaptureToolPill"/> is visible by default and the
+        /// ONLY thing that ever hides one is <see cref="UpdateDevicePills"/>, which this profile
+        /// never calls — so without the explicit hiding below the share strip would carry three
+        /// dead chevrons plus a reserved lane that is transparent but still hit-testable, i.e. a
+        /// band of window that eats clicks on whatever is behind it.
+        /// <see cref="ApplyPillLane"/> then gives that lane's pixels back.
+        /// </summary>
+        private void InitializeShareControls()
+        {
+            // the recording tiles, collapsed rather than disabled: they are not "unavailable
+            // right now", they are not part of this feature at all.
+            BtnStart.IsVisible = false;
+            BtnMic.IsVisible = false;
+            BtnSpeaker.IsVisible = false;
+            BtnWebcam.IsVisible = false;
+            BtnSettings.IsVisible = false;
+
+            BtnBlur.IsVisible = true;
+
+            BtnMicDevice.IsVisible = false;
+            BtnSpeakerDevice.IsVisible = false;
+            BtnWebcamDevice.IsVisible = false;
+            ApplyPillLane();
+        }
+
+        /// <summary>Whether this strip was built for a recording. The five Set* methods below all
+        /// drive controls the share profile collapsed, so they answer this first and no-op rather
+        /// than writing state into a hidden tile that could then leak out through a shared
+        /// helper — <see cref="UpdateDragIcon"/> and <see cref="SetStatusText"/> both branch on
+        /// <c>_recording</c>, and a share strip that had been told it was recording would wear the
+        /// Clowd mark and a zeroed timer.</summary>
+        private bool IsRecordingProfile => _profile == FloatingToolbarProfile.Recording;
 
         /// <summary>Sets the start button label ("WAIT…" → "START"). Settings changed during WAIT
         /// are pushed into the running recorder, so the button never becomes a reload. Ignored
-        /// while recording — the button belongs to PAUSE/RESUME then.</summary>
+        /// while recording — the button belongs to PAUSE/RESUME then — and on a share strip, which
+        /// has no primary button.</summary>
         public void SetPrimaryText(string text)
         {
+            if (!IsRecordingProfile)
+                return;
+
             if (!_recording)
                 BtnStart.Text = text;
         }
@@ -191,6 +326,9 @@ namespace Clowd.UI
         /// honor.</summary>
         public void SetWaiting(bool waiting)
         {
+            if (!IsRecordingProfile)
+                return;
+
             _waiting = waiting;
             UpdatePrimaryState();
         }
@@ -231,6 +369,9 @@ namespace Clowd.UI
         /// pickers lock (see <see cref="UpdateRecordingLocks"/>).</summary>
         public void SetRecordingState(bool recording)
         {
+            if (!IsRecordingProfile)
+                return;
+
             _recording = recording;
             UpdateRecordingLocks();
             UpdatePrimaryState();
@@ -272,7 +413,7 @@ namespace Clowd.UI
         /// Only meaningful while recording.</summary>
         public void SetPausedState(bool paused)
         {
-            if (!_recording)
+            if (!IsRecordingProfile || !_recording)
                 return;
 
             _paused = paused;
@@ -287,21 +428,112 @@ namespace Clowd.UI
 
         /// <summary>Sets the drag handle's status text (timer / FPS); null or empty falls back to
         /// a zeroed timer while recording and to "DRAG ME" before it. While paused the label stays
-        /// PAUSED and the text is only remembered for the resume.</summary>
+        /// PAUSED and the text is only remembered for the resume.
+        /// Works on both profiles — the share strip uses it for the helper's fps, and its empty
+        /// fallback is already the right one: <c>_recording</c> can never be set there
+        /// (<see cref="SetRecordingState"/> no-ops), so clearing the text restores "DRAG ME"
+        /// rather than a zeroed recording timer.</summary>
         public void SetStatusText(string text)
         {
             _hasStatusText = !String.IsNullOrEmpty(text);
             _lastStatusText = _hasStatusText ? text : null;
 
-            if (!_paused)
+            // a blip is a one-off message on the same label the session writes once a second; it
+            // still records the status underneath it, so the label goes back to a live value
+            // rather than to DRAG ME when the blip expires.
+            if (!_paused && !_blipHolding)
                 BtnDrag.Text = _hasStatusText ? text : (_recording ? ZeroStatusText : "DRAG ME");
+        }
+
+        // -- BLUR (share profile) --
+
+        /// <summary>
+        /// Pushes the obscure state onto the tile without raising <see cref="BlurToggled"/> — the
+        /// authoritative direction, for the helper's acks. Two of those matter: the ack for a
+        /// toggle the user just made (a no-op repaint, and cheap insurance that the strip agrees
+        /// with the process actually drawing the frames), and the UNSOLICITED
+        /// <c>obscure/none</c> the helper emits when its GPU effect fails to build — a retraction
+        /// of a blur the user asked for and can currently see is on. Pair that one with
+        /// <see cref="SetBlurAvailable"/>(false): the failure is permanent for that process.
+        /// </summary>
+        public void SetBlurEnabled(bool on)
+        {
+            _blurEnabled = on;
+            BtnBlur.ShowAlternateIcon = on;
+        }
+
+        /// <summary>
+        /// Retires (or restores) the BLUR tile. Called with false when the helper says its effect
+        /// pipeline is gone, which it never rebuilds — so this is a permanent retirement rather
+        /// than a temporary lock, and the tile stays visible-but-dead on purpose: a button that
+        /// vanishes mid-session reads as a bug, and the strip re-laying itself out around the gap
+        /// would move CANCEL under the pointer.
+        /// The only notice is a blip on the status label. Never a dialog: this can land in the
+        /// middle of a live meeting the user is presenting to, where a modal is both a
+        /// screen-sharing embarrassment and a thing they cannot dismiss without losing their place.
+        /// </summary>
+        public void SetBlurAvailable(bool available)
+        {
+            _blurAvailable = available;
+            BtnBlur.IsEnabled = available;
+
+            if (available)
+                return;
+
+            // whatever the user last asked for, nothing is being obscured now — say so, so the
+            // dead tile is not left lit over a region that is being mirrored in the clear.
+            SetBlurEnabled(false);
+            ShowStatusBlip("NO BLUR");
+        }
+
+        private void BlurClicked(object sender, RoutedEventArgs e)
+        {
+            // IsEnabled already blocks this once the tile is retired; the check is here because
+            // the consequence of getting it wrong is a blur command to a helper that has told us
+            // it cannot honor one, and the strip would then be lit over a clear region.
+            if (!_blurAvailable)
+                return;
+
+            SetBlurEnabled(!_blurEnabled);
+            BlurToggled?.Invoke(this, _blurEnabled);
+        }
+
+        /// <summary>
+        /// Says something on the drag handle's label for a few seconds and then hands the label
+        /// back. The strip has no other surface for a message — it is seven 50px tiles — and the
+        /// alternative for a share session (a dialog) is exactly what must not happen while a
+        /// region is being mirrored into a meeting. Statuses arriving meanwhile are still recorded
+        /// (see <see cref="SetStatusText"/>), just not painted, so the blip is not overwritten a
+        /// few hundred milliseconds after it appears.
+        /// </summary>
+        private void ShowStatusBlip(string text)
+        {
+            if (_statusBlip == null)
+            {
+                _statusBlip = new DispatcherTimer { Interval = TimeSpan.FromSeconds(6) };
+                _statusBlip.Tick += (s, e) =>
+                {
+                    _statusBlip.Stop();
+                    _blipHolding = false;
+                    SetStatusText(_lastStatusText);
+                };
+            }
+
+            _blipHolding = true;
+            BtnDrag.Text = text;
+
+            // restart rather than extend: a second message replaces the first outright.
+            _statusBlip.Stop();
+            _statusBlip.Start();
         }
 
         /// <summary>
         /// Shows the toolbar placed via the original WPF cascade (centered below the region →
         /// vertical right → vertical left → horizontally inside near its bottom), clamped to the
-        /// monitor bounds. The region is in physical px on Windows / CG points on macOS — the
-        /// same space Avalonia PixelPoint positioning uses.
+        /// monitor bounds. A share strip takes "centered above" ahead of the two vertical rungs,
+        /// because everything inside its region is being mirrored (see
+        /// <see cref="PositionNearRegion"/>). The region is in physical px on Windows / CG points
+        /// on macOS — the same space Avalonia PixelPoint positioning uses.
         /// </summary>
         public void ShowNear(ScreenRect region)
         {
@@ -375,7 +607,11 @@ namespace Clowd.UI
 
         protected override void OnClosed(EventArgs e)
         {
-            _settings.PropertyChanged -= OnSettingsChanged;
+            // null on a share strip, which never subscribed (and never has a save pending below).
+            if (_settings != null)
+                _settings.PropertyChanged -= OnSettingsChanged;
+
+            _statusBlip?.Stop();
 
             // flush a pending debounced save so a quick toggle-then-finish isn't lost
             if (_saveDebounce.IsEnabled)
@@ -395,7 +631,10 @@ namespace Clowd.UI
         /// rather than its full bounds, so the strip is never dealt a slot underneath the macOS
         /// dock / menu bar or the Windows taskbar, which are painted over it (issue #72). The
         /// selection itself still comes from the full bounds — the capture region legitimately
-        /// covers the reserved strips, and clipping it would shift the centering.</summary>
+        /// covers the reserved strips, and clipping it would shift the centering.
+        /// The share profile inserts an "above" rung between below and right, and only then falls
+        /// back to sitting inside the region — see the cascade itself for why a mirrored region
+        /// changes the stakes of that last rung.</summary>
         private void PositionNearRegion()
         {
             if (_region == null || !IsVisible || _manuallyPositioned)
@@ -435,6 +674,7 @@ namespace Clowd.UI
             var bottomSpace = Math.Max(workArea.Bottom - selection.Bottom, 0) - minDistance;
             var rightSpace = Math.Max(workArea.Right - selection.Right, 0) - minDistance;
             var leftSpace = Math.Max(selection.Left - workArea.Left, 0) - minDistance;
+            var topSpace = Math.Max(selection.Top - workArea.Top, 0) - minDistance;
 
             var shortEdge = Math.Min(panelWidth, panelHeight);
             var longEdge = Math.Max(panelWidth, panelHeight);
@@ -451,6 +691,16 @@ namespace Clowd.UI
             };
             var winShort = shortEdge + (int)Math.Ceiling(lane * scaling);
 
+            // a mirrored region is photographed continuously, so anything the cascade parks inside
+            // it is not a stray frame or two at the end of a recording — it is Clowd's own toolbar
+            // broadcast into someone else's meeting for as long as the session lasts. The share
+            // profile therefore gets a fourth outside-the-region rung (above) before it will
+            // consider the inside one; ScrollStatusWindow.TryComputePlacement takes the same
+            // detour for the same reason. The recording profile's cascade is untouched: for it,
+            // "inside" costs a strip in the last frames before the region is cleared, which is
+            // not worth changing a placement users have learned.
+            var shareRegion = _profile == FloatingToolbarProfile.ShareRegion;
+
             int indLeft, indTop;
 
             if (bottomSpace >= winShort)
@@ -459,6 +709,17 @@ namespace Clowd.UI
                 SetLayout(Orientation.Horizontal, Dock.Bottom);
                 indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
                 indTop = Math.Min(workArea.Bottom, selection.Bottom + maxDistance + winShort) - winShort;
+            }
+            else if (shareRegion && topSpace >= winShort)
+            {
+                // above the selection, share sessions only. It is preferred over the two vertical
+                // rungs because a horizontal strip is the shape the user grabbed the handle on and
+                // the one whose labels read at a glance, and it costs nothing here: the pill lane
+                // it would push back INTO the region is empty on a share strip (no device pickers),
+                // so there is nothing on that edge to overlap the mirrored rectangle.
+                SetLayout(Orientation.Horizontal, Dock.Bottom);
+                indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
+                indTop = Math.Max(selection.Top - maxDistance - winShort, workArea.Top);
             }
             else if (rightSpace >= winShort)
             {
@@ -475,6 +736,13 @@ namespace Clowd.UI
             }
             else // inside capture rect
             {
+                // Last resort, and for a share session a genuinely last one: reaching here means
+                // the region has no room on ANY of its four sides, i.e. it covers essentially the
+                // whole monitor. There is then nowhere on that monitor the strip would not be
+                // mirrored, so refusing to place it would not keep it out of the meeting — it
+                // would only cost the user the CANCEL button that ends the meeting's view of their
+                // screen. Showing it always wins; the strip is never withheld.
+
                 SetLayout(Orientation.Horizontal, Dock.Bottom);
                 indLeft = selection.Left + selection.Width / 2 - longEdge / 2;
                 // keep the gap measured from the placeable bottom edge, so a full-height
@@ -975,6 +1243,15 @@ namespace Clowd.UI
         /// </summary>
         private void UpdateDevicePills()
         {
+            // belt and braces. This is the ONLY method on the strip that reaches AudioDeviceManager
+            // or CameraDeviceManager (through RealDeviceIds), so this one line is what makes device
+            // enumeration structurally impossible on a share strip rather than merely unreached:
+            // every caller below it is a recording control the share profile collapsed, but a
+            // future one would have to defeat this to enumerate. The share strip's pills are hidden
+            // once, in InitializeShareControls, and stay hidden.
+            if (_profile != FloatingToolbarProfile.Recording)
+                return;
+
             // once frames are flowing the device ids are fixed: VideoCapturePage drops a settings
             // change while IsRecording, so a picker could only write a value the recording will
             // never use. That is worth removing rather than graying out — a disabled control
@@ -1221,9 +1498,13 @@ namespace Clowd.UI
 
         /// <summary>Drives the MIC/SPK bar fills from obs-express's 100 ms levels feed (the page
         /// forwards <see cref="ObsLevels"/>). Peak dBFS; null means that source does not exist
-        /// or the capturer was torn down — the fill empties rather than freezing.</summary>
+        /// or the capturer was torn down — the fill empties rather than freezing. No-ops on a
+        /// share strip, which never built the bars.</summary>
         public void SetAudioLevels(double? micDb, double? spkDb)
         {
+            if (!IsRecordingProfile)
+                return;
+
             SetMeterFill(_micFill, micDb);
             SetMeterFill(_spkFill, spkDb);
         }

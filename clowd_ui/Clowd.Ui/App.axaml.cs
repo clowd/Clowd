@@ -322,6 +322,17 @@ namespace Clowd
             };
             menu.Add(record);
 
+            var share = new NativeMenuItem("Share Region");
+            ApplyGesture(share, SettingsRoot.Current.Hotkeys.ShareRegionShortcut);
+            share.Click += async (s, e) =>
+            {
+                // wait long enough for the menu to disappear (matches WPF) — and here it also keeps
+                // the tray menu out of the region the user is about to pick.
+                await Task.Delay(400);
+                ToggleShareRegion();
+            };
+            menu.Add(share);
+
             var colorp = new NativeMenuItem("Color Picker");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
             menu.Add(colorp);
@@ -365,9 +376,9 @@ namespace Clowd
             menu.Add(exit);
         }
 
-        public void StartCapture(CaptureMode mode = CaptureMode.Region, bool video = false)
+        public void StartCapture(CaptureMode mode = CaptureMode.Region, RegionIntent intent = RegionIntent.Capture)
         {
-            PageManager.Current.GetScreenCapturePage().Open(mode, video);
+            PageManager.Current.GetScreenCapturePage().Open(mode, intent);
         }
 
         /// <summary>The Start/Stop Recording hotkey and tray action (DESIGN §4.3): toggles the
@@ -378,7 +389,24 @@ namespace Clowd
             if (VideoCapturePage.ActiveInstance is { } page)
                 page.Toggle();
             else
-                StartCapture(CaptureMode.Region, video: true);
+                StartCapture(CaptureMode.Region, RegionIntent.Video);
+        }
+
+        /// <summary>
+        /// The Share Region hotkey and tray action: ends the live share, or launches the capture
+        /// overlay in share mode to pick a region to mirror. Unlike recording there is no third
+        /// state to toggle through — a share is either running or it is not — so the second press
+        /// simply ends it, exactly as the strip's CANCEL tile does.
+        /// <para>Deliberately independent of <see cref="ToggleRecording"/>: the two sessions are
+        /// separate helper processes with separate guards, and sharing a region while recording it
+        /// (or the reverse) is a reasonable thing to do, so neither entry point blocks the other.</para>
+        /// </summary>
+        public void ToggleShareRegion()
+        {
+            if (ShareRegionPage.ActiveInstance is { } share)
+                share.Cancel();
+            else
+                StartCapture(CaptureMode.Region, RegionIntent.Share);
         }
 
         private void ApplyTheme()
@@ -405,6 +433,7 @@ namespace Clowd
             _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
             _hotkeys.SetAction(HotkeyId.ClipboardUpload, () => UploadClipboard());
             _hotkeys.SetAction(HotkeyId.StartStopRecording, ToggleRecording);
+            _hotkeys.SetAction(HotkeyId.ShareRegion, ToggleShareRegion);
 
             HotkeyManager.Current = _hotkeys;
             ConfigureCaptureHotkeys();
@@ -534,6 +563,21 @@ namespace Clowd
                 SentryConfig.CaptureHandled(ex, "exit.stop-scroll-capture");
             }
 
+            // …and a live region share, for a third reason again: it has nothing to save, but its
+            // helper owns a window a meeting app is actively broadcasting. Left alone it would keep
+            // mirroring the user's screen into that meeting after Clowd is gone (stdin EOF does
+            // eventually stop it, but only once this process has really died).
+            try
+            {
+                if (ShareRegionPage.ActiveInstance is { } sharing)
+                    await sharing.ShutdownAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Error stopping the region share during exit: " + ex);
+                SentryConfig.CaptureHandled(ex, "exit.stop-share-region");
+            }
+
             // close all open windows first so per-window persistence runs before the process dies
             // (EditorWindow.Closing renders the session preview and clears OpenEditor, §5.7).
             CloseAllWindows();
@@ -571,6 +615,15 @@ namespace Clowd
             try
             {
                 _ = VideoCapturePage.ActiveInstance?.ShutdownAsync();
+            }
+            catch { }
+
+            // likewise best-effort for a live region share: there is nothing to save, only a mirror
+            // window to take down before the machine logs out from under it. Even if this does not
+            // get to finish, the helper treats stdin EOF as "quit" once our process dies.
+            try
+            {
+                _ = ShareRegionPage.ActiveInstance?.ShutdownAsync();
             }
             catch { }
 

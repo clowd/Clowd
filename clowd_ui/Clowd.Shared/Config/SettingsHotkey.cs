@@ -52,6 +52,13 @@ namespace Clowd.Config
             set => Set(ref _startStopRecordingShortcut, Normalize(value));
         }
 
+        [DisplayName("Share Region")]
+        public SimpleKeyGesture ShareRegionShortcut
+        {
+            get => _shareRegionShortcut;
+            set => Set(ref _shareRegionShortcut, Normalize(value));
+        }
+
         /// <summary>
         /// Canonicalizes "not set": a Key.None gesture and null are the same state, stored as null.
         /// (A cleared gesture is persisted as "None" because the configuration binder never assigns
@@ -66,5 +73,13 @@ namespace Clowd.Config
         private SimpleKeyGesture _captureFullscreenShortcut = new(Key.Snapshot, KeyModifiers.Control);
         private SimpleKeyGesture _captureActiveShortcut = new(Key.Snapshot, KeyModifiers.Alt);
         private SimpleKeyGesture _startStopRecordingShortcut = new(Key.Snapshot, KeyModifiers.Shift);
+
+        // No default, on purpose: PrintScreen with no modifier, Ctrl, Alt and Shift are all already
+        // spoken for by the four above, and the remaining combinations (Ctrl+Shift, Ctrl+Alt, …) are
+        // worth less than the chance of stamping on something the user's other tools have claimed.
+        // Sharing a region is also a deliberate, unhurried act — you are setting up a meeting — so
+        // it does not need a reflex key the way taking a screenshot does. The action is on the tray
+        // menu, and the Hotkeys settings page lets anyone who wants one bind it.
+        private SimpleKeyGesture _shareRegionShortcut;
     }
 }

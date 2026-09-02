@@ -35,7 +35,10 @@
          PillLayer rather than in the strip — the tile grid is the overlay's look, and a rail
          welded into it would read as another kind of button — and the lane they float in is
          reserved by RootBorder's margin, which the code-behind moves to whichever side the
-         strip's placement left free (below a horizontal row, outboard of a vertical one). -->
+         strip's placement left free (below a horizontal row, outboard of a vertical one).
+         One markup, two profiles (FloatingToolbarProfile): everything below is the recording
+         strip, and a share-region session collapses all of it but DRAG, BLUR and CANCEL — see
+         the constructor for why the two halves are built separately rather than merely hidden. -->
     <Panel Name="RootPanel">
         <Border Name="RootBorder"
                 Margin="0,0,0,16"
@@ -73,6 +76,26 @@
                                             IconPath="{StaticResource IconPlay}"
                                             IconSize="16"
                                             Text="WAIT…" />
+
+                <!-- ShareRegion profile only (hidden for a recording, which has nothing to
+                     obscure): toggles the helper's blur over the mirrored region. It is slotted
+                     into the primary tile's own cell — after START, before the 3px gap that
+                     follows it — so neither strip pays for the other: the recording strip keeps
+                     its DRAG|3|START|3|… rhythm untouched, and once the share profile collapses
+                     START and the four middle tiles the same markup reads DRAG|3|BLUR|3|CANCEL.
+                     SourceToggle because this is an on/off source in exactly the sense MIC/SPK
+                     are — it buys the dimmed-off glyph and the red/green light, which is the
+                     only thing that reads "the meeting is seeing through this" from across the
+                     room. The tile can also be retired outright (SetBlurAvailable) when the
+                     helper reports its GPU effect failed to build. -->
+                <controls:CaptureToolButton Name="BtnBlur"
+                                            Click="BlurClicked"
+                                            IconPath="{StaticResource IconEffectNone}"
+                                            IconPathAlternate="{StaticResource IconEffectBlur}"
+                                            IsVisible="False"
+                                            SourceToggle="True"
+                                            Text="BLUR" />
+
                 <Rectangle Width="3" Height="3" />
 
                 <!-- ShowAlternateIcon (enabled glyph) tracks the capture toggle; the Overlay slot

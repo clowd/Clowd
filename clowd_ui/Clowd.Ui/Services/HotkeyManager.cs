@@ -15,6 +15,7 @@ namespace Clowd.UI
         CaptureFullscreen,
         CaptureActive,
         StartStopRecording,
+        ShareRegion,
     }
 
     /// <summary>
@@ -142,6 +143,9 @@ namespace Clowd.UI
                 Entry(HotkeyId.CaptureFullscreen, nameof(SettingsHotkey.CaptureFullscreenShortcut), s => s.CaptureFullscreenShortcut, (s, g) => s.CaptureFullscreenShortcut = g),
                 Entry(HotkeyId.CaptureActive, nameof(SettingsHotkey.CaptureActiveShortcut), s => s.CaptureActiveShortcut, (s, g) => s.CaptureActiveShortcut = g),
                 Entry(HotkeyId.StartStopRecording, nameof(SettingsHotkey.StartStopRecordingShortcut), s => s.StartStopRecordingShortcut, (s, g) => s.StartStopRecordingShortcut = g),
+                // ships with no default gesture (see SettingsHotkey), so this entry exists purely so
+                // the settings page can offer one — Rebind leaves it unregistered until it has one.
+                Entry(HotkeyId.ShareRegion, nameof(SettingsHotkey.ShareRegionShortcut), s => s.ShareRegionShortcut, (s, g) => s.ShareRegionShortcut = g),
             };
 
             HotkeyEntry Entry(HotkeyId id, string prop, Func<SettingsHotkey, SimpleKeyGesture> get, Action<SettingsHotkey, SimpleKeyGesture> set) =>

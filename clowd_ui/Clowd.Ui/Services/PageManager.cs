@@ -34,6 +34,31 @@ namespace Clowd
         Window,
     }
 
+    /// <summary>
+    /// What the region the user is about to pick is FOR. The overlay looks and behaves identically
+    /// in all three cases — the user drags a rectangle — but a confirmed selection dispatches a
+    /// different action, so the intent has to travel with the launch: it picks the capturer's flag
+    /// (<c>--video</c> / <c>--share</c>, CAPTURE_PROTOCOL.md §1.1) and, just as importantly, decides
+    /// whether the warm standby capturer may service the request at all. Standby was spawned with
+    /// neither flag, so it can only ever take a plain screenshot.
+    /// <para>Deliberately an enum rather than the pair of bools it replaced: the two are mutually
+    /// exclusive (clap rejects both flags together), and a <c>bool video, bool share</c> signature
+    /// makes the illegal combination expressible at every call site.</para>
+    /// </summary>
+    public enum RegionIntent
+    {
+        /// <summary>An ordinary screenshot — the overlay's own buttons decide what happens next.</summary>
+        Capture,
+
+        /// <summary>Pick a region to record (DESIGN §3.1); a confirmed selection dispatches the
+        /// video action immediately.</summary>
+        Video,
+
+        /// <summary>Pick a region to mirror into a window a meeting app can share; a confirmed
+        /// selection dispatches the share action immediately.</summary>
+        Share,
+    }
+
     public interface IPage
     {
         event EventHandler Closed;
@@ -47,7 +72,7 @@ namespace Clowd
 
     public interface IScreenCapturePage : IPage
     {
-        void Open(CaptureMode mode, bool video = false);
+        void Open(CaptureMode mode, RegionIntent intent = RegionIntent.Capture);
     }
 
     public interface IVideoCapturePage : IPage
@@ -90,6 +115,14 @@ namespace Clowd.UI
         {
             // self-guarding via VideoCapturePage.ActiveInstance, same rationale as screenshots.
             return new VideoCapturePage();
+        }
+
+        public IShareRegionPage GetShareRegionPage()
+        {
+            // self-guarding via ShareRegionPage.ActiveInstance, which is also how the app-exit path
+            // and the Share Region tray/hotkey toggle reach a live share — same rationale as
+            // recordings and scrolling captures.
+            return new ShareRegionPage();
         }
 
         public IScrollCapturePage GetScrollCapturePage()

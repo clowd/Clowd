@@ -18,6 +18,11 @@ pub enum Command {
     Edit,
     /// Start video capture on the current selection.
     Video,
+    /// Start mirroring the current selection into a shareable window.
+    /// Emitted only by `--share` mode's auto-dispatch — no panel button
+    /// carries it, exactly as `--video` mode reaches `Video` without one
+    /// when the shell launched the overlay for a recording region.
+    Share,
     /// Enter scroll-point pick mode for the current selection: the next
     /// click inside it hands the region + point off to the scrolling
     /// capture driver.

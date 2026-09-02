@@ -356,12 +356,12 @@ mod tests {
     /// Each added button widens `long_edge_px` by one `svg_button_size`
     /// and therefore shifts the centered panel left by half of that. The
     /// original single-set capture (7 buttons) was area x=597 with
-    /// buttons at 650/703/…/953; the strip as it stands (9 buttons, + OCR
-    /// and SCROLL) is that shifted left by 50. Nothing else about the
-    /// math has moved since the capture.
+    /// buttons at 650/703/…/953; adding OCR and SCROLL shifted that left
+    /// by 50 (9 buttons, area x=547), and adding SHARE shifted it left by
+    /// 25 more. Nothing else about the math has moved since the capture.
     #[test]
     fn panel_geometry_is_pinned() {
-        const EXPECTED: (i32, [i32; 9]) = (547, [600, 653, 703, 753, 803, 853, 903, 953, 1003]);
+        const EXPECTED: (i32, [i32; 10]) = (522, [575, 628, 678, 728, 778, 828, 878, 928, 978, 1028]);
 
         let l = layout_for(PanelButtonSet::Normal, 1.0);
         let (area_left, button_lefts) = EXPECTED;
@@ -566,6 +566,7 @@ mod tests {
         let (button_size, spacing) = metrics(1.0);
         let features = PanelFeatures {
             upload: false,
+            share: false,
             scroll_capture: false,
             ocr: false,
         };
