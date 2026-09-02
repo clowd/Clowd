@@ -508,11 +508,22 @@ mod cursor_shape {
 // Window enumeration (--window-capture)
 // ---------------------------------------------------------------------------
 
-/// The window layer ordinary application windows live on. The Dock, the menu
-/// bar, status items and screen-saver surfaces all sit on nonzero layers;
-/// filtering on this is the macOS analogue of skipping `WS_EX_TOOLWINDOW` on
-/// Windows.
-const NORMAL_WINDOW_LAYER: i64 = 0;
+/// The `kCGWindowLayer` range a real, user-facing application window lives in:
+/// `kCGNormalWindowLevel` (0) through `kCGModalPanelWindowLevel` (8), which
+/// also covers `kCGFloatingWindowLevel` / `kCGTornOffMenuWindowLevel` (both 3).
+///
+/// The upper bound is what excludes the chrome: the Dock (20), the menu bar
+/// (24), status items (25), pop-up menus (101), overlays (102), tooltips
+/// (200), drag images (500), the screen saver (1000) and the cursor. The
+/// desktop picture and its icon layer sit far below 0 and are already dropped
+/// by `ExcludeDesktopElements`.
+///
+/// Floating panels (3) are deliberately INSIDE the range, for the same reason
+/// the Windows enumerator deliberately does not filter `WS_EX_TOOLWINDOW`: a
+/// floating tool palette — the Fonts and Colors panels, a Photoshop panel, an
+/// IDE float dock — is plainly visible in the recording and must be tracked.
+/// Restricting this to layer 0 would silently drop every one of them.
+const WINDOW_LAYERS: std::ops::RangeInclusive<i64> = 0..=8;
 
 /// Minimum dimension (points) for a window to be worth reporting; the mirror
 /// of the Windows `MIN_WINDOW_SIZE`, and the same value Clowd's
@@ -662,7 +673,7 @@ pub fn enumerate_windows() -> Vec<WindowInfo> {
             // An absent layer is treated as "not a normal window": the key is
             // always present in practice, so its absence means this entry is
             // not what we think it is.
-            if dict_i64(dict, kCGWindowLayer).unwrap_or(i64::MIN) != NORMAL_WINDOW_LAYER {
+            if !WINDOW_LAYERS.contains(&dict_i64(dict, kCGWindowLayer).unwrap_or(i64::MIN)) {
                 continue;
             }
             // Fully transparent helper surfaces draw nothing. An *absent*
@@ -743,4 +754,36 @@ pub fn webcam_settings(device_id: &str) -> ObsData {
 /// exist here — compensation is always unity.
 pub fn speaker_compensation_gain(_device_id: &str) -> f32 {
     1.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::WINDOW_LAYERS;
+
+    /// The window-capture layer filter is the only thing separating real
+    /// windows from the system chrome, and both ends of the range are
+    /// load-bearing — narrowing it back to layer 0 (its first form) silently
+    /// drops every floating tool palette, and widening it past the modal-panel
+    /// level pulls the Dock and menu bar in as full-screen "windows".
+    #[test]
+    fn the_layer_filter_admits_panels_and_excludes_the_chrome() {
+        // kCGNormalWindowLevel, kCGFloatingWindowLevel /
+        // kCGTornOffMenuWindowLevel, kCGModalPanelWindowLevel.
+        for level in [0, 3, 8] {
+            assert!(
+                WINDOW_LAYERS.contains(&level),
+                "layer {level} must be tracked"
+            );
+        }
+        // kCGDockWindowLevel, kCGMainMenuWindowLevel, kCGStatusWindowLevel,
+        // kCGPopUpMenuWindowLevel, kCGOverlayWindowLevel, kCGHelpWindowLevel,
+        // kCGDraggingWindowLevel, kCGScreenSaverWindowLevel, and the desktop
+        // levels below zero.
+        for level in [-2_147_483_623, -1, 20, 24, 25, 101, 102, 200, 500, 1000] {
+            assert!(
+                !WINDOW_LAYERS.contains(&level),
+                "layer {level} must be skipped"
+            );
+        }
+    }
 }
