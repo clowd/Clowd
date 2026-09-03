@@ -500,6 +500,7 @@ fn render_worker_main(params: RenderWorkerParams, input_rx: mpsc::Receiver<Worke
             overlay_uniforms,
             accent_color: cycle.accent_color,
             dpi_scale: scale_factor,
+            held_dash_period: None,
         }
     });
 

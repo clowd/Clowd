@@ -42,6 +42,10 @@ pub(crate) struct SnapshotState {
     pub overlay_uniforms: OverlayUniforms,
     /// Seeded once from `CycleParams`; never updated per frame.
     pub accent_color: [f32; 4],
+    /// The snapped dash period the selection border is drawing with,
+    /// held across the whole of a drag (see [`dash_period_for_frame`]).
+    /// `None` until the first selection settles.
+    pub held_dash_period: Option<f32>,
     /// This monitor's DPI scale factor (1.0 = 100 %).
     pub dpi_scale: f32,
 }
@@ -63,7 +67,7 @@ pub(crate) struct FrameState {
     /// Corner radius of `selection` in virtual-desktop px (0 = square).
     pub selection_radius: f32,
     /// The selection is mid-drag (button down): its rect changes every
-    /// frame, so the dash period must not re-snap to it.
+    /// frame, so the dash period holds instead of re-snapping to it.
     pub selection_dragging: bool,
     pub captured: bool,
     pub overlays_visible: bool,
@@ -143,6 +147,22 @@ impl SnapshotState {
             ];
         }
 
+        // A selection that has gone away takes its held period with it, so
+        // the next one starts from the nominal pattern rather than
+        // inheriting a snap made for a rect that no longer exists.
+        if selection.is_none() {
+            self.held_dash_period = None;
+        }
+
+        // Handle visibility is a CPU decision: shown only after capture,
+        // and never while a scroll point is being picked (the picker owns
+        // the next click, so nothing that looks draggable may be on
+        // screen) or while OCR lines are lifted (they must not draw over
+        // the raised text). Decided here rather than at the uniform write
+        // below because the dash period depends on it — a handle over the
+        // corner hides the pattern's seam.
+        let handles = captured && !scroll_pick_mode && !ocr_active;
+
         // Selection rect in window-local physical pixels — through the
         // zoom mapping, so it stays congruent with the UV path above.
         // `None` while overlays are hidden: the desktop shows unfaded
@@ -160,18 +180,17 @@ impl SnapshotState {
                 let radius_local = selection_radius.max(0.0) * zoom.max(1.0);
                 // Dash period: snapped to the border's perimeter (same DPI
                 // step rule the shader uses for the stroke) so the pattern
-                // wraps without a cut dash — square or rounded — except
-                // while a drag is in progress: the rect changes every frame
-                // then, and a period that tracked it would re-phase every
-                // dash along the walk under the cursor. Nominal mid-drag;
-                // re-snapped once on release.
+                // wraps without a cut dash — but only when that seam is on
+                // screen to see, and never mid-drag (see
+                // [`dash_period_for_frame`] and [`seam_visible`]).
                 let dpi_step = self.dpi_scale.max(1.0).floor();
                 let nominal = NOMINAL_DASH_PERIOD * dpi_step;
-                let period = if selection_dragging {
-                    nominal
-                } else {
-                    dash_period(nominal, border_perimeter(r - l, b - t, radius_local))
-                };
+                let period = dash_period_for_frame(
+                    &mut self.held_dash_period,
+                    !selection_dragging && seam_visible(handles, radius_local),
+                    nominal,
+                    border_perimeter(r - l, b - t, radius_local),
+                );
                 ([l, t, r, b], radius_local, period)
             })
         } else {
@@ -199,12 +218,6 @@ impl SnapshotState {
         o.accent_color = self.accent_color;
         o.uv_offset_scale = self.uniforms.uv_offset_scale;
         if let Some((rect, radius, period)) = sel_local {
-            // Handle visibility is a CPU decision now: shown only after
-            // capture, and never while a scroll point is being picked
-            // (the picker owns the next click, so nothing that looks
-            // draggable may be on screen) or while OCR lines are lifted
-            // (they must not draw over the raised text).
-            let handles = captured && !scroll_pick_mode && !ocr_active;
             o.selection_rect = rect;
             o.sel_params = [elapsed, period, radius, if handles { 1.0 } else { 0.0 }];
         } else {
@@ -280,10 +293,8 @@ pub(crate) fn border_perimeter(w: f32, h: f32, r: f32) -> f32 {
 /// period and the walk's start shows a seam where one dash is cut short;
 /// with it the ants march as one continuous loop, at the cost of dashes
 /// up to half a period longer or shorter than nominal — a few percent on
-/// anything bigger than a button. NOT applied while the selection is
-/// being dragged: the perimeter then changes every frame and the snapped
-/// period with it, which re-phases every dash along the walk and reads
-/// as the far end jittering.
+/// anything bigger than a button. Only re-evaluated when the selection is
+/// at rest; see [`dash_period_for_frame`].
 pub(crate) fn dash_period(nominal: f32, perimeter: f32) -> f32 {
     // Degenerate or NaN inputs: hand back the nominal period untouched
     // rather than a 0 / inf / NaN the shader would have to guard against.
@@ -292,6 +303,45 @@ pub(crate) fn dash_period(nominal: f32, perimeter: f32) -> f32 {
     }
     let n = (perimeter / nominal).round().max(1.0);
     perimeter / n
+}
+
+/// Whether the seam the snapped period exists to hide is on screen at
+/// all, for a border with `radius` and the handles up or down.
+///
+/// The dash walk wraps at the top-left corner — exactly on it for a
+/// square border, `radius` px along the left edge for a rounded one (see
+/// selection.wgsl). The corner handle is a disc centred on that same
+/// corner, several times the stroke's own half-thickness across, so
+/// while the handles are up a square border's seam is underneath one and
+/// no snapping can make any visible difference. A rounded border's seam
+/// sits a radius away, out past the disc, and still needs it.
+///
+/// This is what spares every dragged and handle-resized selection a
+/// re-snap: those are always square (only a picked window carries a
+/// radius) and always end with the handles up.
+pub(crate) fn seam_visible(handles: bool, radius: f32) -> bool {
+    !handles || radius > 0.0
+}
+
+/// This frame's dash period, given the one `held` from previous frames.
+///
+/// A snapped period tracks the perimeter, so re-deriving it every frame
+/// of a drag re-phases every dash along the walk and reads as the far end
+/// jittering. Holding it instead — nominal only when the drag is drawing
+/// the first selection, which has no earlier period to keep — leaves the
+/// pattern still for the whole gesture, and it re-snaps once the drag
+/// ends, if it re-snaps at all: `resnap` is false both mid-drag and
+/// whenever the seam is hidden ([`seam_visible`]). A drag that moved the
+/// selection without resizing it lands on the same period it started
+/// with, so even a release that does snap costs no visible step.
+pub(crate) fn dash_period_for_frame(held: &mut Option<f32>, resnap: bool, nominal: f32, perimeter: f32) -> f32 {
+    if resnap {
+        let period = dash_period(nominal, perimeter);
+        *held = Some(period);
+        period
+    } else {
+        *held.get_or_insert(nominal)
+    }
 }
 
 // ── OCR dim + desaturation ──────────────────────────────────────────
@@ -449,6 +499,67 @@ mod tests {
         assert_eq!(dash_period(32.0, 0.0), 32.0);
         assert_eq!(dash_period(32.0, -5.0), 32.0);
         assert_eq!(dash_period(0.0, 100.0), 0.0);
+    }
+
+    /// A drag draws with one period from first frame to last, and the
+    /// release re-snaps only when the drag actually changed the size.
+    #[test]
+    fn dash_period_holds_for_the_length_of_a_drag() {
+        let mut held = None;
+        // First selection ever: nothing to hold, so the drag is nominal.
+        for perimeter in [40.0f32, 180.0, 640.0] {
+            assert_eq!(dash_period_for_frame(&mut held, false, 32.0, perimeter), 32.0);
+        }
+        // A release whose seam shows snaps to the final rect and
+        // remembers that period.
+        let settled = dash_period_for_frame(&mut held, true, 32.0, 640.0);
+        assert_eq!(settled, dash_period(32.0, 640.0));
+        assert_eq!(held, Some(settled));
+
+        // A resize drag holds the settled period the whole way down...
+        for perimeter in [600.0f32, 410.0, 333.0] {
+            assert_eq!(dash_period_for_frame(&mut held, false, 32.0, perimeter), settled);
+        }
+        // ...and steps exactly once, on release.
+        let resized = dash_period_for_frame(&mut held, true, 32.0, 333.0);
+        assert_eq!(resized, dash_period(32.0, 333.0));
+
+        // A move drag ends on the perimeter it began with, so the release
+        // lands back on the same period: no step at all.
+        for _ in 0..3 {
+            assert_eq!(dash_period_for_frame(&mut held, false, 32.0, 333.0), resized);
+        }
+        assert_eq!(dash_period_for_frame(&mut held, true, 32.0, 333.0), resized);
+    }
+
+    /// The seam only shows where no handle covers it: under the handles a
+    /// square border hides it, a rounded one holds it a radius away.
+    #[test]
+    fn seam_shows_unless_a_handle_covers_the_corner() {
+        assert!(seam_visible(false, 0.0), "no handles: square seam shows");
+        assert!(seam_visible(false, 8.0), "no handles: rounded seam shows");
+        assert!(seam_visible(true, 8.0), "rounded seam clears the handle");
+        assert!(!seam_visible(true, 0.0), "square corner sits under a handle");
+    }
+
+    /// Dragged and handle-resized selections are square with the handles
+    /// up, so nothing in the gesture re-snaps: the period the border came
+    /// in with is the period it leaves with, whatever the size did.
+    #[test]
+    fn square_selection_under_handles_never_resnaps() {
+        // A window pick settles on a snapped period while the handles are
+        // still down.
+        let mut held = None;
+        let picked = dash_period_for_frame(&mut held, seam_visible(false, 0.0), 32.0, 640.0);
+        assert_eq!(picked, dash_period(32.0, 640.0));
+
+        // Handles up, then a resize drag and its release: not one frame
+        // of it re-derives the period.
+        for (dragging, perimeter) in [(false, 640.0f32), (true, 500.0), (true, 337.0), (false, 337.0)] {
+            let resnap = !dragging && seam_visible(true, 0.0);
+            assert_eq!(dash_period_for_frame(&mut held, resnap, 32.0, perimeter), picked);
+        }
+        assert_eq!(held, Some(picked));
     }
 
     /// The square perimeter is 2(w+h); rounding trades 8r of corners for a
