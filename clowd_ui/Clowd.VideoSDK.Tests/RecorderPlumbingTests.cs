@@ -39,8 +39,8 @@ namespace Clowd.VideoSDK.Tests
                 WebcamDeviceId = webcam ? "cam-1" : "",
             };
 
-        private static string[] Build(SettingsRecording settings)
-            => ObsArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"), settings)
+        private static string[] Build(SettingsRecording settings, bool windowCapture = false)
+            => ObsArguments.Build(new ScreenRect(10, 20, 640, 480), TestPath.Native(@"C:\out\video.mp4"), TestPath.Native(@"C:\out\obs.json"), settings, windowCapture)
                            .ToArray();
 
         [Fact]
@@ -115,6 +115,56 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(TestPath.Native(@"C:\out\input-capture.jsonl"), args[i + 1]);
 
             Assert.DoesNotContain("--input-capture", Build(Settings(composition: false)));
+        }
+
+        /// <summary>Window capture rides with multi-track the same way, but only when the caller has
+        /// established that the recorder understands the flag — hence the explicit opt-in rather
+        /// than the switch deciding on its own. The jsonl lands in the session directory beside the
+        /// other sidecar.</summary>
+        [Fact]
+        public void Multi_track_recordings_also_capture_windows_when_the_recorder_can()
+        {
+            var args = Build(Settings(), windowCapture: true);
+            var i = Array.IndexOf(args, "--window-capture");
+
+            Assert.True(i >= 0);
+            Assert.Equal(TestPath.Native(@"C:\out\window-capture.jsonl"), args[i + 1]);
+        }
+
+        /// <summary>The opt-in defaults to off. An older recorder rejects an unknown argument with a
+        /// usage error before it writes a line of protocol, so a flag passed on faith would cost
+        /// the whole recording, not just the sidecar — the input-capture flag it has always
+        /// understood must keep arriving without it.</summary>
+        [Fact]
+        public void A_recorder_without_window_capture_is_never_given_the_flag()
+        {
+            var args = Build(Settings());
+
+            Assert.Contains("--input-capture", args);
+            Assert.DoesNotContain("--window-capture", args);
+        }
+
+        /// <summary>A single-track recording has no editor to read either sidecar, so even a
+        /// recorder that could write the window jsonl is not asked for it.</summary>
+        [Fact]
+        public void Single_track_recordings_ask_for_neither_sidecar()
+        {
+            var args = Build(Settings(composition: false), windowCapture: true);
+
+            Assert.DoesNotContain("--input-capture", args);
+            Assert.DoesNotContain("--window-capture", args);
+        }
+
+        /// <summary>The recorder refuses to open two sidecars at one path, so the two file names
+        /// must never collapse into each other.</summary>
+        [Fact]
+        public void The_two_sidecars_are_different_files()
+        {
+            var args = Build(Settings(), windowCapture: true);
+            var input = args[Array.IndexOf(args, "--input-capture") + 1];
+            var window = args[Array.IndexOf(args, "--window-capture") + 1];
+
+            Assert.NotEqual(input, window);
         }
 
         // ------------------------------------------------------------------ settings file
@@ -269,6 +319,35 @@ namespace Clowd.VideoSDK.Tests
                 """);
             Assert.Equal(new ObsTrackInfo(0, 800, 600), stale.Screen);
             Assert.Null(stale.Webcam);
+        }
+
+        /// <summary>A window-capture recording echoes its jsonl path the same way, beside the
+        /// input-capture one — the two describe the same take and are read into one record.</summary>
+        [Fact]
+        public void A_window_capture_report_carries_the_jsonl_path()
+        {
+            var tracks = Parse("""
+                {"type":"started_recording","input_capture":"C:\\s\\input-capture.jsonl","window_capture":"C:\\s\\window-capture.jsonl","tracks":{
+                  "screen":{"index":0,"width":1920,"height":1080},
+                  "webcam":{"index":1,"width":1280,"height":720}}}
+                """);
+
+            Assert.Equal(@"C:\s\input-capture.jsonl", tracks.InputCapturePath);
+            Assert.Equal(@"C:\s\window-capture.jsonl", tracks.WindowCapturePath);
+        }
+
+        /// <summary>Optional and forward-tolerant like <c>input_capture</c>: a recorder that was not
+        /// asked for one (or predates the flag) omits the key, and a malformed value reads as "no
+        /// sidecar" — while the input-capture path beside it is still read.</summary>
+        [Fact]
+        public void A_report_without_window_capture_reads_as_none()
+        {
+            var tracks = Parse("""{"input_capture":"C:\\s\\input-capture.jsonl","tracks":{"screen":{"index":0,"width":800,"height":600}}}""");
+            Assert.Null(tracks.WindowCapturePath);
+            Assert.Equal(@"C:\s\input-capture.jsonl", tracks.InputCapturePath);
+
+            Assert.Null(Parse("""{"window_capture":42,"tracks":{"screen":{"index":0}}}""").WindowCapturePath);
+            Assert.Null(Parse("""{"window_capture":"","tracks":{"screen":{"index":0}}}""").WindowCapturePath);
         }
 
         /// <summary>stopped_recording is the second report; a message carrying none must not clear

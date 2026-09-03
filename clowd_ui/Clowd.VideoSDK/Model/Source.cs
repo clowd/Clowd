@@ -18,6 +18,12 @@ public sealed class Source
     /// degrades to no data — it never blocks the project.</summary>
     public string InputCapturePath { get; set; }
 
+    /// <summary>Full path to the recording's window-capture JSONL sidecar (the live geometry of
+    /// every on-screen window that intersected the capture region, region-relative and on the
+    /// input-capture timebase), or null when the recording carries none. Degrades exactly like
+    /// <see cref="InputCapturePath"/>: a missing or corrupt file is no data, never an error.</summary>
+    public string WindowCapturePath { get; set; }
+
     public List<SourceStream> Streams { get; set; } = new List<SourceStream>();
 }
 

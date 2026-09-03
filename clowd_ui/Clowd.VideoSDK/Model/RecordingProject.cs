@@ -73,6 +73,10 @@ public sealed class RecordingProjectSpec
     /// recording carries none (<see cref="Source.InputCapturePath"/>).</summary>
     public string InputCapturePath { get; set; }
 
+    /// <summary>Full path to the recording's window-capture JSONL sidecar, or null when the
+    /// recording carries none (<see cref="Source.WindowCapturePath"/>).</summary>
+    public string WindowCapturePath { get; set; }
+
     /// <summary>The audio streams, in the order they become rows — one row each. Null or empty
     /// when the recording carries no audio.</summary>
     public IReadOnlyList<AudioStreamProbe> AudioStreams { get; set; }
@@ -206,6 +210,7 @@ public static class RecordingProject
             Id = ids.SourceId,
             Path = spec.InputPath,
             InputCapturePath = spec.InputCapturePath,
+            WindowCapturePath = spec.WindowCapturePath,
         };
         source.Streams.Add(ToSourceStream(screen));
         if (cam != null)

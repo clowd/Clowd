@@ -221,6 +221,83 @@ namespace Clowd.VideoSDK.Tests
             Assert.Throws<JsonException>(() => Project.FromJson(json));
         }
 
+        // ------------------------------------------------------------------------- the window crop
+
+        [Fact]
+        public void A_window_crop_round_trips_through_the_project_file()
+        {
+            var project = FullProject();
+            project.Sources[0].WindowCapturePath = @"C:\rec\window-capture.jsonl";
+            project.Items[0].Transform.CropWindow = new WindowCrop { WindowId = 7, Title = "README.md", App = "Code.exe", Pid = 4212 };
+            Assert.Empty(project.Validate());
+
+            var json = project.ToJson();
+
+            // these strings are the file format — a rename here breaks every saved project.
+            Assert.Contains("\"WindowCapturePath\":", json);
+            Assert.Contains("\"CropWindow\":", json);
+            Assert.Contains("\"WindowId\": 7", json);
+            Assert.Contains("\"Title\": \"README.md\"", json);
+            Assert.Contains("\"App\": \"Code.exe\"", json);
+            Assert.Contains("\"Pid\": 4212", json);
+
+            var restored = Project.FromJson(json);
+            Assert.Equal(json, restored.ToJson());
+            Assert.Equal(@"C:\rec\window-capture.jsonl", restored.Sources[0].WindowCapturePath);
+            var follow = restored.Items[0].Transform.CropWindow;
+            Assert.NotNull(follow);
+            Assert.Equal(7, follow.WindowId);
+            Assert.Equal("README.md", follow.Title);
+            Assert.Equal("Code.exe", follow.App);
+            Assert.Equal(4212, follow.Pid);
+            // the follow and the hand crop are alternatives, never combined: setting one leaves
+            // the other exactly as it was, here the webcam's own crop untouched by the screen's follow.
+            Assert.Null(restored.Items[0].Transform.Crop);
+            Assert.Equal(0.1, restored.Items[1].Transform.Crop.Left);
+            Assert.Null(restored.Items[1].Transform.CropWindow);
+        }
+
+        [Fact]
+        public void A_project_without_a_window_crop_writes_no_key()
+        {
+            // a project saved before the feature existed has neither key. It must load with both
+            // fields null and re-save byte-identical — the whole reason there is no version bump.
+            var json = FullProject().ToJson();
+            Assert.DoesNotContain("CropWindow", json);
+            Assert.DoesNotContain("WindowCapturePath", json);
+
+            var restored = Project.FromJson(json);
+
+            Assert.All(restored.Sources, s => Assert.Null(s.WindowCapturePath));
+            Assert.All(restored.Items, i => Assert.Null(i.Transform.CropWindow));
+            Assert.Equal(json, restored.ToJson());
+        }
+
+        [Fact]
+        public void Cloning_a_transform_copies_the_follow_by_value()
+        {
+            var original = new Transform
+            {
+                Crop = new CropRect { Left = 0.1 },
+                CropWindow = new WindowCrop { WindowId = 7, Title = "README.md", App = "Code.exe", Pid = 4212 },
+            };
+
+            var copy = original.Clone();
+
+            // a shared instance would let an edit on one linked segment leak into another.
+            Assert.NotSame(original.CropWindow, copy.CropWindow);
+            Assert.Equal(7, copy.CropWindow.WindowId);
+            Assert.Equal("README.md", copy.CropWindow.Title);
+            Assert.Equal("Code.exe", copy.CropWindow.App);
+            Assert.Equal(4212, copy.CropWindow.Pid);
+
+            copy.CropWindow.WindowId = 9;
+            Assert.Equal(7, original.CropWindow.WindowId);
+
+            // and no follow clones as no follow, not as an empty one — null is "manual mode".
+            Assert.Null(new Transform().Clone().CropWindow);
+        }
+
         [Fact]
         public void Min_segment_ticks_mirrors_the_v1_constant()
         {

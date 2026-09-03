@@ -136,6 +136,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             RefreshTransitionDefaults();
             RefreshTrackIcons();
             RefreshBackgroundThemes();
+            RefreshCropWindows();
         }
 
         private void ViewModel_PropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -159,6 +160,9 @@ namespace Clowd.UI.VideoEditor.Inspector
                 case nameof(SelectedItemViewModel.BackgroundThemeOptions):
                 case nameof(SelectedItemViewModel.BackgroundTheme):
                     RefreshBackgroundThemes();
+                    break;
+                case nameof(SelectedItemViewModel.CropWindowOptions):
+                    RefreshCropWindows();
                     break;
                 case nameof(SelectedItemViewModel.TrackHidden):
                 case nameof(SelectedItemViewModel.TrackMuted):
@@ -250,6 +254,27 @@ namespace Clowd.UI.VideoEditor.Inspector
             {
                 _pushingBackgroundTheme = false;
             }
+        }
+
+        /// <summary>
+        /// The window picker's list, which is per recording: it comes out of the selected item's
+        /// own sidecar, so it changes with the selection rather than being fixed at startup like
+        /// the enum pickers in the constructor.
+        ///
+        /// Only the list is pushed. Unlike the wallpaper theme tiles (see
+        /// <see cref="RefreshBackgroundThemes"/>), a DropDownButton's SelectedItem is an ordinary
+        /// two-way styled property that the list does not own — its popup ListBox is synced only
+        /// when it opens — so swapping ItemsSource cannot drop the selection and the binding keeps
+        /// working. The view model raises CropWindowOptions before CropWindow so the binding
+        /// re-resolves against a list that is already in place, and it hands back the SAME list
+        /// instance while the sidecar is unchanged, so an unrelated project edit does not churn
+        /// the control.
+        /// </summary>
+        private void RefreshCropWindows()
+        {
+            var options = _vm?.CropWindowOptions;
+            if (!ReferenceEquals(ddCropWindow.ItemsSource, options))
+                ddCropWindow.ItemsSource = options;
         }
 
         /// <summary>The hide/mute buttons flip their glyphs with the state (eye/eye-off,

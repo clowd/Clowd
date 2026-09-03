@@ -158,6 +158,13 @@ namespace Clowd.VideoSDK.Composition
                     if (!frames.TryGetFrame(media.SourceId, media.StreamIndex, sourceTicks, out var frame)
                         || frame.Image == null)
                         return;
+                    // an item's crop can follow a recorded window, which makes it the one piece of
+                    // geometry that is a function of time. Resolved into a throwaway transform
+                    // here, never written back to the model, and the SAME one is handed to the
+                    // cursor overlay below so the pointer cannot land off the pixels it was
+                    // recorded over.
+                    transform = WindowCropMath.Effective(project, media, transform, sourceTicks,
+                        canvasWidth, canvasHeight);
                     DrawPicture(target, frame.Image, frame.Mask, transform, item.Surround,
                         item.Effect, fx, opacity, canvasWidth, canvasHeight);
                     DrawDefaultCursorOverlay(project, media, sourceTicks,
@@ -457,7 +464,8 @@ namespace Clowd.VideoSDK.Composition
             // frames under IVideoPlayer.MaxPresentHeight, and a mapping resolved against a
             // downscaled image would place captured (physical-pixel) positions off by that
             // downscale factor. DrawCursorItem resolves the same way.
-            var (imgW, imgH) = ScreenDims(source, media.StreamIndex, capture.Header);
+            var (imgW, imgH) = ScreenDims(source, media.StreamIndex,
+                capture.Header.RegionWidth, capture.Header.RegionHeight);
             if (!PictureMapping.TryMap(transform, fx, imgW, imgH,
                     canvasWidth, canvasHeight, out var map))
                 return;
@@ -512,8 +520,10 @@ namespace Clowd.VideoSDK.Composition
             long sourceTicks = SourceTimeTicks(media, screen, timeTicks);
             double sourceMs = sourceTicks / (double)TimeSpan.TicksPerMillisecond;
 
-            var (imgW, imgH) = ScreenDims(source, media.StreamIndex, capture.Header);
-            var screenTransform = screen.Transform ?? new Transform();
+            var (imgW, imgH) = ScreenDims(source, media.StreamIndex,
+                capture.Header.RegionWidth, capture.Header.RegionHeight);
+            var screenTransform = WindowCropMath.Effective(project, media,
+                screen.Transform ?? new Transform(), sourceTicks, canvasWidth, canvasHeight);
             var screenFx = TransitionMath.Evaluate(screen, timeTicks);
             if (!PictureMapping.TryMap(screenTransform, screenFx, imgW, imgH,
                     canvasWidth, canvasHeight, out var map))
@@ -606,7 +616,7 @@ namespace Clowd.VideoSDK.Composition
             return false;
         }
 
-        private static Source FindSource(Project project, Guid sourceId)
+        internal static Source FindSource(Project project, Guid sourceId)
         {
             if (project?.Sources == null)
                 return null;
@@ -673,10 +683,10 @@ namespace Clowd.VideoSDK.Composition
         }
 
         /// <summary>The screen stream's pixel dimensions: the probe's numbers (what
-        /// <see cref="DrawPicture"/>'s frames decode to), else the capture region — enough to map
-        /// even when the probe is missing.</summary>
-        private static (double Width, double Height) ScreenDims(Source source, int streamIndex,
-            InputCaptureHeader header)
+        /// <see cref="DrawPicture"/>'s frames decode to), else the caller's fallback — a sidecar
+        /// header's capture region — enough to map even when the probe is missing.</summary>
+        internal static (double Width, double Height) ScreenDims(Source source, int streamIndex,
+            double fallbackWidth, double fallbackHeight)
         {
             if (source.Streams != null)
             {
@@ -686,7 +696,7 @@ namespace Clowd.VideoSDK.Composition
                         return (stream.Width, stream.Height);
                 }
             }
-            return (header.RegionWidth, header.RegionHeight);
+            return (fallbackWidth, fallbackHeight);
         }
 
         // ---------------------------------------------------------------------------- keyboard

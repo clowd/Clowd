@@ -59,6 +59,7 @@ namespace Clowd.UI.VideoEditor
     {
         public SessionVideoTrack Webcam { get; set; }
         public string InputCapturePath { get; set; }
+        public string WindowCapturePath { get; set; }
 
         /// <summary>The rounded corners the recorded window was composited with, as a fraction of
         /// the region's height — the units <see cref="Mask.CornerRadius"/> is in. 0 = square, which
@@ -74,6 +75,7 @@ namespace Clowd.UI.VideoEditor
             {
                 Webcam = session.WebcamTrack,
                 InputCapturePath = session.InputCapturePath,
+                WindowCapturePath = session.WindowCapturePath,
                 ScreenCornerRadius = ScreenCornerRadiusOf(session),
             };
 
@@ -334,6 +336,7 @@ namespace Clowd.UI.VideoEditor
                 // only ever from the session: the jsonl's location is nothing a probe can see, and
                 // an old recording without one must not be pointed at a path that was never there.
                 InputCapturePath = hints?.InputCapturePath,
+                WindowCapturePath = hints?.WindowCapturePath,
                 AudioStreams = audioStreams,
                 // a v1 file predates separate audio tracks entirely, so in practice only a fresh
                 // create has labels to apply — but they belong to the recording, not to the edit.
@@ -458,17 +461,42 @@ namespace Clowd.UI.VideoEditor
             return (x, y, w, h);
         }
 
-        /// <summary>Points the recording's own source back at <paramref name="videoPath"/>. The
-        /// primary source is the one the lowest video row's items reference — every other source in
-        /// the project was imported and keeps its own path.</summary>
+        /// <summary>Points the recording's own source back at <paramref name="videoPath"/>, and
+        /// re-derives its capture sidecars from the directory that file is now in. The primary
+        /// source is the one the lowest video row's items reference — every other source in the
+        /// project was imported and keeps its own path.
+        ///
+        /// The sidecars are re-derived only to repair a break: a stored path that still resolves
+        /// is left alone (it may deliberately point elsewhere), and one that does not is replaced
+        /// only when the well-known name is actually sitting beside the video. That is what lets a
+        /// session directory be moved or copied without the cursor overlay and the
+        /// window-following crop quietly turning into no data.</summary>
         private static void ReconcilePrimaryPath(Project project, string videoPath)
         {
             if (String.IsNullOrEmpty(videoPath))
                 return;
 
             var primary = PrimarySource(project);
-            if (primary != null)
-                primary.Path = videoPath;
+            if (primary == null)
+                return;
+
+            primary.Path = videoPath;
+
+            var dir = Path.GetDirectoryName(videoPath);
+            primary.InputCapturePath = Relocate(primary.InputCapturePath,
+                ObsArguments.GetInputCapturePath(dir));
+            primary.WindowCapturePath = Relocate(primary.WindowCapturePath,
+                ObsArguments.GetWindowCapturePath(dir));
+        }
+
+        /// <summary>A stored sidecar path, or the one beside the video when the stored one no
+        /// longer resolves and that replacement actually exists. Never invents a path: an empty
+        /// stored value means the recording never had that sidecar, and is left empty.</summary>
+        private static string Relocate(string stored, string beside)
+        {
+            if (String.IsNullOrEmpty(stored) || File.Exists(stored))
+                return stored;
+            return File.Exists(beside) ? beside : stored;
         }
 
         private static Source PrimarySource(Project project)

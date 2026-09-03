@@ -129,6 +129,54 @@ namespace Clowd.UI.VideoEditor.Inspector
             public override string ToString() => Label;
         }
 
+        /// <summary>One row of the window picker: the sidecar's wire id beside the label the menu
+        /// shows. A sibling of <see cref="NamedOption"/> — reference equality selects the row —
+        /// except that this list is per recording rather than a static singleton set, so
+        /// <see cref="CropWindow"/> resolves the stored id against the list currently on offer
+        /// instead of holding an object, exactly as <see cref="CursorVariant"/> does.</summary>
+        public sealed class WindowOption
+        {
+            public WindowOption(int id, string label, string tip, string title, string app, int pid)
+            {
+                Id = id;
+                Label = label;
+                Tip = tip;
+                Title = title;
+                App = app;
+                Pid = pid;
+            }
+
+            public int Id { get; }
+
+            /// <summary>What the closed button and the popup row read, already shortened to what a
+            /// 250px sidebar can show: DropDownButton renders items through ToString and neither it
+            /// nor its theme trims, so an untrimmed window title runs off the panel.</summary>
+            public string Label { get; }
+
+            /// <summary>The untruncated title and application, for the row's tooltip.</summary>
+            public string Tip { get; }
+
+            public string Title { get; }
+
+            public string App { get; }
+
+            public int Pid { get; }
+
+            public override string ToString() => Label;
+        }
+
+        /// <summary>Longest label the closed picker shows before it is cut.</summary>
+        private const int MaxWindowLabel = 34;
+
+        /// <summary>Applications whose windows are never offered. The recorder skips only its OWN
+        /// process, so Clowd's tray, its editor and its region border are all tracked like anything
+        /// else while a recording runs, and none of them is something a user would crop to. Matched
+        /// on the owner name the two platforms report — a file name on Windows, an application
+        /// display name on macOS — because a pid only identifies us for a recording made by this
+        /// very run of the app.</summary>
+        private static readonly string[] OwnWindowApps =
+            { "Clowd", "Clowd.exe", "Clowd.Ui", "Clowd.Ui.exe", "clowd_share_region", "clowd_share_region.exe" };
+
         /// <summary>Display names for the cursor styles the model offers. Built off
         /// <see cref="CursorContent.Styles"/> so the menu's order and membership are the model's;
         /// a style with no entry here shows its wire name rather than disappearing.</summary>
@@ -456,6 +504,14 @@ namespace Clowd.UI.VideoEditor.Inspector
         private double _cropTop;
         private double _cropRight;
         private double _cropBottom;
+
+        private WindowCrop _cropWindowFollow;
+        private bool _cropFollowsWindow;
+        private bool _showCropSource;
+        private string _cropWindowPath;
+        private IReadOnlyList<WindowOption> _cropWindowOptions = Array.Empty<WindowOption>();
+        private IReadOnlyList<WindowOption> _cropWindowRecorded = Array.Empty<WindowOption>();
+        private int _cropWindowMissingId;
 
         private string _text;
         private string _fontFamily;
@@ -1014,6 +1070,338 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
+        /// <summary>Whether the crop-source selector is offered at all: only a media item on a
+        /// recording's screen stream whose window sidecar named at least one window that is not one
+        /// of ours. Every other selection keeps the four inset spinners and never learns the mode
+        /// exists — hidden rather than greyed, the choice the cursor rows already make, because a
+        /// disabled control only invites the question of what it would have done.</summary>
+        public bool ShowCropSource => _showCropSource;
+
+        /// <summary>Hand-set insets: the default, and what every selection without a sidecar is.
+        /// The radio partner of <see cref="CropFollowsWindow"/>, over one backing field.</summary>
+        public bool CropManual
+        {
+            get => !_cropFollowsWindow;
+            set => SetCropSource(window: false, value);
+        }
+
+        /// <summary>The crop follows a recorded window's position and size for the whole
+        /// recording; the inset spinners give way to the picker.</summary>
+        public bool CropFollowsWindow
+        {
+            get => _cropFollowsWindow;
+            set => SetCropSource(window: true, value);
+        }
+
+        public bool ShowCropInsets => !_cropFollowsWindow;
+
+        public bool ShowCropWindow => _cropFollowsWindow;
+
+        /// <summary>Fill and Stretch describe how a picture reaches a ratio it does not have. A
+        /// window-following crop is resolved AT the box's own ratio, so neither does anything to
+        /// it; the pair is disabled rather than left looking meaningful.</summary>
+        public bool AspectFitEnabled => AspectSelected && !_cropFollowsWindow;
+
+        /// <summary>The windows this recording tracked, ours filtered out, in the order it first
+        /// saw them. Empty for every selection the selector is not offered on. The same instance is
+        /// returned while the sidecar path is unchanged, so moving the selection between two items
+        /// of one recording does not swap the picker's list out from under it.</summary>
+        public IReadOnlyList<WindowOption> CropWindowOptions => _cropWindowOptions;
+
+        /// <summary>Which window is followed, resolved against the list currently on offer rather
+        /// than stored as an object. A stored id the list cannot name gets a standing "(missing)"
+        /// entry appended, so the row says what is applied instead of falling silently onto a
+        /// neighbour.</summary>
+        public WindowOption CropWindow
+        {
+            get
+            {
+                int id = _cropWindowFollow?.WindowId ?? 0;
+                if (id <= 0)
+                    return null;
+                foreach (var option in _cropWindowOptions)
+                {
+                    if (option.Id == id)
+                        return option;
+                }
+                return null;
+            }
+            set
+            {
+                if (value == null || _syncing || value.Id <= 0
+                    || value.Id == (_cropWindowFollow?.WindowId ?? 0))
+                    return;
+
+                ApplyWindowFollow(value);
+            }
+        }
+
+        /// <summary>The full title and application of the pick, for the row's tooltip: the sidebar
+        /// is 250px wide and the closed label is cut.</summary>
+        public string CropWindowTip => CropWindow?.Tip;
+
+        /// <summary>
+        /// The Manual/Window radio pair's body. Two things worth naming.
+        ///
+        /// Turning Window ON also picks a window, in the same call: a mode with nothing picked is a
+        /// half-finished state that composes as Manual anyway, so the project is never allowed to
+        /// hold one, and folding the two together makes "switch to Window" one undo entry.
+        ///
+        /// Turning it OFF drops the follow and leaves <see cref="Transform.Crop"/> completely
+        /// alone — the follow never wrote there — so the four spinners come straight back to the
+        /// insets the user cut.
+        /// </summary>
+        private void SetCropSource(bool window, bool selected)
+        {
+            if (!selected || _cropFollowsWindow == window)
+                return; // radio deselection, or no change
+
+            if (_syncing)
+                return;
+
+            if (window)
+            {
+                var pick = CropWindow ?? (_cropWindowOptions.Count > 0 ? _cropWindowOptions[0] : null);
+                if (pick == null)
+                {
+                    // nothing to follow: bounce the tile back rather than store an empty follow
+                    RaiseCropSourceFlags();
+                    return;
+                }
+
+                ApplyWindowFollow(pick);
+                return;
+            }
+
+            _cropFollowsWindow = false;
+            _cropWindowFollow = null;
+            RaiseCropSourceFlags();
+            EditRow("sel:cropwin", i => TransformOf(i).CropWindow = null, origin: null);
+        }
+
+        /// <summary>Writes the pick, and with it the mode. Nothing else is written: the resolved
+        /// crop carries the item's own box ratio, so the box does not move and there is no height
+        /// or aspect to seed. One EditRow, so entering the mode and choosing the window are one
+        /// undo entry rather than two.
+        ///
+        /// origin: null, like the other aspect and crop writes: this changes state the setters here
+        /// do not mirror by hand (the inset spinners, the fit-mode tiles), so the panel wants its
+        /// own re-read of the echo.</summary>
+        private void ApplyWindowFollow(WindowOption pick)
+        {
+            _cropWindowFollow = new WindowCrop
+            {
+                WindowId = pick.Id,
+                Title = pick.Title,
+                App = pick.App,
+                Pid = pick.Pid,
+            };
+            _cropFollowsWindow = true;
+            RaiseCropSourceFlags();
+
+            // the gizmo's crop drag is a conversation about the four insets, which this mode has
+            // none of (mirrors the non-croppable clear in Sync)
+            CropModeActive = false;
+
+            int id = pick.Id;
+            string title = pick.Title;
+            string app = pick.App;
+            int pid = pick.Pid;
+            EditRow("sel:cropwin", i => TransformOf(i).CropWindow = new WindowCrop
+            {
+                WindowId = id,
+                Title = title,
+                App = app,
+                Pid = pid,
+            }, origin: null);
+        }
+
+        private void RaiseCropSourceFlags()
+        {
+            OnPropertyChanged(nameof(CropManual));
+            OnPropertyChanged(nameof(CropFollowsWindow));
+            OnPropertyChanged(nameof(ShowCropInsets));
+            OnPropertyChanged(nameof(ShowCropWindow));
+            OnPropertyChanged(nameof(AspectFitEnabled));
+            OnPropertyChanged(nameof(CropWindow));
+            OnPropertyChanged(nameof(CropWindowTip));
+        }
+
+        /// <summary>
+        /// Re-reads the pick and, when the recording has changed, rebuilds the picker's list.
+        /// The parse is cached process-wide by <see cref="WindowCapture.Get"/>, so after the first
+        /// read this is a dictionary hit and a filter over a handful of entries; the list is only
+        /// rebuilt when the sidecar path changes, because its entries are matched by reference and
+        /// rebuilding them swaps the control's ItemsSource.
+        /// </summary>
+        private void SyncCropWindow(Item item, bool isCroppable)
+        {
+            var path = isCroppable ? WindowCapturePathOf(item) : null;
+            if (!String.Equals(path, _cropWindowPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _cropWindowPath = path;
+                _cropWindowRecorded = BuildWindowOptions(path);
+                _cropWindowMissingId = 0;
+                _cropWindowOptions = _cropWindowRecorded;
+                OnPropertyChanged(nameof(CropWindowOptions));
+            }
+
+            var follow = isCroppable && _cropWindowRecorded.Count > 0
+                ? item?.Transform?.CropWindow
+                : null;
+
+            // a stored pick this sidecar cannot name keeps a standing row of its own, so the mode
+            // is still legible; the id is remembered rather than the row, so the appended list is
+            // the same instance for as long as the same stranger is picked.
+            int missingId = follow is { WindowId: > 0 } && FindWindowOption(_cropWindowRecorded, follow.WindowId) == null
+                ? follow.WindowId
+                : 0;
+            if (missingId != _cropWindowMissingId)
+            {
+                _cropWindowMissingId = missingId;
+                if (missingId == 0)
+                {
+                    _cropWindowOptions = _cropWindowRecorded;
+                }
+                else
+                {
+                    var withMissing = new List<WindowOption>(_cropWindowRecorded.Count + 1);
+                    withMissing.AddRange(_cropWindowRecorded);
+                    withMissing.Add(MissingOption(follow));
+                    _cropWindowOptions = withMissing;
+                }
+
+                OnPropertyChanged(nameof(CropWindowOptions));
+            }
+
+            _cropWindowFollow = follow;
+            _cropFollowsWindow = follow is { WindowId: > 0 };
+            Set(ref _showCropSource, _cropWindowOptions.Count > 0, nameof(ShowCropSource));
+            RaiseCropSourceFlags();
+        }
+
+        /// <summary>The window sidecar behind a selection, or null: a media item on a source that
+        /// carries one, playing that source's SCREEN stream. The recorded geometry is measured
+        /// against the screen capture region and means nothing on a webcam row.</summary>
+        private string WindowCapturePathOf(Item item)
+        {
+            if (item?.Content is not MediaContent media)
+                return null;
+
+            var source = _session?.Project?.Sources?.FirstOrDefault(s => s.Id == media.SourceId);
+            if (source == null || !FrameComposer.IsScreenStream(source, media.StreamIndex))
+                return null;
+
+            return String.IsNullOrEmpty(source.WindowCapturePath) ? null : source.WindowCapturePath;
+        }
+
+        private IReadOnlyList<WindowOption> BuildWindowOptions(string path)
+        {
+            if (String.IsNullOrEmpty(path))
+                return Array.Empty<WindowOption>();
+
+            var capture = WindowCapture.Get(path);
+            var kept = new List<WindowInfo>(capture.Windows.Count);
+            foreach (var window in capture.Windows)
+            {
+                if (!IsOwnWindow(window))
+                    kept.Add(window);
+            }
+            return LabelWindows(kept);
+        }
+
+        private static bool IsOwnWindow(WindowInfo window)
+        {
+            if (window.Pid == Environment.ProcessId)
+                return true;
+            foreach (var name in OwnWindowApps)
+            {
+                if (String.Equals(window.App, name, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>Names the picker's rows, disambiguating in the order a person would: the
+        /// title, then the application when two share one, then a running number. A title-less
+        /// window (macOS reports none at all without the Screen Recording permission) falls back to
+        /// its application, and a nameless one to its id, so a row is never blank.</summary>
+        private static IReadOnlyList<WindowOption> LabelWindows(IReadOnlyList<WindowInfo> windows)
+        {
+            var options = new List<WindowOption>(windows.Count);
+            var used = new Dictionary<string, int>(StringComparer.Ordinal);
+
+            foreach (var window in windows)
+            {
+                var name = !String.IsNullOrWhiteSpace(window.Title) ? window.Title.Trim()
+                    : !String.IsNullOrWhiteSpace(window.App) ? window.App.Trim()
+                    : "Window " + window.Id;
+
+                bool shared = false;
+                foreach (var other in windows)
+                {
+                    if (!ReferenceEquals(other, window) && SameBaseName(other, name))
+                    {
+                        shared = true;
+                        break;
+                    }
+                }
+
+                var label = name;
+                if (shared && !String.IsNullOrWhiteSpace(window.App))
+                    label = name + " (" + window.App.Trim() + ")";
+                if (used.TryGetValue(label, out var seen))
+                {
+                    used[label] = seen + 1;
+                    label = label + " #" + (seen + 1);
+                }
+                else
+                {
+                    used[label] = 1;
+                }
+
+                var tip = String.IsNullOrWhiteSpace(window.App) ? name : name + " (" + window.App.Trim() + ")";
+                options.Add(new WindowOption(window.Id, Shorten(label, MaxWindowLabel), tip,
+                    window.Title ?? "", window.App ?? "", window.Pid));
+            }
+
+            return options;
+        }
+
+        private static bool SameBaseName(WindowInfo other, string name)
+        {
+            var otherName = !String.IsNullOrWhiteSpace(other.Title) ? other.Title.Trim()
+                : !String.IsNullOrWhiteSpace(other.App) ? other.App.Trim()
+                : "Window " + other.Id;
+            return String.Equals(otherName, name, StringComparison.Ordinal);
+        }
+
+        private static WindowOption FindWindowOption(IReadOnlyList<WindowOption> options, int id)
+        {
+            foreach (var option in options)
+            {
+                if (option.Id == id)
+                    return option;
+            }
+            return null;
+        }
+
+        private static string Shorten(string text, int max) =>
+            String.IsNullOrEmpty(text) || text.Length <= max ? text : text.Substring(0, max - 1) + "\u2026";
+
+        /// <summary>The standing entry for a stored pick this recording's sidecar does not name —
+        /// a project copied onto a re-recorded session, a hand edit. It reads as picked, so the
+        /// closed button is never blank, and it says out loud that nothing is applied.</summary>
+        private static WindowOption MissingOption(WindowCrop follow)
+        {
+            var name = !String.IsNullOrWhiteSpace(follow.Title) ? follow.Title.Trim()
+                : !String.IsNullOrWhiteSpace(follow.App) ? follow.App.Trim()
+                : "Window " + follow.WindowId;
+            return new WindowOption(follow.WindowId, Shorten(name, MaxWindowLabel - 10) + " (missing)",
+                name + " is not in this recording's window list, so no crop is applied.",
+                follow.Title ?? "", follow.App ?? "", follow.Pid);
+        }
+
         /// <summary>True while the preview's gizmo is in crop mode (dragging the item's edges
         /// adjusts the crop instead of the size). Pure UI state — nothing in the project changes
         /// until a handle is dragged — cleared whenever the selection changes.</summary>
@@ -1058,6 +1446,8 @@ namespace Clowd.UI.VideoEditor.Inspector
 
             OnPropertyChanged(nameof(ShowCustomAspect));
             OnPropertyChanged(nameof(AspectSelected));
+            // the fit pair's gate is the ratio AND the crop source, so it moves with either
+            OnPropertyChanged(nameof(AspectFitEnabled));
         }
 
         private static string TileProperty(AspectTile tile) => tile switch
@@ -2727,6 +3117,11 @@ namespace Clowd.UI.VideoEditor.Inspector
                 Set(ref _cropRight, crop.Right, nameof(CropRight));
                 Set(ref _cropBottom, crop.Bottom, nameof(CropBottom));
                 OnPropertyChanged(nameof(CropTotal));
+
+                // the picker's list and its pick are published in that order and nowhere else:
+                // the entries are matched by reference, so raising the pick first would resolve it
+                // against the list the panel is about to drop.
+                SyncCropWindow(item, isCroppable);
 
                 SyncAspect(item);
 
