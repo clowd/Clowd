@@ -341,6 +341,17 @@ namespace Clowd
             set => Set(value);
         }
 
+        // full path to the window-capture jsonl the recorder wrote beside this session's files —
+        // the live geometry of every window that intersected the region, which the editor's
+        // window-following crop reads. Same lifetime and same tolerance as InputCapturePath: null
+        // on recordings made without it (composition off, or a recorder older than the flag), and
+        // the editor degrades to a hand-set crop when the file has since gone missing.
+        public string WindowCapturePath
+        {
+            get => Get<string>();
+            set => Set(value);
+        }
+
         // the recording's audio tracks as the recorder described them, written once when the session
         // is created (like WebcamTrack). Null on anything it did not report; the video editor still
         // builds a row per audio stream it probes, and uses these only to name them.

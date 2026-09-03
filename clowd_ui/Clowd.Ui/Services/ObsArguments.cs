@@ -82,6 +82,12 @@ namespace Clowd.UI
         /// and a missing file just means no cursor/keyboard data.</summary>
         public const string InputCaptureFileName = "input-capture.jsonl";
 
+        /// <summary>Name of the window-capture JSONL sidecar inside the session directory: the
+        /// live geometry of every window that intersected the region, on the same timebase as
+        /// <see cref="InputCaptureFileName"/>. Like it, it stays in the session directory for the
+        /// life of the session and the editor reads it in place.</summary>
+        public const string WindowCaptureFileName = "window-capture.jsonl";
+
         /// <summary>The color the click tracker is drawn in; obs-express's own default. Not
         /// surfaced as a Clowd setting, but the file must carry every field.</summary>
         private const string TrackerColor = "255,0,0";
@@ -98,6 +104,13 @@ namespace Clowd.UI
         /// asks for input capture on recordings the editor can open.</summary>
         private const string InputCaptureArg = "--input-capture";
 
+        /// <summary>Recorder flag naming the JSONL file it should write live window geometry into.
+        /// obs-express 0.9.0 and later only, and unlike the flag above it is gated on a capability
+        /// probe rather than passed on faith: clap rejects an unknown argument with a usage error
+        /// and exit 2 during parsing, before one line of protocol is written, so guessing wrong
+        /// costs the entire recording rather than the sidecar. See <see cref="ObsCapabilities"/>.</summary>
+        private const string WindowCaptureArg = "--window-capture";
+
         /// <summary>libobs carries at most six audio tracks (its mixer/encoder limit), and the
         /// recorder refuses to start when <see cref="MultiTrackArg"/> is given with more devices
         /// than that. Clowd lists at most one speaker and one microphone, so this is a guard, not a
@@ -105,7 +118,7 @@ namespace Clowd.UI
         private const int MaxAudioTracks = 6;
 
         public static IReadOnlyList<string> Build(ScreenRect region, string outputMp4, string settingsPath,
-            SettingsRecording settings)
+            SettingsRecording settings, bool windowCapture = false)
         {
             var args = new List<string>
             {
@@ -129,6 +142,16 @@ namespace Clowd.UI
                 // CLI argument rather than a settings-file key.
                 args.Add(InputCaptureArg);
                 args.Add(GetInputCapturePath(Path.GetDirectoryName(outputMp4)));
+
+                // window capture rides with input capture for the same reason (only the editor
+                // reads it) and shares its timebase, so the editor can line the two up with no
+                // cross-referencing. Gated separately because it is younger than the recorders in
+                // the field.
+                if (windowCapture)
+                {
+                    args.Add(WindowCaptureArg);
+                    args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputMp4)));
+                }
             }
 
             return args;
@@ -138,6 +161,12 @@ namespace Clowd.UI
         /// exact path, and the editor's fallback (a recorder too old to echo it back) looks here.</summary>
         public static string GetInputCapturePath(string sessionDir)
             => Path.Combine(sessionDir ?? "", InputCaptureFileName);
+
+        /// <summary>Where the window-capture sidecar of a session lives; see
+        /// <see cref="GetInputCapturePath"/>. The recorder refuses two sidecars at one path, so
+        /// this must never equal it.</summary>
+        public static string GetWindowCapturePath(string sessionDir)
+            => Path.Combine(sessionDir ?? "", WindowCaptureFileName);
 
         /// <summary>
         /// Whether this recording is written as one track per stream — which is exactly what

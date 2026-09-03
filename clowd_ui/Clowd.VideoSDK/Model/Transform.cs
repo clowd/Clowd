@@ -68,6 +68,19 @@ public sealed class Transform
     /// — before <see cref="Aspect"/> and <see cref="Scale"/>.</summary>
     public CropRect Crop { get; set; }
 
+    /// <summary>
+    /// A recorded window this item's crop follows instead, or null — the default — for the
+    /// hand-set <see cref="Crop"/>. Non-null IS "window mode": the two are alternatives, never
+    /// combined, and <see cref="Crop"/> is left exactly as the user cut it while this is set, so
+    /// leaving window mode gives those insets straight back.
+    ///
+    /// Only meaningful on a media item playing the screen stream of a source that carries a
+    /// <see cref="Source.WindowCapturePath"/>; anything else composes as if this were null. The
+    /// crop it resolves to is a function of time and is never written back into the project — see
+    /// <c>WindowCropMath.Effective</c>, which builds a throwaway transform per composed frame.
+    /// </summary>
+    public WindowCrop CropWindow { get; set; }
+
     /// <summary>Shape the item is clipped to, or null for the plain rectangle.</summary>
     public Mask Mask { get; set; }
 
@@ -82,6 +95,7 @@ public sealed class Transform
         Aspect = Aspect,
         AspectStretch = AspectStretch,
         Crop = Crop?.Clone(),
+        CropWindow = CropWindow?.Clone(),
         Mask = Mask?.Clone(),
     };
 }
@@ -99,6 +113,46 @@ public sealed class CropRect
     public double Bottom { get; set; }
 
     public CropRect Clone() => new CropRect { Left = Left, Top = Top, Right = Right, Bottom = Bottom };
+}
+
+/// <summary>
+/// The window an item's crop follows, named out of the recording's window-capture sidecar
+/// (<see cref="Source.WindowCapturePath"/>). <see cref="WindowId"/> is the sidecar's own wire id
+/// and is the only field the composer reads; the other three are a human-readable fingerprint,
+/// kept so the editor can still name the pick when the file has gone missing and so a project
+/// file is readable by a person.
+///
+/// Wire ids are scoped to the one file that minted them, which is exactly the lifetime of the
+/// path stored beside them: the recorder assigns them from a (window handle, pid) pair unique
+/// only within a recording, and documents that nothing downstream should key anything durable
+/// off one. Nothing here survives a re-recording, and nothing tries to.
+/// </summary>
+public sealed class WindowCrop
+{
+    /// <summary>The sidecar's <c>window_info.id</c>, 1 or greater. 0 means "nothing picked" and
+    /// composes as no follow at all.</summary>
+    public int WindowId { get; set; }
+
+    /// <summary>The window's title when it was picked. May be empty: macOS without the Screen
+    /// Recording permission reports no titles at all, for any window.</summary>
+    public string Title { get; set; }
+
+    /// <summary>The owning application when it was picked — an executable file name on Windows
+    /// ("Code.exe"), the application display name on macOS ("Visual Studio Code"). May be
+    /// empty.</summary>
+    public string App { get; set; }
+
+    /// <summary>The owning process id when it was picked. Half the recorder's identity key, and
+    /// the tie-break the editor's labels use when two windows share a title.</summary>
+    public int Pid { get; set; }
+
+    public WindowCrop Clone() => new WindowCrop
+    {
+        WindowId = WindowId,
+        Title = Title,
+        App = App,
+        Pid = Pid,
+    };
 }
 
 /// <summary>Mirror of the v1 <c>WebcamOverlayShape</c>, plus <see cref="Squircle"/> which v1 had no

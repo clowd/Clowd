@@ -35,9 +35,11 @@ namespace Clowd.UI
     /// captured, and <see cref="Audio"/> is empty when the report named no audio tracks.
     /// <see cref="InputCapturePath"/> is the recorder's echo of the jsonl path it wrote — a
     /// top-level field beside <c>tracks</c> on the wire, kept here because the two describe the
-    /// same recording and are read together; null on older recorders.</summary>
+    /// same recording and are read together; null on older recorders.
+    /// <see cref="WindowCapturePath"/> is the same thing for the window-geometry sidecar, echoed
+    /// the same way and null on any recorder that was not asked for one.</summary>
     public sealed record ObsTracks(ObsTrackInfo Screen, ObsTrackInfo Webcam, IReadOnlyList<ObsAudioTrackInfo> Audio,
-        string InputCapturePath = null);
+        string InputCapturePath = null, string WindowCapturePath = null);
 
 /// <summary>The recorder's answer to a <c>configure</c> command (DESIGN §1.3): either
 /// <c>configure_applied</c>, whose <see cref="IgnoredKeys"/> names the settings the recorder
@@ -540,7 +542,8 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
         /// editor's rows come from probing the file either way — the report only decorates them.
         /// So anything unparseable is dropped, never thrown on. The message may also carry a
         /// top-level <c>"input_capture":"path"</c> beside <c>tracks</c> — the jsonl sidecar the
-        /// recorder wrote — read into the same record for the same reason.
+        /// recorder wrote — and a <c>"window_capture":"path"</c> next to it, both read into the
+        /// same record for the same reason.
         /// </summary>
         internal static ObsTracks ParseTracks(JsonElement root, ObsTracks previous)
         {
@@ -551,14 +554,22 @@ public sealed record ObsConfigureResult(bool Applied, string[] IgnoredKeys, stri
             if (screen == null)
                 return previous; // a tracks object without a screen track is not one we can use
 
-            var inputCapture = root.TryGetProperty("input_capture", out var pathEl)
-                               && pathEl.ValueKind == JsonValueKind.String
-                               && !String.IsNullOrEmpty(pathEl.GetString())
-                ? pathEl.GetString()
-                : null;
+            var inputCapture = ReadPath(root, "input_capture");
+            var windowCapture = ReadPath(root, "window_capture");
 
-            return new ObsTracks(screen, ReadTrack(tracksEl, "webcam"), ReadAudioTracks(tracksEl), inputCapture);
+            return new ObsTracks(screen, ReadTrack(tracksEl, "webcam"), ReadAudioTracks(tracksEl),
+                inputCapture, windowCapture);
         }
+
+        /// <summary>A top-level sidecar path echoed beside <c>tracks</c>. Absent, non-string or
+        /// empty all read as "no sidecar": the recorder omits the key entirely when it was not
+        /// asked for one, so the key's presence is itself the signal.</summary>
+        private static string ReadPath(JsonElement root, string name)
+            => root.TryGetProperty(name, out var el)
+               && el.ValueKind == JsonValueKind.String
+               && !String.IsNullOrEmpty(el.GetString())
+                ? el.GetString()
+                : null;
 
         /// <summary>The <c>audio</c> array of a tracks report, in the order it was written. An entry
         /// without a numeric index says nothing about a stream and is skipped; a missing

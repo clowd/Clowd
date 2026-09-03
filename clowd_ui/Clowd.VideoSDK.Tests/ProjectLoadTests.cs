@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Clowd.UI;
 using Clowd.UI.VideoEditor;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
@@ -293,9 +294,9 @@ namespace Clowd.VideoSDK.Tests
             => new SessionVideoTrack { Index = index, Width = w, Height = h };
 
         /// <summary>The session's recorder report says which stream is the webcam and where the
-        /// input-capture jsonl lives; the built project records the jsonl on its source (no cursor
-        /// <i>row</i> — only the editor's own factory adds one) and gives the webcam its row as
-        /// ever.</summary>
+        /// input-capture and window-capture jsonls live; the built project records both sidecars
+        /// on its source (no cursor <i>row</i> — only the editor's own factory adds one) and gives
+        /// the webcam its row as ever.</summary>
         [Fact]
         public void Session_hints_classify_the_recordings_streams()
         {
@@ -303,6 +304,7 @@ namespace Clowd.VideoSDK.Tests
             {
                 Webcam = SessionTrack(1, 640, 480),
                 InputCapturePath = TestPath.Native(@"C:\recordings\input-capture.jsonl"),
+                WindowCapturePath = TestPath.Native(@"C:\recordings\window-capture.jsonl"),
             };
 
             var project = VideoEditPersistence.LoadOrCreate(null, VideoPath,
@@ -311,6 +313,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Empty(project.Validate());
             var source = Assert.Single(project.Sources);
             Assert.Equal(TestPath.Native(@"C:\recordings\input-capture.jsonl"), source.InputCapturePath);
+            Assert.Equal(TestPath.Native(@"C:\recordings\window-capture.jsonl"), source.WindowCapturePath);
             Assert.Equal(new[] { 0, 1, 2 }, source.Streams.Select(s => s.Index));
             Assert.Contains(project.Tracks, t => t.Name == "Webcam");
             Assert.DoesNotContain(project.Tracks, t => t.Name == "Cursor");
@@ -337,6 +340,24 @@ namespace Clowd.VideoSDK.Tests
             var source = Assert.Single(VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe()).Sources);
 
             Assert.Null(source.InputCapturePath);
+        }
+
+        /// <summary>The same for the window sidecar, which is newer still: a recording made by a
+        /// recorder without <c>--window-capture</c>, or with composition off, reports no path, and
+        /// the source must carry none — a path that was never there would read as an empty
+        /// capture and hide the crop's Window mode, which is right, but only by accident.</summary>
+        [Fact]
+        public void A_recording_without_window_capture_gets_no_window_path()
+        {
+            var hints = new RecordingTrackHints
+            {
+                InputCapturePath = TestPath.Native(@"C:\recordings\input-capture.jsonl"),
+            };
+
+            var source = Assert.Single(VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe(), null, hints).Sources);
+
+            Assert.Equal(TestPath.Native(@"C:\recordings\input-capture.jsonl"), source.InputCapturePath);
+            Assert.Null(source.WindowCapturePath);
         }
 
         // ------------------------------------------------------------------ v1 migration
@@ -564,6 +585,113 @@ namespace Clowd.VideoSDK.Tests
             {
                 File.Delete(path);
             }
+        }
+
+        /// <summary>A moved session takes its sidecars with it, and both paths in the saved
+        /// project go stale together. The loader re-derives each from the directory the video is
+        /// now in — both of them, since a cursor overlay without its jsonl and a window-following
+        /// crop without its jsonl fail the same quiet way, as no data rather than an error.</summary>
+        [Fact]
+        public void A_moved_session_relinks_both_capture_sidecars()
+        {
+            var dir = TempSessionDir();
+            try
+            {
+                var stale = TestPath.Native(@"D:\old-session");
+                var project = ProjectWithSidecars(
+                    Path.Combine(stale, "video.mp4"),
+                    ObsArguments.GetInputCapturePath(stale),
+                    ObsArguments.GetWindowCapturePath(stale));
+
+                var path = WriteTemp(project.ToJson());
+                try
+                {
+                    var video = Path.Combine(dir, "video.mp4");
+                    var source = Assert.Single(VideoEditPersistence.LoadOrCreate(path, video, Probe()).Sources);
+
+                    Assert.Equal(video, source.Path);
+                    Assert.Equal(ObsArguments.GetInputCapturePath(dir), source.InputCapturePath);
+                    Assert.Equal(ObsArguments.GetWindowCapturePath(dir), source.WindowCapturePath);
+                }
+                finally
+                {
+                    File.Delete(path);
+                }
+            }
+            finally
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+
+        /// <summary>The relink repairs a break and nothing else: a stored sidecar path that still
+        /// resolves may deliberately point somewhere other than beside the video, and it is kept
+        /// even when the well-known file is sitting right there. And a stale path with nothing
+        /// beside the video to replace it with is left as it was, never invented.</summary>
+        [Fact]
+        public void A_sidecar_path_that_still_resolves_is_left_alone()
+        {
+            var dir = TempSessionDir();
+            var elsewhere = TempSessionDir(window: false);
+            try
+            {
+                var stale = TestPath.Native(@"D:\old-session");
+                var project = ProjectWithSidecars(
+                    Path.Combine(stale, "video.mp4"),
+                    ObsArguments.GetInputCapturePath(elsewhere),
+                    ObsArguments.GetWindowCapturePath(stale));
+
+                // the video's own directory holds nothing to relink the window sidecar to
+                File.Delete(ObsArguments.GetWindowCapturePath(dir));
+
+                var path = WriteTemp(project.ToJson());
+                try
+                {
+                    var video = Path.Combine(dir, "video.mp4");
+                    var source = Assert.Single(VideoEditPersistence.LoadOrCreate(path, video, Probe()).Sources);
+
+                    Assert.Equal(video, source.Path);
+                    Assert.Equal(ObsArguments.GetInputCapturePath(elsewhere), source.InputCapturePath);
+                    Assert.Equal(ObsArguments.GetWindowCapturePath(stale), source.WindowCapturePath);
+                }
+                finally
+                {
+                    File.Delete(path);
+                }
+            }
+            finally
+            {
+                Directory.Delete(dir, recursive: true);
+                Directory.Delete(elsewhere, recursive: true);
+            }
+        }
+
+        /// <summary>A session directory on disk: the video and its sidecars, all empty — the
+        /// relink only asks whether they exist.</summary>
+        private static string TempSessionDir(bool window = true)
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "clowd-projectload-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            File.WriteAllBytes(Path.Combine(dir, "video.mp4"), Array.Empty<byte>());
+            File.WriteAllBytes(ObsArguments.GetInputCapturePath(dir), Array.Empty<byte>());
+            if (window)
+                File.WriteAllBytes(ObsArguments.GetWindowCapturePath(dir), Array.Empty<byte>());
+            return dir;
+        }
+
+        /// <summary>A fresh whole-recording project whose source remembers the given video and
+        /// sidecar paths — what a session saved before its directory moved.</summary>
+        private static Project ProjectWithSidecars(string videoPath, string inputCapturePath, string windowCapturePath)
+        {
+            var hints = new RecordingTrackHints
+            {
+                InputCapturePath = inputCapturePath,
+                WindowCapturePath = windowCapturePath,
+            };
+
+            var project = VideoEditPersistence.LoadOrCreate(null, videoPath, Probe(), null, hints);
+            Assert.Empty(project.Validate());
+            return project;
         }
 
         /// <summary>The import flow's round trip: what <see cref="EditorSession.ImportMedia"/>
