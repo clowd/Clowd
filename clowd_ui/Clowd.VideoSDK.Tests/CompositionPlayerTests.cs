@@ -622,17 +622,30 @@ namespace Clowd.VideoSDK.Tests
 
             // the mixed audio masters the clock: position advances against the (silent) device
             player.Play();
-            Assert.True(WaitUntil(() => player.Position.Ticks > Second / 2, 5000),
+
+            // 30s rather than the 5s this waited originally, which is the budget
+            // SilentAudioOutputTests already gives the pump's first pull for the same reason. Under
+            // the audio master the position moves only when SilentAudioOutput's pump pulls, and that
+            // pump is a 10ms System.Threading.Timer whose callback queues to the thread pool; a
+            // hosted Windows runner failed here with pos=0, i.e. it had not been pulled once inside
+            // five seconds, on the same class of starved pool that made that other test's five
+            // seconds too short. Waiting longer cannot turn a broken pump into a passing run: "never
+            // advanced" is still a failure, and every claim about where the position lands (it ends
+            // exactly at Duration, it rewinds below Duration) is asserted below and unaffected.
+            Assert.True(WaitUntil(() => player.Position.Ticks > Second / 2, 30000),
                 $"position did not advance under the audio master (pos={player.Position})");
 
             Assert.True(WaitUntil(() => player.State == PlayerState.Ended, 15000),
                 $"did not end (state={player.State}, pos={player.Position})");
             Assert.Equal(player.Duration, player.Position);
 
-            // Play from Ended rewinds — the mix worker seeks back to zero and produces again
+            // Play from Ended rewinds: the mix worker seeks back to zero and produces again.
+            // 30s for the same reason as the wait above, and it is the same first pull: reaching
+            // Ended parks the pump, so this Play re-arms the timer and waits on the pool afresh.
             player.Play();
             Assert.True(WaitUntil(
-                () => player.State == PlayerState.Playing && player.Position < player.Duration, 5000));
+                () => player.State == PlayerState.Playing && player.Position < player.Duration, 30000),
+                $"did not rewind under the audio master (state={player.State}, pos={player.Position})");
         }
 
         [Fact]
