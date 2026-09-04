@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
@@ -504,7 +504,7 @@ namespace Clowd.UI.VideoEditor
 
             if (item == null || track is not { Kind: TrackKind.Video, Hidden: false, Locked: false } ||
                 ticks < item.TimelineStartTicks || ticks >= item.TimelineEndTicks ||
-                !ItemPlacement.TryResolve(project, item, videoRect.Width, videoRect.Height, out var placed))
+                !ItemPlacement.TryResolve(project, item, videoRect.Width, videoRect.Height, out var placed, ticks))
             {
                 Gizmo.SetTarget(Guid.Empty, default);
                 return empty;

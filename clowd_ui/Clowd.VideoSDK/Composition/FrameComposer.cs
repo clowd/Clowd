@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using Clowd.VideoSDK.Model;
@@ -163,8 +163,7 @@ namespace Clowd.VideoSDK.Composition
                     // here, never written back to the model, and the SAME one is handed to the
                     // cursor overlay below so the pointer cannot land off the pixels it was
                     // recorded over.
-                    transform = WindowCropMath.Effective(project, media, transform, sourceTicks,
-                        canvasWidth, canvasHeight);
+                    transform = WindowCropMath.Effective(project, media, transform, sourceTicks);
                     DrawPicture(target, frame.Image, frame.Mask, transform, item.Surround,
                         item.Effect, fx, opacity, canvasWidth, canvasHeight);
                     DrawDefaultCursorOverlay(project, media, sourceTicks,
@@ -210,7 +209,7 @@ namespace Clowd.VideoSDK.Composition
 
         /// <summary>Source time for a media item at output time <paramref name="timeTicks"/> —
         /// exact for realtime so speed-1 projects keep integer-perfect math.</summary>
-        private static long SourceTimeTicks(MediaContent media, Item item, long timeTicks)
+        public static long SourceTimeTicks(MediaContent media, Item item, long timeTicks)
         {
             long elapsed = timeTicks - item.TimelineStartTicks;
             double speed = TimelineOps.SpeedOf(media);
@@ -523,7 +522,7 @@ namespace Clowd.VideoSDK.Composition
             var (imgW, imgH) = ScreenDims(source, media.StreamIndex,
                 capture.Header.RegionWidth, capture.Header.RegionHeight);
             var screenTransform = WindowCropMath.Effective(project, media,
-                screen.Transform ?? new Transform(), sourceTicks, canvasWidth, canvasHeight);
+                screen.Transform ?? new Transform(), sourceTicks);
             var screenFx = TransitionMath.Evaluate(screen, timeTicks);
             if (!PictureMapping.TryMap(screenTransform, screenFx, imgW, imgH,
                     canvasWidth, canvasHeight, out var map))

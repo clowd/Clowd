@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Clowd.UI.Helpers;
@@ -174,8 +174,13 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// on the owner name the two platforms report — a file name on Windows, an application
         /// display name on macOS — because a pid only identifies us for a recording made by this
         /// very run of the app.</summary>
+        /// <summary>Applications whose windows are Clowd's own recording chrome rather than
+        /// anything the person meant to record. Only the share-region helper qualifies: Clowd's
+        /// main window is ordinary content — recording it is exactly what this branch was built
+        /// for — so it stays in the picker even when the editor runs in the process that recorded
+        /// it.</summary>
         private static readonly string[] OwnWindowApps =
-            { "Clowd", "Clowd.exe", "Clowd.Ui", "Clowd.Ui.exe", "clowd_share_region", "clowd_share_region.exe" };
+            { "clowd_share_region", "clowd_share_region.exe" };
 
         /// <summary>Display names for the cursor styles the model offers. Built off
         /// <see cref="CursorContent.Styles"/> so the menu's order and membership are the model's;
@@ -1093,14 +1098,29 @@ namespace Clowd.UI.VideoEditor.Inspector
             set => SetCropSource(window: true, value);
         }
 
-        public bool ShowCropInsets => !_cropFollowsWindow;
+        /// <summary>The four inset spinners, which are offered in BOTH crop modes. Following a
+        /// window does not take the crop away, it changes what the insets are measured against:
+        /// <c>WindowCropMath.CropFor</c> reads them as fractions of the window, so a top inset
+        /// cuts the title bar off and keeps it off as the window moves and resizes.</summary>
+        public bool ShowCropInsets => true;
 
         public bool ShowCropWindow => _cropFollowsWindow;
 
-        /// <summary>Fill and Stretch describe how a picture reaches a ratio it does not have. A
-        /// window-following crop is resolved AT the box's own ratio, so neither does anything to
-        /// it; the pair is disabled rather than left looking meaningful.</summary>
-        public bool AspectFitEnabled => AspectSelected && !_cropFollowsWindow;
+        /// <summary>Fill and Stretch describe how a picture reaches a ratio it does not have, so
+        /// they mean nothing until a ratio is picked.</summary>
+        public bool AspectFitEnabled => AspectSelected;
+
+        /// <summary>Whether the ASPECT RATIO block is offered — the presets, the custom ratio and
+        /// the fit pair. It is not while the crop follows a window: the window's rect IS the shown
+        /// region and the box takes that region's shape, so <c>WindowCropMath.Effective</c> drops
+        /// the preset, the stretch and any explicit height from the transform it resolves. The
+        /// block would write state nothing draws, which is the same reason a wallpaper is kept
+        /// away from it. Hidden rather than greyed, like the crop-source tiles: the way back is
+        /// the Manual tile, sitting right underneath.
+        ///
+        /// The stored values are not cleared, so switching back to Manual restores the ratio the
+        /// item had.</summary>
+        public bool ShowAspect => _showCrop && !_cropFollowsWindow;
 
         /// <summary>The windows this recording tracked, ours filtered out, in the order it first
         /// saw them. Empty for every selection the selector is not offered on. The same instance is
@@ -1222,6 +1242,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             OnPropertyChanged(nameof(CropFollowsWindow));
             OnPropertyChanged(nameof(ShowCropInsets));
             OnPropertyChanged(nameof(ShowCropWindow));
+            OnPropertyChanged(nameof(ShowAspect));
             OnPropertyChanged(nameof(AspectFitEnabled));
             OnPropertyChanged(nameof(CropWindow));
             OnPropertyChanged(nameof(CropWindowTip));
@@ -1267,7 +1288,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 {
                     var withMissing = new List<WindowOption>(_cropWindowRecorded.Count + 1);
                     withMissing.AddRange(_cropWindowRecorded);
-                    withMissing.Add(MissingOption(follow));
+                    withMissing.Add(UnlistedOption(follow));
                     _cropWindowOptions = withMissing;
                 }
 
@@ -1304,7 +1325,9 @@ namespace Clowd.UI.VideoEditor.Inspector
             var kept = new List<WindowInfo>(capture.Windows.Count);
             foreach (var window in capture.Windows)
             {
-                if (!IsOwnWindow(window))
+                // a window that was covered for the whole recording is offered by nobody: it put
+                // no pixel in the video, so following it would frame whatever was on top of it.
+                if (window.EverVisible && !IsOwnWindow(window))
                     kept.Add(window);
             }
             return LabelWindows(kept);
@@ -1312,8 +1335,6 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private static bool IsOwnWindow(WindowInfo window)
         {
-            if (window.Pid == Environment.ProcessId)
-                return true;
             foreach (var name in OwnWindowApps)
             {
                 if (String.Equals(window.App, name, StringComparison.OrdinalIgnoreCase))
@@ -1388,6 +1409,23 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private static string Shorten(string text, int max) =>
             String.IsNullOrEmpty(text) || text.Length <= max ? text : text.Substring(0, max - 1) + "\u2026";
+
+        /// <summary>The standing entry for a pick the picker does not list. A window this
+        /// recording does know — one the list filtered out as never visible or as Clowd's own
+        /// chrome — keeps an ordinary row, because the crop it drives is real and still applied;
+        /// only a genuine stranger reads as missing.</summary>
+        private WindowOption UnlistedOption(WindowCrop follow)
+        {
+            if (!String.IsNullOrEmpty(_cropWindowPath)
+                && WindowCapture.Get(_cropWindowPath).TryGetWindow(follow.WindowId, out var known))
+            {
+                var labelled = LabelWindows(new[] { known });
+                if (labelled.Count > 0)
+                    return labelled[0];
+            }
+
+            return MissingOption(follow);
+        }
 
         /// <summary>The standing entry for a stored pick this recording's sidecar does not name —
         /// a project copied onto a re-recorded session, a hand edit. It reads as picked, so the
@@ -1566,7 +1604,19 @@ namespace Clowd.UI.VideoEditor.Inspector
             var stretch = _aspectStretch;
 
             var transform = item?.Transform;
-            if (item?.Content is BackgroundContent)
+            if (_cropFollowsWindow)
+            {
+                // the window owns the picture's shape: the composer resolves the crop with no
+                // preset, no stretch and no explicit height whatever the model still holds, so
+                // reading a tile out of those stored values would light one for something that is
+                // not applied — and Unlocked would put free-resize edge handles on the gizmo (the
+                // window forwards AspectUnlocked to TransformGizmoControl.FreeResize) for an axis
+                // the picture no longer takes from the transform. The block itself is hidden;
+                // see ShowAspect. Runs before the ScaleY/Aspect reads below because SyncCropWindow
+                // has already settled _cropFollowsWindow for this selection.
+                stretch = false;
+            }
+            else if (item?.Content is BackgroundContent)
             {
                 tile = AspectTile.Unlocked;
                 stretch = false;

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -12,17 +12,19 @@ namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
     /// <see cref="WindowCropMath"/>: a recorded window's rect resolved into the fractional crop a
-    /// following item draws with. The one assertion everything else hangs off is that the crop
-    /// is grown to the ratio the item's box ALREADY has, so <c>PictureMapping.TryMap</c> lands the
-    /// effective transform on exactly the dest rect it lands the stored one on — the box never
-    /// moves as the window moves or resizes, in every transform state (locked, explicit height,
-    /// ratio preset, a hand crop still stored). That is checked through the real mapping struct,
-    /// not by re-deriving the formula. Around it: the sidecar-to-source coordinate conversion
-    /// (the region's SIZE is divided out, its ORIGIN is never subtracted — the opposite of the
-    /// cursor path), the slide-not-shrink clamp at the picture's edges, the whole-pixel pin on
-    /// the crop origin, and every degrade of <see cref="WindowCropMath.Effective"/>, all of which
-    /// must hand back the stored transform itself rather than draw nothing. One composed-pixel
-    /// case closes the loop through <c>FrameComposer.Compose</c> on the CPU factory.
+    /// following item draws with. The assertion everything else hangs off is that the crop IS the
+    /// window — not grown, not trimmed, not squared to the box — so the item shows the window's
+    /// pixels and nothing beside them, and the drawn box takes the shape of whatever region that
+    /// leaves. The box therefore keeps its width and its centre while the window moves, and
+    /// changes height when the window is RESIZED; a stored ratio preset, stretch or explicit
+    /// height is dropped rather than fought with, which is what the editor's hidden ASPECT RATIO
+    /// block reflects. All of it checked through the real mapping struct, not by re-deriving the
+    /// formula. Around it: the sidecar-to-source coordinate conversion (the region's SIZE is
+    /// divided out, its ORIGIN is never subtracted — the opposite of the cursor path), the
+    /// clip at the picture's edges, the whole-pixel pin on every crop edge, and every degrade of
+    /// <see cref="WindowCropMath.Effective"/>, all of which must hand back the stored transform
+    /// itself rather than draw nothing. One composed-pixel case closes the loop through
+    /// <c>FrameComposer.Compose</c> on the CPU factory.
     /// </summary>
     public class WindowCropMathTests
     {
@@ -38,18 +40,22 @@ namespace Clowd.VideoSDK.Tests
         private static WindowFrame Row(int x, int y, int w, int h, double t = 0) =>
             new WindowFrame(t, x, y, w, h);
 
-        private static CropRect Crop(WindowFrame row, Transform stored = null, WindowCaptureHeader header = null,
-            double imgW = ImgW, double imgH = ImgH) =>
-            WindowCropMath.CropFor(row, stored ?? new Transform(), header ?? Header(), imgW, imgH, CanvasW, CanvasH);
+        private static CropRect Crop(WindowFrame row, WindowCaptureHeader header = null,
+            double imgW = ImgW, double imgH = ImgH, CropRect inset = null) =>
+            WindowCropMath.CropFor(row, inset, header ?? Header(), imgW, imgH);
 
         /// <summary>What <see cref="WindowCropMath.Effective"/> builds: the stored transform with
-        /// the resolved crop swapped in, nothing else touched.</summary>
+        /// the resolved crop swapped in and the aspect intent dropped, because the window owns the
+        /// picture's shape while it is followed.</summary>
         private static Transform Resolved(Transform stored, WindowFrame row)
         {
-            var crop = Crop(row, stored);
+            var crop = Crop(row, inset: stored.Crop);
             Assert.NotNull(crop);
             var effective = stored.Clone();
             effective.Crop = crop;
+            effective.Aspect = null;
+            effective.AspectStretch = false;
+            effective.ScaleY = null;
             return effective;
         }
 
@@ -71,7 +77,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(expected.Bottom, actual.Bottom, 1e-3);
         }
 
-        /// <summary>The window shapes the box invariant is checked against: taller than the box,
+        /// <summary>The window shapes the box rules are checked against: taller than the box,
         /// wider than it, hanging off a corner, and covering the whole picture.</summary>
         private static readonly WindowFrame[] Shapes =
         {
@@ -81,11 +87,26 @@ namespace Clowd.VideoSDK.Tests
             Row(0, 0, 1920, 1080),
         };
 
-        private static void AssertBoxUnmoved(Transform stored)
+        /// <summary>The box the item is drawn in keeps the width and the centre its transform
+        /// asks for, whatever the window is doing, and takes its HEIGHT from the shown region —
+        /// which is the window. Checked through PictureMapping, so it is the composer's own
+        /// arithmetic rather than a restatement of it.</summary>
+        private static void AssertBoxFramesTheWindow(Transform stored)
         {
-            var expected = Map(stored).Dest;
+            var box = Map(stored).Dest;
             foreach (var row in Shapes)
-                AssertSameRect(expected, Map(Resolved(stored, row)).Dest);
+            {
+                var effective = Resolved(stored, row);
+                var dest = Map(effective).Dest;
+                var (w, h) = Extent(effective.Crop);
+
+                // 1e-3, like AssertSameRect: SKRect is float, so the dest edges carry a few
+                // ulps the double arithmetic behind them does not
+                Assert.Equal(box.Width, dest.Width, 1e-3);
+                Assert.Equal(box.MidX, dest.MidX, 1e-3);
+                Assert.Equal(box.MidY, dest.MidY, 1e-3);
+                Assert.Equal(dest.Width * (h / w), dest.Height, 1e-3);
+            }
         }
 
         // ---------------------------------------------------------------------------- sidecars
@@ -140,15 +161,13 @@ namespace Clowd.VideoSDK.Tests
         }
 
         private static Transform Effective(Project project, MediaContent media, Transform stored, double timeMs) =>
-            WindowCropMath.Effective(project, media, stored, (long)(timeMs * TimeSpan.TicksPerMillisecond),
-                CanvasW, CanvasH);
+            WindowCropMath.Effective(project, media, stored, (long)(timeMs * TimeSpan.TicksPerMillisecond));
 
         // -------------------------------------------------------------------------------- shape
 
         [Fact]
-        public void A_window_matching_the_box_ratio_crops_to_exactly_it()
+        public void A_window_crops_to_exactly_itself()
         {
-            // 960×540 is the box's own 16:9, so nothing is grown: the crop IS the window
             var crop = Crop(Row(480, 270, 960, 540));
 
             Assert.Equal(0.25, crop.Left, 1e-12);
@@ -158,54 +177,70 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void A_taller_window_is_widened_to_the_box_ratio_not_trimmed()
+        public void A_window_shaped_unlike_the_box_is_still_cropped_to_exactly_itself()
         {
+            // the old rule grew this one sideways to the box's 16:9, which showed a strip of
+            // desktop down either side of the window — the whole reason the rule changed
             var crop = Crop(Row(760, 240, 400, 600));
             var (w, h) = Extent(crop);
 
-            // the crop's own ratio is the box's, and the window sits wholly inside it
-            Assert.Equal(ImgH / ImgW, h / w, 1e-9);
+            Assert.Equal(400, w, 1e-9);
             Assert.Equal(600, h, 1e-9);
-            Assert.True(crop.Left * ImgW <= 760);
-            Assert.True((1 - crop.Right) * ImgW >= 760 + 400);
-
-            // centred on the window, give or take the whole-pixel pin on the origin
-            Assert.Equal(960, crop.Left * ImgW + w / 2, 0.5);
-            Assert.Equal(540, crop.Top * ImgH + h / 2, 0.5);
+            Assert.Equal(760, crop.Left * ImgW, 1e-9);
+            Assert.Equal(240, crop.Top * ImgH, 1e-9);
         }
 
-        // ------------------------------------------------------------------------- the invariant
+        // ------------------------------------------------------------------------- the box rules
 
         [Fact]
-        public void The_crop_never_moves_the_drawn_box()
+        public void The_box_keeps_its_width_and_takes_its_height_from_the_window()
         {
-            // the single most important assertion in the feature: the dest rect TryMap lands the
-            // effective transform on is the one it lands the stored transform on, for any window
-            AssertBoxUnmoved(new Transform());
-            AssertBoxUnmoved(new Transform { Scale = 0.5, X = 0.3, Y = 0.6 });
+            AssertBoxFramesTheWindow(new Transform());
+            AssertBoxFramesTheWindow(new Transform { Scale = 0.5, X = 0.3, Y = 0.6 });
         }
 
         [Fact]
-        public void The_box_is_unmoved_with_an_explicit_height()
+        public void An_explicit_height_is_dropped_while_a_window_is_followed()
         {
-            AssertBoxUnmoved(new Transform { Scale = 0.5, ScaleY = 0.4, X = 0.3, Y = 0.6 });
+            // ScaleY would put the box at a ratio the crop is not, and Skia would distort the
+            // window into it. The stored value is left alone — the editor just hides the tile.
+            var stored = new Transform { Scale = 0.5, ScaleY = 0.4, X = 0.3, Y = 0.6 };
+            AssertBoxFramesTheWindow(stored);
+            Assert.Equal(0.4, stored.ScaleY);
         }
 
         [Fact]
-        public void The_box_is_unmoved_with_a_ratio_preset()
+        public void A_ratio_preset_is_dropped_while_a_window_is_followed()
         {
-            AssertBoxUnmoved(new Transform { Scale = 0.5, Aspect = 1.0, X = 0.3, Y = 0.6 });
-            AssertBoxUnmoved(new Transform { Scale = 0.5, Aspect = 1.0, AspectStretch = true });
+            var stored = new Transform { Scale = 0.5, Aspect = 1.0, X = 0.3, Y = 0.6 };
+            AssertBoxFramesTheWindow(stored);
+            AssertBoxFramesTheWindow(new Transform { Scale = 0.5, Aspect = 1.0, AspectStretch = true });
+            Assert.Equal(1.0, stored.Aspect);
         }
 
         [Fact]
-        public void The_box_is_unmoved_when_a_hand_crop_is_still_stored()
+        public void A_resize_changes_the_box_but_a_move_does_not()
+        {
+            var stored = new Transform { Scale = 0.5, X = 0.3, Y = 0.6 };
+
+            var first = Map(Resolved(stored, Row(100, 100, 400, 300))).Dest;
+            var moved = Map(Resolved(stored, Row(900, 500, 400, 300))).Dest;
+            var resized = Map(Resolved(stored, Row(100, 100, 400, 600))).Dest;
+
+            AssertSameRect(first, moved);
+            Assert.Equal(first.Width, resized.Width, 1e-3);
+            Assert.Equal(first.Height * 2, resized.Height, 1e-3);
+        }
+
+        [Fact]
+        public void A_stored_hand_crop_cuts_the_window_rather_than_the_picture()
         {
             var stored = new Transform { Scale = 0.5, Crop = new CropRect { Left = 0.1 } };
-            AssertBoxUnmoved(stored);
+            AssertBoxFramesTheWindow(stored);
+            Assert.Equal(0.1, stored.Crop.Left);
 
-            // …and the editor's gizmo, which reads the STORED transform with no notion of time,
-            // boxes the same ratio the resolved crop is grown to
+            // …and the editor's gizmo asks at the composed time, so it boxes the window rather
+            // than the whole recording
             var (project, media, _) = Following(sidecarPath: null);
             var track = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video };
             project.Tracks.Add(track);
@@ -221,14 +256,83 @@ namespace Clowd.VideoSDK.Tests
 
             var gizmo = ItemPlacement.ContentAspect(project, item, CanvasW, CanvasH);
             Assert.NotNull(gizmo);
-            Assert.Equal(WindowCropMath.BoxAspect(stored, ImgW, ImgH, CanvasW, CanvasH), gizmo.Value, 1e-12);
+            // no sidecar here, so the follow degrades and the gizmo reads the stored crop
+            Assert.Equal(AspectMath.DisplayAspect(stored, ImgW, ImgH).Value, gizmo.Value, 1e-12);
+        }
+
+        [Fact]
+        public void The_gizmo_boxes_the_window_at_the_composed_time()
+        {
+            // 480×540 at t=0, twice as wide from t=3s: the box the editor draws has to follow the
+            // second shape once the playhead is past it, or the handles sit off the picture
+            var path = WriteSidecar(HeaderLine, InfoLine(7),
+                WindowLine(0, 7, 100, 100, 480, 540),
+                WindowLine(3000, 7, 100, 100, 960, 540));
+            try
+            {
+                var (project, media, stored) = Following(path);
+                stored.Scale = 0.5;
+                var track = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video };
+                project.Tracks.Add(track);
+                var item = new Item
+                {
+                    Id = Guid.NewGuid(),
+                    TrackId = track.Id,
+                    DurationTicks = 10 * Sec,
+                    Content = media,
+                    Transform = stored,
+                };
+                project.Items.Add(item);
+
+                var early = ItemPlacement.ContentAspect(project, item, CanvasW, CanvasH, 0);
+                var late = ItemPlacement.ContentAspect(project, item, CanvasW, CanvasH, 5 * Sec);
+                Assert.Equal(540.0 / 480, early.Value, 1e-9);
+                Assert.Equal(540.0 / 960, late.Value, 1e-9);
+
+                // and the placement it drives lands on the composer's own dest rect
+                Assert.True(ItemPlacement.TryResolve(project, item, CanvasW, CanvasH, out var placed, 5 * Sec));
+                var map = Map(Effective(project, media, stored, 5000));
+                Assert.Equal(map.Dest.Width, placed.W, 1e-3);
+                Assert.Equal(map.Dest.Height, placed.H, 1e-3);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void The_resolved_transform_carries_no_aspect_intent()
+        {
+            var path = WriteSidecar(HeaderLine, InfoLine(7), WindowLine(0, 7, 100, 100, 400, 300));
+            try
+            {
+                var (project, media, stored) = Following(path);
+                stored.Aspect = 1.0;
+                stored.AspectStretch = true;
+                stored.ScaleY = 0.4;
+
+                var effective = Effective(project, media, stored, 0);
+
+                Assert.Null(effective.Aspect);
+                Assert.False(effective.AspectStretch);
+                Assert.Null(effective.ScaleY);
+                // the model keeps them, so going back to a manual crop restores the item
+                Assert.Equal(1.0, stored.Aspect);
+                Assert.True(stored.AspectStretch);
+                Assert.Equal(0.4, stored.ScaleY);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         [Fact]
         public void A_ratio_preset_trims_nothing()
         {
-            // fill: the squared crop already has the target ratio, so the fill trim is a no-op
-            // and the whole window is shown — which is why the editor can disable Fill/Stretch
+            // the preset is gone from the resolved transform, so SourceInsets has nothing to trim
+            // with and the whole window is shown — which is why the editor hides the tiles
             var stored = new Transform { Aspect = 1.0, AspectStretch = false };
             foreach (var row in Shapes)
             {
@@ -253,53 +357,116 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
-        [Fact]
-        public void An_explicit_height_decides_the_box_ratio_before_a_preset()
-        {
-            // the same precedence PictureMapping.TryMap uses for its dest height
-            var stored = new Transform { Scale = 0.5, ScaleY = 0.4 };
-            Assert.Equal(0.45, WindowCropMath.BoxAspect(stored, ImgW, ImgH, CanvasW, CanvasH), 1e-12);
+        // ------------------------------------------------------------------------------- insets
 
-            var both = new Transform { Scale = 0.5, ScaleY = 0.4, Aspect = 1.0 };
-            Assert.Equal(0.45, WindowCropMath.BoxAspect(both, ImgW, ImgH, CanvasW, CanvasH), 1e-12);
+        [Fact]
+        public void The_stored_insets_are_fractions_of_the_window_not_the_picture()
+        {
+            // 10% off the top of a 300-tall window is 30px, wherever the window is and whatever
+            // the recording's own size — which is what makes "cut the title bar" hold as the
+            // window moves and resizes
+            var inset = new CropRect { Top = 0.1 };
+            var small = Crop(Row(100, 100, 400, 300), inset: inset);
+            var large = Crop(Row(100, 100, 800, 600), inset: inset);
+
+            Assert.Equal(130, small.Top * ImgH, 1e-9);
+            Assert.Equal(400, Extent(small).W, 1e-9);
+            Assert.Equal(270, Extent(small).H, 1e-9);
+
+            // same fraction, twice the window: twice the cut
+            Assert.Equal(160, large.Top * ImgH, 1e-9);
+            Assert.Equal(540, Extent(large).H, 1e-9);
+        }
+
+        [Fact]
+        public void All_four_insets_cut_from_their_own_edge()
+        {
+            var crop = Crop(Row(100, 100, 400, 300),
+                inset: new CropRect { Left = 0.25, Top = 0.1, Right = 0.5, Bottom = 0.2 });
+
+            Assert.Equal(200, crop.Left * ImgW, 1e-9);              // 100 + 0.25·400
+            Assert.Equal(130, crop.Top * ImgH, 1e-9);               // 100 + 0.1·300
+            Assert.Equal(100, Extent(crop).W, 1e-9);                // 400 − 0.25·400 − 0.5·400
+            Assert.Equal(210, Extent(crop).H, 1e-9);                // 300 − 0.1·300 − 0.2·300
+        }
+
+        [Fact]
+        public void An_inset_moves_with_the_window()
+        {
+            var inset = new CropRect { Top = 0.1 };
+            var first = Crop(Row(100, 100, 400, 300), inset: inset);
+            var later = Crop(Row(900, 500, 400, 300), inset: inset);
+
+            Assert.Equal(Extent(first).W, Extent(later).W, 1e-9);
+            Assert.Equal(Extent(first).H, Extent(later).H, 1e-9);
+            Assert.Equal(530, later.Top * ImgH, 1e-9);
+        }
+
+        [Fact]
+        public void An_inset_on_a_window_off_the_edge_still_cuts_the_window()
+        {
+            // the cut is measured on the window's own rect, then the clip takes what is left: a
+            // title bar hanging above the region is not a reason to cut 10% off what remains
+            var crop = Crop(Row(-100, -50, 400, 300), inset: new CropRect { Top = 0.1 });
+
+            Assert.Equal(0, crop.Top, 1e-12);                       // −50 + 30 is still above 0
+            Assert.Equal(300, Extent(crop).W, 1e-9);                // clipped at the left edge
+            Assert.Equal(250, Extent(crop).H, 1e-9);                // −20..230
+        }
+
+        [Fact]
+        public void Insets_that_leave_nothing_produce_no_crop()
+        {
+            Assert.Null(Crop(Row(100, 100, 400, 300), inset: new CropRect { Left = 0.6, Right = 0.6 }));
+            Assert.Null(Crop(Row(100, 100, 400, 300), inset: new CropRect { Top = 1 }));
+        }
+
+        [Fact]
+        public void An_inset_shapes_the_box_like_any_other_crop()
+        {
+            // the box takes the shown region's ratio, and the shown region is what the insets left
+            var stored = new Transform { Scale = 0.5, Crop = new CropRect { Bottom = 0.5 } };
+            var full = Map(Resolved(new Transform { Scale = 0.5 }, Row(100, 100, 400, 300))).Dest;
+            var halved = Map(Resolved(stored, Row(100, 100, 400, 300))).Dest;
+
+            Assert.Equal(full.Width, halved.Width, 1e-3);
+            Assert.Equal(full.Height / 2, halved.Height, 1e-3);
         }
 
         // -------------------------------------------------------------------------------- edges
 
         [Fact]
-        public void A_window_off_the_left_edge_slides_into_frame()
+        public void A_window_off_the_left_edge_is_clipped_not_slid()
         {
-            var inside = Crop(Row(760, 390, 400, 300));
+            // only the part of the window that was inside the region has pixels; sliding the rect
+            // back in would keep its size by framing desktop the window was never over
             var offLeft = Crop(Row(-100, 390, 400, 300));
 
             Assert.Equal(0, offLeft.Left);
-            Assert.Equal(Extent(inside).W, Extent(offLeft).W, 1e-9);
-            Assert.Equal(Extent(inside).H, Extent(offLeft).H, 1e-9);
+            Assert.Equal(300, Extent(offLeft).W, 1e-9);
+            Assert.Equal(300, Extent(offLeft).H, 1e-9);
         }
 
         [Fact]
-        public void A_window_in_a_corner_slides_rather_than_shrinks()
+        public void A_window_past_the_far_edges_is_clipped_there_too()
         {
-            var inside = Crop(Row(760, 390, 400, 300));
             var corner = Crop(Row(1700, 900, 400, 300)); // past both far edges
 
-            Assert.Equal(Extent(inside).W, Extent(corner).W, 1e-9);
-            Assert.Equal(Extent(inside).H, Extent(corner).H, 1e-9);
             Assert.Equal(0, corner.Right, 1e-9);
             Assert.Equal(0, corner.Bottom, 1e-9);
-            Assert.True(corner.Left > 0);
-            Assert.True(corner.Top > 0);
+            Assert.Equal(220, Extent(corner).W, 1e-9);
+            Assert.Equal(180, Extent(corner).H, 1e-9);
         }
 
         [Fact]
-        public void A_window_larger_than_the_picture_is_capped()
+        public void A_window_larger_than_the_picture_shows_the_whole_picture()
         {
             var crop = Crop(Row(-200, -200, 2500, 1600));
 
-            Assert.True(crop.Left >= 0 && crop.Top >= 0 && crop.Right >= 0 && crop.Bottom >= 0);
-            var (w, h) = Extent(crop);
-            Assert.Equal(ImgH / ImgW, h / w, 1e-9);
-            Assert.True(w <= ImgW && h <= ImgH);
+            Assert.Equal(0, crop.Left, 1e-12);
+            Assert.Equal(0, crop.Top, 1e-12);
+            Assert.Equal(0, crop.Right, 1e-12);
+            Assert.Equal(0, crop.Bottom, 1e-12);
         }
 
         [Fact]
@@ -393,6 +560,9 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(Crop(Row(100, 100, 0, 300)));
             Assert.Null(Crop(Row(100, 100, 400, 0)));
             Assert.Null(Crop(Row(100, 100, 400, 300), imgW: 0, imgH: 1080));
+            // wholly outside the picture: the clip leaves nothing, and the caller draws the
+            // stored crop rather than nothing at all
+            Assert.Null(Crop(Row(2200, 100, 400, 300)));
         }
 
         // ----------------------------------------------------------------------------- degrades
@@ -408,7 +578,7 @@ namespace Clowd.VideoSDK.Tests
             var unpicked = new Transform { CropWindow = new WindowCrop { WindowId = 0 } };
             Assert.Same(unpicked, Effective(project, media, unpicked, 500));
 
-            Assert.Null(WindowCropMath.Effective(project, media, null, 0, CanvasW, CanvasH));
+            Assert.Null(WindowCropMath.Effective(project, media, null, 0));
         }
 
         [Fact]
@@ -612,7 +782,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void A_moving_window_changes_the_pixels_but_not_the_box()
+        public void A_moving_window_changes_the_pixels_but_not_the_box() // it keeps its shape
         {
             // a 192×108 recording, red on the left half and green on the right; the followed
             // window sits in the red half at t=0 and in the green half from t=3s
