@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Clowd.VideoSDK.Model;
 
 namespace Clowd.VideoSDK.Composition
@@ -11,26 +11,39 @@ namespace Clowd.VideoSDK.Composition
     /// plain fractional inset that <c>AspectMath</c> and <c>PictureMapping</c> consume exactly as
     /// they consume a hand-made one.
     ///
-    /// <b>The invariant that makes the picture watchable.</b> The window's rect is not written as
-    /// the crop. It is GROWN — never shrunk — to the aspect ratio the item's drawn box already
-    /// has, centred on the window, capped at the frame and slid inside it. Because the shown
-    /// region then shares its ratio with the box:
-    /// <list type="bullet">
-    /// <item>the drawn box does not move: <c>PictureMapping</c> derives its height from
-    /// <see cref="AspectMath.DisplayAspect"/>, which returns the same number for the resolved
-    /// transform as for the stored one, so a window that moves or is resized changes only what is
-    /// inside a fixed rectangle;</item>
-    /// <item>there is no distortion: the source and dest rects share a ratio, so
-    /// <c>map.ScaleX == map.ScaleY</c> even though Skia stretches unconditionally;</item>
-    /// <item>a fill aspect trims nothing: <see cref="AspectMath.SourceInsets"/> computes
-    /// <c>content == target</c>, so the whole window is always shown;</item>
-    /// <item>the editor's gizmo needs no time awareness at all: <c>ItemPlacement.ContentAspect</c>
-    /// reads the STORED transform through the same <see cref="AspectMath.DisplayAspect"/> this
-    /// squares to, so it lands on the drawn box by construction.</item>
-    /// </list>
-    /// The price is that a window whose shape differs from the box shows a little surrounding
-    /// desktop on one axis. That is the only one of the three possible compromises — surrounding
-    /// pixels, cut-off edges, distortion — that does not change as the window is resized.
+    /// <b>The crop is the window, exactly.</b> Not grown, not trimmed, not squared to anything.
+    /// The window's rect becomes the shown region and the drawn box takes the SHAPE of that
+    /// region, so the item is the window and nothing else — no strip of surrounding desktop down
+    /// the side a window's ratio happens to differ from the recording's. The consequence, and it
+    /// is deliberate: the drawn box changes shape when the FOLLOWED WINDOW is resized mid
+    /// recording, because there is no other way to show the window's pixels and only those. It
+    /// does not change when the window merely moves.
+    ///
+    /// <b>The stored insets ride along.</b> <see cref="Transform.Crop"/> keeps working while a
+    /// window is followed, measured against the WINDOW rather than the recording: 0.05 off the top
+    /// is 5% of the window's height, which is how a title bar is cut off and stays cut off as the
+    /// window moves and resizes. The four spinners in the editor therefore stay live in window
+    /// mode. (The preview's crop-drag gizmo does not — its handles write insets against the whole
+    /// picture, which is a different measurement — so window mode still leaves crop-drag off.)
+    ///
+    /// Because the box takes the crop's own ratio there is still no distortion —
+    /// <c>map.ScaleX == map.ScaleY</c> even though Skia stretches unconditionally — and a fill
+    /// aspect would trim nothing, but that is now true by construction rather than by growing the
+    /// crop to meet it.
+    ///
+    /// <b>What that costs the aspect controls.</b> While an item follows a window, the shape of
+    /// its picture is the window's, so the stored aspect intent cannot also be honored:
+    /// <see cref="Transform.Aspect"/> would trim the crop back off the window in
+    /// <see cref="AspectMath.SourceInsets"/>, <see cref="Transform.AspectStretch"/> would distort
+    /// it, and <see cref="Transform.ScaleY"/> would put the box at a ratio the crop is not. All
+    /// three are dropped from the resolved transform. The stored values are left untouched, so
+    /// going back to a manual crop restores them; the editor hides the section that writes them
+    /// while a window is followed (<c>SelectedItemViewModel.ShowAspect</c>) rather than offering
+    /// a control that does nothing.
+    ///
+    /// Because the box now depends on the resolved crop, the editor's gizmo cannot read the stored
+    /// transform and be right — <c>ItemPlacement.ContentAspect</c> and <c>TryResolve</c> take the
+    /// composed time and resolve through here, exactly as the composer does.
     ///
     /// <b>Coordinates.</b> Sidecar rows are already canvas pixels relative to the capture region's
     /// top-left, so the header's region ORIGIN is never subtracted (the cursor path does subtract
@@ -50,7 +63,7 @@ namespace Clowd.VideoSDK.Composition
         /// its stored crop, i.e. usually the whole frame. Never "draws nothing".
         /// </summary>
         public static Transform Effective(Project project, MediaContent media, Transform stored,
-            long sourceTicks, int canvasWidth, int canvasHeight)
+            long sourceTicks)
         {
             var follow = stored?.CropWindow;
             if (follow == null || follow.WindowId <= 0 || media == null)
@@ -77,22 +90,28 @@ namespace Clowd.VideoSDK.Composition
             var (imgW, imgH) = FrameComposer.ScreenDims(source, media.StreamIndex,
                 capture.Header.RegionWidth, capture.Header.RegionHeight);
 
-            var crop = CropFor(row, stored, capture.Header, imgW, imgH, canvasWidth, canvasHeight);
+            var crop = CropFor(row, stored.Crop, capture.Header, imgW, imgH);
             if (crop == null)
                 return stored;
 
             var effective = stored.Clone();
             effective.Crop = crop;
+            // the window owns the picture's shape while it is followed; see the class remarks
+            effective.Aspect = null;
+            effective.AspectStretch = false;
+            effective.ScaleY = null;
             return effective;
         }
 
         /// <summary>
-        /// One sidecar row as fractional source insets. Null when the geometry is degenerate, which
-        /// callers must read as "do not crop", never as "draw nothing". Public and parameterized on
-        /// the raw numbers so the tests can drive the arithmetic without a project.
+        /// One sidecar row as fractional source insets: the window's rect, cut down by
+        /// <paramref name="inset"/> — the item's stored crop, read as fractions OF THE WINDOW.
+        /// Null when the geometry is degenerate or the insets leave nothing, which callers must
+        /// read as "do not crop", never as "draw nothing". Public and parameterized on the raw
+        /// numbers so the tests can drive the arithmetic without a project.
         /// </summary>
-        public static CropRect CropFor(WindowFrame row, Transform stored, WindowCaptureHeader header,
-            double imgW, double imgH, int canvasWidth, int canvasHeight)
+        public static CropRect CropFor(WindowFrame row, CropRect inset, WindowCaptureHeader header,
+            double imgW, double imgH)
         {
             if (!(imgW > 0) || !(imgH > 0))
                 return null;
@@ -110,71 +129,50 @@ namespace Clowd.VideoSDK.Composition
             double y0 = row.Y * sy;
             double y1 = (row.Y + (double)row.Height) * sy;
 
-            double w = x1 - x0;
-            double h = y1 - y0;
-            if (!(w > 0) || !(h > 0))
+            // 2. the item's own crop, applied INSIDE the window: fractions of the window's extent,
+            //    not the picture's, so "5% off the top" keeps cutting the same title bar as the
+            //    window moves and resizes. Applied before the clip below, so an inset on a window
+            //    hanging off the edge still cuts the window rather than the visible remainder.
+            if (inset != null)
+            {
+                double w = x1 - x0;
+                double h = y1 - y0;
+                x0 += Clamp(inset.Left, 0, 1) * w;
+                x1 -= Clamp(inset.Right, 0, 1) * w;
+                y0 += Clamp(inset.Top, 0, 1) * h;
+                y1 -= Clamp(inset.Bottom, 0, 1) * h;
+            }
+
+            // 3. pin every edge to a whole source pixel. The sampling grid is then fixed, so a
+            //    still window resamples bit-identically and cannot shimmer, and the extent is a
+            //    whole number of pixels rather than a fraction that would make the box's ratio
+            //    breathe as the window moved.
+            double left = Math.Round(x0);
+            double right = Math.Round(x1);
+            double top = Math.Round(y0);
+            double bottom = Math.Round(y1);
+
+            // 4. the recording is all there is. Rows are not clipped by the recorder, so a window
+            //    hanging off the region reports edges outside the picture; only the part that was
+            //    inside it has pixels, so the crop is the INTERSECTION. Sliding the rect back
+            //    inside instead — the old behaviour — kept the window's size at the price of
+            //    framing desktop it was never over.
+            left = Clamp(left, 0, imgW);
+            right = Clamp(right, 0, imgW);
+            top = Clamp(top, 0, imgH);
+            bottom = Clamp(bottom, 0, imgH);
+
+            if (!(right - left > 0) || !(bottom - top > 0))
                 return null;
-
-            double cx = (x0 + x1) / 2;
-            double cy = (y0 + y1) / 2;
-
-            // 2. grow (never shrink) to the box's own height/width ratio, about the window's centre
-            double boxAspect = BoxAspect(stored, imgW, imgH, canvasWidth, canvasHeight);
-            if (!(boxAspect > 0) || !double.IsFinite(boxAspect))
-                boxAspect = imgH / imgW;
-
-            if (h / w < boxAspect)
-                h = w * boxAspect;
-            else
-                w = h / boxAspect;
-
-            // the recording is all there is: a frame bigger than the picture is capped with the
-            // ratio held, which is the one case where the window's own edges are cut off
-            if (w > imgW) { w = imgW; h = w * boxAspect; }
-            if (h > imgH) { h = imgH; w = h / boxAspect; }
-
-            // 3. slide, do not shrink. Rows are not clipped by the recorder, so this is also where
-            //    a window hanging off the region's edge comes back inside — off-centre framing near
-            //    an edge beats a magnification that changes as the visible part shrinks. Clamped in
-            //    PIXELS, before anything is normalized: a negative inset would be silently clamped
-            //    per edge by AspectMath.SourceInsets into a crop that is wrong rather than absent.
-            double left = Clamp(cx - w / 2, 0, Math.Max(0, imgW - w));
-            double top = Clamp(cy - h / 2, 0, Math.Max(0, imgH - h));
-
-            // 4. pin the sampling grid to whole source pixels. The ORIGIN only: the extent decides
-            //    the box ratio, and rounding it would let the box breathe by a fraction of a pixel
-            //    every time the window moved. A stationary window emits no new rows, so its crop is
-            //    then bit-identical frame to frame and the linear resample cannot shimmer.
-            left = Clamp(Math.Round(left), 0, Math.Max(0, imgW - w));
-            top = Clamp(Math.Round(top), 0, Math.Max(0, imgH - h));
 
             return new CropRect
             {
                 Left = left / imgW,
                 Top = top / imgH,
                 // insets from the FAR edge, not coordinates
-                Right = (imgW - (left + w)) / imgW,
-                Bottom = (imgH - (top + h)) / imgH,
+                Right = (imgW - right) / imgW,
+                Bottom = (imgH - bottom) / imgH,
             };
-        }
-
-        /// <summary>
-        /// The drawn box's height/width ratio — derived the way <c>PictureMapping.TryMap</c>
-        /// derives its dest height, and IN THE SAME PRECEDENCE: an explicit height wins over an
-        /// aspect preset there, so it must win here. Everything else defers to
-        /// <see cref="AspectMath.DisplayAspect"/> on the STORED transform, which is the same call
-        /// the editor's <c>ItemPlacement.ContentAspect</c> makes. That shared answer is what keeps
-        /// the gizmo, the drawn box and the resolved crop on one number — including for an item
-        /// that had a hand-made crop before window mode was picked, whose stored insets still
-        /// shape the box.
-        /// </summary>
-        public static double BoxAspect(Transform stored, double imgW, double imgH,
-            int canvasWidth, int canvasHeight)
-        {
-            if (stored?.ScaleY is { } scaleY && stored.Scale > 0 && canvasWidth > 0)
-                return (scaleY * canvasHeight) / (stored.Scale * canvasWidth);
-
-            return AspectMath.DisplayAspect(stored, imgW, imgH) ?? (imgW > 0 ? imgH / imgW : 0);
         }
 
         private static double Clamp(double v, double min, double max) =>

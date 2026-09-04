@@ -1,4 +1,4 @@
-<UserControl
+﻿<UserControl
     x:Class="Clowd.UI.VideoEditor.Inspector.InspectorPanel"
     xmlns="https://github.com/avaloniaui"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -30,6 +30,9 @@
 
         <!--  Crop-source icon: a window frame drawn as one filled path, its body wound the other
               way so it punches through as a hole and leaves a title bar.  -->
+        <!--  the crop tool's own glyph, on the same 24-unit grid as the tile icons beside it;
+              the editor window's IconCrop is a different drawing on a 172-unit one  -->
+        <StreamGeometry x:Key="CropIconManual">M 4.984375 1.9863281 A 1.0001 1.0001 0 0 0 4 3 L 4 4 L 3 4 A 1.0001 1.0001 0 1 0 3 6 L 4 6 L 4 18 C 4 19.093063 4.9069372 20 6 20 L 18 20 L 18 21 A 1.0001 1.0001 0 1 0 20 21 L 20 20 L 21 20 A 1.0001 1.0001 0 1 0 21 18 L 19.154297 18 A 1.0001 1.0001 0 0 0 18.984375 17.986328 A 1.0001 1.0001 0 0 0 18.839844 18 L 7.4140625 18 L 18 7.4140625 L 18 15 A 1.0001 1.0001 0 1 0 20 15 L 20 5.4140625 L 21.707031 3.7070312 A 1.0001 1.0001 0 0 0 20.980469 1.9902344 A 1.0001 1.0001 0 0 0 20.292969 2.2929688 L 18.585938 4 L 9 4 A 1.0001 1.0001 0 1 0 9 6 L 16.585938 6 L 6 16.585938 L 6 5.1679688 A 1.0001 1.0001 0 0 0 6 4.8417969 L 6 3 A 1.0001 1.0001 0 0 0 4.984375 1.9863281 z</StreamGeometry>
         <StreamGeometry x:Key="CropIconWindow">M 2 4 L 22 4 L 22 20 L 2 20 Z M 4 9 L 4 18 L 20 18 L 20 9 Z</StreamGeometry>
 
         <!--  A shape-picker tile: icon beside its name in a rounded box that borrows the Semi
@@ -592,7 +595,11 @@
 
                 <!--  aspect ratio + crop  -->
                 <StackPanel Classes="section" IsVisible="{Binding ShowCrop}">
-                    <DockPanel>
+                    <!--  hidden outright while the crop follows a window: the window's rect is
+                          the shown region and the box takes its shape, so a preset, a fit mode and
+                          a free height are all dropped by WindowCropMath.Effective. See
+                          SelectedItemViewModel.ShowAspect. The Manual tile below is the way back.  -->
+                    <DockPanel IsVisible="{Binding ShowAspect}">
                         <TextBlock Classes="section" Text="ASPECT RATIO" />
                         <Rectangle Classes="sectionRule" />
                     </DockPanel>
@@ -603,6 +610,7 @@
                     <Grid
                         ColumnDefinitions="*,*,*,*"
                         ColumnSpacing="4"
+                        IsVisible="{Binding ShowAspect}"
                         RowDefinitions="Auto,Auto"
                         RowSpacing="4">
                         <RadioButton
@@ -761,7 +769,8 @@
                     <Grid
                         ColumnDefinitions="*,*"
                         ColumnSpacing="4"
-                        IsEnabled="{Binding AspectFitEnabled}">
+                        IsEnabled="{Binding AspectFitEnabled}"
+                        IsVisible="{Binding ShowAspect}">
                         <RadioButton
                             Grid.Column="0"
                             Content="Fill"
@@ -798,7 +807,7 @@
                             Content="Manual"
                             GroupName="ItemCropSource"
                             IsChecked="{Binding CropManual, Mode=TwoWay}"
-                            Tag="{StaticResource IconCrop}"
+                            Tag="{StaticResource CropIconManual}"
                             Theme="{StaticResource MaskShapeTile}"
                             ToolTip.Tip="Set the crop by hand" />
                         <RadioButton
@@ -823,6 +832,9 @@
                             ToolTip.Tip="{Binding CropWindowTip}" />
                     </DockPanel>
 
+                    <!--  the insets are offered in both modes: with a window followed they are
+                          read as fractions OF THE WINDOW, which is how a title bar gets cut off
+                          and stays off as the window moves. See ShowCropInsets.  -->
                     <DockPanel Classes="row" IsVisible="{Binding ShowCropInsets}">
                         <Panel Classes="dot" DockPanel.Dock="Left">
                             <controls:ResetDefaultButton CurrentValue="{Binding CropLeft, Mode=TwoWay}" DefaultValue="0" />

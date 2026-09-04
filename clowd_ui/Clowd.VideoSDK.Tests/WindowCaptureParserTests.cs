@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,7 +11,8 @@ namespace Clowd.VideoSDK.Tests
     /// The window-capture JSONL parser: header/window_info/window rows into per-window
     /// time-sorted arrays, the first-seen pick list, the hold-last lookups that make a
     /// window-following crop defined for the whole recording, the all-zero leave sentinel that
-    /// is dropped at parse so an absence holds the last real rect, forward tolerance (unknown
+    /// is dropped at parse so an absence holds the last real rect, the occlusion pass that marks
+    /// a window that spent the whole recording behind others as never visible, forward tolerance (unknown
     /// rows/fields/value shapes skipped, torn lines dropped) and the missing/corrupt degrade to
     /// <see cref="WindowCapture.Empty"/>.
     /// </summary>
@@ -499,6 +500,118 @@ namespace Clowd.VideoSDK.Tests
             var capture = Parse(Header, Row(0, 4097, 0, 0, 800, 600), Row(0, 1_000_000, 0, 0, 800, 600));
 
             Assert.Equal(new[] { 4097, 1_000_000 }, capture.Windows.Select(w => w.Id));
+        }
+
+        // ---------------------------------------------------------------------------- occlusion
+
+        /// <summary>A window big enough to cover the whole 1920x1080 region.</summary>
+        private static string Covering(double t, int id, int z = 0) => Row(t, id, -200, -200, 3000, 2000, z);
+
+        [Fact]
+        public void Z_is_parsed_onto_every_row()
+        {
+            var capture = Parse(Header, Info(1), Row(0, 1, 10, 20, 300, 200, 4));
+
+            Assert.Equal(4, capture.FramesOf(1)[0].Z);
+        }
+
+        [Fact]
+        public void A_window_behind_a_coverer_for_the_whole_recording_is_not_ever_visible()
+        {
+            var capture = Parse(Header, Info(1), Info(2),
+                Covering(0, 1),
+                Row(0, 2, 100, 100, 800, 600, 1),
+                Row(500, 2, 140, 100, 800, 600, 1));
+
+            // it is still a window of this file — its geometry is intact and a stored pick on it
+            // still resolves — it simply never showed
+            Assert.Equal(new[] { 1, 2 }, capture.Windows.Select(w => w.Id).ToArray());
+            Assert.True(capture.Windows.Single(w => w.Id == 1).EverVisible);
+            Assert.False(capture.Windows.Single(w => w.Id == 2).EverVisible);
+            Assert.Equal(2, capture.FramesOf(2).Count);
+        }
+
+        [Fact]
+        public void A_window_covered_only_in_part_is_ever_visible()
+        {
+            var capture = Parse(Header, Info(1), Info(2),
+                Row(0, 1, 0, 0, 1920, 1000, 0),   // 80 rows of the region left over
+                Row(0, 2, 100, 100, 800, 990, 1));
+
+            Assert.True(capture.Windows.Single(w => w.Id == 2).EverVisible);
+        }
+
+        [Fact]
+        public void Two_coverers_that_only_together_cover_a_window_hide_it()
+        {
+            var capture = Parse(Header, Info(1), Info(2), Info(3),
+                // neither half covers 3 alone; the union does, and occlusion is a union question
+                Row(0, 1, 0, 0, 960, 1080, 0),
+                Row(0, 2, 960, 0, 960, 1080, 1),
+                Row(0, 3, 100, 100, 1000, 600, 2));
+
+            Assert.False(capture.Windows.Single(w => w.Id == 3).EverVisible);
+        }
+
+        [Fact]
+        public void A_window_uncovered_for_one_instant_is_ever_visible()
+        {
+            var capture = Parse(Header, Info(1), Info(2),
+                Covering(0, 1),
+                Row(0, 2, 100, 100, 800, 600, 1),
+                // the coverer leaves the region for a single poll: a sliver of a second on screen
+                // is still on screen
+                Gone(500, 1),
+                Covering(600, 1));
+
+            Assert.True(capture.Windows.Single(w => w.Id == 2).EverVisible);
+        }
+
+        [Fact]
+        public void A_window_that_only_ever_shows_before_the_coverer_arrives_is_ever_visible()
+        {
+            var capture = Parse(Header, Info(1), Info(2),
+                Row(0, 2, 100, 100, 800, 600, 0),
+                // the coverer's first row is its arrival; before it there is nothing in front
+                Covering(500, 1),
+                Row(500, 2, 100, 100, 800, 600, 1));
+
+            Assert.True(capture.Windows.Single(w => w.Id == 2).EverVisible);
+        }
+
+        [Fact]
+        public void A_raise_that_puts_a_window_in_front_makes_it_visible()
+        {
+            var capture = Parse(Header, Info(1), Info(2),
+                Covering(0, 1),
+                Row(0, 2, 100, 100, 800, 600, 1),
+                // the recorder re-states both rows on a raise, with the depths swapped
+                Row(500, 2, 100, 100, 800, 600, 0),
+                Covering(500, 1, 1));
+
+            Assert.True(capture.Windows.Single(w => w.Id == 2).EverVisible);
+        }
+
+        [Fact]
+        public void A_window_entirely_outside_the_region_is_not_ever_visible()
+        {
+            var capture = Parse(Header, Info(1),
+                // the recorder tracks windows that intersect the region, so this is a torn or
+                // stale row rather than an everyday one; it is still not on screen
+                Row(0, 1, 2000, 1200, 300, 200));
+
+            Assert.False(capture.Windows.Single(w => w.Id == 1).EverVisible);
+        }
+
+        [Fact]
+        public void Without_a_header_every_window_stays_visible()
+        {
+            // no region to judge coverage against: the pick list must not quietly empty itself
+            var capture = Parse(Info(1), Info(2),
+                Covering(0, 1),
+                Row(0, 2, 100, 100, 800, 600, 1));
+
+            Assert.All(capture.Windows, w => Assert.True(w.EverVisible));
         }
 
         // ----------------------------------------------------------------------- forward tolerance

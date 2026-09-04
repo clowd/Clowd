@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using Clowd.UI.VideoEditor.Inspector;
@@ -27,8 +27,8 @@ namespace Clowd.VideoSDK.Tests
         private static string Info(int id, string title, string app, int pid = 4212)
             => $$"""{"type":"window_info","id":{{id}},"title":"{{title}}","app":"{{app}}","pid":{{pid}}}""";
 
-        private static string Row(double t, int id, int x, int y, int w, int h)
-            => $$"""{"type":"window","t":{{t}},"id":{{id}},"x":{{x}},"y":{{y}},"w":{{w}},"h":{{h}},"z":0}""";
+        private static string Row(double t, int id, int x, int y, int w, int h, int z = 0)
+            => $$"""{"type":"window","t":{{t}},"id":{{id}},"x":{{x}},"y":{{y}},"w":{{w}},"h":{{h}},"z":{{z}}}""";
 
         /// <summary>The everyday sidecar: an editor window met first, a browser second, both
         /// nameable and neither ours. Ids 7 and 9 are deliberately not 1 and 2 — a bug that
@@ -313,19 +313,22 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Leaving_window_mode_restores_the_stored_insets()
+        public void Leaving_window_mode_keeps_the_stored_insets()
         {
             WithWindowCapture(TwoWindows(), fx =>
             {
                 fx.Session.Select(fx.Screen.Id);
                 fx.Vm.CropLeft = 0.2;
 
+                // the insets go on being offered and applied in window mode, only measured
+                // against the window instead of the picture
                 fx.Vm.CropFollowsWindow = true;
-                Assert.False(fx.Vm.ShowCropInsets);
+                Assert.True(fx.Vm.ShowCropInsets);
+                Assert.Equal(0.2, fx.Vm.CropLeft);
 
                 fx.Vm.CropManual = true;
 
-                // the follow never wrote to Transform.Crop, so the spinners come straight back to
+                // the follow never wrote to Transform.Crop, so the spinners still hold exactly
                 // the insets the user cut
                 Assert.Equal(0.2, fx.Vm.CropLeft);
                 Assert.Equal(0.2, Live(fx.Session, fx.Screen.Id).Transform.Crop.Left);
@@ -335,36 +338,51 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void The_inset_rows_and_the_window_row_are_never_both_visible()
+        public void The_inset_rows_stay_offered_in_window_mode()
         {
             WithWindowCapture(TwoWindows(), fx =>
             {
                 fx.Session.Select(fx.Screen.Id);
                 Assert.True(fx.Vm.ShowCropInsets);
-                Assert.NotEqual(fx.Vm.ShowCropInsets, fx.Vm.ShowCropWindow);
+                Assert.False(fx.Vm.ShowCropWindow);
 
+                // following a window does not take the crop away, it changes what the insets are
+                // measured against: WindowCropMath.CropFor reads them as fractions of the window,
+                // which is how a title bar is cut off and stays off as the window moves
                 fx.Vm.CropFollowsWindow = true;
                 Assert.True(fx.Vm.ShowCropWindow);
-                Assert.NotEqual(fx.Vm.ShowCropInsets, fx.Vm.ShowCropWindow);
+                Assert.True(fx.Vm.ShowCropInsets);
+
+                fx.Vm.CropTop = 0.08;
+                Assert.Equal(0.08, Live(fx.Session, fx.Screen.Id).Transform.Crop.Top);
+                Assert.Equal(7, FollowOf(fx.Session, fx.Screen.Id).WindowId);
             });
         }
 
         [Fact]
-        public void The_fit_mode_is_disabled_in_window_mode()
+        public void The_aspect_section_is_hidden_in_window_mode()
         {
             WithWindowCapture(TwoWindows(), fx =>
             {
                 fx.Session.Select(fx.Screen.Id);
                 fx.Vm.Aspect169 = true;
+                Assert.True(fx.Vm.ShowAspect);
                 Assert.True(fx.Vm.AspectFitEnabled);
 
-                // Fill and Stretch describe how a picture reaches a ratio it does not have; a
-                // window crop is resolved AT the box's ratio, so neither does anything
+                // the window's rect is the shown region and the box takes its shape, so a preset,
+                // a fit mode and a free height are all dropped by WindowCropMath.Effective: the
+                // block is hidden rather than left writing state nothing draws
                 fx.Vm.CropFollowsWindow = true;
-                Assert.True(fx.Vm.AspectSelected);
-                Assert.False(fx.Vm.AspectFitEnabled);
+                Assert.False(fx.Vm.ShowAspect);
+                // and no tile reads as applied — Unlocked would put free-resize edge handles on
+                // the gizmo for an axis the picture no longer takes from the transform
+                Assert.True(fx.Vm.AspectOriginal);
+                Assert.False(fx.Vm.AspectUnlocked);
 
+                // the stored ratio was never cleared, so the way back restores the item
                 fx.Vm.CropManual = true;
+                Assert.True(fx.Vm.ShowAspect);
+                Assert.True(fx.Vm.Aspect169);
                 Assert.True(fx.Vm.AspectFitEnabled);
             });
         }
@@ -409,24 +427,94 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Clowds_own_windows_are_not_offered()
+        public void Clowds_recording_chrome_is_not_offered_but_its_ordinary_windows_are()
         {
             WithWindowCapture(new[]
             {
                 Header,
                 Info(7, "README.md", "Code.exe"),
-                // the editor, matched on the owner name the recorder reports...
+                // Clowd's own window is ordinary content: recording it is the point of this
+                // branch, and it stays offered even when the editor is the process that recorded
+                // it. Only the share-region helper's mirror window is chrome.
                 Info(8, "Clowd", "Clowd.Ui.exe", 6001),
-                // ...and anything at all belonging to this very process
-                Info(9, "Region", "Some.exe", Environment.ProcessId),
+                Info(9, "Clowd", "Clowd.Ui.exe", Environment.ProcessId),
+                Info(10, "Region", "clowd_share_region.exe", 6002),
                 Row(0, 7, 100, 100, 800, 600),
                 Row(10, 8, 0, 0, 400, 300),
-                Row(20, 9, 0, 0, 400, 300),
+                Row(20, 9, 900, 0, 400, 300),
+                Row(30, 10, 0, 700, 400, 300),
+            }, fx =>
+            {
+                fx.Session.Select(fx.Screen.Id);
+
+                Assert.Equal(new[] { 7, 8, 9 }, fx.Vm.CropWindowOptions.Select(o => o.Id).ToArray());
+            });
+        }
+
+        [Fact]
+        public void A_window_covered_for_the_whole_recording_is_not_offered()
+        {
+            WithWindowCapture(new[]
+            {
+                Header,
+                Info(7, "README.md", "Code.exe"),
+                Info(8, "Inbox", "chrome.exe", 5150),
+                // 8 sits under a window that fills the region for every sampled instant, so not
+                // one of its pixels reached the video and following it would frame 7's contents
+                Row(0, 7, -200, -200, 3000, 2000, 0),
+                Row(0, 8, 100, 100, 800, 600, 1),
+                Row(500, 8, 140, 100, 800, 600, 1),
             }, fx =>
             {
                 fx.Session.Select(fx.Screen.Id);
 
                 Assert.Equal(new[] { 7 }, fx.Vm.CropWindowOptions.Select(o => o.Id).ToArray());
+            });
+        }
+
+        [Fact]
+        public void A_window_uncovered_for_a_single_instant_is_offered()
+        {
+            WithWindowCapture(new[]
+            {
+                Header,
+                Info(7, "README.md", "Code.exe"),
+                Info(8, "Inbox", "chrome.exe", 5150),
+                Row(0, 7, -200, -200, 3000, 2000, 0),
+                Row(0, 8, 100, 100, 800, 600, 1),
+                // the coverer leaves the region for one poll: a sliver of a second on screen is
+                // still on screen
+                Row(500, 7, 0, 0, 0, 0, 0),
+                Row(600, 7, -200, -200, 3000, 2000, 0),
+            }, fx =>
+            {
+                fx.Session.Select(fx.Screen.Id);
+
+                Assert.Equal(new[] { 7, 8 }, fx.Vm.CropWindowOptions.Select(o => o.Id).ToArray());
+            });
+        }
+
+        [Fact]
+        public void A_stored_pick_the_list_filtered_out_still_reads_as_an_ordinary_row()
+        {
+            WithWindowCapture(new[]
+            {
+                Header,
+                Info(7, "README.md", "Code.exe"),
+                Info(8, "Inbox", "chrome.exe", 5150),
+                Row(0, 7, -200, -200, 3000, 2000, 0),
+                Row(0, 8, 100, 100, 800, 600, 1),
+            }, fx =>
+            {
+                // picked before the window was hidden from the list — or by hand. The crop it
+                // drives is real and still applied, so the row must not claim otherwise.
+                fx.Session.EditItem(fx.Screen.Id, i => (i.Transform ??= new Transform()).CropWindow =
+                    new WindowCrop { WindowId = 8, Title = "Inbox", App = "chrome.exe", Pid = 5150 });
+                fx.Session.Select(fx.Screen.Id);
+
+                Assert.Equal(8, fx.Vm.CropWindow.Id);
+                Assert.Equal("Inbox", fx.Vm.CropWindow.Label);
+                Assert.Equal(new[] { 7, 8 }, fx.Vm.CropWindowOptions.Select(o => o.Id).ToArray());
             });
         }
 
