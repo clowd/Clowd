@@ -187,6 +187,16 @@ namespace Clowd.Config
         }
 
         [Category("Video")]
+        [DisplayName("Capture method")]
+        [Description("Which Windows API captures the screen. DXGI avoids the yellow capture border on Windows 10; WGC works where DXGI records black frames.")]
+        [HiddenOnMacOS]
+        public ScreenCaptureMethod CaptureMethod
+        {
+            get => _captureMethod;
+            set => Set(ref _captureMethod, value);
+        }
+
+        [Category("Video")]
         [DisplayName("Show mouse cursor")]
         [Description("Include the mouse cursor in the recording")]
         public bool ShowMouseCursor
@@ -355,6 +365,7 @@ namespace Clowd.Config
         private int _maxResolutionWidth = 0;
         private int _maxResolutionHeight = 0;
         private bool _hardwareAccelerated = true;
+        private ScreenCaptureMethod _captureMethod = ScreenCaptureMethod.Auto;
         private bool _showMouseCursor = true;
         private bool _highlightClicks = true;
         private bool _captureSpeaker = false;

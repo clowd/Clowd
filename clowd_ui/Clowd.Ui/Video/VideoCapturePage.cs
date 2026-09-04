@@ -59,6 +59,10 @@ namespace Clowd.UI
         // into an existing process: a change means a respawn.
         private bool _appliedMultiTrack;
 
+        // ...and which capture API it was spawned with, for the same reason: --capture-method picks
+        // the capture source built during bootstrap, so a change means a respawn too.
+        private ScreenCaptureMethod _appliedCaptureMethod;
+
         private ObsCapturer _obs;
         // shutdown of a capturer being replaced (failed configure) — awaited before the
         // replacement spawns (both write the same video.mp4).
@@ -198,6 +202,7 @@ namespace Clowd.UI
                 // …and so is the track layout, which is a command-line argument (the output object
                 // is built once), hence remembered here rather than reconfigured later.
                 _appliedMultiTrack = ObsArguments.UsesMultiTrack(_settings);
+                _appliedCaptureMethod = WantedCaptureMethod();
 
                 _obs = new ObsCapturer();
                 _obs.CriticalError += OnCriticalError;
@@ -598,6 +603,9 @@ namespace Clowd.UI
             // ApplySettingsChange turns into a respawn. It also gates "webcam_device", so a flip
             // has to rewrite the settings file as well.
             nameof(SettingsRecording.EnableComposition) => true,
+            // likewise a command-line argument (--capture-method) rather than a settings-file key,
+            // and likewise turned into a respawn by ApplySettingsChange.
+            nameof(SettingsRecording.CaptureMethod) => true,
             // applied as live mutes above, but ALSO part of the --multi-track decision (only an
             // enabled device earns a track), so they must reach ApplySettingsChange too.
             nameof(SettingsRecording.CaptureSpeaker) => true,
@@ -636,7 +644,8 @@ namespace Clowd.UI
                     // the track layout is a command-line argument, so a configure could not change
                     // it — and the recorder refuses a webcam a single-track process cannot carry.
                     // Replace the process instead, which rewrites the settings file anyway.
-                    if (ObsArguments.UsesMultiTrack(_settings) != _appliedMultiTrack)
+                    if (ObsArguments.UsesMultiTrack(_settings) != _appliedMultiTrack
+                        || WantedCaptureMethod() != _appliedCaptureMethod)
                     {
                         await RespawnCapturerAsync();
                         return;
@@ -758,6 +767,13 @@ namespace Clowd.UI
         /// the condition <see cref="ObsArguments.WriteSettingsFile"/> uses to emit a non-empty
         /// <c>webcam_device</c>.</summary>
         private bool IsWebcamCaptured() => ObsArguments.UsesWebcam(_settings);
+
+        /// <summary>The capture API the current settings ask for — what
+        /// <see cref="ObsArguments.Build"/> would put on the next spawn's command line, compared
+        /// against <c>_appliedCaptureMethod</c> to decide whether a configure has to become a
+        /// respawn.</summary>
+        private ScreenCaptureMethod WantedCaptureMethod()
+            => _settings?.CaptureMethod ?? ScreenCaptureMethod.Auto;
 
         /// <summary>
         /// The CAM button was pressed. The toolbar has already written

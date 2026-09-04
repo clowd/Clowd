@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
@@ -84,6 +84,11 @@ namespace Clowd.UI
         /// Falls back to 30 when the settings graph is unavailable, which is the same default
         /// <c>SettingsShareRegion.Fps</c> and the helper's own <c>--fps</c> both carry.</summary>
         private int _mirrorFps = 30;
+
+        /// <summary>The capture API this session's helper was spawned with, read once at spawn for
+        /// the same reason as <see cref="_mirrorFps"/>: it picks the capture source built during
+        /// bootstrap, so a mid-share edit cannot reach it.</summary>
+        private ScreenCaptureMethod _mirrorCaptureMethod = ScreenCaptureMethod.Auto;
 
         /// <summary>
         /// Where the resize mode stands. Deliberately a four-state enum rather than a pair of
@@ -228,13 +233,15 @@ namespace Clowd.UI
                 // is the only frame rate this share will ever have, so latching the value the
                 // spawn actually used is what keeps the page honest about it.
                 _mirrorFps = SettingsRoot.Current?.ShareRegion?.Fps ?? _mirrorFps;
+                _mirrorCaptureMethod = SettingsRoot.Current?.ShareRegion?.CaptureMethod ?? _mirrorCaptureMethod;
 
                 // Spawned while Clowd still holds the foreground rights the capture overlay handed
                 // back to it on its way out (--shell-pid, CAPTURE_PROTOCOL.md §2.5). That matters:
                 // the helper's prompt window has to come to the front to be findable, and a process
                 // spawned by a background app is refused the foreground — the prompt would only
                 // blink in the taskbar and the user would never see the thing they are meant to pick.
-                await _driver.InitializeAsync(region, MirrorWindowTitle, MirrorCaptureCursor, _mirrorFps, binary);
+                await _driver.InitializeAsync(region, MirrorWindowTitle, MirrorCaptureCursor, _mirrorFps,
+                    _mirrorCaptureMethod, binary);
 
                 if (_closing)
                     return;

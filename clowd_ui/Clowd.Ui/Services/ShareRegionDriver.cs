@@ -1,9 +1,10 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using Clowd.Config;
 using Clowd.PlatformUtil;
 
 namespace Clowd.UI
@@ -237,8 +238,11 @@ namespace Clowd.UI
         /// meeting app's picker. Null or empty leaves the helper's own default.</param>
         /// <param name="captureCursor">Whether the mouse cursor is drawn into the mirror.</param>
         /// <param name="fps">Mirror frame rate; clamped to at least 1.</param>
+        /// <param name="captureMethod">Which OS API backs the capture. Windows only — the helper
+        /// ignores it on macOS.</param>
         /// <param name="exePath">The helper binary, from <see cref="ResolveBinary"/>.</param>
-        public async Task InitializeAsync(ScreenRect region, string title, bool captureCursor, int fps, string exePath)
+        public async Task InitializeAsync(ScreenRect region, string title, bool captureCursor, int fps,
+            ScreenCaptureMethod captureMethod, string exePath)
         {
             if (_proc != null)
                 throw new InvalidOperationException(
@@ -247,7 +251,7 @@ namespace Clowd.UI
             if (String.IsNullOrEmpty(exePath))
                 throw new ArgumentException("The screen sharing helper could not be located.", nameof(exePath));
 
-            _proc = HelperProcess.Start(exePath, BuildArguments(region, title, captureCursor, fps));
+            _proc = HelperProcess.Start(exePath, BuildArguments(region, title, captureCursor, fps, captureMethod));
 
             // the prompt window is the whole point of the spawn; hand it our foreground rights
             // before it tries to show itself.
@@ -276,7 +280,8 @@ namespace Clowd.UI
         /// The command line the helper accepts, and nothing else — it has no other flags, and
         /// <c>--help</c>/<c>--version</c> would make it print and exit instead of sharing.
         /// </summary>
-        public static IReadOnlyList<string> BuildArguments(ScreenRect region, string title, bool captureCursor, int fps)
+        public static IReadOnlyList<string> BuildArguments(ScreenRect region, string title, bool captureCursor, int fps,
+            ScreenCaptureMethod captureMethod)
         {
             var args = new List<string>
             {
@@ -284,6 +289,9 @@ namespace Clowd.UI
                 // formatting because a locale digit separator would fail the Rust parser.
                 "--region", FormattableString.Invariant($"{region.X},{region.Y},{region.Width},{region.Height}"),
                 "--fps", FormattableString.Invariant($"{Math.Max(1, fps)}"),
+                // always passed, so the helper's own default never silently overrides what the
+                // settings page shows. Ignored on macOS, where there is only one capture path.
+                "--capture-method", captureMethod.ToCliValue(),
             };
 
             // omitted entirely when empty so the helper's own default title stands, rather than

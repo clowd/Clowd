@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using Avalonia.Input;
 using Avalonia.Media;
@@ -57,6 +57,8 @@ namespace Clowd.Shared.Tests
             original.Capture.TipsMode = CapturerTipsMode.Off; // enum by name (non-default)
             original.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Pixelate; // enum by name (non-default)
             original.ShareRegion.ObscureStrength = 77;
+            original.ShareRegion.CaptureMethod = ScreenCaptureMethod.Dxgi; // enum by name (non-default)
+            original.Recording.CaptureMethod = ScreenCaptureMethod.Wgc;
             original.Capture.ObscuredWindowDetectionThreshold = 0.55; // invariant double
             original.Editor.StartupPadding = 42;
 
@@ -100,6 +102,10 @@ namespace Clowd.Shared.Tests
             // the style persists as the member name "Pixelate" and needs no converter of its own.
             Assert.Equal(ShareRegionObscureStyle.Pixelate, loaded.ShareRegion.ObscureStyle);
             Assert.Equal(77, loaded.ShareRegion.ObscureStrength);
+            // the shared capture-method enum persists by member name on both pages, and defaults to
+            // Auto — so a settings file written before the setting existed keeps today's behavior.
+            Assert.Equal(ScreenCaptureMethod.Dxgi, loaded.ShareRegion.CaptureMethod);
+            Assert.Equal(ScreenCaptureMethod.Wgc, loaded.Recording.CaptureMethod);
             Assert.Equal(0.55, loaded.Capture.ObscuredWindowDetectionThreshold);
             Assert.Equal(42, loaded.Editor.StartupPadding);
 
