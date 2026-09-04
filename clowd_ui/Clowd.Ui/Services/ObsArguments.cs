@@ -98,6 +98,10 @@ namespace Clowd.UI
         /// asks for input capture on recordings the editor can open.</summary>
         private const string InputCaptureArg = "--input-capture";
 
+        /// <summary>Recorder flag choosing the OS API that backs display capture. Windows only —
+        /// the recorder ignores it on macOS, so it is passed unconditionally.</summary>
+        private const string CaptureMethodArg = "--capture-method";
+
         /// <summary>libobs carries at most six audio tracks (its mixer/encoder limit), and the
         /// recorder refuses to start when <see cref="MultiTrackArg"/> is given with more devices
         /// than that. Clowd lists at most one speaker and one microphone, so this is a guard, not a
@@ -113,6 +117,11 @@ namespace Clowd.UI
                 "--output", outputMp4,
                 "--settings", settingsPath,
                 "--pause",
+                // the capture source is built during bootstrap, so like --multi-track this is a
+                // spawn-time choice the settings file cannot carry; a change costs a respawn
+                // (VideoCapturePage). Always passed, so the recorder's own default never silently
+                // overrides what the settings page shows.
+                CaptureMethodArg, settings?.CaptureMethod.ToCliValue() ?? ScreenCaptureMethod.Auto.ToCliValue(),
             };
 
             // …and the one setting that cannot live in the settings file: the track layout picks the

@@ -54,6 +54,21 @@ namespace Clowd.Config
             set => Set(ref _fps, value);
         }
 
+        /// <summary>
+        /// Handed to <c>clowd_share_region --capture-method</c>. Spawn-time like <see cref="Fps"/>
+        /// and for the same reason — it picks the capture source the helper builds during bootstrap
+        /// — so its description carries the same warning about the next share rather than this one.
+        /// </summary>
+        [Category("Video")]
+        [DisplayName("Capture method")]
+        [Description("Which Windows API captures the screen. DXGI avoids the yellow capture border on Windows 10; WGC works where DXGI captures black frames. Applies to the next region you share.")]
+        [HiddenOnMacOS]
+        public ScreenCaptureMethod CaptureMethod
+        {
+            get => _captureMethod;
+            set => Set(ref _captureMethod, value);
+        }
+
         [Category("Obscure")]
         [DisplayName("Mode")]
         [Description("How the shared region is obscured while the HIDE button is on. Hide covers it " +
@@ -88,6 +103,7 @@ namespace Clowd.Config
         public bool ObscureUsesStrength => _obscureStyle != ShareRegionObscureStyle.Hide;
 
         private int _fps = 30;
+        private ScreenCaptureMethod _captureMethod = ScreenCaptureMethod.Auto;
         private ShareRegionObscureStyle _obscureStyle = ShareRegionObscureStyle.Blur;
         private int _obscureStrength = 75;
     }

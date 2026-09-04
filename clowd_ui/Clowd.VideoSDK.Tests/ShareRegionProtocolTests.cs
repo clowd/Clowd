@@ -1,6 +1,8 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Clowd.Config;
+using Clowd.PlatformUtil;
 using Clowd.UI;
 using Xunit;
 
@@ -633,6 +635,24 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(OperatingSystem.IsWindows() ? "clowd_share_region.exe" : "clowd_share_region",
                 ShareRegionDriver.BinaryFileName);
             Assert.Equal("CLOWD_SHARE_REGION_PATH", ShareRegionDriver.EnvVarName);
+        }
+
+        /// <summary>The capture API is a spawn-time argument and always emitted, so the helper's own
+        /// default can never disagree with what the settings page shows. The values are the Rust
+        /// parser's spellings — a mismatch is a spawn failure, not a fallback.</summary>
+        [Fact]
+        public void The_capture_method_is_always_on_the_helper_command_line()
+        {
+            static string MethodArg(ScreenCaptureMethod method)
+            {
+                var args = new List<string>(ShareRegionDriver.BuildArguments(
+                    new ScreenRect(0, 0, 640, 480), "t", true, 30, method));
+                return args[args.IndexOf("--capture-method") + 1];
+            }
+
+            Assert.Equal("auto", MethodArg(ScreenCaptureMethod.Auto));
+            Assert.Equal("dxgi", MethodArg(ScreenCaptureMethod.Dxgi));
+            Assert.Equal("wgc", MethodArg(ScreenCaptureMethod.Wgc));
         }
     }
 }

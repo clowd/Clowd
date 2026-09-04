@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Text.Json;
 using Clowd.Config;
@@ -93,6 +93,24 @@ namespace Clowd.VideoSDK.Tests
             var ticked = Settings(webcam: true);
             ticked.WebcamDeviceId = "";
             Assert.False(ObsArguments.UsesWebcam(ticked));
+        }
+
+        /// <summary>The capture API is a spawn-time argument, always emitted so the recorder's own
+        /// default can never disagree with what the settings page shows. The values are the Rust
+        /// parser's spellings — a mismatch is a spawn failure, not a fallback.</summary>
+        [Fact]
+        public void The_capture_method_is_always_on_the_command_line()
+        {
+            var args = Build(Settings());
+            Assert.Equal("auto", args[Array.IndexOf(args, "--capture-method") + 1]);
+
+            var dxgi = Settings();
+            dxgi.CaptureMethod = ScreenCaptureMethod.Dxgi;
+            Assert.Equal("dxgi", Build(dxgi)[Array.IndexOf(Build(dxgi), "--capture-method") + 1]);
+
+            var wgc = Settings();
+            wgc.CaptureMethod = ScreenCaptureMethod.Wgc;
+            Assert.Equal("wgc", Build(wgc)[Array.IndexOf(Build(wgc), "--capture-method") + 1]);
         }
 
         [Fact]
