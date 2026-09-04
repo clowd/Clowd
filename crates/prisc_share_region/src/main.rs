@@ -129,11 +129,11 @@ struct Cli {
     /// only — ignored on macOS. Same flag, same values and same default as
     /// obs-express, so a shell that pins one can pin both.
     ///
-    /// Use `dxgi` on Windows 10 to lose the yellow capture border Windows
-    /// draws around a WGC-captured display: suppressing it needs
-    /// `GraphicsCaptureSession::IsBorderRequired`, which only exists on
-    /// Windows 11.
-    #[arg(long, value_name = "METHOD", default_value = "wgc")]
+    /// `auto` (the default) leaves it to win-capture's own heuristic. Pin
+    /// `dxgi` on Windows 10 if the yellow border Windows draws around a
+    /// WGC-captured display matters: suppressing it needs
+    /// `GraphicsCaptureSession::IsBorderRequired`, which is Windows 11+.
+    #[arg(long, value_name = "METHOD", default_value = "auto")]
     capture_method: CaptureMethod,
 }
 

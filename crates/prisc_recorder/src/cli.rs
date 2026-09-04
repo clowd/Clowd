@@ -100,11 +100,15 @@ pub struct Cli {
     /// built once), so unlike the tuning knobs it is not re-readable via
     /// `--settings` / stdin `configure`.
     ///
-    /// Use `dxgi` on Windows 10 to lose the yellow capture border Windows
-    /// draws around a WGC-captured display: suppressing it needs
+    /// `auto` (the default) leaves it to win-capture's own heuristic, which
+    /// takes DXGI unless the monitor is off the current graphics adapter or
+    /// the machine is a multi-GPU laptop on mains. That optimises for capture,
+    /// not for the yellow border Windows draws around a WGC-captured display:
+    /// suppressing that border needs
     /// `GraphicsCaptureSession::IsBorderRequired`, which only exists on
-    /// Windows 11.
-    #[arg(long, value_name = "METHOD", default_value = "wgc")]
+    /// Windows 11, so pin `dxgi` if a borderless capture matters more on an
+    /// older machine.
+    #[arg(long, value_name = "METHOD", default_value = "auto")]
     pub capture_method: crate::platform::CaptureMethod,
 
     /// Render an expanding, fading highlight at the pointer on every mouse
@@ -340,21 +344,21 @@ mod tests {
     }
 
     #[test]
-    fn capture_method_parses_and_defaults_to_wgc() {
+    fn capture_method_parses_and_defaults_to_auto() {
         use crate::platform::CaptureMethod;
 
         let cli = parse(&["--output", "a.mp4"]).unwrap();
-        assert_eq!(cli.capture_method, CaptureMethod::Wgc);
+        assert_eq!(cli.capture_method, CaptureMethod::Auto);
 
         let cli = parse(&["--output", "a.mp4", "--capture-method", "dxgi"]).unwrap();
         assert_eq!(cli.capture_method, CaptureMethod::Dxgi);
         assert!(cli.validate().is_ok());
 
         assert_eq!(
-            parse(&["--output", "a.mp4", "--capture-method", "auto"])
+            parse(&["--output", "a.mp4", "--capture-method", "wgc"])
                 .unwrap()
                 .capture_method,
-            CaptureMethod::Auto
+            CaptureMethod::Wgc
         );
         assert!(parse(&["--output", "a.mp4", "--capture-method", "ddapi"]).is_err());
 

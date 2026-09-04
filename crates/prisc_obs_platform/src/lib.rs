@@ -59,15 +59,23 @@ pub struct MonitorInfo {
 /// is the way to get rid of it there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CaptureMethod {
-    /// Let the capture plugin choose.
+    /// Let win-capture decide (`method: 0`). Its `choose_method()` takes DXGI
+    /// unless the monitor is not on the current adapter, or the machine is a
+    /// multi-GPU laptop running on mains — in which case WGC. The default.
+    ///
+    /// Note it optimises for capture correctness and performance, not for the
+    /// WGC capture border: on the Windows 10 machines where that border cannot
+    /// be suppressed, the rare WGC branch still draws it. Pin `Dxgi` if a
+    /// borderless capture matters more than the heuristic.
+    #[default]
     Auto,
     /// DXGI desktop duplication. Draws no capture border on any Windows
-    /// version.
+    /// version, which is the reason to pin it on Windows 10.
     Dxgi,
-    /// Windows Graphics Capture. The default: `Auto` prefers the DXGI
-    /// duplicator, which was verified to produce black frames on a
-    /// Win11 26H1 + NVIDIA machine, while WGC captures correctly there.
-    #[default]
+    /// Windows Graphics Capture. Pin it where the DXGI duplicator misbehaves:
+    /// it was verified to produce black frames on a Win11 26H1 + NVIDIA
+    /// machine, back when libobs was pinned to graphics adapter 0 — see
+    /// `region_adapter_index`, which addressed the likely cause.
     Wgc,
 }
 
@@ -224,7 +232,7 @@ mod tests {
             let m: CaptureMethod = name.parse().unwrap();
             assert_eq!(m.as_str(), name);
         }
-        assert_eq!(CaptureMethod::default(), CaptureMethod::Wgc);
+        assert_eq!(CaptureMethod::default(), CaptureMethod::Auto);
         assert_eq!(CaptureMethod::Auto.as_obs_method(), 0);
         assert_eq!(CaptureMethod::Dxgi.as_obs_method(), 1);
         assert_eq!(CaptureMethod::Wgc.as_obs_method(), 2);
