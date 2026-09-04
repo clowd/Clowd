@@ -78,6 +78,7 @@ obs-express --output clip.mp4 --multi-track --webcam "$(obs-express --list-camer
 | `--hw-accel` | off | Prefer a hardware H.264 encoder; falls back to x264 if none is available. |
 | `--low-cpu` | off | Use the x264 `ultrafast` preset instead of `veryfast`. |
 | `--no-cursor` | off | Do not capture the mouse cursor. |
+| `--capture-method <METHOD>` | `wgc` | Windows only (ignored on macOS): which OS API backs display capture — `auto` (let the capture plugin choose), `dxgi` (desktop duplication) or `wgc` (Windows Graphics Capture). Use `dxgi` on Windows 10 to lose the yellow capture border Windows draws around a WGC-captured display: suppressing that border needs `GraphicsCaptureSession::IsBorderRequired`, which exists only on Windows 11. Session-fixed, so it is not part of the settings file. |
 | `--tracker` | off | Highlight mouse clicks with an expanding, fading circle (see below). |
 | `--tracker-color <R,G,B>` | `255,0,0` | Color of the click highlight; each component 0-255. |
 | `--pause` | off | Build the pipeline, emit `initialized`, and wait for a stdin `start` before recording. |
@@ -88,6 +89,12 @@ obs-express --output clip.mp4 --multi-track --webcam "$(obs-express --list-camer
 | `--list-cameras` | — | Enumerate cameras (DirectShow on Windows, AVFoundation on macOS): prints exactly one JSON line `{"type":"cameras","cameras":[{"id":..,"name":..}]}` on stdout and exits 0 (`{"type":"error","message":..}` and exit 1 on failure). Mutually exclusive with all recording flags; `--output` is not required. |
 | `--speaker-volume-compensation` | off | Windows: boost speaker capture to undo the system master volume when the audio device applies it in software. On such devices (no hardware volume control — common for USB DACs) the loopback stream Windows hands to recorders is already attenuated by the volume slider, so recordings sound quieter than the played content did. Devices with hardware volume are detected and left untouched; no-op on macOS. Volume changes made while recording are tracked within ~100 ms; the boost is capped at +30 dB. |
 | `--settings <FILE.json>` | — | Read the tunables from a JSON file instead of individual flags (see below). Conflicts with every flag it replaces: `--fps`, `--crf`, `--max-width`, `--max-height`, `--hw-accel`, `--low-cpu`, `--no-cursor`, `--tracker`, `--tracker-color`, `--speaker`, `--microphone`, `--speaker-volume-compensation`. |
+
+### Graphics adapter
+
+On Windows the recorder runs libobs on the GPU that drives the display the capture region mostly covers (`obs_video_info.adapter`, resolved through `CreateDXGIFactory1` / `EnumAdapters1` — the same index space libobs uses). This is not cosmetic under `--capture-method dxgi`: desktop duplication only finds monitors attached to the *current graphics device's* adapter, so on a multi-GPU machine a display hanging off the second GPU would never start capturing and the recording would stay black. WGC has no such constraint, but running on the GPU that already owns the surface saves a cross-adapter copy per frame, so the adapter is selected either way.
+
+A region spanning displays driven by two different GPUs can only pick one — the most-covered display wins, and under `dxgi` the displays on the other adapter will not capture. Use `wgc` for that case. The adapter is also fixed for the process: libobs builds the graphics device on the first `obs_reset_video` and ignores the field on later ones.
 
 Downscaling preserves aspect ratio: the tightest of the two caps is applied once to both dimensions, and the output is never upscaled.
 

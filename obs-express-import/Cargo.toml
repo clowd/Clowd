@@ -47,6 +47,13 @@ windows = { version = "0.62", features = [
     # DwmSetWindowAttribute: dark window chrome, the Win11 Mica backdrop and the
     # caption/border colours that stand in for it elsewhere.
     "Win32_Graphics_Dwm",
+    # CreateDXGIFactory1 + IDXGIAdapter1::EnumOutputs: mapping a monitor to the
+    # graphics adapter that drives it, so obs_video_info.adapter can be set to
+    # the GPU that owns the captured region (obs-platform region_adapter_index).
+    "Win32_Graphics_Dxgi",
+    # DXGI_OUTPUT_DESC (and the DXGI_MODE_DESC it embeds) sit behind the
+    # _Common gate in the generated bindings.
+    "Win32_Graphics_Dxgi_Common",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_HiDpi",
     "Win32_UI_Input_KeyboardAndMouse",

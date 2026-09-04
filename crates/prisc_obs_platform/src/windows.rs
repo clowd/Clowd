@@ -8,6 +8,7 @@ use std::path::Path;
 use obs::data::ObsData;
 use windows::core::{BOOL, PCWSTR};
 use windows::Win32::Foundation::{LPARAM, POINT, RECT, TRUE};
+use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, DISPLAY_DEVICEW,
     HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
@@ -19,7 +20,8 @@ use windows::Win32::UI::HiDpi::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{EDD_GET_DEVICE_INTERFACE_NAME, MONITORINFOF_PRIMARY};
 
-use super::{MonitorInfo, ObsPaths};
+use super::region::{self, Rect, RegionPlan};
+use super::{CaptureMethod, MonitorInfo, ObsPaths};
 
 /// `platform` field of the input-capture header (wire contract).
 pub const PLATFORM_NAME: &str = "windows";
@@ -143,15 +145,92 @@ pub fn monitor_display_scale(m: &MonitorInfo) -> f64 {
     dpi_x as f64 / 96.0
 }
 
-pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
+/// The graphics-adapter index that drives the display the region mostly sits
+/// on, ready for `obs_video_info.adapter`. `None` when no planned monitor
+/// could be matched to an adapter output, in which case callers keep libobs's
+/// default of 0.
+///
+/// This matters most for `CaptureMethod::Dxgi`: desktop duplication resolves a
+/// monitor by walking the *current device's* adapter outputs
+/// (`device_duplicator_get_monitor_index` in
+/// obs-studio/libobs-d3d11/d3d11-duplicator.cpp), so a monitor hanging off a
+/// second GPU is simply not found while libobs runs on adapter 0 — the
+/// duplicator never starts and the recording stays black. WGC has no such
+/// constraint, but capturing on the GPU that already owns the surface avoids a
+/// cross-adapter copy per frame either way, so the index is applied
+/// unconditionally.
+///
+/// The index space is `CreateDXGIFactory1` + `EnumAdapters1` order, which is
+/// exactly what libobs-d3d11's `gs_device::InitAdapter` indexes into.
+///
+/// A region spanning two GPUs can only pick one: the most-covered display
+/// wins, and under DXGI the displays on the other adapter will not capture.
+pub fn region_adapter_index(
+    region: Rect,
+    plan: &RegionPlan,
+    monitors: &[MonitorInfo],
+) -> Option<u32> {
+    let ranked = region::monitors_by_coverage(region, plan, monitors);
+    let adapters = adapter_outputs()?;
+    for index in ranked {
+        // GDI device name (`\.\DISPLAY1`) is the join key: it is both
+        // MonitorInfo::alt_id and DXGI_OUTPUT_DESC::DeviceName.
+        let Some(name) = monitors.get(index).and_then(|m| m.alt_id.as_deref()) else {
+            continue;
+        };
+        if let Some((adapter, _)) = adapters.iter().find(|(_, output)| output == name) {
+            return Some(*adapter);
+        }
+    }
+    None
+}
+
+/// Every (adapter index, GDI device name) pair DXGI reports, in enumeration
+/// order. `None` only when the factory itself cannot be created.
+fn adapter_outputs() -> Option<Vec<(u32, String)>> {
+    let factory: IDXGIFactory1 = unsafe { CreateDXGIFactory1() }.ok()?;
+    let mut pairs = Vec::new();
+    for adapter_index in 0.. {
+        // EnumAdapters1 ends with DXGI_ERROR_NOT_FOUND; any other error is
+        // treated the same way (stop, keep what we have).
+        let Ok(adapter) = (unsafe { factory.EnumAdapters1(adapter_index) }) else {
+            break;
+        };
+        for output_index in 0.. {
+            let Ok(output) = (unsafe { adapter.EnumOutputs(output_index) }) else {
+                break;
+            };
+            let Ok(desc) = (unsafe { output.GetDesc() }) else {
+                continue;
+            };
+            let len = desc
+                .DeviceName
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(desc.DeviceName.len());
+            pairs.push((
+                adapter_index,
+                String::from_utf16_lossy(&desc.DeviceName[..len]),
+            ));
+        }
+    }
+    Some(pairs)
+}
+
+pub fn display_capture_settings(
+    m: &MonitorInfo,
+    show_cursor: bool,
+    method: CaptureMethod,
+) -> ObsData {
     let settings = ObsData::new();
     settings.set_string("monitor_id", &m.id);
-    // 2 = WGC. Deliberate deviation from the design's `0` (auto): auto prefers
-    // the DXGI duplicator, which was verified to produce black frames on this
-    // Win11 26H1 + NVIDIA machine, while WGC captures correctly. Requesting
-    // WGC is safe everywhere — win-capture's choose_method() force-falls back
-    // to DXGI when WGC is unsupported (duplicator-monitor-capture.c).
-    settings.set_int("method", 2);
+    // Deliberate deviation from the design's `0` (auto), which is why the
+    // default here is WGC rather than auto: auto prefers the DXGI duplicator,
+    // which was verified to produce black frames on this Win11 26H1 + NVIDIA
+    // machine, while WGC captures correctly. Requesting WGC is safe
+    // everywhere — win-capture's choose_method() force-falls back to DXGI when
+    // WGC is unsupported (duplicator-monitor-capture.c).
+    settings.set_int("method", method.as_obs_method());
     settings.set_bool("capture_cursor", show_cursor);
     settings
 }

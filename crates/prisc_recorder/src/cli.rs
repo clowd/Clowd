@@ -24,6 +24,7 @@ pub struct Cli {
         "hw_accel", "low_cpu", "no_cursor", "tracker", "tracker_color", "pause",
         "speaker", "microphone", "speaker_volume_compensation", "settings",
         "webcam", "multi_track", "input_capture", "window_capture",
+        "capture_method",
     ])]
     pub list_cameras: bool,
 
@@ -93,6 +94,18 @@ pub struct Cli {
 
     #[arg(long)]
     pub no_cursor: bool,
+
+    /// Which OS API backs display capture: `auto`, `dxgi` or `wgc`.
+    /// Windows only — ignored on macOS. Session-fixed (the capture sources are
+    /// built once), so unlike the tuning knobs it is not re-readable via
+    /// `--settings` / stdin `configure`.
+    ///
+    /// Use `dxgi` on Windows 10 to lose the yellow capture border Windows
+    /// draws around a WGC-captured display: suppressing it needs
+    /// `GraphicsCaptureSession::IsBorderRequired`, which only exists on
+    /// Windows 11.
+    #[arg(long, value_name = "METHOD", default_value = "wgc")]
+    pub capture_method: crate::platform::CaptureMethod,
 
     /// Render an expanding, fading highlight at the pointer on every mouse
     /// click (recording only — the real screen is untouched).
@@ -324,6 +337,39 @@ mod tests {
         // The jsonl sidecar itself does not require --multi-track.
         let cli = parse(&["--output", "a.mp4", "--input-capture", "input.jsonl"]).unwrap();
         assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn capture_method_parses_and_defaults_to_wgc() {
+        use crate::platform::CaptureMethod;
+
+        let cli = parse(&["--output", "a.mp4"]).unwrap();
+        assert_eq!(cli.capture_method, CaptureMethod::Wgc);
+
+        let cli = parse(&["--output", "a.mp4", "--capture-method", "dxgi"]).unwrap();
+        assert_eq!(cli.capture_method, CaptureMethod::Dxgi);
+        assert!(cli.validate().is_ok());
+
+        assert_eq!(
+            parse(&["--output", "a.mp4", "--capture-method", "auto"])
+                .unwrap()
+                .capture_method,
+            CaptureMethod::Auto
+        );
+        assert!(parse(&["--output", "a.mp4", "--capture-method", "ddapi"]).is_err());
+
+        // Session-fixed arg: NOT in the --settings conflicts list, but a
+        // recording flag, so --list-cameras rejects it.
+        assert!(parse(&[
+            "--output",
+            "a.mp4",
+            "--settings",
+            "s.json",
+            "--capture-method",
+            "dxgi",
+        ])
+        .is_ok());
+        assert!(parse(&["--list-cameras", "--capture-method", "dxgi"]).is_err());
     }
 
     #[test]

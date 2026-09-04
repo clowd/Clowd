@@ -20,8 +20,8 @@ pub use self::macos::*;
 
 pub use obs_platform::{
     cursor_update_settings, default_obs_paths, display_capture_settings, enumerate_monitors,
-    exit_process, find_monitor, init_process, monitor_display_scale, MonitorInfo,
-    DISPLAY_CAPTURE_ID, GRAPHICS_MODULE, PLATFORM_NAME,
+    exit_process, find_monitor, init_process, monitor_display_scale, region_adapter_index,
+    CaptureMethod, MonitorInfo, DISPLAY_CAPTURE_ID, GRAPHICS_MODULE, PLATFORM_NAME,
 };
 // Part of the compat surface (`crate::platform::ObsPaths`) but referenced
 // nowhere inside this bin crate by name — callers only consume it through

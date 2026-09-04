@@ -41,6 +41,80 @@ pub struct MonitorInfo {
     pub is_primary: bool,
 }
 
+/// Which OS API backs display capture. Windows-only in effect: the macOS
+/// screen-capture source exposes no equivalent knob and ignores the value.
+///
+/// The Windows mapping is win-capture's `method` property
+/// (`enum display_capture_method` in
+/// obs-studio/plugins/win-capture/duplicator-monitor-capture.c): 0 = auto,
+/// 1 = DXGI desktop duplication, 2 = Windows Graphics Capture. `Auto` lets
+/// win-capture's `choose_method()` pick, and every value force-falls back to
+/// DXGI when WGC is unsupported.
+///
+/// The choice is visible to the user beyond performance: WGC makes Windows
+/// draw a yellow capture border around the recorded display, which libobs
+/// suppresses via `GraphicsCaptureSession::IsBorderRequired(false)`
+/// (obs-studio/libobs-winrt/winrt-capture.cpp) — an API that exists only on
+/// Windows 11. On Windows 10 the border is unavoidable under WGC, so `Dxgi`
+/// is the way to get rid of it there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CaptureMethod {
+    /// Let the capture plugin choose.
+    Auto,
+    /// DXGI desktop duplication. Draws no capture border on any Windows
+    /// version.
+    Dxgi,
+    /// Windows Graphics Capture. The default: `Auto` prefers the DXGI
+    /// duplicator, which was verified to produce black frames on a
+    /// Win11 26H1 + NVIDIA machine, while WGC captures correctly there.
+    #[default]
+    Wgc,
+}
+
+impl CaptureMethod {
+    /// The accepted spellings, in `--help` order.
+    pub const VARIANTS: [&'static str; 3] = ["auto", "dxgi", "wgc"];
+
+    /// win-capture's `method` property value.
+    pub fn as_obs_method(self) -> i64 {
+        match self {
+            CaptureMethod::Auto => 0,
+            CaptureMethod::Dxgi => 1,
+            CaptureMethod::Wgc => 2,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CaptureMethod::Auto => "auto",
+            CaptureMethod::Dxgi => "dxgi",
+            CaptureMethod::Wgc => "wgc",
+        }
+    }
+}
+
+impl std::str::FromStr for CaptureMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "auto" => Ok(CaptureMethod::Auto),
+            "dxgi" => Ok(CaptureMethod::Dxgi),
+            "wgc" => Ok(CaptureMethod::Wgc),
+            _ => Err(format!(
+                "unknown capture method '{s}' (expected {})",
+                CaptureMethod::VARIANTS.join(", ")
+            )),
+        }
+    }
+}
+
+impl std::fmt::Display for CaptureMethod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Paths handed to `obs_add_module_path` / `obs_add_data_path`. `module_bin` /
 /// `module_data` are passed to libobs verbatim (they may contain the
 /// `%module%` template token).
@@ -142,6 +216,20 @@ mod tests {
             },
         ];
         assert_eq!(match_monitor("1", &mons).unwrap().x, 0);
+    }
+
+    #[test]
+    fn capture_method_round_trips_and_maps_to_obs_values() {
+        for name in CaptureMethod::VARIANTS {
+            let m: CaptureMethod = name.parse().unwrap();
+            assert_eq!(m.as_str(), name);
+        }
+        assert_eq!(CaptureMethod::default(), CaptureMethod::Wgc);
+        assert_eq!(CaptureMethod::Auto.as_obs_method(), 0);
+        assert_eq!(CaptureMethod::Dxgi.as_obs_method(), 1);
+        assert_eq!(CaptureMethod::Wgc.as_obs_method(), 2);
+        assert_eq!("WGC".parse::<CaptureMethod>().unwrap(), CaptureMethod::Wgc);
+        assert!("ddapi".parse::<CaptureMethod>().is_err());
     }
 
     #[test]

@@ -269,6 +269,11 @@ pub struct Recorder {
     capture_region: Rect,
     canvas: (u32, u32),
     canvas_scale: f64,
+    /// Graphics adapter the pipeline was built on. Session-fixed: libobs only
+    /// honours `obs_video_info.adapter` on the first `obs_reset_video`, so
+    /// `configure`'s later resets must resend this exact value rather than
+    /// recompute one.
+    adapter: u32,
     encoder_types: Vec<String>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: mpsc::Receiver<Command>,
@@ -360,6 +365,20 @@ impl Recorder {
         // 4. Video (canvas = region plan, output = single-pass scaled).
         let (out_w, out_h) =
             region::compute_output_size(plan.canvas, settings.max_width, settings.max_height);
+        // Run libobs on the GPU that drives the captured displays. Mandatory
+        // for --capture-method dxgi, whose duplicator only finds monitors on
+        // the current device's own adapter; a free win for wgc.
+        let adapter = platform::region_adapter_index(capture_region, &plan, &monitors);
+        match adapter {
+            // The overwhelmingly common case (single GPU): say nothing.
+            Some(0) => {}
+            Some(n) => eprintln!(
+                "Using graphics adapter {n}: it drives the display the capture region mostly                  covers"
+            ),
+            None => eprintln!(
+                "Warning: no graphics adapter could be matched to the captured display(s);                  using the default. Under --capture-method dxgi the capture may stay black."
+            ),
+        }
         let video_info = VideoInfo {
             graphics_module: platform::GRAPHICS_MODULE,
             base_width: plan.canvas.0,
@@ -368,6 +387,7 @@ impl Recorder {
             output_height: out_h,
             fps_num: settings.fps,
             fps_den: 1,
+            adapter: adapter.unwrap_or(0),
         };
         if let Err(e) = context.reset_video(&video_info) {
             fail(format_args!("Failed to reset OBS video: {e}"));
@@ -428,7 +448,8 @@ impl Recorder {
         let mut scene_items = Vec::new();
         for (i, item) in plan.items.iter().enumerate() {
             let m = &monitors[item.monitor_index];
-            let source_settings = platform::display_capture_settings(m, settings.cursor);
+            let source_settings =
+                platform::display_capture_settings(m, settings.cursor, cli.capture_method);
             let source = match ObsSource::create(
                 platform::DISPLAY_CAPTURE_ID,
                 &format!("display_{i}"),
@@ -657,6 +678,7 @@ impl Recorder {
             capture_region,
             canvas: plan.canvas,
             canvas_scale: plan.canvas_scale,
+            adapter: adapter.unwrap_or(0),
             encoder_types,
             cmd_tx,
             cmd_rx,
@@ -1040,6 +1062,7 @@ impl Recorder {
                 output_height: out_h,
                 fps_num: new.fps,
                 fps_den: 1,
+                adapter: self.adapter,
             };
             if let Err(e) = self.context.reset_video(&video_info) {
                 return status::emit_configure_error(

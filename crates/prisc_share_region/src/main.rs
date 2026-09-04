@@ -92,6 +92,7 @@ mod ui;
 
 use clap::Parser;
 use obs_platform::region::{self, Rect};
+use obs_platform::CaptureMethod;
 
 use crate::mirror::Mirror;
 use crate::ui::{AppEvents, UiConfig};
@@ -123,6 +124,17 @@ struct Cli {
     /// Do not capture the cursor (passed through to the display capture source).
     #[arg(long)]
     no_cursor: bool,
+
+    /// Which OS API backs display capture: `auto`, `dxgi` or `wgc`. Windows
+    /// only — ignored on macOS. Same flag, same values and same default as
+    /// obs-express, so a shell that pins one can pin both.
+    ///
+    /// Use `dxgi` on Windows 10 to lose the yellow capture border Windows
+    /// draws around a WGC-captured display: suppressing it needs
+    /// `GraphicsCaptureSession::IsBorderRequired`, which only exists on
+    /// Windows 11.
+    #[arg(long, value_name = "METHOD", default_value = "wgc")]
+    capture_method: CaptureMethod,
 }
 
 /// The `AppEvents` implementation: the shim from UI callbacks onto [`Mirror`],
@@ -253,7 +265,7 @@ fn main() {
 
     // Exits the process itself on any construction failure (never unwinds —
     // partial OBS state is never torn down).
-    let mirror = Mirror::bootstrap(region, cli.fps, !cli.no_cursor);
+    let mirror = Mirror::bootstrap(region, cli.fps, !cli.no_cursor, cli.capture_method);
     // The region the mirror actually adopted, not the one that was asked for:
     // `bootstrap` floors and evens the rect exactly as `move` does. Everything
     // downstream — the window's size, `sharing_started` — must use this, or the

@@ -146,6 +146,45 @@ pub fn compute_output_size(base: (u32, u32), max_w: u32, max_h: u32) -> (u32, u3
     ((out_w & !3).max(4), (out_h & !1).max(2))
 }
 
+/// Area of `region` ∩ `m`, in capture-space units squared. 0 when they only
+/// touch, matching [`rects_intersect`].
+pub fn overlap_area(region: Rect, m: &MonitorInfo) -> u64 {
+    // Same i64 math as rects_intersect: virtual-desktop coords go negative and
+    // a full-desktop span overflows i32 when multiplied out.
+    let (rx1, ry1) = (region.x as i64, region.y as i64);
+    let (rx2, ry2) = (rx1 + region.w as i64, ry1 + region.h as i64);
+    let (mx1, my1) = (m.x as i64, m.y as i64);
+    let (mx2, my2) = (mx1 + m.width as i64, my1 + m.height as i64);
+    let w = rx2.min(mx2) - rx1.max(mx1);
+    let h = ry2.min(my2) - ry1.max(my1);
+    if w <= 0 || h <= 0 {
+        return 0;
+    }
+    (w as u64) * (h as u64)
+}
+
+/// The planned monitors, most-covered first: indices into `monitors`, ordered
+/// by how much of each display the region actually occupies (ties keep plan
+/// order). The head is the display the capture is "mostly on", which is what
+/// picks the graphics adapter — see the platform `region_adapter_index`.
+pub fn monitors_by_coverage(
+    region: Rect,
+    plan: &RegionPlan,
+    monitors: &[MonitorInfo],
+) -> Vec<usize> {
+    let mut ranked: Vec<(usize, u64)> = plan
+        .items
+        .iter()
+        .filter_map(|item| {
+            let m = monitors.get(item.monitor_index)?;
+            Some((item.monitor_index, overlap_area(region, m)))
+        })
+        .collect();
+    // Stable sort: equal coverage keeps the plan's (monitor enumeration) order.
+    ranked.sort_by_key(|&(_, area)| std::cmp::Reverse(area));
+    ranked.into_iter().map(|(i, _)| i).collect()
+}
+
 fn rects_intersect(r: Rect, m: &MonitorInfo) -> bool {
     // i64 math: virtual-desktop coords can be negative and spans can overflow i32.
     let (rx1, ry1) = (r.x as i64, r.y as i64);
@@ -358,6 +397,111 @@ mod tests {
         assert_eq!(plan.items[0].scale, 1.0);
         assert_eq!(plan.items[1].pos, (256.0, -200.0));
         assert_eq!(plan.items[1].scale, 2.0);
+    }
+
+    #[test]
+    fn overlap_area_matches_intersection() {
+        let m = mon(0, 0, 1000, 1000);
+        // Fully inside.
+        assert_eq!(
+            overlap_area(
+                Rect {
+                    x: 10,
+                    y: 10,
+                    w: 100,
+                    h: 50
+                },
+                &m
+            ),
+            5000
+        );
+        // Half off the left edge.
+        assert_eq!(
+            overlap_area(
+                Rect {
+                    x: -50,
+                    y: 0,
+                    w: 100,
+                    h: 10
+                },
+                &m
+            ),
+            500
+        );
+        // Touching only: rects_intersect says no, so area is 0.
+        assert_eq!(
+            overlap_area(
+                Rect {
+                    x: 1000,
+                    y: 0,
+                    w: 100,
+                    h: 100
+                },
+                &m
+            ),
+            0
+        );
+        assert_eq!(
+            overlap_area(
+                Rect {
+                    x: -100,
+                    y: 0,
+                    w: 100,
+                    h: 100
+                },
+                &m
+            ),
+            0
+        );
+        // Disjoint.
+        assert_eq!(
+            overlap_area(
+                Rect {
+                    x: 5000,
+                    y: 0,
+                    w: 10,
+                    h: 10
+                },
+                &m
+            ),
+            0
+        );
+    }
+
+    #[test]
+    fn monitors_by_coverage_ranks_most_covered_first() {
+        // Monitor 0 left, monitor 1 right; the region leans onto monitor 1.
+        let monitors = vec![mon(0, 0, 1000, 1000), mon(1000, 0, 1000, 1000)];
+        let region = Rect {
+            x: 900,
+            y: 0,
+            w: 400,
+            h: 100,
+        };
+        let plan = plan_region(region, &monitors).unwrap();
+        assert_eq!(plan.items.len(), 2);
+        // 300x100 on monitor 1 vs 100x100 on monitor 0.
+        assert_eq!(monitors_by_coverage(region, &plan, &monitors), vec![1, 0]);
+
+        // Equal coverage keeps plan (enumeration) order.
+        let region = Rect {
+            x: 900,
+            y: 0,
+            w: 200,
+            h: 100,
+        };
+        let plan = plan_region(region, &monitors).unwrap();
+        assert_eq!(monitors_by_coverage(region, &plan, &monitors), vec![0, 1]);
+
+        // Single monitor: just that one.
+        let region = Rect {
+            x: 10,
+            y: 10,
+            w: 100,
+            h: 100,
+        };
+        let plan = plan_region(region, &monitors).unwrap();
+        assert_eq!(monitors_by_coverage(region, &plan, &monitors), vec![0]);
     }
 
     #[test]

@@ -137,6 +137,9 @@ pub fn create(device_id: &str, settings: &Settings) -> Result<Webcam, String> {
             output_height: canvas.1,
             fps_num: settings.fps,
             fps_den: 1,
+            // A view mix reuses the graphics device the main reset already
+            // created; `adapter` is only read when that device is built.
+            adapter: 0,
         })
         .map_err(|e| format!("Failed to create the webcam video mix: {e}"))?;
 

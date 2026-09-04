@@ -22,7 +22,7 @@ use obs::scene::{ObsScene, ObsSceneItem};
 use obs::source::ObsSource;
 use obs::video::VideoInfo;
 use obs_platform::region::{self, Rect, RegionPlan};
-use obs_platform::MonitorInfo;
+use obs_platform::{CaptureMethod, MonitorInfo};
 
 /// Floor on the region width/height accepted by `bootstrap` and `set_region`.
 /// A degenerate or one-pixel region would produce a canvas the swapchain and
@@ -109,6 +109,15 @@ pub struct Mirror {
     canvas: (u32, u32),
     fps: u32,
     show_cursor: bool,
+    /// Display-capture backend, fixed for the process lifetime; re-applied
+    /// verbatim whenever `set_region` rebuilds the scene items.
+    capture_method: CaptureMethod,
+    /// Graphics adapter chosen from the BOOTSTRAP region, and stuck with: the
+    /// device is built by the first `obs_reset_video` and libobs ignores the
+    /// field on every later one, so a `move` onto a display driven by another
+    /// GPU cannot follow it. Harmless under WGC; under `--capture-method dxgi`
+    /// that moved-to display will not capture.
+    adapter: u32,
 }
 
 impl Mirror {
@@ -130,7 +139,12 @@ impl Mirror {
     /// no `move` command can ever reproduce, so a shell that echoed the region
     /// it was given straight back would get a different one in return. Read the
     /// applied rect back with [`Mirror::region`].
-    pub fn bootstrap(region: Rect, fps: u32, show_cursor: bool) -> Mirror {
+    pub fn bootstrap(
+        region: Rect,
+        fps: u32,
+        show_cursor: bool,
+        capture_method: CaptureMethod,
+    ) -> Mirror {
         // 1. Context (log/crash handlers were installed first thing in main).
         let context = match ObsContext::new("en-US") {
             Ok(c) => c,
@@ -163,7 +177,20 @@ impl Mirror {
 
         // 4. Video. base == output == the region canvas: there is no encoder
         //    to feed, so downscaling would only blur the mirror.
-        if let Err(e) = context.reset_video(&video_info(plan.canvas, fps)) {
+        // Run libobs on the GPU driving the display the region mostly covers —
+        // required by the DXGI duplicator, which only sees monitors attached to
+        // the current device's adapter, and a free cross-adapter copy saved
+        // under WGC.
+        let adapter = match obs_platform::region_adapter_index(region, &plan, &monitors) {
+            Some(0) | None => 0,
+            Some(n) => {
+                eprintln!(
+                    "Using graphics adapter {n}: it drives the display the region mostly covers"
+                );
+                n
+            }
+        };
+        if let Err(e) = context.reset_video(&video_info(plan.canvas, fps, adapter)) {
             fail(format_args!("Failed to reset OBS video: {e}"));
         }
 
@@ -199,7 +226,8 @@ impl Mirror {
             Ok(s) => s,
             Err(e) => fail(format_args!("Failed to create scene: {e}")),
         };
-        let (sources, items) = build_scene_items(&scene, &plan, &monitors, show_cursor);
+        let (sources, items) =
+            build_scene_items(&scene, &plan, &monitors, show_cursor, capture_method);
         context.set_output_source_raw(0, scene.get_source());
 
         let monitor_set = plan.items.iter().map(|i| i.monitor_index).collect();
@@ -215,6 +243,8 @@ impl Mirror {
             canvas: plan.canvas,
             fps,
             show_cursor,
+            capture_method,
+            adapter,
         }
     }
 
@@ -281,7 +311,10 @@ impl Mirror {
         // crates/obs/src/view.rs's warning), and obs displays survive
         // reset_video (libobs rebuilds their swapchains).
         if plan.canvas != self.canvas {
-            if let Err(e) = self.context.reset_video(&video_info(plan.canvas, self.fps)) {
+            if let Err(e) =
+                self.context
+                    .reset_video(&video_info(plan.canvas, self.fps, self.adapter))
+            {
                 fail(format_args!("Failed to reset OBS video: {e}"));
             }
             if let Some(ref display) = self.display {
@@ -298,8 +331,13 @@ impl Mirror {
                 item.remove();
             }
             self.sources.clear();
-            let (sources, items) =
-                build_scene_items(&self.scene, &plan, &self.monitors, self.show_cursor);
+            let (sources, items) = build_scene_items(
+                &self.scene,
+                &plan,
+                &self.monitors,
+                self.show_cursor,
+                self.capture_method,
+            );
             self.sources = sources;
             self.items = items;
         } else {
@@ -318,7 +356,7 @@ impl Mirror {
 }
 
 /// base == output == canvas: the mirror never downscales (no encoder to feed).
-fn video_info(canvas: (u32, u32), fps: u32) -> VideoInfo {
+fn video_info(canvas: (u32, u32), fps: u32, adapter: u32) -> VideoInfo {
     VideoInfo {
         graphics_module: obs_platform::GRAPHICS_MODULE,
         base_width: canvas.0,
@@ -327,6 +365,7 @@ fn video_info(canvas: (u32, u32), fps: u32) -> VideoInfo {
         output_height: canvas.1,
         fps_num: fps,
         fps_den: 1,
+        adapter,
     }
 }
 
@@ -337,12 +376,14 @@ fn build_scene_items(
     plan: &RegionPlan,
     monitors: &[MonitorInfo],
     show_cursor: bool,
+    capture_method: CaptureMethod,
 ) -> (Vec<ObsSource>, Vec<ObsSceneItem>) {
     let mut sources = Vec::new();
     let mut items = Vec::new();
     for (i, planned) in plan.items.iter().enumerate() {
         let m = &monitors[planned.monitor_index];
-        let source_settings = obs_platform::display_capture_settings(m, show_cursor);
+        let source_settings =
+            obs_platform::display_capture_settings(m, show_cursor, capture_method);
         let source = match ObsSource::create(
             obs_platform::DISPLAY_CAPTURE_ID,
             &format!("display_{i}"),

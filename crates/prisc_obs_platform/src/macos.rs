@@ -14,7 +14,8 @@ use objc2_core_graphics::{
     CGMainDisplayID,
 };
 
-use super::{MonitorInfo, ObsPaths};
+use super::region::{Rect, RegionPlan};
+use super::{CaptureMethod, MonitorInfo, ObsPaths};
 
 /// `platform` field of the input-capture header (wire contract).
 pub const PLATFORM_NAME: &str = "macos";
@@ -103,7 +104,24 @@ pub fn monitor_display_scale(m: &MonitorInfo) -> f64 {
     m.scale
 }
 
-pub fn display_capture_settings(m: &MonitorInfo, show_cursor: bool) -> ObsData {
+/// Signature parity with the Windows module (DESIGN §2.2). macOS has no
+/// per-monitor adapter selection to make — `obs_video_info.adapter` is
+/// meaningless to libobs-metal — so this always says "use the default".
+pub fn region_adapter_index(
+    _region: Rect,
+    _plan: &RegionPlan,
+    _monitors: &[MonitorInfo],
+) -> Option<u32> {
+    None
+}
+
+/// `method` is accepted for signature parity with the Windows module (DESIGN
+/// §2.2) and ignored: mac-capture's screen source has no equivalent knob.
+pub fn display_capture_settings(
+    m: &MonitorInfo,
+    show_cursor: bool,
+    _method: CaptureMethod,
+) -> ObsData {
     let settings = ObsData::new();
     settings.set_int("type", 0);
     settings.set_string("display_uuid", &m.id);

@@ -70,6 +70,9 @@ fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
             output_height: 32,
             fps_num: 30,
             fps_den: 1,
+            // Enumeration only — nothing is captured, so the default adapter
+            // is as good as any.
+            adapter: 0,
         })
         .map_err(|e| format!("Failed to reset OBS video: {e}"))?;
     context

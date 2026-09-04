@@ -10,6 +10,13 @@ pub struct VideoInfo {
     pub output_height: u32,
     pub fps_num: u32,
     pub fps_den: u32,
+    /// Graphics adapter index (`CreateDXGIFactory1` + `EnumAdapters1` order on
+    /// Windows; ignored elsewhere). 0 is libobs's default. NOTE: libobs creates
+    /// the graphics device on the FIRST `obs_reset_video` only — a later reset
+    /// with a different index is silently ignored (`obs_reset_video` guards
+    /// `obs_init_graphics` behind `if (!obs->video.graphics)`), so this is
+    /// effectively process-fixed.
+    pub adapter: u32,
 }
 
 impl VideoInfo {
@@ -24,7 +31,7 @@ impl VideoInfo {
             output_width: self.output_width,
             output_height: self.output_height,
             output_format: obs_sys::video_format_VIDEO_FORMAT_NV12,
-            adapter: 0,
+            adapter: self.adapter,
             gpu_conversion: true,
             colorspace: obs_sys::video_colorspace_VIDEO_CS_709,
             range: obs_sys::video_range_type_VIDEO_RANGE_PARTIAL,
