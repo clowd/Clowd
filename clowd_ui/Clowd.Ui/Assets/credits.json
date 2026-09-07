@@ -235,13 +235,13 @@
         },
         {
           "name": "log",
-          "version": "0.4.33",
+          "version": "0.4.34",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/rust-lang/log"
         },
         {
           "name": "naga",
-          "version": "30.0.0",
+          "version": "30.0.1",
           "license": "MIT OR Apache-2.0",
           "url": "https://github.com/gfx-rs/wgpu"
         },
@@ -373,7 +373,7 @@
         },
         {
           "name": "xdialog",
-          "version": "3.1.5",
+          "version": "3.1.8",
           "license": "MIT",
           "url": "https://github.com/velopack/xdialog"
         }
