@@ -77,7 +77,7 @@ fn list_cameras() -> Result<Vec<obs::properties::ListItem>, String> {
         .map_err(|e| format!("Failed to reset OBS video: {e}"))?;
     context
         .reset_audio(&AudioInfo {
-            samples_per_sec: 44100,
+            samples_per_sec: crate::encoder_config::AUDIO_SAMPLE_RATE,
         })
         .map_err(|e| format!("Failed to reset OBS audio: {e}"))?;
 

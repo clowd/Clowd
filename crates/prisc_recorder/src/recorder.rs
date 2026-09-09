@@ -27,7 +27,7 @@ use obs::volmeter::ObsVolmeter;
 
 use crate::cli::{Cli, MAX_AUDIO_SOURCES};
 use crate::commands::{self, Command};
-use crate::encoder_config::{self, EncoderConfig};
+use crate::encoder_config::{self, EncoderConfig, AUDIO_SAMPLE_RATE};
 use crate::frame_clock::{FrameClock, FrameClockCallback};
 use crate::input_capture::InputCapture;
 use crate::platform;
@@ -398,9 +398,12 @@ impl Recorder {
             fail(format_args!("Failed to reset OBS video: {e}"));
         }
 
-        // 5. Audio.
+        // 5. Audio. 48 kHz: the shared-mode rate of nearly every Windows and
+        // macOS device, so capture is usually a straight copy (libobs
+        // resamples any source that differs, so a 44.1 kHz device still
+        // works), and the conventional rate for AAC in video.
         if let Err(e) = context.reset_audio(&AudioInfo {
-            samples_per_sec: 44100,
+            samples_per_sec: AUDIO_SAMPLE_RATE,
         }) {
             fail(format_args!("Failed to reset OBS audio: {e}"));
         }
@@ -537,6 +540,9 @@ impl Recorder {
                 hw_accel: settings.hw_accel,
                 crf: settings.crf,
                 low_cpu: settings.low_cpu,
+                width: out_w,
+                height: out_h,
+                fps: settings.fps,
             },
         ) {
             Ok(e) => e,
@@ -1016,6 +1022,10 @@ impl Recorder {
             || new.crf != cur.crf
             || new.hw_accel != cur.hw_accel
             || new.low_cpu != cur.low_cpu;
+        // The encoder is sized for the output the reset below will produce
+        // (same computation as the video_info further down).
+        let (enc_w, enc_h) =
+            region::compute_output_size(self.canvas, new.max_width, new.max_height);
         let new_encoder = if encoder_changed {
             // Recreating (rather than obs_encoder_update) is the safe route:
             // the encoder id itself can change with hw_accel.
@@ -1025,6 +1035,9 @@ impl Recorder {
                     hw_accel: new.hw_accel,
                     crf: new.crf,
                     low_cpu: new.low_cpu,
+                    width: enc_w,
+                    height: enc_h,
+                    fps: new.fps,
                 },
             ) {
                 Ok(e) => Some(e),

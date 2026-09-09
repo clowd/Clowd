@@ -71,7 +71,8 @@ pub struct Cli {
     #[arg(long, default_value = "30")]
     pub fps: u32,
 
-    /// Quality (x264 CRF / hardware CQP), 0-51.
+    /// Quality, 0-51 (lower = better): an x264-style CRF that each encoder
+    /// maps onto its own quality scale (see encoder_config.rs).
     #[arg(long, default_value = "24", value_parser = clap::value_parser!(u16).range(0..=51))]
     pub crf: u16,
 
@@ -87,8 +88,8 @@ pub struct Cli {
     #[arg(long)]
     pub hw_accel: bool,
 
-    /// x264 preset ultrafast instead of veryfast. No effect with a hardware
-    /// encoder.
+    /// x264 preset superfast (at crf+2) instead of veryfast. No effect with
+    /// a hardware encoder.
     #[arg(long)]
     pub low_cpu: bool,
 
