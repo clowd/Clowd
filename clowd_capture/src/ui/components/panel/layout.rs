@@ -568,6 +568,7 @@ mod tests {
             upload: false,
             share: false,
             scroll_capture: false,
+            video: false,
             ocr: false,
         };
         let l = layout_with(PanelButtonSet::Normal, 1.0, features);

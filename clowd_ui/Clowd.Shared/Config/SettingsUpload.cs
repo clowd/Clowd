@@ -63,6 +63,20 @@ namespace Clowd.Config
 
     public class SettingsUpload : SimpleNotifyObject
     {
+        /// <summary>The tile selector at the top of the Uploads page; Off hides the rest of the
+        /// page and every upload entry point in the app (see <see cref="UploadsMode"/>).</summary>
+        [ModeSelector]
+        public UploadsMode Mode
+        {
+            get => _mode;
+            set => Set(ref _mode, value, nameof(Mode), nameof(IsEnabled));
+        }
+
+        /// <summary>Whether uploading is offered anywhere: the one question every upload entry
+        /// point asks (<see cref="Mode"/> is On).</summary>
+        [Browsable(false), JsonIgnore]
+        public bool IsEnabled => Mode == UploadsMode.On;
+
         // runtime-discovered state — populated by DiscoverProviders(), not persisted directly.
         [Browsable(false), JsonIgnore]
         public UploadProviderInfo[] Providers => _providers.ToArray();
@@ -81,6 +95,7 @@ namespace Clowd.Config
             set => Set(ref _wrapDangerousUploadsInZip, value);
         }
 
+        private UploadsMode _mode = UploadsMode.On;
         private bool _wrapDangerousUploadsInZip = true;
 
         private List<UploadProviderInfo> _providers = new();

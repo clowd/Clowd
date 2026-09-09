@@ -179,14 +179,14 @@ namespace Clowd.UI
 
         /// <summary>
         /// Whether this recording is written as one track per stream — which is exactly what
-        /// <see cref="SettingsRecording.EnableComposition"/> means, so the user's switch decides it
-        /// directly. A single-track recording cannot be edited afterwards (nothing is left to
-        /// separate) and cannot carry a webcam at all, which is why the composition switch also
-        /// gates the webcam rows in settings and the Edit affordance on a finished recording.
+        /// <see cref="RecordingMode.Studio"/> means, so the user's mode decides it directly. A
+        /// single-track (Instant) recording cannot be edited afterwards (nothing is left to
+        /// separate) and cannot carry a webcam at all, which is why the mode also gates the webcam
+        /// rows in settings and the Edit affordance on a finished recording.
         /// </summary>
         internal static bool UsesMultiTrack(SettingsRecording settings)
         {
-            if (settings == null || !settings.EnableComposition)
+            if (settings == null || settings.Mode != RecordingMode.Studio)
                 return false;
 
             // libobs' own cap. Clowd configures at most one speaker and one microphone, so this
@@ -196,11 +196,11 @@ namespace Clowd.UI
         }
 
         /// <summary>Whether a camera is actually recorded: a box ticked, a device picked, and
-        /// composition on to give the camera a track to live in. The one condition
+        /// Studio mode on to give the camera a track to live in. The one condition
         /// <see cref="WriteSettingsFile"/> emits a non-empty <c>webcam_device</c> for.</summary>
         internal static bool UsesWebcam(SettingsRecording settings)
             => settings != null
-            && settings.EnableComposition
+            && settings.Mode == RecordingMode.Studio
             && settings.CaptureWebcam
             && !String.IsNullOrEmpty(settings.WebcamDeviceId);
 
@@ -249,9 +249,9 @@ namespace Clowd.UI
                 // …and the camera, which is the opposite case: the source has to exist in the
                 // pipeline from the start or not at all, so an unticked box (or no device picked)
                 // is written as "" rather than a device the recorder would open and then mute.
-                // Composition off means no --multi-track, and the recorder REFUSES to start with a
-                // webcam_device it has no second video track for — so the gate that grays the
-                // webcam rows out in settings has to be enforced here too, not just in the UI.
+                // Instant mode means no --multi-track, and the recorder REFUSES to start with a
+                // webcam_device it has no second video track for — so the gate that hides the
+                // webcam rows in settings has to be enforced here too, not just in the UI.
                 WebcamDevice = UsesWebcam(settings) ? settings.WebcamDeviceId : "",
             };
 

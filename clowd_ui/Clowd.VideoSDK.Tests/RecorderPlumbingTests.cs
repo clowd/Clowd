@@ -30,7 +30,7 @@ namespace Clowd.VideoSDK.Tests
             string mic = "default", bool webcam = false, bool? captureSpeaker = null, bool? captureMic = null)
             => new SettingsRecording
             {
-                EnableComposition = composition,
+                Mode = composition ? RecordingMode.Studio : RecordingMode.Instant,
                 SpeakerDeviceId = speaker,
                 CaptureSpeaker = captureSpeaker ?? !String.IsNullOrEmpty(speaker),
                 MicrophoneDeviceId = mic,

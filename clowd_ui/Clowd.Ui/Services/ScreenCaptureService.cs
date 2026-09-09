@@ -230,8 +230,7 @@ namespace Clowd.UI
                     StandardErrorEncoding = Encoding.UTF8,
                     WorkingDirectory = Path.GetDirectoryName(binary),
                 };
-                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current.Capture,
-                                                          SettingsRoot.Current.General, mode, intent,
+                foreach (var arg in CaptureArguments.Build(sessionDir, SettingsRoot.Current, mode, intent,
                                                           SettingsRoot.Current.General.LastSavePath))
                     psi.ArgumentList.Add(arg);
 
@@ -473,10 +472,14 @@ namespace Clowd.UI
     /// </summary>
     public static class CaptureArguments
     {
-        public static IReadOnlyList<string> Build(string sessionDir, SettingsCapture settings, SettingsGeneral general,
-                                                  CaptureMode mode, RegionIntent intent = RegionIntent.Capture,
-                                                  string lastSavePath = null)
+        public static IReadOnlyList<string> Build(string sessionDir, SettingsRoot root, CaptureMode mode,
+                                                  RegionIntent intent = RegionIntent.Capture, string lastSavePath = null)
         {
+            // most of the command line is the Capture page, but the feature modes of two other
+            // pages (recording, uploads) decide whether their buttons exist at all.
+            var settings = root.Capture;
+            var general = root.General;
+
             // the accent follows the OS (or the user's pick) and is contrast-corrected for the white
             // text drawn on it — see SettingsGeneral.GetEffectiveAccentColor, issue #48. It lives on
             // General rather than Capture because the recording toolbar and border wear it too.
@@ -524,18 +527,27 @@ namespace Clowd.UI
                 args.Add("--no-rounded-corners");
 
             // The overlay's optional buttons (SettingsCapture "Optional features"). All on by
-            // default, so these only ever appear when the user has switched something off.
-            if (!settings.UploadButtonEnabled)
+            // default, so these only ever appear when the user has switched something off. UPLOAD
+            // also goes with uploads as a whole (Uploads page, Off).
+            if (!settings.UploadButtonEnabled || !root.Uploads.IsEnabled)
                 args.Add("--no-upload");
 
             // Hides the SHARE button, and nothing more: a share started from the tray item or the
             // hotkey arrives as RegionIntent.Share below, which never raises the panel — so the two
             // flags are sent together rather than being treated as a contradiction.
-            if (!settings.ShareRegionEnabled)
+            // …and the button also goes with region sharing as a whole (Shared Region page, Off).
+            if (!settings.ShareRegionEnabled || !root.ShareRegion.IsEnabled)
                 args.Add("--no-share");
 
             if (!settings.ScrollingCaptureEnabled)
                 args.Add("--no-scroll-capture");
+
+            // VIDEO has no switch of its own on the Capture page: it goes with recording itself,
+            // which the Recording page can turn off entirely. Like --no-share this hides the
+            // button only — --video (a RegionIntent.Video launch) never shows the strip, and the
+            // shell does not launch it while recording is off anyway.
+            if (!root.Recording.IsEnabled)
+                args.Add("--no-video");
 
             // OCR runs in the clowd_ai binary, which only exists where ONNX Runtime has a
             // build: not on Intel Macs (the same gate as SelectedItemViewModel.AiEffectsSupported),
@@ -580,15 +592,12 @@ namespace Clowd.UI
             return args;
         }
 
-        public static IReadOnlyList<string> BuildStandby(string sessionRoot, SettingsCapture settings,
-                                                          SettingsGeneral general, SettingsHotkey hotkeys,
-                                                          string lastSavePath = null)
+        public static IReadOnlyList<string> BuildStandby(string sessionRoot, SettingsRoot root, string lastSavePath = null)
         {
             // RegionIntent.Capture, always: a standby capturer serves ordinary screenshots and
             // nothing else — the video/share intents keep their own one-shot lifetime precisely
             // because their flags cannot be added to a process that is already running.
-            var args = new List<string>(Build(sessionRoot, settings, general, CaptureMode.Region,
-                                              RegionIntent.Capture, lastSavePath));
+            var args = new List<string>(Build(sessionRoot, root, CaptureMode.Region, RegionIntent.Capture, lastSavePath));
             // standby creates the per-capture directory itself; throwing (rather than shipping a
             // corrupt command line) lands in the supervisor's crash handling and its fallback.
             if (args[0] != "--session-dir")
@@ -596,6 +605,7 @@ namespace Clowd.UI
             args.RemoveRange(0, 2);
             args.InsertRange(0, new[] { "--standby", "--session-root", sessionRoot });
 
+            var hotkeys = root.Hotkeys;
             AddHotkey("--hk-main", hotkeys.CaptureRegionShortcut);
             AddHotkey("--hk-window", hotkeys.CaptureActiveShortcut);
             AddHotkey("--hk-monitor", hotkeys.CaptureFullscreenShortcut);

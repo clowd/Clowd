@@ -129,6 +129,7 @@ namespace Clowd.UI
         private readonly SettingsHotkey _settings;
         private readonly List<HotkeyEntry> _entries;
         private readonly Dictionary<HotkeyId, Action> _actions = new();
+        private readonly HashSet<HotkeyId> _switchedOff = new();
         private bool _disposed;
 
         public HotkeyManager(IGlobalTriggerHost host, SettingsHotkey settings)
@@ -157,6 +158,19 @@ namespace Clowd.UI
         {
             _actions[id] = action;
             Rebind(GetEntry(id));
+        }
+
+        /// <summary>
+        /// Feature switch for a hotkey: the upload hotkeys while uploads are off, the recording
+        /// hotkey while recording is off. A switched-off hotkey is unregistered — not merely
+        /// inert — so the gesture is neither swallowed nor shown as active; the gesture itself is
+        /// kept, and comes back when the feature does.
+        /// </summary>
+        public void SetEnabled(HotkeyId id, bool enabled)
+        {
+            var changed = enabled ? _switchedOff.Remove(id) : _switchedOff.Add(id);
+            if (changed)
+                Rebind(GetEntry(id));
         }
 
         public HotkeyEntry GetEntry(HotkeyId id) => _entries.First(e => e.Id == id);
@@ -200,6 +214,12 @@ namespace Clowd.UI
             if (!_actions.TryGetValue(entry.Id, out var action) || action == null)
             {
                 entry.SetStatus(false, "");
+                return;
+            }
+
+            if (_switchedOff.Contains(entry.Id))
+            {
+                entry.SetStatus(false, "This feature is turned off in settings.");
                 return;
             }
 

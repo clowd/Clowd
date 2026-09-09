@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Data.Converters;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Config;
@@ -27,6 +29,7 @@ namespace Clowd.UI
         {
             InitializeComponent();
             SettingsRoot.Current.Hotkeys.PropertyChanged += OnHotkeyPropertyChanged;
+            BindRecordingMode();
             NavList.SelectionChanged += OnNavSelectionChanged;
             NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
 
@@ -136,6 +139,21 @@ namespace Clowd.UI
             return String.IsNullOrEmpty(gesture)
                 ? "These settings apply to the live capture opened from Clowd's tray menu. No Capture Region shortcut is currently assigned; you can add one on the Hotkeys page."
                 : $"These settings apply to the live capture opened when you press {gesture}. You can change this shortcut on the Hotkeys page.";
+        }
+
+        /// <summary>Recording Off hides the video editor everywhere, this window's "Video" button
+        /// included; the image button then takes the whole row (the row is "*,8,*", so spanning
+        /// all three columns is what makes it full width). Bindings, not a subscription: this
+        /// window is recreated every time it is reopened, the settings object never is.</summary>
+        private void BindRecordingMode()
+        {
+            var recording = SettingsRoot.Current.Recording;
+            NewVideoButton.Bind(IsVisibleProperty, new Binding(nameof(SettingsRecording.IsEnabled)) { Source = recording });
+            NewImageButton.Bind(Grid.ColumnSpanProperty, new Binding(nameof(SettingsRecording.IsEnabled))
+            {
+                Source = recording,
+                Converter = new FuncValueConverter<bool, int>(enabled => enabled ? 1 : 3),
+            });
         }
 
         private void OnHotkeyPropertyChanged(object sender, PropertyChangedEventArgs e)

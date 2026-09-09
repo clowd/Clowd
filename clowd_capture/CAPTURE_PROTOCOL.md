@@ -49,6 +49,7 @@ flags that differ (`CaptureArguments.Build`).
 | `--no-upload` | flag | UPLOAD shown | Hide the UPLOAD button — in the capture strip *and* the OCR strip — and drop its `U` accelerator. |
 | `--no-share` | flag | SHARE shown | Hide the SHARE button and drop its `H` accelerator. Not the opposite of `--share`: that is a mode which never shows the strip, so the two are sent together whenever the user has trimmed the button away but started a share from the shell's tray item or hotkey. |
 | `--no-scroll-capture` | flag | SCROLL shown | Hide the SCROLL button and drop its `L` accelerator. Windows-only button; the flag parses everywhere. |
+| `--no-video` | flag | VIDEO shown | Hide the VIDEO button and drop its `V` accelerator. Sent when the shell has recording switched off entirely (there is no per-button switch for VIDEO). Like `--no-share`, it hides the button only: `--video` is a mode that never shows the strip and is unaffected. |
 | `--no-ocr` | flag | OCR shown | Hide the OCR button and drop its `O` accelerator. The button is the only way into OCR mode, so this also removes the OCR strip. |
 | `--capture-mode` | `region` \| `screen` \| `window` | `region` | `region` = free crosshair; `screen`/`window` pre-select the active monitor / foreground window and show the action panel. |
 | `--video` | flag | off | Video-region picker: first confirmed selection dispatches the VIDEO action immediately. Requires `--session-dir`. |

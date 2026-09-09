@@ -67,6 +67,12 @@ namespace Clowd.UI
             SettingsRoot.Current.Capture.PropertyChanged += OnSettingsChanged;
             SettingsRoot.Current.Hotkeys.PropertyChanged += OnSettingsChanged;
             SettingsRoot.Current.General.PropertyChanged += OnSettingsChanged;
+            // the recording, upload and share modes decide the strip's VIDEO, UPLOAD and SHARE
+            // buttons (--no-video / --no-upload / --no-share); everything else on those pages is
+            // deduped away by the fingerprint in SendSettings.
+            SettingsRoot.Current.Recording.PropertyChanged += OnSettingsChanged;
+            SettingsRoot.Current.Uploads.PropertyChanged += OnSettingsChanged;
+            SettingsRoot.Current.ShareRegion.PropertyChanged += OnSettingsChanged;
             _ = Task.Run(RunAsync);
         }
 
@@ -174,8 +180,7 @@ namespace Clowd.UI
                         StandardInputEncoding = new UTF8Encoding(false),
                         WorkingDirectory = Path.GetDirectoryName(binary),
                     };
-                    foreach (var arg in CaptureArguments.BuildStandby(PathConstants.SessionData,
-                                 SettingsRoot.Current.Capture, SettingsRoot.Current.General, SettingsRoot.Current.Hotkeys,
+                    foreach (var arg in CaptureArguments.BuildStandby(PathConstants.SessionData, SettingsRoot.Current,
                                  SettingsRoot.Current.General.LastSavePath))
                         psi.ArgumentList.Add(arg);
 
@@ -434,8 +439,7 @@ namespace Clowd.UI
                 // wire last (the pipe write already sits under this lock anyway)
                 lock (_stdinGate)
                 {
-                    var args = CaptureArguments.BuildStandby(PathConstants.SessionData,
-                        SettingsRoot.Current.Capture, SettingsRoot.Current.General, SettingsRoot.Current.Hotkeys,
+                    var args = CaptureArguments.BuildStandby(PathConstants.SessionData, SettingsRoot.Current,
                         SettingsRoot.Current.General.LastSavePath);
                     var fingerprint = JsonSerializer.Serialize(args);
                     if (!force && fingerprint == _lastSettings)
@@ -511,6 +515,9 @@ namespace Clowd.UI
             SettingsRoot.Current.Capture.PropertyChanged -= OnSettingsChanged;
             SettingsRoot.Current.Hotkeys.PropertyChanged -= OnSettingsChanged;
             SettingsRoot.Current.General.PropertyChanged -= OnSettingsChanged;
+            SettingsRoot.Current.Recording.PropertyChanged -= OnSettingsChanged;
+            SettingsRoot.Current.Uploads.PropertyChanged -= OnSettingsChanged;
+            SettingsRoot.Current.ShareRegion.PropertyChanged -= OnSettingsChanged;
             Interlocked.CompareExchange(ref _current, null, this);
             _onFallback = null;
             _stop.Cancel();

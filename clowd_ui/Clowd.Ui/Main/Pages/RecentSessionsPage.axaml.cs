@@ -21,6 +21,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Clowd.Config;
 using Clowd.UI.Controls;
 using Clowd.UI.Dialogs;
 using Clowd.UI.Helpers;
@@ -215,6 +216,8 @@ namespace Clowd.UI
             base.OnAttachedToVisualTree(e);
             SessionManager.Current.Sessions.CollectionChanged += OnSessionsChanged;
             SessionManager.Current.PropertyChanged += OnSessionManagerPropertyChanged;
+            SettingsRoot.Current.Recording.PropertyChanged += OnFeatureModeChanged;
+            SettingsRoot.Current.Uploads.PropertyChanged += OnFeatureModeChanged;
             SessionScroller.ScrollChanged += OnSessionsScrolled;
             RebuildGroups();
 
@@ -230,8 +233,23 @@ namespace Clowd.UI
             base.OnDetachedFromVisualTree(e);
             SessionManager.Current.Sessions.CollectionChanged -= OnSessionsChanged;
             SessionManager.Current.PropertyChanged -= OnSessionManagerPropertyChanged;
+            SettingsRoot.Current.Recording.PropertyChanged -= OnFeatureModeChanged;
+            SettingsRoot.Current.Uploads.PropertyChanged -= OnFeatureModeChanged;
             SessionScroller.ScrollChanged -= OnSessionsScrolled;
             _regroupTimer.Stop();
+        }
+
+        /// <summary>Recording Off takes the Edit and Render buttons off every project row, and
+        /// Uploads Off the Upload button off every row (SessionInfo.ShowEditVideo / ShowRender /
+        /// CanUpload read the modes); the rows only find out through PropertyChanged, which the
+        /// settings cannot raise on their behalf. Both pages call their switch "Mode".</summary>
+        private void OnFeatureModeChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (!String.IsNullOrEmpty(e.PropertyName) && e.PropertyName != "Mode")
+                return;
+
+            foreach (var session in SessionManager.Current.Sessions)
+                session.RaiseRowAffordances();
         }
 
         /// <summary>During a fling the rows under the pointer change faster than any of them can be

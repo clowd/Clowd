@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Clowd.Config;
 using Clowd.PlatformUtil;
 using Clowd.Util;
 
@@ -388,11 +389,14 @@ namespace Clowd
         // A project owns no finished file — its render does — so it is never uploadable.
         // Whether the file is still on disk is settled by UploadSourcePath at the point of use —
         // this one is evaluated by a binding on every row.
+        // …and only while uploading exists as a feature (Uploads page, Off hides the button; the
+        // page re-raises the row affordances when that changes).
         [JsonIgnore]
         public bool CanUpload => ActiveUpload == null
                                  && ActiveGifConversion == null
                                  && ActiveRender == null
                                  && !IsProject
+                                 && SettingsRoot.Current?.Uploads?.IsEnabled != false
                                  && (!String.IsNullOrEmpty(VideoPath) || !String.IsNullOrEmpty(PreviewImgPath) || IsUploadOnly);
 
         /// <summary>The file an upload of this session sends: the recording itself for a video entry
@@ -500,9 +504,16 @@ namespace Clowd
 
         // whether the Recent page offers an Edit button at all. Not gated on the OS — the editor
         // and the render tool run on every desktop platform; when one of them cannot start,
-        // VideoEditorWindow says why.
+        // VideoEditorWindow says why. It IS gated on the recording mode: Off hides the video
+        // editor everywhere, and a project row's Edit and Render buttons are two of those places
+        // (the row itself stays — the recording is still the user's file).
         [JsonIgnore]
-        public bool ShowEditVideo => IsProject;
+        public bool ShowEditVideo => IsProject && VideoEditingEnabled;
+
+        /// <summary>Whether the video editor is offered at all (Recording mode is not Off). Read
+        /// from the live settings; RecentSessionsPage re-raises the row affordances when the mode
+        /// changes so the rows follow it.</summary>
+        private static bool VideoEditingEnabled => SettingsRoot.Current?.Recording?.IsEnabled != false;
 
         // kept as its own name because a good deal of code asks "can this be opened in the video
         // editor?" rather than "does the row show the button?" — for a project they are the same.
@@ -512,7 +523,7 @@ namespace Clowd
         /// <summary>Whether the row offers a Render button: a project is rendered into a video, and
         /// nothing else is.</summary>
         [JsonIgnore]
-        public bool ShowRender => IsProject;
+        public bool ShowRender => IsProject && VideoEditingEnabled;
 
         /// <summary>Whether the row offers "Open in editor" — the <i>image</i> editor, which a
         /// project has no business opening in.</summary>
@@ -733,7 +744,7 @@ namespace Clowd
         /// <summary>Announces every derived flag the Recent row's buttons, marker and status line
         /// are bound to. Raised by each of the few persisted fields that classify an entry — which
         /// of them changed is never interesting, and missing one silently leaves a stale row.</summary>
-        private void RaiseRowAffordances()
+        internal void RaiseRowAffordances()
         {
             OnPropertyChanged(nameof(IsVideo));
             OnPropertyChanged(nameof(IsUploadOnly));

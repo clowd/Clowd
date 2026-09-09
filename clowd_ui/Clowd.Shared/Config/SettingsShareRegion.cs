@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 
 namespace Clowd.Config
 {
@@ -32,6 +33,20 @@ namespace Clowd.Config
     /// </summary>
     public class SettingsShareRegion : SimpleNotifyObject
     {
+        /// <summary>The tile selector at the top of the page; Off hides the rest of the page and
+        /// every share entry point in the app (see <see cref="ShareRegionMode"/>).</summary>
+        [ModeSelector]
+        public ShareRegionMode Mode
+        {
+            get => _mode;
+            set => Set(ref _mode, value, nameof(Mode), nameof(IsEnabled));
+        }
+
+        /// <summary>Whether region sharing is offered anywhere: the one question every share entry
+        /// point asks (<see cref="Mode"/> is On).</summary>
+        [Browsable(false), JsonIgnore]
+        public bool IsEnabled => Mode == ShareRegionMode.On;
+
         /// <summary>
         /// Canvas frame rate of the mirror window, handed to <c>clowd_share_region --fps</c>.
         /// <para>Unlike the obscure settings below it this one is read at SPAWN time, because the
@@ -43,6 +58,7 @@ namespace Clowd.Config
         /// setting whose effect is deferred and does not say so reads as one that does nothing.</para>
         /// </summary>
         [Category("Video")]
+        [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Frame rate")]
         [Description("Frame rate of the shared region's mirror window. Lower costs less GPU and less " +
                      "of the meeting's bandwidth; higher is smoother for motion and video. Applies to " +
@@ -60,6 +76,7 @@ namespace Clowd.Config
         /// — so its description carries the same warning about the next share rather than this one.
         /// </summary>
         [Category("Video")]
+        [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Capture method")]
         [Description("Which Windows API captures the screen. DXGI avoids the yellow capture border on Windows 10; WGC works where DXGI captures black frames. Applies to the next region you share.")]
         [HiddenOnMacOS]
@@ -70,6 +87,7 @@ namespace Clowd.Config
         }
 
         [Category("Obscure")]
+        [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Mode")]
         [Description("How the shared region is obscured while the HIDE button is on. Hide covers it " +
                      "completely; blur and pixelate leave shapes and movement visible. If the sharing " +
@@ -85,6 +103,7 @@ namespace Clowd.Config
         }
 
         [Category("Obscure")]
+        [VisibleWhen(nameof(Mode), ShareRegionMode.On)]
         [DisplayName("Strength")]
         [Description("How strong the blur or pixelation is (1-100). Not used by Hide. Pixelate blocks " +
                      "stay small even at 100, so it obscures detail rather than censoring content.")]
@@ -102,6 +121,7 @@ namespace Clowd.Config
         [Browsable(false)]
         public bool ObscureUsesStrength => _obscureStyle != ShareRegionObscureStyle.Hide;
 
+        private ShareRegionMode _mode = ShareRegionMode.On;
         private int _fps = 30;
         private ScreenCaptureMethod _captureMethod = ScreenCaptureMethod.Auto;
         private ShareRegionObscureStyle _obscureStyle = ShareRegionObscureStyle.Blur;

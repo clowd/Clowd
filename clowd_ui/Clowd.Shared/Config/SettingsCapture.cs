@@ -26,6 +26,7 @@ namespace Clowd.Config
         [DisplayName("Upload")]
         [Description("Show the UPLOAD button in the capture window, which uploads the capture and " +
                      "copies its link to the clipboard")]
+        [VisibleWhen(nameof(SettingsUpload.Mode), UploadsMode.On, Section = nameof(SettingsRoot.Uploads))]
         public bool UploadButtonEnabled
         {
             get => _uploadButtonEnabled;
@@ -43,6 +44,7 @@ namespace Clowd.Config
         [DisplayName("Share region")]
         [Description("Show the SHARE button in the capture window, which mirrors the selected region " +
                      "into a window a meeting app can share")]
+        [VisibleWhen(nameof(SettingsShareRegion.Mode), ShareRegionMode.On, Section = nameof(SettingsRoot.ShareRegion))]
         public bool ShareRegionEnabled
         {
             get => _shareRegionEnabled;

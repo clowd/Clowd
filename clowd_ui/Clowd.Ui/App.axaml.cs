@@ -1,4 +1,5 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -134,6 +135,25 @@ namespace Clowd
                 // beside each item stays current (decision table #48 / §6). SettingsHotkey is pure
                 // data now — every PropertyChanged is a gesture change.
                 SettingsRoot.Current.Hotkeys.PropertyChanged += (s, e) => Dispatcher.UIThread.Post(SetupTrayIcon);
+
+                // …and for the feature modes: Recording Off and Uploads Off each take their items
+                // out of the menu (native, so it is rebuilt) and their hotkeys out of the hook.
+                WatchFeatureMode(SettingsRoot.Current.Recording, nameof(SettingsRecording.Mode));
+                WatchFeatureMode(SettingsRoot.Current.Uploads, nameof(SettingsUpload.Mode));
+                WatchFeatureMode(SettingsRoot.Current.ShareRegion, nameof(SettingsShareRegion.Mode));
+
+                void WatchFeatureMode(INotifyPropertyChanged settings, string property)
+                {
+                    settings.PropertyChanged += (s, e) =>
+                    {
+                        if (e.PropertyName == property)
+                            Dispatcher.UIThread.Post(() =>
+                            {
+                                SetupTrayIcon();
+                                ApplyFeatureHotkeys();
+                            });
+                    };
+                }
 
                 // same mechanism for the language: the tray menu is native and cannot be bound, so
                 // it is rebuilt in place whenever the UI culture changes.
@@ -312,26 +332,38 @@ namespace Clowd
             };
             menu.Add(capture);
 
-            var record = new NativeMenuItem("Start / Stop Recording");
-            ApplyGesture(record, SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut);
-            record.Click += async (s, e) =>
-            {
-                // wait long enough for the menu to disappear (matches WPF).
-                await Task.Delay(400);
-                ToggleRecording();
-            };
-            menu.Add(record);
+            // Recording Off (SettingsRecording.Mode) removes both recording and the video editor
+            // from the app — here, on the main window and in the capture overlay's strip.
+            var recordingEnabled = SettingsRoot.Current.Recording.IsEnabled;
 
-            var share = new NativeMenuItem("Share Region");
-            ApplyGesture(share, SettingsRoot.Current.Hotkeys.ShareRegionShortcut);
-            share.Click += async (s, e) =>
+            if (recordingEnabled)
             {
-                // wait long enough for the menu to disappear (matches WPF) — and here it also keeps
-                // the tray menu out of the region the user is about to pick.
-                await Task.Delay(400);
-                ToggleShareRegion();
-            };
-            menu.Add(share);
+                var record = new NativeMenuItem("Start / Stop Recording");
+                ApplyGesture(record, SettingsRoot.Current.Hotkeys.StartStopRecordingShortcut);
+                record.Click += async (s, e) =>
+                {
+                    // wait long enough for the menu to disappear (matches WPF).
+                    await Task.Delay(400);
+                    ToggleRecording();
+                };
+                menu.Add(record);
+            }
+
+            // Shared Region Off (SettingsShareRegion.Mode) removes it here, from the hotkeys and
+            // from the overlay's strip.
+            if (SettingsRoot.Current.ShareRegion.IsEnabled)
+            {
+                var share = new NativeMenuItem("Share Region");
+                ApplyGesture(share, SettingsRoot.Current.Hotkeys.ShareRegionShortcut);
+                share.Click += async (s, e) =>
+                {
+                    // wait long enough for the menu to disappear (matches WPF) — and here it also
+                    // keeps the tray menu out of the region the user is about to pick.
+                    await Task.Delay(400);
+                    ToggleShareRegion();
+                };
+                menu.Add(share);
+            }
 
             var colorp = new NativeMenuItem("Color Picker");
             colorp.Click += (s, e) => NiceDialog.ShowColorViewer();
@@ -341,25 +373,32 @@ namespace Clowd
             editor.Click += (s, e) => EditorWindow.ShowSession(null);
             menu.Add(editor);
 
-            var videoEditor = new NativeMenuItem("Video Editor");
-            videoEditor.Click += (s, e) => Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
-            menu.Add(videoEditor);
+            if (recordingEnabled)
+            {
+                var videoEditor = new NativeMenuItem("Video Editor");
+                videoEditor.Click += (s, e) => Clowd.UI.VideoEditor.VideoEditorWindow.ShowBlankProject();
+                menu.Add(videoEditor);
+            }
 
             menu.Add(new NativeMenuItemSeparator());
 
-            // every supported action that has a global hotkey is also reachable from this menu — the
-            // menu is the fallback when a hotkey fails to register (see the Hotkeys settings page).
-            var uploadFile = new NativeMenuItem("Upload File…");
-            ApplyGesture(uploadFile, SettingsRoot.Current.Hotkeys.FileUploadShortcut);
-            uploadFile.Click += (s, e) => UploadFilePrompt();
-            menu.Add(uploadFile);
+            // Uploads Off (SettingsUpload.Mode) removes this whole block, separator included.
+            if (SettingsRoot.Current.Uploads.IsEnabled)
+            {
+                // every supported action that has a global hotkey is also reachable from this menu —
+                // the menu is the fallback when a hotkey fails to register (see the Hotkeys page).
+                var uploadFile = new NativeMenuItem("Upload File…");
+                ApplyGesture(uploadFile, SettingsRoot.Current.Hotkeys.FileUploadShortcut);
+                uploadFile.Click += (s, e) => UploadFilePrompt();
+                menu.Add(uploadFile);
 
-            var uploadClip = new NativeMenuItem("Upload Clipboard");
-            ApplyGesture(uploadClip, SettingsRoot.Current.Hotkeys.ClipboardUploadShortcut);
-            uploadClip.Click += (s, e) => UploadClipboard();
-            menu.Add(uploadClip);
+                var uploadClip = new NativeMenuItem("Upload Clipboard");
+                ApplyGesture(uploadClip, SettingsRoot.Current.Hotkeys.ClipboardUploadShortcut);
+                uploadClip.Click += (s, e) => UploadClipboard();
+                menu.Add(uploadClip);
 
-            menu.Add(new NativeMenuItemSeparator());
+                menu.Add(new NativeMenuItemSeparator());
+            }
 
             var uploads = new NativeMenuItem("Recents & Uploads");
             uploads.Click += (s, e) => PageManager.Current.GetSettingsPage().Open(SettingsPageTab.RecentSessions);
@@ -383,12 +422,14 @@ namespace Clowd
 
         /// <summary>The Start/Stop Recording hotkey and tray action (DESIGN §4.3): toggles the
         /// active recording session, or launches the capture overlay in video mode to pick a
-        /// recording region. Toggle() during the WAIT state is a no-op (§4.2).</summary>
+        /// recording region. Toggle() during the WAIT state is a no-op (§4.2), and so is the
+        /// whole action while recording is switched off — the hotkey row stays on the Hotkeys
+        /// page, but a gesture bound to a feature the user turned off must not start it.</summary>
         public void ToggleRecording()
         {
             if (VideoCapturePage.ActiveInstance is { } page)
                 page.Toggle();
-            else
+            else if (SettingsRoot.Current.Recording.IsEnabled)
                 StartCapture(CaptureMode.Region, RegionIntent.Video);
         }
 
@@ -405,7 +446,7 @@ namespace Clowd
         {
             if (ShareRegionPage.ActiveInstance is { } share)
                 share.Cancel();
-            else
+            else if (SettingsRoot.Current.ShareRegion.IsEnabled)
                 StartCapture(CaptureMode.Region, RegionIntent.Share);
         }
 
@@ -436,6 +477,7 @@ namespace Clowd
             _hotkeys.SetAction(HotkeyId.ShareRegion, ToggleShareRegion);
 
             HotkeyManager.Current = _hotkeys;
+            ApplyFeatureHotkeys();
             ConfigureCaptureHotkeys();
 
             SettingsRoot.Current.Capture.PropertyChanged += (s, e) =>
@@ -443,6 +485,23 @@ namespace Clowd
                 if (e.PropertyName == nameof(SettingsCapture.KeepCapturerWarm))
                     Dispatcher.UIThread.Post(ConfigureCaptureHotkeys);
             };
+        }
+
+        /// <summary>A hotkey for a feature the user switched off (Uploads, Recording or Shared
+        /// Region Off) is
+        /// unregistered rather than left to fire into a guard: it must not swallow its key, and
+        /// the Hotkeys page hides its row for the same reason. Called at startup and again
+        /// whenever either mode changes.</summary>
+        private void ApplyFeatureHotkeys()
+        {
+            if (_hotkeys == null)
+                return;
+
+            var uploads = SettingsRoot.Current.Uploads.IsEnabled;
+            _hotkeys.SetEnabled(HotkeyId.FileUpload, uploads);
+            _hotkeys.SetEnabled(HotkeyId.ClipboardUpload, uploads);
+            _hotkeys.SetEnabled(HotkeyId.StartStopRecording, SettingsRoot.Current.Recording.IsEnabled);
+            _hotkeys.SetEnabled(HotkeyId.ShareRegion, SettingsRoot.Current.ShareRegion.IsEnabled);
         }
 
         /// <summary>
@@ -704,11 +763,25 @@ namespace Clowd
         private async void OnFilesReceived(string[] filePaths)
         {
             Debug.WriteLine("Files received from secondary instance: " + String.Join(", ", filePaths));
+
+            // the Explorer / Finder "Upload with Clowd" entries and the command line have no way
+            // of knowing uploads were switched off; a silent drop would look like a lost file.
+            if (!SettingsRoot.Current.Uploads.IsEnabled)
+            {
+                await NiceDialog.ShowNoticeAsync(null, NiceDialogIcon.Information,
+                    "Uploads are turned off in Clowd's settings, so nothing was uploaded. You can turn them back on from the Uploads page.",
+                    "Uploads are off");
+                return;
+            }
+
             await UploadManager.UploadSeveralFiles(filePaths);
         }
 
         private async void UploadFilePrompt()
         {
+            if (!SettingsRoot.Current.Uploads.IsEnabled)
+                return;
+
             var files = await NiceDialog.ShowSelectFilesDialog(null, "Select files to upload",
                 SettingsRoot.Current.General.LastSavePath, true);
 
@@ -720,6 +793,9 @@ namespace Clowd
         /// Paste() hotkey handler.</summary>
         private async void UploadClipboard()
         {
+            if (!SettingsRoot.Current.Uploads.IsEnabled)
+                return;
+
             var clipboard = GetPrimaryClipboard();
 
             try

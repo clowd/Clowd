@@ -272,6 +272,7 @@ namespace Clowd.UI
             BtnMic.ShowAlternateIcon = _micEnabled;
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
             BtnWebcam.ShowAlternateIcon = _camEnabled;
+            ApplyRecordingMode();
 
             // re-enumerate rather than take the process-wide cache: the strip opens long after the
             // app did, and a camera plugged in since then is exactly the one being reached for.
@@ -737,8 +738,8 @@ namespace Clowd.UI
             if (e.PropertyName is not (null
                 or "" or nameof(SettingsRecording.CaptureMicrophone) or nameof(SettingsRecording.CaptureSpeaker)
                 or nameof(SettingsRecording.CaptureWebcam) or nameof(SettingsRecording.WebcamDeviceId)
-                // gates the webcam entirely: switching composition off unlights CAM.
-                or nameof(SettingsRecording.EnableComposition)))
+                // gates the webcam entirely: leaving Studio mode unlights CAM.
+                or nameof(SettingsRecording.Mode)))
                 return;
 
             _micEnabled = _settings.CaptureMicrophone;
@@ -751,10 +752,29 @@ namespace Clowd.UI
             BtnSpeaker.ShowAlternateIcon = _spkEnabled;
             BtnWebcam.ShowAlternateIcon = _camEnabled;
             UpdateMeterVisibility();
+
+            if (e.PropertyName is null or "" or nameof(SettingsRecording.Mode))
+            {
+                ApplyRecordingMode();
+                UpdateDevicePills();
+                // the strip just changed width (a tile came or went); re-centre it on the region
+                // once the new layout has settled — a no-op if the user has dragged it away.
+                Dispatcher.UIThread.Post(PositionNearRegion, DispatcherPriority.Loaded);
+            }
+        }
+
+        /// <summary>The CAM tile exists only in Studio mode: an Instant recording is one flattened
+        /// track with nowhere for a camera to go, and the settings page hides the webcam rows for
+        /// the same reason. Collapsed rather than disabled — it is not "unavailable right now", it
+        /// is not part of this mode at all — and its device pill follows it through
+        /// <see cref="UpdateDevicePills"/>.</summary>
+        private void ApplyRecordingMode()
+        {
+            BtnWebcam.IsVisible = _settings.Mode == RecordingMode.Studio;
         }
 
         /// <summary>A webcam is only captured when the box is ticked, a camera has been chosen and
-        /// composition is on — <see cref="ObsArguments.WriteSettingsFile"/> writes an empty device
+        /// Studio mode is on — <see cref="ObsArguments.WriteSettingsFile"/> writes an empty device
         /// id (i.e. no webcam source at all) when any of those is missing, so the button says the
         /// same rather than lighting up for a camera that will not be recorded.</summary>
         private static bool IsWebcamCaptured(SettingsRecording settings)
@@ -1211,9 +1231,9 @@ namespace Clowd.UI
         /// CAM toggle. Unlike MIC/SPK this is not a mute: the recorder builds (or drops) a whole
         /// webcam source and a second encoder for it, which it will only do while it is still
         /// waiting — hence <see cref="UpdateRecordingLocks"/> locking the button once frames flow.
-        /// Turning it on with no camera chosen opens the camera picker (as MIC/SPK do); with
-        /// composition off there is no second video track for a camera to live in, which no
-        /// dropdown can fix, so that one click still goes to the settings page.
+        /// Turning it on with no camera chosen opens the camera picker (as MIC/SPK do). Outside
+        /// Studio mode the tile is hidden altogether (<see cref="ApplyRecordingMode"/>); the
+        /// settings-page branch below is the guard for a click that somehow lands anyway.
         /// </summary>
         private void WebcamClicked(object sender, RoutedEventArgs e)
         {
@@ -1222,7 +1242,7 @@ namespace Clowd.UI
 
             UpdateDevicePills();
 
-            if (!_camEnabled && !_settings.EnableComposition)
+            if (!_camEnabled && _settings.Mode != RecordingMode.Studio)
             {
                 // the page's own handler owns the navigation (the toolbar never touches PageManager).
                 SettingsClicked?.Invoke(this, EventArgs.Empty);
@@ -1418,7 +1438,8 @@ namespace Clowd.UI
             // output device to choose (the same reason SpeakerDeviceId is [HiddenOnMacOS]).
             BtnSpeakerDevice.IsVisible = pickable && !OperatingSystem.IsMacOS()
                 && RealDeviceIds(CaptureSource.Speaker).Count > 1;
-            BtnWebcamDevice.IsVisible = pickable && RealDeviceIds(CaptureSource.Webcam).Count > 1;
+            // …and the CAM pill only exists while the CAM tile does (ApplyRecordingMode).
+            BtnWebcamDevice.IsVisible = pickable && BtnWebcam.IsVisible && RealDeviceIds(CaptureSource.Webcam).Count > 1;
 
             ApplyPillLane();
             UpdatePillPositions();
@@ -1469,9 +1490,9 @@ namespace Clowd.UI
                 changed = true;
             }
 
-            // composition being off is not a missing device — the camera rows are merely gated,
-            // and the user's tick is still what they will get back when they switch it on again.
-            if (_settings.CaptureWebcam && _settings.EnableComposition && !HasDevice(CaptureSource.Webcam))
+            // Instant mode is not a missing device — the camera rows are merely hidden, and the
+            // user's tick is still what they will get back when they switch to Studio again.
+            if (_settings.CaptureWebcam && _settings.Mode == RecordingMode.Studio && !HasDevice(CaptureSource.Webcam))
             {
                 _settings.CaptureWebcam = false;
                 changed = true;
