@@ -167,6 +167,27 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
+        public void The_crop_source_selector_is_hidden_when_the_sidecar_file_is_gone()
+        {
+            // a project that names a sidecar the disk no longer has: the session directory was
+            // pruned, or the project was copied away from it. Reading it must not throw and must
+            // not offer a picker with nothing behind it — the same nothing as a recording that
+            // never had one.
+            var missing = Path.Combine(Path.GetTempPath(),
+                "clowd-window-capture-missing-" + Guid.NewGuid().ToString("N") + ".jsonl");
+            Assert.False(File.Exists(missing));
+
+            var fx = NewInspector(missing);
+            fx.Session.Select(fx.Screen.Id);
+
+            Assert.True(fx.Vm.ShowCrop);
+            Assert.False(fx.Vm.ShowCropSource);
+            Assert.True(fx.Vm.CropManual);
+            Assert.True(fx.Vm.ShowCropInsets);
+            Assert.Empty(fx.Vm.CropWindowOptions);
+        }
+
+        [Fact]
         public void The_crop_source_selector_is_hidden_on_a_webcam_row()
         {
             WithWindowCapture(TwoWindows(), fx =>
