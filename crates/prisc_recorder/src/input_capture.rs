@@ -12,11 +12,13 @@
 //! sends the resulting [`SpriteEvent`] alongside the frame row; PNG/base64
 //! encoding, content-hash dedupe and `cursor_image` row emission all live on
 //! the writer thread, which guarantees a sprite's row always precedes the
-//! first frame row referencing it.
+//! first frame row referencing it. A cursor_image row may precede the first
+//! frame row: a skipped pre-t0 frame can supply the sprite that a surviving
+//! frame's Unchanged event relies on.
 //!
-//! Timebase: `t` is milliseconds relative to the first frame time sampled
-//! after `OutputStarted` (`t0`), minus the accumulated pause offset — the
-//! same clock and pause adjustment the output applies to its PTS. The offset
+//! Timebase: `t` is milliseconds relative to the shared packet-anchored
+//! recording origin (`t0`), minus the pause offset accumulated since t0. Startup
+//! observations wait on the writer until the origin is known. The offset
 //! is read from the track-0 *video encoder* (`obs_encoder_get_pause_offset`),
 //! NOT `obs_output_get_pause_offset`: this recorder's outputs (ffmpeg_muxer /
 //! mp4_output) are OBS_OUTPUT_ENCODED, so pause bookkeeping lives on the
@@ -32,17 +34,18 @@
 //! firing after `output.stop()`, so without disarming rows would keep landing
 //! after the final flush) and then flushes.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::ffi::c_void;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
 use serde::Serialize;
 
 use crate::cursor_sprite::{self, SpriteEvent};
+use crate::frame_clock::FrameClock;
 use crate::input_hook::{InputHook, RawEvent, RawEventKind};
 use crate::platform::{self, MonitorInfo};
 use crate::region::Rect;
@@ -50,6 +53,7 @@ use crate::region::Rect;
 /// Bound on waiting for the writer thread to acknowledge a flush — a wedged
 /// disk must not stall the recorder's exit path indefinitely.
 const FLUSH_ACK_TIMEOUT: Duration = Duration::from_secs(5);
+const STARTUP_BUFFER_CAP: usize = 1024;
 
 // ---------------------------------------------------------------------------
 // Wire rows (DESIGN §1 — field names and order are the contract)
@@ -216,11 +220,37 @@ enum WriterMsg {
     /// together so the writer can resolve the row's `ci` against sprite state
     /// that is exactly as old as the row itself.
     Frame {
+        frame_ns: u64,
+        pause_offset: u64,
         row: FrameRow,
         sprite: SpriteEvent,
     },
     Event(RawEvent),
     Flush(mpsc::Sender<()>),
+}
+
+/// Events snapshot their pause eligibility and offset on initial writer
+/// receipt, as before. Draining startup rows must not query a later pause state.
+enum PendingRow {
+    Frame {
+        frame_ns: u64,
+        pause_offset: u64,
+        row: FrameRow,
+        sprite: SpriteEvent,
+    },
+    Event {
+        event: RawEvent,
+        pause_offset: u64,
+    },
+}
+
+impl PendingRow {
+    fn frame_time(&self) -> Option<(u64, u64)> {
+        match self {
+            Self::Frame { frame_ns, pause_offset, .. } => Some((*frame_ns, *pause_offset)),
+            Self::Event { .. } => None,
+        }
+    }
 }
 
 /// Cap on distinct sprites recorded per session — a pathological cursor
@@ -342,130 +372,179 @@ fn write_frame(
     }
 }
 
-/// Serializes rows to the JSONL file. Event `t` mapping happens here (the
-/// hook thread must not query the output): `t0` via the shared atomic, pause
-/// state/offset read straight off the output pointer — sound for the same
-/// reason as the status thread's counter reads (the process always exits via
-/// `exit_process` while the output is alive). Events are gated on `armed`
-/// (set on `OutputStarted`, cleared by `close`), so nothing lands after the
-/// final flush and the writer never touches the output's encoder while a
-/// pre-start configure may still be swapping it.
+/// Maps buffered observations only after the shared origin is known. Sprite
+/// transitions still run for pre-origin frames: a surviving Unchanged event
+/// may depend on pixels captured by a frame which the encoder skipped.
+fn drain_pending(
+    pending: &mut VecDeque<PendingRow>,
+    clock: &FrameClock,
+    sprites: &mut SpriteCache,
+    canvas_scale: f64,
+    closing: bool,
+    write_line: &mut impl FnMut(&str),
+) {
+    if clock.t0() == 0 {
+        let ticks: Vec<(u64, u64)> = pending.iter().filter_map(PendingRow::frame_time).collect();
+        // Closing permits the bounded fallback even without a preceding tick.
+        let _ = clock.try_resolve(&ticks, closing || pending.len() >= STARTUP_BUFFER_CAP);
+        if closing {
+            let _ = clock.resolve_for_close(ticks.first().copied());
+        }
+    }
+    let t0 = clock.t0();
+    if t0 == 0 {
+        return;
+    }
+    let base = clock.base_offset();
+    while let Some(row) = pending.pop_front() {
+        match row {
+            PendingRow::Frame {
+                frame_ns,
+                pause_offset,
+                mut row,
+                sprite,
+            } => {
+                if let Some(t) = map_t(frame_ns, t0, pause_offset.saturating_sub(base)) {
+                    row.t = t;
+                    write_frame(row, sprite, sprites, write_line);
+                } else {
+                    sprites.apply(sprite, write_line);
+                }
+            }
+            PendingRow::Event { event, pause_offset } => {
+                if let Some(t) = map_t(event.t_ns, t0, pause_offset.saturating_sub(base)) {
+                    if let Ok(line) =
+                        serde_json::to_string(&event_row(t, event.kind, canvas_scale))
+                    {
+                        write_line(&line);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// The hook thread only sends. Its existing pause gate and encoder-offset
+/// read happen on initial writer receipt, never when a buffered event drains.
+/// Frames already carry the pause offset sampled on their graphics tick.
 fn writer_loop(
     file: std::fs::File,
     rx: mpsc::Receiver<WriterMsg>,
     armed: std::sync::Arc<AtomicBool>,
-    t0_ns: std::sync::Arc<AtomicU64>,
+    clock: std::sync::Arc<FrameClock>,
     output_addr: usize,
     canvas_scale: f64,
 ) {
     let output = output_addr as *mut obs_sys::obs_output_t;
     let mut w = BufWriter::new(file);
     let mut sprites = SpriteCache::new();
+    let mut pending = VecDeque::new();
     loop {
-        // Block for the next message, then drain the backlog and flush once
-        // the channel runs dry: at most one small flush per frame, and the
-        // on-disk file stays current — a crash loses at most the in-flight
-        // frame (the mp4 side is crash-resilient, the sidecar should be too).
-        let msg = match rx.recv() {
-            Ok(m) => m,
-            Err(_) => break,
+        let (msg, disconnected) = match rx.recv() {
+            Ok(msg) => (msg, false),
+            Err(_) => {
+                let (ack, _) = mpsc::channel();
+                (WriterMsg::Flush(ack), true)
+            }
         };
         handle_msg(
             &mut w,
             msg,
             &mut sprites,
             &armed,
-            &t0_ns,
+            &clock,
             output,
             canvas_scale,
+            &mut pending,
         );
-        loop {
-            match rx.try_recv() {
-                Ok(m) => handle_msg(
-                    &mut w,
-                    m,
-                    &mut sprites,
-                    &armed,
-                    &t0_ns,
-                    output,
-                    canvas_scale,
-                ),
-                Err(mpsc::TryRecvError::Empty) => {
-                    let _ = w.flush();
-                    break;
-                }
-                Err(mpsc::TryRecvError::Disconnected) => {
-                    let _ = w.flush();
-                    return;
-                }
-            }
+        if disconnected {
+            break;
         }
+        // Preserve the existing batching: one flush after the channel's
+        // current backlog, rather than one flush per hook event.
+        while let Ok(msg) = rx.try_recv() {
+            handle_msg(
+                &mut w,
+                msg,
+                &mut sprites,
+                &armed,
+                &clock,
+                output,
+                canvas_scale,
+                &mut pending,
+            );
+        }
+        let _ = w.flush();
     }
-    // All senders gone (never in a normal session — exit paths flush and then
-    // exit the process); make the tail durable anyway.
     let _ = w.flush();
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_msg(
     w: &mut BufWriter<std::fs::File>,
     msg: WriterMsg,
     sprites: &mut SpriteCache,
     armed: &AtomicBool,
-    t0_ns: &AtomicU64,
+    clock: &FrameClock,
     output: *mut obs_sys::obs_output_t,
     canvas_scale: f64,
+    pending: &mut VecDeque<PendingRow>,
 ) {
     let mut write_line = |line: &str| {
         if let Err(e) = writeln!(w, "{line}") {
             eprintln!("Warning: input-capture write failed: {e}");
         }
     };
-    match msg {
+    let row = match msg {
         WriterMsg::Header(h) => {
             if let Ok(line) = serde_json::to_string(&h) {
                 write_line(&line);
             }
+            None
         }
-        WriterMsg::Frame { row, sprite } => write_frame(row, sprite, sprites, &mut write_line),
-        WriterMsg::Event(ev) => {
-            // Dropped before start and after close (the hooks fire the whole
-            // time), and while paused (frame rows are gated on the graphics
-            // thread; events are gated here). The armed gate also keeps the
-            // encoder-pointer read below away from pre-start configure swaps.
+        WriterMsg::Frame { frame_ns, pause_offset, row, sprite } => {
+            Some(PendingRow::Frame { frame_ns, pause_offset, row, sprite })
+        }
+        WriterMsg::Event(event) => {
+            // Evaluate once, before startup buffering. Rechecking on drain
+            // would drop pre-pause edges or apply a later pause's offset.
             if !armed.load(Ordering::Acquire) || unsafe { obs_sys::obs_output_paused(output) } {
                 return;
             }
-            let offset = unsafe { pause_offset_ns(output) };
-            if let Some(t) = map_t(ev.t_ns, t0_ns.load(Ordering::Acquire), offset) {
-                if let Ok(line) = serde_json::to_string(&event_row(t, ev.kind, canvas_scale)) {
-                    write_line(&line);
-                }
-            }
+            Some(PendingRow::Event {
+                event,
+                pause_offset: unsafe { pause_offset_ns(output) },
+            })
         }
         WriterMsg::Flush(ack) => {
+            drain_pending(pending, clock, sprites, canvas_scale, true, &mut write_line);
             if let Err(e) = w.flush() {
                 eprintln!("Warning: input-capture flush failed: {e}");
             }
             let _ = ack.send(());
+            return;
         }
+    };
+    if let Some(row) = row {
+        if pending.len() >= STARTUP_BUFFER_CAP {
+            pending.pop_front();
+        }
+        pending.push_back(row);
     }
+    drain_pending(pending, clock, sprites, canvas_scale, false, &mut write_line);
 }
 
 // ---------------------------------------------------------------------------
 // Tick callback (graphics thread)
 // ---------------------------------------------------------------------------
 
-/// Everything the tick callback touches. Boxed and handed to libobs as the
-/// callback's `param` (`tracker.rs` pattern); the atomics are shared with the
-/// run loop (`armed`) and the writer thread (`t0_ns`).
+/// Everything the tick callback touches. The stable Box remains alive until
+/// close has removed the callback and the writer has acknowledged its flush.
 struct TickState {
-    /// Set by `on_output_started`, cleared by `close`: rows only flow while
-    /// armed. Shared with the writer thread, which gates event rows on it.
+    /// Set immediately before output.start(), cleared by close.
     armed: std::sync::Arc<AtomicBool>,
-    /// First frame time sampled after arming; 0 = not started (sentinel —
-    /// `obs_get_video_frame_time` is a boot-relative monotonic clock, never 0
-    /// mid-session).
-    t0_ns: std::sync::Arc<AtomicU64>,
+    /// close and Drop may both run; remove the callback only once.
+    registered: AtomicBool,
     /// `*mut obs_output_t` as usize (pause state/offset reads).
     output: usize,
     /// Capture-space units per canvas pixel, applied to the row coordinates
@@ -480,25 +559,23 @@ struct TickState {
 /// Only sampling, cursor-sprite rasterization and a channel send; never file
 /// I/O or image encoding.
 unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        sample_tick(param);
+    }));
+}
+
+unsafe fn sample_tick(param: *mut c_void) {
     let state = &*(param as *const TickState);
 
     if !state.armed.load(Ordering::Acquire) {
         return;
     }
     let frame_ns = obs_sys::obs_get_video_frame_time();
-    if state.t0_ns.load(Ordering::Acquire) == 0 {
-        // First tick after OutputStarted: this frame is t = 0.
-        state.t0_ns.store(frame_ns, Ordering::Release);
-    }
-
     let output = state.output as *mut obs_sys::obs_output_t;
     if obs_sys::obs_output_paused(output) {
         return;
     }
     let offset = pause_offset_ns(output);
-    let Some(t) = map_t(frame_ns, state.t0_ns.load(Ordering::Acquire), offset) else {
-        return;
-    };
 
     // ONE `get_cursor_state` snapshot serves the frame row's position/kind
     // AND the sprite rasterization — the DESIGN §1 consistency contract: the
@@ -509,9 +586,12 @@ unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
     let sprite = platform::take_cursor_sprite(&cursor);
     let (buttons, keys) = state.hook.snapshot();
     let _ = state.tx.send(WriterMsg::Frame {
+        frame_ns,
+        pause_offset: offset,
         row: FrameRow {
             ty: "frame",
-            t,
+            // Resolved on the writer after the packet clock is known.
+            t: 0.0,
             x: to_canvas(cursor.x, state.canvas_scale),
             y: to_canvas(cursor.y, state.canvas_scale),
             b: buttons,
@@ -561,6 +641,7 @@ impl InputCapture {
         canvas_scale: f64,
         canvas: (u32, u32),
         output: *mut obs_sys::obs_output_t,
+        clock: std::sync::Arc<FrameClock>,
     ) -> Result<InputCapture, String> {
         // Prime the cursor classifier from the calling (main) thread. The first
         // sample is the expensive one — on macOS it bootstraps AppKit and hashes
@@ -573,15 +654,14 @@ impl InputCapture {
 
         let (tx, rx) = mpsc::channel::<WriterMsg>();
         let armed = std::sync::Arc::new(AtomicBool::new(false));
-        let t0_ns = std::sync::Arc::new(AtomicU64::new(0));
 
         let writer_armed = armed.clone();
-        let writer_t0 = t0_ns.clone();
+        let writer_clock = clock;
         let output_addr = output as usize;
         std::thread::Builder::new()
             .name("input-capture-writer".to_string())
             .spawn(move || {
-                writer_loop(file, rx, writer_armed, writer_t0, output_addr, canvas_scale)
+                writer_loop(file, rx, writer_armed, writer_clock, output_addr, canvas_scale)
             })
             .map_err(|e| format!("failed to spawn the input-capture writer: {e}"))?;
 
@@ -607,7 +687,7 @@ impl InputCapture {
 
         let state = Box::new(TickState {
             armed,
-            t0_ns,
+            registered: AtomicBool::new(true),
             output: output_addr,
             canvas_scale,
             tx: tx.clone(),
@@ -634,10 +714,8 @@ impl InputCapture {
         &self.path
     }
 
-    /// Called from the run loop on `OutputStarted`: writes the header line
-    /// (with the *final* fps — a pre-start configure may have changed the one
-    /// construction saw) and arms the tick callback, whose next tick defines
-    /// `t0`.
+    /// Called immediately before output.start(): the final fps is now fixed,
+    /// and sampling must precede the first encoded frame, not its start signal.
     pub fn on_output_started(&self, fps_num: u32) {
         let _ = self.tx.send(WriterMsg::Header(HeaderLine {
             ty: "header",
@@ -661,15 +739,15 @@ impl InputCapture {
     /// `emit_stopped_recording` — exit paths skip Drop, and losing the tail
     /// of the sidecar silently desyncs the editor overlays.
     ///
-    /// Disarm-then-flush ordering matters: the graphics thread keeps ticking
-    /// and the hooks keep firing after `output.stop()`, so without the
-    /// disarm, rows would keep flowing while the parent (told the file is
-    /// final by `stopped_recording`) reads it — and `exit_process` could kill
-    /// the writer mid-write, leaving a torn trailing line. After the disarm,
-    /// every row already in the channel is drained and flushed by the ack'd
-    /// flush (channel FIFO), and no new row can follow it onto disk.
+    /// Remove the tick callback before the flush barrier: an in-flight tick
+    /// may already have passed the arm gate. Hook events arriving afterwards
+    /// are rejected by the writer's arm gate.
     pub fn close(&self) {
         self.state.armed.store(false, Ordering::Release);
+        if self.state.registered.swap(false, Ordering::AcqRel) {
+            let param = &*self.state as *const TickState as *mut c_void;
+            unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
+        }
         self.flush();
     }
 
@@ -691,9 +769,7 @@ impl InputCapture {
 
 impl Drop for InputCapture {
     fn drop(&mut self) {
-        // Deregister before the Box (and the hooks inside it) goes away.
-        let param = &*self.state as *const TickState as *mut c_void;
-        unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
+        self.close();
     }
 }
 
@@ -701,6 +777,87 @@ impl Drop for InputCapture {
 mod tests {
     use super::*;
     use crate::input_hook::{BTN_LEFT, BTN_RIGHT};
+
+    #[test]
+    fn startup_drain_preserves_sprite_transitions_from_skipped_frames() {
+        let clock = FrameClock::new();
+        let mut pending = VecDeque::new();
+        pending.push_back(PendingRow::Frame {
+            frame_ns: 100,
+            pause_offset: 0,
+            row: test_frame(0.0),
+            sprite: SpriteEvent::Candidate(test_sprite(9)),
+        });
+        pending.push_back(PendingRow::Event {
+            event: RawEvent {
+                t_ns: 1_000_200,
+                kind: RawEventKind::KeyUp { vk: 17 },
+            },
+            pause_offset: 500_000,
+        });
+        pending.push_back(PendingRow::Frame {
+            frame_ns: 2_000_200,
+            pause_offset: 500_000,
+            row: test_frame(0.0),
+            sprite: SpriteEvent::Unchanged,
+        });
+        let mut sprites = SpriteCache::new();
+        let mut lines = Vec::new();
+        drain_pending(&mut pending, &clock, &mut sprites, 1.0, false, &mut sink(&mut lines));
+        assert_eq!(pending.len(), 3);
+        assert!(lines.is_empty());
+
+        clock.resolve_for_close(Some((200, 0)));
+        drain_pending(&mut pending, &clock, &mut sprites, 1.0, false, &mut sink(&mut lines));
+        assert!(pending.is_empty());
+        assert_eq!(lines.len(), 3);
+        assert!(lines[0].starts_with(r#"{"type":"cursor_image","id":1,"#));
+        assert_eq!(lines[1], r#"{"type":"event","t":0.5,"kind":"ku","vk":17}"#);
+        assert_eq!(
+            lines[2],
+            r#"{"type":"frame","t":1.5,"x":0,"y":0,"b":0,"c":"arrow","ci":1}"#
+        );
+    }
+
+    #[test]
+    fn startup_drain_subtracts_only_pauses_after_the_origin() {
+        let clock = FrameClock::new();
+        let t0 = 3_000_000_000;
+        let base = 2_000_000_000;
+        let mut pending = VecDeque::new();
+        pending.push_back(PendingRow::Frame {
+            frame_ns: t0,
+            pause_offset: base,
+            row: test_frame(0.0),
+            sprite: SpriteEvent::Hidden,
+        });
+        pending.push_back(PendingRow::Event {
+            event: RawEvent {
+                t_ns: t0 + 250_000_000,
+                kind: RawEventKind::KeyUp { vk: 17 },
+            },
+            pause_offset: base,
+        });
+        pending.push_back(PendingRow::Frame {
+            frame_ns: t0 + 3_000_000_000,
+            pause_offset: base + 2_000_000_000,
+            row: test_frame(0.0),
+            sprite: SpriteEvent::Unchanged,
+        });
+        clock.resolve_for_close(pending.front().and_then(PendingRow::frame_time));
+        let mut sprites = SpriteCache::new();
+        let mut lines = Vec::new();
+        drain_pending(&mut pending, &clock, &mut sprites, 1.0, false, &mut sink(&mut lines));
+        assert!(pending.is_empty());
+        assert_eq!(
+            lines,
+            vec![
+                r#"{"type":"frame","t":0.0,"x":0,"y":0,"b":0,"c":"arrow"}"#,
+                r#"{"type":"event","t":250.0,"kind":"ku","vk":17}"#,
+                r#"{"type":"frame","t":1000.0,"x":0,"y":0,"b":0,"c":"arrow"}"#,
+            ]
+        );
+    }
 
     // -- map_t ---------------------------------------------------------------
 

@@ -28,6 +28,7 @@ use obs::volmeter::ObsVolmeter;
 use crate::cli::{Cli, MAX_AUDIO_SOURCES};
 use crate::commands::{self, Command};
 use crate::encoder_config::{self, EncoderConfig};
+use crate::frame_clock::{FrameClock, FrameClockCallback};
 use crate::input_capture::InputCapture;
 use crate::platform;
 use crate::region::{self, Rect};
@@ -198,6 +199,10 @@ fn apply_speaker_compensation(sources: &[ObsSource], devices: &[String]) {
 }
 
 pub struct Recorder {
+    // Unregister before output is released. The registration itself owns an
+    // Arc, and both sidecars retain the clock while their workers drain.
+    _frame_clock_callback: Option<FrameClockCallback>,
+    frame_clock: Arc<FrameClock>,
     // ---- Sidecars first: DECLARATION ORDER IS DROP ORDER. ----
     // Both hold a raw `*mut obs_output_t` that background threads (the
     // input-capture writer, the window-capture poller) dereference for the
@@ -590,12 +595,22 @@ impl Recorder {
             output.set_audio_encoder(Some(encoder), idx);
         }
 
-        // Input-capture sidecar (--input-capture): installs the global input
-        // hooks and a tick callback now, but no rows flow until the run loop
-        // arms it on OutputStarted. Needs the output pointer (pause state /
-        // pause offset), hence built after the output. No view or encoder of
-        // its own, so — unlike the webcam — it has no obs_reset_video
-        // interaction (tick callbacks survive a video reset).
+        // Register before output.start(), so even the first surviving screen
+        // packet can calibrate the sidecars. Pre-start configure replaces
+        // encoders/video mixes, not this output; the callback reads the actual
+        // packet encoder, and start_output resets the clock with the final fps.
+        let frame_clock = Arc::new(FrameClock::new());
+        let frame_clock_callback = if cli.input_capture.is_some() || cli.window_capture.is_some() {
+            Some(unsafe {
+                FrameClockCallback::register(output.as_ptr(), frame_clock.clone())
+            })
+        } else {
+            None
+        };
+
+        // Install hooks and ticks now, but arm only immediately before
+        // output.start(). Neither sidecar owns a view or encoder, and tick
+        // registrations survive pre-start video resets.
         let input_capture = match cli.input_capture {
             Some(ref path) => {
                 match InputCapture::new(
@@ -605,6 +620,7 @@ impl Recorder {
                     plan.canvas_scale,
                     plan.canvas,
                     output.as_ptr(),
+                    frame_clock.clone(),
                 ) {
                     Ok(ic) => Some(ic),
                     Err(e) => fail(format_args!("Failed to start input capture: {e}")),
@@ -624,6 +640,7 @@ impl Recorder {
                     plan.canvas_scale,
                     plan.canvas,
                     output.as_ptr(),
+                    frame_clock.clone(),
                 ) {
                     Ok(wc) => Some(wc),
                     Err(e) => fail(format_args!("Failed to start window capture: {e}")),
@@ -650,6 +667,8 @@ impl Recorder {
             });
 
         Recorder {
+            _frame_clock_callback: frame_clock_callback,
+            frame_clock,
             output,
             speakers: speakers_built.sources,
             speaker_devices: speakers_built.devices,
@@ -757,15 +776,8 @@ impl Recorder {
                 Command::OutputStarted => {
                     if !started {
                         started = true;
-                        // Arm the sidecar first: its t0 is the frame time of
-                        // the next tick, which should sit as close to the
-                        // first encoded frame as possible.
-                        if let Some(ref ic) = self.input_capture {
-                            ic.on_output_started(self.settings.fps);
-                        }
-                        if let Some(ref wc) = self.window_capture {
-                            wc.on_output_started(self.settings.fps);
-                        }
+                        // Sidecars were armed before output.start(), so their
+                        // startup observations already cover encoder activation.
                         let mut started_msg = serde_json::json!({
                             "type": "started_recording",
                             "tracks": self.tracks_json(),
@@ -1366,6 +1378,13 @@ impl Recorder {
         status_stop: &Arc<AtomicBool>,
         levels_handle: &mut Option<std::thread::JoinHandle<()>>,
     ) {
+        self.frame_clock.reset(self.settings.fps);
+        if let Some(ref ic) = self.input_capture {
+            ic.on_output_started(self.settings.fps);
+        }
+        if let Some(ref wc) = self.window_capture {
+            wc.on_output_started(self.settings.fps);
+        }
         if let Err(e) = self.output.start() {
             eprintln!("Failed to start recording: {e}");
             status_stop.store(true, Ordering::Relaxed);

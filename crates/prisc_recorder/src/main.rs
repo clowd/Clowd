@@ -3,6 +3,7 @@ mod cli;
 mod commands;
 mod cursor_sprite;
 mod encoder_config;
+mod frame_clock;
 mod input_capture;
 mod input_hook;
 mod platform;

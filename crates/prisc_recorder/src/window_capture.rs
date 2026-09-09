@@ -3,20 +3,16 @@
 //! relative to that region. Mirrors `--input-capture`: same session-fixed CLI
 //! shape, same timebase, same arm/close lifetime, its own file.
 //!
-//! Threading: one dedicated poll thread enumerates windows, diffs them against
-//! the previous sample and writes the resulting rows itself. Unlike the
-//! input-capture writer thread this needs no channel — the sampler is already
-//! off the graphics thread, so blocking it on file I/O only delays the next
-//! window sample. A tiny libobs tick callback publishes the current video
-//! frame time into an atomic so the poll thread never reads libobs state
-//! itself (`tracker.rs` / `input_capture.rs` callback pattern).
+//! Threading: each unpaused graphics tick sends its frame time and encoder
+//! pause offset to the worker. The worker coalesces waiting triggers, then
+//! enumerates, diffs and writes. Removing an independent sleep cadence avoids
+//! poll-phase drift; enumeration and file I/O remain off the graphics thread.
+//! A delayed worker still observes the desktop after its triggering tick.
 //!
-//! Timebase: identical to the input-capture sidecar — `t` is milliseconds
-//! since the first frame time sampled after `OutputStarted`, minus the
-//! track-0 video encoder's accumulated pause offset — so rows in the two
-//! files line up without any cross-referencing. Rows are dropped while the
-//! output is paused; a window that moved during a pause reports its new rect
-//! on the first poll after the resume.
+//! Timebase: identical to input capture — `t` is milliseconds since their
+//! shared packet-anchored origin, minus the sampled track-0 encoder pause
+//! offset accumulated since that origin. Startup snapshots wait for the origin. Windows
+//! moved during a pause are observed on the first serviced unpaused tick.
 //!
 //! Emission is change-driven, not per frame: a window gets a row when it
 //! enters the region, whenever its rect or z-order changes, and one final
@@ -35,33 +31,24 @@
 //! `emit_stopped_recording`, exactly as it does for the input-capture
 //! sidecar.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::c_void;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use serde::Serialize;
 
+use crate::frame_clock::FrameClock;
 use crate::input_capture::{map_t, to_canvas};
 use crate::platform::{self, WindowInfo};
 use crate::region::Rect;
 
-/// Upper bound on the poll rate. The recording fps sets the cadence (one
-/// sample per encoded frame is all the video can show), but a 120/240 fps
-/// recording does not justify enumerating every window that often — window
-/// motion is driven by the user's hand, not the encoder.
-const MAX_POLL_HZ: u32 = 60;
-
-/// Cadence before the recording starts, while the poll loop is only checking
-/// its arm flag. Deliberately short: it is also the worst-case delay between
-/// `OutputStarted` and the first window sample, and at 100 ms a 30 fps
-/// recording would open with three frames of no geometry at all. One atomic
-/// load every 5 ms costs nothing measurable, and it bounds the `Drop` join
-/// below by the same amount.
-const IDLE_POLL: Duration = Duration::from_millis(5);
+/// Waiting for packet timing must not grow startup memory indefinitely.
+const STARTUP_BUFFER_CAP: usize = 256;
+const FLUSH_ACK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Cap on distinct windows given a wire id in one session. A pathological
 /// window-churning app must not grow the identity map (or the sidecar)
@@ -377,43 +364,45 @@ fn write_info(id: u32, title: &str, app: &str, pid: u32, write_line: &mut impl F
 // Shared state
 // ---------------------------------------------------------------------------
 
-/// Everything the tick callback and the poll thread share. Boxed and handed to
-/// libobs as the tick callback's `param` (`tracker.rs` pattern).
+enum WorkerMsg {
+    Tick(u64, u64),
+    Close(mpsc::Sender<()>),
+}
+
+struct Snapshot {
+    frame_ns: u64,
+    pause_offset: u64,
+    windows: Vec<WindowInfo>,
+}
+
+/// The Arc allocation is the stable callback parameter. The worker owns the
+/// receiver and all enumeration/tracker state.
 struct Shared {
-    /// Set by `on_output_started`, cleared by `close`: rows only flow while
-    /// armed.
     armed: AtomicBool,
-    /// Set once the poll loop should exit (`close`).
-    stopped: AtomicBool,
-    /// First video frame time sampled after arming; 0 = not started (sentinel
-    /// — `obs_get_video_frame_time` is a boot-relative monotonic clock and is
-    /// never 0 mid-session).
-    t0_ns: AtomicU64,
-    /// The most recent video frame time, published by the tick callback so
-    /// the poll thread never reads libobs video state off the graphics
-    /// thread. Window samples are therefore stamped at frame granularity —
-    /// the only granularity the recording can show them at.
-    frame_ns: AtomicU64,
-    /// Poll period in milliseconds, derived from the final fps at arm time.
-    poll_ms: AtomicU32,
-    /// `*mut obs_output_t` as usize (pause state / pause offset reads).
+    closed: AtomicBool,
+    registered: AtomicBool,
+    clock: Arc<FrameClock>,
+    tx: mpsc::Sender<WorkerMsg>,
+    /// `*mut obs_output_t` as usize; output outlives callback and worker.
     output: usize,
-    /// The sidecar file, shared with `flush` on the caller's thread.
     file: Mutex<BufWriter<std::fs::File>>,
 }
 
-/// libobs tick callback — once per rendered frame on the graphics thread. Two
-/// atomic stores and nothing else; all window work happens on the poll thread.
+/// Only clock/pause reads and a channel send on the graphics thread.
 unsafe extern "C" fn tick(param: *mut c_void, _seconds: f32) {
-    let shared = &*(param as *const Shared);
-    if !shared.armed.load(Ordering::Acquire) {
-        return;
-    }
-    let frame_ns = obs_sys::obs_get_video_frame_time();
-    shared.frame_ns.store(frame_ns, Ordering::Release);
-    let _ = shared
-        .t0_ns
-        .compare_exchange(0, frame_ns, Ordering::AcqRel, Ordering::Acquire);
+    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let shared = &*(param as *const Shared);
+        if !shared.armed.load(Ordering::Acquire) {
+            return;
+        }
+        let output = shared.output as *mut obs_sys::obs_output_t;
+        if obs_sys::obs_output_paused(output) {
+            return;
+        }
+        let frame_ns = obs_sys::obs_get_video_frame_time();
+        let offset = pause_offset_ns(output);
+        let _ = shared.tx.send(WorkerMsg::Tick(frame_ns, offset));
+    }));
 }
 
 /// Accumulated pause time (ns) for this recorder's output, read off the
@@ -429,23 +418,26 @@ unsafe fn pause_offset_ns(output: *mut obs_sys::obs_output_t) -> u64 {
     obs_sys::obs_encoder_get_pause_offset(encoder)
 }
 
-/// Samples the desktop, filters to the capture region, and writes whatever
-/// changed.
-fn poll_once(shared: &Shared, tracker: &mut Tracker, region: Rect, canvas_scale: f64) {
-    let output = shared.output as *mut obs_sys::obs_output_t;
-    if unsafe { obs_sys::obs_output_paused(output) } {
-        return;
-    }
-    // Frame time before pause offset: a pause landing between the two reads
-    // then yields an offset that is, if anything, too *large*, so `t` never
-    // runs ahead of the recording. Sub-frame either way.
-    let frame_ns = shared.frame_ns.load(Ordering::Acquire);
-    let offset = unsafe { pause_offset_ns(output) };
-    let Some(t) = map_t(frame_ns, shared.t0_ns.load(Ordering::Acquire), offset) else {
+/// Apply only surviving snapshots. A pre-origin snapshot must not update the
+/// tracker, or unchanged geometry could disappear from the opening rows.
+fn write_snapshot(
+    shared: &Shared,
+    tracker: &mut Tracker,
+    snapshot: Snapshot,
+    region: Rect,
+    canvas_scale: f64,
+) {
+    let t0 = shared.clock.t0();
+    let base = shared.clock.base_offset();
+    let Some(t) = map_t(
+        snapshot.frame_ns,
+        t0,
+        snapshot.pause_offset.saturating_sub(base),
+    ) else {
         return;
     };
 
-    let windows: Vec<(u64, u32, Geometry, String, String)> = platform::enumerate_windows()
+    let windows: Vec<(u64, u32, Geometry, String, String)> = snapshot.windows
         .into_iter()
         .filter(|w: &WindowInfo| intersects((w.x, w.y, w.w, w.h), region))
         .map(|w| {
@@ -462,14 +454,8 @@ fn poll_once(shared: &Shared, tracker: &mut Tracker, region: Rect, canvas_scale:
     let Ok(mut file) = shared.file.lock() else {
         return; // a poisoned lock means a previous writer panicked mid-row
     };
-    // Re-checked under the lock, which `close` also takes: either this poll
-    // wrote first and close's flush follows it, or close disarmed first and
-    // this poll writes nothing. Without it a poll that cleared the gate just
-    // before `close` could append rows after the parent was told the file was
-    // final.
-    if !shared.armed.load(Ordering::Acquire) {
-        return;
-    }
+    // Accepted snapshots also drain after disarming. close removes the tick
+    // producer and places a barrier after its last message before waiting.
     let mut wrote = false;
     let mut failed = false;
     {
@@ -499,17 +485,123 @@ fn poll_once(shared: &Shared, tracker: &mut Tracker, region: Rect, canvas_scale:
     }
 }
 
-fn poll_loop(shared: Arc<Shared>, region: Rect, canvas_scale: f64) {
-    let mut tracker = Tracker::new();
-    while !shared.stopped.load(Ordering::Acquire) {
-        if !shared.armed.load(Ordering::Acquire) {
-            std::thread::sleep(IDLE_POLL);
-            continue;
+/// Coalescing may skip observations, but must not skip startup clock history.
+fn remember_startup_tick(
+    clock: &FrameClock,
+    startup_ticks: &mut Vec<(u64, u64)>,
+    tick: (u64, u64),
+) {
+    if clock.t0() == 0 {
+        if startup_ticks.len() >= STARTUP_BUFFER_CAP {
+            startup_ticks.remove(0);
         }
-        poll_once(&shared, &mut tracker, region, canvas_scale);
-        std::thread::sleep(Duration::from_millis(
-            shared.poll_ms.load(Ordering::Acquire) as u64,
-        ));
+        startup_ticks.push(tick);
+    }
+}
+
+fn drain_snapshots(
+    shared: &Shared,
+    tracker: &mut Tracker,
+    pending: &mut VecDeque<Snapshot>,
+    startup_ticks: &mut Vec<(u64, u64)>,
+    region: Rect,
+    canvas_scale: f64,
+    closing: bool,
+) {
+    if shared.clock.t0() == 0 {
+        // Closing permits the bounded fallback even without a preceding tick.
+        let _ = shared.clock.try_resolve(
+            startup_ticks,
+            closing || startup_ticks.len() >= STARTUP_BUFFER_CAP,
+        );
+        if closing {
+            let _ = shared
+                .clock
+                .resolve_for_close(startup_ticks.first().copied());
+        }
+    }
+    if shared.clock.t0() != 0 {
+        startup_ticks.clear();
+        while let Some(snapshot) = pending.pop_front() {
+            write_snapshot(shared, tracker, snapshot, region, canvas_scale);
+        }
+    }
+}
+
+fn worker_loop(
+    shared: Arc<Shared>,
+    rx: mpsc::Receiver<WorkerMsg>,
+    region: Rect,
+    canvas_scale: f64,
+) {
+    let mut tracker = Tracker::new();
+    let mut pending = VecDeque::new();
+    let mut startup_ticks: Vec<(u64, u64)> = Vec::new();
+    loop {
+        let received = rx.recv();
+        let mut latest = None;
+        let mut close_ack = None;
+        let mut closing = false;
+        match received {
+            Ok(WorkerMsg::Tick(frame_ns, offset)) => {
+                remember_startup_tick(&shared.clock, &mut startup_ticks, (frame_ns, offset));
+                latest = Some((frame_ns, offset));
+            }
+            Ok(WorkerMsg::Close(ack)) => {
+                close_ack = Some(ack);
+                closing = true;
+            }
+            // Shared retains a sender; Close is the normal termination path.
+            Err(_) => closing = true,
+        }
+        // Never enumerate once for each obsolete queued trigger. Retain its
+        // timestamp and offset together; a later atomic read would mislabel it.
+        if !closing {
+            while let Ok(msg) = rx.try_recv() {
+                match msg {
+                    WorkerMsg::Tick(frame_ns, offset) => {
+                        remember_startup_tick(&shared.clock, &mut startup_ticks, (frame_ns, offset));
+                        latest = Some((frame_ns, offset));
+                    }
+                    WorkerMsg::Close(ack) => {
+                        close_ack = Some(ack);
+                        closing = true;
+                        break;
+                    }
+                }
+            }
+        }
+        if let Some((frame_ns, pause_offset)) = latest {
+            let output = shared.output as *mut obs_sys::obs_output_t;
+            // A pause can arrive while a trigger waits behind a disk write.
+            if !unsafe { obs_sys::obs_output_paused(output) } {
+                pending.push_back(Snapshot {
+                    frame_ns,
+                    pause_offset,
+                    windows: platform::enumerate_windows(),
+                });
+            }
+        }
+        drain_snapshots(
+            &shared,
+            &mut tracker,
+            &mut pending,
+            &mut startup_ticks,
+            region,
+            canvas_scale,
+            closing,
+        );
+        if closing {
+            if let Ok(mut file) = shared.file.lock() {
+                if let Err(e) = file.flush() {
+                    eprintln!("Warning: window-capture flush failed: {e}");
+                }
+            }
+            if let Some(ack) = close_ack {
+                let _ = ack.send(());
+            }
+            return;
+        }
     }
 }
 
@@ -552,25 +644,27 @@ impl WindowCapture {
         canvas_scale: f64,
         canvas: (u32, u32),
         output: *mut obs_sys::obs_output_t,
+        clock: Arc<FrameClock>,
     ) -> Result<WindowCapture, String> {
         let file = std::fs::File::create(path)
             .map_err(|e| format!("failed to create '{}': {e}", path.display()))?;
 
+        let (tx, rx) = mpsc::channel();
         let shared = Arc::new(Shared {
             armed: AtomicBool::new(false),
-            stopped: AtomicBool::new(false),
-            t0_ns: AtomicU64::new(0),
-            frame_ns: AtomicU64::new(0),
-            poll_ms: AtomicU32::new(IDLE_POLL.as_millis() as u32),
+            closed: AtomicBool::new(false),
+            registered: AtomicBool::new(true),
+            clock,
+            tx,
             output: output as usize,
             file: Mutex::new(BufWriter::new(file)),
         });
 
         let poll_shared = shared.clone();
         let poll = std::thread::Builder::new()
-            .name("window-capture-poll".to_string())
-            .spawn(move || poll_loop(poll_shared, region, canvas_scale))
-            .map_err(|e| format!("failed to spawn the window-capture poller: {e}"))?;
+            .name("window-capture-writer".to_string())
+            .spawn(move || worker_loop(poll_shared, rx, region, canvas_scale))
+            .map_err(|e| format!("failed to spawn the window-capture writer: {e}"))?;
 
         let param = Arc::as_ptr(&shared) as *mut c_void;
         unsafe { obs_sys::obs_add_tick_callback(Some(tick), param) };
@@ -592,11 +686,8 @@ impl WindowCapture {
         &self.path
     }
 
-    /// Called from the run loop on `OutputStarted`: writes the header line
-    /// (with the *final* fps — a pre-start configure may have changed the one
-    /// construction saw), sets the poll cadence from it, and arms the
-    /// pipeline. The header is written and flushed before the arm, so it is
-    /// always line 1 no matter when the first poll lands.
+    /// Called immediately before output.start(). Write the final-fps header
+    /// before arming so it precedes every snapshot even on a fast first tick.
     pub fn on_output_started(&self, fps_num: u32) {
         let header = HeaderLine {
             ty: "header",
@@ -620,9 +711,6 @@ impl WindowCapture {
             let _ = file.flush();
         }
 
-        self.shared
-            .poll_ms
-            .store(poll_period_ms(fps_num), Ordering::Release);
         self.shared.armed.store(true, Ordering::Release);
     }
 
@@ -630,46 +718,36 @@ impl WindowCapture {
     /// `emit_stopped_recording` — exit paths skip Drop, and a truncated tail
     /// silently desyncs the editor's window overlays.
     ///
-    /// Disarm-then-flush ordering matters for the same reason it does in
-    /// `input_capture`: the graphics thread keeps ticking and the poll thread
-    /// keeps running after `output.stop()`, so without the disarm rows would
-    /// keep landing while the parent — told the file is final by
-    /// `stopped_recording` — reads it. Once disarmed, at most the poll already
-    /// inside `poll_once` can still write, and the flush below waits on its
-    /// lock.
+    /// Deregistration quiesces a tick that already passed the arm gate. The
+    /// Close message then follows every accepted trigger; the worker drains
+    /// its startup snapshots and flushes before acknowledging it.
     pub fn close(&self) {
         self.shared.armed.store(false, Ordering::Release);
-        self.shared.stopped.store(true, Ordering::Release);
-        if let Ok(mut file) = self.shared.file.lock() {
-            if let Err(e) = file.flush() {
-                eprintln!("Warning: window-capture flush failed: {e}");
-            }
+        if self.shared.registered.swap(false, Ordering::AcqRel) {
+            let param = Arc::as_ptr(&self.shared) as *mut c_void;
+            unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
+        }
+        if self.shared.closed.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let (ack_tx, ack_rx) = mpsc::channel();
+        if self.shared.tx.send(WorkerMsg::Close(ack_tx)).is_err() {
+            return;
+        }
+        if ack_rx.recv_timeout(FLUSH_ACK_TIMEOUT).is_err() {
+            eprintln!(
+                "Warning: the window-capture file did not flush within {FLUSH_ACK_TIMEOUT:?}; it may be incomplete"
+            );
         }
     }
 }
 
-/// Poll period for a recording fps: one sample per encoded frame, capped at
-/// [`MAX_POLL_HZ`] and floored at 1 ms so a degenerate fps cannot spin.
-fn poll_period_ms(fps: u32) -> u32 {
-    let hz = fps.clamp(1, MAX_POLL_HZ);
-    (1000 / hz).max(1)
-}
-
 impl Drop for WindowCapture {
     fn drop(&mut self) {
-        // Deregister first, so the graphics thread stops touching the shared
-        // state the callback points at.
-        let param = Arc::as_ptr(&self.shared) as *mut c_void;
-        unsafe { obs_sys::obs_remove_tick_callback(Some(tick), param) };
-
-        // Then stop AND JOIN the poller, so this returns only once nothing is
-        // still dereferencing the output pointer. Paired with `Recorder`
-        // declaring its sidecar fields above `output`, that guarantees the
-        // thread is gone before the output it reads is released — including
-        // on a panic unwind, which is the only path that reaches Drop at all
-        // (every ordinary exit goes through `exit_process`). Bounded by one
-        // poll period: ≤ 33 ms at 30 fps, 5 ms while disarmed.
-        self.shared.stopped.store(true, Ordering::Release);
+        self.close();
+        // Ordinary exit paths use the bounded close above and exit_process.
+        // Unwinding must join before releasing the output pointer, even if a
+        // slow enumeration or write exceeded close's acknowledgement timeout.
         if let Some(handle) = self.poll.take() {
             let _ = handle.join();
         }
@@ -1036,16 +1114,26 @@ mod tests {
         assert_eq!(tracker.wire_id((0, 1)), Some(1));
     }
 
-    // -- poll cadence --------------------------------------------------------
-
     #[test]
-    fn poll_period_follows_the_fps_up_to_the_cap() {
-        assert_eq!(poll_period_ms(30), 33);
-        assert_eq!(poll_period_ms(60), 16);
-        // Capped: a 120/240 fps recording still polls at 60 Hz.
-        assert_eq!(poll_period_ms(120), 16);
-        assert_eq!(poll_period_ms(240), 16);
-        // A degenerate fps must not produce a zero-length sleep.
-        assert_eq!(poll_period_ms(0), 1000);
+    fn skipping_a_pre_origin_snapshot_preserves_the_opening_geometry() {
+        let mut tracker = Tracker::new();
+        let clock = FrameClock::new();
+        clock.resolve_for_close(Some((200, 0)));
+        let mut lines = Vec::new();
+        for (frame_ns, title) in [(100, "before"), (200, "opening")] {
+            if let Some(t) = map_t(frame_ns, clock.t0(), 0) {
+                lines.extend(sample(
+                    &mut tracker,
+                    t,
+                    &[(0xA, 42, geometry(10, 20), title, "a.exe")],
+                ));
+            }
+        }
+        assert_eq!(lines.len(), 2);
+        assert!(lines[0].contains(r#""title":"opening""#));
+        assert_eq!(
+            lines[1],
+            r#"{"type":"window","t":0.0,"id":1,"x":10,"y":20,"w":100,"h":100,"z":0}"#
+        );
     }
 }
