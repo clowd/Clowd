@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Clowd.UI.Controls">
 
     <Styles.Resources>
         <ResourceDictionary>
@@ -51,6 +52,17 @@
         <Setter Property="FontSize" Value="14" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <!-- Menus size their own window, and Win32 truncates that size to whole physical pixels, so at
+         125%/150% scaling a menu that fits perfectly well can end up a pixel short and sprout the
+         scroll chevrons. MenuScrollFix turns scrolling off when the overflow is that small. `:is()`
+         is deliberate: it also catches the Windows tray menu's internal presenter subclass. -->
+    <Style Selector=":is(ContextMenu)">
+        <Setter Property="controls:MenuScrollFix.Enabled" Value="True" />
+    </Style>
+    <Style Selector=":is(MenuFlyoutPresenter)">
+        <Setter Property="controls:MenuScrollFix.Enabled" Value="True" />
     </Style>
 
 </Styles>
