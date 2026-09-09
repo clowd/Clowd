@@ -1718,7 +1718,7 @@ namespace Clowd.UI.VideoEditor
 
                 var argsPath = ProjectFileWriter.Write(
                     Path.Combine(workDir, VideoRenderManager.RenderArgsFileName), project, outputPath,
-                    (int)(SettingsRoot.Current?.Recording?.Quality ?? VideoQuality.Medium));
+                    SettingsRoot.Current?.Recording?.Crf ?? (int)VideoQuality.Medium);
 
                 _devRunner = new VidRenderRunner();
                 _devRunner.ProgressChanged += (_, percent) => btnRender.Progress = percent;

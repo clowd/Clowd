@@ -405,9 +405,8 @@ namespace Clowd.UI.Services
         {
             var argsPath = Path.Combine(Path.GetDirectoryName(session.FilePath), RenderArgsFileName);
 
-            // a snapshot: settings edited while the render runs apply to the next one. The
-            // VideoQuality enum members are the CRF values (Low=29, Medium=23, High=16).
-            var crf = (int)(SettingsRoot.Current?.Recording?.Quality ?? VideoQuality.Medium);
+            // a snapshot: settings edited while the render runs apply to the next one.
+            var crf = SettingsRoot.Current?.Recording?.Crf ?? (int)VideoQuality.Medium;
             return ProjectFileWriter.Write(argsPath, project, outputPath, crf);
         }
 

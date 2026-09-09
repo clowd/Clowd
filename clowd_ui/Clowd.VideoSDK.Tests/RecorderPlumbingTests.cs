@@ -232,6 +232,35 @@ namespace Clowd.VideoSDK.Tests
             Assert.True(file.RootElement.GetProperty("tracker").GetBoolean());
         }
 
+        /// <summary>Studio records at the fixed CRF whatever the (hidden) preset says; Instant
+        /// records at the preset the user picked.</summary>
+        [Fact]
+        public void Studio_records_at_a_fixed_crf_and_instant_at_the_preset()
+        {
+            var studio = Settings();
+            studio.Quality = VideoQuality.Low;
+            using var studioFile = WriteSettings(studio);
+            Assert.Equal(SettingsRecording.StudioCrf, studioFile.RootElement.GetProperty("crf").GetInt32());
+
+            var instant = Settings(composition: false);
+            instant.Quality = VideoQuality.Low;
+            using var instantFile = WriteSettings(instant);
+            Assert.Equal((int)VideoQuality.Low, instantFile.RootElement.GetProperty("crf").GetInt32());
+        }
+
+        /// <summary>"Lower CPU usage" is the recorder's low_cpu key, off unless the user asks.</summary>
+        [Fact]
+        public void Low_cpu_usage_reaches_the_settings_file()
+        {
+            using var off = WriteSettings(Settings());
+            Assert.False(off.RootElement.GetProperty("low_cpu").GetBoolean());
+
+            var settings = Settings();
+            settings.LowCpuUsage = true;
+            using var on = WriteSettings(settings);
+            Assert.True(on.RootElement.GetProperty("low_cpu").GetBoolean());
+        }
+
         // ------------------------------------------------------------------ tracks report
 
         private static ObsTracks Parse(string json, ObsTracks previous = null)
