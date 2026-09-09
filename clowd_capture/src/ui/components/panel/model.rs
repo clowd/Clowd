@@ -94,6 +94,12 @@ pub struct PanelFeatures {
     pub share: bool,
     /// SCROLL in the capture strip.
     pub scroll_capture: bool,
+    /// VIDEO in the capture strip. Off when the shell has recording switched
+    /// off altogether (its Recording settings page), which is the only reason
+    /// to hide it: there is no per-button switch for VIDEO on the Capture
+    /// page. Like SHARE, this hides the button and its accelerator only —
+    /// `--video` never shows the strip, so it is untouched.
+    pub video: bool,
     /// OCR in the capture strip. Switching it off makes the OCR strip
     /// unreachable, since OCR mode is the only thing that raises it.
     pub ocr: bool,
@@ -111,6 +117,7 @@ impl PanelFeatures {
         upload: true,
         share: true,
         scroll_capture: true,
+        video: true,
         ocr: true,
     };
 
@@ -121,6 +128,7 @@ impl PanelFeatures {
             Command::Upload | Command::OcrUpload => self.upload,
             Command::Share => self.share,
             Command::ScrollCapture => self.scroll_capture,
+            Command::Video => self.video,
             Command::Ocr => self.ocr,
             _ => true,
         }
@@ -429,15 +437,16 @@ mod tests {
     /// All eight on/off combinations of the three switches, so the
     /// invariants below are checked against every strip the shell can ask
     /// for rather than just the extremes.
-    const FEATURE_COMBINATIONS: [PanelFeatures; 16] = {
-        let mut out = [PanelFeatures::ALL; 16];
+    const FEATURE_COMBINATIONS: [PanelFeatures; 32] = {
+        let mut out = [PanelFeatures::ALL; 32];
         let mut i = 0;
-        while i < 16 {
+        while i < 32 {
             out[i] = PanelFeatures {
                 upload: i & 1 != 0,
                 scroll_capture: i & 2 != 0,
                 ocr: i & 4 != 0,
                 share: i & 8 != 0,
+                video: i & 16 != 0,
             };
             i += 1;
         }
@@ -516,11 +525,13 @@ mod tests {
             upload: false,
             share: false,
             scroll_capture: false,
+            video: false,
             ocr: false,
         };
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'u'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'h'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'l'), None);
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'v'), None);
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, off, 'o'), None);
         // UPLOAD is one switch across both strips — text is still an upload.
         assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, off, 'u'), None);
@@ -530,7 +541,6 @@ mod tests {
         for features in FEATURE_COMBINATIONS {
             for (key, cmd) in [
                 ('e', Command::Edit),
-                ('v', Command::Video),
                 ('c', Command::Copy),
                 ('s', Command::Save),
                 ('r', Command::Reset),

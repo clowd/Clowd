@@ -65,7 +65,12 @@ namespace Clowd.UI.Config
 
         public Control GetSettingsPanel()
         {
-            var rows = EnumerateRows().ToList();
+            var all = EnumerateRows().ToList();
+
+            // a [ModeSelector] property is the page's headline choice: it renders as a row of tiles
+            // above the sections (never inside one), and the sections are what it gates.
+            var selectors = all.Where(r => GetFirstAttributeOrDefault<ModeSelectorAttribute>(r.Pd) != null).ToList();
+            var rows = all.Except(selectors).ToList();
 
             // pages whose properties carry [Category] render as GroupBox sections (matching the
             // hand-written General page); pages without categories (Hotkeys, upload provider
@@ -73,6 +78,15 @@ namespace Clowd.UI.Config
             var grouped = rows.Any(r => GetFirstAttributeOrDefault<CategoryAttribute>(r.Pd) != null);
 
             var content = grouped ? BuildGroupedPanel(rows) : BuildFlatPanel(rows);
+
+            if (selectors.Count > 0)
+            {
+                var stack = new StackPanel { Spacing = 16 };
+                foreach (var (owner, pd) in selectors)
+                    stack.Children.Add(owner.BuildModeSelector(pd));
+                stack.Children.Add(content);
+                content = stack;
+            }
 
             // margin on the *content* (not ScrollViewer padding) exactly like the hand-written
             // pages: the 16px right/bottom clearance then scrolls with the content, so the last
@@ -140,10 +154,68 @@ namespace Clowd.UI.Config
                 if (app != null && app.TryGetResource("GroupBox", app.ActualThemeVariant, out var theme) && theme is ControlTheme groupBoxTheme)
                     box.Theme = groupBoxTheme;
 
+                GateGroupVisibility(box, group.ToList());
                 stack.Children.Add(box);
             }
 
             return stack;
+        }
+
+        /// <summary>
+        /// Hides a section while every one of its rows is hidden by [VisibleWhen] — an empty
+        /// GroupBox with just a header is worse than no section. Rows without the attribute are
+        /// always visible, so a section holding one is never gated at all. A binding rather than
+        /// a PropertyChanged subscription, for the same reason the rows use one: the settings
+        /// objects outlive every settings window, and Avalonia's bindings subscribe weakly.
+        /// </summary>
+        private static void GateGroupVisibility(Control box, List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> group)
+        {
+            var gates = new List<(object Source, VisibleWhenAttribute Attr)>();
+            foreach (var (owner, pd) in group)
+            {
+                var attr = GetFirstAttributeOrDefault<VisibleWhenAttribute>(pd);
+                var source = attr == null ? null : ResolveGateSource(owner._obj, attr);
+                if (source == null)
+                    return;
+                gates.Add((source, attr));
+            }
+
+            var binding = new MultiBinding
+            {
+                Mode = BindingMode.OneWay,
+                // values arrive in gate order, so pair each back with the attribute it answers.
+                Converter = new FuncMultiValueConverter<object, bool>(
+                    values => values.Select((v, i) => gates[i].Attr.Matches(v)).Any(shown => shown)),
+            };
+            foreach (var (source, attr) in gates)
+                binding.Bindings.Add(new Binding(attr.PropertyName) { Source = source, Mode = BindingMode.OneWay });
+
+            box.Bind(Visual.IsVisibleProperty, binding);
+        }
+
+        /// <summary>The object a [VisibleWhen] reads its gating property from: the row's own
+        /// settings object, or the named <see cref="SettingsRoot"/> section for a row that follows
+        /// another page's choice. Null (no root yet, or an unknown section) leaves the row shown.</summary>
+        private static object ResolveGateSource(object own, VisibleWhenAttribute attr)
+        {
+            if (String.IsNullOrEmpty(attr.Section))
+                return own;
+
+            var root = SettingsRoot.Current;
+            return root == null ? null : TypeDescriptor.GetProperties(root)[attr.Section]?.GetValue(root);
+        }
+
+        /// <summary>
+        /// The tile selector for <paramref name="propertyName"/> of <paramref name="obj"/> (a
+        /// [ModeSelector] enum property), for hand-written pages that host one above their own
+        /// content — the Uploads page. Same control, same titles and captions as the generated
+        /// pages get, so the enum stays the one place those words live.
+        /// </summary>
+        public static Control CreateModeSelector(object obj, string propertyName)
+        {
+            var pd = TypeDescriptor.GetProperties(obj)[propertyName]
+                ?? throw new ArgumentException($"{obj.GetType().Name} has no property {propertyName}.", nameof(propertyName));
+            return new SettingsControlFactory(() => null, obj).BuildModeSelector(pd);
         }
 
         private void AddRowToGrid(Grid grid, ref int row, PropertyDescriptor pd)
@@ -182,6 +254,25 @@ namespace Clowd.UI.Config
                 });
             }
 
+            // [VisibleWhen] rows leave the page altogether — label, editor and caption — while the
+            // property they defer to holds a value they were not declared for; the section goes
+            // with them once its last row is gone (see GateGroupVisibility).
+            var visibleWhen = GetFirstAttributeOrDefault<VisibleWhenAttribute>(pd);
+
+            void ApplyVisibleWhen(Control target)
+            {
+                var source = visibleWhen == null ? null : ResolveGateSource(_obj, visibleWhen);
+                if (source == null)
+                    return;
+
+                target.Bind(Visual.IsVisibleProperty, new Binding(visibleWhen.PropertyName)
+                {
+                    Source = source,
+                    Mode = BindingMode.OneWay,
+                    Converter = new FuncValueConverter<object, bool>(visibleWhen.Matches),
+                });
+            }
+
             // the caption hugs its own row (2px); rows without one carry the full bottom gap
             // themselves so vertical rhythm stays even either way (12+12 = ~24px between settings).
             var bottom = String.IsNullOrEmpty(description) ? 12d : 2d;
@@ -213,6 +304,8 @@ namespace Clowd.UI.Config
             // the Border carries the gate for the editor inside it, so IsEnabled cascades.
             ApplyDisabledWhen(rowLabel);
             ApplyDisabledWhen(rowContent);
+            ApplyVisibleWhen(rowLabel);
+            ApplyVisibleWhen(rowContent);
 
             row++;
 
@@ -233,6 +326,7 @@ namespace Clowd.UI.Config
                 Grid.SetColumnSpan(caption, 2);
                 grid.Children.Add(caption);
                 ApplyDisabledWhen(caption, enabledOpacity: 0.65);
+                ApplyVisibleWhen(caption);
                 row++;
             }
         }
@@ -435,6 +529,43 @@ namespace Clowd.UI.Config
             }
 
             return new TextBlock { Text = pd.Name, VerticalAlignment = VerticalAlignment.Center };
+        }
+
+        /// <summary>
+        /// The tile row for a [ModeSelector] enum property: one <see cref="ModeOption"/> per
+        /// member, titled by its [Description] (the same text the dropdown editor would show) and
+        /// captioned by its [ModeCaption].
+        /// </summary>
+        private Control BuildModeSelector(PropertyDescriptor pd)
+        {
+            if (!pd.PropertyType.IsEnum)
+                throw new InvalidOperationException($"[ModeSelector] on {pd.ComponentType.Name}.{pd.Name} needs an enum property.");
+
+            var selector = new ModeSelector
+            {
+                HorizontalAlignment = HorizontalAlignment.Left,
+                MaxWidth = 720,
+            };
+
+            foreach (var value in Enum.GetValues(pd.PropertyType))
+            {
+                var caption = pd.PropertyType.GetField(value.ToString())
+                    ?.GetCustomAttributes(typeof(ModeCaptionAttribute), false)
+                    .OfType<ModeCaptionAttribute>().FirstOrDefault()?.Caption;
+
+                selector.Options.Add(new ModeOption
+                {
+                    Value = value,
+                    Title = GetEnumDisplayString(value),
+                    Caption = caption,
+                });
+            }
+
+            // bound after the options are all in, so the stored value is never seen against a
+            // partial set (the selector's own fallback is deferred to attachment for the same
+            // reason — this is the belt to that suspenders).
+            selector.Bind(ModeSelector.SelectedValueProperty, CreateBinding(pd.Name));
+            return selector;
         }
 
         public static string FromCamelCase(string variableName)

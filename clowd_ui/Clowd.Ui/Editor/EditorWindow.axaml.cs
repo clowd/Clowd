@@ -189,6 +189,11 @@ namespace Clowd.UI
 
             btnUpload.AddHandler(PointerPressedEvent, btnUpload_RightMouseDown, RoutingStrategies.Tunnel);
 
+            // Uploads Off (the Uploads page) takes the button away; the command guards itself, so
+            // Ctrl+U goes quiet with it.
+            ApplyUploadsMode();
+            SettingsRoot.Current.Uploads.PropertyChanged += Uploads_PropertyChanged;
+
             miniColor.ParentWindow = this;
             miniColor.Canceled += (_, _) => miniColorPopup.IsOpen = false;
 
@@ -322,6 +327,8 @@ namespace Clowd.UI
         private void EditorWindow_Closing(object sender, WindowClosingEventArgs e)
         {
             _sessionInfoDebounce?.Stop();
+
+            SettingsRoot.Current.Uploads.PropertyChanged -= Uploads_PropertyChanged;
 
             // detach upload-progress handlers while _session is still alive (it is nulled below).
             if (_session != null)
@@ -1307,6 +1314,17 @@ namespace Clowd.UI
             Toast.Show(this, message, NotificationType.Error);
         }
 
+        private void Uploads_PropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (String.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SettingsUpload.Mode))
+                ApplyUploadsMode();
+        }
+
+        private void ApplyUploadsMode()
+        {
+            btnUpload.IsVisible = SettingsRoot.Current.Uploads.IsEnabled;
+        }
+
         private void UploadCommandExecuted(object parameter)
         {
             UploadCommandImpl();
@@ -1314,6 +1332,9 @@ namespace Clowd.UI
 
         private async void UploadCommandImpl(IUploadProvider provider = null)
         {
+            if (!SettingsRoot.Current.Uploads.IsEnabled)
+                return; // Uploads Off: the button is hidden, and its shortcut must not work around that
+
             if (_session.ActiveUpload != null)
                 return; // one active upload per document
 

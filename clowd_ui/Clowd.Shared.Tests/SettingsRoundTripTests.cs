@@ -302,6 +302,87 @@ namespace Clowd.Shared.Tests
         }
 
         [Fact]
+        public void RecordingMode_DefaultsToStudio_AndRoundTrips()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(RecordingMode.Studio, loaded.Recording.Mode);
+
+            var original = new SettingsRoot();
+            original.Recording.Mode = RecordingMode.Off;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(RecordingMode.Off, loaded.Recording.Mode);
+
+            // the mode replaced the composition switch; a file saved by this build carries only
+            // the mode, so an old build can never read a stale "EnableComposition" back over it.
+            Assert.DoesNotContain("EnableComposition", File.ReadAllText(_path));
+        }
+
+        [Fact]
+        public void UploadsMode_DefaultsToOn_AndRoundTrips()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(UploadsMode.On, loaded.Uploads.Mode);
+            Assert.True(loaded.Uploads.IsEnabled);
+
+            var original = new SettingsRoot();
+            original.Uploads.Mode = UploadsMode.Off;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(UploadsMode.Off, loaded.Uploads.Mode);
+            Assert.False(loaded.Uploads.IsEnabled);
+        }
+
+        [Fact]
+        public void ShareRegionMode_DefaultsToOn_AndRoundTrips()
+        {
+            var loaded = SettingsService.Load(_path);
+            Assert.Equal(ShareRegionMode.On, loaded.ShareRegion.Mode);
+            Assert.True(loaded.ShareRegion.IsEnabled);
+
+            var original = new SettingsRoot();
+            original.ShareRegion.Mode = ShareRegionMode.Off;
+
+            SettingsService.Save(original, _path);
+            loaded = SettingsService.Load(_path);
+
+            Assert.Equal(ShareRegionMode.Off, loaded.ShareRegion.Mode);
+            Assert.False(loaded.ShareRegion.IsEnabled);
+        }
+
+        [Fact]
+        public void RecordingMode_ReadsLegacyCompositionSwitch()
+        {
+            // a settings file from before RecordingMode existed carries the bool it replaced:
+            // composition off was the single-track recording that is now Instant mode, and on
+            // (the default) is Studio.
+            Directory.CreateDirectory(Path.GetDirectoryName(_path));
+            File.WriteAllText(_path, """
+                {
+                  "Recording": {
+                    "EnableComposition": false
+                  }
+                }
+                """);
+
+            Assert.Equal(RecordingMode.Instant, SettingsService.Load(_path).Recording.Mode);
+
+            File.WriteAllText(_path, """
+                {
+                  "Recording": {
+                    "EnableComposition": true
+                  }
+                }
+                """);
+
+            Assert.Equal(RecordingMode.Studio, SettingsService.Load(_path).Recording.Mode);
+        }
+
+        [Fact]
         public void VideoEditorViewState_Defaults_WhenAbsentFromFile()
         {
             var loaded = SettingsService.Load(_path);

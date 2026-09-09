@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Controls.Notifications;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
@@ -35,6 +36,15 @@ namespace Clowd.UI.Pages
             InitializeComponent();
             DataContext = SettingsRoot.Current.Uploads;
             _transferBar = BuildTransferBar();
+
+            ModeHost.Content = SettingsControlFactory.CreateModeSelector(SettingsRoot.Current.Uploads, nameof(SettingsUpload.Mode));
+
+            // Uploads Off leaves the page with just the selector: the provider list, the zip option
+            // and the header's import/export strip all describe uploads that cannot happen. Bindings
+            // rather than a PropertyChanged subscription: the settings object outlives every
+            // settings window, and a binding to it is held weakly.
+            Body.Bind(IsVisibleProperty, new Binding(nameof(SettingsUpload.IsEnabled)) { Source = SettingsRoot.Current.Uploads });
+            _transferBar.Bind(IsVisibleProperty, new Binding(nameof(SettingsUpload.IsEnabled)) { Source = SettingsRoot.Current.Uploads });
         }
 
         public Control HeaderContent => _transferBar;

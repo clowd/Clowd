@@ -10,7 +10,11 @@ namespace Clowd.Config
     /// </summary>
     public class SettingsHotkey : SimpleNotifyObject
     {
+        // the rows for a feature that can be switched off (uploads, recording) go with it: the
+        // gesture is kept, but a shortcut for something the app no longer offers is noise here —
+        // and HotkeyManager stops registering it, so it does not swallow the key either.
         [DisplayName("Upload from File")]
+        [VisibleWhen(nameof(SettingsUpload.Mode), UploadsMode.On, Section = nameof(SettingsRoot.Uploads))]
         public SimpleKeyGesture FileUploadShortcut
         {
             get => _fileUploadShortcut;
@@ -18,6 +22,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Upload Clipboard")]
+        [VisibleWhen(nameof(SettingsUpload.Mode), UploadsMode.On, Section = nameof(SettingsRoot.Uploads))]
         public SimpleKeyGesture ClipboardUploadShortcut
         {
             get => _clipboardUploadShortcut;
@@ -46,6 +51,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Start / Stop Recording")]
+        [VisibleWhen(nameof(SettingsRecording.Mode), RecordingMode.Studio, RecordingMode.Instant, Section = nameof(SettingsRoot.Recording))]
         public SimpleKeyGesture StartStopRecordingShortcut
         {
             get => _startStopRecordingShortcut;
@@ -53,6 +59,7 @@ namespace Clowd.Config
         }
 
         [DisplayName("Share Region")]
+        [VisibleWhen(nameof(SettingsShareRegion.Mode), ShareRegionMode.On, Section = nameof(SettingsRoot.ShareRegion))]
         public SimpleKeyGesture ShareRegionShortcut
         {
             get => _shareRegionShortcut;

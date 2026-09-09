@@ -48,7 +48,9 @@ namespace Clowd.UI.VideoEditor
         {
             _target = target;
 
-            if (target != null && SettingsRoot.Current?.Recording?.CaptureMediaKeys == true)
+            // the switch only shows on the settings page in Studio mode, so it only acts there —
+            // a swallowed media key with no visible setting to explain it is a bug report.
+            if (target != null && SettingsRoot.Current?.Recording is { CaptureMediaKeys: true, Mode: RecordingMode.Studio })
                 Register();
             else
                 Unregister();

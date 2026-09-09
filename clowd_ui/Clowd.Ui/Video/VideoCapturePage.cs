@@ -605,6 +605,9 @@ namespace Clowd.UI
         {
             // post-recording UI behavior; the capturer never sees it.
             nameof(SettingsRecording.OpenWhenFinished) => false,
+            // raised alongside Mode (its dependent), which already configures; a second pass for
+            // the same change would only be a needless configure.
+            nameof(SettingsRecording.IsEnabled) => false,
             // the capturer always writes video.mp4 into the session dir; these only decide where
             // the finished file is moved to afterwards (issue #50), which happens at stop time.
             nameof(SettingsRecording.OutputDirectory) => false,
@@ -622,7 +625,7 @@ namespace Clowd.UI
             // not a settings-file key at all — it picks the recorder's --multi-track argument, which
             // ApplySettingsChange turns into a respawn. It also gates "webcam_device", so a flip
             // has to rewrite the settings file as well.
-            nameof(SettingsRecording.EnableComposition) => true,
+            nameof(SettingsRecording.Mode) => true,
             // likewise a command-line argument (--capture-method) rather than a settings-file key,
             // and likewise turned into a respawn by ApplySettingsChange.
             nameof(SettingsRecording.CaptureMethod) => true,

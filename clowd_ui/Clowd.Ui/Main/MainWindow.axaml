@@ -45,8 +45,8 @@
 
                 <!-- "New Editor" split in two: the image editor and the video editor open blank
                      documents of their own, and nothing about one implies the other. The video
-                     half is hidden where the video editor does not ship (non-Windows), and the
-                     image half then takes the whole row. -->
+                     half is hidden while recording is switched off (MainWindow.ApplyRecordingMode),
+                     and the image half then takes the whole row. -->
                 <Grid x:Name="NewDocumentRow" ColumnDefinitions="*,8,*">
                     <Button x:Name="NewImageButton"
                             HorizontalAlignment="Stretch"

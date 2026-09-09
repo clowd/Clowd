@@ -1,0 +1,73 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Clowd.UI.Controls">
+
+    <!-- The selector adds this file to its own Styles collection (the CollapsingSegmentedBar
+         pattern), so the tile chrome travels with the control rather than with whichever page
+         hosts it. -->
+    <Styles.Resources>
+
+        <!-- One tile: a rounded card whose outline turns accent when it is the active choice. The
+             title and caption inside are built by the control; the theme only settles the card.
+
+             Templated rather than styled on top of Semi's ToggleButton so the resting / hover /
+             checked fills are decided by this one Background property instead of by whichever of
+             the two themes wins. The border stays 1px in both states so a click never shifts the
+             text — the checked state speaks through color (the outline, the title, and the check
+             glyph the control places in the corner) plus an inner accent ring. -->
+        <ControlTheme x:Key="ClowdModeTile" TargetType="ToggleButton">
+            <Setter Property="Padding" Value="14,12,14,14" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Top" />
+            <Setter Property="Background" Value="{DynamicResource ButtonDefaultBackground}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Card"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{TemplateBinding CornerRadius}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter Content="{TemplateBinding Content}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+            <Style Selector="^:pointerover">
+                <Setter Property="Background" Value="{DynamicResource ButtonDefaultPointeroverBackground}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+            </Style>
+        </ControlTheme>
+
+    </Styles.Resources>
+
+    <Style Selector="controls|ModeSelector > ToggleButton">
+        <Setter Property="Theme" Value="{StaticResource ClowdModeTile}" />
+    </Style>
+
+    <!-- The title and the check glyph are the tile's *content* (built by ModeSelector.cs), not
+         template parts, so they are styled from the selector's own scope rather than from inside
+         the theme. Both setters are style values on purpose: a local IsVisible on the glyph
+         would outrank them and the check could never appear. -->
+    <Style Selector="controls|ModeSelector > ToggleButton Path.ModeCheck">
+        <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="controls|ModeSelector > ToggleButton:checked Path.ModeCheck">
+        <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="controls|ModeSelector > ToggleButton:checked TextBlock.ModeTitle">
+        <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+    </Style>
+
+</Styles>

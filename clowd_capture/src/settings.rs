@@ -286,6 +286,13 @@ pub struct CliArgs {
     #[arg(long)]
     pub no_scroll_capture: bool,
 
+    /// Hide the VIDEO button — the shell sends this when the user has
+    /// switched recording off entirely. Like `--no-share` it hides the
+    /// button and its accelerator only; `--video` is a mode that never
+    /// shows the strip and is unaffected.
+    #[arg(long)]
+    pub no_video: bool,
+
     /// Hide the OCR button, which is the only way into OCR mode.
     #[arg(long)]
     pub no_ocr: bool,
@@ -342,6 +349,7 @@ impl CliArgs {
                 upload: !self.no_upload,
                 share: !self.no_share,
                 scroll_capture: !self.no_scroll_capture,
+                video: !self.no_video,
                 ocr: !self.no_ocr,
             },
             bench_startup: self.bench_startup,
@@ -428,13 +436,22 @@ mod tests {
         let bare = CliArgs::parse_from(["clowd_capture"]).into_settings();
         assert_eq!(bare.panel_features, PanelFeatures::ALL);
 
-        let none = CliArgs::parse_from(["clowd_capture", "--no-upload", "--no-share", "--no-scroll-capture", "--no-ocr"]).into_settings();
+        let none = CliArgs::parse_from([
+            "clowd_capture",
+            "--no-upload",
+            "--no-share",
+            "--no-scroll-capture",
+            "--no-video",
+            "--no-ocr",
+        ])
+        .into_settings();
         assert_eq!(
             none.panel_features,
             PanelFeatures {
                 upload: false,
                 share: false,
                 scroll_capture: false,
+                video: false,
                 ocr: false,
             }
         );
@@ -446,6 +463,17 @@ mod tests {
         let no_share = CliArgs::parse_from(["clowd_capture", "--no-share"]).into_settings();
         assert!(!no_share.panel_features.share);
         assert!(no_share.panel_features.upload && no_share.panel_features.scroll_capture && no_share.panel_features.ocr);
+
+        let no_video = CliArgs::parse_from(["clowd_capture", "--no-video"]).into_settings();
+        assert!(!no_video.panel_features.video);
+        assert!(no_video.panel_features.upload && no_video.panel_features.share && no_video.panel_features.ocr);
+
+        // `--no-video` hides the button; `--video` is a mode that never shows the strip.
+        // The shell never sends both (recording off means it never launches video mode),
+        // but they must not conflict either.
+        let both = CliArgs::parse_from(["clowd_capture", "--video", "--no-video"]).into_settings();
+        assert!(both.video_mode);
+        assert!(!both.panel_features.video);
 
         // `--no-share` hides the button; `--share` is a mode that never shows the
         // strip. The shell sends both when a trimmed-away button meets a tray or
