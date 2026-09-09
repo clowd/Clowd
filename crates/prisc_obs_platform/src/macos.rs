@@ -115,6 +115,13 @@ pub fn region_adapter_index(
     None
 }
 
+/// Signature parity with the Windows module (DESIGN §2.2). Nothing to resolve:
+/// mac-capture's screen source has no capture-method knob, so every value —
+/// `Auto` included — passes through unchanged.
+pub fn resolve_capture_method(method: CaptureMethod) -> CaptureMethod {
+    method
+}
+
 /// `method` is accepted for signature parity with the Windows module (DESIGN
 /// §2.2) and ignored: mac-capture's screen source has no equivalent knob.
 pub fn display_capture_settings(

@@ -4,15 +4,18 @@ use std::env;
 use std::ffi::CStr;
 use std::mem;
 use std::path::Path;
+use std::sync::OnceLock;
 
 use obs::data::ObsData;
 use windows::core::{BOOL, PCWSTR};
+use windows::Wdk::System::SystemServices::RtlGetVersion;
 use windows::Win32::Foundation::{LPARAM, POINT, RECT, TRUE};
 use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1};
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayDevicesW, EnumDisplayMonitors, GetMonitorInfoW, MonitorFromPoint, DISPLAY_DEVICEW,
     HDC, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
 };
+use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows::Win32::System::Threading::ExitProcess;
 use windows::Win32::UI::HiDpi::{
     GetDpiForMonitor, SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
@@ -217,6 +220,53 @@ fn adapter_outputs() -> Option<Vec<(u32, String)>> {
     Some(pairs)
 }
 
+/// The first component of the Windows 11 build range. Windows 11 kept
+/// `dwMajorVersion` at 10 and is told apart from Windows 10 only by the build
+/// number: 21H2, the first release, is build 22000.
+const WINDOWS_11_BUILD: u32 = 22000;
+
+/// Whether the running OS is Windows 11 or newer, from `RtlGetVersion`.
+///
+/// `GetVersionExW` and `VerifyVersionInfoW` are shimmed by the compatibility
+/// layer and report 6.2 (Windows 8) unless the executable's manifest opts in
+/// per-version, so ntdll's `RtlGetVersion` — which never lies — is the one to
+/// ask. Probed once: the answer cannot change while the process runs.
+fn is_windows_11_or_newer() -> bool {
+    static CACHED: OnceLock<bool> = OnceLock::new();
+    *CACHED.get_or_init(|| {
+        let mut info = OSVERSIONINFOW {
+            dwOSVersionInfoSize: mem::size_of::<OSVERSIONINFOW>() as u32,
+            ..Default::default()
+        };
+        // NTSTATUS: only STATUS_SUCCESS (0) is documented, but treat any
+        // failure as "not Windows 11" so an unreadable version falls back to
+        // win-capture's own heuristic rather than forcing WGC blindly.
+        if unsafe { RtlGetVersion(&mut info) }.is_err() {
+            return false;
+        }
+        (info.dwMajorVersion, info.dwBuildNumber) >= (10, WINDOWS_11_BUILD)
+    })
+}
+
+/// `method` with [`CaptureMethod::Auto`] resolved for this machine: WGC on
+/// Windows 11+, and left to win-capture's `choose_method()` on Windows 10.
+///
+/// The Win11 preference is deliberate. WGC is the API Microsoft still develops;
+/// it captures a monitor regardless of which adapter drives it, where the DXGI
+/// duplicator only finds monitors on libobs's own adapter (see
+/// `region_adapter_index`) and was verified to produce black frames on a
+/// Win11 26H1 + NVIDIA machine; and Win11 is exactly where libobs can suppress
+/// the yellow WGC capture border via
+/// `GraphicsCaptureSession::IsBorderRequired(false)`
+/// (obs-studio/libobs-winrt/winrt-capture.cpp), so preferring it costs nothing
+/// visible. On Windows 10 that border is unavoidable under WGC, so `auto` stays
+/// out of the way there and win-capture decides.
+///
+/// Explicit `dxgi` / `wgc` pass through untouched.
+pub fn resolve_capture_method(method: CaptureMethod) -> CaptureMethod {
+    method.resolve(is_windows_11_or_newer())
+}
+
 pub fn display_capture_settings(
     m: &MonitorInfo,
     show_cursor: bool,
@@ -224,13 +274,12 @@ pub fn display_capture_settings(
 ) -> ObsData {
     let settings = ObsData::new();
     settings.set_string("monitor_id", &m.id);
-    // Deliberate deviation from the design's `0` (auto), which is why the
-    // default here is WGC rather than auto: auto prefers the DXGI duplicator,
-    // which was verified to produce black frames on this Win11 26H1 + NVIDIA
-    // machine, while WGC captures correctly. Requesting WGC is safe
-    // everywhere — win-capture's choose_method() force-falls back to DXGI when
-    // WGC is unsupported (duplicator-monitor-capture.c).
-    settings.set_int("method", method.as_obs_method());
+    // `auto` is resolved here rather than passed to win-capture as `method: 0`
+    // — see resolve_capture_method for why Windows 11 always takes WGC.
+    // Requesting WGC is safe everywhere: win-capture's choose_method()
+    // force-falls back to DXGI when WGC is unsupported
+    // (duplicator-monitor-capture.c).
+    settings.set_int("method", resolve_capture_method(method).as_obs_method());
     settings.set_bool("capture_cursor", show_cursor);
     settings
 }
@@ -278,4 +327,31 @@ pub fn exit_process(code: i32) -> ! {
 fn wide_to_string(buf: &[u16]) -> String {
     let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
     String::from_utf16_lossy(&buf[..len])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The probe itself: it must return an answer that agrees with what
+    /// `resolve_capture_method` does with `Auto`, and must leave an explicit
+    /// pin alone. The expected value depends on the host OS, so the Windows 11
+    /// branch is asserted only when the probe says we are on one.
+    #[test]
+    fn auto_resolves_to_wgc_on_windows_11() {
+        let expected = if is_windows_11_or_newer() {
+            CaptureMethod::Wgc
+        } else {
+            CaptureMethod::Auto
+        };
+        assert_eq!(resolve_capture_method(CaptureMethod::Auto), expected);
+        assert_eq!(
+            resolve_capture_method(CaptureMethod::Dxgi),
+            CaptureMethod::Dxgi
+        );
+        assert_eq!(
+            resolve_capture_method(CaptureMethod::Wgc),
+            CaptureMethod::Wgc
+        );
+    }
 }

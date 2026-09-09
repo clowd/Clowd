@@ -100,14 +100,15 @@ pub struct Cli {
     /// built once), so unlike the tuning knobs it is not re-readable via
     /// `--settings` / stdin `configure`.
     ///
-    /// `auto` (the default) leaves it to win-capture's own heuristic, which
-    /// takes DXGI unless the monitor is off the current graphics adapter or
-    /// the machine is a multi-GPU laptop on mains. That optimises for capture,
-    /// not for the yellow border Windows draws around a WGC-captured display:
-    /// suppressing that border needs
-    /// `GraphicsCaptureSession::IsBorderRequired`, which only exists on
-    /// Windows 11, so pin `dxgi` if a borderless capture matters more on an
-    /// older machine.
+    /// `auto` (the default) takes WGC on Windows 11 and newer, where the
+    /// yellow border Windows draws around a WGC-captured display can be
+    /// suppressed (`GraphicsCaptureSession::IsBorderRequired`, Windows 11+)
+    /// and WGC captures monitors on any graphics adapter. On Windows 10 it
+    /// leaves the choice to win-capture's own heuristic, which takes DXGI
+    /// unless the monitor is off the current adapter or the machine is a
+    /// multi-GPU laptop on mains. That heuristic optimises for capture, not
+    /// for the border — which is unsuppressable there — so pin `dxgi` on
+    /// Windows 10 if a borderless capture matters.
     #[arg(long, value_name = "METHOD", default_value = "auto")]
     pub capture_method: crate::platform::CaptureMethod,
 

@@ -63,6 +63,12 @@ windows = { version = "0.62", features = [
     "Win32_System_LibraryLoader",
     # ExitProcess / GetCurrentThreadId (obs-platform exit_process, input hooks).
     "Win32_System_Threading",
+    # RtlGetVersion + OSVERSIONINFOW: the real OS build number, used to resolve
+    # --capture-method auto to WGC on Windows 11+ (obs-platform
+    # resolve_capture_method). GetVersionExW/VerifyVersionInfoW report a
+    # manifest-shimmed version instead, so ntdll's is the only usable one.
+    "Wdk_System_SystemServices",
+    "Win32_System_SystemInformation",
     # SetConsoleCtrlHandler (recorder.rs CTRL_CLOSE grace handling).
     "Win32_System_Console",
     # CoInitializeEx / CoCreateInstance + IMMDeviceEnumerator/IAudioEndpointVolume:

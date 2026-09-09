@@ -59,14 +59,22 @@ pub struct MonitorInfo {
 /// is the way to get rid of it there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CaptureMethod {
-    /// Let win-capture decide (`method: 0`). Its `choose_method()` takes DXGI
-    /// unless the monitor is not on the current adapter, or the machine is a
-    /// multi-GPU laptop running on mains — in which case WGC. The default.
+    /// Decide per machine, and the default.
     ///
-    /// Note it optimises for capture correctness and performance, not for the
-    /// WGC capture border: on the Windows 10 machines where that border cannot
-    /// be suppressed, the rare WGC branch still draws it. Pin `Dxgi` if a
-    /// borderless capture matters more than the heuristic.
+    /// On Windows 11 and newer this resolves to [`CaptureMethod::Wgc`]: WGC is
+    /// the API Microsoft develops, it captures monitors on any adapter without
+    /// the duplicator's cross-GPU blind spot (see `region_adapter_index`), and
+    /// its yellow capture border can be suppressed there via
+    /// `GraphicsCaptureSession::IsBorderRequired(false)`, so nothing is given
+    /// up by taking it. See `resolve` / the Windows `resolve_capture_method`.
+    ///
+    /// On Windows 10 it stays `method: 0` and win-capture's own
+    /// `choose_method()` decides. That heuristic takes DXGI unless the monitor
+    /// is not on the current adapter, or the machine is a multi-GPU laptop
+    /// running on mains — in which case WGC. Note it optimises for capture
+    /// correctness and performance, not for the WGC capture border, which
+    /// cannot be suppressed on Windows 10: pin `Dxgi` if a borderless capture
+    /// matters more than the heuristic.
     #[default]
     Auto,
     /// DXGI desktop duplication. Draws no capture border on any Windows
@@ -89,6 +97,19 @@ impl CaptureMethod {
             CaptureMethod::Auto => 0,
             CaptureMethod::Dxgi => 1,
             CaptureMethod::Wgc => 2,
+        }
+    }
+
+    /// [`CaptureMethod::Auto`] resolved against the running OS, given whether
+    /// it is Windows 11 or newer. Split out from the platform probe so it can
+    /// be tested on any host; the Windows module supplies the real flag.
+    ///
+    /// Every non-`Auto` value passes through: an explicit `--capture-method`
+    /// is the user overriding this, so it is never second-guessed.
+    pub fn resolve(self, windows_11_or_newer: bool) -> Self {
+        match self {
+            CaptureMethod::Auto if windows_11_or_newer => CaptureMethod::Wgc,
+            other => other,
         }
     }
 
@@ -236,6 +257,14 @@ mod tests {
         assert_eq!(CaptureMethod::Auto.as_obs_method(), 0);
         assert_eq!(CaptureMethod::Dxgi.as_obs_method(), 1);
         assert_eq!(CaptureMethod::Wgc.as_obs_method(), 2);
+        // auto resolves to WGC on Windows 11+, and stays auto below it.
+        assert_eq!(CaptureMethod::Auto.resolve(true), CaptureMethod::Wgc);
+        assert_eq!(CaptureMethod::Auto.resolve(false), CaptureMethod::Auto);
+        // An explicit pin is never second-guessed on either OS.
+        for pinned in [CaptureMethod::Dxgi, CaptureMethod::Wgc] {
+            assert_eq!(pinned.resolve(true), pinned);
+            assert_eq!(pinned.resolve(false), pinned);
+        }
         assert_eq!("WGC".parse::<CaptureMethod>().unwrap(), CaptureMethod::Wgc);
         assert!("ddapi".parse::<CaptureMethod>().is_err());
     }
