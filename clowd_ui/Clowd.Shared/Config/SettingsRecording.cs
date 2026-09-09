@@ -61,8 +61,9 @@ namespace Clowd.Config
         [Description("Medium")]
         Medium = 23,
 
+        // 18, not 16: benchmarked, and 16 was no visible improvement for a noticeably larger file.
         [Description("High (larger file)")]
-        High = 16,
+        High = 18,
     }
 
     /// <summary>
@@ -183,6 +184,16 @@ namespace Clowd.Config
             set => Set(ref _openWhenFinished, value);
         }
 
+        [Category("Output")]
+        [VisibleWhen(nameof(Mode), Studio)]
+        [DisplayName("Render automatically when capture finished")]
+        [Description("Flatten the recording to a single shareable video as soon as capture stops, without waiting for you to open the editor. The multi-track original is kept, so you can still edit and re-render it.")]
+        public bool RenderWhenFinished
+        {
+            get => _renderWhenFinished;
+            set => Set(ref _renderWhenFinished, value);
+        }
+
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
         [DisplayName("Frame rate")]
@@ -194,10 +205,11 @@ namespace Clowd.Config
             set => Set(ref _fps, value);
         }
 
+        /// <summary>Instant mode only: a Studio recording is raw material for the editor and is
+        /// always captured at <see cref="StudioCrf"/>. Consumers read <see cref="Crf"/>, never
+        /// this directly, so the hidden value can never leak into a Studio recording.</summary>
         [Category("Video")]
-        // TODO: Studio mode is meant to lose this row (the editor's render owns quality there);
-        // kept in both modes for now.
-        [VisibleWhen(nameof(Mode), Studio, Instant)]
+        [VisibleWhen(nameof(Mode), Instant)]
         [DisplayName("Quality")]
         [Description("Encoder quality preset — higher quality produces larger files")]
         public VideoQuality Quality
@@ -205,6 +217,15 @@ namespace Clowd.Config
             get => _quality;
             set => Set(ref _quality, value);
         }
+
+        /// <summary>The encoder CRF Studio mode always records at: the high preset, since the
+        /// recording is edited and re-encoded afterwards and a lossy source compounds.</summary>
+        public const int StudioCrf = (int)VideoQuality.High;
+
+        /// <summary>The encoder CRF a recording (and a render of one) is made with: the fixed
+        /// <see cref="StudioCrf"/> in Studio mode, the user's <see cref="Quality"/> otherwise.</summary>
+        [Browsable(false), JsonIgnore]
+        public int Crf => Mode == RecordingMode.Studio ? StudioCrf : (int)Quality;
 
         [Category("Video")]
         [VisibleWhen(nameof(Mode), Studio, Instant)]
@@ -236,6 +257,16 @@ namespace Clowd.Config
         {
             get => _hardwareAccelerated;
             set => Set(ref _hardwareAccelerated, value);
+        }
+
+        [Category("Video")]
+        [VisibleWhen(nameof(Mode), Studio, Instant)]
+        [DisplayName("Lower CPU usage")]
+        [Description("Use a lighter encoder configuration that costs less CPU while recording, at some expense of quality and file size. Turn on if recording makes the machine stutter.")]
+        public bool LowCpuUsage
+        {
+            get => _lowCpuUsage;
+            set => Set(ref _lowCpuUsage, value);
         }
 
         [Category("Video")]
@@ -344,17 +375,7 @@ namespace Clowd.Config
             set => Set(ref _webcamDeviceId, value);
         }
 
-        [Category("Behavior")]
-        [VisibleWhen(nameof(Mode), Studio)]
-        [DisplayName("Render automatically when capture finished")]
-        [Description("Flatten the recording to a single shareable video as soon as capture stops, without waiting for you to open the editor. The multi-track original is kept, so you can still edit and re-render it.")]
-        public bool RenderWhenFinished
-        {
-            get => _renderWhenFinished;
-            set => Set(ref _renderWhenFinished, value);
-        }
-
-        [Category("Behavior")]
+        [Category("Editor")]
         [VisibleWhen(nameof(Mode), Studio)]
         [DisplayName("Capture media keys in video editor")]
         [Description("Let the keyboard's media keys drive the video editor while its window is focused: play/pause toggles playback, next track steps one frame forward and previous track one frame back. Those keys are swallowed while the editor is focused, so nothing else playing on the machine reacts to them; in every other window they keep doing what they always did.")]
@@ -420,6 +441,7 @@ namespace Clowd.Config
         private int _maxResolutionWidth = 0;
         private int _maxResolutionHeight = 0;
         private bool _hardwareAccelerated = true;
+        private bool _lowCpuUsage = false;
         private ScreenCaptureMethod _captureMethod = ScreenCaptureMethod.Auto;
         private bool _showMouseCursor = true;
         private bool _highlightClicks = true;

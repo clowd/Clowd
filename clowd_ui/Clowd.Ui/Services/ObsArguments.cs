@@ -231,12 +231,13 @@ namespace Clowd.UI
             var model = new ObsSettingsJson
             {
                 Fps = settings.Fps,
-                // the VideoQuality enum members are the CRF values (Low=29, Medium=23, High=16).
-                Crf = (int)settings.Quality,
+                // Studio records at a fixed CRF; Instant at the user's preset (the VideoQuality
+                // enum members are the CRF values).
+                Crf = settings.Crf,
                 MaxWidth = settings.MaxResolutionWidth,
                 MaxHeight = settings.MaxResolutionHeight,
                 HwAccel = settings.HardwareAccelerated,
-                LowCpu = false,
+                LowCpu = settings.LowCpuUsage,
                 Cursor = !inputCapture && settings.ShowMouseCursor,
                 Tracker = !inputCapture && settings.HighlightClicks,
                 TrackerColor = TrackerColor,
