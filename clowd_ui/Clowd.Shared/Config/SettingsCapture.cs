@@ -211,7 +211,7 @@ namespace Clowd.Config
 
         private string _filenamePattern = DefaultFilenamePattern;
         private bool _keepCapturerWarm = true;
-        private bool _screenshotWithCursor = true;
+        private bool _screenshotWithCursor = false;
         private bool _detectWindows = true;
         private CapturerTipsMode _tipsMode = CapturerTipsMode.Hints;
         private bool _obscuredWindowPeek = true;
