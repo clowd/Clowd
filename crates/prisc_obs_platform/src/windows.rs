@@ -281,6 +281,21 @@ pub fn display_capture_settings(
     // (duplicator-monitor-capture.c).
     settings.set_int("method", resolve_capture_method(method).as_obs_method());
     settings.set_bool("capture_cursor", show_cursor);
+    // The output is always SDR (NV12 / Rec.709), so ask win-capture for an SDR
+    // picture of an HDR monitor instead of the scRGB texture it would tone-map
+    // itself — the same as ticking "Force SDR" on OBS Studio's display capture
+    // source. Under WGC this requests a B8G8R8A8 capture (libobs-winrt
+    // get_pixel_format); under DXGI win-capture keeps the scRGB duplication but
+    // scales it by the monitor's own SDR white level, which Windows reports as
+    // >= 80 nits (duplicator-monitor-capture.c duplicator_capture_render,
+    // d3d11-subsystem.cpp GetSdrMaxNits). HDR highlights brighter than the
+    // monitor's SDR white clip instead of being tone-mapped, which is the same
+    // trade-off OBS Studio's option makes. Without it both backends draw an
+    // HDR monitor through DrawMultiplyTonemap with
+    // `80 / obs_get_video_sdr_white_level()`, which divides by zero unless the
+    // host has set the video levels (see ObsContext::reset_video) and records
+    // solid black.
+    settings.set_bool("force_sdr", true);
     settings
 }
 

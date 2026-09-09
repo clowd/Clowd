@@ -41,6 +41,24 @@ impl ObsContext {
         if ret != 0 {
             return Err(ObsError::VideoReset(ret as i32));
         }
+        // libobs never initialises its SDR white / HDR nominal peak levels:
+        // `obs_core` is zero-allocated and only `obs_set_video_levels` writes
+        // them, which OBS Studio's frontend calls after every video reset
+        // (OBSBasic.cpp, 300 / 1000 nit defaults). Left at zero, the
+        // HDR-to-SDR capture paths divide by `obs_get_video_sdr_white_level()`
+        // (win-capture and libobs-winrt DrawMultiplyTonemap: 80 / 0 = inf, the
+        // tonemap saturates the NaN to black) and the SDR-to-scRGB presentation
+        // path multiplies by it (obs_render_main_texture on an HDR swapchain:
+        // zero). obs_reset_video does not touch the levels, so after the first
+        // reset this re-applies the same values; done after every reset for
+        // parity with the frontend. The graphics thread is already rendering
+        // (and reading the levels) by the time obs_reset_video returns, so
+        // take the graphics context around the plain float stores.
+        unsafe {
+            obs_sys::obs_enter_graphics();
+            obs_sys::obs_set_video_levels(300.0, 1000.0);
+            obs_sys::obs_leave_graphics();
+        }
         Ok(())
     }
 
