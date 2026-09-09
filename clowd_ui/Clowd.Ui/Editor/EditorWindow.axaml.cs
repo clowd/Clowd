@@ -209,12 +209,36 @@ namespace Clowd.UI
             // it in sync as uploads start/finish. Handles a window opened onto an already-active upload.
             _session.PropertyChanged += Session_PropertyChanged;
             SyncUploadProgress();
+            SyncStarButton();
         }
 
         private void Session_PropertyChanged(object sender, PropertyChangedEventArgs e)
         {
             if (e.PropertyName == nameof(SessionInfo.ActiveUpload))
                 SyncUploadProgress();
+            else if (e.PropertyName == nameof(SessionInfo.Starred))
+                SyncStarButton(); // the Recent page, or another window, can star the same session
+        }
+
+        private void star_Click(object sender, RoutedEventArgs e)
+        {
+            if (_session == null)
+                return;
+
+            // the setter persists the flag and raises PropertyChanged, which brings the button back
+            // through SyncStarButton — so there is nothing to redraw here.
+            _session.Starred = !_session.Starred;
+        }
+
+        /// <summary>Draws btnStar in the session's current starred state: the filled gold glyph when
+        /// starred, the outline in the strip's white when not, carrying the Recent page's own wording
+        /// in the tooltip so the retention promise is spelled out in both places.</summary>
+        private void SyncStarButton()
+        {
+            var starred = _session?.Starred == true;
+            btnStar.IconPath = FindIconGeometry(starred ? "IconStarFilled" : "IconStarOutline");
+            btnStar.Classes.Set("starOn", starred);
+            ToolTip.SetTip(btnStar, _session?.StarTooltip);
         }
 
         /// <summary>Points btnUpload's ring at the session's current ActiveUpload: subscribes to the

@@ -94,6 +94,13 @@
                     <Setter Property="Height" Value="30" />
                     <Setter Property="Orientation" Value="Horizontal" />
                 </Style>
+
+                <!--  A starred session's star is gold — the same mark the Recent page's rows carry,
+                      so the state reads identically wherever it is shown. Unstarred keeps the
+                      strip's white and the outline glyph (both set in SyncStarButton).  -->
+                <Style Selector="controls|ToolButton.starOn">
+                    <Setter Property="Foreground" Value="{DynamicResource ClowdStarBrush}" />
+                </Style>
             </controls:DockAndWrapPanel.Styles>
 
             <StackPanel>
@@ -252,6 +259,16 @@
                 IsChecked="{Binding ElementName=drawingCanvas, Path=ObjectCursorVisible, Mode=TwoWay}"
                 IsVisible="{Binding ElementName=drawingCanvas, Path=SubjectSkill, Mode=OneWay, Converter={StaticResource enumMatch}, ConverterParameter=Cursor}"
                 ToolTip.Tip="Toggle Captured Mouse Cursor" />
+
+            <!--  Star/unstar this session — the same toggle as the Recent page's row star, and
+                  first in the docked group so it lands leftmost in the right-hand cluster. Glyph,
+                  tint and tooltip are pushed from code (SyncStarButton) rather than bound: this
+                  window is its own DataContext and does not raise PropertyChanged.  -->
+            <controls:ToolButton
+                x:Name="btnStar"
+                Padding="6"
+                controls:DockAndWrapPanel.DockToEnd="True"
+                Click="star_Click" />
 
             <controls:ToolButton
                 x:Name="btnUpload"

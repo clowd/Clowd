@@ -259,12 +259,13 @@ namespace Clowd
         [JsonIgnore]
         public string StarMenuHeader => Starred ? "Unfavorite" : "Favorite";
 
-        /// <summary>What the row's star explains when hovered — including the retention promise,
-        /// which is the half of this feature nothing else on the row says out loud.</summary>
+        /// <summary>What a star explains when hovered, on the Recent row and on both editors' star
+        /// buttons — including the retention promise, which is the half of this feature nothing
+        /// else in the UI says out loud.</summary>
         [JsonIgnore]
         public string StarTooltip => Starred
             ? "Starred — kept until you remove the star. Click to unstar."
-            : "Star this item to keep it out of the automatic cleanup";
+            : "Star this item to save it for later, or keep it out of automatic cleanup";
 
         // null/empty for capture/editor sessions; for upload-only sessions (clipboard / file / tray
         // uploads that do not open in the image editor) one of "image", "video", "text", "file".
