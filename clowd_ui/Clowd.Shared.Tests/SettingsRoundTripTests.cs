@@ -52,7 +52,7 @@ namespace Clowd.Shared.Tests
             // strings / bools / numbers
             original.General.LastSavePath = @"C:\Users\test\Pictures";
             original.General.ConfirmClose = false;
-            original.Capture.ScreenshotWithCursor = false;
+            original.Capture.ScreenshotWithCursor = true;
             original.Capture.RoundedWindowCorners = false;
             original.Capture.TipsMode = CapturerTipsMode.Off; // enum by name (non-default)
             original.ShareRegion.ObscureStyle = ShareRegionObscureStyle.Pixelate; // enum by name (non-default)
@@ -95,7 +95,7 @@ namespace Clowd.Shared.Tests
 
             Assert.Equal(@"C:\Users\test\Pictures", loaded.General.LastSavePath);
             Assert.False(loaded.General.ConfirmClose);
-            Assert.False(loaded.Capture.ScreenshotWithCursor);
+            Assert.True(loaded.Capture.ScreenshotWithCursor);
             Assert.False(loaded.Capture.RoundedWindowCorners);
             Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
             // the share-region obscure pair rides the already-registered JsonStringEnumConverter, so
@@ -369,7 +369,7 @@ namespace Clowd.Shared.Tests
                 {
                   "Capture": {
                     "TipsMode": "Off",
-                    "ScreenshotWithCursor": false
+                    "ScreenshotWithCursor": true
                   }
                 }
                 """);
@@ -379,7 +379,7 @@ namespace Clowd.Shared.Tests
             // the section really did bind — without this the two assertions below would also pass
             // for a file the binder skipped entirely, which is a different test.
             Assert.Equal(CapturerTipsMode.Off, loaded.Capture.TipsMode);
-            Assert.False(loaded.Capture.ScreenshotWithCursor);
+            Assert.True(loaded.Capture.ScreenshotWithCursor);
 
             Assert.Equal(ShareRegionObscureStyle.Blur, loaded.ShareRegion.ObscureStyle);
             Assert.Equal(75, loaded.ShareRegion.ObscureStrength);
