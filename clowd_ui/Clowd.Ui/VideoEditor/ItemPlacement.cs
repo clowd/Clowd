@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using Clowd.VideoSDK.Composition;
@@ -108,13 +108,17 @@ namespace Clowd.UI.VideoEditor
         /// this, so "no placement" is also "no gizmo".
         /// </summary>
         public static bool TryResolve(Project project, Item item, double canvasWidth, double canvasHeight,
-            out PlacedItem placed)
+            out PlacedItem placed, long timeTicks = 0)
         {
             placed = default;
             if (project == null || item == null || canvasWidth <= 0 || canvasHeight <= 0)
                 return false;
 
-            var transform = item.Transform ?? new ModelTransform();
+            // a window-following crop makes the picture's shape — and with it the box's height and
+            // the aspect intent the box honors — a function of time, so the placement resolves the
+            // same transform the composer draws with rather than the stored one. Every other item
+            // gets its stored transform back, the same instance.
+            var transform = Drawn(project, item, timeTicks);
 
             double x, y, w, h, aspect, denominator, denominatorY;
             if (item.Content is KeyboardContent keyboard)
@@ -147,7 +151,7 @@ namespace Clowd.UI.VideoEditor
             }
             else
             {
-                var resolved = ContentAspect(project, item, canvasWidth, canvasHeight);
+                var resolved = ContentAspect(project, item, canvasWidth, canvasHeight, timeTicks);
                 if (resolved is not > 0)
                     return false;
 
@@ -164,6 +168,22 @@ namespace Clowd.UI.VideoEditor
             return true;
         }
 
+        /// <summary>The transform an item is DRAWN with at <paramref name="timeTicks"/>: the
+        /// stored one, except for a media item whose crop follows a recorded window, which
+        /// <see cref="WindowCropMath.Effective"/> resolves into a throwaway clone carrying the
+        /// window's rect as its crop (and, because the window then owns the picture's shape, no
+        /// aspect preset, stretch or explicit height). Never null, and never the model's own
+        /// instance modified.</summary>
+        private static ModelTransform Drawn(Project project, Item item, long timeTicks)
+        {
+            var stored = item?.Transform ?? new ModelTransform();
+            if (item?.Content is not MediaContent media || stored.CropWindow is not { WindowId: > 0 })
+                return stored;
+
+            return WindowCropMath.Effective(project, media, stored,
+                FrameComposer.SourceTimeTicks(media, item, timeTicks)) ?? stored;
+        }
+
         /// <summary>
         /// The drawn height/width of an item's content, or null when it is unknown or draws nothing.
         /// Media takes the probed stream dimensions (the decoded frame may be a proxy, but a proxy
@@ -173,7 +193,8 @@ namespace Clowd.UI.VideoEditor
         /// take the canvas ratio raw, because their composer paths take the canvas as their
         /// natural size and read neither an aspect preset nor a crop.
         /// </summary>
-        public static double? ContentAspect(Project project, Item item, double canvasWidth, double canvasHeight)
+        public static double? ContentAspect(Project project, Item item, double canvasWidth,
+            double canvasHeight, long timeTicks = 0)
         {
             switch (item?.Content)
             {
@@ -184,7 +205,11 @@ namespace Clowd.UI.VideoEditor
                     if (stream is not { Kind: StreamKind.Video, Width: > 0, Height: > 0 })
                         return null;
 
-                    return AspectMath.DisplayAspect(item.Transform, stream.Width, stream.Height);
+                    // a followed window's rect IS the shown region, so the box takes that region's
+                    // ratio and changes shape when the window is resized: the gizmo has to ask at
+                    // the composed time, not read the stored crop, or it boxes the whole recording
+                    return AspectMath.DisplayAspect(Drawn(project, item, timeTicks),
+                        stream.Width, stream.Height);
                 }
 
                 case ImageContent image:
@@ -288,7 +313,7 @@ namespace Clowd.UI.VideoEditor
                         continue;
                     if (timeTicks < item.TimelineStartTicks || timeTicks >= item.TimelineEndTicks)
                         continue;
-                    if (!TryResolve(project, item, canvasWidth, canvasHeight, out var placed))
+                    if (!TryResolve(project, item, canvasWidth, canvasHeight, out var placed, timeTicks))
                         continue;
 
                     // the composer rotates the picture about its center, so test the point in the

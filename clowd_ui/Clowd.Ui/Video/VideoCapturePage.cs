@@ -63,6 +63,11 @@ namespace Clowd.UI
         // the capture source built during bootstrap, so a change means a respawn too.
         private ScreenCaptureMethod _appliedCaptureMethod;
 
+        // whether the recorder currently running was spawned with --window-capture. Unlike the
+        // flag above this is not a settings question but a binary question, so it is remembered
+        // for the same reason and answered by a probe rather than by SettingsRecording.
+        private bool _appliedWindowCapture;
+
         private ObsCapturer _obs;
         // shutdown of a capturer being replaced (failed configure) — awaited before the
         // replacement spawns (both write the same video.mp4).
@@ -204,12 +209,27 @@ namespace Clowd.UI
                 _appliedMultiTrack = ObsArguments.UsesMultiTrack(_settings);
                 _appliedCaptureMethod = WantedCaptureMethod();
 
+                // …and whether this build of the recorder can write the window sidecar at all.
+                // Probed once per binary and cached; a recorder that cannot records exactly as
+                // before, and the editor's crop then offers Manual only.
+                _appliedWindowCapture = _appliedMultiTrack
+                    && await ObsCapabilities.SupportsWindowCaptureAsync(_binaryPath);
+
+                // the first probe of a binary spawns `--help` and can take seconds, during which
+                // CANCEL stays live — so re-assert the guard above rather than spawning into a
+                // session that has since been torn down (nothing would ever dispose that process:
+                // OnCriticalError returns early once _closing is set).
+                if (_closing)
+                    return;
+
                 _obs = new ObsCapturer();
                 _obs.CriticalError += OnCriticalError;
                 _obs.StatusReceived += OnStatusReceived;
                 _obs.LevelsReceived += OnLevelsReceived;
 
-                await _obs.InitializeAsync(ObsArguments.Build(_region, _outputMp4, _settingsPath, _settings), _binaryPath);
+                await _obs.InitializeAsync(
+                    ObsArguments.Build(_region, _outputMp4, _settingsPath, _settings, _appliedWindowCapture),
+                    _binaryPath);
             }
             finally
             {
@@ -974,6 +994,7 @@ namespace Clowd.UI
             session.CornerRadius = _cornerRadius;
             session.WebcamTrack = ResolveWebcamTrack();
             session.InputCapturePath = ResolveInputCapturePath();
+            session.WindowCapturePath = ResolveWindowCapturePath();
             session.AudioTracks = ResolveAudioTracks();
             // the track layout is fixed when the recorder is spawned, so this reports what the file
             // actually got — not what the settings say now, which a mid-recording edit can no
@@ -1076,6 +1097,29 @@ namespace Clowd.UI
             catch (Exception ex)
             {
                 Debug.WriteLine("Could not determine the recording's input-capture file: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>The window-capture jsonl this recording wrote, or null when there is none on
+        /// disk. Report-first then the well-known session path, both existence-checked, exactly
+        /// like <see cref="ResolveInputCapturePath"/>. Existence is the only test: the recorder
+        /// creates the file when it constructs the writer, so a 0-byte file is a legitimate
+        /// outcome of a recording that never started, and emptiness is the parser's problem.</summary>
+        private string ResolveWindowCapturePath()
+        {
+            try
+            {
+                var reported = _obs?.LastTracks?.WindowCapturePath;
+                if (!String.IsNullOrEmpty(reported) && File.Exists(reported))
+                    return reported;
+
+                var expected = ObsArguments.GetWindowCapturePath(_sessionDir);
+                return File.Exists(expected) ? expected : null;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Could not determine the recording's window-capture file: " + ex.Message);
                 return null;
             }
         }
