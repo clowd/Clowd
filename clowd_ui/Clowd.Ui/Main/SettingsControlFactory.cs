@@ -116,23 +116,21 @@ namespace Clowd.UI.Config
             }
         }
 
-        private static Grid NewRowsGrid()
+        // the label column shares its width across the rows of one section (and gives way when
+        // the window is short of room) - see SettingsRowsPanel for why a Grid does not do here.
+        private static SettingsRowsPanel NewRowsPanel()
         {
-            var grid = new Grid();
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Auto));
-            grid.ColumnDefinitions.Add(new ColumnDefinition(GridLength.Star));
-            return grid;
+            return new SettingsRowsPanel();
         }
 
         private Control BuildFlatPanel(List<(SettingsControlFactory Owner, PropertyDescriptor Pd)> rows)
         {
             var stack = new StackPanel { Spacing = 8 };
-            var grid = NewRowsGrid();
-            int row = 0;
+            var panel = NewRowsPanel();
             foreach (var (owner, pd) in rows)
-                owner.AddRowToGrid(grid, ref row, pd);
+                owner.AddRow(panel, pd);
 
-            stack.Children.Add(grid);
+            stack.Children.Add(panel);
             return stack;
         }
 
@@ -144,12 +142,11 @@ namespace Clowd.UI.Config
             // even when declarations interleave.
             foreach (var group in rows.GroupBy(r => GetFirstAttributeOrDefault<CategoryAttribute>(r.Pd)?.Category ?? "Other"))
             {
-                var grid = NewRowsGrid();
-                int row = 0;
+                var panel = NewRowsPanel();
                 foreach (var (owner, pd) in group)
-                    owner.AddRowToGrid(grid, ref row, pd);
+                    owner.AddRow(panel, pd);
 
-                var box = new HeaderedContentControl { Header = group.Key, Content = grid };
+                var box = new HeaderedContentControl { Header = group.Key, Content = panel };
                 var app = Application.Current;
                 if (app != null && app.TryGetResource("GroupBox", app.ActualThemeVariant, out var theme) && theme is ControlTheme groupBoxTheme)
                     box.Theme = groupBoxTheme;
@@ -218,7 +215,7 @@ namespace Clowd.UI.Config
             return new SettingsControlFactory(() => null, obj).BuildModeSelector(pd);
         }
 
-        private void AddRowToGrid(Grid grid, ref int row, PropertyDescriptor pd)
+        private void AddRow(SettingsRowsPanel panel, PropertyDescriptor pd)
         {
             var description = GetFirstAttributeOrDefault<DescriptionAttribute>(pd)?.Description;
             var editor = GetRowForProperty(pd);
@@ -277,29 +274,27 @@ namespace Clowd.UI.Config
             // themselves so vertical rhythm stays even either way (12+12 = ~24px between settings).
             var bottom = String.IsNullOrEmpty(description) ? 12d : 2d;
 
-            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-
             var rowLabel = new TextBlock();
             rowLabel.VerticalAlignment = VerticalAlignment.Center;
             rowLabel.HorizontalAlignment = HorizontalAlignment.Left;
+            // wraps when the panel narrows the label column (a long title in a small window)
+            rowLabel.TextWrapping = TextWrapping.Wrap;
             rowLabel.Margin = new Thickness(0, 12, 0, bottom);
             rowLabel.Text = FromCamelCase(pd.DisplayName);
-            Grid.SetRow(rowLabel, row);
-            Grid.SetColumn(rowLabel, 0);
+            SettingsRowsPanel.SetRole(rowLabel, SettingsRowsPanel.Role.Label);
 
             var rowContent = new Border();
             rowContent.VerticalAlignment = VerticalAlignment.Center;
             // left-aligned with a width cap so rows read as label→control pairs instead
-            // of full-width bands (editors carry their own MinWidth).
+            // of full-width bands (editors carry their own preferred width).
             rowContent.HorizontalAlignment = HorizontalAlignment.Left;
             rowContent.MaxWidth = 460;
             rowContent.Child = editor;
             rowContent.Margin = new Thickness(24, 12, 4, bottom);
-            Grid.SetRow(rowContent, row);
-            Grid.SetColumn(rowContent, 1);
+            SettingsRowsPanel.SetRole(rowContent, SettingsRowsPanel.Role.Editor);
 
-            grid.Children.Add(rowLabel);
-            grid.Children.Add(rowContent);
+            panel.Children.Add(rowLabel);
+            panel.Children.Add(rowContent);
 
             // the Border carries the gate for the editor inside it, so IsEnabled cascades.
             ApplyDisabledWhen(rowLabel);
@@ -307,11 +302,8 @@ namespace Clowd.UI.Config
             ApplyVisibleWhen(rowLabel);
             ApplyVisibleWhen(rowContent);
 
-            row++;
-
             if (!String.IsNullOrEmpty(description))
             {
-                grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
                 var caption = new TextBlock
                 {
                     Text = description,
@@ -322,12 +314,10 @@ namespace Clowd.UI.Config
                     HorizontalAlignment = HorizontalAlignment.Left,
                     Margin = new Thickness(0, 0, 4, 12),
                 };
-                Grid.SetRow(caption, row);
-                Grid.SetColumnSpan(caption, 2);
-                grid.Children.Add(caption);
+                SettingsRowsPanel.SetRole(caption, SettingsRowsPanel.Role.Caption);
+                panel.Children.Add(caption);
                 ApplyDisabledWhen(caption, enabledOpacity: 0.65);
                 ApplyVisibleWhen(caption);
-                row++;
             }
         }
 
@@ -354,7 +344,9 @@ namespace Clowd.UI.Config
                 if (suggested != null)
                     return SuggestedValuesBinding(suggested, pd);
 
-                var txt = SimpleControlBinding(new TextBox { MinWidth = 280 }, pd, TextBox.TextProperty);
+                // a preferred rather than minimum width: in a narrow window the box shrinks
+                // instead of running under the Browse button / off the page (PreferredWidthBox).
+                var txt = new PreferredWidthBox(280, SimpleControlBinding(new TextBox(), pd, TextBox.TextProperty));
                 if (pd.Name.EndsWith("Directory"))
                 {
                     var btn = ButtonControl("Browse", "Secondary", async (s, e) =>
@@ -389,6 +381,7 @@ namespace Clowd.UI.Config
                     {
                         FontSize = 12,
                         Opacity = 0.65,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
                         Margin = new Thickness(2, 4, 0, 0),
                     };
                     preview.Bind(TextBlock.TextProperty, new Binding(pd.Name)
@@ -451,7 +444,7 @@ namespace Clowd.UI.Config
                 // decision table #53: WPFUI NumberBox -> NumericUpDown (decimal?) bridged to the
                 // int/double settings property by NumericTypeConverter. [Range] bounds the spinner
                 // so it cannot walk the value out of the valid domain.
-                var numeric = new NumericUpDown { MinWidth = 160, Increment = 1, FormatString = "0.##" };
+                var numeric = new NumericUpDown { Increment = 1, FormatString = "0.##" };
                 if (range != null)
                 {
                     numeric.Minimum = Convert.ToDecimal(range.Minimum);
@@ -460,7 +453,7 @@ namespace Clowd.UI.Config
                         numeric.Increment = 0.05m;
                 }
 
-                return SimpleControlBinding(numeric, pd, NumericUpDown.ValueProperty, new NumericTypeConverter());
+                return new PreferredWidthBox(160, SimpleControlBinding(numeric, pd, NumericUpDown.ValueProperty, new NumericTypeConverter()));
             }
 
             if (Is(pd, typeof(Color)))
@@ -707,8 +700,9 @@ namespace Clowd.UI.Config
                 return items;
             }
 
-            var combo = new ComboBox { MinWidth = 280 };
-            combo.ItemTemplate = new FuncDataTemplate<AudioDeviceInfo>((o, ns) => new TextBlock { Text = o?.FriendlyName });
+            // Semi aligns ComboBox Left, so it must be told to fill the preferred-width box.
+            var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+            combo.ItemTemplate = new FuncDataTemplate<AudioDeviceInfo>((o, ns) => ComboItemText(o?.FriendlyName));
 
             void Reload()
             {
@@ -726,7 +720,7 @@ namespace Clowd.UI.Config
                     pd.SetValue(_obj, info.DeviceId);
             };
 
-            return combo;
+            return new PreferredWidthBox(280, combo);
         }
 
         /// <summary>A dropdown of cameras for a string device-id property, the camera counterpart of
@@ -741,8 +735,8 @@ namespace Clowd.UI.Config
             const string NoneId = "";
             const string RefreshId = "__clowd_refresh__"; // not a device id any platform can produce
 
-            var combo = new ComboBox { MinWidth = 280 };
-            combo.ItemTemplate = new FuncDataTemplate<CameraDeviceInfo>((o, ns) => new TextBlock { Text = o?.FriendlyName });
+            var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+            combo.ItemTemplate = new FuncDataTemplate<CameraDeviceInfo>((o, ns) => ComboItemText(o?.FriendlyName));
 
             List<CameraDeviceInfo> BuildItems(List<CameraDeviceInfo> cameras)
             {
@@ -803,7 +797,7 @@ namespace Clowd.UI.Config
                     pd.SetValue(_obj, info.DeviceId);
             };
 
-            return combo;
+            return new PreferredWidthBox(280, combo);
         }
 
         /// <summary>An editable field for a string property carrying [SuggestedValues]: a free-text
@@ -814,7 +808,7 @@ namespace Clowd.UI.Config
         /// stable popup path as the ComboBox editors.</summary>
         Control SuggestedValuesBinding(SuggestedValuesAttribute attr, PropertyDescriptor pd)
         {
-            var txt = new TextBox { MinWidth = 280, VerticalAlignment = VerticalAlignment.Center };
+            var txt = new TextBox { VerticalAlignment = VerticalAlignment.Center };
             txt.Bind(TextBox.TextProperty, CreateBinding(pd.Name));
 
             var list = new ListBox
@@ -850,17 +844,29 @@ namespace Clowd.UI.Config
             };
 
             txt.InnerRightContent = btn;
-            return txt;
+            return new PreferredWidthBox(280, txt);
+        }
+
+        /// <summary>The text of a dropdown row (and of the selection box, which reuses the item
+        /// template). Trimmed rather than wrapped: a squeezed combo - a long device name in a
+        /// narrow window - ellipsizes, and the dropdown still shows the full names.</summary>
+        static TextBlock ComboItemText(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                TextWrapping = TextWrapping.NoWrap,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
         }
 
         Control ComboSelectBinding(Func<IEnumerable> items, PropertyDescriptor pd, Func<object, string> display = null, bool canClear = true)
         {
             display ??= o => o?.ToString();
 
-            var combo = new ComboBox();
-            combo.ItemTemplate = new FuncDataTemplate<object>((o, ns) => new TextBlock { Text = display(o) });
+            var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
+            combo.ItemTemplate = new FuncDataTemplate<object>((o, ns) => ComboItemText(display(o)));
             combo.ItemsSource = items();
-            combo.MinWidth = 160;
             combo.DropDownOpened += (s, e) => { combo.ItemsSource = items(); };
             combo.Bind(ComboBox.SelectedItemProperty, CreateBinding(pd.Name));
 
@@ -875,12 +881,12 @@ namespace Clowd.UI.Config
                 reset.Content = "Clear";
                 reset.Click += (s, e) => { combo.SelectedIndex = -1; };
                 panel.Children.Add(reset);
-                panel.Children.Add(combo);
+                panel.Children.Add(new PreferredWidthBox(160, combo));
                 return panel;
             }
             else
             {
-                return combo;
+                return new PreferredWidthBox(160, combo);
             }
         }
 
