@@ -321,6 +321,15 @@ namespace Clowd.UI.VideoEditor
                 : !String.IsNullOrEmpty(videoPath) ? Path.GetFileName(videoPath)
                 : BlankProjectName;
 
+            // the star acts on a Recents entry, so it only exists when there is one: a dev-mode
+            // window opened straight onto a file (--video-edit) has no session to star.
+            if (_session != null)
+                _session.PropertyChanged += Session_PropertyChanged;
+            else
+                btnStar.IsVisible = false;
+
+            SyncStarButton();
+
             RestoreWindowBounds();
 
             Opened += VideoEditorWindow_Opened;
@@ -1832,6 +1841,9 @@ namespace Clowd.UI.VideoEditor
             // detach the progress tracking.
             UntrackRender();
 
+            if (_session != null)
+                _session.PropertyChanged -= Session_PropertyChanged;
+
             // sidecar generation belongs to this window's edit: cancel whatever is running.
             Inspector.Analysis = null;
             _analysis?.Dispose();
@@ -2133,6 +2145,33 @@ namespace Clowd.UI.VideoEditor
             var playing = _player?.State == PlayerState.Playing;
             btnPlayPause.IconPath = FindIconGeometry(playing ? "IconPause" : "IconPlay");
             ToolTip.SetTip(btnPlayPause, playing ? "Pause (Space)" : "Play (Space)");
+        }
+
+        private void Session_PropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName == nameof(SessionInfo.Starred))
+                SyncStarButton(); // the Recent page, or another window, can star the same session
+        }
+
+        private void star_Click(object sender, RoutedEventArgs e)
+        {
+            if (_session == null)
+                return;
+
+            // the setter persists the flag and raises PropertyChanged, which brings the button back
+            // through SyncStarButton — so there is nothing to redraw here.
+            _session.Starred = !_session.Starred;
+        }
+
+        /// <summary>Draws btnStar in the session's current starred state: the filled gold glyph when
+        /// starred, the outline in the top bar's white when not, carrying the Recent page's own
+        /// wording in the tooltip so the retention promise is spelled out in both places.</summary>
+        private void SyncStarButton()
+        {
+            var starred = _session?.Starred == true;
+            btnStar.IconPath = FindIconGeometry(starred ? "IconStarFilled" : "IconStarOutline");
+            btnStar.Classes.Set("starOn", starred);
+            ToolTip.SetTip(btnStar, _session?.StarTooltip);
         }
 
         private Geometry FindIconGeometry(string key)
