@@ -149,8 +149,9 @@ namespace Clowd.VideoSDK.Thumbs
                 Interlocked.Increment(ref _builds);
 
                 // a generated source (an AI denoise sidecar) can be rewritten while this pass
-                // reads it; the stamp taken here is re-checked before the peaks are cached, so a
-                // pass that raced a rewrite is never saved under the new file's identity.
+                // reads it; the stamp taken here is what the peaks get cached under, and the save
+                // drops itself if the file no longer matches it, so a pass that raced a rewrite is
+                // never saved under the new file's identity.
                 var stamp = FileStamp(entry.SourcePath);
 
                 bool complete = WaveformBuilder.Build(entry.SourcePath, entry.StreamIndex, buffer,
@@ -166,11 +167,8 @@ namespace Clowd.VideoSDK.Thumbs
                     return; // canceled: keep the partial peaks, never cache them
 
                 RaiseChanged();
-                if (FileStamp(entry.SourcePath) == stamp)
-                {
-                    WaveformCache.TrySave(entry.CacheDir, entry.SourcePath, entry.StreamIndex, entry.Snapshot,
-                        entry.CacheKey);
-                }
+                WaveformCache.TrySave(entry.CacheDir, entry.SourcePath, entry.StreamIndex, entry.Snapshot,
+                    entry.CacheKey, stamp);
             }
             catch (Exception ex)
             {
