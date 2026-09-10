@@ -61,7 +61,7 @@ namespace Clowd.VideoSDK.Playback
         /// The transport tick, which is also the rate <see cref="PositionChanged"/> is raised at
         /// while playing. Display rate, not "often enough to notice": the position comes from a
         /// clock that interpolates continuously, so there is no event to wait for — a subscriber
-        /// drawing a playhead can only be as smooth as this timer, and at the old 100ms it visibly
+        /// drawing a playhead can only be as smooth as this tick, and at the old 100ms it visibly
         /// hopped. The work per tick is a handful of array walks (seam offset, audio attach state,
         /// end-of-timeline), nothing next to decoding, and the whole callback returns immediately
         /// unless the player is playing.
@@ -79,7 +79,14 @@ namespace Clowd.VideoSDK.Playback
         private volatile Project _project;
         private PlaybackClock _clock;
         private VideoOpenOptions _options;
-        private Timer _tickTimer;
+
+        /// <summary>The transport runs on its own thread, not a <see cref="Timer"/>: end-of-
+        /// timeline is detected nowhere else, and a thread-pool callback can be starved for
+        /// seconds by unrelated pool work (decode continuations, thumbnailing, a busy host
+        /// process) — playback would then run past the end still reporting
+        /// <see cref="PlayerState.Playing"/>, and the playhead would freeze.</summary>
+        private Thread _tickThread;
+        private readonly ManualResetEventSlim _tickStop = new ManualResetEventSlim(false);
 
         private volatile PlayerState _state = PlayerState.Idle;
         private double _volume = 1.0;
@@ -335,7 +342,8 @@ namespace Clowd.VideoSDK.Playback
                 _ = SeekAsync(TimeSpan.Zero, SeekMode.Exact);
             }
 
-            _tickTimer = new Timer(OnTick, null, TickIntervalMs, TickIntervalMs);
+            _tickThread = new Thread(TickLoop) { Name = "clowd-transport", IsBackground = true };
+            _tickThread.Start();
         }
 
         /// <summary>Serial-0 Prepare/OnSeeked pairing + thread start, mirroring
@@ -984,7 +992,13 @@ namespace Clowd.VideoSDK.Playback
             RaisePositionChanged();
         }
 
-        private void OnTick(object state)
+        private void TickLoop()
+        {
+            while (!_tickStop.Wait(TickIntervalMs))
+                OnTick();
+        }
+
+        private void OnTick()
         {
             if (_disposed || _state != PlayerState.Playing)
                 return;
@@ -1332,11 +1346,17 @@ namespace Clowd.VideoSDK.Playback
 
         private void DisposeCore()
         {
+            // joined outside the lock: the tick only ever TryEnters _lifecycleSync, so it
+            // cannot deadlock here, and stopping it first means teardown races nothing. The
+            // event is deliberately not disposed — a tick that outlived the join would fault
+            // on it.
+            _tickStop.Set();
+            var tick = _tickThread;
+            _tickThread = null;
+            tick?.Join(TimeSpan.FromSeconds(1));
+
             lock (_lifecycleSync)
             {
-                _tickTimer?.Dispose();
-                _tickTimer = null;
-
                 var set = _pipelines;
                 _pipelines = null;
                 _frameSource.Dispose();

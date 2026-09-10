@@ -121,10 +121,16 @@ namespace Clowd.VideoSDK.Thumbs
         }
 
         /// <summary>Writes the waveform for a stream, replacing any existing file. Returns false
-        /// when there is nothing to cache (no directory, an incomplete waveform) or the write
-        /// failed — never a reason to fail the analysis that produced it.</summary>
+        /// when there is nothing to cache (no directory, an incomplete waveform), the source no
+        /// longer matches <paramref name="sourceStamp"/>, or the write failed — never a reason to
+        /// fail the analysis that produced it.</summary>
+        /// <param name="sourceStamp">Length and mtime the peaks were read from. The save is
+        /// dropped when the file no longer matches it: a source rewritten during the pass (an AI
+        /// sidecar) would otherwise be cached under the new file's identity holding the old
+        /// file's peaks, and every later open would hit that stale entry.</param>
         public static bool TrySave(string cacheDir, string sourcePath, int streamIndex,
-            WaveformSnapshot snapshot, string cacheKey = null)
+            WaveformSnapshot snapshot, string cacheKey = null,
+            (long Length, long MTimeTicks)? sourceStamp = null)
         {
             if (snapshot == null || !snapshot.IsComplete)
                 return false;
@@ -142,6 +148,12 @@ namespace Clowd.VideoSDK.Thumbs
                 if (!source.Exists)
                     return false;
 
+                long sourceLength = source.Length;
+                long sourceMTimeUtcTicks = source.LastWriteTimeUtc.Ticks;
+                if (sourceStamp is { } stamp
+                    && (stamp.Length != sourceLength || stamp.MTimeTicks != sourceMTimeUtcTicks))
+                    return false;
+
                 Directory.CreateDirectory(cacheDir);
 
                 int buckets = snapshot.ReadyBuckets;
@@ -152,8 +164,8 @@ namespace Clowd.VideoSDK.Thumbs
                     writer.Write((ushort)CurrentVersion);
                     writer.Write((ushort)snapshot.BucketsPerSecond);
                     writer.Write((uint)buckets);
-                    writer.Write(source.Length);
-                    writer.Write(source.LastWriteTimeUtc.Ticks);
+                    writer.Write(sourceLength);
+                    writer.Write(sourceMTimeUtcTicks);
 
                     var bytes = new byte[buckets * 2];
                     Buffer.BlockCopy(snapshot.Pairs, 0, bytes, 0, bytes.Length);
