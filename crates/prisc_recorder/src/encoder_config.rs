@@ -112,9 +112,20 @@ fn select_videotoolbox_encoder(available: &[String]) -> Option<String> {
 /// (0 worst - 100 best; the plugin divides by 100 for
 /// kVTCompressionPropertyKey_Quality). VT ignores the x264 "crf" key entirely,
 /// so without this mapping every recording used the plugin default of 60.
+///
+/// The linear slope was measured on an M2 Pro (2026-09-10) to track x264
+/// `veryfast` at the same CRF to within ~0.6 VMAF across crf 16-24, so it is
+/// kept. What the slider does not have is a sane top end: past ~70 each
+/// point buys a fraction of a VMAF for a multiple of the bytes (q65 ≈ 11
+/// Mbps, q70 ≈ 17.5 Mbps, q80 ≈ 38 Mbps, q90 ≈ 113 Mbps at 1080p30), so the
+/// result is clamped to 15..=70 — crf 15 and below all land on 70.
 fn vt_quality_from_crf(crf: u16) -> i64 {
-    ((51u16.saturating_sub(crf) as f64) * 100.0 / 51.0).round() as i64
+    let q = ((51u16.saturating_sub(crf) as f64) * 100.0 / 51.0).round() as i64;
+    q.clamp(VT_QUALITY_MIN, VT_QUALITY_MAX)
 }
+
+const VT_QUALITY_MIN: i64 = 15;
+const VT_QUALITY_MAX: i64 = 70;
 
 /// Intel-Mac VideoToolbox has no quality mode, so it records at an average
 /// bitrate. Scale a 4 Mbps-at-3440x1440@30 budget by pixel rate and clamp to
@@ -405,14 +416,19 @@ mod tests {
 
     #[test]
     fn vt_quality_mapping_inverts_crf() {
-        assert_eq!(vt_quality_from_crf(0), 100);
-        assert_eq!(vt_quality_from_crf(51), 0);
+        // both ends are clamped: the slider turns over past ~70 (bytes
+        // explode for no visible gain) and below 15 is unwatchable
+        assert_eq!(vt_quality_from_crf(0), 70);
+        assert_eq!(vt_quality_from_crf(15), 70);
+        assert_eq!(vt_quality_from_crf(16), 69);
+        assert_eq!(vt_quality_from_crf(18), 65);
+        assert_eq!(vt_quality_from_crf(51), 15);
         assert_eq!(vt_quality_from_crf(24), 53);
         // Clowd presets must be distinguishable: High(16) > Medium(23) > Low(29)
         assert!(vt_quality_from_crf(16) > vt_quality_from_crf(23));
         assert!(vt_quality_from_crf(23) > vt_quality_from_crf(29));
         // out-of-range input saturates instead of wrapping
-        assert_eq!(vt_quality_from_crf(60), 0);
+        assert_eq!(vt_quality_from_crf(60), 15);
     }
 
     fn cfg(crf: u16, low_cpu: bool) -> EncoderConfig {
