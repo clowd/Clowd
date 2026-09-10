@@ -82,7 +82,7 @@ namespace Clowd.Config
         }
 
         /// <summary>
-        /// Default for <see cref="RegisterAutoStart"/> (and, per that, <see cref="StartMinimized"/>).
+        /// Default for <see cref="RegisterAutoStart"/>.
         /// On Windows the Velopack install hook registers the login item at install time, so a fresh
         /// install is already auto-starting; elsewhere the user has to opt in. Debug builds are never
         /// installed, so they don't default to registering their bin directory to run at login.
@@ -100,14 +100,6 @@ namespace Clowd.Config
         {
             get => _registerAutoStart;
             set => Set(ref _registerAutoStart, value);
-        }
-
-        [DisplayName("Start Clowd minimized")]
-        [Description("Starts Clowd in the notification area without opening this window.")]
-        public bool StartMinimized
-        {
-            get => _startMinimized;
-            set => Set(ref _startMinimized, value);
         }
 
         /// <summary>
@@ -274,10 +266,6 @@ namespace Clowd.Config
         private bool _confirmClose = true;
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;
         private bool _registerAutoStart = DefaultRegisterAutoStart;
-
-        // only on by default where auto-start is: otherwise the first thing a manual launch does is
-        // vanish into the tray, which reads as "nothing happened".
-        private bool _startMinimized = DefaultRegisterAutoStart;
         private AppTheme _theme = AppTheme.System;
         private TrayClickAction _trayClick = TrayClickAction.OpenSettings;
 

@@ -364,8 +364,9 @@ namespace Clowd.UI
             {
                 // a silent restart comes back up in the tray: the user never asked for a window, and
                 // having settings appear unprompted is the one thing that would make a background
-                // update conspicuous. An explicit "Restart to Update" click restarts normally.
-                var restartArgs = silent ? new[] { Program.SilentUpdateRestartArg } : null;
+                // update conspicuous. An explicit "Restart to Update" click is a user action, so the
+                // relaunched process opens General and shows off the version it just installed.
+                var restartArgs = new[] { silent ? Program.AutoStartedArg : Program.UpdatedRestartArg };
                 manager.WaitExitThenApplyUpdates(asset ?? UpdatePendingRestart, silent, true, restartArgs);
             }
             catch (Exception ex)

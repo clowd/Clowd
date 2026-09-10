@@ -187,15 +187,10 @@
                         <CheckBox x:Name="AutoStartCheck" IsChecked="{Binding RegisterAutoStart}">
                             <TextBlock Text="Start Clowd when your computer starts up" />
                         </CheckBox>
-                        <TextBlock x:Name="AutoStartStatusText" Classes="Caption" IsVisible="False" />
-                    </StackPanel>
-
-                    <StackPanel Classes="Setting">
-                        <CheckBox IsChecked="{Binding StartMinimized}">
-                            <TextBlock Text="Start Clowd minimized" />
-                        </CheckBox>
                         <TextBlock Classes="Caption"
-                                   Text="Clowd starts in the notification area without opening this window." />
+                                   TextWrapping="Wrap"
+                                   Text="A startup launch goes straight to the notification area. Starting Clowd yourself always opens this window." />
+                        <TextBlock x:Name="AutoStartStatusText" Classes="Caption" IsVisible="False" />
                     </StackPanel>
 
                     <StackPanel Classes="Setting">
