@@ -137,24 +137,21 @@ namespace Clowd.Shared.Tests
         [Fact]
         public void StartupOptions_DefaultToAutoStart_AndRoundTrip()
         {
-            // auto-start is registered by the Velopack install hook on Windows only, and
-            // start-minimized follows it so a manual launch on other platforms still shows a window.
+            // auto-start is registered by the Velopack install hook on Windows only; elsewhere the
+            // user has to opt in.
             var expected = SettingsGeneral.DefaultRegisterAutoStart;
             Assert.Equal(OperatingSystem.IsWindows() && !IsDebugBuild, expected);
 
             var loaded = SettingsService.Load(_path);
             Assert.Equal(expected, loaded.General.RegisterAutoStart);
-            Assert.Equal(expected, loaded.General.StartMinimized);
 
             var original = new SettingsRoot();
             original.General.RegisterAutoStart = !expected;
-            original.General.StartMinimized = !expected;
 
             SettingsService.Save(original, _path);
             loaded = SettingsService.Load(_path);
 
             Assert.Equal(!expected, loaded.General.RegisterAutoStart);
-            Assert.Equal(!expected, loaded.General.StartMinimized);
         }
 
         [Fact]

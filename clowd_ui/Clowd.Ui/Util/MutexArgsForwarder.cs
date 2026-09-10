@@ -80,8 +80,11 @@ namespace Clowd.Util
                 try
                 {
                     // an empty launch is still sent: it tells the running instance to
-                    // surface its main window (ShowMainWindowRequested on the other side).
-                    await SendArgsToRemote(args ?? Array.Empty<string>());
+                    // surface its main window (ShowMainWindowRequested on the other side) — unless
+                    // nobody asked for this launch (login item / background update restart), which
+                    // must never pop a window on the instance that is already running.
+                    if (!Program.IsAutoStarted || (args != null && args.Length > 0))
+                        await SendArgsToRemote(args ?? Array.Empty<string>());
                 }
                 finally
                 {
@@ -271,7 +274,7 @@ namespace Clowd.Util
             if (args == null || args.Length < 1)
             {
                 // only meaningful from a second instance — our own argless startup already
-                // decides window visibility (StartMinimized / first-run) in App.Startup.
+                // decides window visibility (launch origin / first-run) in App.Startup.
                 if (remote)
                     RequestShowMainWindow();
                 return;

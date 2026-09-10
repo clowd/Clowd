@@ -11,6 +11,10 @@ namespace Clowd.UI
     /// <summary>
     /// Backs "Start Clowd when your computer starts up" (<see cref="Clowd.Config.SettingsGeneral.RegisterAutoStart"/>).
     ///
+    /// Both registrations launch Clowd with <see cref="Clowd.Program.AutoStartedArg"/>: that flag is
+    /// what tells the new process the machine started it rather than the user, and so it must stay
+    /// in the tray instead of opening a window.
+    ///
     /// Windows: an <c>HKCU\...\CurrentVersion\Run</c> value. The Velopack install hook (Program.cs)
     /// writes it at install time and the uninstall hook removes it again, which is why the setting
     /// defaults to on there — a fresh install is already registered before Clowd first runs.
@@ -123,7 +127,7 @@ namespace Clowd.UI
                             ?? throw new InvalidOperationException("Could not open the Windows Run registry key.");
 
             if (enabled)
-                key.SetValue(RunValueName, "\"" + AppLaunchPath.Current + "\"", RegistryValueKind.String);
+                key.SetValue(RunValueName, "\"" + AppLaunchPath.Current + "\" " + Program.AutoStartedArg, RegistryValueKind.String);
             else if (key.GetValue(RunValueName) != null)
                 key.DeleteValue(RunValueName, false);
         }
@@ -143,7 +147,7 @@ namespace Clowd.UI
 
             // `open -a <bundle>` rather than exec'ing the inner Mach-O directly: launchd would
             // otherwise start it outside the normal app-launch path, which breaks the dock/menu-bar
-            // registration Avalonia expects.
+            // registration Avalonia expects. Everything after `--args` is passed on to the app.
             var target = SecurityElement.Escape(GetMacOSLaunchTarget());
             var plist =
                 "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
@@ -157,6 +161,8 @@ namespace Clowd.UI
                 "    <string>/usr/bin/open</string>\n" +
                 "    <string>-a</string>\n" +
                 "    <string>" + target + "</string>\n" +
+                "    <string>--args</string>\n" +
+                "    <string>" + Program.AutoStartedArg + "</string>\n" +
                 "  </array>\n" +
                 "  <key>RunAtLoad</key>\n" +
                 "  <true/>\n" +

@@ -184,26 +184,25 @@ namespace Clowd
                 // start receiving command line arguments forwarded from secondary instances
                 _processor.Ready();
 
-                if (Program.IsSilentUpdateRestart)
-                {
-                    // relaunched by the updater after a background update: come back up exactly as
-                    // the user left it — in the tray, with whatever editors were open restored.
-                    if (SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
-                        EditorWindow.ShowAllPreviouslyActiveSessions();
-                }
-                else if (firstRun)
-                {
-                    // first launch after an install: show the window regardless of StartMinimized,
-                    // on General so the auto-start / minimized options are the first thing seen.
-                    PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
-                }
-                else
-                {
-                    if (!SettingsRoot.Current.General.StartMinimized)
-                        PageManager.Current.GetSettingsPage().Open();
+                if (!firstRun && SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
+                    EditorWindow.ShowAllPreviouslyActiveSessions();
 
-                    if (SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
-                        EditorWindow.ShowAllPreviouslyActiveSessions();
+                // whether a window opens is decided by who started the process, not by a setting.
+                // An automated launch stays in the tray: the OS login item and the updater's
+                // background restart both pass --autostarted, and an Explorer "Upload with Clowd"
+                // launch already carries its own work. Anything else is the user starting Clowd,
+                // and has to look like it did something.
+                var startedForCliWork = CliArgs.ExtractUploadPaths(args).Length > 0;
+
+                if (!Program.IsAutoStarted && !startedForCliWork)
+                {
+                    // first launch after an install, or the restart the user asked for with
+                    // "Restart to Update", opens on General — where the startup options and the
+                    // version number that just changed are.
+                    if (firstRun || Program.IsUpdateRestart)
+                        PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
+                    else
+                        PageManager.Current.GetSettingsPage().Open();
                 }
             }
             catch (Exception ex)
