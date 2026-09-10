@@ -179,6 +179,12 @@ pub fn encoder_settings(encoder_id: &str, config: &EncoderConfig, caps: &Encoder
             // byte-identical H.264 output to p6, and 4 B-frames matched 2.
             settings.set_string("rate_control", "CQVBR");
             settings.set_int("target_quality", (crf + 4).clamp(1, MAX_QUALITY));
+            // The plugin still hands its `max_bitrate` default (10 Mbps) to
+            // NVENC as maxBitRate in CQVBR mode, which caps quality on bursts
+            // (a page jump at 4K60) instead of letting the target quality
+            // decide. 0 = no ceiling, which is what FFmpeg's `-cq -b:v 0`
+            // does and what the measurements were taken with.
+            settings.set_int("max_bitrate", 0);
             settings.set_string("preset", "p6");
             settings.set_string("tune", "hq");
             settings.set_string("multipass", "qres");
@@ -458,7 +464,8 @@ mod tests {
         assert_eq!(s.get_int("bf"), 2);
         assert_eq!(s.get_string("profile"), "high");
         assert_eq!(s.get_int("keyint_sec"), KEYINT_SEC);
-        // unconstrained VBR: no bitrate ceiling is handed to the plugin
+        // unconstrained VBR: max_bitrate is set to 0 explicitly (the plugin
+        // default of 10 Mbps would otherwise cap bursts) and bitrate is unset
         assert_eq!(s.get_int("bitrate"), 0);
         assert_eq!(s.get_int("max_bitrate"), 0);
         // low_cpu is an x264-only knob
