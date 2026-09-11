@@ -357,6 +357,16 @@ namespace Clowd.Drawing
         public DrawingCanvas()
         {
             Focusable = true; // to handle keyboard messages
+
+            // ...but not a tab stop. The canvas is the document surface, not a widget: it takes
+            // focus from a click or from the editor handing it back, and Tab belongs to the
+            // toolbar. It was also the one stop whose focus ring was nonsense — the theme adorns
+            // the whole control, and the border draws through the canvas's own zoom/pan transform,
+            // so it landed out in the artwork rather than on the viewport edge. No ring either
+            // way; a local value outranks the theme's setter.
+            IsTabStop = false;
+            FocusAdorner = null;
+
             UseLayoutRounding = false;
 
             InitializeZoom();

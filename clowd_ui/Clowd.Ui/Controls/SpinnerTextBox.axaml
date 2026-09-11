@@ -38,6 +38,10 @@
     <!-- The 16px-wide up/down buttons (replaces the WPF "SimpleButton" template:
          #33FFFFFF background fading to #66FFFFFF on hover over 0.1s). -->
     <ControlTheme x:Key="ClowdSpinnerSpinButton" TargetType="Button">
+        <!-- Pointer-only affordance: the keyboard spins the value with Up/Down/PageUp/PageDown
+             from the text box, so a tab stop on each arrow would add two useless stops per
+             field. -->
+        <Setter Property="Focusable" Value="False" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="FontSize" Value="6" />
         <Setter Property="Foreground" Value="White" />

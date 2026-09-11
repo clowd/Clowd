@@ -34,12 +34,16 @@ namespace Clowd.UI
 {
     public partial class EditorWindow : SystemThemedWindow
     {
-        private ToolType? _panPreviousTool = null; // null means we're not in a held-key (shift/space) pan
+        private ToolType? _panPreviousTool = null; // null means we're not in a held-key (space) pan
         private SettingsRoot _settings = SettingsRoot.Current;
         private SessionInfo _session;
         private int _nudgeRepeatCount;
         private ScreenRect _normalBounds; // tracked manually while WindowState == Normal (decision table #55)
         private readonly HashSet<Key> _pressedKeys = new HashSet<Key>(); // repeat tracker (decision table #37)
+
+        // the swatch that opened the mini color picker, so closing the popup puts keyboard focus
+        // back where it came from instead of dropping it into the popup root as it disappears
+        private Control _colorSwatchToRefocus;
 
         private readonly string _graphicsPath;
         private readonly string _historyPath;
@@ -196,6 +200,17 @@ namespace Clowd.UI
 
             miniColor.ParentWindow = this;
             miniColor.Canceled += (_, _) => miniColorPopup.IsOpen = false;
+
+            // covers every close path, light dismiss included
+            miniColorPopup.Closed += (_, _) =>
+            {
+                var swatch = _colorSwatchToRefocus;
+                _colorSwatchToRefocus = null;
+                if (swatch is { IsEffectivelyVisible: true })
+                    swatch.Focus(NavigationMethod.Tab);
+                else
+                    drawingCanvas.Focus();
+            };
 
             // opt-in editor features (customizable toolbar / layers sidebar). The sidebar is
             // per-window and always starts closed, so the strip renders exactly as before plus the
@@ -551,7 +566,10 @@ namespace Clowd.UI
                 icmd.Execute(null);
         }
 
-        private static bool IsPanKey(Key key) => key is Key.LeftShift or Key.RightShift or Key.Space;
+        // Space only. Shift used to pan as well, but it is half of Shift+Tab: holding it to
+        // reach the previous tab stop dropped the tool and put the canvas into pan mode, and the
+        // key is already spoken for inside the canvas as the aspect/snap constrain modifier.
+        private static bool IsPanKey(Key key) => key is Key.Space;
 
         private void OnTunnelKeyDown(object sender, KeyEventArgs e)
         {
@@ -574,7 +592,7 @@ namespace Clowd.UI
             if (e.Source is TextBox)
                 return;
 
-            // shift/space-pan: save the current tool and enter pan mode while the key is held
+            // space-pan: save the current tool and enter pan mode while the key is held
             // (skipped while a tool drag is active, §5.4)
             if (IsPanKey(e.Key) && _panPreviousTool == null && !drawingCanvas.IsToolDragActive) {
                 _panPreviousTool = drawingCanvas.Tool;
@@ -665,7 +683,7 @@ namespace Clowd.UI
         {
             _pressedKeys.Remove(e.Key);
 
-            // restore the saved tool once no pan key (shift/space) remains held
+            // restore the saved tool once no pan key (space) remains held
             if (IsPanKey(e.Key) && _panPreviousTool != null && !_pressedKeys.Any(IsPanKey)) {
                 drawingCanvas.Tool = _panPreviousTool.Value;
                 _panPreviousTool = null;
@@ -1387,12 +1405,47 @@ namespace Clowd.UI
 
         private void objectColor_Click(object sender, PointerPressedEventArgs e)
         {
-            miniColor.Reset(drawingCanvas.ObjectColor, (c) => drawingCanvas.ObjectColor = c);
-            miniColorPopup.IsOpen = true;
+            OpenObjectColorPicker();
         }
 
         private void backgroundColor_Click(object sender, PointerPressedEventArgs e)
         {
+            OpenBackgroundColorPicker();
+        }
+
+        // The swatches are plain Borders (a Button theme would fight the checker/color fill), so
+        // keyboard activation is wired by hand. Enter only: the editor swallows Space window-wide
+        // as the pan modifier, so it never reaches a focused control.
+        private void objectColor_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            e.Handled = true;
+            OpenObjectColorPicker();
+        }
+
+        private void backgroundColor_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Enter)
+                return;
+
+            e.Handled = true;
+            OpenBackgroundColorPicker();
+        }
+
+        private void OpenObjectColorPicker()
+        {
+            _colorSwatchToRefocus = objectColorSwatch;
+            miniColorPopup.PlacementTarget = objectColorSwatch;
+            miniColor.Reset(drawingCanvas.ObjectColor, (c) => drawingCanvas.ObjectColor = c);
+            miniColorPopup.IsOpen = true;
+        }
+
+        private void OpenBackgroundColorPicker()
+        {
+            _colorSwatchToRefocus = backgroundColorSwatch;
+            miniColorPopup.PlacementTarget = backgroundColorSwatch;
             miniColor.Reset(drawingCanvas.ArtworkBackground, (c) => drawingCanvas.SetBackgroundColor(c));
             miniColorPopup.IsOpen = true;
         }
