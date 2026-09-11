@@ -1788,7 +1788,7 @@ namespace Clowd.UI.VideoEditor
                 return;
 
             var rect = new PixelRect(x, y, (int)w, (int)h);
-            if (!Screens.All.Any(s => s.WorkingArea.Intersects(rect)))
+            if (!DesktopScreens.All(this).Any(s => s.WorkingArea.Intersects(rect)))
                 return;
 
             WindowStartupLocation = WindowStartupLocation.Manual;

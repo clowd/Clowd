@@ -421,7 +421,7 @@ namespace Clowd.UI
                 // (practical subset per §3 #55: no border compensation, constant padding only)
                 var origRect = session.OriginalBounds;
                 var origPx = new PixelRect(origRect.X, origRect.Y, origRect.Width, origRect.Height);
-                var screen = wnd.Screens.ScreenFromBounds(origPx) ?? wnd.Screens.Primary;
+                var screen = DesktopScreens.FromRect(wnd, origPx) ?? DesktopScreens.Primary(wnd);
                 var workArea = screen?.WorkingArea ?? origPx;
                 var scaling = screen?.Scaling ?? 1.0;
 
@@ -503,7 +503,7 @@ namespace Clowd.UI
         {
             // all placement math is physical px; divide by the target screen scaling only when
             // setting the logical Width/Height (decision table #55).
-            var screen = Screens.ScreenFromBounds(rect) ?? Screens.Primary;
+            var screen = DesktopScreens.FromRect(this, rect) ?? DesktopScreens.Primary(this);
             var scaling = screen?.Scaling ?? 1.0;
             Position = rect.Position;
             Width = rect.Width / scaling;

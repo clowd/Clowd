@@ -723,7 +723,7 @@ namespace Clowd.UI
         /// </summary>
         private void ParkOnRegionScreen(ScreenRect region)
         {
-            var screen = Screens.ScreenFromPoint(new PixelPoint(region.Center.X, region.Center.Y)) ?? Screens.Primary;
+            var screen = DesktopScreens.FromPoint(this, new PixelPoint(region.Center.X, region.Center.Y)) ?? DesktopScreens.Primary(this);
             if (screen == null)
                 return;
 
@@ -823,7 +823,7 @@ namespace Clowd.UI
             if (panelWidth <= 0 || panelHeight <= 0)
                 return;
 
-            var screen = Screens.ScreenFromPoint(new PixelPoint(_region.Center.X, _region.Center.Y)) ?? Screens.Primary;
+            var screen = DesktopScreens.FromPoint(this, new PixelPoint(_region.Center.X, _region.Center.Y)) ?? DesktopScreens.Primary(this);
             if (screen == null)
                 return;
 
