@@ -68,9 +68,19 @@ namespace Clowd.UI
         // for the same reason and answered by a probe rather than by SettingsRecording.
         private bool _appliedWindowCapture;
 
+        // the container the recorder currently running was spawned to write, i.e. the extension of
+        // _outputFile: --output is a command-line argument like the two above, so a change means a
+        // respawn. Always Mp4 for a multi-track recording, whatever the setting says.
+        private VideoContainer _appliedContainer;
+
+        // whether the resolved recorder accepts an .mkv output at all (a binary question, probed
+        // once like _appliedWindowCapture). Folded into WantedContainer so a recorder that cannot
+        // settles on Mp4 rather than respawning after every unrelated settings change.
+        private bool _recorderSupportsMkv;
+
         private ObsCapturer _obs;
         // shutdown of a capturer being replaced (failed configure) — awaited before the
-        // replacement spawns (both write the same video.mp4).
+        // replacement spawns (both write into the same session directory).
         private Task _pendingShutdown;
         private BorderWindow _border;
         private FloatingToolbarWindow _toolbar;
@@ -83,10 +93,12 @@ namespace Clowd.UI
         private double _cornerRadius;
         private string _binaryPath;
         private string _sessionDir;
-        private string _outputMp4;
+        // the file the recorder writes into the session directory: video.mp4, or video.mkv for an
+        // Instant recording the user asked for as MKV (see SetOutputFile).
+        private string _outputFile;
         private string _settingsPath;
         // where the finished video actually ended up (§4.5 / issue #50): the user's output folder
-        // once MoveToOutputFolderAsync has run, and _outputMp4 while recording or if the move failed.
+        // once MoveToOutputFolderAsync has run, and _outputFile while recording or if the move failed.
         private string _savedPath;
         private TimeSpan _lastStatusElapsed;
         private int _statusCount;
@@ -112,9 +124,10 @@ namespace Clowd.UI
                 _cornerRadius = cornerRadius;
                 _settings = SettingsRoot.Current.Recording;
                 _sessionDir = sessionDir;
-                _outputMp4 = Path.Combine(sessionDir, "video.mp4");
+                // provisional: InitializeCapturerAsync settles the container once it knows what
+                // the recorder can write, but the crash/cancel paths read these before then.
+                SetOutputFile(VideoContainer.Mp4);
                 _settingsPath = Path.Combine(sessionDir, ObsArguments.SettingsFileName);
-                _savedPath = _outputMp4;
 
                 // normalize the configured output folder up-front (creating it, or falling back to
                 // Videos when it has gone away) and write it back, so the settings page the OPTIONS
@@ -215,6 +228,14 @@ namespace Clowd.UI
                 _appliedWindowCapture = _appliedMultiTrack
                     && await ObsCapabilities.SupportsWindowCaptureAsync(_binaryPath);
 
+                // …and whether it can write Matroska, which decides the extension of --output.
+                // Same probe cost model: an older recorder quietly records MP4, which is what it
+                // always did, rather than exit 2 on a path it does not accept.
+                _recorderSupportsMkv = await ObsCapabilities.SupportsMkvOutputAsync(_binaryPath);
+                if (_settings.Container == VideoContainer.Mkv && !_recorderSupportsMkv)
+                    Debug.WriteLine("The recorder does not accept an .mkv output; recording MP4 instead.");
+                SetOutputFile(WantedContainer());
+
                 // the first probe of a binary spawns `--help` and can take seconds, during which
                 // CANCEL stays live — so re-assert the guard above rather than spawning into a
                 // session that has since been torn down (nothing would ever dispose that process:
@@ -228,7 +249,7 @@ namespace Clowd.UI
                 _obs.LevelsReceived += OnLevelsReceived;
 
                 await _obs.InitializeAsync(
-                    ObsArguments.Build(_region, _outputMp4, _settingsPath, _settings, _appliedWindowCapture),
+                    ObsArguments.Build(_region, _outputFile, _settingsPath, _settings, _appliedWindowCapture),
                     _binaryPath);
             }
             finally
@@ -629,6 +650,9 @@ namespace Clowd.UI
             // likewise a command-line argument (--capture-method) rather than a settings-file key,
             // and likewise turned into a respawn by ApplySettingsChange.
             nameof(SettingsRecording.CaptureMethod) => true,
+            // and the extension of --output, which is how the recorder picks the container —
+            // respawned the same way.
+            nameof(SettingsRecording.Container) => true,
             // applied as live mutes above, but ALSO part of the --multi-track decision (only an
             // enabled device earns a track), so they must reach ApplySettingsChange too.
             nameof(SettingsRecording.CaptureSpeaker) => true,
@@ -668,7 +692,8 @@ namespace Clowd.UI
                     // it — and the recorder refuses a webcam a single-track process cannot carry.
                     // Replace the process instead, which rewrites the settings file anyway.
                     if (ObsArguments.UsesMultiTrack(_settings) != _appliedMultiTrack
-                        || WantedCaptureMethod() != _appliedCaptureMethod)
+                        || WantedCaptureMethod() != _appliedCaptureMethod
+                        || WantedContainer() != _appliedContainer)
                     {
                         await RespawnCapturerAsync();
                         return;
@@ -797,6 +822,28 @@ namespace Clowd.UI
         /// respawn.</summary>
         private ScreenCaptureMethod WantedCaptureMethod()
             => _settings?.CaptureMethod ?? ScreenCaptureMethod.Auto;
+
+        /// <summary>The container the current settings ask for, narrowed to what can actually be
+        /// written: a multi-track recording is the hybrid MP4 whatever the setting says (the
+        /// recorder rejects an .mkv path with --multi-track), and a recorder that predates .mkv
+        /// support records MP4. Compared against <c>_appliedContainer</c> like the method above.</summary>
+        private VideoContainer WantedContainer()
+        {
+            if (_settings == null || ObsArguments.UsesMultiTrack(_settings) || !_recorderSupportsMkv)
+                return VideoContainer.Mp4;
+            return _settings.Container;
+        }
+
+        /// <summary>Points <c>_outputFile</c> (and, until a move relocates it, <c>_savedPath</c>)
+        /// at the session-directory file the recorder writes for <paramref name="container"/>.
+        /// Called before every spawn: the extension is what tells the recorder which container to
+        /// write, so it has to match the process about to be started.</summary>
+        private void SetOutputFile(VideoContainer container)
+        {
+            _appliedContainer = container;
+            _outputFile = Path.Combine(_sessionDir, "video" + container.ToExtension());
+            _savedPath = _outputFile;
+        }
 
         /// <summary>
         /// The CAM button was pressed. The toolbar has already written
@@ -1144,7 +1191,7 @@ namespace Clowd.UI
         {
             try
             {
-                if (!File.Exists(_outputMp4))
+                if (!File.Exists(_outputFile))
                     return null;
 
                 // a composition recording is a project, not a video: its mp4 carries one stream per
@@ -1154,13 +1201,15 @@ namespace Clowd.UI
                 if (_appliedMultiTrack)
                     return null;
 
-                var target = RecordingOutputPath.GetSavePath(_settings);
+                // the extension of the file actually written, not the setting: the container is
+                // fixed at spawn time and a mid-recording change no longer acts on it.
+                var target = RecordingOutputPath.GetSavePath(_settings, Path.GetExtension(_outputFile));
                 if (String.IsNullOrEmpty(target))
                     return null; // no writable output folder at all; keep the session copy silently
 
                 // File.Move degrades to a full copy across volumes, which for a long recording is
                 // seconds of work — never on the UI thread.
-                await Task.Run(() => File.Move(_outputMp4, target));
+                await Task.Run(() => File.Move(_outputFile, target));
 
                 _savedPath = target;
                 Debug.WriteLine("Recording saved to " + target);
@@ -1180,7 +1229,7 @@ namespace Clowd.UI
         {
             try
             {
-                var mp4 = new FileInfo(_outputMp4);
+                var mp4 = new FileInfo(_outputFile);
                 return mp4.Exists && mp4.Length > 0;
             }
             catch
