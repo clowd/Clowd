@@ -17,13 +17,20 @@ namespace Clowd.Config
         Dark,
     }
 
-    public enum TrayClickAction
+    /// <summary>What a click does — shared by the tray icon and by "launching" Clowd while it is
+    /// already running (<see cref="SettingsGeneral.TrayClick"/> / <see cref="SettingsGeneral.ShortcutClick"/>).
+    /// The member names are what lands in the settings file, so they stay as they were first
+    /// written even where the label has since moved on.</summary>
+    public enum ClickAction
     {
-        [Description("Open settings")]
+        [Description("Open main window")]
         OpenSettings,
 
-        [Description("Capture region")]
+        [Description("Start capture")]
         CaptureRegion,
+
+        [Description("Do nothing")]
+        DoNothing,
     }
 
     /// <summary>How often Clowd polls the release feed while running. Values are minutes — the
@@ -243,10 +250,18 @@ namespace Clowd.Config
 
         [DisplayName("Tray icon click")]
         [Description("What a single click on the tray icon does. The right-click menu always offers everything.")]
-        public TrayClickAction TrayClick
+        public ClickAction TrayClick
         {
             get => _trayClick;
             set => Set(ref _trayClick, value);
+        }
+
+        [DisplayName("Shortcut click")]
+        [Description("What starting Clowd yourself does — the desktop/start menu shortcut, the taskbar or the dock — whether or not Clowd is already running. An automatic startup launch is unaffected: it always stays in the notification area.")]
+        public ClickAction ShortcutClick
+        {
+            get => _shortcutClick;
+            set => Set(ref _shortcutClick, value);
         }
 
         [DisplayName("Confirm before exit")]
@@ -267,7 +282,8 @@ namespace Clowd.Config
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;
         private bool _registerAutoStart = DefaultRegisterAutoStart;
         private AppTheme _theme = AppTheme.System;
-        private TrayClickAction _trayClick = TrayClickAction.OpenSettings;
+        private ClickAction _trayClick = ClickAction.OpenSettings;
+        private ClickAction _shortcutClick = ClickAction.OpenSettings;
 
         private bool _autoDownloadUpdates = true;
         private UpdateInterval _updateCheckInterval = UpdateInterval.ThreeHourly;
