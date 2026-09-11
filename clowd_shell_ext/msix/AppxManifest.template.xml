@@ -42,7 +42,17 @@
   </Capabilities>
 
   <Applications>
-    <Application Id="Clowd" Executable="current\Clowd.Ui.exe" EntryPoint="Windows.FullTrustApplication">
+    <!--
+      A sparse package must declare an Application, but this one must NOT be current\Clowd.Ui.exe:
+      when a process carrying this package's identity (Explorer's dllhost surrogate running the
+      COM server) launches the exe declared here, Windows creates it as this package's application
+      (AUMID Clowd.ShellExtension_...!Clowd) no matter what breakaway attribute the caller passes,
+      and the app then runs packaged - blank taskbar icon, virtualized state (clowd/Clowd#83).
+      Any other exe launched from the surrogate breaks away as intended. The Velopack root
+      launcher only ever relaunches current\Clowd.Ui.exe through Update.exe, so it is a harmless
+      activation target; nothing in Clowd launches it from a packaged process.
+    -->
+    <Application Id="Clowd" Executable="Clowd.Ui.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements DisplayName="Clowd Shell Extension"
                           Description="Adds an 'Upload with Clowd' command to the File Explorer context menu."
                           AppListEntry="none"

@@ -91,6 +91,12 @@ namespace Clowd
 
             velopack.Run();
 
+            // Records whether this process was accidentally started with the shell extension's
+            // package identity (clowd/Clowd#83) — the one launch-origin difference that is
+            // invisible from the outside once the app is running.
+            if (OperatingSystem.IsWindows())
+                SparsePackageManager.ReportProcessIdentity();
+
             args = ConsumeStartupFlags(args);
 
             // single-instance enforcement (MutexArgsForwarder) and argument forwarding happens

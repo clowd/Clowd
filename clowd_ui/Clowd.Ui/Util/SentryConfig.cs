@@ -47,6 +47,18 @@ namespace Clowd
         /// CLOWD-C).</summary>
         public const string ProcessLogKey = "clowd.process-log";
 
+        /// <summary>Sets a tag on every event this process reports from now on. No-op in debug
+        /// builds and when telemetry is opted out, like <see cref="Init"/>.</summary>
+        public static void SetTag(string key, string value)
+        {
+#if !DEBUG
+            if (IsOptedOut)
+                return;
+
+            SentrySdk.ConfigureScope(scope => scope.SetTag(key, value ?? "null"));
+#endif
+        }
+
         public static bool IsOptedOut =>
             !String.IsNullOrEmpty(Environment.GetEnvironmentVariable(OptOutVariable));
 
