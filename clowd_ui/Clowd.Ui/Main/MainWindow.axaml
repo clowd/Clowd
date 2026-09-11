@@ -11,6 +11,38 @@
     MinHeight="360"
     WindowStartupLocation="CenterScreen">
 
+    <ui:SystemThemedWindow.Styles>
+        <!-- Ursa paints the selected nav item in SemiColorPrimaryLight, the palest step of the
+             accent ramp (~8% accent over white) — next to invisible on the light window.
+             ClowdNavSelectedBrush (AccentTheme) is one step up there, and the stock accent in
+             the dark theme. Set on the template border too: Ursa's own pointer-over style writes
+             the border's Background directly, which would otherwise win over the control's
+             Background while hovered. -->
+        <Style Selector="u|NavMenuItem:selected">
+            <Setter Property="Background" Value="{DynamicResource ClowdNavSelectedBrush}" />
+        </Style>
+        <Style Selector="u|NavMenuItem:selected /template/ Border#PART_Border">
+            <Setter Property="Background" Value="{DynamicResource ClowdNavSelectedBrush}" />
+        </Style>
+        <!-- The glyphs sit a touch behind the labels. Even with both slots centered (below) the
+             glyph's middle lands a pixel above the capitals' middle — measured, not eyeballed —
+             so it is nudged down by a render pixel rather than a layout margin, which would
+             only move it half that. -->
+        <Style Selector="u|NavMenuItem PathIcon">
+            <Setter Property="Opacity" Value="0.8" />
+            <Setter Property="RenderTransform" Value="translateY(1px)" />
+        </Style>
+        <!-- Ursa's icon slot is 16px of glyph in 8px padding (32 tall) beside a 14px label in
+             the same padding (~35 tall), and neither presenter is centered in the row, so the
+             glyph lands above the text's middle. Center both on the same axis. -->
+        <Style Selector="u|NavMenuItem /template/ ContentPresenter#PART_IconPresenter">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="u|NavMenuItem /template/ ContentPresenter#PART_HeaderPresenter">
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </ui:SystemThemedWindow.Styles>
+
     <!-- Replaces the WPFUI NavigationFluent / Breadcrumb / Frame shell (decision table #53):
          Ursa NavMenu navigation on the left + a cached ContentControl hosting the pages.
          Spacing: 16px window padding on the left/top edges; right/bottom are left to the
@@ -24,22 +56,24 @@
             </Viewbox>
             <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
                 <TextBlock FontWeight="Medium" Text="CLOWD" />
-                <TextBlock Opacity="0.6" Text="Screen Capture Tool" />
+                <TextBlock Opacity="0.6" Text="Screen Capture" />
             </StackPanel>
         </Grid>
 
         <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*">
 
-            <StackPanel Grid.Row="0" Margin="0,0,0,12" Spacing="8">
+            <StackPanel Grid.Row="0" Margin="0,0,0,24" Spacing="8">
                 <!-- Capture leads: it is what the app is for, and the two editors below it are the
                      ways in without one. -->
                 <Button x:Name="NewCaptureButton"
+                        Classes="Primary"
+                        Theme="{StaticResource SolidButton}"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Click="NewCapture_Click">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <PathIcon Width="16" Height="16" Data="{StaticResource IconNavCapture}" />
-                        <TextBlock Text="Screen Capture" />
+                        <TextBlock Text="Start Capture" />
                     </StackPanel>
                 </Button>
 

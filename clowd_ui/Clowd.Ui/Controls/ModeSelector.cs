@@ -143,7 +143,7 @@ namespace Clowd.UI.Controls
                 Margin = new Thickness(8, 0, 0, 0),
             };
             check.Classes.Add("ModeCheck");
-            check.Bind(Shape.FillProperty, this.GetResourceObservable("SemiColorPrimary"));
+            check.Bind(Shape.FillProperty, this.GetResourceObservable("ClowdAccentTextBrush"));
 
             var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
             header.Children.Add(title);

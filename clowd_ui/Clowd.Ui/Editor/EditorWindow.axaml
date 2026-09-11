@@ -21,60 +21,6 @@
         <conv:ColorToBrushConverter x:Key="convColorToBrush" />
         <conv:EnumMatchToBooleanConverter x:Key="enumMatch" />
         <conv:StringToFontFamilyConverter x:Key="convFontFamily" />
-
-        <!--  The font preview button. Same chrome idiom as SpinnerTextBox: #454545 fill with a
-              #666666 1px border, and the interactive surface drawn 1px inside the border
-              (#33FFFFFF fading to #66FFFFFF on hover over 0.1s, like the spin buttons).  -->
-        <ControlTheme x:Key="InnerToolButtonTheme" TargetType="Button">
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="Margin" Value="4,0,0,0" />
-            <Setter Property="Padding" Value="10,0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Template">
-                <ControlTemplate>
-                    <Border
-                        Background="#454545"
-                        BorderBrush="#666666"
-                        BorderThickness="1">
-                        <Border Name="_bg" Margin="1">
-                            <Border.Transitions>
-                                <Transitions>
-                                    <BrushTransition Property="Background" Duration="0:0:0.1" />
-                                </Transitions>
-                            </Border.Transitions>
-                            <Panel>
-                                <Rectangle
-                                    Height="5"
-                                    VerticalAlignment="Top"
-                                    IsHitTestVisible="False">
-                                    <Rectangle.Fill>
-                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                                            <GradientStop Offset="0" Color="#30FFFFFF" />
-                                            <GradientStop Offset="1" Color="#00FFFFFF" />
-                                        </LinearGradientBrush>
-                                    </Rectangle.Fill>
-                                </Rectangle>
-                                <ContentPresenter
-                                    Name="PART_ContentPresenter"
-                                    Padding="{TemplateBinding Padding}"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Center"
-                                    RenderTransform="translateY(-1px)"
-                                    Content="{TemplateBinding Content}"
-                                    ContentTemplate="{TemplateBinding ContentTemplate}" />
-                            </Panel>
-                        </Border>
-                    </Border>
-                </ControlTemplate>
-            </Setter>
-            <Style Selector="^ /template/ Border#_bg">
-                <Setter Property="Background" Value="#33FFFFFF" />
-            </Style>
-            <Style Selector="^:pointerover /template/ Border#_bg">
-                <Setter Property="Background" Value="#66FFFFFF" />
-            </Style>
-        </ControlTheme>
     </Window.Resources>
 
     <Grid x:Name="rootGrid" Background="#535353">
@@ -103,9 +49,11 @@
                 </Style>
 
                 <!--  A bare Border carries no focus adorner, so the swatches paint their own
-                      keyboard ring: the white inner edge goes accent while they hold focus.  -->
+                      keyboard ring: the white inner edge takes the same brush the theme's focus
+                      adorner draws every other control's ring in (the accent tint AccentTheme
+                      publishes for both variants), so tabbing along the bar reads as one ring.  -->
                 <Style Selector="Border.colorSwatch:focus-visible">
-                    <Setter Property="BorderBrush" Value="{DynamicResource ClowdAccentBrush}" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource AdornerLayerBorderBrush}" />
                 </Style>
             </controls:DockAndWrapPanel.Styles>
 

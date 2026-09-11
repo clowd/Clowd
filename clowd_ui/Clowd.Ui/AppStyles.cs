@@ -67,7 +67,8 @@ namespace Clowd
                 var app = Application.Current;
                 if (app != null)
                 {
-                    // Semi theme accent token (SolidColorBrush per theme variant).
+                    // Semi theme accent token (SolidColorBrush per theme variant). AccentTheme has
+                    // already written the user's accent over it, so this follows their choice.
                     if (app.TryGetResource("SemiColorPrimary", app.ActualThemeVariant, out var brushValue) && brushValue is ISolidColorBrush brush)
                         return brush.Color;
                     // Underlying palette color the primary brush is fed from.
@@ -83,8 +84,7 @@ namespace Clowd
         /// <summary>
         /// The accent of the capture surfaces — the overlay's button panel, and the C# windows
         /// styled to match it (the recording toolbar, the recording border, the scrolling-capture
-        /// status strip). Not <see cref="AccentColor"/>: that one follows the Semi theme and themes
-        /// the ordinary app UI, while this is the OS accent (or the user's pick) put through
+        /// status strip): the OS accent (or the user's pick) put through
         /// <see cref="AccentColors.EnsureContrastWithWhite"/> — the same value
         /// <see cref="CaptureArguments"/> hands the overlay as <c>--accent-color</c>, so a Clowd
         /// window sitting beside the overlay is painted the same blue rather than a near-miss.

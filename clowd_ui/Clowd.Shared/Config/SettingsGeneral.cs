@@ -210,8 +210,9 @@ namespace Clowd.Config
         /// <see cref="GetEffectiveAccentColor"/>.
         /// </summary>
         [DisplayName("Accent color")]
-        [Description("Color of the crosshair, selection border and primary buttons in the capture overlay, " +
-                     "and of the recording toolbar and border.")]
+        [Description("Clowd's accent color: the crosshair, selection border and primary buttons in the " +
+                     "capture overlay, the recording toolbar and border, and the highlighted controls " +
+                     "throughout the app.")]
         [DisabledWhen(nameof(UseSystemAccentColor))]
         public Color AccentColor
         {

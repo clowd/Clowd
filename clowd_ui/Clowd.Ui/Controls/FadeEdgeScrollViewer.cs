@@ -7,7 +7,7 @@ namespace Clowd.UI.Controls
 {
     /// <summary>ScrollViewer that dissolves content at whichever vertical edge has more content
     /// scrolled out of view, instead of ending in a hard clip line. Implemented as an opacity
-    /// mask (not a painted gradient) so it composes with the Mica/acrylic window backdrop.</summary>
+    /// mask (not a painted gradient) so it composes with the Mica window backdrop.</summary>
     public class FadeEdgeScrollViewer : ScrollViewer
     {
         public static readonly StyledProperty<double> FadeSizeProperty =

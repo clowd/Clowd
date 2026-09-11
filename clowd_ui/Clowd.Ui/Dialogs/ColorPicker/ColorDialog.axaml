@@ -82,14 +82,25 @@
                        Orientation="Horizontal" />
         </Grid>
 
+        <!-- The readouts and buttons sit in a panel drawn with the settings pages' GroupBox
+             tokens (same border, radius and surface), only without a header — the GroupBox
+             theme itself always reserves the header row, so this is a bare Border on the same
+             resources. -->
+        <Border Grid.Column="1"
+                Margin="0,10,10,10"
+                Padding="12"
+                Background="{DynamicResource HeaderedContentControlBackground}"
+                BorderBrush="{DynamicResource HeaderedContentControlBorderBrush}"
+                BorderThickness="{DynamicResource HeaderedContentControlBorderThickness}"
+                CornerRadius="{DynamicResource HeaderedContentControlCornerRadius}">
+        <Grid RowDefinitions="*,Auto">
+
         <!-- rows/columns are sized for the theme font (the old 24px rows and 58px value
              column were tuned for 9px Consolas and clipped anything larger). The middle
              column is Auto so it tracks the font rather than clipping again; its width comes
              from the MinWidth on the HSL readout below, which is the widest content. -->
-        <Grid Grid.Column="1"
-              Margin="12"
-              ColumnDefinitions="Auto,Auto,86"
-              RowDefinitions="30,12,30,30,30,30,30,12,30,30,30,30,16,*,32">
+        <Grid ColumnDefinitions="Auto,Auto,86"
+              RowDefinitions="30,12,30,30,30,30,30,12,30,30,30,30">
 
             <Control x:Name="tabReset" Focusable="True" />
 
@@ -220,8 +231,10 @@
                      Classes="val"
                      helpers:SelectTextOnFocus.Active="True" />
 
-            <StackPanel Grid.Row="14"
-                        Grid.ColumnSpan="3"
+        </Grid>
+
+            <StackPanel Grid.Row="1"
+                        Margin="0,12,0,0"
                         HorizontalAlignment="Right"
                         Orientation="Horizontal"
                         Spacing="10">
@@ -265,5 +278,6 @@
                                             Content="_Cancel" />
             </StackPanel>
         </Grid>
+        </Border>
     </Grid>
 </ui:SystemThemedWindow>

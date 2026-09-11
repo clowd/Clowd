@@ -1137,14 +1137,27 @@
 
                     <!--  the button previews the face itself; clicking opens the font picker.
                           Content is kept in step by the code-behind (this project binds at
-                          runtime, and a FontFamily needs converting anyway).  -->
-                    <Button
-                        x:Name="btnFont"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        ToolTip.Tip="Choose a font">
-                        <TextBlock x:Name="txtFontName" Text="Default font" />
-                    </Button>
+                          runtime, and a FontFamily needs converting anyway). Same chrome as the
+                          image editor's font button (InnerToolButtonTheme, AppResources), in a
+                          labelled row like the properties around it.  -->
+                    <DockPanel Classes="row">
+                        <Panel Classes="dot" DockPanel.Dock="Left">
+                            <!--  empty is the renderer's default face  -->
+                            <controls:ResetDefaultButton CurrentValue="{Binding FontFamily, Mode=TwoWay}" DefaultValue="" />
+                        </Panel>
+                        <TextBlock Classes="label" Text="Font" />
+                        <!--  sized and placed like the spinners (120px, on the row's right edge)  -->
+                        <Button
+                            x:Name="btnFont"
+                            Width="120"
+                            Margin="6,0,0,0"
+                            HorizontalAlignment="Right"
+                            HorizontalContentAlignment="Left"
+                            Theme="{StaticResource InnerToolButtonTheme}"
+                            ToolTip.Tip="Choose a font">
+                            <TextBlock x:Name="txtFontName" Text="Default font" TextTrimming="CharacterEllipsis" />
+                        </Button>
+                    </DockPanel>
 
                     <DockPanel Classes="row">
                         <Panel Classes="dot" DockPanel.Dock="Left">

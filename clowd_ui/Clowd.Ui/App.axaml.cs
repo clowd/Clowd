@@ -50,6 +50,8 @@ namespace Clowd
             return null;
         }
 
+
+
         public override void OnFrameworkInitializationCompleted()
         {
             SetupExceptionHandling();
@@ -97,6 +99,11 @@ namespace Clowd
                 bool firstRun = await SetupSettings() || Program.IsVelopackFirstRun;
 
                 ApplyTheme();
+
+                // the accent the user picked drives the whole app, not only the capture surfaces:
+                // it is written over the Semi theme's primary tokens (AccentTheme), so primary
+                // buttons, labels and focus rings all follow it.
+                AccentTheme.Attach();
 
                 // must run before anything resolves a string. An empty Language setting keeps the
                 // OS UI language, which Loc captured on first touch just now.
