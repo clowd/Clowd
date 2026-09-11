@@ -67,6 +67,10 @@ namespace Clowd
 
                 MacDockIcon.Initialize(desktop);
 
+                // Windows: park a never-shown window so display changes reach Avalonia's screen
+                // cache while Clowd is tray-only (see ScreenCacheSentinel).
+                ScreenCacheSentinel.Initialize();
+
                 Startup(desktop.Args ?? Array.Empty<string>());
             }
 
