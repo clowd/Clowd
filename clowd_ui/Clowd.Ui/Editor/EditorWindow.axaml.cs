@@ -212,6 +212,8 @@ namespace Clowd.UI
                     drawingCanvas.Focus();
             };
 
+            InitCustomizePopup();
+
             // opt-in editor features (customizable toolbar / layers sidebar). The sidebar is
             // per-window and always starts closed, so the strip renders exactly as before plus the
             // customize button, and no sidebar.
@@ -867,26 +869,116 @@ namespace Clowd.UI
             return this.TryFindResource(key, ActualThemeVariant, out var value) ? value as Geometry : null;
         }
 
-        /// <summary>Regenerates the customize-popup rows (one per vector tool in resolved order) in place.</summary>
-        private void RebuildCustomizePopup()
+        // ---- customize popup ------------------------------------------------------------
+
+        /// <summary>Grip dots at rest / on hover — the same pair the layers panel uses, so the two
+        /// reorderable lists in this window read as one control.</summary>
+        private static readonly SolidColorBrush _customizeGripBrush = new SolidColorBrush(Color.FromRgb(215, 215, 218));
+        private static readonly SolidColorBrush _customizeGripHoverBrush = new SolidColorBrush(Colors.White);
+
+        /// <summary>Drag-to-reorder for the popup's rows (the grip cell on the left of each). Owns
+        /// the pointer for the gesture; <see cref="CustomizeRowsHost"/> answers its questions.</summary>
+        private RowReorderDrag _customizeDrag;
+
+        /// <summary>The tool behind each popup row, in display order — the order list may name a
+        /// tool the registry does not know, so a row index is not an order index.</summary>
+        private readonly List<ToolType> _customizeRowTools = new List<ToolType>();
+
+        /// <summary>The checkbox of each popup row, in display order. Only these are tab stops:
+        /// the grips are pointer-only by nature and the two reset buttons are mouse-only, so Tab
+        /// cycles the tools and nothing else.</summary>
+        private readonly List<CheckBox> _customizeChecks = new List<CheckBox>();
+
+        /// <summary>Wires the customize popup once: reorder drag, keyboard focus on open (the
+        /// button is opened with Enter as often as with a click), Escape to close, and focus back
+        /// on the button afterwards so the keyboard does not fall into the vanishing popup root.</summary>
+        private void InitCustomizePopup()
         {
+            customizeDropIndicator.Background = new SolidColorBrush(AppStyles.AccentColor);
+            _customizeDrag = new RowReorderDrag(customizeRows, customizeRows, customizeDropIndicator, new CustomizeRowsHost(this));
+
+            customizePopup.Opened += (_, _) => FocusCustomizeCheck(_customizeChecks.FirstOrDefault(c => c.IsEnabled));
+
+            // covers every close path, light dismiss included
+            customizePopup.Closed += (_, _) =>
+            {
+                if (btnCustomize.IsEffectivelyVisible)
+                    btnCustomize.Focus(NavigationMethod.Tab);
+                else
+                    drawingCanvas.Focus();
+            };
+
+            // The popup lives in its own PopupRoot with its own focus scope, so the window's key
+            // handlers never see keys pressed in it. Hook the root itself (it only exists while
+            // the popup is open, hence on attach) so Escape works whichever child has focus.
+            TopLevel keyRoot = null;
+            customizeRoot.AttachedToVisualTree += (_, _) =>
+            {
+                keyRoot = TopLevel.GetTopLevel(customizeRoot);
+                keyRoot?.AddHandler(KeyDownEvent, CustomizeRoot_KeyDown, RoutingStrategies.Tunnel);
+            };
+            customizeRoot.DetachedFromVisualTree += (_, _) =>
+            {
+                keyRoot?.RemoveHandler(KeyDownEvent, CustomizeRoot_KeyDown);
+                keyRoot = null;
+            };
+        }
+
+        private void CustomizeRoot_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Escape)
+                return;
+
+            e.Handled = true;
+            customizePopup.IsOpen = false;
+        }
+
+        /// <summary>Posted: on open the popup root is still laying out, and after a rebuild the
+        /// new rows are, so an immediate Focus() is dropped on the way in (the mini color picker
+        /// does the same). Skipped if the popup closed in the meantime.</summary>
+        private void FocusCustomizeCheck(CheckBox check)
+        {
+            if (check == null)
+                return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (customizePopup.IsOpen && check.IsLoaded)
+                    check.Focus(NavigationMethod.Tab);
+            }, DispatcherPriority.Background);
+        }
+
+        /// <summary>Regenerates the customize-popup rows (one per vector tool in resolved order) in
+        /// place. <paramref name="focusTool"/> names the row whose checkbox should hold the
+        /// keyboard afterwards — a rebuild destroys the row that had it.</summary>
+        private void RebuildCustomizePopup(ToolType? focusTool = null)
+        {
+            _customizeDrag.Cancel(); // before the rows it is holding on to go away
             customizeRows.Children.Clear();
+            _customizeRowTools.Clear();
+            _customizeChecks.Clear();
 
             var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor);
             var hidden = ToolbarConfig.ResolveHiddenTools(_settings.Editor);
+            var shown = order.Where(t => GetToolEntry(t) != null).ToList();
 
-            for (int i = 0; i < order.Count; i++)
+            for (int i = 0; i < shown.Count; i++)
             {
-                var tool = order[i];
+                var tool = shown[i];
                 var entry = GetToolEntry(tool);
-                if (entry == null)
-                    continue;
 
                 var row = new Grid
                 {
                     Height = 28,
-                    ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"),
+                    ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
                 };
+
+                // drag grip, leftmost; the cell is reserved on every row so the checkboxes stay
+                // on one left edge, and the dots are only there when there is somewhere to go
+                var grip = _customizeDrag.BuildGrip(i, shown.Count > 1, _customizeGripBrush, _customizeGripHoverBrush,
+                    new Thickness(2, 2, 8, 2));
+                Grid.SetColumn(grip, 0);
+                row.Children.Add(grip);
 
                 var check = new CheckBox
                 {
@@ -894,7 +986,7 @@ namespace Clowd.UI
                     IsChecked = !hidden.Contains(tool),
                     IsEnabled = tool != ToolType.Pointer, // the pointer can never be hidden
                 };
-                Grid.SetColumn(check, 0);
+                Grid.SetColumn(check, 1);
                 var toolForCheck = tool;
                 check.IsCheckedChanged += (_, _) => SetToolHidden(toolForCheck, check.IsChecked != true);
                 row.Children.Add(check);
@@ -906,35 +998,51 @@ namespace Clowd.UI
                     Foreground = Brushes.White,
                     Text = entry.DisplayName,
                 };
-                Grid.SetColumn(label, 1);
+                Grid.SetColumn(label, 2);
                 row.Children.Add(label);
 
-                int index = i;
-
-                var up = CreateReorderButton("IconChevronUp", i > 0);
-                Grid.SetColumn(up, 2);
-                up.Click += (_, _) => MoveTool(index, index - 1);
-                row.Children.Add(up);
-
-                var down = CreateReorderButton("IconChevronDown", i < order.Count - 1);
-                Grid.SetColumn(down, 3);
-                down.Click += (_, _) => MoveTool(index, index + 1);
-                row.Children.Add(down);
-
                 customizeRows.Children.Add(row);
+                _customizeRowTools.Add(tool);
+                _customizeChecks.Add(check);
+            }
+
+            if (focusTool.HasValue)
+            {
+                var index = _customizeRowTools.IndexOf(focusTool.Value);
+                if (index >= 0)
+                    FocusCustomizeCheck(_customizeChecks[index]);
             }
         }
 
-        private ToolButton CreateReorderButton(string iconKey, bool enabled)
+        /// <summary>What the customize popup's rows tell <see cref="RowReorderDrag"/> about
+        /// themselves: one flat list, every row may land anywhere in it.</summary>
+        private sealed class CustomizeRowsHost : IRowReorderDragHost
         {
-            return new ToolButton
+            private readonly EditorWindow _window;
+
+            public CustomizeRowsHost(EditorWindow window) => _window = window;
+
+            public int RowCount => _window.customizeRows.Children.Count;
+
+            public (double Top, double Height) RowExtent(int row)
             {
-                Width = 24,
-                Height = 24,
-                Padding = new Thickness(4),
-                IconPath = FindIconGeometry(iconKey),
-                IsEnabled = enabled,
-            };
+                var bounds = _window.customizeRows.Children[row].Bounds;
+                return (bounds.Top, bounds.Height);
+            }
+
+            public (int Start, int End) SlotGroup(int row) => (0, RowCount - 1);
+
+            public bool CanBeginDrag => true;
+
+            public void SetRowLifted(int row, bool lifted) =>
+                _window.customizeRows.Children[row].Opacity = lifted ? 0.45 : 1;
+
+            public void Drop(int fromRow, int dropSlot)
+            {
+                var target = RowReorderMath.TargetRow(fromRow, dropSlot);
+                if (target != fromRow)
+                    _window.MoveTool(fromRow, target);
+            }
         }
 
         private void SetToolHidden(ToolType tool, bool hide)
@@ -951,20 +1059,34 @@ namespace Clowd.UI
             _settings.Editor.HiddenTools = hidden.Select(t => t.ToString()).ToList();
             RebuildToolStrip();
             TrySaveSettings();
-            RebuildCustomizePopup();
+            // no popup rebuild: the row order is unchanged, and the checkbox already shows the new
+            // state — rebuilding would drop the keyboard focus that just toggled it
         }
 
-        private void MoveTool(int from, int to)
+        /// <summary>Moves the tool on popup row <paramref name="fromRow"/> so that it ends up on
+        /// row <paramref name="toRow"/> (both display indexes), and persists the new order.</summary>
+        private void MoveTool(int fromRow, int toRow)
         {
-            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor).ToList();
-            if (from < 0 || to < 0 || from >= order.Count || to >= order.Count)
+            if (fromRow == toRow || fromRow < 0 || toRow < 0 || fromRow >= _customizeRowTools.Count || toRow >= _customizeRowTools.Count)
                 return;
 
-            (order[to], order[from]) = (order[from], order[to]);
+            var shown = _customizeRowTools.ToList();
+            var tool = shown[fromRow];
+            shown.RemoveAt(fromRow);
+            shown.Insert(toRow, tool);
+
+            // The persisted order may carry tools this registry does not show; they keep their
+            // place. The moved tool goes just ahead of whichever shown tool now follows it (or to
+            // the end, when none does).
+            var order = ToolbarConfig.ResolveToolbarOrder(_settings.Editor).ToList();
+            order.Remove(tool);
+            var insertAt = toRow + 1 < shown.Count ? order.IndexOf(shown[toRow + 1]) : order.Count;
+            order.Insert(insertAt, tool);
+
             _settings.Editor.ToolbarOrder = order.Select(t => t.ToString()).ToList();
             RebuildToolStrip();
             TrySaveSettings();
-            RebuildCustomizePopup();
+            RebuildCustomizePopup(focusTool: tool);
         }
 
         private void customize_Click(object sender, RoutedEventArgs e)
