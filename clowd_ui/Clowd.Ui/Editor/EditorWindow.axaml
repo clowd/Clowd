@@ -101,6 +101,12 @@
                 <Style Selector="controls|ToolButton.starOn">
                     <Setter Property="Foreground" Value="{DynamicResource ClowdStarBrush}" />
                 </Style>
+
+                <!--  A bare Border carries no focus adorner, so the swatches paint their own
+                      keyboard ring: the white inner edge goes accent while they hold focus.  -->
+                <Style Selector="Border.colorSwatch:focus-visible">
+                    <Setter Property="BorderBrush" Value="{DynamicResource ClowdAccentBrush}" />
+                </Style>
             </controls:DockAndWrapPanel.Styles>
 
             <StackPanel>
@@ -133,10 +139,14 @@
                     BorderBrush="Black"
                     BorderThickness="1">
                     <Border
+                        x:Name="backgroundColorSwatch"
                         Background="{x:Static util:CheckerBrushes.Light}"
                         BorderBrush="White"
                         BorderThickness="1"
+                        Classes="colorSwatch"
                         Cursor="Hand"
+                        Focusable="True"
+                        KeyDown="backgroundColor_KeyDown"
                         PointerPressed="backgroundColor_Click">
                         <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ArtworkBackground, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
                     </Border>
@@ -163,10 +173,14 @@
                     BorderThickness="1"
                     IsVisible="{Binding ElementName=chkColorAuto, Path=!IsChecked}">
                     <Border
+                        x:Name="objectColorSwatch"
                         Background="{x:Static util:CheckerBrushes.Light}"
                         BorderBrush="White"
                         BorderThickness="1"
+                        Classes="colorSwatch"
                         Cursor="Hand"
+                        Focusable="True"
+                        KeyDown="objectColor_KeyDown"
                         PointerPressed="objectColor_Click">
                         <Rectangle Fill="{Binding ElementName=drawingCanvas, Path=ObjectColor, Mode=OneWay, Converter={StaticResource convColorToBrush}}" />
                     </Border>
@@ -454,12 +468,17 @@
 
         </Grid>
 
+        <!--  Anchored to the swatch that opened it (PlacementTarget is set in code), never to the
+              pointer: the pointer is only where the swatch is when the swatch was clicked, and a
+              keyboard open put the picker wherever the mouse happened to be sitting. The offsets
+              cancel the dialog's 10px shadow margin, so the popup's visible edge lines up with the
+              swatch's left edge and sits 2px under it.  -->
         <Popup
             x:Name="miniColorPopup"
-            HorizontalOffset="-5"
+            HorizontalOffset="-10"
             IsLightDismissEnabled="True"
-            Placement="Pointer"
-            VerticalOffset="-5">
+            Placement="BottomEdgeAlignedLeft"
+            VerticalOffset="-8">
             <colors:MiniColorDialog
                 x:Name="miniColor"
                 Margin="10"

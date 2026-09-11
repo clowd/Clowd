@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Clowd.UI.Converters;
 using Clowd.Util;
 
@@ -62,6 +63,17 @@ namespace Clowd.UI.Dialogs.ColorPicker
         // the four component slots, in display order. Slot 0 doubles as the full-width hex box.
         private TextBox[] _componentBoxes;
 
+        // the slot the user is part-way through typing into, or -1. Only that box is held back
+        // from the programmatic refresh: the hex field takes focus the moment the picker opens, so
+        // keying off focus alone would freeze its readout for every color picked with the wheel.
+        private int _editingBox = -1;
+
+        // the text UpdateComponentValues last wrote into each slot. TextChanged is dispatcher-
+        // posted, so a flag around the write cannot mask the echo — but the echo carries exactly
+        // the text that was written, which a user's keystroke never does (and if it somehow
+        // matched, the color it parses to is the one already in effect).
+        private readonly string[] _lastWritten = new string[4];
+
         private TextBlock[] _componentLabels;
 
         private StackPanel[] _componentPanels;
@@ -83,17 +95,25 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
                 box.TextChanged += (s, e) =>
                 {
-                    // TextChanged is dispatcher-posted in Avalonia (unlike WPF), so a boolean
-                    // flag around the programmatic write in Update() cannot mask the echo — it
-                    // arrives after the flag is reset and would replace CurrentColor with an
-                    // RGB round-trip, quantizing or resetting the stored hue. Update() only
-                    // writes a box while unfocused, so unfocused changes are echoes.
+                    // Only a keystroke may drive the color from here: an echo of Update()'s own
+                    // write would replace CurrentColor with an RGB round-trip, quantizing or
+                    // resetting the stored hue. TextChanged is dispatcher-posted in Avalonia
+                    // (unlike WPF), so a flag around the write cannot mask the echo — it arrives
+                    // after the flag is reset. An unfocused box was certainly not typed into, and
+                    // a focused one is judged by its text (see _lastWritten).
                     if (!box.IsFocused) return;
+                    if (box.Text == _lastWritten[index]) return;
+                    _editingBox = index;
                     ApplyComponentText(index, box.Text);
                 };
 
                 // rewrite whatever the user typed into canonical form once they leave the box
-                box.LostFocus += (s, e) => UpdateComponentValues();
+                box.LostFocus += (s, e) =>
+                {
+                    if (_editingBox == index)
+                        _editingBox = -1;
+                    UpdateComponentValues();
+                };
             }
 
             UpdateComponentLayout();
@@ -143,6 +163,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
             ColorSelectFn = null; // don't echo the seed value back to the caller
             _originalColor = initial;
             _committed = false;
+            _editingBox = -1;
+            Array.Clear(_lastWritten);
             CurrentColor = HslRgbColor.FromColor(initial);
             ColorSelectFn = selectFn;
         }
@@ -184,6 +206,23 @@ namespace Clowd.UI.Dialogs.ColorPicker
             // Hook the popup root so Escape/Enter work no matter which child has focus.
             _keyRoot = TopLevel.GetTopLevel(this);
             _keyRoot?.AddHandler(KeyDownEvent, RootKeyDown, RoutingStrategies.Tunnel);
+
+            // The picker opens into its own popup root, which starts with nothing focused: Tab
+            // would have to walk in from the host window, and Escape/Enter only worked because
+            // RootKeyDown is hooked. Put the caret in the text field so the popup is the
+            // keyboard's subject the moment it appears — the field is a real tab stop, unlike this
+            // control, which must stay unfocusable so Tab cycles the picker's own widgets.
+            //
+            // Posted: at attach time the popup root is still laying out and a Focus() there is
+            // dropped on the way in.
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (!IsLoaded)
+                    return;
+
+                _componentBoxes[0].Focus(NavigationMethod.Tab);
+                _componentBoxes[0].SelectAll();
+            }, DispatcherPriority.Background);
 
             // subscribed per-open rather than for the control's lifetime: the history event is
             // static, and the editor's picker outlives any single popup
@@ -449,8 +488,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
             UpdateComponentValues();
         }
 
-        /// <summary>Writes the current color into the component boxes, leaving whichever box has
-        /// focus alone so it does not fight the user's typing.</summary>
+        /// <summary>Writes the current color into the component boxes, leaving the one the user is
+        /// mid-edit in alone so it does not fight their typing.</summary>
         private void UpdateComponentValues(bool skipFocused = true)
         {
             var c = CurrentColor;
@@ -478,9 +517,10 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
             for (int i = 0; i < values.Length; i++)
             {
-                if (skipFocused && _componentBoxes[i].IsFocused)
+                if (skipFocused && i == _editingBox)
                     continue;
 
+                _lastWritten[i] = values[i];
                 _componentBoxes[i].Text = values[i];
             }
         }
