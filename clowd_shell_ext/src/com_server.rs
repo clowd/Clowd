@@ -17,7 +17,12 @@ use windows::Win32::System::Com::{CoTaskMemAlloc, CoTaskMemFree, IBindCtx, IClas
 use windows::Win32::System::LibraryLoader::{
     GetModuleFileNameW, GetModuleHandleExW, GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 };
-use windows::Win32::System::Threading::{CreateProcessW, DETACHED_PROCESS, PROCESS_INFORMATION, STARTUPINFOW};
+use windows::Win32::System::Threading::{
+    CreateProcessW, DeleteProcThreadAttributeList, InitializeProcThreadAttributeList, UpdateProcThreadAttribute, DETACHED_PROCESS,
+    EXTENDED_STARTUPINFO_PRESENT, LPPROC_THREAD_ATTRIBUTE_LIST, PROCESS_INFORMATION, PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY,
+    STARTUPINFOEXW, STARTUPINFOW,
+};
+use windows::Win32::System::WindowsProgramming::PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE;
 use windows::Win32::UI::Shell::{
     IEnumExplorerCommand, IExplorerCommand, IExplorerCommand_Impl, IShellItemArray, ECF_DEFAULT, ECS_ENABLED, SIGDN_FILESYSPATH,
 };
@@ -119,9 +124,22 @@ fn spawn_detached(exe: &Path, paths: &[String]) -> windows::core::Result<()> {
     // CreateProcessW may scribble on the command line buffer, hence PWSTR/mut
     let mut cmd_wide = to_wide(&invoke::build_command_line(&exe_text, paths));
     unsafe {
-        let startup = STARTUPINFOW {
-            cb: std::mem::size_of::<STARTUPINFOW>() as u32,
-            ..Default::default()
+        // This DLL runs inside a dllhost.exe surrogate that carries the sparse package's
+        // identity (Clowd.ShellExtension), and by default a packaged process hands that
+        // identity down to every child it creates. Clowd.Ui.exe launched that way is a
+        // "packaged" app in the shell's eyes: its taskbar buttons take the package's
+        // AppUserModelID and logo instead of the exe's icon (which is what Explorer
+        // showed as a blank taskbar icon, clowd/Clowd#83), and anything keyed on identity
+        // — notifications, AUMID grouping, virtualized registry/file access — diverges from
+        // the same app started from a shortcut. The desktop-app policy attribute breaks the
+        // child out so it runs exactly as an unpackaged launch would.
+        let attributes = DesktopAppBreakaway::new()?;
+        let startup = STARTUPINFOEXW {
+            StartupInfo: STARTUPINFOW {
+                cb: std::mem::size_of::<STARTUPINFOEXW>() as u32,
+                ..Default::default()
+            },
+            lpAttributeList: attributes.list(),
         };
         let mut process = PROCESS_INFORMATION::default();
         CreateProcessW(
@@ -130,10 +148,10 @@ fn spawn_detached(exe: &Path, paths: &[String]) -> windows::core::Result<()> {
             None,
             None,
             false,
-            DETACHED_PROCESS,
+            DETACHED_PROCESS | EXTENDED_STARTUPINFO_PRESENT,
             None,
             PCWSTR(cwd_wide.as_ptr()),
-            &startup,
+            &startup.StartupInfo,
             &mut process,
         )?;
         // hand the child our foreground rights so its window (or the one the running
@@ -144,6 +162,53 @@ fn spawn_detached(exe: &Path, paths: &[String]) -> windows::core::Result<()> {
         let _ = CloseHandle(process.hThread);
     }
     Ok(())
+}
+
+/// A one-entry PROC_THREAD_ATTRIBUTE_LIST carrying
+/// PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY = BREAKAWAY_ENABLE_PROCESS_TREE, which makes the
+/// process created with it (and its descendants) run without our package identity. Owns
+/// the list's buffer and the policy value for as long as CreateProcessW may read them.
+struct DesktopAppBreakaway {
+    buffer: Vec<u8>,
+    // boxed so its address is stable: UpdateProcThreadAttribute stores the pointer, not the value
+    policy: Box<u32>,
+}
+
+impl DesktopAppBreakaway {
+    unsafe fn new() -> windows::core::Result<Self> {
+        // first call only reports the buffer size (and fails with ERROR_INSUFFICIENT_BUFFER)
+        let mut size = 0usize;
+        let _ = InitializeProcThreadAttributeList(None, 1, None, &mut size);
+        let mut buffer = vec![0u8; size];
+        let list = LPPROC_THREAD_ATTRIBUTE_LIST(buffer.as_mut_ptr() as *mut c_void);
+        InitializeProcThreadAttributeList(Some(list), 1, None, &mut size)?;
+        let policy = Box::new(PROCESS_CREATION_DESKTOP_APP_BREAKAWAY_ENABLE_PROCESS_TREE);
+        let this = Self {
+            buffer,
+            policy,
+        };
+        // on failure Drop still deletes the initialized list
+        UpdateProcThreadAttribute(
+            this.list(),
+            0,
+            PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY as usize,
+            Some(&*this.policy as *const u32 as *const c_void),
+            std::mem::size_of::<u32>(),
+            None,
+            None,
+        )?;
+        Ok(this)
+    }
+
+    fn list(&self) -> LPPROC_THREAD_ATTRIBUTE_LIST {
+        LPPROC_THREAD_ATTRIBUTE_LIST(self.buffer.as_ptr() as *mut c_void)
+    }
+}
+
+impl Drop for DesktopAppBreakaway {
+    fn drop(&mut self) {
+        unsafe { DeleteProcThreadAttributeList(self.list()) };
+    }
 }
 
 #[implement(IExplorerCommand)]
