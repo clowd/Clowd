@@ -12,8 +12,11 @@ pub const MAX_AUDIO_SOURCES: usize = 8;
 #[derive(Parser, Debug)]
 #[command(name = "obs-express", about = "Minimal screen recorder backed by OBS")]
 pub struct Cli {
-    /// Recording file path; must end .mp4 and its parent directory must exist.
-    /// Required in recording mode (i.e. unless --list-cameras).
+    /// Recording file path; must end .mp4 or .mkv (the extension picks the
+    /// container) and its parent directory must exist. .mkv is single-track
+    /// only: --multi-track uses OBS's hybrid MP4 output, which writes MP4
+    /// whatever the file is called. Required in recording mode (i.e. unless
+    /// --list-cameras).
     #[arg(long, required_unless_present = "list_cameras")]
     pub output: Option<PathBuf>,
 
@@ -168,8 +171,17 @@ impl Cli {
             None => return Err("--output is required".to_string()),
         };
         let output_str = output.to_string_lossy();
-        if !output_str.to_ascii_lowercase().ends_with(".mp4") {
-            return Err(format!("--output must end with .mp4: '{output_str}'"));
+        let lower = output_str.to_ascii_lowercase();
+        if !lower.ends_with(".mp4") && !lower.ends_with(".mkv") {
+            return Err(format!("--output must end with .mp4 or .mkv: '{output_str}'"));
+        }
+        // ffmpeg_muxer picks the container from the extension, so .mkv just works there.
+        // mp4_output writes MP4 boxes regardless of the name, and a Matroska-named MP4 is
+        // a file every player trips over.
+        if self.multi_track && lower.ends_with(".mkv") {
+            return Err(format!(
+                "--output must end with .mp4 when --multi-track is given: '{output_str}'"
+            ));
         }
         match output.parent() {
             // A bare file name has an empty parent — that is the CWD, which exists.
@@ -287,13 +299,26 @@ mod tests {
     }
 
     #[test]
-    fn output_must_be_mp4() {
-        let cli = parse(&["--output", "video.mkv"]).unwrap();
+    fn output_must_be_mp4_or_mkv() {
+        let cli = parse(&["--output", "video.mov"]).unwrap();
         assert!(cli.validate().is_err());
         let cli = parse(&["--output", "video.mp4"]).unwrap();
         assert!(cli.validate().is_ok());
+        let cli = parse(&["--output", "video.mkv"]).unwrap();
+        assert!(cli.validate().is_ok());
         // Case-insensitive suffix.
         let cli = parse(&["--output", "VIDEO.MP4"]).unwrap();
+        assert!(cli.validate().is_ok());
+        let cli = parse(&["--output", "VIDEO.MKV"]).unwrap();
+        assert!(cli.validate().is_ok());
+    }
+
+    #[test]
+    fn mkv_is_single_track_only() {
+        let cli = parse(&["--output", "video.mkv", "--multi-track"]).unwrap();
+        let err = cli.validate().unwrap_err();
+        assert!(err.contains("--multi-track"), "{err}");
+        let cli = parse(&["--output", "video.mp4", "--multi-track"]).unwrap();
         assert!(cli.validate().is_ok());
     }
 

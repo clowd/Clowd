@@ -44,10 +44,10 @@ See [Building](#building) below.
 ## Usage
 
 ```
-obs-express --output <FILE.mp4> [capture target] [options]
+obs-express --output <FILE.mp4|FILE.mkv> [capture target] [options]
 ```
 
-`--output` is required and must end in `.mp4` (its parent directory must already exist). If neither `--region` nor `--monitor` is given, the **primary monitor** is recorded.
+`--output` is required and must end in `.mp4` or `.mkv` (its parent directory must already exist); the extension picks the container, and `.mkv` is only accepted without `--multi-track`. If neither `--region` nor `--monitor` is given, the **primary monitor** is recorded.
 
 ```sh
 # Record the primary monitor to recording.mp4
@@ -68,7 +68,7 @@ obs-express --output clip.mp4 --multi-track --webcam "$(obs-express --list-camer
 
 | Flag | Default | Description |
 | --- | --- | --- |
-| `--output <PATH>` | *(required)* | Destination file. Must end in `.mp4`; parent directory must exist. |
+| `--output <PATH>` | *(required)* | Destination file. Must end in `.mp4` or `.mkv` (the extension picks the container; `.mkv` is rejected with `--multi-track`); parent directory must exist. |
 | `--region <X,Y,W,H>` | — | Capture rectangle in the platform capture coordinate space. `X`/`Y` may be negative (virtual desktop); `W`/`H` must be ≥ 2. Mutually exclusive with `--monitor`. |
 | `--monitor <ID>` | — | Record a whole monitor by device id, alternate id, or 0-based index. Mutually exclusive with `--region`. |
 | `--fps <INT>` | `30` | Output frame rate (≥ 1). |
@@ -225,7 +225,7 @@ quit                      ->
 
 ## Encoding
 
-- **Container** — MP4. By default the single-track `ffmpeg_muxer` (one video track, one mixed audio track). `--multi-track` switches to OBS's hybrid MP4 output (`mp4_output`): it carries a track per stream (see below), is written fragment-by-fragment so a crash or kill mid-recording leaves a file FFmpeg can still read, and is soft-remuxed to a standard MP4 on stop.
+- **Container** — MP4 or Matroska, chosen by the `--output` extension. By default the single-track `ffmpeg_muxer` (one video track, one mixed audio track), which writes whichever container the extension names. `--multi-track` switches to OBS's hybrid MP4 output (`mp4_output`): it carries a track per stream (see below), is written fragment-by-fragment so a crash or kill mid-recording leaves a file FFmpeg can still read, and is soft-remuxed to a standard MP4 on stop. It is MP4 only, so `--multi-track` rejects an `.mkv` output.
 - **Track layout** — with `--multi-track`, video track 0 is the clean screen, video track 1 the webcam, and each `--speaker` / `--microphone` device gets its own audio track (speakers first, in the order given; at most 6, libobs's mixer limit). Every audio source is routed to exactly one libobs mixer and encoded by that mixer's own AAC encoder, so the tracks stay fully separate — nothing is pre-mixed. Track names (`Screen`, `Webcam`, `Speaker 1`, `Microphone 1`, …) are written into the MP4. Without the flag, all audio devices are mixed into the single audio track, exactly as before.
 - **Video** — H.264. Software x264 by default (`veryfast`, or `ultrafast` with `--low-cpu`); `--hw-accel` selects the first available hardware encoder (Windows priority NVENC → AMF → QSV; macOS VideoToolbox) and falls back to x264 otherwise. `--crf` is passed through as the CRF (x264) or CQP (hardware) value. Every video encoder uses a 2 s keyframe interval: the hybrid MP4 output flushes a fragment at each keyframe, so this bounds the data lost to a hard crash/kill to a few seconds (an encoder-default ~8 s GOP would make any recording killed in its first ~9 seconds a zero-byte total loss) and keeps editor seeking fast.
 - **Webcam track** — with `--webcam` (or the `webcam_device` settings key), video track 1 carries the camera at its native size, downscaled aspect-preserving to fit 1280x720, always encoded with x264 (CRF from `--crf`/settings, `veryfast`, high profile) at the recording fps. The camera renders into its own private `obs_view` mix, so the screen track never sees it. Windows uses the DirectShow source (`dshow_input`), macOS AVFoundation (`macos-avcapture`).
