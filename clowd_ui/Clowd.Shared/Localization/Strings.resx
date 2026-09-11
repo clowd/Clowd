@@ -68,11 +68,11 @@
     <comment>Sidebar button that opens an empty image editor window.</comment>
   </data>
   <data name="Main_ScreenCapture" xml:space="preserve">
-    <value>Screen Capture</value>
+    <value>Start Capture</value>
     <comment>Sidebar button that starts a new region capture.</comment>
   </data>
   <data name="Main_Tagline" xml:space="preserve">
-    <value>Screen Capture Tool</value>
+    <value>Screen Capture</value>
     <comment>Subtitle under the CLOWD wordmark in the main window. "Clowd" itself is a brand name and is never translated.</comment>
   </data>
   <data name="Nav_About" xml:space="preserve">

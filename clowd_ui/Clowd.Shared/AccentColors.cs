@@ -6,13 +6,14 @@ using Microsoft.Win32;
 namespace Clowd
 {
     /// <summary>
-    /// The accent color of the capture overlay (issue #48): either the color Windows itself is
-    /// themed with, or one the user picked in the Capture settings page. Whichever it is, it is
-    /// darkened until it has enough contrast with white — the overlay draws white labels and icons
-    /// on top of accent-filled buttons, and a light accent leaves them unreadable.
+    /// Clowd's accent color (issue #48): either the color Windows itself is themed with, or one
+    /// the user picked in the Capture settings page. Whichever it is, it is darkened until it has
+    /// enough contrast with white — the overlay draws white labels and icons on top of
+    /// accent-filled buttons, and a light accent leaves them unreadable.
     ///
-    /// This is deliberately separate from <c>AppStyles.AccentColor</c>, which themes the rest of
-    /// the C# UI and follows the Semi theme rather than the OS.
+    /// It paints the capture surfaces directly, and the rest of the app through
+    /// <c>AccentTheme</c>, which writes it over the Semi theme's blue ramp — so
+    /// <c>AppStyles.AccentColor</c>, reading the theme, hands back this same color.
     /// </summary>
     public static class AccentColors
     {

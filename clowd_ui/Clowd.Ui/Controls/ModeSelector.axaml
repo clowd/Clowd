@@ -45,8 +45,11 @@
             <Style Selector="^:pointerover">
                 <Setter Property="Background" Value="{DynamicResource ButtonDefaultPointeroverBackground}" />
             </Style>
+            <!-- ClowdAccentTextBrush, not SemiColorPrimary: the outline, title and check are
+                 accent *on* the card, and on the dark theme the fill accent has no contrast
+                 there (AccentTheme publishes a lifted one for that use). -->
             <Style Selector="^:checked">
-                <Setter Property="BorderBrush" Value="{DynamicResource SemiColorPrimary}" />
+                <Setter Property="BorderBrush" Value="{DynamicResource ClowdAccentTextBrush}" />
             </Style>
         </ControlTheme>
 
@@ -67,7 +70,7 @@
         <Setter Property="IsVisible" Value="True" />
     </Style>
     <Style Selector="controls|ModeSelector > ToggleButton:checked TextBlock.ModeTitle">
-        <Setter Property="Foreground" Value="{DynamicResource SemiColorPrimary}" />
+        <Setter Property="Foreground" Value="{DynamicResource ClowdAccentTextBrush}" />
     </Style>
 
 </Styles>

@@ -750,10 +750,15 @@
             Background="#3a3a3a"
             BorderBrush="#666666"
             BorderThickness="0,1,0,0">
-            <tl:TimelineControl
-                x:Name="timeline"
-                MaxHeight="320"
-                Margin="0,2,0,0" />
+            <!--  The editor's chrome is hard-coded dark whatever the app theme, and the timeline
+                  reads its palette (and themes its buttons and menus) off the variant it sits in —
+                  so pin it to Dark, or the light theme paints pale rows into the dark chrome.  -->
+            <ThemeVariantScope RequestedThemeVariant="Dark">
+                <tl:TimelineControl
+                    x:Name="timeline"
+                    MaxHeight="320"
+                    Margin="0,2,0,0" />
+            </ThemeVariantScope>
         </Border>
 
     </Grid>

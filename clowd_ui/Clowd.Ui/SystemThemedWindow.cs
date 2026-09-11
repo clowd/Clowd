@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Clowd.UI.Helpers;
 
 namespace Clowd.UI
@@ -33,18 +34,8 @@ namespace Clowd.UI
 
             FontSize = 14; // Semi's base size; keeps generated pages in step with the Body class
 
-            // Decision table #45: prefer Mica (Win11), fall back to acrylic blur-behind
-            // (Win10 / macOS vibrancy). The background brush is chosen per granted level in
-            // UpdateBackgroundForTransparency; compositors that grant neither get the opaque brush.
-            TransparencyLevelHint = new[]
-            {
-                WindowTransparencyLevel.Mica,
-                WindowTransparencyLevel.AcrylicBlur,
-                WindowTransparencyLevel.None,
-            };
-
-            ActualThemeVariantChanged += (_, _) => UpdateBackgroundForTransparency();
-            UpdateBackgroundForTransparency();
+            ActualThemeVariantChanged += (_, _) => UpdateBackdrop();
+            UpdateBackdrop();
 
             // macOS Cmd+W (issue #73). Registered on the base so every shell window gets it;
             // the recording/scroll overlays are deliberately not shell windows and keep their
@@ -56,24 +47,40 @@ namespace Clowd.UI
         {
             base.OnPropertyChanged(change);
             if (change.Property == ActualTransparencyLevelProperty)
-                UpdateBackgroundForTransparency();
+                UpdateBackground();
         }
 
-        private void UpdateBackgroundForTransparency()
+        /// <summary>
+        /// Mica (Win11) in the dark theme only. In the light theme the composited backdrop makes
+        /// the text look smeared and low-contrast (ClearType has no opaque surface to blend
+        /// against), so light windows are plain opaque windows with no effect at all. There is
+        /// no acrylic fallback either: compositors that do not grant Mica get the opaque brush.
+        /// </summary>
+        private void UpdateBackdrop()
         {
-            // Mica is subtle enough to sit directly behind the content; acrylic blur is much
-            // busier, so it gets an 80% wash (Light #FAFAFA / Dark #202020 theme dictionaries
-            // in Assets/AppResources.axaml). Anything else falls back to the opaque brush.
+            // a window's own ActualThemeVariant is not settled until it is attached; the app's is
+            var variant = ActualThemeVariant ?? Application.Current?.ActualThemeVariant;
+            var dark = variant == ThemeVariant.Dark;
+
+            TransparencyLevelHint = dark
+                ? new[] { WindowTransparencyLevel.Mica, WindowTransparencyLevel.None }
+                : new[] { WindowTransparencyLevel.None };
+
+            UpdateBackground();
+        }
+
+        private void UpdateBackground()
+        {
+            // Mica is subtle enough to sit directly behind the content, so it gets no background
+            // of its own. Anything else paints the opaque theme brush (Light #FAFAFA / Dark
+            // #202020 theme dictionaries in Assets/AppResources.axaml).
             if (ActualTransparencyLevel == WindowTransparencyLevel.Mica)
             {
                 Background = Brushes.Transparent;
                 return;
             }
 
-            var key = ActualTransparencyLevel == WindowTransparencyLevel.AcrylicBlur
-                ? "ApplicationBackgroundAcrylicBrush"
-                : "ApplicationBackgroundBrush";
-            if (this.TryFindResource(key, ActualThemeVariant, out var value) && value is IBrush brush)
+            if (this.TryFindResource("ApplicationBackgroundBrush", ActualThemeVariant, out var value) && value is IBrush brush)
                 Background = brush;
         }
     }

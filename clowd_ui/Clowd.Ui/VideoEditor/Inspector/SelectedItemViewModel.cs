@@ -519,7 +519,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         private int _cropWindowMissingId;
 
         private string _text;
-        private string _fontFamily;
+        private string _fontFamily = ""; // empty, never null: the reset dot compares it to ""
         private double _fontSize = 48;
         private string _textColorHex = "#FFFFFFFF";
         private TextAlign _textAlign = TextAlign.Center;

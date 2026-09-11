@@ -11,18 +11,80 @@
                  and the dark background, and this one carries enough contrast on both. -->
             <Color x:Key="ClowdStarColor">#F5B31B</Color>
             <SolidColorBrush x:Key="ClowdStarBrush" Color="#F5B31B" />
+
+            <!--  The font preview button of the image editor and the video editor's inspector — the
+                  dark-chrome tool surfaces, whatever the app theme. Same chrome idiom as
+                  SpinnerTextBox: #454545 fill with a #666666 1px border, and the interactive surface
+                  drawn 1px inside the border (#33FFFFFF fading to #66FFFFFF on hover over 0.1s, like
+                  the spin buttons).  -->
+            <ControlTheme x:Key="InnerToolButtonTheme" TargetType="Button">
+                <Setter Property="Foreground" Value="White" />
+                <Setter Property="Height" Value="22" />
+                <Setter Property="Margin" Value="4,0,0,0" />
+                <Setter Property="Padding" Value="10,0" />
+                <Setter Property="Cursor" Value="Hand" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <ControlTemplate>
+                        <Border
+                            Background="#454545"
+                            BorderBrush="#666666"
+                            BorderThickness="1">
+                            <Border Name="_bg" Margin="1">
+                                <Border.Transitions>
+                                    <Transitions>
+                                        <BrushTransition Property="Background" Duration="0:0:0.1" />
+                                    </Transitions>
+                                </Border.Transitions>
+                                <Panel>
+                                    <Rectangle
+                                        Height="5"
+                                        VerticalAlignment="Top"
+                                        IsHitTestVisible="False">
+                                        <Rectangle.Fill>
+                                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                                                <GradientStop Offset="0" Color="#30FFFFFF" />
+                                                <GradientStop Offset="1" Color="#00FFFFFF" />
+                                            </LinearGradientBrush>
+                                        </Rectangle.Fill>
+                                    </Rectangle>
+                                    <ContentPresenter
+                                        Name="PART_ContentPresenter"
+                                        Padding="{TemplateBinding Padding}"
+                                        HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                        VerticalAlignment="Center"
+                                        RenderTransform="translateY(-1px)"
+                                        Content="{TemplateBinding Content}"
+                                        ContentTemplate="{TemplateBinding ContentTemplate}" />
+                                </Panel>
+                            </Border>
+                        </Border>
+                    </ControlTemplate>
+                </Setter>
+                <Style Selector="^ /template/ Border#_bg">
+                    <Setter Property="Background" Value="#33FFFFFF" />
+                </Style>
+                <Style Selector="^:pointerover /template/ Border#_bg">
+                    <Setter Property="Background" Value="#66FFFFFF" />
+                </Style>
+            </ControlTheme>
             <ResourceDictionary.ThemeDictionaries>
                 <!-- WPFUI exact theme colors replaced by hardcoded Light #FAFAFA / Dark #202020 (§6). -->
                 <ResourceDictionary x:Key="Light">
                     <Color x:Key="ApplicationBackgroundColor">#FAFAFA</Color>
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#FAFAFA" />
-                    <!-- 80% wash layered over an AcrylicBlur backdrop (Mica uses no background at all) -->
-                    <SolidColorBrush x:Key="ApplicationBackgroundAcrylicBrush" Color="#CCFAFAFA" />
+                    <!-- Semi's tooltip is an inverted chip (dark slab, white text); it reads as a
+                         stray dark-mode fragment on the light window. Restyled to the context
+                         menu's surface so the two popups match. Light only: on the dark theme
+                         the stock pale chip is fine as it is. -->
+                    <StaticResource x:Key="ToolTipBackground" ResourceKey="SemiColorBackground3" />
+                    <StaticResource x:Key="ToolTipForeground" ResourceKey="SemiColorText0" />
+                    <StaticResource x:Key="ToolTipBorderBrush" ResourceKey="SemiColorBorder" />
+                    <Thickness x:Key="ToolTipBorderThickness">1</Thickness>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
                     <Color x:Key="ApplicationBackgroundColor">#202020</Color>
                     <SolidColorBrush x:Key="ApplicationBackgroundBrush" Color="#202020" />
-                    <SolidColorBrush x:Key="ApplicationBackgroundAcrylicBrush" Color="#CC202020" />
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
