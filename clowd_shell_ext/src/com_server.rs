@@ -132,7 +132,11 @@ fn spawn_detached(exe: &Path, paths: &[String]) -> windows::core::Result<()> {
         // showed as a blank taskbar icon, clowd/Clowd#83), and anything keyed on identity
         // — notifications, AUMID grouping, virtualized registry/file access — diverges from
         // the same app started from a shortcut. The desktop-app policy attribute breaks the
-        // child out so it runs exactly as an unpackaged launch would.
+        // child out so it runs as an unpackaged launch would — with one exception it cannot
+        // override: an exe that the package manifest declares as its Application Executable is
+        // always created as that application, identity included. That is why the manifest
+        // declares the Velopack root launcher, never this current\Clowd.Ui.exe (see the comment
+        // in msix/AppxManifest.template.xml).
         let attributes = DesktopAppBreakaway::new()?;
         let startup = STARTUPINFOEXW {
             StartupInfo: STARTUPINFOW {

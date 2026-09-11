@@ -56,6 +56,47 @@ namespace Clowd.UI
         /// <summary>The error from the most recent failed apply, or null if the last one worked.</summary>
         public static string LastError { get; private set; }
 
+        [System.Runtime.InteropServices.DllImport("kernel32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, ExactSpelling = true)]
+        private static extern int GetCurrentPackageFullName(ref uint length, char[] fullName);
+
+        private const int APPMODEL_ERROR_NO_PACKAGE = 15700;
+
+        /// <summary>
+        /// Records this process's package identity (Sentry tag <c>package_identity</c> plus a
+        /// debug line): "none" for a normal launch, the sparse package's full name when the
+        /// process was created as that package's application. The latter is the clowd/Clowd#83
+        /// failure — the shell extension's surrogate carries the package identity, and Windows
+        /// hands it to any child that is the manifest's declared <c>Application Executable</c>
+        /// regardless of the breakaway attribute the extension passes, which is why the manifest
+        /// declares the Velopack root launcher and never <c>current\Clowd.Ui.exe</c>. Never throws.
+        /// </summary>
+        [SupportedOSPlatform("windows")]
+        public static void ReportProcessIdentity()
+        {
+            string identity;
+            try
+            {
+                // package full names are capped well below this; 122 (insufficient buffer) would
+                // surface as an error value rather than being mistaken for "none"
+                uint length = 512;
+                var buffer = new char[length];
+                var result = GetCurrentPackageFullName(ref length, buffer);
+                identity = result switch
+                {
+                    0 => new string(buffer, 0, Math.Max(0, (int)length - 1)),
+                    APPMODEL_ERROR_NO_PACKAGE => "none",
+                    _ => "error " + result,
+                };
+            }
+            catch (Exception ex)
+            {
+                identity = "error " + ex.GetType().Name;
+            }
+
+            Debug.WriteLine("SparsePackageManager: process package identity: " + identity);
+            SentryConfig.SetTag("package_identity", identity);
+        }
+
         /// <summary>The registration state as of the last read or apply. UI code renders this —
         /// <see cref="IsEnabled"/> shells out to PowerShell and must stay off the UI thread.</summary>
         public static bool LastKnownIsEnabled { get; private set; }
