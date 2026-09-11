@@ -65,7 +65,7 @@ namespace Clowd.UI
             var guessScaling = 1.0;
             try
             {
-                guessScaling = Screens.ScreenFromPoint(new PixelPoint(_region.Center.X, _region.Center.Y))?.Scaling ?? 1.0;
+                guessScaling = DesktopScreens.FromPoint(this, new PixelPoint(_region.Center.X, _region.Center.Y))?.Scaling ?? 1.0;
             }
             catch
             {
@@ -192,7 +192,7 @@ namespace Clowd.UI
                 // Screen bounds are in the same capture space as _region (see field comment).
                 // Perpendicular-overlap guard: only a monitor the region actually spans against
                 // can suppress an edge.
-                foreach (var screen in Screens.All)
+                foreach (var screen in DesktopScreens.All(this))
                 {
                     var b = screen.Bounds;
                     var overlapsX = _region.Left < b.Right && b.X < _region.Right;

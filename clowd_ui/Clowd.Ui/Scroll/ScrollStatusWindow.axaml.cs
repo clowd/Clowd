@@ -80,7 +80,7 @@ namespace Clowd.UI
             var scaling = 1.0;
             try
             {
-                scaling = Screens.ScreenFromPoint(new PixelPoint(region.Center.X, region.Center.Y))?.Scaling ?? 1.0;
+                scaling = DesktopScreens.FromPoint(this, new PixelPoint(region.Center.X, region.Center.Y))?.Scaling ?? 1.0;
             }
             catch
             {
@@ -130,10 +130,10 @@ namespace Clowd.UI
             var h = (int)Math.Ceiling(HeightLogical * toCapture);
             var gap = (int)Math.Ceiling(GapLogical * toCapture);
 
-            Screen screen = null;
+            DesktopScreen screen = null;
             try
             {
-                screen = Screens.ScreenFromPoint(new PixelPoint(region.Center.X, region.Center.Y)) ?? Screens.Primary;
+                screen = DesktopScreens.FromPoint(this, new PixelPoint(region.Center.X, region.Center.Y)) ?? DesktopScreens.Primary(this);
             }
             catch
             {

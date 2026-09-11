@@ -155,7 +155,7 @@ namespace Clowd.UI
             var guessScaling = 1.0;
             try
             {
-                guessScaling = Screens.ScreenFromPoint(new PixelPoint(Region.Center.X, Region.Center.Y))?.Scaling ?? 1.0;
+                guessScaling = DesktopScreens.FromPoint(this, new PixelPoint(Region.Center.X, Region.Center.Y))?.Scaling ?? 1.0;
             }
             catch
             {

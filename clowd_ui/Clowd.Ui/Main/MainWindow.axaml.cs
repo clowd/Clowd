@@ -55,7 +55,7 @@ namespace Clowd.UI
                 return;
 
             var rect = new Avalonia.PixelRect(x, y, (int)w, (int)h);
-            if (!Screens.All.Any(s => s.WorkingArea.Intersects(rect)))
+            if (!Clowd.UI.Helpers.DesktopScreens.All(this).Any(s => s.WorkingArea.Intersects(rect)))
                 return;
 
             WindowStartupLocation = WindowStartupLocation.Manual;
