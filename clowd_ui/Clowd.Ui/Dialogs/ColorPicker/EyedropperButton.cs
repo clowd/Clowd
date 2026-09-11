@@ -51,6 +51,11 @@ namespace Clowd.UI.Dialogs.ColorPicker
         {
             Cursor = new Cursor(StandardCursorType.Cross);
 
+            // Sampling is a press-and-drag gesture over the desktop, so there is nothing the
+            // keyboard can do with this button — keep it out of the tab order (it stays
+            // focusable, so a click still moves focus here like any other button).
+            IsTabStop = false;
+
             // no screen sampling on this platform — an eyedropper that cannot sample is worse
             // than no eyedropper, so take it out of the layout entirely
             if (!ScreenColorReader.IsSupported)

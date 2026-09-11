@@ -102,7 +102,11 @@
         <Grid ColumnDefinitions="Auto,Auto,86"
               RowDefinitions="30,12,30,30,30,30,30,12,30,30,30,30">
 
-            <Control x:Name="tabReset" Focusable="True" />
+            <!-- Focus sink for OnPreviewPointerPressed: focusable so a click off the
+                 textboxes can park focus somewhere harmless, but never a tab stop itself. -->
+            <Control x:Name="tabReset"
+                     Focusable="True"
+                     IsTabStop="False" />
 
             <TextBlock Classes="lbl" Text="HEX:" />
             <TextBox x:Name="txtHex"
