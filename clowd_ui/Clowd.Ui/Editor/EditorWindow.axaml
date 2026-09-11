@@ -433,36 +433,57 @@
                 Realtime="True" />
         </Popup>
 
+        <!--  Same chrome as the mini color picker above: the 10px margin is room for the shadow,
+              and the horizontal offset cancels it so the visible edge sits 4px off the button.
+              Rows are generated in code-behind (RebuildCustomizePopup); the drop indicator is a
+              sibling laid over them, as in the layers panel. Keyboard: the popup takes focus on
+              open, only the checkboxes are tab stops, and Escape closes it (see the code-behind).  -->
         <Popup
             x:Name="customizePopup"
-            HorizontalOffset="4"
+            HorizontalOffset="-6"
             IsLightDismissEnabled="True"
             Placement="Right">
             <Border
-                Width="240"
-                Background="#454545"
-                BorderBrush="#666666"
-                BorderThickness="1">
-                <StackPanel Margin="8">
+                x:Name="customizeRoot"
+                Width="220"
+                Margin="10"
+                Padding="8"
+                Background="#202124"
+                BorderBrush="#464648"
+                BorderThickness="1"
+                BoxShadow="0 2 8 0 #80000000"
+                CornerRadius="8">
+                <StackPanel>
                     <TextBlock
                         Margin="4,2,4,8"
-                        FontWeight="Bold"
-                        Foreground="White"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="#F0F0F0"
                         Text="Customize toolbar" />
-                    <StackPanel x:Name="customizeRows" />
+                    <Panel>
+                        <StackPanel x:Name="customizeRows" />
+                        <Border
+                            x:Name="customizeDropIndicator"
+                            Height="2"
+                            VerticalAlignment="Top"
+                            IsHitTestVisible="False"
+                            IsVisible="False" />
+                    </Panel>
                     <Button
                         Margin="4,8,4,0"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Click="customizeResetOrder_Click"
-                        Content="Reset Tool Order" />
+                        Content="Reset Tool Order"
+                        IsTabStop="False" />
                     <Button
                         Margin="4,4,4,2"
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Center"
                         Classes="Danger"
                         Click="customizeResetSettings_Click"
-                        Content="Reset Tool Settings" />
+                        Content="Reset Tool Settings"
+                        IsTabStop="False" />
                 </StackPanel>
             </Border>
         </Popup>
