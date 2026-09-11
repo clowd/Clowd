@@ -137,7 +137,9 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (previousColor != null)
             {
                 PreviousColor = previousColor;
-                CurrentColor = previousColor;
+                // sliders mutate CurrentColor in place; sharing the instance would corrupt
+                // PreviousColor and break restoring it
+                CurrentColor = previousColor.Clone();
             }
             else
             {
@@ -394,7 +396,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
             if (!skipFocused || !txtClrH.IsFocused) txtClrH.Text = Math.Round(clr.Hue).ToString();
             if (!skipFocused || !txtClrS.IsFocused) txtClrS.Text = Math.Round(clr.Saturation * 100).ToString();
             if (!skipFocused || !txtClrL.IsFocused) txtClrL.Text = Math.Round(clr.Lightness * 100).ToString();
-            pathPrevColor.Cursor = (PreviousColor != HslRgbColor.Transparent && PreviousColor != clr)
+            pathPrevColor.Cursor = (!PreviousColor.ValueEquals(HslRgbColor.Transparent) && !PreviousColor.ValueEquals(clr))
                 ? new Cursor(StandardCursorType.Hand)
                 : Cursor.Default;
             HandleTextEvents = true;
@@ -488,8 +490,8 @@ namespace Clowd.UI.Dialogs.ColorPicker
 
         private void PrevColorClicked(object sender, PointerPressedEventArgs e)
         {
-            if (PreviousColor != HslRgbColor.Transparent)
-                CurrentColor = PreviousColor;
+            if (!PreviousColor.ValueEquals(HslRgbColor.Transparent))
+                CurrentColor = PreviousColor.Clone();
         }
     }
 }

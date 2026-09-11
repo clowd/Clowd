@@ -505,7 +505,7 @@ namespace Clowd.UI.Dialogs.ColorPicker
                 // an RGB round-trip loses hue/saturation for desaturated colors, so don't replace
                 // the color when the text already resolves to it
                 if (CurrentColor != null && (detected == ColorTextFormat.Hsl
-                                                 ? parsed == CurrentColor
+                                                 ? parsed.ValueEquals(CurrentColor)
                                                  : parsed.ToColor() == CurrentColor.ToColor()))
                     return;
 
