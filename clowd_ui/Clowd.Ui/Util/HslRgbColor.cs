@@ -3,7 +3,7 @@ using Avalonia.Media;
 
 namespace Clowd.Util
 {
-    public sealed class HslRgbColor : SimpleNotifyObject, ICloneable, IEquatable<HslRgbColor>
+    public sealed class HslRgbColor : SimpleNotifyObject, ICloneable
     {
         public static HslRgbColor White => new HslRgbColor(255, 255, 255, 1d);
 
@@ -234,29 +234,25 @@ namespace Clowd.Util
 
         object ICloneable.Clone() => Clone();
 
-        public HslRgbColor Clone() => new HslRgbColor(_h, _s, _l, _a);
-
-        public override bool Equals(object obj)
+        public HslRgbColor Clone()
         {
-            if (obj is HslRgbColor clr)
-                return Equals(clr);
-
-            return false;
+            // copy the RGB fields rather than re-deriving them from HSL, so a clone used to
+            // restore a color puts back the exact RGB the user saw
+            var clone = new HslRgbColor(_h, _s, _l, _a);
+            clone._r = _r;
+            clone._g = _g;
+            clone._b = _b;
+            return clone;
         }
 
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hashCode = _h.GetHashCode();
-                hashCode = (hashCode * 397) ^ _s.GetHashCode();
-                hashCode = (hashCode * 397) ^ _l.GetHashCode();
-                hashCode = (hashCode * 397) ^ _a.GetHashCode();
-                return hashCode;
-            }
-        }
-
-        public bool Equals(HslRgbColor other)
+        /// <summary>Component-wise comparison. Deliberately a named method rather than
+        /// Equals/==: Avalonia's styled property store compares assigned values with
+        /// EqualityComparer&lt;T&gt;.Default, and when a new-but-equal instance is assigned it
+        /// stores the new reference WITHOUT raising a change notification. The picker dialogs
+        /// attach PropertyChanged handlers from those notifications, so value equality here
+        /// silently orphaned the handler and froze the slider UI (issue #89). With reference
+        /// equality every instance swap is observable.</summary>
+        public bool ValueEquals(HslRgbColor other)
         {
             if (ReferenceEquals(other, null))
                 return false;
@@ -266,18 +262,5 @@ namespace Clowd.Util
                 && _l == other._l
                 && _a == other._a;
         }
-
-        public static bool operator ==(HslRgbColor obj1, HslRgbColor obj2)
-        {
-            if (ReferenceEquals(obj1, obj2))
-                return true;
-            if (ReferenceEquals(obj1, null))
-                return false;
-            if (ReferenceEquals(obj2, null))
-                return false;
-            return obj1.Equals(obj2);
-        }
-
-        public static bool operator !=(HslRgbColor obj1, HslRgbColor obj2) => !(obj1 == obj2);
     }
 }
