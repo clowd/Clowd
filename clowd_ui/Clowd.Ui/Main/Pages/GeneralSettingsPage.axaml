@@ -189,7 +189,7 @@
                         </CheckBox>
                         <TextBlock Classes="Caption"
                                    TextWrapping="Wrap"
-                                   Text="A startup launch goes straight to the notification area. Starting Clowd yourself always opens this window." />
+                                   Text="A startup launch goes straight to the notification area. Starting Clowd yourself does whatever 'Shortcut click' below says." />
                         <TextBlock x:Name="AutoStartStatusText" Classes="Caption" IsVisible="False" />
                     </StackPanel>
 
@@ -206,6 +206,16 @@
                         </StackPanel>
                         <TextBlock Classes="Caption"
                                    Text="What a single click on the tray icon does. The right-click menu always offers everything." />
+                    </StackPanel>
+
+                    <StackPanel Classes="Setting">
+                        <StackPanel Classes="SettingRow">
+                            <TextBlock VerticalAlignment="Center" Text="Shortcut click" />
+                            <ComboBox x:Name="ShortcutClickCombo" MinWidth="160" />
+                        </StackPanel>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="What starting Clowd yourself does - the desktop or start menu shortcut, the taskbar, the dock - whether or not Clowd is already running." />
                     </StackPanel>
                 </StackPanel>
             </HeaderedContentControl>

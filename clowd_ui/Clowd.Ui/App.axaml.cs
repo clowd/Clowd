@@ -174,7 +174,7 @@ namespace Clowd
                     activatable.Activated += (s, e) =>
                     {
                         if (e.Kind == ActivationKind.Reopen)
-                            Dispatcher.UIThread.Post(ShowMainWindowForAppActivation);
+                            Dispatcher.UIThread.Post(OnShortcutLaunchedWhileRunning);
                     };
                 }
 
@@ -187,22 +187,33 @@ namespace Clowd
                 if (!firstRun && SettingsRoot.Current.Editor.RestoreSessionsOnClowdStart)
                     EditorWindow.ShowAllPreviouslyActiveSessions();
 
-                // whether a window opens is decided by who started the process, not by a setting.
-                // An automated launch stays in the tray: the OS login item and the updater's
+                // who started the process decides whether this is the user's launch at all. An
+                // automated launch stays in the tray: the OS login item and the updater's
                 // background restart both pass --autostarted, and an Explorer "Upload with Clowd"
                 // launch already carries its own work. Anything else is the user starting Clowd,
-                // and has to look like it did something.
+                // and what that does is theirs to choose (SettingsGeneral.ShortcutClick) — the
+                // same choice as clicking the shortcut while Clowd is already running.
                 var startedForCliWork = CliArgs.ExtractUploadPaths(args).Length > 0;
 
                 if (!Program.IsAutoStarted && !startedForCliWork)
                 {
                     // first launch after an install, or the restart the user asked for with
-                    // "Restart to Update", opens on General — where the startup options and the
-                    // version number that just changed are.
+                    // "Restart to Update", opens on General regardless — where the startup options
+                    // and the version number that just changed are.
                     if (firstRun || Program.IsUpdateRestart)
                         PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsGeneral);
                     else
-                        PageManager.Current.GetSettingsPage().Open();
+                        switch (SettingsRoot.Current.General.ShortcutClick)
+                        {
+                            case ClickAction.CaptureRegion:
+                                StartCapture();
+                                break;
+                            case ClickAction.DoNothing:
+                                break;
+                            default:
+                                PageManager.Current.GetSettingsPage().Open();
+                                break;
+                        }
                 }
             }
             catch (Exception ex)
@@ -262,7 +273,7 @@ namespace Clowd
         {
             _processor = new MutexArgsForwarder();
             _processor.ArgsReceived += (s, e) => Dispatcher.UIThread.Post(() => OnFilesReceived(e.Args));
-            _processor.ShowMainWindowRequested += (s, e) => Dispatcher.UIThread.Post(ShowMainWindowForAppActivation);
+            _processor.ShowMainWindowRequested += (s, e) => Dispatcher.UIThread.Post(OnShortcutLaunchedWhileRunning);
 
             try
             {
@@ -299,10 +310,17 @@ namespace Clowd
                 // action is user-configurable (General settings).
                 _trayIcon.Clicked += (s, e) =>
                 {
-                    if (SettingsRoot.Current?.General?.TrayClick == TrayClickAction.CaptureRegion)
-                        StartCapture();
-                    else
-                        PageManager.Current.GetSettingsPage().Open();
+                    switch (SettingsRoot.Current?.General?.TrayClick ?? ClickAction.OpenSettings)
+                    {
+                        case ClickAction.CaptureRegion:
+                            StartCapture();
+                            break;
+                        case ClickAction.DoNothing:
+                            break;
+                        default:
+                            PageManager.Current.GetSettingsPage().Open();
+                            break;
+                    }
                 };
 
                 TrayIcon.SetIcons(this, new TrayIcons { _trayIcon });
@@ -716,7 +734,25 @@ namespace Clowd
         }
 
         /// <summary>The user "launched" Clowd while it was already running (Windows second
-        /// instance with no args, macOS reopen). Bring back whatever is already on screen: the
+        /// instance with no args, macOS reopen). The shortcut does whatever the user asked it to
+        /// (<see cref="SettingsGeneral.ShortcutClick"/>), which is the same set of actions the
+        /// tray icon offers and matches what a cold start does in App.Startup.</summary>
+        private void OnShortcutLaunchedWhileRunning()
+        {
+            switch (SettingsRoot.Current?.General?.ShortcutClick ?? ClickAction.OpenSettings)
+            {
+                case ClickAction.CaptureRegion:
+                    StartCapture();
+                    break;
+                case ClickAction.DoNothing:
+                    break;
+                default:
+                    ShowMainWindowForAppActivation();
+                    break;
+            }
+        }
+
+        /// <summary>Bring back whatever is already on screen: the
         /// main window if it is up (without yanking the user off their tab), otherwise the
         /// editors they have open. Only when nothing is showing does this open the main window
         /// on Recents.</summary>
