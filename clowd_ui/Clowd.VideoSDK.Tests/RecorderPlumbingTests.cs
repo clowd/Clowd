@@ -57,6 +57,26 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("--pause", args[6]);
         }
 
+        /// <summary>The output path is the recorder's only container selector, so an .mkv path
+        /// has to reach the command line untouched — nothing in here may normalize it to .mp4.</summary>
+        [Fact]
+        public void The_output_extension_reaches_the_recorder_verbatim()
+        {
+            var mkv = TestPath.Native(@"C:\out\video.mkv");
+            var args = ObsArguments.Build(new ScreenRect(0, 0, 8, 8), mkv, TestPath.Native(@"C:\out\obs.json"), Settings(composition: false)).ToArray();
+
+            Assert.Equal("--output", args[2]);
+            Assert.Equal(mkv, args[3]);
+            Assert.DoesNotContain("--multi-track", args);
+        }
+
+        [Fact]
+        public void The_container_setting_maps_to_the_extension_the_recorder_reads()
+        {
+            Assert.Equal(".mp4", VideoContainer.Mp4.ToExtension());
+            Assert.Equal(".mkv", VideoContainer.Mkv.ToExtension());
+        }
+
         /// <summary>Composition IS the multi-track layout, so the switch decides the flag on its
         /// own — whatever audio the user happens to have configured. A composed recording with no
         /// audio at all is still editable (trims, text, a placed webcam), so "no audio device" is

@@ -121,13 +121,19 @@ namespace Clowd.UI
         /// case that arises today.</summary>
         private const int MaxAudioTracks = 6;
 
-        public static IReadOnlyList<string> Build(ScreenRect region, string outputMp4, string settingsPath,
+        /// <summary>
+        /// The command line for one spawn. <paramref name="outputPath"/> is passed verbatim: its
+        /// extension is how the recorder picks the container (.mp4 or .mkv, the latter accepted for
+        /// single-track recordings only), so the caller decides it — see
+        /// <see cref="VideoContainer"/> and VideoCapturePage's WantedContainer.
+        /// </summary>
+        public static IReadOnlyList<string> Build(ScreenRect region, string outputPath, string settingsPath,
             SettingsRecording settings, bool windowCapture = false)
         {
             var args = new List<string>
             {
                 "--region", FormattableString.Invariant($"{region.X},{region.Y},{region.Width},{region.Height}"),
-                "--output", outputMp4,
+                "--output", outputPath,
                 "--settings", settingsPath,
                 "--pause",
                 // the capture source is built during bootstrap, so like --multi-track this is a
@@ -150,7 +156,7 @@ namespace Clowd.UI
                 // single-track recording never reaches. Session-fixed like --output, so it is a
                 // CLI argument rather than a settings-file key.
                 args.Add(InputCaptureArg);
-                args.Add(GetInputCapturePath(Path.GetDirectoryName(outputMp4)));
+                args.Add(GetInputCapturePath(Path.GetDirectoryName(outputPath)));
 
                 // window capture rides with input capture for the same reason (only the editor
                 // reads it) and shares its timebase, so the editor can line the two up with no
@@ -159,7 +165,7 @@ namespace Clowd.UI
                 if (windowCapture)
                 {
                     args.Add(WindowCaptureArg);
-                    args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputMp4)));
+                    args.Add(GetWindowCapturePath(Path.GetDirectoryName(outputPath)));
                 }
             }
 

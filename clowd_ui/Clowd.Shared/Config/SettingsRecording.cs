@@ -83,6 +83,42 @@ namespace Clowd.Config
         Fair,
     }
 
+    /// <summary>
+    /// The container an Instant recording is written in. obs-express picks the container from the
+    /// extension of its <c>--output</c> path, so this decides nothing but that extension. Instant
+    /// only: a Studio recording is the hybrid MP4 output (one track per stream), which is MP4
+    /// whatever the file is called, and the recorder rejects an .mkv path with --multi-track.
+    /// Declaration order is dropdown order, so the default comes first. Persisted by name.
+    /// </summary>
+    public enum VideoContainer
+    {
+        /// <summary>Plays everywhere; the recorder writes it in one pass on stop.</summary>
+        [Description("MP4")]
+        Mp4,
+
+        /// <summary>Matroska. Written incrementally, so a crash or forced stop keeps what was
+        /// recorded up to that point; fewer players and sites accept it.</summary>
+        [Description("MKV")]
+        Mkv,
+    }
+
+    public static class VideoContainerExtensions
+    {
+        /// <summary>
+        /// The file extension (with its dot) the recorder maps the container to. Written out rather
+        /// than lowercasing <see cref="Enum.ToString()"/> so renaming a member here cannot silently
+        /// change a path the recorder would then reject at spawn time.
+        /// </summary>
+        public static string ToExtension(this VideoContainer container)
+        {
+            switch (container)
+            {
+                case VideoContainer.Mkv: return ".mkv";
+                default: return ".mp4";
+            }
+        }
+    }
+
     /// <summary>What Clowd shows the user once a recording has been saved. Declaration order is
     /// the order the settings dropdown offers them in, so the default comes first.</summary>
     public enum RecordingFinishAction
@@ -172,6 +208,19 @@ namespace Clowd.Config
         {
             get => _filenamePattern;
             set => Set(ref _filenamePattern, value);
+        }
+
+        /// <summary>Instant mode only: a Studio recording is always the hybrid MP4 (see
+        /// <see cref="VideoContainer"/>). Consumers of a recording's extension read the file
+        /// actually written rather than this, so the hidden value can never leak into Studio.</summary>
+        [Category("Output")]
+        [VisibleWhen(nameof(Mode), Instant)]
+        [DisplayName("File format")]
+        [Description("Container the recording is saved as. MP4 plays everywhere; MKV survives a crash or forced stop with everything recorded so far intact, but fewer players and sites accept it.")]
+        public VideoContainer Container
+        {
+            get => _container;
+            set => Set(ref _container, value);
         }
 
         [Category("Output")]
@@ -457,6 +506,7 @@ namespace Clowd.Config
         private bool _captureMediaKeys = false;
         private string _outputDirectory = DefaultOutputDirectory;
         private string _filenamePattern = "yyyy-MM-dd HH-mm-ss";
+        private VideoContainer _container = VideoContainer.Mp4;
         private RecordingFinishAction _openWhenFinished = RecordingFinishAction.VideoEditor;
         private GifQuality _gifQuality = GifQuality.Good;
         private int _gifMaxWidth = 0;

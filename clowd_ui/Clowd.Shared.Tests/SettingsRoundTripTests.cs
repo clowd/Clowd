@@ -262,11 +262,14 @@ namespace Clowd.Shared.Tests
             // a finished recording opens in the video editor by default — trimming it (and placing
             // a webcam, when there is one) is the usual next step, not finding the file.
             Assert.Equal(RecordingFinishAction.VideoEditor, loaded.Recording.OpenWhenFinished);
+            // MP4 by default: it is what every player and upload target accepts.
+            Assert.Equal(VideoContainer.Mp4, loaded.Recording.Container);
 
             var original = new SettingsRoot();
             original.Recording.OutputDirectory = @"C:\Users\test\Recordings";
             original.Recording.FilenamePattern = "'clowd' yyyy-MM-dd";
             original.Recording.OpenWhenFinished = RecordingFinishAction.OutputFolder; // enum by name
+            original.Recording.Container = VideoContainer.Mkv;
 
             SettingsService.Save(original, _path);
             loaded = SettingsService.Load(_path);
@@ -274,6 +277,7 @@ namespace Clowd.Shared.Tests
             Assert.Equal(@"C:\Users\test\Recordings", loaded.Recording.OutputDirectory);
             Assert.Equal("'clowd' yyyy-MM-dd", loaded.Recording.FilenamePattern);
             Assert.Equal(RecordingFinishAction.OutputFolder, loaded.Recording.OpenWhenFinished);
+            Assert.Equal(VideoContainer.Mkv, loaded.Recording.Container);
         }
 
         [Fact]
