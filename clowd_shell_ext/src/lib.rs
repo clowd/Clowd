@@ -11,4 +11,6 @@
 mod invoke;
 
 #[cfg(windows)]
+mod broker;
+#[cfg(windows)]
 mod com_server;

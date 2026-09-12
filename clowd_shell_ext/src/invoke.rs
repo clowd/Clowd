@@ -76,6 +76,15 @@ pub fn build_command_line(exe: &str, args: &[String]) -> String {
     let mut line = String::new();
     append_quoted(exe, &mut line);
     line.push(' ');
+    line.push_str(&build_arguments(args));
+    line
+}
+
+/// The command line without its exe: what ShellExecute takes as the parameters
+/// string. Quoted exactly like `build_command_line`, so the app's CommandLineToArgvW
+/// sees the same arguments whichever way it was started.
+pub fn build_arguments(args: &[String]) -> String {
+    let mut line = String::new();
     append_quoted(UPLOAD_COMMAND, &mut line);
     for arg in args {
         line.push(' ');
