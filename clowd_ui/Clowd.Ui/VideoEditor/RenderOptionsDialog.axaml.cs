@@ -75,6 +75,7 @@ namespace Clowd.UI.VideoEditor
 
             // a cap that cannot shrink this project would be a lie — 720p on a 640x360 canvas
             // would have to upscale, which a render never does.
+            Size1440.IsEnabled = _project.HeightPx > 1440;
             Size1080.IsEnabled = _project.HeightPx > 1080;
             Size720.IsEnabled = _project.HeightPx > 720;
 
@@ -98,7 +99,7 @@ namespace Clowd.UI.VideoEditor
                 };
             }
             CrfSlider.ValueChanged += (_, _) => SyncQualitySegments();
-            foreach (var size in new[] { SizeFull, Size1080, Size720 })
+            foreach (var size in new[] { SizeActual, Size1440, Size1080, Size720 })
                 size.IsCheckedChanged += (_, _) => SyncSizeCaption();
 
             SyncQualitySegments();
@@ -197,21 +198,24 @@ namespace Clowd.UI.VideoEditor
             CrfValue.Text = "CRF " + crf.ToString(CultureInfo.InvariantCulture);
         }
 
-        /// <summary>Checks the size segment for <paramref name="maxHeight"/>, falling back to Full
+        /// <summary>Checks the size segment for <paramref name="maxHeight"/>, falling back to Actual
         /// when that cap is one this project cannot use (a remembered 720p meeting a 720p project).</summary>
         private void SelectSize(int maxHeight)
         {
-            if (maxHeight == 1080 && Size1080.IsEnabled)
+            if (maxHeight == 1440 && Size1440.IsEnabled)
+                Size1440.IsChecked = true;
+            else if (maxHeight == 1080 && Size1080.IsEnabled)
                 Size1080.IsChecked = true;
             else if (maxHeight == 720 && Size720.IsEnabled)
                 Size720.IsChecked = true;
             else
-                SizeFull.IsChecked = true;
+                SizeActual.IsChecked = true;
         }
 
         private int SelectedCrf() => RenderPresets.ClampCrf((int)Math.Round(CrfSlider.Value));
 
         private int SelectedMaxHeight() =>
+            Size1440.IsChecked == true ? 1440 :
             Size1080.IsChecked == true ? 1080 :
             Size720.IsChecked == true ? 720 : 0;
 
