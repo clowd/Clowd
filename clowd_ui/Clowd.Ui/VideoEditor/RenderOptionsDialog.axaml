@@ -195,8 +195,13 @@
                 <Border Classes="segments">
                     <StackPanel Orientation="Horizontal">
                         <RadioButton
-                            x:Name="SizeFull"
-                            Content="Full"
+                            x:Name="SizeActual"
+                            Content="Actual"
+                            GroupName="size"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="Size1440"
+                            Content="1440p"
                             GroupName="size"
                             Theme="{StaticResource SegmentCell}" />
                         <RadioButton
@@ -233,7 +238,7 @@
                 Spacing="2">
                 <CheckBox x:Name="HardwareCheck" Content="Use hardware encoder" />
                 <TextBlock
-                    Margin="28,0,0,0"
+                    Margin="24,0,0,0"
                     Classes="hint"
                     Text="Encodes on the GPU when one is available. Lower quality and a larger file at the same setting; mainly useful on laptops." />
             </StackPanel>
