@@ -881,6 +881,63 @@ namespace Clowd.VideoSDK.Tests
             Assert.InRange(rendered.DurationTicks, Second - Second / Fps, Second + Second / Fps);
         }
 
+        /// <summary>A v2 job file that names an encoder the tool does not know is refused up front
+        /// — one error line, exit 1 — rather than rendering on some default; a known name renders,
+        /// and "software" in particular pins x264 regardless of the machine.</summary>
+        [Fact]
+        public void A_v2_file_with_an_unknown_encoder_is_one_error_line()
+        {
+            Assert.SkipUnless(FFmpegAvailable, TestFFmpeg.SkipReason);
+
+            string argsPath = TempPath(".json");
+            var job = ProjectFileWriter.Serialize(new Project
+            {
+                Output = new OutputSettings { WidthPx = 64, HeightPx = 64, FpsNum = 30, FpsDen = 1, SampleRate = 48000 },
+            }, TempPath(".mp4"), 30);
+            File.WriteAllText(argsPath, System.Text.Encoding.UTF8.GetString(job)
+                .Replace("\"encoder\": \"auto\"", "\"encoder\": \"x264\"", StringComparison.Ordinal));
+
+            var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
+
+            Assert.Equal(1, run.ExitCode);
+            string line = Assert.Single(run.Stdout);
+            Assert.StartsWith("error ", line, StringComparison.Ordinal);
+            Assert.Contains("unknown encoder \"x264\"", line, StringComparison.Ordinal);
+            Assert.Contains(VideoEncoderNames.All, line, StringComparison.Ordinal);
+        }
+
+        [Fact]
+        public void The_tool_honours_the_v2_file_s_software_encoder()
+        {
+            Assert.SkipUnless(FFmpegAvailable, TestFFmpeg.SkipReason);
+
+            const int Fps = 30, Rate = 48000;
+            string input = WriteFixtureMp4(64, 64, Fps, seconds: 1, sampleRate: Rate);
+            string output = TempPath(".mp4");
+            string argsPath = TempPath(".json");
+
+            var probe = MediaProbe.ProbeDetailed(input);
+            var project = RecordingProject.Build(new RecordingProjectSpec
+            {
+                InputPath = input,
+                Screen = probe.VideoStreams[0],
+                AudioStreams = probe.AudioStreams,
+                FpsNum = Fps,
+                FpsDen = 1,
+                Segments = new[] { new KeepSegment(0, 1000 * Ms) },
+            });
+            File.WriteAllBytes(argsPath, ProjectFileWriter.Serialize(project, output, 30, VideoEncoder.Software));
+
+            var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
+
+            Assert.Equal(0, run.ExitCode);
+            Assert.StartsWith("done ", run.Stdout[^1], StringComparison.Ordinal);
+            // the diagnostics name the encoder that ran: x264, as asked
+            Assert.Contains("Mp4Writer: video encoder libx264 (x264 crf=30 preset=fast", run.Stderr, StringComparison.Ordinal);
+            Assert.Contains("requested software", run.Stderr, StringComparison.Ordinal);
+            Assert.Equal("h264", Assert.Single(MediaProbe.ProbeDetailed(output).VideoStreams).CodecName);
+        }
+
         [Fact]
         public void No_arguments_is_a_usage_error()
         {

@@ -521,8 +521,12 @@ namespace Clowd.VideoSDK.Render
 
         public string OutputPath { get; init; }
 
-        /// <summary>x264 constant rate factor from the args (or vid-render's default).</summary>
+        /// <summary>Constant rate factor from the args (or vid-render's default).</summary>
         public int Crf { get; init; }
+
+        /// <summary>The H.264 encoder to render with. A v1 args file predates the choice and
+        /// always gets <see cref="VideoEncoder.Auto"/>; a v2 job file may name one.</summary>
+        public VideoEncoder Encoder { get; init; } = VideoEncoder.Auto;
 
         /// <summary>The mask PNG the shape was recovered from, for diagnostics only.</summary>
         public string MaskPngPath { get; init; }

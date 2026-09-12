@@ -33,6 +33,15 @@ namespace Clowd.VideoSDK.Composition
             return surface.ReadPixels(SurfacePixels.Bgra(width, height), dst, rowBytes, 0, 0);
         }
 
+        /// <summary>Raster surfaces are CPU memory already: the synchronous ring's readback is a
+        /// memcpy, so there is nothing to pipeline and no more than
+        /// <see cref="SyncReadbackRing.MaxUsefulSlots"/> slots to hold.</summary>
+        public IReadbackRing CreateReadbackRing(int width, int height, int slots, Action<string> diagnosticLog = null)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            return new SyncReadbackRing(this, width, height, SyncReadbackRing.UsefulSlots(slots));
+        }
+
         public void Dispose()
         {
             _disposed = true;

@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Playback;
@@ -181,6 +182,8 @@ namespace Clowd.VideoSDK.Tests
                 }))
                 {
                     Assert.True(writer.HasAudio);
+                    Assert.Equal(VideoEncoder.Software, writer.Encoder); // the writer's default
+                    Assert.Equal("libx264", writer.EncoderName);
                     SubmitSolidFrames(writer, W, H, Frames);
                     SubmitSine(writer, Rate, 2 * Rate); // 2s of sine
                     writer.Finish();
@@ -367,7 +370,220 @@ namespace Clowd.VideoSDK.Tests
                 new Mp4Writer(path, new Mp4WriterOptions { Width = 320, Height = 240, FpsNum = 0 }));
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 new Mp4Writer(path, new Mp4WriterOptions { Width = 320, Height = 240, FpsNum = 30, Crf = 52 }));
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                new Mp4Writer(path, new Mp4WriterOptions { Width = 320, Height = 240, FpsNum = 30, Encoder = (VideoEncoder)99 }));
             Assert.False(File.Exists(path) && new FileInfo(path).Length > 0);
+        }
+
+        // -------------------------------------------------------------------- encoder choice
+
+        /// <summary>Encodes one second through <paramref name="encoder"/> and checks the mp4
+        /// plays back as H.264 with the expected frame count, at the probe size (above every
+        /// hardware encoder's minimum; NVENC refuses 64x64).</summary>
+        private static (List<string> Log, VideoEncoder Ran, string Name) RenderWith(VideoEncoder encoder, int crf = Mp4WriterOptions.DefaultCrf)
+        {
+            const int W = H264EncoderProbe.ProbeWidth, H = H264EncoderProbe.ProbeHeight, Fps = 30, Frames = 30;
+            string path = TempMp4();
+            var log = new List<string>();
+            try
+            {
+                VideoEncoder ran;
+                string name;
+                using (var writer = new Mp4Writer(path, new Mp4WriterOptions
+                {
+                    Width = W,
+                    Height = H,
+                    FpsNum = Fps,
+                    FpsDen = 1,
+                    Crf = crf,
+                    Encoder = encoder,
+                    DiagnosticLog = log.Add,
+                    Audio = new Mp4AudioOptions { SampleRate = 48000, Channels = 2 },
+                }))
+                {
+                    ran = writer.Encoder;
+                    name = writer.EncoderName;
+                    Assert.NotEqual(VideoEncoder.Auto, ran);
+                    Assert.Equal(H264EncoderSettings.CodecNameOf(ran), name);
+                    Assert.False(string.IsNullOrEmpty(writer.EncoderDescription));
+                    SubmitSolidFrames(writer, W, H, Frames);
+                    SubmitSine(writer, 48000, 48000);
+                    writer.Finish();
+                }
+
+                var probe = MediaProbe.ProbeDetailed(path);
+                var v = Assert.Single(probe.VideoStreams);
+                Assert.Equal("h264", v.CodecName);
+                Assert.Equal(W, v.Width);
+                Assert.Equal(H, v.Height);
+                Assert.Equal(30L * v.AvgFrameRateDen, (long)v.AvgFrameRateNum);
+                Assert.InRange(probe.DurationTicks, 9_500_000, 11_500_000);
+                Assert.True(probe.HasAudio);
+
+                var raw = ProbeRaw(path);
+                Assert.Equal(AVCodecID.AV_CODEC_ID_H264, raw.VideoCodecId);
+                Assert.Equal(AVPixelFormat.AV_PIX_FMT_YUV420P, raw.VideoPixelFormat);
+                Assert.Equal(AVCodecID.AV_CODEC_ID_AAC, raw.AudioCodecId);
+                AssertFastStart(path);
+
+                // the one line that names the encoder and its effective settings
+                var chosen = Assert.Single(log, line => line.StartsWith("Mp4Writer: video encoder ", StringComparison.Ordinal));
+                Assert.Contains(name, chosen, StringComparison.Ordinal);
+                Assert.Contains($"requested {VideoEncoderNames.Of(encoder)}, crf {crf}", chosen, StringComparison.Ordinal);
+                return (log, ran, name);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        [Fact]
+        public void Software_encoder_writes_a_playable_mp4()
+        {
+            RequireFFmpeg();
+            var (log, ran, name) = RenderWith(VideoEncoder.Software, crf: 18);
+            Assert.Equal(VideoEncoder.Software, ran);
+            Assert.Equal("libx264", name);
+            Assert.Contains(log, line => line.Contains("x264 crf=18 preset=fast", StringComparison.Ordinal));
+            Assert.DoesNotContain(log, line => line.Contains("falling back", StringComparison.Ordinal));
+        }
+
+        /// <summary>crf 0 is x264's lossless mode, which the High profile forbids
+        /// (x264_param_apply_profile: "high profile doesn't support lossless"); the old writer
+        /// set no profile and rendered it, so the settings must leave the profile to x264
+        /// there, which picks High 4:4:4 Predictive.</summary>
+        [Fact]
+        public void Software_encoder_renders_lossless_at_crf_0()
+        {
+            RequireFFmpeg();
+            var (log, ran, name) = RenderWith(VideoEncoder.Software, crf: 0);
+            Assert.Equal(VideoEncoder.Software, ran);
+            Assert.Equal("libx264", name);
+            Assert.Contains(log, line => line.Contains("x264 crf=0 (lossless) preset=fast profile=high444", StringComparison.Ordinal));
+            Assert.DoesNotContain(log, line => line.Contains("falling back", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void Nvenc_encoder_writes_a_playable_mp4_when_it_opens_here()
+        {
+            RequireFFmpeg();
+            Assert.SkipUnless(H264EncoderProbe.CanOpen(VideoEncoder.Nvenc, out var reason), "h264_nvenc does not open here: " + reason);
+            var (log, ran, name) = RenderWith(VideoEncoder.Nvenc, crf: 21);
+            Assert.Equal(VideoEncoder.Nvenc, ran);
+            Assert.Equal("h264_nvenc", name);
+            Assert.Contains(log, line => line.Contains("NVENC vbr cq=25 preset=p6", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void Amf_encoder_writes_a_playable_mp4_when_it_opens_here()
+        {
+            RequireFFmpeg();
+            Assert.SkipUnless(H264EncoderProbe.CanOpen(VideoEncoder.Amf, out var reason), "h264_amf does not open here: " + reason);
+            var (log, ran, name) = RenderWith(VideoEncoder.Amf, crf: 21);
+            Assert.Equal(VideoEncoder.Amf, ran);
+            Assert.Equal("h264_amf", name);
+            Assert.Contains(log, line => line.Contains("AMF cqp qp=21", StringComparison.Ordinal));
+        }
+
+        [Fact]
+        public void VideoToolbox_encoder_writes_a_playable_mp4_when_it_opens_here()
+        {
+            RequireFFmpeg();
+            Assert.SkipUnless(OperatingSystem.IsMacOS() && H264EncoderProbe.CanOpen(VideoEncoder.VideoToolbox, out _),
+                "h264_videotoolbox is macOS only");
+            var (log, ran, name) = RenderWith(VideoEncoder.VideoToolbox, crf: 21);
+            Assert.Equal(VideoEncoder.VideoToolbox, ran);
+            Assert.Equal("h264_videotoolbox", name);
+            Assert.Contains(log, line => line.Contains("VideoToolbox ", StringComparison.Ordinal));
+        }
+
+        /// <summary>Asking for a hardware encoder never fails the writer: where it does not open
+        /// the render lands on x264 with a fallback line, where it does it runs. Every explicit
+        /// choice is exercised, so this covers whichever hardware the machine lacks.</summary>
+        [Theory]
+        [InlineData(VideoEncoder.Nvenc)]
+        [InlineData(VideoEncoder.Amf)]
+        [InlineData(VideoEncoder.VideoToolbox)]
+        public void An_unavailable_hardware_encoder_falls_back_to_x264(VideoEncoder requested)
+        {
+            RequireFFmpeg();
+            bool available = H264EncoderProbe.CanOpen(requested, out _);
+            var (log, ran, name) = RenderWith(requested);
+            if (available)
+            {
+                Assert.Equal(requested, ran);
+                Assert.DoesNotContain(log, line => line.Contains("falling back", StringComparison.Ordinal));
+            }
+            else
+            {
+                Assert.Equal(VideoEncoder.Software, ran);
+                Assert.Equal("libx264", name);
+                var fallback = Assert.Single(log, line => line.Contains("falling back to libx264", StringComparison.Ordinal));
+                Assert.Contains(H264EncoderSettings.CodecNameOf(requested), fallback, StringComparison.Ordinal);
+            }
+        }
+
+        [Fact]
+        public void Auto_lands_on_the_probed_encoder()
+        {
+            RequireFFmpeg();
+            var (log, ran, _) = RenderWith(VideoEncoder.Auto);
+            Assert.Equal(H264EncoderProbe.Resolve(VideoEncoder.Auto, null), ran);
+            Assert.Contains(log, line => line.Contains("requested auto", StringComparison.Ordinal));
+        }
+
+        /// <summary>The recorder's rate, so an edit of a recording does not lose audio quality.</summary>
+        [Fact]
+        public void Audio_is_aac_at_192_kbps()
+        {
+            RequireFFmpeg();
+            Assert.Equal(192_000, Mp4Writer.AudioBitRate);
+            string path = TempMp4();
+            try
+            {
+                using (var writer = new Mp4Writer(path, new Mp4WriterOptions
+                {
+                    Width = 64,
+                    Height = 64,
+                    FpsNum = 30,
+                    Audio = new Mp4AudioOptions { SampleRate = 48000, Channels = 2 },
+                }))
+                {
+                    SubmitSolidFrames(writer, 64, 64, 300);
+                    SubmitSine(writer, 48000, 48000 * 10);
+                    writer.Finish();
+                }
+                // the aac encoder's declared rate survives into the container's codec parameters
+                Assert.InRange(ProbeAudioBitRate(path), 150_000, 230_000);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+        }
+
+        private static unsafe long ProbeAudioBitRate(string path)
+        {
+            AVFormatContext* fmt = null;
+            int err = ffmpeg.avformat_open_input(&fmt, path, null, null);
+            if (err < 0)
+                throw new InvalidOperationException($"open failed: {FFmpegLoader.ErrorToString(err)}");
+            try
+            {
+                ffmpeg.avformat_find_stream_info(fmt, null);
+                for (int i = 0; i < fmt->nb_streams; i++)
+                {
+                    var par = fmt->streams[i]->codecpar;
+                    if (par->codec_type == AVMediaType.AVMEDIA_TYPE_AUDIO)
+                        return par->bit_rate;
+                }
+                return 0;
+            }
+            finally
+            {
+                ffmpeg.avformat_close_input(&fmt);
+            }
         }
     }
 }
