@@ -55,8 +55,8 @@ namespace Clowd.VideoSDK.Tests
         };
 
         private static string Serialize(Project project, string output = Output, int crf = 23,
-            VideoEncoder encoder = VideoEncoder.Auto)
-            => Encoding.UTF8.GetString(ProjectFileWriter.Serialize(project, output, crf, encoder));
+            VideoEncoder encoder = VideoEncoder.Auto, int maxHeight = 0)
+            => Encoding.UTF8.GetString(ProjectFileWriter.Serialize(project, output, crf, encoder, maxHeight));
 
         [Fact]
         public void The_job_file_is_the_project_with_output_crf_and_encoder_beside_it()
@@ -87,6 +87,30 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(encoder, parsed);
         }
 
+        /// <summary>The encode-time size cap: written only when there is one, so a job file for an
+        /// uncapped render is exactly what it was before the cap existed (and the tool reads an
+        /// absent sibling as "no cap").</summary>
+        [Fact]
+        public void The_size_cap_is_a_sibling_only_when_there_is_one()
+        {
+            using (var uncapped = JsonDocument.Parse(Serialize(Sample())))
+                Assert.False(uncapped.RootElement.TryGetProperty(ProjectFileWriter.MaxHeightProperty, out _));
+
+            using var document = JsonDocument.Parse(Serialize(Sample(), maxHeight: 720));
+            Assert.Equal(720, document.RootElement.GetProperty(ProjectFileWriter.MaxHeightProperty).GetInt32());
+            Assert.Equal("maxHeight", ProjectFileWriter.MaxHeightProperty);
+            // and it rides alongside the model exactly like the other siblings do
+            Assert.Equal(1080, document.RootElement.GetProperty("Output").GetProperty("HeightPx").GetInt32());
+            Assert.Empty(Project.FromJson(Serialize(Sample(), maxHeight: 720)).Validate());
+        }
+
+        [Fact]
+        public void A_negative_size_cap_is_rejected()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => ProjectFileWriter.Serialize(Sample(), Output, 23,
+                VideoEncoder.Auto, -1));
+        }
+
         [Fact]
         public void The_job_file_still_reads_back_as_the_same_project()
         {
@@ -115,6 +139,11 @@ namespace Clowd.VideoSDK.Tests
             {
                 Assert.Equal(path, ProjectFileWriter.Write(path, project, Output, 23, VideoEncoder.Software));
                 Assert.Equal(ProjectFileWriter.Serialize(project, Output, 23, VideoEncoder.Software), File.ReadAllBytes(path));
+
+                // the cap reaches disk through the same overload
+                ProjectFileWriter.Write(path, project, Output, 23, VideoEncoder.Software, 720);
+                Assert.Equal(ProjectFileWriter.Serialize(project, Output, 23, VideoEncoder.Software, 720),
+                    File.ReadAllBytes(path));
             }
             finally
             {

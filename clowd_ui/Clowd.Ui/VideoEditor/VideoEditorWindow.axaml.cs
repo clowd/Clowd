@@ -101,6 +101,10 @@ namespace Clowd.UI.VideoEditor
         private VidRenderRunner _devRunner;
         private bool _devRenderRunning;
 
+        // the Render flyout's rows in display order — the list the arrow keys walk. Built once in
+        // InitRenderPopup; the rows themselves live in the XAML.
+        private List<Button> _renderRows;
+
         private const string RenderTooltip = "Render edited video";
         private const string CancelRenderTooltip = "Cancel render";
 
@@ -305,6 +309,7 @@ namespace Clowd.UI.VideoEditor
             UpdateMuteIcon();
 
             BuildSpeedMenu();
+            InitRenderPopup();
 
             ddResolution.PropertyChanged += Resolution_PropertyChanged;
             ddFrameRate.PropertyChanged += FrameRate_PropertyChanged;
@@ -1615,15 +1620,211 @@ namespace Clowd.UI.VideoEditor
                 return;
             }
 
+            // the pre-checks above run before the flyout opens, so it never offers a render that
+            // would fail the moment it was picked.
+            OpenRenderFlyout();
+        }
+
+        /// <summary>Wires the Render flyout once: the preset rows, keyboard focus on open (the
+        /// button is opened with Enter as often as with a click), Up/Down between rows, Escape to
+        /// close, and focus back on the Render button afterwards — the image editor's customize
+        /// popup keyboard behaviour, which is the app's convention for a button flyout.</summary>
+        private void InitRenderPopup()
+        {
+            _renderRows = new List<Button> { btnPresetShare, btnPresetBest, btnPresetSmall, btnRenderMore };
+
+            btnPresetShare.Click += (_, _) => RenderPresetPicked(RenderPreset.Share);
+            btnPresetBest.Click += (_, _) => RenderPresetPicked(RenderPreset.BestQuality);
+            btnPresetSmall.Click += (_, _) => RenderPresetPicked(RenderPreset.SmallFile);
+            btnRenderMore.Click += (_, _) =>
+            {
+                renderPopup.IsOpen = false;
+                _ = ShowRenderOptionsAsync();
+            };
+
+            renderPopup.Opened += (_, _) => FocusRenderRow(RowForPreset(LastRenderPreset));
+
+            // covers every close path, light dismiss included
+            renderPopup.Closed += (_, _) =>
+            {
+                if (!_closing && btnRender.IsEffectivelyVisible)
+                    btnRender.Focus(NavigationMethod.Tab);
+            };
+
+            // The popup lives in its own PopupRoot with its own focus scope, so this window's key
+            // handlers never see keys pressed in it. Hook the root itself (it only exists while the
+            // popup is open, hence on attach) so the arrows and Escape work whichever row has focus.
+            TopLevel keyRoot = null;
+            renderPopupRoot.AttachedToVisualTree += (_, _) =>
+            {
+                keyRoot = TopLevel.GetTopLevel(renderPopupRoot);
+                keyRoot?.AddHandler(KeyDownEvent, RenderPopupRoot_KeyDown, RoutingStrategies.Tunnel);
+            };
+            renderPopupRoot.DetachedFromVisualTree += (_, _) =>
+            {
+                keyRoot?.RemoveHandler(KeyDownEvent, RenderPopupRoot_KeyDown);
+                keyRoot = null;
+            };
+        }
+
+        private void RenderPopupRoot_KeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.Key)
+            {
+                case Key.Escape:
+                    e.Handled = true;
+                    renderPopup.IsOpen = false;
+                    break;
+
+                case Key.Down:
+                case Key.Up:
+                    e.Handled = true;
+                    MoveRenderRowFocus(e.Key == Key.Down ? 1 : -1);
+                    break;
+            }
+        }
+
+        /// <summary>Opens the preset flyout under the Render button, with the check mark on the
+        /// preset the last render used.</summary>
+        private void OpenRenderFlyout()
+        {
+            SyncRenderPresetChecks();
+            renderPopup.PlacementTarget = btnRender;
+            renderPopup.IsOpen = true;
+        }
+
+        /// <summary>The preset that will render when the flyout is opened and Enter is
+        /// pressed — what was rendered last, defaulting to Share.</summary>
+        private static RenderPreset LastRenderPreset => Settings?.LastRenderPreset ?? RenderPreset.Share;
+
+        private void SyncRenderPresetChecks()
+        {
+            var last = LastRenderPreset;
+            checkPresetShare.IsVisible = last == RenderPreset.Share;
+            checkPresetBest.IsVisible = last == RenderPreset.BestQuality;
+            checkPresetSmall.IsVisible = last == RenderPreset.SmallFile;
+            // a custom render has no row of its own, so the mark (and the focus) go to the row that
+            // would repeat it: the dialog.
+            checkRenderMore.IsVisible = last == RenderPreset.Custom;
+        }
+
+        private Button RowForPreset(RenderPreset preset) => preset switch
+        {
+            RenderPreset.BestQuality => btnPresetBest,
+            RenderPreset.SmallFile => btnPresetSmall,
+            RenderPreset.Custom => btnRenderMore,
+            _ => btnPresetShare,
+        };
+
+        /// <summary>Posted: on open the popup root is still laying out, so an immediate Focus() is
+        /// dropped on the way in (the image editor's popups do the same). Skipped if the popup
+        /// closed in the meantime.</summary>
+        private void FocusRenderRow(Button row)
+        {
+            if (row == null)
+                return;
+
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (renderPopup.IsOpen && row.IsLoaded)
+                    row.Focus(NavigationMethod.Tab);
+            }, DispatcherPriority.Background);
+        }
+
+        /// <summary>Moves the keyboard one row down (+1) or up (-1), wrapping — a four-row menu is
+        /// quicker to reach the end of by going up than by pressing Down four times.</summary>
+        private void MoveRenderRowFocus(int delta)
+        {
+            if (_renderRows == null || _renderRows.Count == 0)
+                return;
+
+            var current = _renderRows.FindIndex(r => r.IsFocused);
+            if (current < 0)
+                current = delta > 0 ? -1 : 0;
+
+            var next = ((current + delta) % _renderRows.Count + _renderRows.Count) % _renderRows.Count;
+            _renderRows[next].Focus(NavigationMethod.Tab);
+        }
+
+        /// <summary>A preset row was activated: remember it as the flyout's default and render with
+        /// it straight away — the whole point of the flyout is that a preset is one click.</summary>
+        private void RenderPresetPicked(RenderPreset preset)
+        {
+            renderPopup.IsOpen = false;
+
+            if (Settings != null)
+            {
+                Settings.LastRenderPreset = preset;
+                TrySaveSettings();
+            }
+
+            _ = StartRenderAsync(RenderPresets.Create(preset, Settings));
+        }
+
+        /// <summary>The flyout's "More options…" row: the render dialog, prefilled from the
+        /// last-used preset (or the last custom values), and the render it describes.</summary>
+        private async Task ShowRenderOptionsAsync()
+        {
+            if (_editor == null)
+                return;
+
+            var project = _editor.Project;
+
+            // how long the *file* will be, which is output (speed-warped) time — the same number
+            // the transport reads out, not the project duration a Speed effect stretches or
+            // shrinks. With no player open yet the warp is identity, so project time is right.
+            var durationTicks = _player?.OutputDurationTicks ?? 0;
+            if (durationTicks <= 0)
+                durationTicks = _editor.DurationTicks;
+
+            var info = new RenderProjectInfo(
+                project.Output.WidthPx, project.Output.HeightPx,
+                project.Output.FpsNum, project.Output.FpsDen,
+                TimeSpan.FromTicks(Math.Max(0, durationTicks)));
+
+            var initial = RenderPresets.Create(LastRenderPreset, Settings);
+            var request = await RenderOptionsDialog.ShowAsync(this, info, initial, DefaultRenderOutputPath());
+            if (request == null)
+                return; // canceled
+
+            if (Settings != null)
+            {
+                // the dialog's values become the custom ones the next dialog opens on, and the
+                // flyout checks the row they amount to (Custom when they match no preset).
+                Settings.CustomRenderCrf = request.Crf;
+                Settings.CustomRenderMaxHeight = request.MaxHeight;
+                Settings.CopyToClipboardAfterRender = request.CopyToClipboard;
+                Settings.ShowInFolderAfterRender = request.ShowInFolder;
+                Settings.HardwareEncodeRender = request.HardwareEncoder;
+                Settings.LastRenderPreset = RenderPresets.Match(request.Crf, request.MaxHeight);
+                TrySaveSettings();
+            }
+
+            await StartRenderAsync(request);
+        }
+
+        /// <summary>The path the dialog's "Save to" box opens on: what a preset render would have
+        /// written to — the recording settings' output folder and filename pattern, or, in the dev
+        /// harness (no session), the file beside the one being edited.</summary>
+        private string DefaultRenderOutputPath() =>
+            _session != null ? VideoRenderManager.GetOutputPath(_session) : VideoRenderManager.GetOutputPath(_videoPath);
+
+        /// <summary>Starts <paramref name="request"/>: through the render manager when this editor
+        /// has a session behind it, in-process when it does not (the dev harness).</summary>
+        private async Task StartRenderAsync(RenderRequest request)
+        {
+            if (_editor == null)
+                return;
+
             if (_session == null)
             {
-                await RunDevRenderAsync();
+                await RunDevRenderAsync(request);
                 return;
             }
 
             // a snapshot of the very project the preview is composing, so the render is what was
             // on screen (and later edits cannot race the render job file).
-            var created = await VideoRenderManager.StartRenderAsync(_session, _editor.SnapshotForPlayer());
+            var created = await VideoRenderManager.StartRenderAsync(_session, _editor.SnapshotForPlayer(), request);
             if (created != null)
             {
                 TrackRenderSession(created);
@@ -1704,12 +1905,15 @@ namespace Clowd.UI.VideoEditor
         }
 
         /// <summary>Dev-mode render (--video-edit, no session): writes the same job file the manager
-        /// would, puts the output next to the source file, and runs the render tool directly without
-        /// creating any Recents entry.</summary>
-        private async Task RunDevRenderAsync()
+        /// would — quality, size cap and all, from the flyout or the dialog exactly as a real render
+        /// gets them — puts the output next to the source file, and runs the render tool directly
+        /// without creating any Recents entry.</summary>
+        private async Task RunDevRenderAsync(RenderRequest request)
         {
             var project = _editor.SnapshotForPlayer();
-            var outputPath = VideoRenderManager.GetOutputPath(_videoPath);
+            var outputPath = String.IsNullOrEmpty(request.OutputPath)
+                ? VideoRenderManager.GetOutputPath(_videoPath)
+                : request.OutputPath;
             var workDir = Path.Combine(Path.GetTempPath(), "clowd-video-edit-" + Guid.NewGuid().ToString("N"));
 
             try
@@ -1718,7 +1922,9 @@ namespace Clowd.UI.VideoEditor
 
                 var argsPath = ProjectFileWriter.Write(
                     Path.Combine(workDir, VideoRenderManager.RenderArgsFileName), project, outputPath,
-                    SettingsRoot.Current?.Recording?.Crf ?? (int)VideoQuality.Medium);
+                    RenderPresets.ClampCrf(request.Crf),
+                    request.HardwareEncoder ? Clowd.VideoSDK.Media.VideoEncoder.Auto : Clowd.VideoSDK.Media.VideoEncoder.Software,
+                    Math.Max(0, request.MaxHeight));
 
                 _devRunner = new VidRenderRunner();
                 _devRunner.ProgressChanged += (_, percent) => btnRender.Progress = percent;
@@ -1732,7 +1938,9 @@ namespace Clowd.UI.VideoEditor
                 switch (result.Outcome)
                 {
                     case VidRenderOutcome.Success:
-                        Toast.Show(this, "Video saved: " + Path.GetFileName(result.OutputPath ?? outputPath));
+                        // the same after-render actions (and the same toast) a real render runs
+                        await RenderAfterActions.RunAsync(this, result.OutputPath ?? outputPath,
+                            request.CopyToClipboard, request.ShowInFolder);
                         break;
                     case VidRenderOutcome.Canceled:
                         break;

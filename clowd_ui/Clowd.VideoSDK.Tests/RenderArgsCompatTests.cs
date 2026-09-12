@@ -938,6 +938,77 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal("h264", Assert.Single(MediaProbe.ProbeDetailed(output).VideoStreams).CodecName);
         }
 
+        /// <summary>The job file's <c>maxHeight</c> sibling is an encode-time cap: the project is
+        /// untouched (it still says 64x64) and the mp4 comes out at the capped size.</summary>
+        [Fact]
+        public void The_tool_caps_the_output_height_of_a_v2_file()
+        {
+            Assert.SkipUnless(FFmpegAvailable, TestFFmpeg.SkipReason);
+
+            const int Fps = 30, Rate = 48000;
+            string input = WriteFixtureMp4(64, 64, Fps, seconds: 1, sampleRate: Rate);
+            string output = TempPath(".mp4");
+            string argsPath = TempPath(".json");
+
+            var probe = MediaProbe.ProbeDetailed(input);
+            var project = RecordingProject.Build(new RecordingProjectSpec
+            {
+                InputPath = input,
+                Screen = probe.VideoStreams[0],
+                AudioStreams = probe.AudioStreams,
+                FpsNum = Fps,
+                FpsDen = 1,
+                Segments = new[] { new KeepSegment(0, 1000 * Ms) },
+            });
+            File.WriteAllBytes(argsPath,
+                ProjectFileWriter.Serialize(project, output, 30, VideoEncoder.Software, maxHeight: 32));
+
+            var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
+
+            Assert.Equal(0, run.ExitCode);
+            Assert.StartsWith("done ", run.Stdout[^1], StringComparison.Ordinal);
+            var rendered = Assert.Single(MediaProbe.ProbeDetailed(output).VideoStreams);
+            Assert.Equal(32, rendered.Height);
+            Assert.Equal(32, rendered.Width);
+            Assert.Equal(64, project.Output.HeightPx); // the canvas never moved
+            Assert.Contains("encoded at 32x32 (max height 32)", run.Stderr, StringComparison.Ordinal);
+        }
+
+        /// <summary>A <c>maxHeight</c> that is not a non-negative whole number of pixels is refused
+        /// up front — one error line, exit 1 — rather than silently rendering at full size.</summary>
+        [Theory]
+        [InlineData("\"720p\"", "maxHeight \"720p\" is not a whole number of pixels")]
+        [InlineData("719.5", "maxHeight 719.5 is not a whole number of pixels")]
+        [InlineData("-16", "maxHeight -16 is negative")]
+        public void A_v2_file_with_a_bad_max_height_is_one_error_line(string json, string expected)
+        {
+            Assert.SkipUnless(FFmpegAvailable, TestFFmpeg.SkipReason);
+
+            string argsPath = TempPath(".json");
+            var job = ProjectFileWriter.Serialize(new Project
+            {
+                Output = new OutputSettings { WidthPx = 64, HeightPx = 64, FpsNum = 30, FpsDen = 1, SampleRate = 48000 },
+            }, TempPath(".mp4"), 30);
+            File.WriteAllText(argsPath, System.Text.Encoding.UTF8.GetString(job)
+                .Replace("\"encoder\": \"auto\"", $"\"encoder\": \"auto\",\n  \"maxHeight\": {json}", StringComparison.Ordinal));
+
+            var run = RunTool(argsPath, FFmpegLoader.LibrariesDirectory);
+
+            Assert.Equal(1, run.ExitCode);
+            string line = Assert.Single(run.Stdout);
+            Assert.StartsWith("error ", line, StringComparison.Ordinal);
+            Assert.Contains(expected, line, StringComparison.Ordinal);
+        }
+
+        /// <summary>A v1 args file predates the cap and never gets one, whatever the file says.</summary>
+        [Fact]
+        public void A_v1_args_file_has_no_size_cap()
+        {
+            var plan = Build(ArgsJson());
+
+            Assert.Equal(0, plan.MaxHeight);
+        }
+
         [Fact]
         public void No_arguments_is_a_usage_error()
         {

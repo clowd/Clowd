@@ -1,0 +1,287 @@
+<Window
+    x:Class="Clowd.UI.VideoEditor.RenderOptionsDialog"
+    xmlns="https://github.com/avaloniaui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Render video"
+    Width="520"
+    Background="{DynamicResource ApplicationBackgroundBrush}"
+    CanResize="False"
+    ShowInTaskbar="False"
+    SizeToContent="Height"
+    WindowStartupLocation="CenterOwner">
+
+    <Window.Resources>
+        <!--  One cell of a segmented bar: the radios sit shoulder to shoulder inside a rounded,
+              clipped border, so the cells themselves are square and only the group is rounded.
+              The checked cell takes the accent fill (the same token the Render button wears);
+              a cell that cannot shrink the output is disabled rather than hidden, so the row
+              still reads as "these are the sizes".  -->
+        <ControlTheme x:Key="SegmentCell" TargetType="RadioButton">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="MinWidth" Value="64" />
+            <Setter Property="Padding" Value="14,5" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText1}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_box"
+                        Padding="{TemplateBinding Padding}"
+                        Background="Transparent">
+                        <ContentPresenter
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Content="{TemplateBinding Content}"
+                            Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_box">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+            </Style>
+            <Style Selector="^:checked /template/ Border#_box">
+                <Setter Property="Background" Value="{DynamicResource SemiColorPrimary}" />
+            </Style>
+            <Style Selector="^:checked">
+                <Setter Property="Foreground" Value="{DynamicResource SemiColorWhite}" />
+            </Style>
+            <!--  keyboard focus has to be visible: the cells have no border of their own  -->
+            <Style Selector="^:focus-visible /template/ Border#_box">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+            <Style Selector="^:checked:focus-visible /template/ Border#_box">
+                <Setter Property="Background" Value="{DynamicResource SemiColorPrimaryActive}" />
+            </Style>
+            <Style Selector="^:disabled">
+                <Setter Property="Opacity" Value="0.45" />
+            </Style>
+        </ControlTheme>
+    </Window.Resources>
+
+    <Window.Styles>
+        <!--  the label column: one style rather than four copies of the same three setters  -->
+        <Style Selector="TextBlock.rowLabel">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,12,0" />
+        </Style>
+        <Style Selector="TextBlock.hint">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText2}" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="Border.segments">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="BorderBrush" Value="{DynamicResource SemiColorBorder}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+
+        <!--  button strip, on the same fill as the resolution dialog's  -->
+        <Border DockPanel.Dock="Bottom" Background="{DynamicResource SemiColorFill0}">
+            <DockPanel Margin="16,10" LastChildFill="False">
+                <TextBlock
+                    x:Name="MetaText"
+                    VerticalAlignment="Center"
+                    Classes="hint"
+                    DockPanel.Dock="Left" />
+                <StackPanel
+                    DockPanel.Dock="Right"
+                    Orientation="Horizontal"
+                    Spacing="8">
+                    <Button
+                        x:Name="RenderButton"
+                        MinWidth="80"
+                        HorizontalContentAlignment="Center"
+                        Classes="Primary"
+                        Content="Render"
+                        IsDefault="True"
+                        Theme="{StaticResource SolidButton}" />
+                    <Button
+                        x:Name="CancelButton"
+                        MinWidth="80"
+                        HorizontalContentAlignment="Center"
+                        Content="Cancel"
+                        IsCancel="True" />
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid Margin="16,18,16,16" ColumnDefinitions="96,*">
+            <!--  quality · the CRF slider · size · encoder · save to · after render  -->
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!--  Quality: the three recording presets as shortcuts onto the CRF slider below  -->
+            <TextBlock
+                Grid.Row="0"
+                Grid.Column="0"
+                Classes="rowLabel"
+                Text="Quality" />
+            <Border
+                Grid.Row="0"
+                Grid.Column="1"
+                Classes="segments">
+                <StackPanel Orientation="Horizontal">
+                    <RadioButton
+                        x:Name="QualityLow"
+                        Content="Low"
+                        GroupName="quality"
+                        Theme="{StaticResource SegmentCell}" />
+                    <RadioButton
+                        x:Name="QualityMedium"
+                        Content="Medium"
+                        GroupName="quality"
+                        Theme="{StaticResource SegmentCell}" />
+                    <RadioButton
+                        x:Name="QualityHigh"
+                        Content="High"
+                        GroupName="quality"
+                        Theme="{StaticResource SegmentCell}" />
+                </StackPanel>
+            </Border>
+
+            <!--  The CRF slider is the real control; the three segments above are shortcuts that
+                  move it to 29 / 23 / 18 and light up whenever it sits on one of those values.  -->
+            <StackPanel
+                Grid.Row="1"
+                Grid.Column="1"
+                Margin="0,8,0,0"
+                Spacing="2">
+                <DockPanel LastChildFill="True">
+                    <TextBlock
+                        x:Name="CrfValue"
+                        MinWidth="52"
+                        VerticalAlignment="Center"
+                        Classes="hint"
+                        DockPanel.Dock="Right"
+                        TextAlignment="Right" />
+                    <Slider
+                        x:Name="CrfSlider"
+                        VerticalAlignment="Center"
+                        IsSnapToTickEnabled="True"
+                        Maximum="51"
+                        Minimum="0"
+                        TickFrequency="1" />
+                </DockPanel>
+                <TextBlock
+                    Classes="hint"
+                    Text="Lower is better quality and a bigger file. 18–28 is the useful range." />
+            </StackPanel>
+
+            <!--  Size: an encode-time cap on the height, never a change to the project canvas  -->
+            <TextBlock
+                Grid.Row="2"
+                Grid.Column="0"
+                Margin="0,14,12,0"
+                Classes="rowLabel"
+                Text="Size" />
+            <StackPanel
+                Grid.Row="2"
+                Grid.Column="1"
+                Margin="0,14,0,0"
+                Orientation="Horizontal"
+                Spacing="10">
+                <Border Classes="segments">
+                    <StackPanel Orientation="Horizontal">
+                        <RadioButton
+                            x:Name="SizeFull"
+                            Content="Full"
+                            GroupName="size"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="Size1080"
+                            Content="1080p"
+                            GroupName="size"
+                            Theme="{StaticResource SegmentCell}" />
+                        <RadioButton
+                            x:Name="Size720"
+                            Content="720p"
+                            GroupName="size"
+                            Theme="{StaticResource SegmentCell}" />
+                    </StackPanel>
+                </Border>
+                <TextBlock
+                    x:Name="SizeCaption"
+                    VerticalAlignment="Center"
+                    Classes="hint" />
+            </StackPanel>
+
+            <!--  Encoder: the GPU paths exist (NVENC, AMF, VideoToolbox, with x264 as the fallback
+                  when none opens) but stay off unless asked: they are engine-bound and their quality
+                  mapping runs larger than x264's at the same setting.  -->
+            <TextBlock
+                Grid.Row="3"
+                Grid.Column="0"
+                Margin="0,14,12,0"
+                Classes="rowLabel"
+                Text="Encoder" />
+            <StackPanel
+                Grid.Row="3"
+                Grid.Column="1"
+                Margin="0,14,0,0"
+                Spacing="2">
+                <CheckBox x:Name="HardwareCheck" Content="Use hardware encoder" />
+                <TextBlock
+                    Margin="28,0,0,0"
+                    Classes="hint"
+                    Text="Encodes on the GPU when one is available. Lower quality and a larger file at the same setting; mainly useful on laptops." />
+            </StackPanel>
+
+            <!--  Save to: the full path, pre-filled from the recording settings  -->
+            <TextBlock
+                Grid.Row="4"
+                Grid.Column="0"
+                Margin="0,14,12,0"
+                Classes="rowLabel"
+                Text="Save to" />
+            <Grid
+                Grid.Row="4"
+                Grid.Column="1"
+                Margin="0,14,0,0"
+                ColumnDefinitions="*,Auto">
+                <TextBox
+                    x:Name="PathBox"
+                    Grid.Column="0"
+                    VerticalAlignment="Center"
+                    ToolTip.Tip="The full path this render is written to" />
+                <Button
+                    x:Name="BrowseButton"
+                    Grid.Column="1"
+                    MinWidth="84"
+                    Margin="8,0,0,0"
+                    HorizontalContentAlignment="Center"
+                    Content="Browse…" />
+            </Grid>
+
+            <!--  After render  -->
+            <TextBlock
+                Grid.Row="5"
+                Grid.Column="0"
+                Margin="0,16,12,0"
+                Classes="rowLabel"
+                Text="After render" />
+            <StackPanel
+                Grid.Row="5"
+                Grid.Column="1"
+                Margin="0,16,0,0"
+                Orientation="Horizontal"
+                Spacing="18">
+                <CheckBox x:Name="CopyCheck" Content="Copy file to clipboard" />
+                <CheckBox x:Name="RevealCheck" Content="Show in folder" />
+            </StackPanel>
+        </Grid>
+
+    </DockPanel>
+
+</Window>

@@ -176,6 +176,48 @@
             </Style>
         </ControlTheme>
 
+        <!--  A row of the Render flyout: a menu item in all but name — a full-width button with a
+              title, a caption under it and room on the right for the check mark on the preset that
+              rendered last. It is a Button so Enter and Space activate the focused row for free;
+              the popup's own key handler adds Up/Down and Escape.  -->
+        <ControlTheme x:Key="RenderPresetRowTheme" TargetType="Button">
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource SemiColorText0}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border
+                        Name="_bg"
+                        Padding="{TemplateBinding Padding}"
+                        Background="{TemplateBinding Background}"
+                        CornerRadius="6">
+                        <!--  Foreground is relayed explicitly: the editor window sets a white
+                              Foreground for its dark chrome and popup content inherits it, which
+                              would be invisible on this themed panel.  -->
+                        <ContentPresenter
+                            HorizontalAlignment="Stretch"
+                            Content="{TemplateBinding Content}"
+                            Foreground="{TemplateBinding Foreground}" />
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill0}" />
+            </Style>
+            <Style Selector="^:pressed /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+            <!--  the flyout is opened by keyboard as often as by mouse, so the focused row has to
+                  look like the hovered one does  -->
+            <Style Selector="^:focus-visible /template/ Border#_bg">
+                <Setter Property="Background" Value="{DynamicResource SemiColorFill1}" />
+            </Style>
+        </ControlTheme>
+
         <!--  The add-track tips are rich panels (ve:TrackTip) rather than a line of text, and they
               draw their own dark chrome, so the ToolTip around them is a bare presenter: no
               theme padding, background or border to double up on the panel's.  -->
@@ -760,6 +802,127 @@
                     Margin="0,2,0,0" />
             </ThemeVariantScope>
         </Border>
+
+        <!--  The Render button's presets. Same chrome as the image editor's two popups (commit
+              a4b42d07): the 10px margin is room for the shadow and the offsets cancel it, so the
+              visible edge lines up with the button's right edge and sits 2px under it. Colours are
+              theme tokens rather than the editor chrome's fixed darks — this is a menu hanging off
+              the window, and it should read like the render dialog it opens.
+              Keyboard: the popup takes focus on open with the last-used row focused, Up/Down move,
+              Enter activates and Escape closes (see InitRenderPopup).  -->
+        <Popup
+            x:Name="renderPopup"
+            HorizontalOffset="10"
+            IsLightDismissEnabled="True"
+            Placement="BottomEdgeAlignedRight"
+            VerticalOffset="-8">
+            <Border
+                x:Name="renderPopupRoot"
+                Width="248"
+                Margin="10"
+                Padding="6"
+                Background="{DynamicResource ApplicationBackgroundBrush}"
+                BorderBrush="{DynamicResource SemiColorBorder}"
+                BorderThickness="1"
+                BoxShadow="0 2 8 0 #80000000"
+                CornerRadius="8">
+                <StackPanel x:Name="renderPresetRows">
+                    <Button x:Name="btnPresetShare" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Share" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="{DynamicResource SemiColorText2}"
+                                    Text="Plays everywhere, sensible size"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path
+                                x:Name="checkPresetShare"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+
+                    <Button x:Name="btnPresetBest" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Best quality" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="{DynamicResource SemiColorText2}"
+                                    Text="For YouTube or keeping a master"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path
+                                x:Name="checkPresetBest"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+
+                    <Button x:Name="btnPresetSmall" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Spacing="2">
+                                <TextBlock FontWeight="SemiBold" Text="Small file" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="{DynamicResource SemiColorText2}"
+                                    Text="Fits chat upload limits"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <Path
+                                x:Name="checkPresetSmall"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+
+                    <Border
+                        Height="1"
+                        Margin="6,5"
+                        Background="{DynamicResource SemiColorBorder}" />
+
+                    <Button x:Name="btnRenderMore" Theme="{StaticResource RenderPresetRowTheme}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="More options…" />
+                            <Path
+                                x:Name="checkRenderMore"
+                                Grid.Column="1"
+                                Width="11"
+                                Height="11"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Data="{StaticResource IconCheckmark}"
+                                Fill="{DynamicResource SemiColorPrimary}"
+                                IsVisible="False"
+                                Stretch="Uniform" />
+                        </Grid>
+                    </Button>
+                </StackPanel>
+            </Border>
+        </Popup>
 
     </Grid>
 </local:SystemThemedWindow>

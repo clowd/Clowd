@@ -8,9 +8,9 @@ namespace Clowd.VideoSDK.Editing
 {
     /// <summary>
     /// Writes the job file <c>Clowd.VideoRender</c> takes: the v2 <see cref="Project"/> itself, plus
-    /// the three things the model deliberately does not carry — the file the render is written to,
-    /// the encoder quality it is written at, and which H.264 encoder writes it — as siblings of the
-    /// project's own properties.
+    /// the four things the model deliberately does not carry — the file the render is written to,
+    /// the encoder quality it is written at, which H.264 encoder writes it, and the encode-time cap
+    /// on the output height — as siblings of the project's own properties.
     ///
     /// The siblings are emitted by hand rather than through a DTO so the project's JSON is copied
     /// through verbatim, whatever the model gains later. Their names are lower-case because that is
@@ -29,13 +29,21 @@ namespace Clowd.VideoSDK.Editing
         /// the tool treats a missing one as <see cref="VideoEncoder.Auto"/>.</summary>
         public const string EncoderProperty = "encoder";
 
+        /// <summary>Sibling property carrying the encode-time cap on the output height in pixels
+        /// (<see cref="Clowd.VideoSDK.Render.RenderJobOptions.MaxHeight"/>). Written only when
+        /// there is a cap: absent — like 0 — means the project's own canvas height.</summary>
+        public const string MaxHeightProperty = "maxHeight";
+
         /// <summary>The job file's bytes.</summary>
+        /// <param name="maxHeight">Encode-time cap on the output height in pixels; 0 (the
+        /// default) writes no <c>maxHeight</c> sibling at all.</param>
         public static byte[] Serialize(Project project, string outputPath, int crf,
-            VideoEncoder encoder = VideoEncoder.Auto)
+            VideoEncoder encoder = VideoEncoder.Auto, int maxHeight = 0)
         {
             ArgumentNullException.ThrowIfNull(project);
             if (String.IsNullOrEmpty(outputPath))
                 throw new ArgumentException("The render output path is empty.", nameof(outputPath));
+            ArgumentOutOfRangeException.ThrowIfNegative(maxHeight);
 
             var projectJson = project.ToJson();
 
@@ -52,7 +60,8 @@ namespace Clowd.VideoSDK.Editing
                 {
                     if (String.Equals(property.Name, OutputProperty, StringComparison.Ordinal) ||
                         String.Equals(property.Name, CrfProperty, StringComparison.Ordinal) ||
-                        String.Equals(property.Name, EncoderProperty, StringComparison.Ordinal))
+                        String.Equals(property.Name, EncoderProperty, StringComparison.Ordinal) ||
+                        String.Equals(property.Name, MaxHeightProperty, StringComparison.Ordinal))
                         continue; // ours, rewritten below
 
                     property.WriteTo(writer);
@@ -61,6 +70,10 @@ namespace Clowd.VideoSDK.Editing
                 writer.WriteString(OutputProperty, outputPath);
                 writer.WriteNumber(CrfProperty, crf);
                 writer.WriteString(EncoderProperty, VideoEncoderNames.Of(encoder));
+                // An uncapped render writes no sibling: the tool reads an absent one as "none",
+                // so job files from before the cap existed stay byte-identical.
+                if (maxHeight > 0)
+                    writer.WriteNumber(MaxHeightProperty, maxHeight);
 
                 writer.WriteEndObject();
             }
@@ -70,12 +83,12 @@ namespace Clowd.VideoSDK.Editing
 
         /// <summary>Writes the job file to <paramref name="path"/> and returns that path.</summary>
         public static string Write(string path, Project project, string outputPath, int crf,
-            VideoEncoder encoder = VideoEncoder.Auto)
+            VideoEncoder encoder = VideoEncoder.Auto, int maxHeight = 0)
         {
             if (String.IsNullOrEmpty(path))
                 throw new ArgumentException("The job file path is empty.", nameof(path));
 
-            File.WriteAllBytes(path, Serialize(project, outputPath, crf, encoder));
+            File.WriteAllBytes(path, Serialize(project, outputPath, crf, encoder, maxHeight));
             return path;
         }
     }

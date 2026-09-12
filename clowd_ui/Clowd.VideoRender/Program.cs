@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using Clowd.VideoSDK;
 using Clowd.VideoSDK.Ai;
+using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Render;
@@ -25,9 +26,11 @@ namespace Clowd.VideoRender
     /// PNG, crf), mapped onto the v2 model by <see cref="RenderArgsCompat"/>.</item>
     /// <item><c>"version": 2</c> — a <see cref="Project"/> straight from the editor. The output
     /// path is not part of the project model, so it comes from a sibling <c>"output"</c> property
-    /// in the same file (and optional <c>"crf"</c> and <c>"encoder"</c> siblings — the latter one
-    /// of <c>auto|software|nvenc|amf|videotoolbox</c>, <c>auto</c> when absent), or from the
-    /// optional second argument, which wins when both are present.</item>
+    /// in the same file (and optional <c>"crf"</c>, <c>"encoder"</c> and <c>"maxHeight"</c>
+    /// siblings — the encoder one of <c>auto|software|nvenc|amf|videotoolbox</c>, <c>auto</c> when
+    /// absent; <c>maxHeight</c> a non-negative whole number of pixels capping the encoded height,
+    /// no cap when absent or 0), or from the optional second argument, which wins when both are
+    /// present.</item>
     /// </list>
     ///
     /// <para>Stdout protocol, byte-compatible with vid-render (and vid2gif before it), one message
@@ -80,6 +83,9 @@ namespace Clowd.VideoRender
                     {
                         Crf = job.Crf,
                         Encoder = job.Encoder,
+                        // the job file's optional size cap: the project composes at its canvas
+                        // size and the encoder opens at the capped one (0 = no cap).
+                        MaxHeight = job.MaxHeight,
                         // v1 args are vid-render's contract: mux with its container timing, and
                         // follow its VFR frame-passthrough schedule when the compat mapping built
                         // one. v2 projects render on the CFR grid with full sample durations.
@@ -168,6 +174,7 @@ namespace Clowd.VideoRender
                         OutputPath = outputOverride,
                         Crf = plan.Crf,
                         Encoder = plan.Encoder,
+                        MaxHeight = plan.MaxHeight,
                         MaskPngPath = plan.MaskPngPath,
                         FrameTimestampsTicks = plan.FrameTimestampsTicks,
                         LegacyContainerTiming = plan.LegacyContainerTiming,
@@ -237,6 +244,7 @@ namespace Clowd.VideoRender
             string output = outputOverride;
             int crf = RenderArgsCompat.DefaultCrf;
             var encoder = VideoEncoder.Auto;
+            int maxHeight = 0;
 
             using (var document = JsonDocument.Parse(text,
                        new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }))
@@ -257,6 +265,14 @@ namespace Clowd.VideoRender
                      !VideoEncoderNames.TryParse(encoderProperty.GetString(), out encoder)))
                     throw new InvalidOperationException(
                         $"unknown encoder {encoderProperty.GetRawText()} (expected one of {VideoEncoderNames.All})");
+
+                // The size cap is optional and absent means none; anything present must be a
+                // whole number of pixels — a "720p" string or a 719.5 would otherwise silently
+                // render at full size, which is the opposite of what the user asked for.
+                if (document.RootElement.TryGetProperty(ProjectFileWriter.MaxHeightProperty, out var maxHeightProperty) &&
+                    (maxHeightProperty.ValueKind != JsonValueKind.Number || !maxHeightProperty.TryGetInt32(out maxHeight)))
+                    throw new InvalidOperationException(
+                        $"maxHeight {maxHeightProperty.GetRawText()} is not a whole number of pixels");
             }
 
             if (String.IsNullOrEmpty(output))
@@ -266,11 +282,21 @@ namespace Clowd.VideoRender
             if (crf is < 0 or > 51)
                 throw new InvalidOperationException($"crf {crf} out of range (0-51)");
 
+            if (maxHeight < 0)
+                throw new InvalidOperationException($"maxHeight {maxHeight} is negative");
+
             var parent = Path.GetDirectoryName(Path.GetFullPath(output));
             if (!String.IsNullOrEmpty(parent))
                 Directory.CreateDirectory(parent);
 
-            return new LegacyRenderPlan { Project = project, OutputPath = output, Crf = crf, Encoder = encoder };
+            return new LegacyRenderPlan
+            {
+                Project = project,
+                OutputPath = output,
+                Crf = crf,
+                Encoder = encoder,
+                MaxHeight = maxHeight,
+            };
         }
 
         // ------------------------------------------------------------------------ FFmpeg natives

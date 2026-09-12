@@ -1302,7 +1302,7 @@ namespace Clowd.UI
                 _settings.General.LastSavePath = Path.GetDirectoryName(savedPath);
                 SettingsService.Save(_settings); // settings no longer auto-save on PropertyChanged
                 if (_settings.Capture.OpenSavedInExplorer)
-                    RevealFileOrFolder(savedPath);
+                    ShellHelper.RevealFileInFolder(savedPath);
                 Toast.Show(this, "Image Saved");
             }
         }
@@ -1507,18 +1507,6 @@ namespace Clowd.UI
             var provider = await UploadManager.SelectProvider(SupportedUploadType.Image);
             if (provider != null)
                 UploadCommandImpl(provider);
-        }
-
-        private static void RevealFileOrFolder(string path)
-        {
-            try {
-                if (OperatingSystem.IsWindows())
-                    Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
-                else if (OperatingSystem.IsMacOS())
-                    Process.Start("open", new[] { "-R", path });
-                else
-                    Process.Start(new ProcessStartInfo(Path.GetDirectoryName(path)) { UseShellExecute = true });
-            } catch {; }
         }
 
         // ====================================================================

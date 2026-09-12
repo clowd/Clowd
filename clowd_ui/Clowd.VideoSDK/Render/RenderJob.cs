@@ -34,6 +34,19 @@ namespace Clowd.VideoSDK.Render
         public bool PreferGpu { get; init; } = true;
 
         /// <summary>
+        /// Encode-time cap on the output height in pixels, 0 (the default) for none: the project
+        /// still composes at its own canvas size and the encoder is opened at
+        /// <see cref="CapSize"/> of it — aspect preserved, both dimensions rounded down to even
+        /// (4:2:0 chroma), never upscaled — with the convert stage scaling BGRA → NV12 into that
+        /// size. This is the render dialog's "Size" row (Full / 1080p / 720p): a smaller file from
+        /// the same project, without touching the project. Negative values are rejected.
+        /// A cap always renders through the readback stages: the zero-copy bridge hands the
+        /// composed texture to the encoder at the canvas size, so it cannot serve a capped
+        /// render (one <see cref="DiagnosticLog"/> line says so).
+        /// </summary>
+        public int MaxHeight { get; init; }
+
+        /// <summary>
         /// On Windows, with the Direct3D 12 composer and a hardware encoder (NVENC, AMF), hand
         /// the composed frames to the encoder in video memory (<see cref="D3D11EncodeBridge"/>)
         /// instead of reading them back and converting on the CPU. Every part of that path is
@@ -208,6 +221,8 @@ namespace Clowd.VideoSDK.Render
             if (string.IsNullOrWhiteSpace(outputPath))
                 throw new ArgumentException("Output path is empty.", nameof(outputPath));
             options ??= new RenderJobOptions();
+            if (options.MaxHeight < 0)
+                throw new ArgumentException($"MaxHeight {options.MaxHeight} is negative.", nameof(options));
 
             var problems = project.Validate();
             if (problems.Count > 0)
@@ -215,6 +230,11 @@ namespace Clowd.VideoSDK.Render
                     "Project is not renderable: " + string.Join(" ", problems), nameof(project));
 
             var output = project.Output;
+            // Composition always runs at the canvas size; only the encoder (and the convert stage
+            // feeding it) sees the cap, so every item's geometry stays exactly what the preview
+            // showed and swscale does the one resample.
+            var (encodeWidth, encodeHeight) = CapSize(output.WidthPx, output.HeightPx, options.MaxHeight);
+            bool capped = encodeWidth != output.WidthPx || encodeHeight != output.HeightPx;
             long durationTicks = project.GetDurationTicks();
             if (durationTicks <= 0)
                 throw new InvalidOperationException("The project has no items — nothing to render.");
@@ -314,6 +334,7 @@ namespace Clowd.VideoSDK.Render
                     options.DiagnosticLog?.Invoke(
                         $"RenderJob: {frameCount} frames at {output.WidthPx}x{output.HeightPx} " +
                         $"{output.FpsNum}/{output.FpsDen} fps on {backend}" +
+                        (capped ? $", encoded at {encodeWidth}x{encodeHeight} (max height {options.MaxHeight})" : "") +
                         (hasAudio ? $", audio {output.SampleRate} Hz" : ", no audio"));
 
                     // everything context-affine (cache, frame source, readback ring) lives on the
@@ -331,7 +352,7 @@ namespace Clowd.VideoSDK.Render
                     // hardware encoder with a Direct3D 11 input, and a Direct3D 12 ring whose
                     // textures the driver let us share. The encoder is resolved here the same
                     // way the writer will (a cached probe), so both agree.
-                    bridge = TryCreateBridge(composer, ring, options);
+                    bridge = TryCreateBridge(composer, ring, options, capped);
 
                     WarpAudioResampler audioWarp = null;
                     float[] mixBuffer = null;
@@ -355,8 +376,8 @@ namespace Clowd.VideoSDK.Render
 
                     writer = new Mp4Writer(outputPath, new Mp4WriterOptions
                     {
-                        Width = output.WidthPx,
-                        Height = output.HeightPx,
+                        Width = encodeWidth,
+                        Height = encodeHeight,
                         FpsNum = output.FpsNum,
                         FpsDen = output.FpsDen,
                         Crf = options.Crf,
@@ -384,12 +405,15 @@ namespace Clowd.VideoSDK.Render
 
                     if (bridge == null)
                     {
-                        converter = new Nv12Converter(output.WidthPx, output.HeightPx, output.WidthPx, output.HeightPx);
+                        // swscale scales in the same pass that converts, so a capped render costs
+                        // no extra copy — only the (cheaper, smaller) destination.
+                        converter = new Nv12Converter(output.WidthPx, output.HeightPx, encodeWidth, encodeHeight);
                         for (int i = 0; i < ConvertedFrames; i++)
-                            yuvFrames.Add(new Nv12Frame(output.WidthPx, output.HeightPx));
+                            yuvFrames.Add(new Nv12Frame(encodeWidth, encodeHeight));
                         options.DiagnosticLog?.Invoke(
                             $"RenderJob: readback: {ring.Description}; convert: {converter.Threads} swscale threads, " +
-                            $"{ConvertedFrames} frames");
+                            $"{ConvertedFrames} frames" +
+                            (capped ? $", scaling to {encodeWidth}x{encodeHeight}" : ""));
                     }
                     else
                     {
@@ -757,18 +781,52 @@ namespace Clowd.VideoSDK.Render
         }
 
         /// <summary>
+        /// The size the encoder is opened at for a canvas of <paramref name="widthPx"/> x
+        /// <paramref name="heightPx"/> under <paramref name="maxHeight"/>
+        /// (<see cref="RenderJobOptions.MaxHeight"/>): the canvas itself when the cap is 0 or
+        /// would not shrink it (a cap never upscales), otherwise the cap's height with the width
+        /// that preserves the aspect ratio — both rounded down to even, which 4:2:0 chroma
+        /// requires, and never below 2. The UI shows the result of this as the size a preset
+        /// would produce, so the math lives here rather than in the caller.
+        /// </summary>
+        public static (int Width, int Height) CapSize(int widthPx, int heightPx, int maxHeight)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(widthPx);
+            ArgumentOutOfRangeException.ThrowIfNegativeOrZero(heightPx);
+            ArgumentOutOfRangeException.ThrowIfNegative(maxHeight);
+
+            if (maxHeight == 0 || maxHeight >= heightPx)
+                return (widthPx, heightPx);
+
+            int height = Math.Max(2, maxHeight & ~1);
+            int width = Math.Max(2, (int)Math.Round(widthPx * (double)height / heightPx,
+                MidpointRounding.AwayFromZero) & ~1);
+            return (width, height);
+        }
+
+        /// <summary>
         /// Brings up the zero-copy encode path when everything it needs is there — the option
         /// on, Windows, a shareable <see cref="D3D12ReadbackRing"/>, and an encoder with a
         /// Direct3D 11 input — or returns null, with one diagnostic line naming what was
         /// missing whenever a hardware encoder would have used it. Runs the bridge's creation
         /// (which draws a self-check frame through the ring) on the composer thread.
+        /// <paramref name="capped"/> renders are readback renders by construction: the bridge
+        /// blits the composed slot into an NV12 texture of the same size, so a size cap has to
+        /// be applied by the convert stage instead (swscale scales as it converts).
         /// </summary>
-        private static IEncodeBridge TryCreateBridge(ComposerThread composer, IReadbackRing ring, RenderJobOptions options)
+        private static IEncodeBridge TryCreateBridge(ComposerThread composer, IReadbackRing ring,
+            RenderJobOptions options, bool capped)
         {
             var log = options.DiagnosticLog;
             var encoder = H264EncoderProbe.Resolve(options.Encoder, log);
             if (encoder is not (VideoEncoder.Nvenc or VideoEncoder.Amf))
                 return null; // x264 and VideoToolbox read system memory; nothing to bridge
+
+            if (capped)
+            {
+                log?.Invoke($"RenderJob: zero-copy encode unavailable (the output is capped to {options.MaxHeight} rows, which the GPU blit does not scale to); using readback");
+                return null;
+            }
 
             if (!options.ZeroCopyEncode)
             {
