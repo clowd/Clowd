@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Text.Json;
 using Clowd.VideoSDK.Editing;
+using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
 using Xunit;
 
@@ -10,7 +11,7 @@ namespace Clowd.VideoSDK.Tests
 {
     /// <summary>
     /// The v2 render job file (<see cref="ProjectFileWriter"/>): the project verbatim, plus the
-    /// output path and crf as siblings. Both halves of the contract are checked — the tool reads
+    /// output path, crf and encoder as siblings. Both halves of the contract are checked — the tool reads
     /// the siblings straight off the JSON and the project through <see cref="Project.FromJson"/>,
     /// so the file has to satisfy both readers at once.
     /// </summary>
@@ -53,11 +54,12 @@ namespace Clowd.VideoSDK.Tests
             },
         };
 
-        private static string Serialize(Project project, string output = Output, int crf = 23)
-            => Encoding.UTF8.GetString(ProjectFileWriter.Serialize(project, output, crf));
+        private static string Serialize(Project project, string output = Output, int crf = 23,
+            VideoEncoder encoder = VideoEncoder.Auto)
+            => Encoding.UTF8.GetString(ProjectFileWriter.Serialize(project, output, crf, encoder));
 
         [Fact]
-        public void The_job_file_is_the_project_with_output_and_crf_beside_it()
+        public void The_job_file_is_the_project_with_output_crf_and_encoder_beside_it()
         {
             using var document = JsonDocument.Parse(Serialize(Sample(), crf: 16));
             var root = document.RootElement;
@@ -65,10 +67,24 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(Project.CurrentVersion, root.GetProperty("Version").GetInt32());
             Assert.Equal(Output, root.GetProperty("output").GetString());
             Assert.Equal(16, root.GetProperty("crf").GetInt32());
+            Assert.Equal("auto", root.GetProperty("encoder").GetString()); // the default
 
             // the siblings are lower-case precisely so they cannot shadow the project's own output
             // block — the tool would then read the canvas settings as a path.
             Assert.Equal(1920, root.GetProperty("Output").GetProperty("WidthPx").GetInt32());
+        }
+
+        [Theory]
+        [InlineData(VideoEncoder.Software, "software")]
+        [InlineData(VideoEncoder.Nvenc, "nvenc")]
+        [InlineData(VideoEncoder.Amf, "amf")]
+        [InlineData(VideoEncoder.VideoToolbox, "videotoolbox")]
+        public void The_encoder_sibling_is_the_wire_name(VideoEncoder encoder, string name)
+        {
+            using var document = JsonDocument.Parse(Serialize(Sample(), encoder: encoder));
+            Assert.Equal(name, document.RootElement.GetProperty("encoder").GetString());
+            Assert.True(VideoEncoderNames.TryParse(name, out var parsed));
+            Assert.Equal(encoder, parsed);
         }
 
         [Fact]
@@ -97,8 +113,8 @@ namespace Clowd.VideoSDK.Tests
             var path = Path.Combine(Path.GetTempPath(), $"clowd-jobfile-test-{Guid.NewGuid():N}.json");
             try
             {
-                Assert.Equal(path, ProjectFileWriter.Write(path, project, Output, 23));
-                Assert.Equal(ProjectFileWriter.Serialize(project, Output, 23), File.ReadAllBytes(path));
+                Assert.Equal(path, ProjectFileWriter.Write(path, project, Output, 23, VideoEncoder.Software));
+                Assert.Equal(ProjectFileWriter.Serialize(project, Output, 23, VideoEncoder.Software), File.ReadAllBytes(path));
             }
             finally
             {

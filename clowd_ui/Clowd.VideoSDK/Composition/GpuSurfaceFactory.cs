@@ -182,6 +182,28 @@ namespace Clowd.VideoSDK.Composition
             return surface.ReadPixels(SurfacePixels.Bgra(width, height), dst, rowBytes, 0, 0);
         }
 
+        /// <summary>
+        /// Direct3D 12: the asynchronous <see cref="D3D12ReadbackRing"/> (copy-queue readback,
+        /// no GPU wait on this thread), falling back to the synchronous ring — with the reason
+        /// logged — when the driver refuses any part of it. Metal: the synchronous ring; an
+        /// IOSurface-backed equivalent is a later, mac-side piece of work.
+        /// </summary>
+        public IReadbackRing CreateReadbackRing(int width, int height, int slots, Action<string> diagnosticLog = null)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (OperatingSystem.IsWindows() && _d3dDevice != IntPtr.Zero)
+            {
+                var ring = D3D12ReadbackRing.TryCreate(_context, _d3dAdapter, _d3dDevice, _d3dQueue, width, height, slots,
+                    out var reason);
+                if (ring != null)
+                    return ring;
+                diagnosticLog?.Invoke(
+                    $"Direct3D 12 asynchronous readback unavailable ({reason}); using synchronous readback.");
+            }
+
+            return new SyncReadbackRing(this, width, height, SyncReadbackRing.UsefulSlots(slots));
+        }
+
         public void Dispose()
         {
             if (_disposed)

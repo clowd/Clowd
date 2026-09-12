@@ -1,14 +1,16 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
 
 namespace Clowd.VideoSDK.Editing
 {
     /// <summary>
     /// Writes the job file <c>Clowd.VideoRender</c> takes: the v2 <see cref="Project"/> itself, plus
-    /// the two things the model deliberately does not carry — the file the render is written to and
-    /// the encoder quality it is written at — as siblings of the project's own properties.
+    /// the three things the model deliberately does not carry — the file the render is written to,
+    /// the encoder quality it is written at, and which H.264 encoder writes it — as siblings of the
+    /// project's own properties.
     ///
     /// The siblings are emitted by hand rather than through a DTO so the project's JSON is copied
     /// through verbatim, whatever the model gains later. Their names are lower-case because that is
@@ -23,8 +25,13 @@ namespace Clowd.VideoSDK.Editing
         /// <summary>Sibling property carrying the encoder's constant rate factor.</summary>
         public const string CrfProperty = "crf";
 
+        /// <summary>Sibling property naming the H.264 encoder (<see cref="VideoEncoderNames"/>);
+        /// the tool treats a missing one as <see cref="VideoEncoder.Auto"/>.</summary>
+        public const string EncoderProperty = "encoder";
+
         /// <summary>The job file's bytes.</summary>
-        public static byte[] Serialize(Project project, string outputPath, int crf)
+        public static byte[] Serialize(Project project, string outputPath, int crf,
+            VideoEncoder encoder = VideoEncoder.Auto)
         {
             ArgumentNullException.ThrowIfNull(project);
             if (String.IsNullOrEmpty(outputPath))
@@ -44,7 +51,8 @@ namespace Clowd.VideoSDK.Editing
                 foreach (var property in doc.RootElement.EnumerateObject())
                 {
                     if (String.Equals(property.Name, OutputProperty, StringComparison.Ordinal) ||
-                        String.Equals(property.Name, CrfProperty, StringComparison.Ordinal))
+                        String.Equals(property.Name, CrfProperty, StringComparison.Ordinal) ||
+                        String.Equals(property.Name, EncoderProperty, StringComparison.Ordinal))
                         continue; // ours, rewritten below
 
                     property.WriteTo(writer);
@@ -52,6 +60,7 @@ namespace Clowd.VideoSDK.Editing
 
                 writer.WriteString(OutputProperty, outputPath);
                 writer.WriteNumber(CrfProperty, crf);
+                writer.WriteString(EncoderProperty, VideoEncoderNames.Of(encoder));
 
                 writer.WriteEndObject();
             }
@@ -60,12 +69,13 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>Writes the job file to <paramref name="path"/> and returns that path.</summary>
-        public static string Write(string path, Project project, string outputPath, int crf)
+        public static string Write(string path, Project project, string outputPath, int crf,
+            VideoEncoder encoder = VideoEncoder.Auto)
         {
             if (String.IsNullOrEmpty(path))
                 throw new ArgumentException("The job file path is empty.", nameof(path));
 
-            File.WriteAllBytes(path, Serialize(project, outputPath, crf));
+            File.WriteAllBytes(path, Serialize(project, outputPath, crf, encoder));
             return path;
         }
     }
