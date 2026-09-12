@@ -66,9 +66,10 @@ namespace Clowd.UI
         /// debug line): "none" for a normal launch, the sparse package's full name when the
         /// process was created as that package's application. The latter is the clowd/Clowd#83
         /// failure — the shell extension's surrogate carries the package identity, and Windows
-        /// hands it to any child that is the manifest's declared <c>Application Executable</c>
-        /// regardless of the breakaway attribute the extension passes, which is why the manifest
-        /// declares the Velopack root launcher and never <c>current\Clowd.Ui.exe</c>. Never throws.
+        /// hands it to any child a packaged process creates inside the package's external
+        /// location (the install root) regardless of the breakaway attribute, which is why the
+        /// extension launches the app through Explorer instead (clowd_shell_ext broker.rs).
+        /// Never throws.
         /// </summary>
         [SupportedOSPlatform("windows")]
         public static void ReportProcessIdentity()

@@ -113,30 +113,29 @@ fn collect_fs_paths(items: &IShellItemArray) -> windows::core::Result<Vec<String
 
 /// Spawn the app fire-and-forget: it forwards the paths to any running instance
 /// itself (single-instance mutex + named pipe), so we never wait on the child.
+///
+/// Explorer does the launching (see `broker`): on the builds this was measured on, a
+/// process this surrogate creates inside the install root inherits the package identity
+/// no matter what, and a packaged Clowd.Ui.exe gets the package's AUMID/logo on the
+/// taskbar - a blank button (clowd/Clowd#83). Only when Explorer cannot be *reached* do
+/// we fall back to launching directly: once ShellExecute has been asked, an error may
+/// arrive after Explorer already created the process, and launching again would upload
+/// the same selection twice.
 fn spawn_detached(exe: &Path, paths: &[String]) -> windows::core::Result<()> {
+    let cwd = exe.parent().unwrap_or(Path::new("."));
+    match crate::broker::ExplorerShell::connect() {
+        Ok(explorer) => explorer.execute(exe, &invoke::build_arguments(paths), cwd),
+        Err(_) => spawn_direct(exe, cwd, paths),
+    }
+}
+
+fn spawn_direct(exe: &Path, cwd: &Path, paths: &[String]) -> windows::core::Result<()> {
     let exe_text = exe.to_string_lossy();
-    let cwd_text = exe
-        .parent()
-        .unwrap_or(Path::new("."))
-        .to_string_lossy();
     let exe_wide = to_wide(&exe_text);
-    let cwd_wide = to_wide(&cwd_text);
+    let cwd_wide = to_wide(&cwd.to_string_lossy());
     // CreateProcessW may scribble on the command line buffer, hence PWSTR/mut
     let mut cmd_wide = to_wide(&invoke::build_command_line(&exe_text, paths));
     unsafe {
-        // This DLL runs inside a dllhost.exe surrogate that carries the sparse package's
-        // identity (Clowd.ShellExtension), and by default a packaged process hands that
-        // identity down to every child it creates. Clowd.Ui.exe launched that way is a
-        // "packaged" app in the shell's eyes: its taskbar buttons take the package's
-        // AppUserModelID and logo instead of the exe's icon (which is what Explorer
-        // showed as a blank taskbar icon, clowd/Clowd#83), and anything keyed on identity
-        // — notifications, AUMID grouping, virtualized registry/file access — diverges from
-        // the same app started from a shortcut. The desktop-app policy attribute breaks the
-        // child out so it runs as an unpackaged launch would — with one exception it cannot
-        // override: an exe that the package manifest declares as its Application Executable is
-        // always created as that application, identity included. That is why the manifest
-        // declares the Velopack root launcher, never this current\Clowd.Ui.exe (see the comment
-        // in msix/AppxManifest.template.xml).
         let attributes = DesktopAppBreakaway::new()?;
         let startup = STARTUPINFOEXW {
             StartupInfo: STARTUPINFOW {
@@ -169,9 +168,10 @@ fn spawn_detached(exe: &Path, paths: &[String]) -> windows::core::Result<()> {
 }
 
 /// A one-entry PROC_THREAD_ATTRIBUTE_LIST carrying
-/// PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY = BREAKAWAY_ENABLE_PROCESS_TREE, which makes the
-/// process created with it (and its descendants) run without our package identity. Owns
-/// the list's buffer and the policy value for as long as CreateProcessW may read them.
+/// PROC_THREAD_ATTRIBUTE_DESKTOP_APP_POLICY = BREAKAWAY_ENABLE_PROCESS_TREE: the documented
+/// way to create a child without our package identity, which in practice only holds for
+/// exes outside the package's external location (see `spawn_direct`). Owns the list's
+/// buffer and the policy value for as long as CreateProcessW may read them.
 struct DesktopAppBreakaway {
     buffer: Vec<u8>,
     // boxed so its address is stable: UpdateProcThreadAttribute stores the pointer, not the value
