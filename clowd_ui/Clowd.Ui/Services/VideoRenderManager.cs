@@ -276,10 +276,18 @@ namespace Clowd.UI.Services
         /// same recording is already in flight. Any *finished* entry for this recording is replaced,
         /// file and all. Must be called on the UI thread.
         /// </summary>
-        public static async Task<SessionInfo> StartRenderAsync(SessionInfo source, Project project)
+        /// <param name="request">What this render was asked to do — quality, size cap, encoder,
+        /// output path and after-render actions. Null (the auto-render and the Recents row, which
+        /// have no dialog in front of them) renders at the recording settings' quality into the
+        /// settings-derived path, on x264, with no after-render actions: an unattended render must
+        /// not take the clipboard or pop a folder because of a box ticked in the dialog once.</param>
+        public static async Task<SessionInfo> StartRenderAsync(SessionInfo source, Project project,
+            RenderRequest request = null)
         {
             if (source == null || project == null)
                 return null;
+
+            request ??= new RenderRequest { Crf = SettingsRoot.Current?.Recording?.Crf ?? (int)VideoQuality.Medium };
 
             // an edited entry's own video is the render output; re-editing it is fine, but it is
             // never itself a gif.
@@ -339,11 +347,25 @@ namespace Clowd.UI.Services
             if (existing?.ActiveRender != null)
                 return existing;
 
-            // …a finished one is replaced, so re-rendering does not pile up "-edited-2.mp4" files.
-            if (existing != null)
-                DeleteEntryAndOutput(existing);
+            // the dialog's "Save to" box wins when there was one; otherwise the settings-derived
+            // default, which is what every render used before the dialog existed. Resolved before
+            // the old entry goes, so the free name it picks is one no file on disk holds.
+            var outputPath = String.IsNullOrEmpty(request.OutputPath) ? GetOutputPath(source) : request.OutputPath;
 
-            var outputPath = GetOutputPath(source);
+            // …a finished one is replaced: its Recents row always, but the file it wrote only when
+            // this render is about to write over that very path anyway. Now that the dialog lets the
+            // user name the output, the previous file can be one they chose, kept and already
+            // shared — re-rendering the edit under a different name must not delete it behind their
+            // back. A render that does reuse the name was confirmed by the dialog's overwrite prompt.
+            if (existing != null)
+            {
+                var previousOutput = existing.VideoPath;
+                DeleteQuietly(existing);
+
+                if (!String.IsNullOrEmpty(previousOutput) &&
+                    String.Equals(previousOutput, outputPath, StringComparison.OrdinalIgnoreCase))
+                    DeletePartialOutput(previousOutput);
+            }
 
             SessionInfo session;
             try
@@ -361,7 +383,7 @@ namespace Clowd.UI.Services
             string renderArgsPath;
             try
             {
-                renderArgsPath = WriteProjectArgs(session, project, outputPath);
+                renderArgsPath = WriteProjectArgs(session, project, outputPath, request);
             }
             catch (Exception ex)
             {
@@ -377,7 +399,7 @@ namespace Clowd.UI.Services
             runner.ProgressChanged += (s, percent) => render.SetProgress(percent);
             session.ActiveRender = render;
 
-            _ = RenderAsync(session, render, runner, renderArgsPath, outputPath);
+            _ = RenderAsync(session, render, runner, renderArgsPath, outputPath, request);
             return session;
         }
 
@@ -401,23 +423,24 @@ namespace Clowd.UI.Services
         }
 
         /// <summary>Writes the render job — the project itself, plus the output path, the encoder
-        /// quality and the encoder choice it cannot carry — into the session directory and returns
-        /// its path.</summary>
-        private static string WriteProjectArgs(SessionInfo session, Project project, string outputPath)
+        /// quality, the size cap and the encoder choice it cannot carry — into the session directory
+        /// and returns its path.</summary>
+        private static string WriteProjectArgs(SessionInfo session, Project project, string outputPath,
+            RenderRequest request)
         {
             var argsPath = Path.Combine(Path.GetDirectoryName(session.FilePath), RenderArgsFileName);
 
-            // a snapshot: settings edited while the render runs apply to the next one.
-            var recording = SettingsRoot.Current?.Recording;
-            var crf = recording?.Crf ?? (int)VideoQuality.Medium;
-            // Software (x264) for every render for now. The hardware paths (NVENC/AMF/VideoToolbox,
-            // zero-copy included) are implemented and tested, but on a desktop CPU x264 fast finishes
-            // sooner and writes a smaller file: NVENC is engine-bound at 2-7 ms/frame with the
-            // recorder's quality settings, and its cq mapping overshoots x264's bytes by ~1.7x
-            // (measured 2026-09-12, RTX 4070 / i7-14700K). Revisit when the render dialog exposes
-            // the choice, where "auto" is the right default for laptops.
-            var encoder = VideoEncoder.Software;
-            return ProjectFileWriter.Write(argsPath, project, outputPath, crf, encoder);
+            // a snapshot: a preset picked while the render runs applies to the next one.
+            var crf = RenderPresets.ClampCrf(request.Crf);
+            var maxHeight = Math.Max(0, request.MaxHeight);
+            // x264 unless the dialog's "Use hardware encoder" was ticked. The GPU paths
+            // (NVENC/AMF/VideoToolbox, zero-copy included) are implemented and tested, but on a
+            // desktop CPU x264 fast finishes sooner and writes a smaller file: NVENC is engine-bound
+            // at 2-7 ms/frame with the recorder's quality settings, and its cq mapping overshoots
+            // x264's bytes by ~1.7x (measured 2026-09-12, RTX 4070 / i7-14700K). "auto" probes for a
+            // working GPU encoder and falls back to x264 by itself, so it never fails a render.
+            var encoder = request.HardwareEncoder ? VideoEncoder.Auto : VideoEncoder.Software;
+            return ProjectFileWriter.Write(argsPath, project, outputPath, crf, encoder, maxHeight);
         }
 
         /// <summary>The path of the first media file the project <b>references</b> that is not on
@@ -448,8 +471,12 @@ namespace Clowd.UI.Services
         /// video the user set out to make, so it follows their recording settings like a capture
         /// does: their output folder, named with their filename pattern. Only when no writable
         /// output folder can be resolved at all does it fall back to sitting beside whatever it was
-        /// rendered from (the session directory, for a project with no recording behind it).</summary>
-        private static string GetOutputPath(SessionInfo source)
+        /// rendered from (the session directory, for a project with no recording behind it).
+        ///
+        /// Public because the render dialog shows this path in its "Save to" box and hands back
+        /// whatever the user made of it: the default the dialog offers has to be the one a preset
+        /// render would have used. Each call resolves a fresh free name, so ask once per render.</summary>
+        public static string GetOutputPath(SessionInfo source)
         {
             var configured = RecordingOutputPath.GetSavePath(SettingsRoot.Current?.Recording);
             if (!String.IsNullOrEmpty(configured))
@@ -501,7 +528,7 @@ namespace Clowd.UI.Services
         }
 
         private static async Task RenderAsync(SessionInfo session, VideoRender render, VidRenderRunner runner,
-            string renderArgsPath, string outputPath)
+            string renderArgsPath, string outputPath, RenderRequest request)
         {
             VidRenderResult result;
             try
@@ -520,10 +547,11 @@ namespace Clowd.UI.Services
                 runner.Dispose();
             }
 
-            await Dispatcher.UIThread.InvokeAsync(() => FinishAsync(session, render, outputPath, result));
+            await Dispatcher.UIThread.InvokeAsync(() => FinishAsync(session, render, outputPath, result, request));
         }
 
-        private static async Task FinishAsync(SessionInfo session, VideoRender render, string outputPath, VidRenderResult result)
+        private static async Task FinishAsync(SessionInfo session, VideoRender render, string outputPath,
+            VidRenderResult result, RenderRequest request)
         {
             // the entry stops being an in-progress row here whatever happened next.
             if (ReferenceEquals(session.ActiveRender, render))
@@ -548,7 +576,12 @@ namespace Clowd.UI.Services
                         }
                     }
 
-                    Toast.Show(Toast.GetActiveOrMainWindow(), "Video saved");
+                    // the after-render actions belong to this render only — they are what the user
+                    // ticked in the dialog (or last ticked, for a preset render), not a standing
+                    // preference the next render re-reads. The toast says which of them ran.
+                    await RenderAfterActions.RunAsync(null,
+                        String.IsNullOrEmpty(result.OutputPath) ? outputPath : result.OutputPath,
+                        request.CopyToClipboard, request.ShowInFolder);
                     break;
 
                 case VidRenderOutcome.Canceled:
@@ -573,15 +606,6 @@ namespace Clowd.UI.Services
 
         private static bool IsLive(SessionInfo session) =>
             SessionManager.Current.Sessions.Any(s => ReferenceEquals(s, session));
-
-        /// <summary>Drops a finished edited entry and the file it produced, so the replacement
-        /// render can take the same output name back.</summary>
-        private static void DeleteEntryAndOutput(SessionInfo session)
-        {
-            var output = session.VideoPath;
-            DeleteQuietly(session);
-            DeletePartialOutput(output);
-        }
 
         private static void DeleteQuietly(SessionInfo session)
         {

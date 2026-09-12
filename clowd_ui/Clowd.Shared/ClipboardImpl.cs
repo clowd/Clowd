@@ -8,6 +8,7 @@ using System.Runtime.Versioning;
 using System.Threading.Tasks;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
+using Avalonia.Platform.Storage;
 using Clowd.Clipboard;
 using AvaBitmap = Avalonia.Media.Imaging.Bitmap;
 
@@ -151,6 +152,46 @@ public static class ClipboardImpl
             data.Add(DataTransferItem.Create(pngDataFormat, pngBytes));
             await clipboard.SetDataAsync(data).ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    /// Puts <paramref name="paths"/> on the clipboard as a file-drop list, so pasting into
+    /// Explorer/Finder copies the files and pasting into Discord, Slack or Teams attaches them —
+    /// what "Copy file to clipboard" after a video render means. On Windows this is CF_HDROP
+    /// through the GDI handle, for the same reason the image path takes it: the Avalonia backend
+    /// serves its values lazily, so it must stay the owner of the data. Everywhere else the files
+    /// travel as Avalonia storage items, one <see cref="DataTransferItem"/> each (the shape every
+    /// receiving app expects of a multi-file drag).
+    /// </summary>
+    /// <param name="clipboard">The clipboard of a live top-level; unused on Windows.</param>
+    /// <param name="storage">The storage provider the paths are resolved through; unused on
+    /// Windows. Null (or a path it cannot resolve) means nothing is copied.</param>
+    /// <param name="paths">Full paths of files that exist. An empty list is a no-op — the
+    /// clipboard is never cleared over nothing.</param>
+    public static async Task SetClipboardFiles(IClipboard clipboard, IStorageProvider storage, params string[] paths)
+    {
+        if (paths == null || paths.Length == 0)
+            return;
+
+        if (OperatingSystem.IsWindowsVersionAtLeast(6, 1)) {
+            await ClipboardGdi.SetFileDropListAsync(paths).ConfigureAwait(false);
+            return;
+        }
+
+        if (clipboard == null || storage == null)
+            return;
+
+        using var data = new DataTransfer();
+        foreach (var path in paths) {
+            var file = await storage.TryGetFileFromPathAsync(path).ConfigureAwait(false);
+            if (file != null)
+                data.Add(DataTransferItem.CreateFile(file));
+        }
+
+        if (data.Items.Count == 0)
+            return;
+
+        await clipboard.SetDataAsync(data).ConfigureAwait(false);
     }
 
     public async static Task SetClipboardText(IClipboard clipboard, string text)
