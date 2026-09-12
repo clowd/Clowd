@@ -26,13 +26,14 @@ namespace Clowd.VideoSDK.Composition
         private Exception _startError;
         private bool _disposed;
 
-        private ComposerThread(bool preferGpu, Action<string> log)
+        private ComposerThread(bool preferGpu, Action<string> log, ThreadPriority priority)
         {
             _log = log;
             _thread = new Thread(() => ThreadProc(preferGpu))
             {
                 Name = "Clowd.VideoSDK Composer",
                 IsBackground = true,
+                Priority = priority,
             };
             _thread.Start();
         }
@@ -40,9 +41,13 @@ namespace Clowd.VideoSDK.Composition
         /// <summary>
         /// Starts the composer thread and blocks until backend selection has completed on it.
         /// </summary>
-        public static ComposerThread Start(bool preferGpu, Action<string> diagnosticLog = null)
+        /// <param name="priority">The thread's scheduling priority. Normal by default; a caller
+        /// whose composer competes with its own worker pools (the render pipeline) may raise it —
+        /// that decision, and the measurement behind it, belong to the caller.</param>
+        public static ComposerThread Start(bool preferGpu, Action<string> diagnosticLog = null,
+            ThreadPriority priority = ThreadPriority.Normal)
         {
-            var composer = new ComposerThread(preferGpu, diagnosticLog);
+            var composer = new ComposerThread(preferGpu, diagnosticLog, priority);
             composer._ready.Wait();
             if (composer._startError != null)
             {

@@ -9,6 +9,7 @@ using Clowd.UI.Helpers;
 using Clowd.UI.VideoEditor;
 using Clowd.VideoSDK;
 using Clowd.VideoSDK.Editing;
+using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
 
@@ -399,15 +400,24 @@ namespace Clowd.UI.Services
             return session;
         }
 
-        /// <summary>Writes the render job — the project itself, plus the output path and the
-        /// encoder quality it cannot carry — into the session directory and returns its path.</summary>
+        /// <summary>Writes the render job — the project itself, plus the output path, the encoder
+        /// quality and the encoder choice it cannot carry — into the session directory and returns
+        /// its path.</summary>
         private static string WriteProjectArgs(SessionInfo session, Project project, string outputPath)
         {
             var argsPath = Path.Combine(Path.GetDirectoryName(session.FilePath), RenderArgsFileName);
 
             // a snapshot: settings edited while the render runs apply to the next one.
-            var crf = SettingsRoot.Current?.Recording?.Crf ?? (int)VideoQuality.Medium;
-            return ProjectFileWriter.Write(argsPath, project, outputPath, crf);
+            var recording = SettingsRoot.Current?.Recording;
+            var crf = recording?.Crf ?? (int)VideoQuality.Medium;
+            // Software (x264) for every render for now. The hardware paths (NVENC/AMF/VideoToolbox,
+            // zero-copy included) are implemented and tested, but on a desktop CPU x264 fast finishes
+            // sooner and writes a smaller file: NVENC is engine-bound at 2-7 ms/frame with the
+            // recorder's quality settings, and its cq mapping overshoots x264's bytes by ~1.7x
+            // (measured 2026-09-12, RTX 4070 / i7-14700K). Revisit when the render dialog exposes
+            // the choice, where "auto" is the right default for laptops.
+            var encoder = VideoEncoder.Software;
+            return ProjectFileWriter.Write(argsPath, project, outputPath, crf, encoder);
         }
 
         /// <summary>The path of the first media file the project <b>references</b> that is not on

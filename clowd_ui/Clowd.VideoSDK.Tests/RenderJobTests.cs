@@ -16,6 +16,7 @@ namespace Clowd.VideoSDK.Tests
     // End-to-end render loop: Project → RenderJob (CPU backend) → probe/decode the produced mp4.
     // Real-encode tests skip when the FFmpeg natives are absent (same resolver as EncoderTests);
     // validation-path tests run everywhere.
+    [Collection("HardwareFrames")] // HardwareFrame.LiveCount is process-wide: no parallel producers
     public class RenderJobTests : IDisposable
     {
         private const int W = 64, H = 64, Fps = 30;
@@ -49,12 +50,12 @@ namespace Clowd.VideoSDK.Tests
             return path;
         }
 
-        private static Project NewProject() => new Project
+        private static Project NewProject(int width = W, int height = H) => new Project
         {
             Output = new OutputSettings
             {
-                WidthPx = W,
-                HeightPx = H,
+                WidthPx = width,
+                HeightPx = height,
                 FpsNum = Fps,
                 FpsDen = 1,
                 SampleRate = Rate,
@@ -435,6 +436,247 @@ namespace Clowd.VideoSDK.Tests
             Assert.False(File.Exists(path), "partial output must be deleted on cancellation");
         }
 
+        // ------------------------------------------------------------- staged loop equivalence
+
+        /// <summary>A project whose frames change every few frames and whose items sit off the
+        /// pixel grid, so composition, readback and conversion all have something to get wrong:
+        /// a full-canvas colour that switches at 0.5 s, a smaller off-centre item over it from
+        /// 0.25 s, and a third one on a higher track for the last third.</summary>
+        private static Project SyntheticProject(int width = W, int height = H)
+        {
+            var project = NewProject(width, height);
+            var back = AddTrack(project, TrackKind.Video);
+            var front = AddTrack(project, TrackKind.Video);
+            AddSolid(project, back, 0, Second / 2, "#FFC03020");
+            AddSolid(project, back, Second / 2, Second / 2, "#FF2040C0");
+            project.Items.Add(new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = front.Id,
+                TimelineStartTicks = Second / 4,
+                DurationTicks = Second / 2,
+                Content = new SolidContent { Color = "#FF30C060" },
+                Transform = new Transform { X = 0.37, Y = 0.58, Scale = 0.41 },
+            });
+            project.Items.Add(new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = front.Id,
+                TimelineStartTicks = 3 * Second / 4,
+                DurationTicks = Second / 4,
+                Content = new SolidContent { Color = "#80FFFFFF" },
+                Transform = new Transform { X = 0.61, Y = 0.33, Scale = 0.53 },
+            });
+            return project;
+        }
+
+        /// <summary>Every frame of a rendered file as tightly packed BGRA, decoded through the
+        /// SDK's own sequential source.</summary>
+        private static List<byte[]> DecodeAllFrames(string path, int count, int width = W, int height = H)
+        {
+            var project = NewProject(width, height);
+            var sourceId = Guid.NewGuid();
+            project.Sources.Add(new Source
+            {
+                Id = sourceId,
+                Path = path,
+                Streams = { new SourceStream { Index = 0, Kind = StreamKind.Video, Width = width, Height = height, AvgFrameRateNum = Fps, AvgFrameRateDen = 1 } },
+            });
+
+            using var factory = new CpuSurfaceFactory();
+            using var cache = new FrameTextureCache(factory);
+            using var source = new SequentialFrameSource(project, cache);
+            var frames = new List<byte[]>();
+            var native = Marshal.AllocHGlobal(width * 4 * height);
+            try
+            {
+                var info = new SkiaSharp.SKImageInfo(width, height, SkiaSharp.SKColorType.Bgra8888, SkiaSharp.SKAlphaType.Premul);
+                for (int n = 0; n < count; n++)
+                {
+                    Assert.True(source.TryGetFrame(sourceId, 0, TimeBase.FrameIndexToTicks(n, Fps, 1), out var frameRef));
+                    Assert.True(frameRef.Image.ReadPixels(info, native, width * 4, 0, 0));
+                    var pixels = new byte[width * 4 * height];
+                    Marshal.Copy(native, pixels, 0, pixels.Length);
+                    frames.Add(pixels);
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(native);
+            }
+            return frames;
+        }
+
+        private static (int Worst, long Differing, double Mean, long BeyondFour, long Total) Compare(List<byte[]> a, List<byte[]> b)
+        {
+            Assert.Equal(a.Count, b.Count);
+            int worst = 0;
+            long differing = 0, beyondFour = 0, total = 0, sum = 0;
+            for (int n = 0; n < a.Count; n++)
+            {
+                Assert.Equal(a[n].Length, b[n].Length);
+                for (int i = 0; i < a[n].Length; i++)
+                {
+                    int d = Math.Abs(a[n][i] - b[n][i]);
+                    worst = Math.Max(worst, d);
+                    sum += d;
+                    total++;
+                    if (d != 0)
+                        differing++;
+                    if (d > 4)
+                        beyondFour++;
+                }
+            }
+            return (worst, differing, sum / (double)Math.Max(1, total), beyondFour, total);
+        }
+
+        [Fact]
+        public void Staged_loop_matches_the_direct_compose_and_encode_path()
+        {
+            RequireFFmpeg();
+            var project = SyntheticProject();
+            int frames = Fps; // 1 s
+
+            // the pipeline: compose stage -> readback ring -> convert stage -> encode stage
+            string staged = TempMp4();
+            var result = RenderJob.Run(project, staged, new RenderJobOptions { PreferGpu = false, Encoder = VideoEncoder.Software });
+            Assert.Equal(RenderOutcome.Completed, result.Outcome);
+            Assert.Equal(frames, result.VideoFrames);
+            Assert.Equal(VideoEncoder.Software, result.Encoder);
+            Assert.Equal("libx264", result.EncoderName);
+
+            // the loop as it was: compose, TryReadPixels, and the writer's own BGRA conversion,
+            // one frame at a time on one thread
+            string direct = TempMp4();
+            using (var factory = new CpuSurfaceFactory())
+            using (var cache = new FrameTextureCache(factory))
+            using (var source = new SequentialFrameSource(project, cache))
+            using (var surface = factory.CreateSurface(W, H))
+            using (var writer = new Mp4Writer(direct, new Mp4WriterOptions { Width = W, Height = H, FpsNum = Fps, FpsDen = 1 }))
+            {
+                var native = Marshal.AllocHGlobal(W * 4 * H);
+                try
+                {
+                    for (int n = 0; n < frames; n++)
+                    {
+                        FrameComposer.Compose(project, TimeBase.FrameIndexToTicks(n, Fps, 1), source, surface.Canvas, W, H);
+                        Assert.True(factory.TryReadPixels(surface, W, H, native, W * 4));
+                        writer.SubmitVideoFrame(native, W * 4, W, H, n);
+                    }
+                }
+                finally
+                {
+                    Marshal.FreeHGlobal(native);
+                }
+                writer.Finish();
+            }
+
+            // identical encoder input and a deterministic encoder: identical files
+            Assert.Equal(File.ReadAllBytes(direct), File.ReadAllBytes(staged));
+            var (worst, differing, _, _, _) = Compare(DecodeAllFrames(direct, frames), DecodeAllFrames(staged, frames));
+            Assert.True(worst == 0, $"decoded frames differ: worst {worst}, {differing} bytes");
+        }
+
+        [Fact]
+        public void Gpu_render_matches_cpu_render()
+        {
+            RequireFFmpeg();
+            var gpu = GpuSurfaceFactory.TryCreate(out var reason);
+            Assert.SkipWhen(gpu == null, "GPU backend unavailable: " + reason);
+            gpu.Dispose(); // only probing; RenderJob creates its own on the composer thread
+
+            var project = SyntheticProject();
+            string cpuPath = TempMp4(), gpuPath = TempMp4();
+            var log = new List<string>();
+            var cpu = RenderJob.Run(project, cpuPath, new RenderJobOptions { PreferGpu = false, Encoder = VideoEncoder.Software });
+            var gpuResult = RenderJob.Run(project, gpuPath, new RenderJobOptions { PreferGpu = true, Encoder = VideoEncoder.Software, DiagnosticLog = log.Add });
+            Assert.Equal(RenderOutcome.Completed, cpu.Outcome);
+            Assert.Equal(RenderOutcome.Completed, gpuResult.Outcome);
+            Assert.NotEqual("CPU", gpuResult.SurfaceBackend);
+            if (OperatingSystem.IsWindows())
+                Assert.Contains(log, line => line.Contains("Direct3D 12 copy-queue readback", StringComparison.Ordinal));
+
+            // Flat colours whose edges sit off the pixel grid: the fills agree exactly, the
+            // anti-aliased edge pixels differ between the GPU's and the CPU's coverage
+            // computation, and x264 spreads those edge differences into neighbouring pixels.
+            // The gate is the one BackgroundComposeTests.Gpu_matches_cpu_for_backgrounds uses:
+            // a mean well under one level and few bytes beyond four — a misplaced, mistimed or
+            // mis-converted frame moves whole regions and trips it by a wide margin.
+            var (worst, differing, mean, beyondFour, total) = Compare(DecodeAllFrames(cpuPath, Fps), DecodeAllFrames(gpuPath, Fps));
+            Assert.True(mean < 1.0 && beyondFour <= total * 3 / 100,
+                $"GPU and CPU renders differ: worst {worst}, mean {mean:F3}, {differing} of {total} bytes, {beyondFour} beyond 4");
+        }
+
+        [Fact]
+        public void Compose_stage_failure_propagates_and_deletes_partial_output()
+        {
+            RequireFFmpeg();
+            var project = NewProject();
+            var sourceId = Guid.NewGuid();
+            project.Sources.Add(new Source
+            {
+                Id = sourceId,
+                Path = Path.Combine(Path.GetTempPath(), $"clowd-missing-{Guid.NewGuid():N}.mp4"),
+                Streams = { new SourceStream { Index = 0, Kind = StreamKind.Video, Width = W, Height = H, AvgFrameRateNum = Fps, AvgFrameRateDen = 1 } },
+            });
+            var track = AddTrack(project, TrackKind.Video);
+            AddSolid(project, track, 0, Second, "#FF102030");
+            AddMedia(project, track, sourceId, 0, Second, Second, 0); // the second second opens a file that is not there
+
+            string path = TempMp4();
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                RenderJob.Run(project, path, new RenderJobOptions { PreferGpu = false }));
+            Assert.Contains("open", ex.Message, StringComparison.OrdinalIgnoreCase);
+            Assert.False(File.Exists(path), "partial output must be deleted when a stage fails");
+        }
+
+        [Fact]
+        public void Diagnostic_log_carries_the_timing_summary()
+        {
+            RequireFFmpeg();
+            var project = NewProject();
+            var track = AddTrack(project, TrackKind.Video);
+            AddSolid(project, track, 0, Second, "#FF335577");
+
+            var log = new List<string>();
+            var result = RenderJob.Run(project, TempMp4(), new RenderJobOptions { PreferGpu = false, DiagnosticLog = log.Add });
+            Assert.Equal(RenderOutcome.Completed, result.Outcome);
+
+            var summary = Assert.Single(log, line => line.StartsWith($"RenderJob: {Fps} frames in ", StringComparison.Ordinal));
+            foreach (var stage in new[] { " fps) on CPU;", "composer: compose ", "readback submit ", "convert: convert ", "readback wait ", "encoder: encode ", "audio ", "finish " })
+                Assert.Contains(stage, summary, StringComparison.Ordinal);
+            Assert.EndsWith($"({result.EncoderName})", summary, StringComparison.Ordinal);
+            Assert.Contains(log, line => line.Contains("readback: synchronous readback", StringComparison.Ordinal));
+            Assert.Contains(log, line => line.StartsWith($"Mp4Writer: video encoder {result.EncoderName} (", StringComparison.Ordinal));
+        }
+
+        /// <summary>The job's encoder choice reaches the writer and comes back in the result:
+        /// Software is x264 by contract; Auto is whatever the process-wide probe picked, and at
+        /// this test's 64x64 (below NVENC's minimum) a hardware pick falls back to x264 with a
+        /// logged reason rather than failing the render.</summary>
+        [Fact]
+        public void Encoder_choice_is_honoured_and_reported()
+        {
+            RequireFFmpeg();
+            var project = NewProject();
+            var track = AddTrack(project, TrackKind.Video);
+            AddSolid(project, track, 0, Second, "#FF335577");
+
+            var software = RenderJob.Run(project, TempMp4(), new RenderJobOptions { PreferGpu = false, Encoder = VideoEncoder.Software });
+            Assert.Equal(VideoEncoder.Software, software.Encoder);
+            Assert.Equal("libx264", software.EncoderName);
+
+            var log = new List<string>();
+            var auto = RenderJob.Run(project, TempMp4(), new RenderJobOptions { PreferGpu = false, Encoder = VideoEncoder.Auto, DiagnosticLog = log.Add });
+            Assert.Equal(RenderOutcome.Completed, auto.Outcome);
+            Assert.NotEqual(VideoEncoder.Auto, auto.Encoder);
+            Assert.Equal(H264EncoderSettings.CodecNameOf(auto.Encoder), auto.EncoderName);
+            var line = Assert.Single(log, l => l.StartsWith("Mp4Writer: video encoder ", StringComparison.Ordinal));
+            Assert.Contains("requested auto", line, StringComparison.Ordinal);
+            if (auto.Encoder == VideoEncoder.Software && H264EncoderProbe.Resolve(VideoEncoder.Auto, null) != VideoEncoder.Software)
+                Assert.Contains(log, l => l.Contains("falling back to libx264", StringComparison.Ordinal));
+        }
+
         [Fact]
         public void Invalid_project_is_rejected_before_any_output()
         {
@@ -456,6 +698,169 @@ namespace Clowd.VideoSDK.Tests
         {
             var project = NewProject();
             Assert.Throws<InvalidOperationException>(() => RenderJob.Run(project, TempMp4()));
+        }
+
+        // -------------------------------------------------------------------- zero-copy encode
+
+        /// <summary>The zero-copy path end to end on this machine (a shareable Direct3D 12 ring
+        /// and NVENC; skips without either) against the readback path with the same encoder:
+        /// both must decode to the same pictures. The two convert BGRA→NV12 with different
+        /// implementations (the GPU video processor, swscale) under the same BT.601 matrix, and
+        /// NVENC then encodes each, so the gate is the statistical one the GPU/CPU test uses —
+        /// a misplaced, mistimed, flipped or mis-converted frame trips it by a wide margin.</summary>
+        [Fact]
+        public void Zero_copy_render_matches_readback_render()
+        {
+            RequireFFmpeg();
+            Assert.SkipUnless(OperatingSystem.IsWindows(), "the zero-copy path is Direct3D-only");
+            var gpu = GpuSurfaceFactory.TryCreate(out var reason);
+            Assert.SkipWhen(gpu == null, "GPU backend unavailable: " + reason);
+            gpu.Dispose();
+            Assert.SkipUnless(H264EncoderProbe.CanOpen(VideoEncoder.Nvenc, out reason), "h264_nvenc does not open here: " + reason);
+
+            // above NVENC's minimum size; the 64x64 fixtures would fall back to x264
+            const int w = H264EncoderProbe.ProbeWidth, h = H264EncoderProbe.ProbeHeight;
+            var project = SyntheticProject(w, h);
+            string zeroCopyPath = TempMp4(), readbackPath = TempMp4();
+            var zeroCopyLog = new List<string>();
+            var readbackLog = new List<string>();
+
+            var zeroCopy = RenderJob.Run(project, zeroCopyPath, new RenderJobOptions
+            {
+                Encoder = VideoEncoder.Nvenc, Crf = 16, ZeroCopyEncode = true, DiagnosticLog = zeroCopyLog.Add,
+            });
+            var readback = RenderJob.Run(project, readbackPath, new RenderJobOptions
+            {
+                Encoder = VideoEncoder.Nvenc, Crf = 16, ZeroCopyEncode = false, DiagnosticLog = readbackLog.Add,
+            });
+
+            Assert.Equal(RenderOutcome.Completed, zeroCopy.Outcome);
+            Assert.Equal(RenderOutcome.Completed, readback.Outcome);
+            Assert.Equal("h264_nvenc", zeroCopy.EncoderName);
+            Assert.Equal("h264_nvenc", readback.EncoderName);
+            Assert.True(zeroCopy.ZeroCopy, "the zero-copy path did not engage: " + string.Join(" | ", zeroCopyLog));
+            Assert.False(readback.ZeroCopy);
+            Assert.Contains(zeroCopyLog, line => line.StartsWith("RenderJob: zero-copy: Direct3D 11 zero-copy", StringComparison.Ordinal));
+            Assert.Contains(zeroCopyLog, line => line.Contains("input: Direct3D 11 NV12 textures", StringComparison.Ordinal));
+            Assert.Contains(zeroCopyLog, line => line.EndsWith("(h264_nvenc, zero-copy)", StringComparison.Ordinal));
+            Assert.DoesNotContain(zeroCopyLog, line => line.Contains("using readback", StringComparison.Ordinal));
+            Assert.Contains(readbackLog, line => line.Contains("zero-copy encode disabled; using readback", StringComparison.Ordinal));
+            Assert.Contains(readbackLog, line => line.StartsWith("RenderJob: readback: Direct3D 12 copy-queue readback", StringComparison.Ordinal));
+            Assert.Contains(readbackLog, line => line.EndsWith("(h264_nvenc)", StringComparison.Ordinal));
+
+            var (worst, differing, mean, beyondFour, total) = Compare(
+                DecodeAllFrames(zeroCopyPath, Fps, w, h), DecodeAllFrames(readbackPath, Fps, w, h));
+            Assert.True(mean < 1.0 && beyondFour <= total * 3 / 100,
+                $"zero-copy and readback renders differ: worst {worst}, mean {mean:F3}, {differing} of {total} bytes, {beyondFour} beyond 4");
+        }
+
+        /// <summary>A hardware encoder that will not open over the bridge's frames (AMF on a
+        /// machine without an AMD driver: the bridge comes up, the encoder declines) drops the
+        /// bridge and takes the readback stages with whatever encoder the writer settled on —
+        /// the render still completes. On a machine where AMF does open the same render runs
+        /// zero-copy, and the test checks that instead.</summary>
+        [Fact]
+        public void Zero_copy_bridge_is_dropped_when_the_encoder_declines_gpu_frames()
+        {
+            RequireFFmpeg();
+            Assert.SkipUnless(OperatingSystem.IsWindows(), "the zero-copy path is Direct3D-only");
+            var gpu = GpuSurfaceFactory.TryCreate(out var reason);
+            Assert.SkipWhen(gpu == null, "GPU backend unavailable: " + reason);
+            gpu.Dispose();
+            bool amfOpens = H264EncoderProbe.CanOpen(VideoEncoder.Amf, out _);
+
+            const int w = H264EncoderProbe.ProbeWidth, h = H264EncoderProbe.ProbeHeight;
+            var log = new List<string>();
+            var result = RenderJob.Run(SyntheticProject(w, h), TempMp4(), new RenderJobOptions
+            {
+                Encoder = VideoEncoder.Amf, ZeroCopyEncode = true, DiagnosticLog = log.Add,
+            });
+            Assert.Equal(RenderOutcome.Completed, result.Outcome);
+            Assert.Equal(Fps, result.VideoFrames);
+            if (amfOpens)
+            {
+                Assert.Equal(VideoEncoder.Amf, result.Encoder);
+                Assert.True(result.ZeroCopy || log.Exists(line => line.Contains("using readback", StringComparison.Ordinal)));
+                return;
+            }
+
+            Assert.False(result.ZeroCopy);
+            Assert.Equal(VideoEncoder.Software, result.Encoder);
+            Assert.Contains(log, line => line.Contains("falling back to libx264", StringComparison.Ordinal));
+            var unavailable = Assert.Single(log, line => line.StartsWith("RenderJob: zero-copy encode unavailable", StringComparison.Ordinal));
+            Assert.EndsWith("using readback", unavailable, StringComparison.Ordinal);
+            // a bridge that did come up (a shareable ring) was dropped for the writer's sake
+            if (log.Exists(line => line.Contains("would not open over Direct3D 11 frames", StringComparison.Ordinal)))
+                Assert.Contains("no encoder opened over Direct3D 11 frames", unavailable, StringComparison.Ordinal);
+            Assert.Contains(log, line => line.StartsWith("RenderJob: readback: ", StringComparison.Ordinal));
+            Assert.Contains(log, line => line.EndsWith("(libx264)", StringComparison.Ordinal));
+        }
+
+        /// <summary>The bridge is only ever built for an encoder with a GPU input: a software
+        /// render on the Direct3D 12 composer says nothing about zero-copy and takes the
+        /// readback stages.</summary>
+        [Fact]
+        public void Zero_copy_is_not_attempted_for_the_software_encoder()
+        {
+            RequireFFmpeg();
+            var gpu = GpuSurfaceFactory.TryCreate(out var reason);
+            Assert.SkipWhen(gpu == null, "GPU backend unavailable: " + reason);
+            gpu.Dispose();
+
+            var log = new List<string>();
+            var result = RenderJob.Run(SyntheticProject(), TempMp4(), new RenderJobOptions
+            {
+                Encoder = VideoEncoder.Software, ZeroCopyEncode = true, DiagnosticLog = log.Add,
+            });
+            Assert.Equal(RenderOutcome.Completed, result.Outcome);
+            Assert.False(result.ZeroCopy);
+            Assert.DoesNotContain(log, line => line.Contains("zero-copy", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(log, line => line.StartsWith("RenderJob: readback: ", StringComparison.Ordinal));
+            Assert.Contains(log, line => line.EndsWith("(libx264)", StringComparison.Ordinal));
+        }
+
+        /// <summary>A cancelled zero-copy render (NVENC; skips without it) must leave no GPU
+        /// frame behind. The teardown drains only what is still queued for the encoder; the
+        /// frame the convert thread holds while a full queue blocks its hand-off and the one the
+        /// encode thread has taken out are each stage's own to drop — and a HardwareFrame has no
+        /// finalizer, so a dropped one would keep its texture, the frames context and the D3D11
+        /// device alive for the rest of the process.</summary>
+        [Fact]
+        public void Zero_copy_cancel_leaves_no_hardware_frame_alive()
+        {
+            RequireFFmpeg();
+            Assert.SkipUnless(OperatingSystem.IsWindows(), "the zero-copy path is Direct3D-only");
+            var gpu = GpuSurfaceFactory.TryCreate(out var reason);
+            Assert.SkipWhen(gpu == null, "GPU backend unavailable: " + reason);
+            gpu.Dispose();
+            Assert.SkipUnless(H264EncoderProbe.CanOpen(VideoEncoder.Nvenc, out reason), "h264_nvenc does not open here: " + reason);
+
+            const int w = H264EncoderProbe.ProbeWidth, h = H264EncoderProbe.ProbeHeight;
+            var project = NewProject(w, h);
+            var track = AddTrack(project, TrackKind.Video);
+            AddSolid(project, track, 0, 10 * Second, "#FF4080C0"); // 300 frames — plenty to cancel into
+
+            string path = TempMp4();
+            using var cts = new CancellationTokenSource();
+            var progress = new InlineProgress(p =>
+            {
+                if (p > 0)
+                    cts.Cancel(); // cancel once the first frame has actually been encoded
+            });
+            var log = new List<string>();
+            int live = HardwareFrame.LiveCount;
+
+            var result = RenderJob.Run(project, path, new RenderJobOptions
+            {
+                Encoder = VideoEncoder.Nvenc, ZeroCopyEncode = true, DiagnosticLog = log.Add,
+            }, progress, cts.Token);
+
+            Assert.Equal(RenderOutcome.Canceled, result.Outcome);
+            Assert.True(result.ZeroCopy, "the zero-copy path did not engage: " + string.Join(" | ", log));
+            Assert.True(result.VideoFrames > 0, "cancel should land mid-render, not before it");
+            Assert.True(result.VideoFrames < 300, "render ran to completion despite cancellation");
+            Assert.False(File.Exists(path), "partial output must be deleted on cancellation");
+            Assert.Equal(live, HardwareFrame.LiveCount);
         }
     }
 }

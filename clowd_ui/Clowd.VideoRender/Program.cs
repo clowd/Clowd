@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using Clowd.VideoSDK;
 using Clowd.VideoSDK.Ai;
+using Clowd.VideoSDK.Media;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Render;
 
@@ -24,8 +25,9 @@ namespace Clowd.VideoRender
     /// PNG, crf), mapped onto the v2 model by <see cref="RenderArgsCompat"/>.</item>
     /// <item><c>"version": 2</c> — a <see cref="Project"/> straight from the editor. The output
     /// path is not part of the project model, so it comes from a sibling <c>"output"</c> property
-    /// in the same file (and an optional <c>"crf"</c>), or from the optional second argument, which
-    /// wins when both are present.</item>
+    /// in the same file (and optional <c>"crf"</c> and <c>"encoder"</c> siblings — the latter one
+    /// of <c>auto|software|nvenc|amf|videotoolbox</c>, <c>auto</c> when absent), or from the
+    /// optional second argument, which wins when both are present.</item>
     /// </list>
     ///
     /// <para>Stdout protocol, byte-compatible with vid-render (and vid2gif before it), one message
@@ -77,6 +79,7 @@ namespace Clowd.VideoRender
                     new RenderJobOptions
                     {
                         Crf = job.Crf,
+                        Encoder = job.Encoder,
                         // v1 args are vid-render's contract: mux with its container timing, and
                         // follow its VFR frame-passthrough schedule when the compat mapping built
                         // one. v2 projects render on the CFR grid with full sample durations.
@@ -89,6 +92,13 @@ namespace Clowd.VideoRender
                         PreferGpu = !String.Equals(
                             Environment.GetEnvironmentVariable("CLOWD_RENDER_BACKEND"), "cpu",
                             StringComparison.OrdinalIgnoreCase),
+                        // CLOWD_RENDER_ZEROCOPY=0 forces the readback path for NVENC/AMF renders
+                        // (the zero-copy Direct3D 11 hand-off falls back to it on its own when
+                        // anything is missing) — the A/B knob for benchmarking the two, in the
+                        // same spirit as CLOWD_RENDER_BACKEND.
+                        ZeroCopyEncode = !String.Equals(
+                            Environment.GetEnvironmentVariable("CLOWD_RENDER_ZEROCOPY"), "0",
+                            StringComparison.Ordinal),
                         // the job file sits beside the project's videoedit.json, which is where
                         // the AI sidecars live (AiSidecars) — matte/denoise consumption and any
                         // pre-render generation both key off this directory.
@@ -157,6 +167,7 @@ namespace Clowd.VideoRender
                         InputPath = plan.InputPath,
                         OutputPath = outputOverride,
                         Crf = plan.Crf,
+                        Encoder = plan.Encoder,
                         MaskPngPath = plan.MaskPngPath,
                         FrameTimestampsTicks = plan.FrameTimestampsTicks,
                         LegacyContainerTiming = plan.LegacyContainerTiming,
@@ -203,8 +214,9 @@ namespace Clowd.VideoRender
             }
         }
 
-        /// <summary>A v2 file is the project itself; the output path and encoder quality ride
-        /// alongside it as siblings (the project model has no notion of where it is written).</summary>
+        /// <summary>A v2 file is the project itself; the output path, encoder quality and encoder
+        /// choice ride alongside it as siblings (the project model has no notion of where or how
+        /// it is written).</summary>
         private static LegacyRenderPlan LoadProjectFile(string argsPath, string outputOverride)
         {
             var text = File.ReadAllText(argsPath);
@@ -224,6 +236,7 @@ namespace Clowd.VideoRender
 
             string output = outputOverride;
             int crf = RenderArgsCompat.DefaultCrf;
+            var encoder = VideoEncoder.Auto;
 
             using (var document = JsonDocument.Parse(text,
                        new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip }))
@@ -236,6 +249,14 @@ namespace Clowd.VideoRender
                 if (document.RootElement.TryGetProperty("crf", out var crfProperty) &&
                     crfProperty.TryGetInt32(out var crfValue))
                     crf = crfValue;
+
+                // absent means auto; present means exactly one of the known names — a typo must
+                // not silently render on the software path (or the hardware one).
+                if (document.RootElement.TryGetProperty("encoder", out var encoderProperty) &&
+                    (encoderProperty.ValueKind != JsonValueKind.String ||
+                     !VideoEncoderNames.TryParse(encoderProperty.GetString(), out encoder)))
+                    throw new InvalidOperationException(
+                        $"unknown encoder {encoderProperty.GetRawText()} (expected one of {VideoEncoderNames.All})");
             }
 
             if (String.IsNullOrEmpty(output))
@@ -249,7 +270,7 @@ namespace Clowd.VideoRender
             if (!String.IsNullOrEmpty(parent))
                 Directory.CreateDirectory(parent);
 
-            return new LegacyRenderPlan { Project = project, OutputPath = output, Crf = crf };
+            return new LegacyRenderPlan { Project = project, OutputPath = output, Crf = crf, Encoder = encoder };
         }
 
         // ------------------------------------------------------------------------ FFmpeg natives

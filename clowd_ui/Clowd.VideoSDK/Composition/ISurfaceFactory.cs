@@ -32,6 +32,23 @@ namespace Clowd.VideoSDK.Composition
         /// perf-critical seam of the render loop, so callers pipeline it (two surfaces in flight).
         /// </summary>
         bool TryReadPixels(SKSurface surface, int width, int height, IntPtr dst, int rowBytes);
+
+        /// <summary>
+        /// Creates the render loop's readback ring (<see cref="IReadbackRing"/>): composition
+        /// targets whose pixels are read back asynchronously where the backend can (Direct3D 12),
+        /// and synchronously otherwise. <paramref name="slots"/> is the depth an asynchronous ring
+        /// gets; a synchronous ring has no copy in flight to cover and is capped at
+        /// <see cref="SyncReadbackRing.MaxUsefulSlots"/>, so callers size their bookkeeping from
+        /// <see cref="IReadbackRing.SlotCount"/>, not from what they asked for. The default is the
+        /// synchronous <see cref="SyncReadbackRing"/> over <see cref="CreateSurface"/> and
+        /// <see cref="TryReadPixels"/> — every implementation gets a working ring for free and
+        /// only a backend with a faster path overrides it. Must be called on the factory's
+        /// thread; the ring is disposed there too, before the factory.
+        /// </summary>
+        /// <param name="diagnosticLog">Receives a line when an asynchronous ring was wanted but
+        /// could not be created (the reason, and that the synchronous ring is used instead).</param>
+        IReadbackRing CreateReadbackRing(int width, int height, int slots, Action<string> diagnosticLog = null)
+            => new SyncReadbackRing(this, width, height, SyncReadbackRing.UsefulSlots(slots));
     }
 
     internal static class SurfacePixels
