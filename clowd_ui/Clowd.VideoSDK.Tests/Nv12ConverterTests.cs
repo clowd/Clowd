@@ -53,11 +53,15 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>The conversion as the writer's original single-threaded path did it: the
-        /// legacy API on a context from sws_getContext with the same flags.</summary>
-        private static unsafe byte[][] LegacyConvert(byte[] bgra, int rowBytes, int w, int h)
+        /// legacy API on a context from sws_getContext with the same flags.
+        /// <paramref name="dw"/>/<paramref name="dh"/> default to the source size (no scaling).</summary>
+        private static unsafe byte[][] LegacyConvert(byte[] bgra, int rowBytes, int w, int h,
+            int dw = 0, int dh = 0)
         {
-            using var dst = new Nv12Frame(w, h);
-            var sws = ffmpeg.sws_getContext(w, h, AVPixelFormat.AV_PIX_FMT_BGRA, w, h,
+            if (dw == 0) dw = w;
+            if (dh == 0) dh = h;
+            using var dst = new Nv12Frame(dw, dh);
+            var sws = ffmpeg.sws_getContext(w, h, AVPixelFormat.AV_PIX_FMT_BGRA, dw, dh,
                 AVPixelFormat.AV_PIX_FMT_NV12, ffmpeg.SWS_BILINEAR, null, null, null);
             Assert.True(sws != null, "sws_getContext failed");
             try
@@ -73,7 +77,8 @@ namespace Clowd.VideoSDK.Tests
                         dstData[i] = dst.Frame->data[i];
                         dstStride[i] = dst.Frame->linesize[i];
                     }
-                    Assert.Equal(h, ffmpeg.sws_scale(sws, srcData, srcStride, 0, h, dstData, dstStride));
+                    // sws_scale takes the source slice and returns the destination rows it wrote.
+                    Assert.Equal(dh, ffmpeg.sws_scale(sws, srcData, srcStride, 0, h, dstData, dstStride));
                 }
             }
             finally
@@ -83,11 +88,14 @@ namespace Clowd.VideoSDK.Tests
             return Planes(dst);
         }
 
-        private static byte[][] Convert(byte[] bgra, int rowBytes, int w, int h, int threads)
+        private static byte[][] Convert(byte[] bgra, int rowBytes, int w, int h, int threads,
+            int dw = 0, int dh = 0)
         {
-            using var converter = new Nv12Converter(w, h, w, h, threads);
+            if (dw == 0) dw = w;
+            if (dh == 0) dh = h;
+            using var converter = new Nv12Converter(w, h, dw, dh, threads);
             Assert.Equal(threads, converter.Threads);
-            using var dst = new Nv12Frame(w, h);
+            using var dst = new Nv12Frame(dw, dh);
             var pin = GCHandle.Alloc(bgra, GCHandleType.Pinned);
             try
             {
@@ -126,6 +134,48 @@ namespace Clowd.VideoSDK.Tests
             AssertPlanesEqual(legacy, Convert(bgra, w * 4, w, h, threads: 1), "1 thread");
             AssertPlanesEqual(legacy, Convert(bgra, w * 4, w, h, threads: 4), "4 threads");
             AssertPlanesEqual(legacy, Convert(bgra, w * 4, w, h, threads: 8), "8 threads");
+        }
+
+        /// <summary>The encode-time size cap (<see cref="Clowd.VideoSDK.Render.RenderJobOptions.MaxHeight"/>)
+        /// rides on the same stage: the convert stage scales BGRA → NV12 in one swscale pass, and
+        /// that pass must be exactly what the legacy scaling context produces — the render's
+        /// downscale is swscale's bilinear, nothing of our own.</summary>
+        [Theory]
+        [InlineData(64, 64, 32, 32)]
+        [InlineData(322, 146, 160, 72)]   // neither dimension a clean fraction of the source
+        [InlineData(1240, 1166, 766, 720)] // a real recording capped to 720 rows
+        public void Scaled_conversion_matches_legacy_sws_scale_exactly(int w, int h, int dw, int dh)
+        {
+            RequireFFmpeg();
+            var bgra = NoiseFrame(w, h, w * 4, seed: w - h);
+            var legacy = LegacyConvert(bgra, w * 4, w, h, dw, dh);
+            AssertPlanesEqual(legacy, Convert(bgra, w * 4, w, h, threads: 1, dw, dh), "1 thread");
+            AssertPlanesEqual(legacy, Convert(bgra, w * 4, w, h, threads: 4, dw, dh), "4 threads");
+        }
+
+        /// <summary>A scaling converter reports the two sizes it was built with, and still only
+        /// takes a destination frame of the size it produces.</summary>
+        [Fact]
+        public void Scaled_converter_knows_both_sizes()
+        {
+            RequireFFmpeg();
+            using var converter = new Nv12Converter(96, 64, 48, 32, 1);
+            Assert.Equal(96, converter.SourceWidth);
+            Assert.Equal(64, converter.SourceHeight);
+            Assert.Equal(48, converter.Width);
+            Assert.Equal(32, converter.Height);
+
+            using var wrong = new Nv12Frame(96, 64); // the source size, not the destination
+            var pixels = new byte[96 * 4 * 64];
+            var pin = GCHandle.Alloc(pixels, GCHandleType.Pinned);
+            try
+            {
+                Assert.Throws<ArgumentException>(() => converter.Convert(pin.AddrOfPinnedObject(), 96 * 4, wrong));
+            }
+            finally
+            {
+                pin.Free();
+            }
         }
 
         /// <summary>NV12 is the same 4:2:0 picture as yuv420p with the chroma interleaved, and

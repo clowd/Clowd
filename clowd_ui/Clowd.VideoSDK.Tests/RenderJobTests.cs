@@ -700,6 +700,107 @@ namespace Clowd.VideoSDK.Tests
             Assert.Throws<InvalidOperationException>(() => RenderJob.Run(project, TempMp4()));
         }
 
+        // ------------------------------------------------------------------ encode-time size cap
+
+        /// <summary>The size the encoder is opened at: the cap's height (rounded down to even)
+        /// with the width that preserves the aspect ratio (likewise even), and the canvas itself
+        /// whenever the cap is absent or would not shrink it — a cap never upscales.</summary>
+        [Theory]
+        [InlineData(1920, 1080, 0, 1920, 1080)]     // no cap
+        [InlineData(1920, 1080, 1080, 1920, 1080)]  // exactly the output height: nothing to do
+        [InlineData(1920, 1080, 2160, 1920, 1080)]  // above it: never upscale
+        [InlineData(1920, 1080, 720, 1280, 720)]
+        [InlineData(1240, 1166, 720, 766, 720)]     // the recorder's window size, capped to 720p
+        [InlineData(64, 64, 32, 32, 32)]
+        [InlineData(64, 64, 33, 32, 32)]            // odd cap rounds down to even
+        [InlineData(66, 44, 22, 32, 22)]            // 66*22/44 = 33: the odd width rounds too
+        [InlineData(1920, 1080, 1, 4, 2)]           // a silly cap still produces an encodable size
+        public void Cap_size_preserves_the_aspect_ratio_on_even_dimensions(
+            int width, int height, int maxHeight, int expectedWidth, int expectedHeight)
+        {
+            Assert.Equal((expectedWidth, expectedHeight), RenderJob.CapSize(width, height, maxHeight));
+        }
+
+        [Fact]
+        public void Cap_size_rejects_a_negative_cap()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => RenderJob.CapSize(64, 64, -1));
+            var project = NewProject();
+            var track = AddTrack(project, TrackKind.Video);
+            AddSolid(project, track, 0, Second, "#FF335577");
+            string path = TempMp4();
+            Assert.Throws<ArgumentException>(() =>
+                RenderJob.Run(project, path, new RenderJobOptions { MaxHeight = -1 }));
+            Assert.False(File.Exists(path));
+        }
+
+        /// <summary>The cap is an encode-time resample: the project composes at its canvas size
+        /// (a 96x64 canvas here, so a wrong aspect would show up as a wrong width) and the mp4
+        /// comes out at the capped size, with the convert stage — not the project — scaling.</summary>
+        [Fact]
+        public void Max_height_caps_the_encoded_mp4()
+        {
+            RequireFFmpeg();
+
+            var project = SyntheticProject(96, 64);
+            string path = TempMp4();
+            var log = new List<string>();
+            var result = RenderJob.Run(project, path,
+                new RenderJobOptions { PreferGpu = false, MaxHeight = 32, DiagnosticLog = log.Add });
+
+            Assert.Equal(RenderOutcome.Completed, result.Outcome);
+            Assert.Equal(Fps, result.VideoFrames); // the cap changes pixels, never frames
+            Assert.False(result.ZeroCopy);
+            var video = Assert.Single(MediaProbe.ProbeDetailed(path).VideoStreams);
+            Assert.Equal(32, video.Height);
+            Assert.Equal(48, video.Width); // 96x64 at 32 rows
+            Assert.Contains(log, l => l.Contains("encoded at 48x32 (max height 32)", StringComparison.Ordinal));
+            Assert.Contains(log, l => l.Contains("scaling to 48x32", StringComparison.Ordinal));
+        }
+
+        /// <summary>An odd cap is rounded down to an even height (4:2:0 chroma) rather than
+        /// refused, and the whole render still runs.</summary>
+        [Fact]
+        public void An_odd_cap_renders_at_the_even_size_below_it()
+        {
+            RequireFFmpeg();
+
+            var project = SyntheticProject();
+            string path = TempMp4();
+            var result = RenderJob.Run(project, path,
+                new RenderJobOptions { PreferGpu = false, MaxHeight = 33 });
+
+            Assert.Equal(RenderOutcome.Completed, result.Outcome);
+            var video = Assert.Single(MediaProbe.ProbeDetailed(path).VideoStreams);
+            Assert.Equal(32, video.Height);
+            Assert.Equal(32, video.Width);
+        }
+
+        /// <summary>A cap at or above the project's own height changes nothing at all — not the
+        /// size, and not the encoded bytes (x264 is deterministic for identical input), so an
+        /// uncapped render is never paying for a no-op rescale.</summary>
+        [Fact]
+        public void A_cap_that_would_not_shrink_the_output_is_a_no_op()
+        {
+            RequireFFmpeg();
+
+            var project = SyntheticProject();
+            string uncapped = TempMp4(), capped = TempMp4();
+            var options = new RenderJobOptions { PreferGpu = false, Encoder = VideoEncoder.Software };
+            RenderJob.Run(project, uncapped, options);
+            RenderJob.Run(project, capped, new RenderJobOptions
+            {
+                PreferGpu = false,
+                Encoder = VideoEncoder.Software,
+                MaxHeight = H * 2,
+            });
+
+            var video = Assert.Single(MediaProbe.ProbeDetailed(capped).VideoStreams);
+            Assert.Equal(W, video.Width);
+            Assert.Equal(H, video.Height);
+            Assert.Equal(File.ReadAllBytes(uncapped), File.ReadAllBytes(capped));
+        }
+
         // -------------------------------------------------------------------- zero-copy encode
 
         /// <summary>The zero-copy path end to end on this machine (a shareable Direct3D 12 ring

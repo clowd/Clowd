@@ -528,6 +528,11 @@ namespace Clowd.VideoSDK.Render
         /// always gets <see cref="VideoEncoder.Auto"/>; a v2 job file may name one.</summary>
         public VideoEncoder Encoder { get; init; } = VideoEncoder.Auto;
 
+        /// <summary>Encode-time cap on the output height in pixels
+        /// (<see cref="RenderJobOptions.MaxHeight"/>), 0 for none. A v1 args file predates the
+        /// cap and always gets 0; a v2 job file may carry a <c>maxHeight</c> sibling.</summary>
+        public int MaxHeight { get; init; }
+
         /// <summary>The mask PNG the shape was recovered from, for diagnostics only.</summary>
         public string MaskPngPath { get; init; }
 
