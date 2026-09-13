@@ -996,6 +996,101 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(item.LinkGroupId);
         }
 
+        /// <summary>A silent audio stream (as the caller's scan reported it) gets no row: the
+        /// source still describes the whole file, but the import is a lone video item — unlinked,
+        /// because the group counts rows made, not streams probed.</summary>
+        [Fact]
+        public void ImportMedia_skips_the_audio_streams_reported_silent()
+        {
+            var session = NewSession(out _, out _, out _, out _);
+            var tracksBefore = session.Project.Tracks.Count;
+
+            var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), Ms(2_000),
+                silentAudioStreams: new[] { 1 });
+
+            var item = Assert.Single(created);
+            Assert.Empty(session.Project.Validate());
+            Assert.Equal(0, ((MediaContent)item.Content).StreamIndex);
+            Assert.Null(item.LinkGroupId);
+            Assert.Equal(tracksBefore + 1, session.Project.Tracks.Count);
+
+            var source = session.Project.Sources.Single(s => s.Path == TestPath.Native(@"C:\media\clip.mp4"));
+            Assert.Equal(2, source.Streams.Count);
+
+            // an index that names no audio stream changes nothing
+            Assert.Equal(2, session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), Ms(2_000),
+                silentAudioStreams: new[] { 7 }).Count);
+        }
+
+        // ------------------------------------------------------------- lone-group collapse
+
+        /// <summary>A recording with nothing but a screen row opens with its segments unlinked:
+        /// the group would only pin them, and a pinned clip is the one thing the sync gate
+        /// forbids dragging. So they are not ripple groups, and one moves without the other.</summary>
+        [Fact]
+        public void A_screen_only_recording_opens_unlinked_and_movable()
+        {
+            var project = Model.RecordingProject.Build(new RecordingProjectSpec
+            {
+                InputPath = TestPath.Native(@"C:\rec\input.mp4"),
+                Screen = new VideoStreamProbe { StreamIndex = 0, Width = 1920, Height = 1080, AvgFrameRateNum = 30, AvgFrameRateDen = 1, DurationTicks = Ms(60_000) },
+                FpsNum = 30,
+                FpsDen = 1,
+                Segments = new[] { new KeepSegment(0, Ms(10_000)), new KeepSegment(Ms(20_000), Ms(10_000)) },
+                Ids = RecordingIds.New(0),
+            });
+            Assert.All(project.Items, i => Assert.NotNull(i.LinkGroupId)); // Build itself still groups
+
+            var session = new EditorSession(project, null, null);
+
+            Assert.Equal(2, session.Project.Items.Count);
+            Assert.All(session.Project.Items, i => Assert.Null(i.LinkGroupId));
+            Assert.All(session.Project.Items, i => Assert.False(session.IsRippleGroup(i.Id)));
+
+            var second = session.Project.Items.Single(i => i.TimelineStartTicks == Ms(10_000));
+            Assert.Equal(Ms(5_000), session.MoveItem(second.Id, Ms(5_000)));
+            Assert.Equal(Ms(15_000), session.Project.Items.Single(i => i.Id == second.Id).TimelineStartTicks);
+            Assert.Equal(0, session.Project.Items.Single(i => i.Id != second.Id).TimelineStartTicks);
+        }
+
+        /// <summary>Deleting the recording's other rows leaves the screen row alone in its group,
+        /// and the group goes with them — inside the same mutation, so one undo brings back rows
+        /// and link alike.</summary>
+        [Fact]
+        public void Deleting_the_other_rows_unlinks_the_last_one()
+        {
+            var session = NewSession(out var screen, out var webcam, out var audio, out _);
+            var before = session.Project.ToJson();
+
+            Assert.True(session.DeleteTrack(webcam.TrackId));
+            Assert.NotNull(session.Project.Items.Single(i => i.Id == screen.Id).LinkGroupId); // still two rows
+
+            Assert.True(session.DeleteTrack(audio.TrackId));
+            var lone = session.Project.Items.Single(i => i.Id == screen.Id);
+            Assert.Null(lone.LinkGroupId);
+            Assert.False(session.IsRippleGroup(screen.Id));
+
+            session.Undo();
+            Assert.Equal(2, session.Project.Tracks.Count);
+            Assert.NotNull(session.Project.Items.Single(i => i.Id == screen.Id).LinkGroupId);
+            session.Undo();
+            Assert.Equal(before, session.Project.ToJson());
+        }
+
+        /// <summary>Unlinking every other row is the same thing said differently: the row that
+        /// was never unlinked is unlinked too, because there is nothing left to be linked to.</summary>
+        [Fact]
+        public void Unlinking_every_other_row_unlinks_the_last_one()
+        {
+            var session = NewSession(out var screen, out var webcam, out var audio, out _);
+
+            session.UnlinkTrack(webcam.TrackId);
+            session.UnlinkTrack(audio.TrackId);
+
+            Assert.All(session.Project.Items, i => Assert.Null(i.LinkGroupId));
+            Assert.False(session.IsRippleGroup(screen.Id));
+        }
+
         /// <summary>The delete-routing discriminator: a recording segment's group has members on
         /// the tracks the session opened with; an import's group lives entirely on session-created
         /// rows. Ripple (and the move gate) applies to the former only.</summary>

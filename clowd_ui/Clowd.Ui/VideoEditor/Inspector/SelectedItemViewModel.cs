@@ -3256,10 +3256,9 @@ namespace Clowd.UI.VideoEditor.Inspector
             if (item == null)
                 return;
 
-            // scoped to what the write reaches (the row for linked segments, the item alone
-            // otherwise): a bare "sel:x" would let a selection change inside the coalesce window
-            // merge two different items' edits into one undo entry.
-            var scope = item.LinkGroupId != null ? item.TrackId : item.Id;
+            // scoped to what the write reaches (the row for a feed's segments, the item alone
+            // otherwise) — see ItemRowScope.CoalesceScope.
+            var scope = ItemRowScope.CoalesceScope(_session, item);
             _session.EditItems(ItemRowScope.RowItemIds(_session, item), edit, $"{coalesceKey}:{scope}",
                 structural: false, origin: origin);
         }
@@ -3347,7 +3346,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             if (item?.Content is not TContent)
                 return;
 
-            var scope = item.LinkGroupId != null ? item.TrackId : item.Id;
+            var scope = ItemRowScope.CoalesceScope(_session, item);
             _session.EditItems(ItemRowScope.RowItemIds(_session, item), i =>
             {
                 if (i.Content is TContent content)

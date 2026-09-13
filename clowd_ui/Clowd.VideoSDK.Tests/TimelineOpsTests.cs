@@ -716,5 +716,81 @@ namespace Clowd.VideoSDK.Tests
             TimelineOps.SetSpeed(project, webcam.Id, 2.0);
             Assert.False(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
         }
+
+        // ------------------------------------------------------------- lone-group collapse
+
+        /// <summary>A group is only worth having across rows: once every member sits on one
+        /// track — the other rows unlinked or gone — it dissolves, and a group still spanning two
+        /// rows is left alone.</summary>
+        [Fact]
+        public void CollapseLoneGroups_dissolves_a_group_left_on_one_track()
+        {
+            var project = RecordingProject(out var screen, out var webcam, out var audio);
+
+            // three rows: nothing to do
+            Assert.False(TimelineOps.CollapseLoneGroups(project));
+            Assert.NotNull(screen.LinkGroupId);
+
+            // two rows: still a sync worth keeping
+            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            Assert.False(TimelineOps.CollapseLoneGroups(project));
+            Assert.NotNull(screen.LinkGroupId);
+            Assert.Equal(screen.LinkGroupId, audio.LinkGroupId);
+
+            // one row: the group pins the screen's clips for nothing
+            TimelineOps.UnlinkTrack(project, audio.TrackId);
+            Assert.True(TimelineOps.CollapseLoneGroups(project));
+            Assert.All(project.Items, i => Assert.Null(i.LinkGroupId));
+
+            Assert.False(TimelineOps.CollapseLoneGroups(project)); // idempotent
+        }
+
+        /// <summary>Several segments of one row sharing a group (a recording built from keep
+        /// slices) is still a group of one row, and dissolving it is what lets the segments be
+        /// dragged apart.</summary>
+        [Fact]
+        public void CollapseLoneGroups_treats_one_rows_segments_as_one_row()
+        {
+            var project = RecordingProject(out var screen, out var webcam, out var audio);
+            project.Items.Remove(webcam);
+            project.Items.Remove(audio);
+            Assert.True(TimelineOps.SplitItem(project, screen.Id, Ms(5_000)));
+            Assert.Equal(2, project.Items.Count);
+            Assert.All(project.Items, i => Assert.Equal(screen.LinkGroupId, i.LinkGroupId));
+
+            Assert.True(TimelineOps.CollapseLoneGroups(project));
+            Assert.All(project.Items, i => Assert.Null(i.LinkGroupId));
+        }
+
+        /// <summary>Cursor/keyboard items are hard-synced to the screen by their group and must
+        /// carry one to validate at all, so a group holding one is never dissolved, whatever its
+        /// shape.</summary>
+        [Fact]
+        public void CollapseLoneGroups_leaves_input_overlay_groups_alone()
+        {
+            var project = RecordingProject(out var screen, out var webcam, out var audio);
+            project.Items.Remove(webcam);
+            project.Items.Remove(audio);
+            var cursorTrack = new Track { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Cursor", Order = 3 };
+            project.Tracks.Add(cursorTrack);
+            var cursor = new Item
+            {
+                Id = Guid.NewGuid(),
+                TrackId = cursorTrack.Id,
+                TimelineStartTicks = 0,
+                DurationTicks = Ms(10_000),
+                Content = new CursorContent(),
+                LinkGroupId = screen.LinkGroupId,
+            };
+            project.Items.Add(cursor);
+
+            // screen + cursor: two rows, untouched either way
+            Assert.False(TimelineOps.CollapseLoneGroups(project));
+
+            // cursor row alone in the group (screen row deleted): kept, validation needs it
+            project.Items.Remove(screen);
+            Assert.False(TimelineOps.CollapseLoneGroups(project));
+            Assert.NotNull(cursor.LinkGroupId);
+        }
     }
 }
