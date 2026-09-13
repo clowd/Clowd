@@ -19,7 +19,9 @@ screen recording tool for Windows and macOS. The audience is end users, not deve
    name of the setting, menu item, button, dialog or hotkey a user would interact with,
    so the instructions you write match what they see on screen. Do not guess a name.
 3. Drop anything a user cannot observe: CI and build changes, tests, refactors,
-   dependency bumps, version bumps, telemetry plumbing, internal renames.
+   dependency bumps, version bumps, telemetry plumbing, internal renames. Drop cosmetic
+   noise too, such as a tidied up label or a nudged margin. The test is whether a user
+   would notice the change and care, not whether the diff is user facing.
 4. Write the notes to `release-notes.md` in the current directory.
 
 ## Output format
@@ -51,6 +53,11 @@ exact menu, setting or hotkey. Use a short bullet list for multi step instructio
 - `Features` is the only section that gets extra detail, and it still stays tight. Two
   to six lines per feature.
 - Plain language. No marketing voice, no "we are excited to".
+- Write the name of a menu, button, setting or dialog in bold, exactly as it appears on
+  screen: **Render**, **Use hardware encoder**. Never use backticks, and reserve bold for
+  those labels so it stays meaningful.
+- At most five entries under `Features`. If more qualify, keep the five a user would care
+  about most and move the rest into `Minor Changes` as one line each.
 - Never use em-dashes or en-dashes. Use a comma, a colon, or a full stop instead.
 - Present tense, and describe the result rather than the change: "Selections snap to
   window borders" rather than "Added snapping to window borders".
