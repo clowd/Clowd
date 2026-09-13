@@ -39,19 +39,22 @@ screen recording tool for Windows and macOS. The audience is end users, not deve
 Markdown, no title, no preamble, no closing summary, no code fence around the whole
 document. Start directly with the first heading. Omit any section that would be empty.
 
-```
-# Features
+Use `##` for the section headings and `###` for a feature name. Do not use a single `#`
+anywhere, because GitHub renders it larger than the release title above it.
 
-## <Feature name>
+```
+## Features
+
+### <Feature name>
 
 One or two sentences on what it does and why it is useful, then how to use it. Name the
 exact menu, setting or hotkey. Use a short bullet list for multi step instructions.
 
-# Minor Changes
+## Minor Changes
 
 - <One line. What changed, from the user's point of view.>
 
-# Bugs Fixed
+## Bugs Fixed
 
 - <One line. What was broken, stated as the symptom the user saw.>
 ```
