@@ -278,7 +278,6 @@
             </StackPanel>
 
             <StackPanel>
-                <TextBlock VerticalAlignment="Center" Text="Resolution:" />
                 <controls:DropDownButton
                     x:Name="ddResolution"
                     MinWidth="104"

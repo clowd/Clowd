@@ -85,6 +85,9 @@ namespace Clowd.UI.VideoEditor
         private bool _playerUpdatePending; // an edit arrived while the player was Opening — re-applied on Ready
         private bool _emptyEditShown; // the status overlay currently shows the empty-edit notice
         private bool _closing;
+        // item count at the last RefreshTimelineCollapse, so a new item can open a collapsed
+        // timeline; -1 until the first refresh, which treats an occupied timeline as an arrival.
+        private int _timelineItemCount = -1;
         // add-speed's CanExecute, recomputed from the playhead (see RefreshAddSpeedButton); null
         // until the first refresh, so that one always lands.
         private bool? _canAddSpeed;
@@ -663,6 +666,7 @@ namespace Clowd.UI.VideoEditor
             // the playhead.
             RefreshResolutionPicker();
             RefreshFrameRatePicker();
+            RefreshTimelineCollapse();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -778,6 +782,7 @@ namespace Clowd.UI.VideoEditor
             RefreshFrameRatePicker();
             RefreshAddSpeedButton();
             RefreshInputOverlayButtons();
+            RefreshTimelineCollapse();
 
             if (_editor.DurationTicks <= 0)
             {
@@ -2205,12 +2210,37 @@ namespace Clowd.UI.VideoEditor
         /// <summary>The transport's timeline collapse toggle: hides the whole timeline strip so
         /// the preview takes its space (the chevron flips to point the way back). Per-window and
         /// transient, like the sidebar.</summary>
-        private void ToggleTimelineVisible()
+        private void ToggleTimelineVisible() => SetTimelineVisible(!timelineBorder.IsVisible);
+
+        /// <summary>Shows or hides the timeline strip, keeping the toggle's chevron and tooltip
+        /// pointing the way back.</summary>
+        private void SetTimelineVisible(bool show)
         {
-            var show = !timelineBorder.IsVisible;
             timelineBorder.IsVisible = show;
             btnTimelineCollapse.IconPath = TimelineIcons.Find(show ? "IconChevronDown" : "IconChevronUp");
             ToolTip.SetTip(btnTimelineCollapse, show ? "Hide the timeline" : "Show the timeline");
+        }
+
+        /// <summary>Ties the timeline strip to what the project holds: an empty timeline is kept
+        /// collapsed (there is nothing to show, so the toggle is disabled too), and an item
+        /// arriving opens it again whether it was collapsed by hand or because the project was
+        /// empty. Removing items never collapses on its own — only emptying the project does.</summary>
+        private void RefreshTimelineCollapse()
+        {
+            var count = _editor?.Project?.Items?.Count ?? 0;
+            var previous = _timelineItemCount;
+            _timelineItemCount = count;
+
+            if (count == 0)
+            {
+                SetTimelineVisible(false);
+                btnTimelineCollapse.IsEnabled = false;
+                return;
+            }
+
+            btnTimelineCollapse.IsEnabled = true;
+            if (count > previous)
+                SetTimelineVisible(true);
         }
 
         /// <summary>Fills the speed button's drop-down once; the entries are radio items so the
