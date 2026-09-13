@@ -1,7 +1,9 @@
 using System;
 using Avalonia.Controls;
 using Avalonia.Controls.Templates;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.UI.Config;
@@ -161,6 +163,21 @@ namespace Clowd.UI.Pages
         /// handler can be removed on detach. See <see cref="InitializePermissions"/>.</summary>
         private Window _activationSource;
 
+        /// <summary>Whether the user has opened the collapsed group by hand. Null means they have not
+        /// touched it, so the group follows the default for the current state: open while something
+        /// is missing, closed once both permissions are granted.</summary>
+        private bool? _permissionsExpandedByUser;
+
+        /// <summary>Cached because each <see cref="StandardCursorType"/> allocates a native handle
+        /// and the header's cursor is set on every render.</summary>
+        private static readonly Cursor HandCursor = new Cursor(StandardCursorType.Hand);
+
+        /// <summary>Whether there is nothing left for the user to do here — the only state in which
+        /// the group is allowed to collapse.</summary>
+        private static bool PermissionsComplete =>
+            MacPermissions.IsGranted(MacPermission.ScreenRecording) &&
+            MacPermissions.IsGranted(MacPermission.Accessibility);
+
         private void OnPermissionsChanged(object sender, EventArgs e) => Dispatcher.UIThread.Post(RenderPermissions);
 
         private void OnWindowActivated(object sender, EventArgs e) => RenderPermissions();
@@ -175,6 +192,49 @@ namespace Clowd.UI.Pages
             RenderPermission(MacPermission.Accessibility, AccessibilityStatus, AccessibilityButton, AccessibilityCaption,
                              "Lets Clowd listen for its global hotkeys while other apps are in the foreground. Without "
                              + "it, hotkeys do nothing and every action has to be started from the menu bar.");
+
+            RenderPermissionsCollapse();
+        }
+
+        /// <summary>
+        /// The group is a to-do list while anything is missing and a reference card once nothing is:
+        /// with a permission outstanding it stays open and offers no way to close it, and once both
+        /// are granted it collapses to its header, which the user can click open again to check a
+        /// status or go revoke one.
+        /// </summary>
+        /// <remarks>
+        /// A permission reading as missing again hands the state back to this method, so the rows are
+        /// on screen whenever they matter even if the user had closed them earlier. That is also the
+        /// state a fresh grant lands in: macOS only hands out its TCC answer at launch, so the just
+        /// granted permission still reads as missing here until Clowd restarts, and the group keeps
+        /// showing the restart hint rather than folding itself away under the user's cursor.
+        /// </remarks>
+        private void RenderPermissionsCollapse()
+        {
+            var complete = PermissionsComplete;
+            if (!complete)
+                _permissionsExpandedByUser = null;
+
+            PermissionsChevron.IsVisible = complete;
+            PermissionsHeader.Cursor = complete ? HandCursor : Cursor.Default;
+
+            var expanded = !complete || _permissionsExpandedByUser == true;
+            PermissionsChevron.RenderTransform = new RotateTransform(expanded ? 180 : 0);
+
+            // collapsing takes the rows out of the group rather than hiding them in place: the
+            // GroupBox theme draws its header separator and content padding whenever the control has
+            // content at all, so a hidden body would leave a framed empty gap under the header. The
+            // rows survive off the tree, PermissionsBody keeps holding them.
+            PermissionsGroup.Content = expanded ? PermissionsBody : null;
+        }
+
+        private void OnPermissionsHeaderPressed(object sender, PointerPressedEventArgs e)
+        {
+            if (!PermissionsComplete)
+                return;
+
+            _permissionsExpandedByUser = _permissionsExpandedByUser != true;
+            RenderPermissionsCollapse();
         }
 
         private static void RenderPermission(MacPermission permission, TextBlock status, Button button, TextBlock caption,

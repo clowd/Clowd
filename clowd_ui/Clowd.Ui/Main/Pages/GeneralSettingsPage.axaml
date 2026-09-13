@@ -56,10 +56,32 @@
                  every window activation, since the user grants these over in System Settings and
                  then comes back. -->
             <HeaderedContentControl x:Name="PermissionsGroup"
-                                    Header="Permissions"
                                     IsVisible="False"
                                     Theme="{StaticResource GroupBox}">
-                <StackPanel Classes="SettingsGroup">
+                <!-- The header doubles as the collapse toggle once there is nothing left to grant
+                     (RenderPermissionsCollapse). While a permission is missing there is no chevron
+                     and no click, so the group cannot be closed over the top of an unusable Clowd. -->
+                <HeaderedContentControl.Header>
+                    <Grid x:Name="PermissionsHeader"
+                          ColumnDefinitions="*,Auto"
+                          Background="Transparent"
+                          PointerPressed="OnPermissionsHeaderPressed">
+                        <TextBlock Grid.Column="0" VerticalAlignment="Center" Text="Permissions" />
+                        <Path x:Name="PermissionsChevron"
+                              Grid.Column="1"
+                              Width="9"
+                              Height="5.5"
+                              VerticalAlignment="Center"
+                              Data="M 0,0 L 4,4 L 8,0"
+                              IsVisible="False"
+                              Stretch="Uniform"
+                              Stroke="{DynamicResource SemiColorText1}"
+                              StrokeJoin="Round"
+                              StrokeLineCap="Round"
+                              StrokeThickness="1.3" />
+                    </Grid>
+                </HeaderedContentControl.Header>
+                <StackPanel x:Name="PermissionsBody" Classes="SettingsGroup">
                     <StackPanel Classes="Setting" Spacing="8">
                         <StackPanel Classes="SettingRow">
                             <TextBlock VerticalAlignment="Center" Text="Screen Recording" />
