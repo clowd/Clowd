@@ -393,6 +393,12 @@
             TextAlignment="Center"
             TextWrapping="Wrap" />
 
+        <!--  The tile pickers further down are fixed grids that never scroll on their own, so
+              their selection must not drag this one. A ListBox with AutoScrollToSelectedItem
+              left on (the default) asks for its selected tile to be brought into view the first
+              time it is realized, and that request bubbles up to this ScrollViewer and lands the
+              panel halfway down its own content the first time a section holding a picker is
+              shown. Every picker therefore sets AutoScrollToSelectedItem="False".  -->
         <ScrollViewer HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding HasSelection}">
             <StackPanel Margin="10" Spacing="14">
 
@@ -982,6 +988,7 @@
                           for the same reason (compiled bindings are off, there is no x:DataType).  -->
                     <ListBox
                         x:Name="listBackgroundStyle"
+                        AutoScrollToSelectedItem="False"
                         Margin="0,0,-4,-4"
                         Padding="0"
                         Background="Transparent"
@@ -1080,6 +1087,7 @@
                           off SelectionChanged.  -->
                     <ListBox
                         x:Name="listBackgroundTheme"
+                        AutoScrollToSelectedItem="False"
                         Margin="0,4,-4,-4"
                         Padding="0"
                         Background="Transparent"
@@ -1444,6 +1452,7 @@
                           they are the style, and the shape picker sets the precedent.  -->
                     <ListBox
                         x:Name="listCursorStyle"
+                        AutoScrollToSelectedItem="False"
                         Margin="0,0,-4,-4"
                         Padding="0"
                         Background="Transparent"
@@ -1495,6 +1504,7 @@
                           draws the style's own arrow in the palette it names, which is the whole
                           of what the choice does.  -->
                     <ListBox
+                        AutoScrollToSelectedItem="False"
                         Margin="0,4,-4,-4"
                         Padding="0"
                         Background="Transparent"
@@ -1546,6 +1556,7 @@
                           finished video.  -->
                     <ListBox
                         x:Name="listCursorClick"
+                        AutoScrollToSelectedItem="False"
                         Margin="0,0,-4,-4"
                         Padding="0"
                         Background="Transparent"
