@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Clowd.UI.VideoEditor;
+using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
 
@@ -75,7 +76,11 @@ namespace Clowd.UI.Services
                 return false;
             }
 
-            project = VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe, audioTrackNames, hints);
+            // a fresh build leaves the recording's silent audio streams out (a saved edit is
+            // taken as it is): the scan decodes, which is fine here — this already runs off the
+            // UI thread for the probe's sake.
+            project = VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe, audioTrackNames, hints,
+                AudioSilenceScan.FindSilentStreams);
             return project != null;
         }
 

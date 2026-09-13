@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -151,14 +152,23 @@ namespace Clowd.UI.VideoEditor
         /// its input-capture file (see <see cref="RecordingTrackHints"/>); null when there is no
         /// session. Like the labels, decoration over the probe and build-time only — a saved
         /// project already knows which of its streams is which.</param>
+        /// <param name="findSilentAudioStreams">Decides which of the recording's audio streams get
+        /// no row: given the file and its probed audio streams, returns the mp4 stream indices that
+        /// hold nothing but silence (<c>AudioSilenceScan.FindSilentStreams</c> in the app). The
+        /// recorder writes a track per configured device whether or not it captured — that is
+        /// what lets a device be switched on mid-recording — and a track that only ever held
+        /// silence is clutter on the timeline. Consulted only when a project is being <i>built</i>,
+        /// so a saved edit never pays for a scan and keeps whatever rows it has; null keeps every
+        /// probed stream. It decodes, so call this off the UI thread.</param>
         public static Project LoadOrCreate(string editJsonPath, string videoPath, MediaProbeResult probe,
-            IReadOnlyList<string> audioTrackNames = null, RecordingTrackHints hints = null)
+            IReadOnlyList<string> audioTrackNames = null, RecordingTrackHints hints = null,
+            Func<string, IReadOnlyList<AudioStreamProbe>, IReadOnlyCollection<int>> findSilentAudioStreams = null)
         {
             ArgumentNullException.ThrowIfNull(probe);
 
-            return TryLoadProject(editJsonPath, videoPath, probe, audioTrackNames, hints)
+            return TryLoadProject(editJsonPath, videoPath, probe, audioTrackNames, hints, findSilentAudioStreams)
                    ?? BuildFromDocument(FreshDocument(), videoPath, probe, audioTrackNames, hints,
-                       freshEdit: true);
+                       findSilentAudioStreams, freshEdit: true);
         }
 
         /// <summary>The canvas a project with nothing in it yet composes onto. Provisional: the
@@ -241,7 +251,8 @@ namespace Clowd.UI.VideoEditor
         /// <summary>The saved project, or null when there is nothing loadable — best-effort by
         /// design: a broken edit file must cost the edit, never the recording.</summary>
         private static Project TryLoadProject(string path, string videoPath, MediaProbeResult probe,
-            IReadOnlyList<string> audioTrackNames, RecordingTrackHints hints)
+            IReadOnlyList<string> audioTrackNames, RecordingTrackHints hints,
+            Func<string, IReadOnlyList<AudioStreamProbe>, IReadOnlyCollection<int>> findSilentAudioStreams)
         {
             try
             {
@@ -253,7 +264,7 @@ namespace Clowd.UI.VideoEditor
 
                 return version?.Version switch
                 {
-                    VideoEditDocumentDto.CurrentVersion => MigrateLegacy(bytes, videoPath, probe, audioTrackNames, hints),
+                    VideoEditDocumentDto.CurrentVersion => MigrateLegacy(bytes, videoPath, probe, audioTrackNames, hints, findSilentAudioStreams),
                     Project.CurrentVersion => LoadSaved(bytes, videoPath),
                     _ => null,
                 };
@@ -278,11 +289,12 @@ namespace Clowd.UI.VideoEditor
         }
 
         private static Project MigrateLegacy(byte[] bytes, string videoPath, MediaProbeResult probe,
-            IReadOnlyList<string> audioTrackNames, RecordingTrackHints hints)
+            IReadOnlyList<string> audioTrackNames, RecordingTrackHints hints,
+            Func<string, IReadOnlyList<AudioStreamProbe>, IReadOnlyCollection<int>> findSilentAudioStreams)
         {
             var document = new VideoEditDocument();
             return LoadLegacy(bytes, document)
-                ? BuildFromDocument(document, videoPath, probe, audioTrackNames, hints)
+                ? BuildFromDocument(document, videoPath, probe, audioTrackNames, hints, findSilentAudioStreams)
                 : null;
         }
 
@@ -297,6 +309,7 @@ namespace Clowd.UI.VideoEditor
         /// </summary>
         private static Project BuildFromDocument(VideoEditDocument document, string videoPath,
             MediaProbeResult probe, IReadOnlyList<string> audioTrackNames, RecordingTrackHints hints,
+            Func<string, IReadOnlyList<AudioStreamProbe>, IReadOnlyCollection<int>> findSilentAudioStreams,
             bool freshEdit = false)
         {
             var videoStreams = probe.VideoStreams ?? Array.Empty<VideoStreamProbe>();
@@ -315,7 +328,8 @@ namespace Clowd.UI.VideoEditor
             if (cam is not { Width: > 0, Height: > 0 })
                 cam = null;
 
-            var audioStreams = probe.AudioStreams ?? Array.Empty<AudioStreamProbe>();
+            var (audioStreams, audioNames) = LiveAudioStreams(videoPath,
+                probe.AudioStreams ?? Array.Empty<AudioStreamProbe>(), audioTrackNames, findSilentAudioStreams);
 
             // the container's duration, exactly as the export path has always taken it; a file
             // whose container declares none falls back to the screen stream's own.
@@ -340,7 +354,7 @@ namespace Clowd.UI.VideoEditor
                 AudioStreams = audioStreams,
                 // a v1 file predates separate audio tracks entirely, so in practice only a fresh
                 // create has labels to apply — but they belong to the recording, not to the edit.
-                AudioTrackNames = audioTrackNames,
+                AudioTrackNames = audioNames,
                 FpsNum = fpsNum,
                 FpsDen = fpsDen,
                 Segments = segments,
@@ -360,6 +374,39 @@ namespace Clowd.UI.VideoEditor
                     : null,
                 Ids = RecordingIds.New(audioStreams.Count),
             });
+        }
+
+        /// <summary>
+        /// The probed audio streams a built project gets rows for, with their labels re-aligned to
+        /// match: every stream, less the ones <paramref name="findSilentAudioStreams"/> reports
+        /// silent (by mp4 stream index). Labels are index-aligned to the probe (see
+        /// <see cref="AudioTrackLabels"/>), so dropping a stream has to drop its label too or the
+        /// names would slide onto the wrong rows. No finder, nothing silent, or no labels passes
+        /// both through untouched — and the finder is never asked about a file with no audio.
+        /// </summary>
+        private static (IReadOnlyList<AudioStreamProbe> Streams, IReadOnlyList<string> Names) LiveAudioStreams(
+            string videoPath, IReadOnlyList<AudioStreamProbe> audioStreams, IReadOnlyList<string> audioTrackNames,
+            Func<string, IReadOnlyList<AudioStreamProbe>, IReadOnlyCollection<int>> findSilentAudioStreams)
+        {
+            if (findSilentAudioStreams == null || audioStreams.Count == 0)
+                return (audioStreams, audioTrackNames);
+
+            var silentStreams = findSilentAudioStreams(videoPath, audioStreams);
+            if (silentStreams == null || silentStreams.Count == 0)
+                return (audioStreams, audioTrackNames);
+
+            var streams = new List<AudioStreamProbe>(audioStreams.Count);
+            var names = audioTrackNames == null ? null : new List<string>(audioStreams.Count);
+            for (var i = 0; i < audioStreams.Count; i++)
+            {
+                if (silentStreams.Contains(audioStreams[i].StreamIndex))
+                    continue;
+
+                streams.Add(audioStreams[i]);
+                names?.Add(i < audioTrackNames.Count ? audioTrackNames[i] : null);
+            }
+
+            return (streams, names);
         }
 
         /// <summary>The probed stream a session hint names, matched by mp4 stream index — never the

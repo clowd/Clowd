@@ -509,6 +509,74 @@ namespace Clowd.VideoSDK.Tests
             }
         }
 
+        /// <summary>The silence finder decides which probed audio streams become rows, and the
+        /// labels — index-aligned to the probe — follow the streams that stay rather than sliding
+        /// onto the wrong rows.</summary>
+        [Fact]
+        public void A_fresh_create_leaves_silent_audio_streams_out()
+        {
+            var names = new[] { "System Audio", "Microphone" };
+            IReadOnlyList<AudioStreamProbe> asked = null;
+
+            var project = VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe(audioStreams: 2), names,
+                findSilentAudioStreams: (path, streams) =>
+                {
+                    Assert.Equal(VideoPath, path);
+                    asked = streams;
+                    return new[] { 2 }; // the first audio stream, by mp4 index
+                });
+
+            Assert.Empty(project.Validate());
+            Assert.Equal(2, asked.Count);
+            Assert.Equal(new[] { "Microphone" }, AudioRowNames(project));
+            Assert.Equal(new[] { 3 },
+                project.Items.Select(i => ((MediaContent)i.Content).StreamIndex).Where(s => s >= 2).ToArray());
+
+            // every stream silent: a project with no audio rows at all, still valid
+            var mute = VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe(audioStreams: 2), names,
+                findSilentAudioStreams: (_, streams) => streams.Select(s => s.StreamIndex).ToArray());
+            Assert.Empty(mute.Validate());
+            Assert.Empty(AudioRowNames(mute));
+
+            // nothing silent, or no finder: every row as before
+            Assert.Equal(new[] { "System Audio", "Microphone" }, AudioRowNames(
+                VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe(audioStreams: 2), names,
+                    findSilentAudioStreams: (_, _) => Array.Empty<int>())));
+            Assert.Equal(new[] { "System Audio", "Microphone" }, AudioRowNames(
+                VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe(audioStreams: 2), names)));
+        }
+
+        /// <summary>The scan decodes, so it is only paid when a project is being built: a saved
+        /// edit keeps its rows and is never asked, and a recording with no audio has nothing to
+        /// ask about.</summary>
+        [Fact]
+        public void The_silence_finder_is_only_consulted_for_a_build()
+        {
+            var calls = 0;
+            IReadOnlyCollection<int> Count(string path, IReadOnlyList<AudioStreamProbe> streams)
+            {
+                calls++;
+                return Array.Empty<int>();
+            }
+
+            var project = VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe(), findSilentAudioStreams: Count);
+            Assert.Equal(1, calls);
+
+            var path = WriteTemp(project.ToJson());
+            try
+            {
+                VideoEditPersistence.LoadOrCreate(path, VideoPath, Probe(), findSilentAudioStreams: Count);
+                Assert.Equal(1, calls);
+            }
+            finally
+            {
+                File.Delete(path);
+            }
+
+            VideoEditPersistence.LoadOrCreate(null, VideoPath, Probe(audioStreams: 0), findSilentAudioStreams: Count);
+            Assert.Equal(1, calls);
+        }
+
         private static string[] AudioRowNames(Project project) => project.Tracks
             .Where(t => t.Kind == TrackKind.Audio)
             .OrderBy(t => t.Order)

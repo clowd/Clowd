@@ -25,6 +25,7 @@ using Clowd.UI.Services;
 using Clowd.UI.VideoEditor.Inspector;
 using Clowd.UI.VideoEditor.Timeline;
 using Clowd.VideoSDK;
+using Clowd.VideoSDK.Audio;
 using Clowd.VideoSDK.Editing;
 using Clowd.VideoSDK.Model;
 using Clowd.VideoSDK.Playback;
@@ -576,9 +577,16 @@ namespace Clowd.UI.VideoEditor
                 {
                     // the session's recorder report names the audio rows a fresh edit creates ("Microphone"
                     // rather than "Audio 2") and classifies the video streams (which is the webcam, which
-                    // the cursor box); the probe still decides which rows there are.
-                    project = VideoEditPersistence.LoadOrCreate(_editDocPath, _videoPath, probe,
-                        AudioTrackLabels.From(_session?.AudioTracks), RecordingTrackHints.From(_session));
+                    // the cursor box); the probe still decides which rows there are — less the ones
+                    // a fresh build finds silent, which means decoding them, so the load runs off
+                    // the UI thread. The session is read here first: its accessors belong to this
+                    // thread (see SessionProjectBuilder).
+                    var audioTrackNames = AudioTrackLabels.From(_session?.AudioTracks);
+                    var hints = RecordingTrackHints.From(_session);
+                    var editDocPath = _editDocPath;
+                    var videoPath = _videoPath;
+                    project = await Task.Run(() => VideoEditPersistence.LoadOrCreate(editDocPath, videoPath, probe,
+                        audioTrackNames, hints, AudioSilenceScan.FindSilentStreams));
                 }
                 catch (Exception ex)
                 {
@@ -1257,9 +1265,16 @@ namespace Clowd.UI.VideoEditor
         private async Task<(IReadOnlyList<Item> created, string error)> TryAddFileAsync(string path)
         {
             MediaProbeResult probe;
+            IReadOnlyCollection<int> silentAudioStreams;
             try
             {
-                probe = await Task.Run(() => MediaProbe.ProbeDetailed(path));
+                // the silence scan rides with the probe: same thread, same "reading the file"
+                // moment, and a live stream answers within its first chunk of audio.
+                (probe, silentAudioStreams) = await Task.Run(() =>
+                {
+                    var result = MediaProbe.ProbeDetailed(path);
+                    return (result, AudioSilenceScan.FindSilentStreams(path, result.AudioStreams));
+                });
             }
             catch (Exception ex)
             {
@@ -1276,7 +1291,7 @@ namespace Clowd.UI.VideoEditor
                 return (still != null ? new[] { still } : Array.Empty<Item>(), null);
             }
 
-            var created = _editor.ImportMedia(path, probe, PlayheadTicks);
+            var created = _editor.ImportMedia(path, probe, PlayheadTicks, silentAudioStreams);
             if (created.Count == 0)
                 return (created, "That file has no video or audio track to import.");
 

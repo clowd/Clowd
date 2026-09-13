@@ -193,6 +193,10 @@ namespace Clowd.VideoSDK.Editing
             ArgumentNullException.ThrowIfNull(project);
 
             project.Normalize();
+            // a group with one row left in it pins that row for nothing (see
+            // TimelineOps.CollapseLoneGroups): a recording that only ever had a screen row, or a
+            // saved edit from before lone groups were dissolved, opens already collapsed.
+            TimelineOps.CollapseLoneGroups(project);
             Project = project;
             _persist = persist;
             _saveScheduler = saveScheduler ?? (save => save());
@@ -1563,6 +1567,11 @@ namespace Clowd.VideoSDK.Editing
         /// half canvas width, centered. One undo entry restores all of it. Returns the live items
         /// (empty when the probe had no usable streams or the import was rolled back).
         ///
+        /// <paramref name="silentAudioStreams"/> names, by mp4 stream index, the audio streams
+        /// that hold nothing (<c>AudioSilenceScan.FindSilentStreams</c>, run by the caller off the
+        /// UI thread beside the probe): they get no row. The source still lists them — it
+        /// describes the file — and the link group counts only the rows actually made.
+        ///
         /// The <b>first</b> file into a project that has never held any (a blank project, started
         /// from the Video button rather than opened onto a recording) defines it instead: the
         /// output canvas, frame rate and sample rate are taken from the media, and its video lands
@@ -1570,7 +1579,7 @@ namespace Clowd.VideoSDK.Editing
         /// not a choice — and it is still resizable afterwards like any other.
         /// </summary>
         public IReadOnlyList<Item> ImportMedia(string path, MediaProbeResult probe, long startTicks,
-            object origin = null)
+            IReadOnlyCollection<int> silentAudioStreams = null, object origin = null)
         {
             if (String.IsNullOrEmpty(path))
                 throw new ArgumentException("The media path is empty.", nameof(path));
@@ -1594,13 +1603,14 @@ namespace Clowd.VideoSDK.Editing
                 if (String.IsNullOrWhiteSpace(baseName))
                     baseName = "Import";
 
-                // only multi-stream imports are linked: a group of one has nothing to keep in
-                // sync. The UI moves and deletes an import group as a unit (it is a per-file
-                // group, not a recording-segment group — see IsRippleGroup).
-                var linkGroup = streams.Count > 1 ? Guid.NewGuid() : (Guid?)null;
-
                 var videoStreams = streams.Where(s => s.Kind == StreamKind.Video).ToList();
-                var audioStreams = streams.Where(s => s.Kind == StreamKind.Audio).ToList();
+                var audioStreams = streams.Where(s => s.Kind == StreamKind.Audio
+                                                      && silentAudioStreams?.Contains(s.Index) != true).ToList();
+
+                // only multi-row imports are linked: a group of one has nothing to keep in sync.
+                // The UI moves and deletes an import group as a unit (it is a per-file group, not
+                // a recording-segment group — see IsRippleGroup).
+                var linkGroup = videoStreams.Count + audioStreams.Count > 1 ? Guid.NewGuid() : (Guid?)null;
 
                 for (var i = 0; i < videoStreams.Count; i++)
                 {
@@ -1867,6 +1877,10 @@ namespace Clowd.VideoSDK.Editing
             try
             {
                 result = edit(Project);
+                // every edit that can leave a link group with a single row behind — a track
+                // deleted or unlinked, a row's last items cut — ends with the group dissolved,
+                // inside the same mutation so one undo restores both.
+                TimelineOps.CollapseLoneGroups(Project);
                 Project.Normalize();
             }
             catch

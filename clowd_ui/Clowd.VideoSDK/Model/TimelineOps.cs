@@ -391,6 +391,35 @@ public static class TimelineOps
     }
 
     /// <summary>
+    /// Dissolves every link group whose members all sit on one track. A group exists to keep
+    /// <i>rows</i> in step — the recording's screen, webcam and audio trimming and cutting as one
+    /// — so once only one row is left in it (the audio rows deleted, the webcam unlinked, a
+    /// recording that never had anything but a screen) there is nothing left to keep in step,
+    /// and the group would only pin that row's clips in place. Cursor/keyboard overlay items
+    /// keep their group whatever the shape: validation requires it, and their row is defined by
+    /// the screen row it annotates. Returns true when anything changed.
+    /// </summary>
+    public static bool CollapseLoneGroups(Project project)
+    {
+        var changed = false;
+        foreach (var members in project.Items.Where(i => i.LinkGroupId != null)
+                                             .GroupBy(i => i.LinkGroupId.Value))
+        {
+            if (members.Any(m => m.Content is CursorContent or KeyboardContent))
+                continue;
+
+            if (members.Select(m => m.TrackId).Distinct().Skip(1).Any())
+                continue;
+
+            foreach (var m in members)
+                m.LinkGroupId = null;
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    /// <summary>
     /// Puts a track back into the link groups it was unlinked from, but only when that is still
     /// true: every item of the row must overlap exactly one group on the other tracks, and must
     /// agree with it on source alignment — same <c>TimelineStartTicks - SourceInTicks</c> offset,
