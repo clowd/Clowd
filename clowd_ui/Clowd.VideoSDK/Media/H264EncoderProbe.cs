@@ -41,17 +41,6 @@ namespace Clowd.VideoSDK.Media
 
         private const int ProbeFps = 30;
 
-        /// <summary>
-        /// VideoToolbox stays off until it is verified on a Mac. On the macos-15 CI runners
-        /// (2026-09-12) h264_videotoolbox opened and encoded, but every one of its packets was
-        /// refused by the mp4 muxer (<c>av_interleaved_write_frame</c>: Invalid argument), which
-        /// failed every render that reached it. Nobody has run the path on real hardware yet
-        /// (the MetalBackend note applies), so <see cref="TryExercise(H264EncoderSettings, int, int, int, int, HardwareFrames, out string)"/>
-        /// reports it as unavailable and Auto lands on x264 on macOS. Flip this once the
-        /// timestamps are understood and the VideoToolbox encoder test passes on a Mac.
-        /// </summary>
-        public const bool VideoToolboxEnabled = false;
-
         private static readonly object _sync = new object();
         private static VideoEncoder? _autoChoice;
 
@@ -167,12 +156,6 @@ namespace Clowd.VideoSDK.Media
         internal static bool TryExercise(H264EncoderSettings settings, int width, int height,
             int fpsNum, int fpsDen, HardwareFrames hardwareFrames, out string failure)
         {
-            if (settings.Encoder == VideoEncoder.VideoToolbox && !VideoToolboxEnabled)
-            {
-                failure = "h264_videotoolbox is disabled until its output is verified to mux on a Mac (see H264EncoderProbe.VideoToolboxEnabled)";
-                return false;
-            }
-
             var ctx = TryOpenContext(settings, width, height,
                 new AVRational { num = fpsDen, den = fpsNum }, new AVRational { num = fpsNum, den = fpsDen },
                 globalHeader: false, hardwareFrames, out failure);

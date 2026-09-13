@@ -490,8 +490,8 @@ namespace Clowd.VideoSDK.Tests
         public void VideoToolbox_encoder_writes_a_playable_mp4_when_it_opens_here()
         {
             RequireFFmpeg();
-            Assert.SkipUnless(OperatingSystem.IsMacOS(), "h264_videotoolbox is macOS only");
-            Assert.SkipUnless(H264EncoderProbe.CanOpen(VideoEncoder.VideoToolbox, out var why), why);
+            Assert.SkipUnless(OperatingSystem.IsMacOS() && H264EncoderProbe.CanOpen(VideoEncoder.VideoToolbox, out _),
+                "h264_videotoolbox is macOS only");
             var (log, ran, name) = RenderWith(VideoEncoder.VideoToolbox, crf: 21);
             Assert.Equal(VideoEncoder.VideoToolbox, ran);
             Assert.Equal("h264_videotoolbox", name);
