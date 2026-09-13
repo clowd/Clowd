@@ -26,7 +26,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = 0,
                 DurationTicks = Ms(10_000),
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = streamIndex, SourceInTicks = Ms(2_000) },
-                LinkGroupId = linkGroup,
+                GroupId = linkGroup,
             };
 
             screen = NewItem(screenTrack, 0);
@@ -92,7 +92,7 @@ namespace Clowd.VideoSDK.Tests
         public void Move_on_an_unlinked_item_moves_only_that_item()
         {
             var project = RecordingProject(out var screen, out var webcam, out var audio);
-            TimelineOps.Unlink(project, new[] { webcam.Id });
+            TimelineOps.Ungroup(project, new[] { webcam.Id });
 
             TimelineOps.Move(project, webcam.Id, Ms(1_500));
 
@@ -247,7 +247,7 @@ namespace Clowd.VideoSDK.Tests
         {
             var project = RecordingProject(out var screen, out _, out _);
             screen.Content = new TextContent { Text = "title" };
-            screen.LinkGroupId = null;
+            screen.GroupId = null;
 
             var applied = TimelineOps.TrimEnd(project, screen.Id, Ms(100_000));
 
@@ -261,7 +261,7 @@ namespace Clowd.VideoSDK.Tests
         public void Split_produces_back_to_back_items_with_correct_source_in()
         {
             var project = RecordingProject(out var screen, out _, out _);
-            TimelineOps.Unlink(project, project.Items.Select(i => i.Id).ToArray());
+            TimelineOps.Ungroup(project, project.Items.Select(i => i.Id).ToArray());
 
             Assert.True(TimelineOps.Split(project, screen.Id, Ms(4_000)));
 
@@ -285,7 +285,7 @@ namespace Clowd.VideoSDK.Tests
         public void Split_applies_to_every_covered_member_and_relinks_the_right_halves()
         {
             var project = RecordingProject(out var screen, out var webcam, out var audio);
-            var originalGroup = screen.LinkGroupId;
+            var originalGroup = screen.GroupId;
 
             Assert.True(TimelineOps.Split(project, screen.Id, Ms(4_000)));
 
@@ -296,11 +296,11 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(3, rights.Count);
 
             // left halves keep their group; right halves form a new one of their own.
-            Assert.All(lefts, i => Assert.Equal(originalGroup, i.LinkGroupId));
-            var rightGroup = rights[0].LinkGroupId;
+            Assert.All(lefts, i => Assert.Equal(originalGroup, i.GroupId));
+            var rightGroup = rights[0].GroupId;
             Assert.NotNull(rightGroup);
             Assert.NotEqual(originalGroup, rightGroup);
-            Assert.All(rights, i => Assert.Equal(rightGroup, i.LinkGroupId));
+            Assert.All(rights, i => Assert.Equal(rightGroup, i.GroupId));
 
             Assert.All(rights, i => Assert.Equal(Ms(4_000), i.TimelineStartTicks));
             Assert.All(rights, i => Assert.Equal(Ms(6_000), i.DurationTicks));
@@ -318,7 +318,7 @@ namespace Clowd.VideoSDK.Tests
         public void SplitItem_cuts_only_the_item_it_is_given()
         {
             var project = RecordingProject(out var screen, out var webcam, out var audio);
-            var originalGroup = screen.LinkGroupId;
+            var originalGroup = screen.GroupId;
 
             Assert.True(TimelineOps.SplitItem(project, screen.Id, Ms(4_000)));
 
@@ -333,8 +333,8 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(Ms(6_000), SourceIn(right));
 
             // both halves stay in the recording: the clip was cut, not unlinked.
-            Assert.Equal(originalGroup, right.LinkGroupId);
-            Assert.Equal(originalGroup, screen.LinkGroupId);
+            Assert.Equal(originalGroup, right.GroupId);
+            Assert.Equal(originalGroup, screen.GroupId);
         }
 
         /// <summary>A later group split still behaves, because it only ever acts on the members
@@ -417,10 +417,10 @@ namespace Clowd.VideoSDK.Tests
             var project = RecordingProject(out var screen, out var webcam, out _);
             // the webcam member starts later, so a split that is fine for the screen item lands
             // within MinSegment of the webcam item's start.
-            TimelineOps.Unlink(project, new[] { webcam.Id });
+            TimelineOps.Ungroup(project, new[] { webcam.Id });
             webcam.TimelineStartTicks = Ms(4_000) - TimelineOps.MinSegmentTicks / 2;
             webcam.DurationTicks = Ms(6_000);
-            TimelineOps.Link(project, project.Items.Select(i => i.Id).ToArray());
+            TimelineOps.Group(project, project.Items.Select(i => i.Id).ToArray());
 
             var before = project.ToJson();
             Assert.False(TimelineOps.Split(project, screen.Id, Ms(4_000)));
@@ -438,9 +438,9 @@ namespace Clowd.VideoSDK.Tests
         {
             var project = RecordingProject(out var screen, out var webcam, out _);
             // shorten the webcam member so the split point falls past its end.
-            TimelineOps.Unlink(project, new[] { webcam.Id });
+            TimelineOps.Ungroup(project, new[] { webcam.Id });
             webcam.DurationTicks = Ms(3_000);
-            TimelineOps.Link(project, project.Items.Select(i => i.Id).ToArray());
+            TimelineOps.Group(project, project.Items.Select(i => i.Id).ToArray());
 
             Assert.True(TimelineOps.Split(project, screen.Id, Ms(5_000)));
 
@@ -516,32 +516,32 @@ namespace Clowd.VideoSDK.Tests
         // ---- link / unlink ----
 
         [Fact]
-        public void Unlink_detaches_only_the_given_items()
+        public void Ungroup_detaches_only_the_given_items()
         {
             var project = RecordingProject(out var screen, out var webcam, out var audio);
 
-            TimelineOps.Unlink(project, new[] { audio.Id });
+            TimelineOps.Ungroup(project, new[] { audio.Id });
             TimelineOps.Move(project, screen.Id, Ms(2_000));
 
             Assert.Equal(Ms(2_000), screen.TimelineStartTicks);
             Assert.Equal(Ms(2_000), webcam.TimelineStartTicks);
             Assert.Equal(0, audio.TimelineStartTicks);
-            Assert.Null(audio.LinkGroupId);
+            Assert.Null(audio.GroupId);
         }
 
         [Fact]
         public void Link_creates_a_fresh_shared_group()
         {
             var project = RecordingProject(out var screen, out var webcam, out var audio);
-            var originalGroup = screen.LinkGroupId;
-            TimelineOps.Unlink(project, project.Items.Select(i => i.Id).ToArray());
+            var originalGroup = screen.GroupId;
+            TimelineOps.Ungroup(project, project.Items.Select(i => i.Id).ToArray());
 
-            var group = TimelineOps.Link(project, new[] { screen.Id, audio.Id });
+            var group = TimelineOps.Group(project, new[] { screen.Id, audio.Id });
 
             Assert.NotEqual(originalGroup, group);
-            Assert.Equal(group, screen.LinkGroupId);
-            Assert.Equal(group, audio.LinkGroupId);
-            Assert.Null(webcam.LinkGroupId);
+            Assert.Equal(group, screen.GroupId);
+            Assert.Equal(group, audio.GroupId);
+            Assert.Null(webcam.GroupId);
 
             TimelineOps.Move(project, screen.Id, Ms(1_000));
             Assert.Equal(Ms(1_000), audio.TimelineStartTicks);
@@ -554,17 +554,17 @@ namespace Clowd.VideoSDK.Tests
         public void UnlinkTrack_then_TryRelinkTrack_round_trips()
         {
             var project = RecordingProject(out var screen, out var webcam, out var audio);
-            var group = screen.LinkGroupId;
+            var group = screen.GroupId;
 
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
 
-            Assert.Null(webcam.LinkGroupId);
-            Assert.Equal(group, screen.LinkGroupId);
-            Assert.Equal(group, audio.LinkGroupId);
+            Assert.Null(webcam.GroupId);
+            Assert.Equal(group, screen.GroupId);
+            Assert.Equal(group, audio.GroupId);
 
-            Assert.True(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+            Assert.True(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
 
-            Assert.Equal(group, webcam.LinkGroupId);
+            Assert.Equal(group, webcam.GroupId);
             TimelineOps.Move(project, screen.Id, Ms(1_000));
             Assert.Equal(Ms(1_000), webcam.TimelineStartTicks);
         }
@@ -575,64 +575,64 @@ namespace Clowd.VideoSDK.Tests
             var project = RecordingProject(out var screen, out var webcam, out _);
             Assert.True(TimelineOps.Split(project, screen.Id, Ms(4_000)));
 
-            var leftGroup = screen.LinkGroupId;
-            var rightGroup = project.Items.Single(i => i.TrackId == screen.TrackId && i.Id != screen.Id).LinkGroupId;
+            var leftGroup = screen.GroupId;
+            var rightGroup = project.Items.Single(i => i.TrackId == screen.TrackId && i.Id != screen.Id).GroupId;
             var webcamRight = project.Items.Single(i => i.TrackId == webcam.TrackId && i.Id != webcam.Id);
 
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
 
-            Assert.True(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+            Assert.True(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
 
             Assert.NotEqual(leftGroup, rightGroup);
-            Assert.Equal(leftGroup, webcam.LinkGroupId);
-            Assert.Equal(rightGroup, webcamRight.LinkGroupId);
+            Assert.Equal(leftGroup, webcam.GroupId);
+            Assert.Equal(rightGroup, webcamRight.GroupId);
         }
 
         [Fact]
         public void TryRelinkTrack_accepts_a_row_that_was_only_trimmed()
         {
             var project = RecordingProject(out var screen, out var webcam, out _);
-            var group = screen.LinkGroupId;
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            var group = screen.GroupId;
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
 
             // trim moves the in-point with the start, so the source<->timeline mapping — and with
             // it the row's claim of sync — survives.
             TimelineOps.TrimStart(project, webcam.Id, Ms(1_000));
             TimelineOps.TrimEnd(project, webcam.Id, -Ms(1_000));
 
-            Assert.True(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
-            Assert.Equal(group, webcam.LinkGroupId);
+            Assert.True(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
+            Assert.Equal(group, webcam.GroupId);
         }
 
         [Fact]
         public void TryRelinkTrack_refuses_after_the_rest_of_the_group_moved()
         {
             var project = RecordingProject(out var screen, out var webcam, out _);
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             TimelineOps.Move(project, screen.Id, Ms(2_000));
 
             var before = project.ToJson();
-            Assert.False(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+            Assert.False(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
             Assert.Equal(before, project.ToJson()); // refusal leaves the project untouched
-            Assert.Null(webcam.LinkGroupId);
+            Assert.Null(webcam.GroupId);
 
             // and once the group has moved clear of the row there is nothing to join at all.
             TimelineOps.Move(project, screen.Id, Ms(20_000));
-            Assert.False(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
-            Assert.Null(webcam.LinkGroupId);
+            Assert.False(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
+            Assert.Null(webcam.GroupId);
         }
 
         [Fact]
         public void TryRelinkTrack_refuses_when_an_item_overlaps_two_groups()
         {
             var project = RecordingProject(out var screen, out var webcam, out _);
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             // the other rows are cut in two while the webcam row is one long item, so it has no
             // single group to belong to.
             Assert.True(TimelineOps.Split(project, screen.Id, Ms(4_000)));
 
             var before = project.ToJson();
-            Assert.False(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+            Assert.False(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
             Assert.Equal(before, project.ToJson());
         }
 
@@ -642,7 +642,7 @@ namespace Clowd.VideoSDK.Tests
         public void SetSpeed_scales_duration_and_keeps_the_source_span()
         {
             var project = RecordingProject(out _, out var webcam, out _);
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
 
             // 10s of timeline at 2x plays the same 10s of source in 5s.
             Assert.Equal(2.0, TimelineOps.SetSpeed(project, webcam.Id, 2.0));
@@ -658,7 +658,7 @@ namespace Clowd.VideoSDK.Tests
         public void SetSpeed_clamps_against_the_next_item_on_the_track()
         {
             var project = RecordingProject(out _, out var webcam, out _);
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             Assert.True(TimelineOps.SplitItem(project, webcam.Id, Ms(4_000)));
 
             // halving the left segment's speed wants 8s of timeline, but the right half starts
@@ -673,7 +673,7 @@ namespace Clowd.VideoSDK.Tests
         public void Trim_and_split_scale_source_movement_by_the_speed()
         {
             var project = RecordingProject(out _, out var webcam, out _);
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             TimelineOps.SetSpeed(project, webcam.Id, 2.0); // 5s timeline over source [2s, 12s)
 
             // trimming 1s off the start advances the source in-point by 2s.
@@ -693,7 +693,7 @@ namespace Clowd.VideoSDK.Tests
         public void TrimEnd_extension_is_bounded_by_the_source_at_the_item_speed()
         {
             var project = RecordingProject(out _, out var webcam, out _);
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             TimelineOps.SetSpeed(project, webcam.Id, 2.0); // 5s timeline over source [2s, 12s), stream 60s
 
             // remaining source is 48s, which at 2x is 24s of timeline extension.
@@ -704,17 +704,17 @@ namespace Clowd.VideoSDK.Tests
         public void TryRelinkTrack_refuses_a_retimed_row()
         {
             var project = RecordingProject(out _, out var webcam, out _);
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             TimelineOps.SetSpeed(project, webcam.Id, 2.0);
             TimelineOps.SetSpeed(project, webcam.Id, 1.0);
 
             // the round-trip restored the row's geometry exactly, so only the speed history
             // separates it — and with speed 1 restored it may relink again.
-            Assert.True(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+            Assert.True(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
 
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             TimelineOps.SetSpeed(project, webcam.Id, 2.0);
-            Assert.False(TimelineOps.TryRelinkTrack(project, webcam.TrackId));
+            Assert.False(TimelineOps.TryRegroupTrack(project, webcam.TrackId));
         }
 
         // ------------------------------------------------------------- lone-group collapse
@@ -729,18 +729,18 @@ namespace Clowd.VideoSDK.Tests
 
             // three rows: nothing to do
             Assert.False(TimelineOps.CollapseLoneGroups(project));
-            Assert.NotNull(screen.LinkGroupId);
+            Assert.NotNull(screen.GroupId);
 
             // two rows: still a sync worth keeping
-            TimelineOps.UnlinkTrack(project, webcam.TrackId);
+            TimelineOps.UngroupTrack(project, webcam.TrackId);
             Assert.False(TimelineOps.CollapseLoneGroups(project));
-            Assert.NotNull(screen.LinkGroupId);
-            Assert.Equal(screen.LinkGroupId, audio.LinkGroupId);
+            Assert.NotNull(screen.GroupId);
+            Assert.Equal(screen.GroupId, audio.GroupId);
 
             // one row: the group pins the screen's clips for nothing
-            TimelineOps.UnlinkTrack(project, audio.TrackId);
+            TimelineOps.UngroupTrack(project, audio.TrackId);
             Assert.True(TimelineOps.CollapseLoneGroups(project));
-            Assert.All(project.Items, i => Assert.Null(i.LinkGroupId));
+            Assert.All(project.Items, i => Assert.Null(i.GroupId));
 
             Assert.False(TimelineOps.CollapseLoneGroups(project)); // idempotent
         }
@@ -756,10 +756,10 @@ namespace Clowd.VideoSDK.Tests
             project.Items.Remove(audio);
             Assert.True(TimelineOps.SplitItem(project, screen.Id, Ms(5_000)));
             Assert.Equal(2, project.Items.Count);
-            Assert.All(project.Items, i => Assert.Equal(screen.LinkGroupId, i.LinkGroupId));
+            Assert.All(project.Items, i => Assert.Equal(screen.GroupId, i.GroupId));
 
             Assert.True(TimelineOps.CollapseLoneGroups(project));
-            Assert.All(project.Items, i => Assert.Null(i.LinkGroupId));
+            Assert.All(project.Items, i => Assert.Null(i.GroupId));
         }
 
         /// <summary>Cursor/keyboard items are hard-synced to the screen by their group and must
@@ -780,7 +780,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = 0,
                 DurationTicks = Ms(10_000),
                 Content = new CursorContent(),
-                LinkGroupId = screen.LinkGroupId,
+                GroupId = screen.GroupId,
             };
             project.Items.Add(cursor);
 
@@ -790,7 +790,7 @@ namespace Clowd.VideoSDK.Tests
             // cursor row alone in the group (screen row deleted): kept, validation needs it
             project.Items.Remove(screen);
             Assert.False(TimelineOps.CollapseLoneGroups(project));
-            Assert.NotNull(cursor.LinkGroupId);
+            Assert.NotNull(cursor.GroupId);
         }
     }
 }

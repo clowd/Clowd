@@ -605,7 +605,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = start,
                 DurationTicks = duration,
                 Content = content,
-                LinkGroupId = Guid.NewGuid(),
+                GroupId = Guid.NewGuid(),
             };
             p.Items.Add(item);
             return item;
@@ -761,11 +761,11 @@ namespace Clowd.VideoSDK.Tests
             var group = Guid.NewGuid();
             var screen = AddItem(p, AddTrack(p, TrackKind.Video, 0),
                 new MediaContent { SourceId = source.Id, StreamIndex = 0, SourceInTicks = 2 * Sec });
-            screen.LinkGroupId = group;
+            screen.GroupId = group;
 
             var keys = AddItem(p, AddTrack(p, TrackKind.Video, 1),
                 new KeyboardContent { SourceId = source.Id, FontSize = 10 });
-            keys.LinkGroupId = group;
+            keys.GroupId = group;
             keys.Transform = new Transform { X = 0.5, Y = 0.9, Scale = 1.0 };
 
             // without the screen item's clock this instant would show nothing (item-relative

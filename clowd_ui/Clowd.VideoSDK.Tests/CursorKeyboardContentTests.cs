@@ -44,7 +44,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = 0,
                 DurationTicks = Ms(20_000),
                 Content = new MediaContent { SourceId = source.Id, StreamIndex = 0 },
-                LinkGroupId = group,
+                GroupId = group,
             };
             cursorItem = new Item
             {
@@ -73,7 +73,7 @@ namespace Clowd.VideoSDK.Tests
                     Size = 0.11,
                     Distance = 0, // a glow sits on the glyph; only a shadow falls
                 },
-                LinkGroupId = group,
+                GroupId = group,
             };
             keyboardItem = new Item
             {
@@ -91,7 +91,7 @@ namespace Clowd.VideoSDK.Tests
                     BackgroundColor = 0x66112233,
                 },
                 Transform = new Transform { X = 0.5, Y = 0.85, Scale = 0.5 },
-                LinkGroupId = group,
+                GroupId = group,
             };
 
             return new Project
@@ -291,11 +291,11 @@ namespace Clowd.VideoSDK.Tests
         public void Validate_requires_a_link_group_on_overlay_items()
         {
             var project = OverlayProject(out _, out var cursorItem, out var keyboardItem);
-            cursorItem.LinkGroupId = null;
-            keyboardItem.LinkGroupId = null;
+            cursorItem.GroupId = null;
+            keyboardItem.GroupId = null;
 
             var errors = project.Validate();
-            Assert.Equal(2, errors.Count(e => e.Contains("carries no link group")));
+            Assert.Equal(2, errors.Count(e => e.Contains("carries no group")));
         }
 
         [Fact]

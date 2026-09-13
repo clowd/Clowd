@@ -83,7 +83,7 @@ namespace Clowd.UI.VideoEditor.Inspector
             dotKeyFilter.DefaultValue = SelectedItemViewModel.DefaultKeystrokeFilterOption;
 
             btnFont.Click += async (_, _) => await PickFontAsync();
-            btnDesync.Click += async (_, _) => await ConfirmDesyncAsync();
+            btnUngroup.Click += async (_, _) => await ConfirmUngroupAsync();
             colorWell.PointerPressed += (_, e) => OpenColorPicker(e,
                 () => _vm.TextColorHex, hex => _vm.TextColorHex = hex);
             keyTextColorWell.PointerPressed += (_, e) => OpenColorPicker(e,
@@ -316,22 +316,22 @@ namespace Clowd.UI.VideoEditor.Inspector
             e.Handled = true;
         }
 
-        /// <summary>Desync is one-way, so it gets a real explanation and a yes/no — not a bare
+        /// <summary>Ungroup is one-way, so it gets a real explanation and a yes/no — not a bare
         /// button that quietly severs the row from its recording.</summary>
-        private async System.Threading.Tasks.Task ConfirmDesyncAsync()
+        private async System.Threading.Tasks.Task ConfirmUngroupAsync()
         {
             var vm = _vm;
             if (vm == null)
                 return;
 
             var confirmed = await NiceDialog.ShowYesNoPromptAsync(this, NiceDialogIcon.Warning,
-                "This track's position in the timeline is currently synced with the original " +
-                "recording: it can be split, trimmed and cropped, but not moved. Desyncing lets " +
-                "you move it freely — but it cannot be re-linked, so it will be permanently out " +
-                "of sync with the other tracks from this recording.",
-                "Desync this object?");
+                "This track is grouped with the other tracks from its recording: they move, split " +
+                "and cut together, so they always stay aligned. Ungrouping lets this track move on " +
+                "its own — but it cannot be regrouped, so it can end up permanently out of step " +
+                "with the rest of the recording.",
+                "Ungroup this object?");
 
-            var command = (System.Windows.Input.ICommand)vm.CommandUnlink;
+            var command = (System.Windows.Input.ICommand)vm.CommandUngroup;
             if (confirmed && command.CanExecute(null))
                 command.Execute(null);
         }

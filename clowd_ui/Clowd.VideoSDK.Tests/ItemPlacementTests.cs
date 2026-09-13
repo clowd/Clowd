@@ -497,7 +497,7 @@ namespace Clowd.VideoSDK.Tests
                 DurationTicks = 5 * TimeSpan.TicksPerSecond,
                 Content = new CursorContent { SourceId = project.Sources[0].Id },
                 Transform = new ModelTransform(),
-                LinkGroupId = Guid.NewGuid(),
+                GroupId = Guid.NewGuid(),
             };
             project.Tracks.Add(track);
             project.Items.Add(cursor);
@@ -1053,7 +1053,7 @@ namespace Clowd.VideoSDK.Tests
                     PauseBreakMs = 10,
                 },
                 Transform = new ModelTransform { X = 0.5, Y = 0.85, Scale = 0.5 },
-                LinkGroupId = Guid.NewGuid(),
+                GroupId = Guid.NewGuid(),
             };
 
             project.Tracks.Add(backTrack);

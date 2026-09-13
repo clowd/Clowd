@@ -144,7 +144,7 @@ namespace Clowd.VideoSDK.Tests
                 foreach (var item in project.Items.Where(i => i.TrackId == track.Id).OrderBy(i => i.TimelineStartTicks))
                 {
                     int group = 0;
-                    if (item.LinkGroupId is { } id && !groups.TryGetValue(id, out group))
+                    if (item.GroupId is { } id && !groups.TryGetValue(id, out group))
                         groups[id] = group = groups.Count + 1;
 
                     text.AppendLine($"  {item.TimelineStartTicks}+{item.DurationTicks} " +
@@ -185,7 +185,7 @@ namespace Clowd.VideoSDK.Tests
 
             Assert.Equal(new[] { "Screen", "Webcam", "Audio" }, project.Tracks.Select(t => t.Name));
             Assert.Equal(3, project.Items.Count);
-            Assert.Single(project.Items.Select(i => i.LinkGroupId).Distinct());
+            Assert.Single(project.Items.Select(i => i.GroupId).Distinct());
 
             foreach (var item in project.Items)
             {
@@ -379,7 +379,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(VideoPath, source.Path);
             Assert.Equal(new[] { 0, 1, 2 }, source.Streams.Select(s => s.Index).ToArray());
             Assert.Equal(new[] { "Screen", "Webcam", "Audio" }, project.Tracks.Select(t => t.Name));
-            Assert.Single(project.Items.Select(i => i.LinkGroupId).Distinct());
+            Assert.Single(project.Items.Select(i => i.GroupId).Distinct());
 
             // the trim really is one item per row, 2151ms into the source and running to the end
             var screen = Assert.Single(project.Items, i => ((MediaContent)i.Content).StreamIndex == 0);
@@ -440,7 +440,7 @@ namespace Clowd.VideoSDK.Tests
                 Assert.Equal(2, items.Count); // one per keep segment, like every other row
             }
 
-            Assert.Single(project.Items.Select(i => i.LinkGroupId).Distinct());
+            Assert.Single(project.Items.Select(i => i.GroupId).Distinct());
         }
 
         [Fact]
@@ -801,8 +801,8 @@ namespace Clowd.VideoSDK.Tests
                 var items = reloaded.Items.Where(i => ((MediaContent)i.Content).SourceId == import.Id).ToList();
                 Assert.Equal(2, items.Count);
                 Assert.Equal(2_000 * Ms, items[0].TimelineStartTicks);
-                Assert.NotNull(items[0].LinkGroupId);
-                Assert.Equal(items[0].LinkGroupId, items[1].LinkGroupId);
+                Assert.NotNull(items[0].GroupId);
+                Assert.Equal(items[0].GroupId, items[1].GroupId);
 
                 var rows = items.Select(i => reloaded.Tracks.Single(t => t.Id == i.TrackId)).ToList();
                 Assert.Contains(rows, t => t.Kind == TrackKind.Video && t.Name == "overlay");
@@ -937,7 +937,7 @@ namespace Clowd.VideoSDK.Tests
 
                 // an unlinked item can be dragged; the gesture is the undo unit, as in the timeline
                 var moved = session.Project.Items.First(i => i.TrackId == screenTrack.Id);
-                session.UnlinkTrack(screenTrack.Id);
+                session.UngroupTrack(screenTrack.Id);
                 using (var gesture = session.BeginGesture("Move"))
                 {
                     session.MoveItem(moved.Id, 250 * Ms);

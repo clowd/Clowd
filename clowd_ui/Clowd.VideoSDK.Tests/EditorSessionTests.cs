@@ -36,7 +36,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = 0,
                 DurationTicks = Ms(10_000),
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = streamIndex, SourceInTicks = Ms(2_000) },
-                LinkGroupId = linkGroup,
+                GroupId = linkGroup,
             };
 
             screen = NewItem(screenTrack, 0);
@@ -143,10 +143,10 @@ namespace Clowd.VideoSDK.Tests
                 ("SplitAtPlayhead", null, (s, sc, wc, au) => Assert.True(s.SplitAtPlayhead(Ms(4_000)))),
                 ("RippleDeleteItem", null, (s, sc, wc, au) => s.RippleDeleteItem(sc.Id)),
                 ("DeleteItem", null, (s, sc, wc, au) => s.DeleteItem(wc.Id)),
-                ("UnlinkTrack", null, (s, sc, wc, au) => s.UnlinkTrack(wc.TrackId)),
-                ("TryRelinkTrack",
-                    (s, sc, wc, au) => s.UnlinkTrack(wc.TrackId),
-                    (s, sc, wc, au) => Assert.True(s.TryRelinkTrack(wc.TrackId))),
+                ("UngroupTrack", null, (s, sc, wc, au) => s.UngroupTrack(wc.TrackId)),
+                ("TryRegroupTrack",
+                    (s, sc, wc, au) => s.UngroupTrack(wc.TrackId),
+                    (s, sc, wc, au) => Assert.True(s.TryRegroupTrack(wc.TrackId))),
                 ("SetTrackHidden", null, (s, sc, wc, au) => s.SetTrackHidden(wc.TrackId, true)),
                 ("SetTrackMuted", null, (s, sc, wc, au) => s.SetTrackMuted(au.TrackId, true)),
                 ("SetTrackLocked", null, (s, sc, wc, au) => s.SetTrackLocked(sc.TrackId, true)),
@@ -938,14 +938,14 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0.5, image.Transform.X);
             Assert.Equal(0.5, image.Transform.Y);
             Assert.Equal(0.5, image.Transform.Scale);
-            Assert.Null(image.LinkGroupId);
+            Assert.Null(image.GroupId);
         }
 
         [Fact]
         public void ImportMedia_creates_source_tracks_and_linked_items_in_one_undo_entry()
         {
             var session = NewSession(out var screen, out _, out _, out _);
-            var recordingGroup = screen.LinkGroupId;
+            var recordingGroup = screen.GroupId;
             var before = session.Project.ToJson();
 
             var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(), Ms(2_000));
@@ -975,9 +975,9 @@ namespace Clowd.VideoSDK.Tests
             Assert.All(created, i => Assert.Equal(0L, ((MediaContent)i.Content).SourceInTicks));
             Assert.Equal(Ms(8_000), videoItem.DurationTicks);
             Assert.Equal(Ms(7_900), audioItem.DurationTicks);
-            Assert.NotNull(videoItem.LinkGroupId);
-            Assert.Equal(videoItem.LinkGroupId, audioItem.LinkGroupId);
-            Assert.NotEqual(recordingGroup, videoItem.LinkGroupId);
+            Assert.NotNull(videoItem.GroupId);
+            Assert.Equal(videoItem.GroupId, audioItem.GroupId);
+            Assert.NotEqual(recordingGroup, videoItem.GroupId);
             Assert.Equal(0.5, videoItem.Transform.X);
 
             session.Undo();
@@ -993,7 +993,7 @@ namespace Clowd.VideoSDK.Tests
             var created = session.ImportMedia(TestPath.Native(@"C:\media\clip.mp4"), ClipProbe(withAudio: false), 0);
 
             var item = Assert.Single(created);
-            Assert.Null(item.LinkGroupId);
+            Assert.Null(item.GroupId);
         }
 
         /// <summary>A silent audio stream (as the caller's scan reported it) gets no row: the
@@ -1011,7 +1011,7 @@ namespace Clowd.VideoSDK.Tests
             var item = Assert.Single(created);
             Assert.Empty(session.Project.Validate());
             Assert.Equal(0, ((MediaContent)item.Content).StreamIndex);
-            Assert.Null(item.LinkGroupId);
+            Assert.Null(item.GroupId);
             Assert.Equal(tracksBefore + 1, session.Project.Tracks.Count);
 
             var source = session.Project.Sources.Single(s => s.Path == TestPath.Native(@"C:\media\clip.mp4"));
@@ -1028,7 +1028,7 @@ namespace Clowd.VideoSDK.Tests
         /// the group would only pin them, and a pinned clip is the one thing the sync gate
         /// forbids dragging. So they are not ripple groups, and one moves without the other.</summary>
         [Fact]
-        public void A_screen_only_recording_opens_unlinked_and_movable()
+        public void A_screen_only_recording_opens_ungrouped_and_movable()
         {
             var project = Model.RecordingProject.Build(new RecordingProjectSpec
             {
@@ -1039,12 +1039,12 @@ namespace Clowd.VideoSDK.Tests
                 Segments = new[] { new KeepSegment(0, Ms(10_000)), new KeepSegment(Ms(20_000), Ms(10_000)) },
                 Ids = RecordingIds.New(0),
             });
-            Assert.All(project.Items, i => Assert.NotNull(i.LinkGroupId)); // Build itself still groups
+            Assert.All(project.Items, i => Assert.NotNull(i.GroupId)); // Build itself still groups
 
             var session = new EditorSession(project, null, null);
 
             Assert.Equal(2, session.Project.Items.Count);
-            Assert.All(session.Project.Items, i => Assert.Null(i.LinkGroupId));
+            Assert.All(session.Project.Items, i => Assert.Null(i.GroupId));
             Assert.All(session.Project.Items, i => Assert.False(session.IsRippleGroup(i.Id)));
 
             var second = session.Project.Items.Single(i => i.TimelineStartTicks == Ms(10_000));
@@ -1057,22 +1057,22 @@ namespace Clowd.VideoSDK.Tests
         /// and the group goes with them — inside the same mutation, so one undo brings back rows
         /// and link alike.</summary>
         [Fact]
-        public void Deleting_the_other_rows_unlinks_the_last_one()
+        public void Deleting_the_other_rows_ungroups_the_last_one()
         {
             var session = NewSession(out var screen, out var webcam, out var audio, out _);
             var before = session.Project.ToJson();
 
             Assert.True(session.DeleteTrack(webcam.TrackId));
-            Assert.NotNull(session.Project.Items.Single(i => i.Id == screen.Id).LinkGroupId); // still two rows
+            Assert.NotNull(session.Project.Items.Single(i => i.Id == screen.Id).GroupId); // still two rows
 
             Assert.True(session.DeleteTrack(audio.TrackId));
             var lone = session.Project.Items.Single(i => i.Id == screen.Id);
-            Assert.Null(lone.LinkGroupId);
+            Assert.Null(lone.GroupId);
             Assert.False(session.IsRippleGroup(screen.Id));
 
             session.Undo();
             Assert.Equal(2, session.Project.Tracks.Count);
-            Assert.NotNull(session.Project.Items.Single(i => i.Id == screen.Id).LinkGroupId);
+            Assert.NotNull(session.Project.Items.Single(i => i.Id == screen.Id).GroupId);
             session.Undo();
             Assert.Equal(before, session.Project.ToJson());
         }
@@ -1080,14 +1080,14 @@ namespace Clowd.VideoSDK.Tests
         /// <summary>Unlinking every other row is the same thing said differently: the row that
         /// was never unlinked is unlinked too, because there is nothing left to be linked to.</summary>
         [Fact]
-        public void Unlinking_every_other_row_unlinks_the_last_one()
+        public void Ungrouping_every_other_row_ungroups_the_last_one()
         {
             var session = NewSession(out var screen, out var webcam, out var audio, out _);
 
-            session.UnlinkTrack(webcam.TrackId);
-            session.UnlinkTrack(audio.TrackId);
+            session.UngroupTrack(webcam.TrackId);
+            session.UngroupTrack(audio.TrackId);
 
-            Assert.All(session.Project.Items, i => Assert.Null(i.LinkGroupId));
+            Assert.All(session.Project.Items, i => Assert.Null(i.GroupId));
             Assert.False(session.IsRippleGroup(screen.Id));
         }
 

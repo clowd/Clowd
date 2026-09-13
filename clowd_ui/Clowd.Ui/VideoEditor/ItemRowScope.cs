@@ -12,7 +12,7 @@ namespace Clowd.UI.VideoEditor
     /// cropped to, are properties of the <i>feed</i>, not of a segment — so a transform edit on any
     /// segment writes every segment of that feed on the row in one <see cref="EditorSession.EditItems"/>
     /// call, exactly as the v1 webcam pane behaved. "The same feed" is the same source stream on
-    /// the same track — not the link group, which says whether rows trim and cut together and is
+    /// the same track — not the group, which says whether rows trim and cut together and is
     /// dissolved once a recording is down to one row (see <c>TimelineOps.CollapseLoneGroups</c>);
     /// a screen-only recording's segments still share their placement. A cursor or keyboard
     /// overlay row is one feed too — its segments mirror the screen's, and its style is the row's

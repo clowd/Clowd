@@ -26,12 +26,12 @@ namespace Clowd.UI.VideoEditor.Inspector
     /// <b>What fans out over the row.</b> A recording row's items are the split segments of one
     /// continuous feed: where that picture sits on the canvas, and what it is masked or cropped to,
     /// are properties of the <i>feed</i>, not of a segment — so a transform/mask/crop edit on any
-    /// segment writes every linked segment of the row in one <see cref="EditorSession.EditItems"/>
+    /// segment writes every grouped segment of the row in one <see cref="EditorSession.EditItems"/>
     /// call (one pipeline run, one undo entry — see <see cref="ItemRowScope"/>, which the preview
     /// gizmo shares so a spinner and a drag touch the same items), exactly as the webcam sidebar
     /// this replaces behaved. Everything that is about a segment's own edges or its own sound — entry/exit
     /// transitions and volume — stays single-item, because varying those per segment is precisely
-    /// why the user split the row. An unlinked item (an import, a text card, an unlinked row) is a
+    /// why the user split the row. An ungrouped item (an import, a text card, an ungrouped row) is a
     /// row of one either way, so both paths agree there.
     ///
     /// Deliberately free of Avalonia types: the panel binds to this, and the tests drive it with no
@@ -535,8 +535,8 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         private bool _trackHidden;
         private bool _trackMuted;
-        private bool _isLinked;
-        private bool _canDesync;
+        private bool _isGrouped;
+        private bool _canUngroup;
 
         private bool _showSpeed;
         private double _speed = 1.0;
@@ -605,11 +605,11 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         public SelectedItemViewModel()
         {
-            CommandUnlink = new RelayCommand
+            CommandUngroup = new RelayCommand
             {
-                Executed = _ => Unlink(),
-                CanExecute = _ => CanDesync,
-                Text = "Unlink row",
+                Executed = _ => Ungroup(),
+                CanExecute = _ => CanUngroup,
+                Text = "Ungroup row",
             };
         }
 
@@ -666,8 +666,8 @@ namespace Clowd.UI.VideoEditor.Inspector
             }
         }
 
-        /// <summary>Turns the row's sync (link group) off — the header toggle's inspector twin.</summary>
-        public RelayCommand CommandUnlink { get; }
+        /// <summary>Turns the row's sync (group) off — the header toggle's inspector twin.</summary>
+        public RelayCommand CommandUngroup { get; }
 
         // ------------------------------------------------------------------- section visibility
 
@@ -1531,7 +1531,7 @@ namespace Clowd.UI.VideoEditor.Inspector
                 // an explicit height seeded from what the item is drawn at right now, so the
                 // picture does not move — the point is the free edge handles, not a jump. Read
                 // BEFORE the aspect is cleared: the seed is the drawn (aspect-shaped) height.
-                // Per item, not per row: linked segments share the transform's numbers but each
+                // Per item, not per row: grouped segments share the transform's numbers but each
                 // resolves its own content aspect.
                 EditRow("sel:aspect", i =>
                 {
@@ -1983,15 +1983,15 @@ namespace Clowd.UI.VideoEditor.Inspector
                 == System.Runtime.InteropServices.Architecture.Arm64;
 
         /// <summary>True when the selected item still moves with the rest of its recording.</summary>
-        public bool IsLinked => _isLinked;
+        public bool IsGrouped => _isGrouped;
 
-        /// <summary>Whether the synced-object banner offers the Desync button. The cursor and
+        /// <summary>Whether the grouped-object banner offers the Ungroup button. The cursor and
         /// keystroke overlays only make sense against the recording their input data came from,
         /// so they can never be cut loose — the banner explains the lock but offers no way out.</summary>
-        public bool CanDesync => _canDesync;
+        public bool CanUngroup => _canUngroup;
 
         /// <summary>The Speed row: media items (video or audio) only, and only once the row is
-        /// desynced — a linked segment keeps the recording's own clock, so re-timing it is not
+        /// ungrouped — a grouped segment keeps the recording's own clock, so re-timing it is not
         /// offered until the user cuts it loose.</summary>
         public bool ShowSpeed => _showSpeed;
 
@@ -2077,7 +2077,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         }
 
         /// <summary>The zoom item's magnification (1 = untouched). Single-item like every other
-        /// property of an effect item: effect items are never linked into a row.</summary>
+        /// property of an effect item: effect items are never grouped into a row.</summary>
         public double ZoomFactor
         {
             get => _zoomFactor;
@@ -2218,7 +2218,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// of these two sections writes the whole row (<see cref="EditCursor"/> /
         /// <see cref="EditKeyboard"/> fan out like <see cref="EditRow"/>): the segments of an
         /// overlay row are the split pieces of one continuous overlay, so a style the user picked
-        /// on one piece belongs to all of them — an unlinked row is a row of one either way.
+        /// on one piece belongs to all of them — an ungrouped row is a row of one either way.
         /// </summary>
         public NamedOption CursorStyle
         {
@@ -3022,14 +3022,14 @@ namespace Clowd.UI.VideoEditor.Inspector
                 if (track is { Kind: TrackKind.Audio })
                     Set(ref _denoiseStrength, track.DenoiseStrength, nameof(DenoiseStrength));
                 OnPropertyChanged(nameof(ShowDenoiseStrength));
-                Set(ref _isLinked, item?.LinkGroupId != null, nameof(IsLinked));
-                Set(ref _canDesync,
-                    _isLinked && item.Content is not CursorContent and not KeyboardContent,
-                    nameof(CanDesync));
-                CommandUnlink.RaiseCanExecuteChanged();
+                Set(ref _isGrouped, item?.GroupId != null, nameof(IsGrouped));
+                Set(ref _canUngroup,
+                    _isGrouped && item.Content is not CursorContent and not KeyboardContent,
+                    nameof(CanUngroup));
+                CommandUngroup.RaiseCanExecuteChanged();
 
                 var media = item?.Content as MediaContent;
-                Set(ref _showSpeed, media != null && item.LinkGroupId == null, nameof(ShowSpeed));
+                Set(ref _showSpeed, media != null && item.GroupId == null, nameof(ShowSpeed));
                 Set(ref _speed, TimelineOps.SpeedOf(media), nameof(SpeedChoice));
 
                 if (item?.Content is SpeedContent speedEffect)
@@ -3239,8 +3239,8 @@ namespace Clowd.UI.VideoEditor.Inspector
 
         // ------------------------------------------------------------------------- write paths
 
-        /// <summary>The row-wide write (see the class remarks): every linked segment of the
-        /// selected item's row in one mutation, or just the item when it is unlinked.</summary>
+        /// <summary>The row-wide write (see the class remarks): every grouped segment of the
+        /// selected item's row in one mutation, or just the item when it is ungrouped.</summary>
         private void EditRow(string coalesceKey, Action<Item> edit) => EditRow(coalesceKey, edit, this);
 
         /// <summary>
@@ -3248,7 +3248,7 @@ namespace Clowd.UI.VideoEditor.Inspector
         /// not fight the control being held; the aspect/crop writes pass null instead — they change
         /// state whose mirrors (tile selection, crop total, the height row) the setters do not
         /// maintain by hand, so the inspector wants its own <see cref="Session_ProjectChanged"/>
-        /// re-read, exactly like <see cref="Unlink"/>.
+        /// re-read, exactly like <see cref="Ungroup"/>.
         /// </summary>
         private void EditRow(string coalesceKey, Action<Item> edit, object origin)
         {
@@ -3602,16 +3602,16 @@ namespace Clowd.UI.VideoEditor.Inspector
                 EditSelected("sel:rampexit", i => i.Exit = Build());
         }
 
-        private void Unlink()
+        private void Ungroup()
         {
             var item = SelectedItem;
             var track = SelectedTrack;
-            if (item == null || track == null || item.LinkGroupId == null)
+            if (item == null || track == null || item.GroupId == null)
                 return;
 
-            // origin null (not this): unlinking changes state the setters do not mirror, so the
+            // origin null (not this): ungrouping changes state the setters do not mirror, so the
             // inspector wants its own ProjectChanged re-read.
-            _session.UnlinkTrack(track.Id, null);
+            _session.UngroupTrack(track.Id, null);
         }
 
         // ----------------------------------------------------------------------- model helpers

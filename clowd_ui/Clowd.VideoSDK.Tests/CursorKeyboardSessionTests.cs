@@ -64,7 +64,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = startTicks,
                 DurationTicks = durationTicks,
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 0, SourceInTicks = startTicks },
-                LinkGroupId = group,
+                GroupId = group,
             });
             project.Items.Add(new Item
             {
@@ -73,7 +73,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = startTicks,
                 DurationTicks = durationTicks,
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 1, SourceInTicks = startTicks },
-                LinkGroupId = group,
+                GroupId = group,
             });
         }
 
@@ -135,8 +135,8 @@ namespace Clowd.VideoSDK.Tests
             {
                 Assert.Equal(screenItems[i].TimelineStartTicks, cursorItems[i].TimelineStartTicks);
                 Assert.Equal(screenItems[i].DurationTicks, cursorItems[i].DurationTicks);
-                Assert.Equal(screenItems[i].LinkGroupId, cursorItems[i].LinkGroupId);
-                Assert.NotNull(cursorItems[i].LinkGroupId);
+                Assert.Equal(screenItems[i].GroupId, cursorItems[i].GroupId);
+                Assert.NotNull(cursorItems[i].GroupId);
 
                 var content = (CursorContent)cursorItems[i].Content;
                 Assert.Equal(session.Project.Sources.Single().Id, content.SourceId);
@@ -213,15 +213,15 @@ namespace Clowd.VideoSDK.Tests
             var session = NewSession(out var screenTrack, out _, out _);
             var project = session.Project;
             var loose = project.Items.First(i => i.TrackId == screenTrack.Id);
-            loose.LinkGroupId = null;
+            loose.GroupId = null;
 
             session.AddCursorTrack();
 
             var refreshed = session.Project.Items.Single(i => i.Id == loose.Id);
-            Assert.NotNull(refreshed.LinkGroupId);
+            Assert.NotNull(refreshed.GroupId);
             var mirror = session.Project.Items.Single(i =>
                 i.Content is CursorContent && i.TimelineStartTicks == refreshed.TimelineStartTicks);
-            Assert.Equal(refreshed.LinkGroupId, mirror.LinkGroupId);
+            Assert.Equal(refreshed.GroupId, mirror.GroupId);
             Assert.Empty(session.Project.Validate());
         }
 
@@ -489,16 +489,16 @@ namespace Clowd.VideoSDK.Tests
             var undoCount = 0;
             session.HistoryChanged += (_, _) => undoCount++;
 
-            session.UnlinkTrack(cursor.TrackId);
-            session.UnlinkTrack(keys.TrackId);
+            session.UngroupTrack(cursor.TrackId);
+            session.UngroupTrack(keys.TrackId);
 
             Assert.Equal(json, session.Project.ToJson());
             Assert.Equal(0, undoCount); // refused before the pipeline, not rolled back inside it
 
             // a normal row still unlinks.
-            session.UnlinkTrack(webcamTrack.Id);
+            session.UngroupTrack(webcamTrack.Id);
             Assert.All(session.Project.Items.Where(i => i.TrackId == webcamTrack.Id),
-                i => Assert.Null(i.LinkGroupId));
+                i => Assert.Null(i.GroupId));
         }
 
         [Fact]

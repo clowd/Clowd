@@ -778,7 +778,20 @@
                         ToolTip.Tip="Hide the timeline" />
                 </StackPanel>
 
-                <Panel />
+                <!--  the stretch between the transport (left) and the volume cluster (right):
+                      what the timeline is doing right now, when there is something to say. Only
+                      a group drag speaks here today ("Dragging N grouped clips"), in the group
+                      badge's orange so the text and the highlighted clips read as one cue.  -->
+                <Panel>
+                    <TextBlock
+                        x:Name="txtGroupDrag"
+                        Margin="12,2,12,0"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontWeight="SemiBold"
+                        Foreground="#FF9F43"
+                        IsVisible="False" />
+                </Panel>
             </DockPanel>
         </Border>
 

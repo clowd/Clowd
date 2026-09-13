@@ -68,7 +68,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = startTicks,
                 DurationTicks = durationTicks,
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 0, SourceInTicks = startTicks },
-                LinkGroupId = group,
+                GroupId = group,
             };
             project.Items.Add(item);
             project.Items.Add(new Item
@@ -78,7 +78,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = startTicks,
                 DurationTicks = durationTicks,
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 1, SourceInTicks = startTicks },
-                LinkGroupId = group,
+                GroupId = group,
             });
             return item;
         }
@@ -232,7 +232,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void OverlayRows_AreSyncedButOfferNoDesync()
+        public void OverlayRows_AreGroupedButOfferNoUngroup()
         {
             // the overlays read the recording's input capture at the recording's own times, so
             // their sync is not a toggle: the banner shows, the Desync button does not
@@ -241,20 +241,20 @@ namespace Clowd.VideoSDK.Tests
             var keys = session.AddKeyboardTrack();
 
             session.Select(cursor.Id);
-            Assert.True(vm.IsLinked);
-            Assert.False(vm.CanDesync);
-            Assert.False(((System.Windows.Input.ICommand)vm.CommandUnlink).CanExecute(null));
+            Assert.True(vm.IsGrouped);
+            Assert.False(vm.CanUngroup);
+            Assert.False(((System.Windows.Input.ICommand)vm.CommandUngroup).CanExecute(null));
 
             session.Select(keys.Id);
-            Assert.True(vm.IsLinked);
-            Assert.False(vm.CanDesync);
-            Assert.False(((System.Windows.Input.ICommand)vm.CommandUnlink).CanExecute(null));
+            Assert.True(vm.IsGrouped);
+            Assert.False(vm.CanUngroup);
+            Assert.False(((System.Windows.Input.ICommand)vm.CommandUngroup).CanExecute(null));
 
             // an ordinary linked media row keeps the way out
             session.Select(screen.Id);
-            Assert.True(vm.IsLinked);
-            Assert.True(vm.CanDesync);
-            Assert.True(((System.Windows.Input.ICommand)vm.CommandUnlink).CanExecute(null));
+            Assert.True(vm.IsGrouped);
+            Assert.True(vm.CanUngroup);
+            Assert.True(((System.Windows.Input.ICommand)vm.CommandUngroup).CanExecute(null));
         }
 
         [Fact]

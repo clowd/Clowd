@@ -117,10 +117,18 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         public IBrush RulerLabelBrush { get; private init; }
 
-        /// <summary>The track headers' link badge — orange, so the "this row moves with the
+        /// <summary>The track headers' group badge — orange, so the "this row moves with the
         /// recording" mark stands out from the neutral button cluster around it (and from the
         /// accent, which selection owns).</summary>
-        public IBrush LinkBadgeBrush { get; private init; }
+        public IBrush GroupBadgeBrush { get; private init; }
+
+        /// <summary>Border of every clip in a group being dragged — the badge's orange, so the
+        /// moving set refers back to the mark that says the rows are grouped.</summary>
+        public Pen GroupDragPen { get; private init; }
+
+        /// <summary>Faint wash over those same clips, so a group reads as one thing even where
+        /// its borders are far apart.</summary>
+        public IBrush GroupDragFill { get; private init; }
 
         /// <summary>The star cluster marking an item whose AI-backed features are on — the accent,
         /// so it carries the same blue as the window's Render button. Only legible because it is
@@ -369,7 +377,9 @@ namespace Clowd.UI.VideoEditor.Timeline
                 RulerMinorTickPen = new Pen(new SolidColorBrush(text2, 0.75), 1),
                 RulerLabelBrush = new SolidColorBrush(text1),
                 LabelBrush = new SolidColorBrush(text3),
-                LinkBadgeBrush = new SolidColorBrush(dark ? Color.FromRgb(255, 159, 67) : Color.FromRgb(224, 113, 22)),
+                GroupBadgeBrush = new SolidColorBrush(dark ? Color.FromRgb(255, 159, 67) : Color.FromRgb(224, 113, 22)),
+                GroupDragPen = new Pen(new SolidColorBrush(dark ? Color.FromRgb(255, 159, 67) : Color.FromRgb(224, 113, 22)), 2),
+                GroupDragFill = new SolidColorBrush(dark ? Color.FromRgb(255, 159, 67) : Color.FromRgb(224, 113, 22), 0.18),
                 AiBadgeBrush = new SolidColorBrush(accent),
                 AiBadgeChipFill = new SolidColorBrush(dark ? Color.FromRgb(238, 240, 245) : Colors.White, 0.92),
                 AiBadgeShadow = new BoxShadows(new BoxShadow

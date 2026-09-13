@@ -42,7 +42,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = start,
                 DurationTicks = duration,
                 Content = content,
-                LinkGroupId = linkGroup,
+                GroupId = linkGroup,
             };
             p.Items.Add(item);
             return item;

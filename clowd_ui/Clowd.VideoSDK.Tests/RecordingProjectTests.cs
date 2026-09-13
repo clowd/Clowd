@@ -142,7 +142,7 @@ namespace Clowd.VideoSDK.Tests
             }
 
             // one recording is one link group, however many rows it made
-            Assert.Single(project.Items.Select(i => i.LinkGroupId).Distinct());
+            Assert.Single(project.Items.Select(i => i.GroupId).Distinct());
         }
 
         [Fact]
@@ -225,7 +225,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(before.Sources[0].Id, after.Sources[0].Id);
             Assert.Equal(before.Tracks.Select(t => t.Id).ToArray(), after.Tracks.Select(t => t.Id).ToArray());
             Assert.Equal(ids.AudioTrackIds.ToArray(), AudioTracks(after).Select(t => t.Id).ToArray());
-            Assert.Single(after.Items.Select(i => i.LinkGroupId).Distinct());
+            Assert.Single(after.Items.Select(i => i.GroupId).Distinct());
         }
 
         // ------------------------------------------------------------------------ screen mask

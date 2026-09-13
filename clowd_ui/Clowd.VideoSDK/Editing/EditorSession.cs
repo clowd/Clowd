@@ -455,7 +455,7 @@ namespace Clowd.VideoSDK.Editing
 
         // --------------------------------------------------------------------------- timeline ops
 
-        /// <summary>Wraps <see cref="TimelineOps.Move"/> (whole link group, clamped at the
+        /// <summary>Wraps <see cref="TimelineOps.Move"/> (whole group, clamped at the
         /// origin). Returns the delta actually applied — 0 when clamped away entirely or when the
         /// result was rolled back (a move onto an occupied span of the same track).</summary>
         public long MoveItem(Guid itemId, long deltaTicks, object origin = null) =>
@@ -496,10 +496,10 @@ namespace Clowd.VideoSDK.Editing
         private ProjectChangeKind TrimChangeKind(Guid itemId)
         {
             var item = Project.Items.FirstOrDefault(i => i.Id == itemId);
-            if (item?.LinkGroupId is not Guid group || item.Content is not MediaContent)
+            if (item?.GroupId is not Guid group || item.Content is not MediaContent)
                 return ProjectChangeKind.Mapping;
 
-            return Project.Items.Any(i => i.LinkGroupId == group
+            return Project.Items.Any(i => i.GroupId == group
                                           && i.Content is CursorContent or KeyboardContent)
                 ? ProjectChangeKind.Structural
                 : ProjectChangeKind.Mapping;
@@ -511,7 +511,7 @@ namespace Clowd.VideoSDK.Editing
         /// the cursor for a while) but must never reach past the screen span, where they would have
         /// nothing to annotate — the cursor draws nothing there and the keyboard falls back to
         /// item-relative time (see <c>FrameComposer.FindScreenMediaItem</c>). The dragged edge is
-        /// therefore clamped to the span of the screen items sharing the overlay's link group. An
+        /// therefore clamped to the span of the screen items sharing the overlay's group. An
         /// item already hanging past that span may still shrink, it just cannot grow, exactly as
         /// <see cref="TimelineOps.TrimEnd"/> treats an item hanging past the end of its source.
         /// Non-overlay items — and overlays whose screen row is gone — pass through unchanged.
@@ -529,21 +529,21 @@ namespace Clowd.VideoSDK.Editing
 
         /// <summary>
         /// The other side of the same contract: after a screen item is trimmed, the overlay items of
-        /// its link group are pulled in with it so they never outlive the screen span. Trims are
+        /// its group are pulled in with it so they never outlive the screen span. Trims are
         /// single-item by design (the group's rows keep their own in-points), so nothing else fans
         /// out this way — but an overlay left hanging over material that is gone is exactly the
         /// state the hard sync exists to prevent. An overlay item the trim leaves entirely outside
-        /// the span is removed: what it annotated no longer plays. No-op for anything but a linked
+        /// the span is removed: what it annotated no longer plays. No-op for anything but a grouped
         /// media item.
         /// </summary>
         private void ClampOverlayItemsToScreen(Project project, Guid trimmedItemId)
         {
             var trimmed = project.Items.FirstOrDefault(i => i.Id == trimmedItemId);
-            if (trimmed?.LinkGroupId is not Guid group || trimmed.Content is not MediaContent)
+            if (trimmed?.GroupId is not Guid group || trimmed.Content is not MediaContent)
                 return;
 
             var dropped = false;
-            foreach (var overlay in project.Items.Where(i => i.LinkGroupId == group
+            foreach (var overlay in project.Items.Where(i => i.GroupId == group
                          && i.Content is CursorContent or KeyboardContent).ToList())
             {
                 if (OverlayScreenSpan(project, overlay) is not { } span)
@@ -567,7 +567,7 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>The span an input-overlay item is allowed to occupy: the union of the video-row
-        /// screen items sharing its link group — the segment it mirrors, which a
+        /// screen items sharing its group — the segment it mirrors, which a
         /// <see cref="TimelineOps.SplitItem"/> on the screen row may have left as two back-to-back
         /// members. Null for a non-overlay item, and for an overlay whose screen partner is gone
         /// (nothing to clamp to; the overlay already draws nothing).</summary>
@@ -581,7 +581,7 @@ namespace Clowd.VideoSDK.Editing
             else
                 return null;
 
-            if (item.LinkGroupId is not Guid group)
+            if (item.GroupId is not Guid group)
                 return null;
 
             var source = project.Sources.FirstOrDefault(s => s.Id == sourceId);
@@ -591,7 +591,7 @@ namespace Clowd.VideoSDK.Editing
             long start = long.MaxValue, end = long.MinValue;
             foreach (var partner in project.Items)
             {
-                if (partner.LinkGroupId != group || partner.Content is not MediaContent media
+                if (partner.GroupId != group || partner.Content is not MediaContent media
                     || media.SourceId != sourceId
                     || !Composition.FrameComposer.IsScreenStream(source, media.StreamIndex))
                     continue;
@@ -641,7 +641,7 @@ namespace Clowd.VideoSDK.Editing
                     speed.PitchCorrect = pitchCorrect;
             });
 
-        /// <summary>Wraps <see cref="TimelineOps.Split"/> (whole link group, all-or-nothing).</summary>
+        /// <summary>Wraps <see cref="TimelineOps.Split"/> (whole group, all-or-nothing).</summary>
         public bool SplitAt(Guid itemId, long timelineTicks, object origin = null) =>
             Mutate("Split", ProjectChangeKind.Mapping, null, origin,
                 p => TimelineOps.Split(p, itemId, timelineTicks));
@@ -653,7 +653,7 @@ namespace Clowd.VideoSDK.Editing
                 p => TimelineOps.SplitItem(p, itemId, timelineTicks));
 
         /// <summary>The split-everything command: cuts every item covering the playhead — video,
-        /// audio, text and image rows alike — taking each link group once. Deliberately ignores the
+        /// audio, text and image rows alike — taking each group once. Deliberately ignores the
         /// selection: this is the "cut straight down the timeline" gesture, and a selected clip must
         /// not quietly narrow it to one row (the right-click menu is what cuts a single clip).
         /// Returns true when anything split.</summary>
@@ -663,7 +663,7 @@ namespace Clowd.VideoSDK.Editing
                 // snapshot the candidates first: right halves produced by a split start exactly at
                 // the playhead, so they cover it and must not themselves be split.
                 var candidates = p.Items.Where(i => Covers(i, playheadTicks))
-                                        .Select(i => (i.Id, i.LinkGroupId)).ToList();
+                                        .Select(i => (i.Id, i.GroupId)).ToList();
                 var handledGroups = new HashSet<Guid>();
                 var any = false;
                 foreach (var (id, group) in candidates)
@@ -676,7 +676,7 @@ namespace Clowd.VideoSDK.Editing
             });
 
         /// <summary>Wraps <see cref="TimelineOps.RippleDelete"/> (the clip's span cut out of its
-        /// link group, gap closes on all tracks), then prunes any non-initial track that lost its
+        /// group, gap closes on all tracks), then prunes any non-initial track that lost its
         /// last item — inside the same mutation, so one undo restores tracks and items
         /// together.</summary>
         public void RippleDeleteItem(Guid itemId, object origin = null) =>
@@ -695,51 +695,51 @@ namespace Clowd.VideoSDK.Editing
                     PruneEmptyTracks(p);
             });
 
-        /// <summary>Wraps <see cref="TimelineOps.DeleteLinked"/> (the clip's span cut out of its
-        /// link group in place — no ripple) with the same track prune, all in one mutation. The
+        /// <summary>Wraps <see cref="TimelineOps.DeleteGrouped"/> (the clip's span cut out of its
+        /// group in place — no ripple) with the same track prune, all in one mutation. The
         /// delete for an imported file's rows, whose group means "streams of one file", not
         /// "contiguous recording segments" (see <see cref="IsRippleGroup"/>): closing the gap
         /// under everything else is the recording cut's semantics, not the overlay's.</summary>
         public void DeleteGroup(Guid itemId, object origin = null) =>
             Mutate("Delete", ProjectChangeKind.Structural, null, origin, p =>
             {
-                TimelineOps.DeleteLinked(p, itemId);
+                TimelineOps.DeleteGrouped(p, itemId);
                 PruneEmptyTracks(p);
             });
 
         /// <summary>
-        /// True when the item's link group is a recording-segment group — one with a member on a
+        /// True when the item's group is a recording-segment group — one with a member on a
         /// track the session opened with — as opposed to the per-file group an import gets. The
         /// discriminator the UI keys the move gate off: a recording group is pinned in place
-        /// while an import moves as one. False for unlinked items.
+        /// while an import moves as one. False for ungrouped items.
         /// </summary>
         public bool IsRippleGroup(Guid itemId)
         {
             var item = Project.Items.FirstOrDefault(i => i.Id == itemId);
-            if (item?.LinkGroupId is not Guid group)
+            if (item?.GroupId is not Guid group)
                 return false;
 
-            return Project.Items.Any(i => i.LinkGroupId == group && _initialTrackIds.Contains(i.TrackId));
+            return Project.Items.Any(i => i.GroupId == group && _initialTrackIds.Contains(i.TrackId));
         }
 
-        /// <summary>Wraps <see cref="TimelineOps.UnlinkTrack"/> — the row's sync toggle turned
-        /// off. Link groups only affect editing, never playback, so this is a mapping change.
-        /// Refused for cursor/keyboard rows: their items are hard-synced to the recording
-        /// (validation requires the link group), so the toggle never comes off.</summary>
-        public void UnlinkTrack(Guid trackId, object origin = null)
+        /// <summary>Wraps <see cref="TimelineOps.UngroupTrack"/> — the row taken out of its
+        /// recording's group. Groups only affect editing, never playback, so this is a mapping
+        /// change. Refused for cursor/keyboard rows: their items are pinned to the recording
+        /// (validation requires the group), so they never come out.</summary>
+        public void UngroupTrack(Guid trackId, object origin = null)
         {
             if (IsInputOverlayTrack(Project, trackId))
                 return;
 
-            Mutate("Unlink Track", ProjectChangeKind.Mapping, null, origin,
-                p => TimelineOps.UnlinkTrack(p, trackId));
+            Mutate("Ungroup Track", ProjectChangeKind.Mapping, null, origin,
+                p => TimelineOps.UngroupTrack(p, trackId));
         }
 
-        /// <summary>Wraps <see cref="TimelineOps.TryRelinkTrack"/>. False means the row has
+        /// <summary>Wraps <see cref="TimelineOps.TryRegroupTrack"/>. False means the row has
         /// drifted and the toggle stays off — the project is untouched.</summary>
-        public bool TryRelinkTrack(Guid trackId, object origin = null) =>
-            Mutate("Relink Track", ProjectChangeKind.Mapping, null, origin,
-                p => TimelineOps.TryRelinkTrack(p, trackId));
+        public bool TryRegroupTrack(Guid trackId, object origin = null) =>
+            Mutate("Regroup Track", ProjectChangeKind.Mapping, null, origin,
+                p => TimelineOps.TryRegroupTrack(p, trackId));
 
         // ---------------------------------------------------------------- tracks and properties
 
@@ -780,8 +780,8 @@ namespace Clowd.VideoSDK.Editing
 
         /// <summary>
         /// Duplicates a row: a new track of the same kind and enable state directly above the
-        /// original, carrying a copy of every item on it. The copies are unlinked — a duplicate is
-        /// its own material, not a new member of the recording's group (a linked copy would make
+        /// original, carrying a copy of every item on it. The copies are ungrouped — a duplicate is
+        /// its own material, not a new member of the recording's group (a grouped copy would make
         /// every group move/split apply twice to the same content). The copy is never locked: a
         /// duplicate exists to be edited. Returns false for an unknown id, or for the speed row —
         /// playback speed is a single global timeline, and a second speed row cannot validate.
@@ -1033,14 +1033,14 @@ namespace Clowd.VideoSDK.Editing
         }
 
         /// <summary>The screen row an overlay row is pinned above: the video row of the
-        /// screen-stream media item sharing a link group with one of the overlay's items — the
+        /// screen-stream media item sharing a group with one of the overlay's items — the
         /// hard-sync partner <see cref="AddInputOverlayTrack"/> wired. Null when the screen row
         /// is gone (the overlay then draws nothing and pins to nothing).</summary>
         private static Track FindOverlayScreenTrack(Project project, Track overlay)
         {
             foreach (var item in project.Items)
             {
-                if (item.TrackId != overlay.Id || item.LinkGroupId == null)
+                if (item.TrackId != overlay.Id || item.GroupId == null)
                     continue;
 
                 Guid sourceId;
@@ -1057,7 +1057,7 @@ namespace Clowd.VideoSDK.Editing
 
                 foreach (var partner in project.Items)
                 {
-                    if (partner.LinkGroupId != item.LinkGroupId
+                    if (partner.GroupId != item.GroupId
                         || partner.Content is not MediaContent media || media.SourceId != sourceId
                         || !Composition.FrameComposer.IsScreenStream(source, media.StreamIndex))
                         continue;
@@ -1382,7 +1382,7 @@ namespace Clowd.VideoSDK.Editing
         /// Adds the cursor overlay row: a <see cref="TrackKind.Video"/> track named "Cursor"
         /// directly above the recording's screen row (above the keyboard row when one exists),
         /// carrying one <see cref="CursorContent"/> item per screen keep-segment — mirroring each
-        /// segment's span and link group, which is what hard-syncs the row to the recording's
+        /// segment's span and group, which is what hard-syncs the row to the recording's
         /// trims and cuts. Returns the first live item, or null when refused: no source with
         /// input-capture data, the row already exists, or the screen row has no segments.
         /// </summary>
@@ -1497,10 +1497,10 @@ namespace Clowd.VideoSDK.Editing
             Item first = null;
             foreach (var segment in segments)
             {
-                // hard-sync: the overlay item joins the segment's link group. A screen segment
-                // that was unlinked gets a fresh group shared with its overlay — the overlay
+                // hard-sync: the overlay item joins the segment's group. A screen segment
+                // that was ungrouped gets a fresh group shared with its overlay — the overlay
                 // must follow the screen either way.
-                segment.LinkGroupId ??= Guid.NewGuid();
+                segment.GroupId ??= Guid.NewGuid();
 
                 var item = new Item
                 {
@@ -1537,7 +1537,7 @@ namespace Clowd.VideoSDK.Editing
                         DurationTicks = KeyboardRowTransitionTicks,
                         Easing = TransitionEasing.CubicInOut,
                     },
-                    LinkGroupId = segment.LinkGroupId,
+                    GroupId = segment.GroupId,
                 };
                 project.Items.Add(item);
                 first ??= item;
@@ -1553,7 +1553,7 @@ namespace Clowd.VideoSDK.Editing
                 i.TrackId == t.Id && (cursor ? i.Content is CursorContent : i.Content is KeyboardContent)));
 
         /// <summary>Whether the row's items are cursor/keyboard overlays — the rows whose sync,
-        /// reorder and duplicate are refused (their placement and link groups are structural, not
+        /// reorder and duplicate are refused (their placement and groups are structural, not
         /// user-arrangeable).</summary>
         private static bool IsInputOverlayTrack(Project project, Guid trackId) =>
             project.Items.Any(i => i.TrackId == trackId && i.Content is CursorContent or KeyboardContent);
@@ -1562,7 +1562,7 @@ namespace Clowd.VideoSDK.Editing
         /// Imports an external media file as an overlay: one new <see cref="Source"/> with the
         /// probed streams (mapped exactly as a recording's are), one new track per stream — video
         /// rows stacked above the existing video rows, audio rows at the bottom — and one item per
-        /// stream starting at <paramref name="startTicks"/>. The items share a fresh link group
+        /// stream starting at <paramref name="startTicks"/>. The items share a fresh group
         /// when there is more than one, so the file's rows move as one; video items default to
         /// half canvas width, centered. One undo entry restores all of it. Returns the live items
         /// (empty when the probe had no usable streams or the import was rolled back).
@@ -1570,7 +1570,7 @@ namespace Clowd.VideoSDK.Editing
         /// <paramref name="silentAudioStreams"/> names, by mp4 stream index, the audio streams
         /// that hold nothing (<c>AudioSilenceScan.FindSilentStreams</c>, run by the caller off the
         /// UI thread beside the probe): they get no row. The source still lists them — it
-        /// describes the file — and the link group counts only the rows actually made.
+        /// describes the file — and the group counts only the rows actually made.
         ///
         /// The <b>first</b> file into a project that has never held any (a blank project, started
         /// from the Video button rather than opened onto a recording) defines it instead: the
@@ -1607,7 +1607,7 @@ namespace Clowd.VideoSDK.Editing
                 var audioStreams = streams.Where(s => s.Kind == StreamKind.Audio
                                                       && silentAudioStreams?.Contains(s.Index) != true).ToList();
 
-                // only multi-row imports are linked: a group of one has nothing to keep in sync.
+                // only multi-row imports are grouped: a group of one has nothing to keep in sync.
                 // The UI moves and deletes an import group as a unit (it is a per-file group, not
                 // a recording-segment group — see IsRippleGroup).
                 var linkGroup = videoStreams.Count + audioStreams.Count > 1 ? Guid.NewGuid() : (Guid?)null;
@@ -1877,8 +1877,8 @@ namespace Clowd.VideoSDK.Editing
             try
             {
                 result = edit(Project);
-                // every edit that can leave a link group with a single row behind — a track
-                // deleted or unlinked, a row's last items cut — ends with the group dissolved,
+                // every edit that can leave a group with a single row behind — a track
+                // deleted or ungrouped, a row's last items cut — ends with the group dissolved,
                 // inside the same mutation so one undo restores both.
                 TimelineOps.CollapseLoneGroups(Project);
                 Project.Normalize();
@@ -2266,7 +2266,7 @@ namespace Clowd.VideoSDK.Editing
                     SourceInTicks = 0,
                 },
                 Transform = transform ?? new Transform(),
-                LinkGroupId = linkGroup,
+                GroupId = linkGroup,
             };
         }
 

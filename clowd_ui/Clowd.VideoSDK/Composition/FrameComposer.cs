@@ -114,7 +114,7 @@ namespace Clowd.VideoSDK.Composition
         {
             var source = FindSource(project, cursor.SourceId);
             var screen = source == null ? null
-                : FindScreenMediaItem(project, source, item.LinkGroupId, timeTicks);
+                : FindScreenMediaItem(project, source, item.GroupId, timeTicks);
             if (screen == null)
                 return fallback;
 
@@ -513,7 +513,7 @@ namespace Clowd.VideoSDK.Composition
 
             // the linked screen item defines both the time mapping and the placement math —
             // hard sync means the cursor has no clock or geometry of its own.
-            var screen = FindScreenMediaItem(project, source, item.LinkGroupId, timeTicks);
+            var screen = FindScreenMediaItem(project, source, item.GroupId, timeTicks);
             if (screen?.Content is not MediaContent media)
                 return;
             long sourceTicks = SourceTimeTicks(media, screen, timeTicks);
@@ -674,7 +674,7 @@ namespace Clowd.VideoSDK.Composition
                     continue;
                 if (!videoTracks.Contains(item.TrackId) || !IsScreenStream(source, media.StreamIndex))
                     continue;
-                if (linkGroupId != null && item.LinkGroupId == linkGroupId)
+                if (linkGroupId != null && item.GroupId == linkGroupId)
                     return item;
                 best ??= item;
             }
@@ -870,7 +870,7 @@ namespace Clowd.VideoSDK.Composition
             // item's own span stands in (SourceIn 0, realtime) so the overlay degrades, not dies.
             double speed = 1.0;
             long sourceTicks = timeTicks - item.TimelineStartTicks;
-            var screen = FindScreenMediaItem(project, source, item.LinkGroupId, timeTicks);
+            var screen = FindScreenMediaItem(project, source, item.GroupId, timeTicks);
             if (screen?.Content is MediaContent media)
             {
                 speed = TimelineOps.SpeedOf(media);

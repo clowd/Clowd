@@ -40,7 +40,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = start,
                 DurationTicks = duration,
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = streamIndex, SourceInTicks = start },
-                LinkGroupId = linkGroup,
+                GroupId = linkGroup,
             };
 
             screen = Media(screenTrack, 0, 0, Ms(10_000));
@@ -569,7 +569,7 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void UnlinkedItem_EditsOnlyItself()
+        public void UngroupedItem_EditsOnlyItself()
         {
             var (session, vm) = NewInspector(out _, out _, out _, out _, out var text);
             session.Select(text.Id);
@@ -577,7 +577,7 @@ namespace Clowd.VideoSDK.Tests
             vm.PositionY = 0.2;
 
             Assert.Equal(0.2, Live(session, text.Id).Transform.Y);
-            Assert.False(vm.IsLinked);
+            Assert.False(vm.IsGrouped);
         }
 
         // -------------------------------------------------------------------------------- mask
@@ -813,17 +813,17 @@ namespace Clowd.VideoSDK.Tests
         }
 
         [Fact]
-        public void Unlink_ClearsTheRowsLinkageAndTheInspectorSeesIt()
+        public void Ungroup_ClearsTheRowsGroupAndTheInspectorSeesIt()
         {
             var (session, vm) = NewInspector(out _, out var webcamA, out var webcamB, out _, out _);
             session.Select(webcamA.Id);
-            Assert.True(vm.IsLinked);
+            Assert.True(vm.IsGrouped);
 
-            ((System.Windows.Input.ICommand)vm.CommandUnlink).Execute(null);
+            ((System.Windows.Input.ICommand)vm.CommandUngroup).Execute(null);
 
-            Assert.False(vm.IsLinked);
-            Assert.Null(Live(session, webcamA.Id).LinkGroupId);
-            Assert.Null(Live(session, webcamB.Id).LinkGroupId);
+            Assert.False(vm.IsGrouped);
+            Assert.Null(Live(session, webcamA.Id).GroupId);
+            Assert.Null(Live(session, webcamB.Id).GroupId);
         }
 
         [Fact]
@@ -883,7 +883,7 @@ namespace Clowd.VideoSDK.Tests
         // ---------------------------------------------------------------------- playback speed
 
         [Fact]
-        public void Speed_ShownOnlyForDesyncedMedia()
+        public void Speed_ShownOnlyForUngroupedMedia()
         {
             var (session, vm) = NewInspector(out var screen, out _, out _, out var audio, out var text);
 
@@ -896,7 +896,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.False(vm.ShowSpeed);
 
             // desyncing the audio row exposes it (audio and video alike)
-            session.UnlinkTrack(session.Project.Items.First(i => i.Id == audio.Id).TrackId, null);
+            session.UngroupTrack(session.Project.Items.First(i => i.Id == audio.Id).TrackId, null);
             session.Select(audio.Id);
             Assert.True(vm.ShowSpeed);
             Assert.Equal(1.0, vm.SpeedChoice.Value);
@@ -906,7 +906,7 @@ namespace Clowd.VideoSDK.Tests
         public void Speed_WritesThroughTheSessionAndRetimes()
         {
             var (session, vm) = NewInspector(out var screen, out _, out _, out _, out _);
-            session.UnlinkTrack(screen.TrackId, null);
+            session.UngroupTrack(screen.TrackId, null);
             session.Select(screen.Id);
 
             var twoX = SelectedItemViewModel.SpeedOptions.First(o => o.Value == 2.0);

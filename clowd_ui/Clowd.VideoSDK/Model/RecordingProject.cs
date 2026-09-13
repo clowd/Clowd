@@ -29,8 +29,8 @@ public sealed class RecordingIds
     /// separate mic/system tracks has one entry each; a silent one has none.</summary>
     public IReadOnlyList<Guid> AudioTrackIds { get; init; } = Array.Empty<Guid>();
 
-    /// <summary>One recording is one link group: every row it produced trims/cuts as one.</summary>
-    public Guid LinkGroupId { get; init; }
+    /// <summary>One recording is one group: every row it produced trims/cuts as one.</summary>
+    public Guid GroupId { get; init; }
 
     public static RecordingIds New(int audioTrackCount)
     {
@@ -48,7 +48,7 @@ public sealed class RecordingIds
             CursorTrackId = Guid.NewGuid(),
             KeyboardTrackId = Guid.NewGuid(),
             AudioTrackIds = audioTrackIds,
-            LinkGroupId = Guid.NewGuid(),
+            GroupId = Guid.NewGuid(),
         };
     }
 }
@@ -118,7 +118,7 @@ public sealed class RecordingProjectSpec
 /// The one mapping from "a Clowd recording plus a keep-segment list" onto a v2
 /// <see cref="Project"/>: a screen video row, an optional webcam video row and one row per audio
 /// stream, over a single source file, one item per kept slice per row, all sharing one
-/// <see cref="Item.LinkGroupId"/>.
+/// <see cref="Item.GroupId"/>.
 ///
 /// Both entry points into the editor's world go through here so they cannot drift: the v1 args
 /// shim (<c>RenderArgsCompat</c>, which maps a legacy <c>render-args.json</c>) and the editor
@@ -252,12 +252,12 @@ public static class RecordingProject
                 continue;
 
             AddItem(project, screenTrack, source.Id, screen.StreamIndex, timelineStart, durationTicks,
-                startTicks, ids.LinkGroupId,
+                startTicks, ids.GroupId,
                 screenMask == null ? null : new Transform { Mask = screenMask.Clone() });
 
             if (camTrack != null)
                 AddItem(project, camTrack, source.Id, cam.StreamIndex, timelineStart, durationTicks,
-                    startTicks, ids.LinkGroupId, camTransform?.Clone(), spec.WebcamSurround?.Clone());
+                    startTicks, ids.GroupId, camTransform?.Clone(), spec.WebcamSurround?.Clone());
 
             for (var i = 0; i < audioTracks.Length; i++)
             {
@@ -271,7 +271,7 @@ public static class RecordingProject
                     audioDuration = Math.Clamp(audio.DurationTicks - startTicks, 0, durationTicks);
                 if (audioDuration > 0)
                     AddItem(project, audioTracks[i], source.Id, audio.StreamIndex, timelineStart,
-                        audioDuration, startTicks, ids.LinkGroupId, null);
+                        audioDuration, startTicks, ids.GroupId, null);
             }
 
             timelineStart += durationTicks;
@@ -330,7 +330,7 @@ public static class RecordingProject
             },
             Transform = transform ?? new Transform(),
             Surround = surround,
-            LinkGroupId = linkGroup,
+            GroupId = linkGroup,
         });
     }
 }

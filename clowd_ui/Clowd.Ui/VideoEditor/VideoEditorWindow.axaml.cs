@@ -274,6 +274,7 @@ namespace Clowd.UI.VideoEditor
             timeline.ScrubStarted += Timeline_ScrubStarted;
             timeline.Scrubbed += Timeline_Scrubbed;
             timeline.ScrubCompleted += Timeline_ScrubCompleted;
+            timeline.GroupDragChanged += Timeline_GroupDragChanged;
 
             // the inspector owns crop mode and the Unlocked (free-resize) aspect tile; the
             // preview's gizmo follows both
@@ -1002,6 +1003,14 @@ namespace Clowd.UI.VideoEditor
         {
             _scrubbing = false;
             _ = FinishScrubAsync(ticks);
+        }
+
+        /// <summary>The transport bar's status text for a group drag: the member count while the
+        /// timeline is carrying a whole group, nothing once it lets go.</summary>
+        private void Timeline_GroupDragChanged(object sender, int count)
+        {
+            txtGroupDrag.Text = count > 1 ? $"Dragging {count} grouped clips" : null;
+            txtGroupDrag.IsVisible = count > 1;
         }
 
         private async Task FinishScrubAsync(long ticks)

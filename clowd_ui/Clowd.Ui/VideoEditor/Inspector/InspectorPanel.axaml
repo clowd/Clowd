@@ -439,7 +439,7 @@
                     </StackPanel>
                 </DockPanel>
 
-                <!--  playback speed: media rows only, and only once desynced — a linked segment
+                <!--  playback speed: media rows only, and only once ungrouped — a grouped segment
                       keeps the recording's clock (see SelectedItemViewModel.ShowSpeed). Sits
                       under the title because it re-times the whole clip, not one property.  -->
                 <DockPanel Classes="row" IsVisible="{Binding ShowSpeed}">
@@ -453,16 +453,16 @@
                     <controls:DropDownButton x:Name="ddSpeed" SelectedItem="{Binding SpeedChoice, Mode=TwoWay}" />
                 </DockPanel>
 
-                <!--  synced-object banner: shown only while the row still moves with its recording.
-                      An unsynced row shows nothing at all — "not linked" is the unremarkable state.  -->
+                <!--  grouped-object banner: shown only while the row still moves with its recording.
+                      An ungrouped row shows nothing at all — "not grouped" is the unremarkable state.  -->
                 <Border
                     Padding="8"
                     Background="#3d3d3d"
                     CornerRadius="4"
-                    IsVisible="{Binding IsLinked}">
+                    IsVisible="{Binding IsGrouped}">
                     <StackPanel Spacing="6">
                         <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
-                            <!--  the timeline's link-badge orange (TimelinePalette.LinkBadgeBrush,
+                            <!--  the timeline's link-badge orange (TimelinePalette.GroupBadgeBrush,
                                   dark) — the banner and the badge are the same mark. Width only:
                                   a fixed Height would top-align the Uniform-stretched ink.  -->
                             <Path
@@ -477,18 +477,18 @@
                                 VerticalAlignment="Center"
                                 FontWeight="Bold"
                                 Foreground="White"
-                                Text="Synced object" />
+                                Text="Grouped object" />
                         </Grid>
                         <TextBlock
                             FontSize="11"
                             Foreground="#BBBBBB"
-                            Text="This object's position in the timeline is locked to the original recording."
+                            Text="This object moves, splits and cuts together with the other tracks from its recording."
                             TextWrapping="Wrap" />
                         <Button
-                            x:Name="btnDesync"
+                            x:Name="btnUngroup"
                             HorizontalAlignment="Left"
-                            Content="Desync…"
-                            IsVisible="{Binding CanDesync}" />
+                            Content="Ungroup…"
+                            IsVisible="{Binding CanUngroup}" />
                     </StackPanel>
                 </Border>
 

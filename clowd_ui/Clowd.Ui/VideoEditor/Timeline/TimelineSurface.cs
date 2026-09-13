@@ -85,6 +85,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         private DragMode _dragMode;
         private EditGesture _gesture;
         private Guid _dragItemId;
+        /// <summary>Every member of the dragged item's group while a move drag is on and the group
+        /// has more than one member — the set the surface paints in the group color, and the
+        /// count <see cref="GroupDragChanged"/> reports. Null outside such a drag.</summary>
+        private HashSet<Guid> _dragGroupIds;
         private long _grabOffsetTicks;   // pointer ticks minus the dragged start/edge at press time
         private IPointer _dragPointer;
         private long? _snapGuideTicks;
@@ -116,6 +120,11 @@ namespace Clowd.UI.VideoEditor.Timeline
         public event EventHandler<long> Scrubbed;
 
         public event EventHandler<long> ScrubCompleted;
+
+        /// <summary>Raised with the member count when a move drag takes a whole group along
+        /// (more than one clip), and with 0 when that drag ends — the window shows "Dragging N
+        /// grouped clips" for the duration.</summary>
+        public event EventHandler<int> GroupDragChanged;
 
         public TimelineSurface(TimelineViewport viewport)
         {
@@ -356,16 +365,13 @@ namespace Clowd.UI.VideoEditor.Timeline
 
                     _session.Select(item.Id);
 
-                    // moving is the one edit recording sync forbids: a recording segment's (or a
-                    // locked row's) body gets selection only — the missing drag affordance IS the
-                    // sync cue, together with the header's link toggle. An import's group is just
-                    // "streams of one file": dragging any member moves the whole group
-                    // (TimelineOps.Move is group-scoped), which cannot desync anything. Cursor and
-                    // keyboard items are hard-synced to the recording whatever their group looks
-                    // like, so they are named here rather than left to the group test.
+                    // a locked row's body gets selection only. Anything else drags — a grouped
+                    // clip takes its whole group along (TimelineOps.Move is group-scoped), so a
+                    // recording's rows, an import's streams and the cursor/keyboard overlays over
+                    // a screen segment all keep their alignment by moving together; the group is
+                    // painted in its color and counted in the status text while the drag is on.
                     var track = FindTrack(item.TrackId);
-                    if (_session.IsRippleGroup(item.Id) || IsInputOverlayRow(item.TrackId) ||
-                        track is not { Locked: false })
+                    if (track is not { Locked: false })
                         return;
 
                     BeginDrag(DragMode.MoveItem, e, item.Id,
@@ -415,7 +421,20 @@ namespace Clowd.UI.VideoEditor.Timeline
             e.Pointer.Capture(this);
 
             if (mode == DragMode.MoveItem)
+            {
                 Cursor = DragCursors.Grabbing;
+
+                var item = FindItem(itemId);
+                if (item?.GroupId is Guid group)
+                {
+                    var members = _session.Project.Items.Where(i => i.GroupId == group).Select(i => i.Id).ToHashSet();
+                    if (members.Count > 1)
+                    {
+                        _dragGroupIds = members;
+                        GroupDragChanged?.Invoke(this, members.Count);
+                    }
+                }
+            }
         }
 
         protected override void OnPointerMoved(PointerEventArgs e)
@@ -519,6 +538,12 @@ namespace Clowd.UI.VideoEditor.Timeline
             // grab if the pointer is still over the item.
             if (mode == DragMode.MoveItem)
                 Cursor = null;
+
+            if (_dragGroupIds != null)
+            {
+                _dragGroupIds = null;
+                GroupDragChanged?.Invoke(this, 0);
+            }
 
             if (gesture != null)
             {
@@ -648,7 +673,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             {
                 foreach (var other in project.Items)
                 {
-                    if (other.Id == excludeItemId)
+                    // the dragged item's own edges are no target, and neither are those of the
+                    // group moving with it — they travel, so snapping to them would chase itself.
+                    if (other.Id == excludeItemId || _dragGroupIds?.Contains(other.Id) == true)
                         continue;
 
                     targets.Add(other.TimelineStartTicks);
@@ -713,13 +740,10 @@ namespace Clowd.UI.VideoEditor.Timeline
                 {
                     var item = FindItem(hit.ItemId);
                     var track = item == null ? null : FindTrack(item.TrackId);
-                    var movable = item != null && track is { Locked: false } &&
-                                  _session?.IsRippleGroup(item.Id) != true &&
-                                  !IsInputOverlayRow(item.TrackId);
-                    // Arrow (not the grab hand) on a recording-synced or locked body: no move
-                    // affordance IS the cue. Import groups move as one, so their bodies keep it.
-                    // Grab (not the pointing Hand — that one belongs to the edge-jump chevrons)
-                    // says "this drags".
+                    var movable = item != null && track is { Locked: false };
+                    // Arrow (not the grab hand) on a locked body: no move affordance IS the cue.
+                    // Grouped bodies keep it — the group moves as one. Grab (not the pointing
+                    // Hand — that one belongs to the edge-jump chevrons) says "this drags".
                     Cursor = movable ? DragCursors.Grab : null;
                     break;
                 }
@@ -802,7 +826,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             var trackId = track.Id;
 
-            // Z order. Row-level like Unlink below — the whole row moves, because stacking is a
+            // Z order. Row-level like Ungroup below — the whole row moves, because stacking is a
             // property of the row and not of one clip on it. The timeline draws video rows highest
             // layer first, so moving up the panel and moving towards the viewer are the same
             // direction (see TimelineRowLayout.Build).
@@ -817,16 +841,16 @@ namespace Clowd.UI.VideoEditor.Timeline
                     () => _session.MoveTrackLayer(trackId, towardsFront: false, this)));
             }
 
-            // unlinking is a row-level action (it is the header's link toggle), offered here
+            // ungrouping is a row-level action (it is the header's group toggle), offered here
             // because that toggle is easy to miss and this is where the sync is felt: a synced
             // item has no move affordance. Never offered on a cursor/keyboard row: those read the
             // recording's input capture at the recording's own times, so their sync is not a
-            // toggle and the session refuses to take it off (EditorSession.UnlinkTrack).
+            // toggle and the session refuses to take it off (EditorSession.UngroupTrack).
             if (!IsInputOverlayRow(trackId) &&
-                _session.Project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null))
+                _session.Project.Items.Any(i => i.TrackId == trackId && i.GroupId != null))
             {
                 menu.Items.Add(new Separator());
-                menu.Items.Add(NewMenuItem("Unlink Row", true, () => _session.UnlinkTrack(trackId, this)));
+                menu.Items.Add(NewMenuItem("Ungroup Row", true, () => _session.UngroupTrack(trackId, this)));
             }
         }
 
@@ -1128,8 +1152,18 @@ namespace Clowd.UI.VideoEditor.Timeline
             if (hovered && !selected)
                 context.DrawRectangle(palette.HoverOverlay, null, body, ItemCornerRadius, ItemCornerRadius);
 
-            if (selected)
+            // a group on the move is painted in the group color, the dragged clip included, so
+            // every clip travelling with the pointer reads as one thing — the same orange as the
+            // headers' group badge, which is what the cue refers back to.
+            if (_dragGroupIds?.Contains(item.Id) == true)
+            {
+                context.DrawRectangle(palette.GroupDragFill, null, body, ItemCornerRadius, ItemCornerRadius);
+                context.DrawRectangle(null, palette.GroupDragPen, body.Deflate(0.75), ItemCornerRadius, ItemCornerRadius);
+            }
+            else if (selected)
+            {
                 context.DrawRectangle(null, palette.SelectionPen, body.Deflate(0.75), ItemCornerRadius, ItemCornerRadius);
+            }
 
             if ((selected || hovered) && body.Width >= TimelineHitTester.MinEdgeGrabWidth)
                 RenderTrimHandles(context, palette, body, selected);
