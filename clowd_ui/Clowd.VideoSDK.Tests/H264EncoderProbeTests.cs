@@ -126,7 +126,8 @@ namespace Clowd.VideoSDK.Tests
             Assert.SkipUnless(TestFFmpeg.Available, TestFFmpeg.SkipReason);
             Assert.SkipWhen(OperatingSystem.IsMacOS(), "VideoToolbox is present on macOS");
             Assert.False(H264EncoderProbe.CanOpen(VideoEncoder.VideoToolbox, out var reason));
-            Assert.Contains("not present", reason, StringComparison.Ordinal);
+            // the gate answers first while VideoToolbox is switched off; the encoder lookup once it is on
+            Assert.Contains(H264EncoderProbe.VideoToolboxEnabled ? "not present" : "disabled", reason, StringComparison.Ordinal);
         }
     }
 }

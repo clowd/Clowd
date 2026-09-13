@@ -431,7 +431,11 @@ namespace Clowd.VideoSDK.Tests
                         if (d != 0)
                             differing++;
                     }
-                    Assert.True(worst == 0,
+                    // The same draw lands in a texture we created and in one Skia created; a
+                    // driver may round bilinear samples differently between the two (the GitHub
+                    // Windows runner's virtual GPU: 21 of 76800 bytes off by one). One level is
+                    // sampling noise, anything more is a real difference in what was read back.
+                    Assert.True(worst <= 1,
                         $"sampled content differs by up to {worst} in {differing} of {viaSurface.Length} bytes");
                 }
                 finally

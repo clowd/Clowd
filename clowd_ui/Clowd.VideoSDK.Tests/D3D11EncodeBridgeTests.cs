@@ -63,13 +63,17 @@ namespace Clowd.VideoSDK.Tests
 
         /// <summary>A shareable ring with a bridge over it (or the skips of
         /// <see cref="RequireShareableRing"/>). A shareable ring on which the bridge fails to
-        /// come up is a failure, not a skip: that is exactly the regression to catch.</summary>
+        /// come up is a failure, not a skip: that is exactly the regression to catch. The one
+        /// exception is a GPU that cannot run it at all (no Direct3D 11 video processing: the
+        /// GitHub Windows runner), which is a skip like any other missing hardware.</summary>
         private static Rig Require(int width, int height, int slots)
         {
             var rig = RequireShareableRing(width, height, slots);
             try
             {
                 rig.Bridge = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason);
+                Assert.SkipWhen(rig.Bridge == null && D3D11EncodeBridge.IsMissingCapability(reason),
+                    "this GPU cannot run the D3D11 encode bridge: " + reason);
                 Assert.True(rig.Bridge != null, "the bridge did not come up on a shareable ring: " + reason);
                 return rig;
             }
@@ -292,6 +296,9 @@ namespace Clowd.VideoSDK.Tests
 
             var failed = D3D11EncodeBridge.TryCreate(rig.Ring, out var reason, bridge => bridge.Frames.Dispose());
             Assert.Null(failed);
+            // a GPU that cannot run the bridge fails before the self-check ever runs
+            Assert.SkipWhen(D3D11EncodeBridge.IsMissingCapability(reason),
+                "this GPU cannot run the D3D11 encode bridge: " + reason);
             Assert.Contains("HardwareFrames", reason, StringComparison.Ordinal); // the disposed pool, not a ring-state message
             Assert.Equal(live, HardwareFrame.LiveCount);
 

@@ -292,6 +292,31 @@ namespace Clowd.VideoSDK.Composition
             return false;
         }
 
+        /// <summary>
+        /// Whether a <see cref="TryCreate(D3D12ReadbackRing, out string)"/> failure reason says this
+        /// machine simply cannot run the bridge — no shareable ring, no Direct3D 11.4 runtime, or
+        /// a Direct3D 11 device without video processing (the GitHub Windows runner's virtual GPU
+        /// answers E_NOINTERFACE to ID3D11VideoDevice) — as opposed to something going wrong on a
+        /// capable one. Tests skip on the former and fail on the latter.
+        /// </summary>
+        public static bool IsMissingCapability(string failureReason)
+        {
+            if (String.IsNullOrEmpty(failureReason))
+                return false;
+            foreach (var marker in new[]
+                     {
+                         "not shareable", "QueryInterface(ID3D11Device5", "QueryInterface(ID3D11DeviceContext4)",
+                         "QueryInterface(ID3D11VideoDevice)", "QueryInterface(ID3D11VideoContext)",
+                         "CreateVideoProcessorEnumerator", "ID3D11VideoDevice::CreateVideoProcessor ",
+                     })
+            {
+                if (failureReason.Contains(marker, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
+        }
+
         // ---------------------------------------------------------------------- NV12 pool
 
         /// <summary>A pool texture: NV12, render-target bindable (the video processor's output
