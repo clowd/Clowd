@@ -190,6 +190,23 @@ namespace Clowd.Config
         }
 
         /// <summary>
+        /// macOS only: run window content up under a transparent title bar, so the traffic lights
+        /// float over it, instead of sitting below a title bar of its own. Read once per window in
+        /// SystemThemedWindow's constructor, which is why the description promises new windows
+        /// rather than an instant change; the main window is reopened on the spot so the choice is
+        /// visible, and anything already open keeps its own look until the user closes it.
+        /// </summary>
+        [HiddenOnWindows]
+        [DisplayName("Extend windows into the title bar")]
+        [Description("Run window content up under a transparent title bar, the way most modern " +
+                     "Mac apps look. Takes effect for windows opened from now on.")]
+        public bool ExtendIntoTitleBar
+        {
+            get => _extendIntoTitleBar;
+            set => Set(ref _extendIntoTitleBar, value);
+        }
+
+        /// <summary>
         /// Follow the OS accent color instead of <see cref="AccentColor"/>. Reads as false wherever
         /// there is no system accent to read (macOS), so the row it disables cannot get stuck grayed
         /// out on a platform that hides this checkbox.
@@ -283,6 +300,10 @@ namespace Clowd.Config
         private bool _registerExplorerContextMenu = DefaultRegisterExplorerContextMenu;
         private bool _registerAutoStart = DefaultRegisterAutoStart;
         private AppTheme _theme = AppTheme.System;
+
+        // On by default: it is what a Tahoe-era mac window looks like, and the windows that
+        // extend have been laid out for it (the gutters in SystemThemedWindow).
+        private bool _extendIntoTitleBar = true;
         private ClickAction _trayClick = ClickAction.OpenSettings;
         private ClickAction _shortcutClick = ClickAction.OpenSettings;
 

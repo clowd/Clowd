@@ -29,6 +29,7 @@ namespace Clowd.UI
         {
             InitializeComponent();
             SettingsRoot.Current.Hotkeys.PropertyChanged += OnHotkeyPropertyChanged;
+            SettingsRoot.Current.General.PropertyChanged += OnGeneralPropertyChanged;
             BindRecordingMode();
             NavList.SelectionChanged += OnNavSelectionChanged;
             NavList.SelectedItem = NavList.Items.OfType<NavMenuItem>().FirstOrDefault(i => !i.IsSeparator);
@@ -273,7 +274,32 @@ namespace Clowd.UI
         protected override void OnClosed(EventArgs e)
         {
             SettingsRoot.Current.Hotkeys.PropertyChanged -= OnHotkeyPropertyChanged;
+            SettingsRoot.Current.General.PropertyChanged -= OnGeneralPropertyChanged;
             base.OnClosed(e);
+        }
+
+        /// <summary>
+        /// Rebuilds this window when the title bar setting is toggled, so the user sees their
+        /// choice rather than being told to restart. A window's chrome is fixed in
+        /// <see cref="SystemThemedWindow"/>'s constructor, so a new window is the only way to show
+        /// it. Editors already open are deliberately left alone: they keep the look they were born
+        /// with until the user closes them, which is what the setting's description promises.
+        /// </summary>
+        private void OnGeneralPropertyChanged(object sender, PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(SettingsGeneral.ExtendIntoTitleBar))
+                return;
+
+            // Posted, not run inline: this fires from the toggle's own PropertyChanged, and closing
+            // the window here would pull the control that raised it out of the tree mid-notify.
+            // Reopening goes through PageManager so the singleton bookkeeping stays honest — Close
+            // evicts the cached instance, and the next GetSettingsPage builds a fresh one.
+            var tab = _selectedTab;
+            Dispatcher.UIThread.Post(() =>
+            {
+                Close();
+                PageManager.Current.GetSettingsPage().Open(tab);
+            });
         }
 
         public void Open(SettingsPageTab? selectedTab = null)

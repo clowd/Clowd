@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Clowd.Config;
 using Clowd.UI.Helpers;
 
 namespace Clowd.UI
@@ -36,33 +37,54 @@ namespace Clowd.UI
 
             FontSize = 14; // Semi's base size; keeps generated pages in step with the Body class
 
-            // macOS only. Runs the window content up under a transparent titlebar (NSWindow gains
-            // FullSizeContentView), which is what a Tahoe-era mac window looks like; the traffic
-            // lights stay where AppKit puts them and float over the content. Deliberately not set
-            // on Windows: there the caption buttons live on the RIGHT, and extending the client
-            // area hands Avalonia the drag region, double-click-to-maximize and the Win11 snap
-            // layouts flyout, none of which these layouts are built for. -1 keeps the system
-            // titlebar height.
-            if (OperatingSystem.IsMacOS())
-            {
-                ExtendClientAreaToDecorationsHint = true;
-                ExtendClientAreaTitleBarHeightHint = -1;
-            }
+            // A window that does not extend still has to resolve the gutter keys, so register them
+            // first and let the platform branch below raise them. Collapsed, the spacers bound to
+            // them take no space and every layout is the one it was before any of this existed.
+            Resources["MacTitleBarGutterHorz"] = 0d;
+            Resources["MacTitleBarGutterVert"] = 0d;
 
-            // Room a window's own content yields to the traffic lights once the client area is
-            // extended, in whichever axis it gets out of their way. Both are zero everywhere else,
-            // where the caption buttons are on the right and the client area is not extended at
-            // all, so a gutter would be dead space.
+            // The outer test is the user's intent, the inner one is what this platform can honour.
+            // They are separate because the intent is platform-neutral and the means are not: if
+            // Windows ever grows a branch here it wants its own hints and its own gutters, since
+            // its caption buttons sit on the trailing edge rather than the leading one.
             //
-            // Horz: for a window whose top row is a toolbar and so shares the strip with them.
-            // Clears the buttons (three 14pt on 20pt centres, the first centred 15.8pt in, so the
-            // zoom button's right edge lands at ~63pt) and then keeps going, the surplus being
-            // what leaves bare strip to drag the window by even when the bar is packed.
-            //
-            // Vert: for a window that steps its top-left content down past them instead, leaving
-            // the strip to the buttons alone.
-            Resources["MacTitleBarGutterHorz"] = OperatingSystem.IsMacOS() ? 105d : 0d;
-            Resources["MacTitleBarGutterVert"] = OperatingSystem.IsMacOS() ? 28d : 0d;
+            // Read once, here, so a window's look is fixed for its lifetime: the hint is a
+            // construction-time decision for the backend, and the drag handler below is subscribed
+            // once. Toggling the setting therefore governs windows opened after it, which is what
+            // its description promises.
+            if (ExtendIntoTitleBar)
+            {
+                if (OperatingSystem.IsMacOS())
+                {
+                    // Runs the window content up under a transparent titlebar (NSWindow gains
+                    // FullSizeContentView), which is what a Tahoe-era mac window looks like; the
+                    // traffic lights stay where AppKit puts them and float over the content. -1
+                    // keeps the system titlebar height.
+                    ExtendClientAreaToDecorationsHint = true;
+                    ExtendClientAreaTitleBarHeightHint = -1;
+
+                    // Room a window's own content yields to the traffic lights, in whichever axis
+                    // it gets out of their way.
+                    //
+                    // Horz: for a window whose top row is a toolbar and so shares the strip with
+                    // them. Clears the buttons (three 14pt on 20pt centres, the first centred
+                    // 15.8pt in, so the zoom button's right edge lands at ~63pt) and then keeps
+                    // going, the surplus being what leaves bare strip to drag the window by even
+                    // when the bar is packed.
+                    //
+                    // Vert: for a window that steps its top-left content down past them instead,
+                    // leaving the strip to the buttons alone.
+                    Resources["MacTitleBarGutterHorz"] = 105d;
+                    Resources["MacTitleBarGutterVert"] = 28d;
+
+                    _clientAreaExtended = true;
+                }
+
+                // No Windows branch yet, and the row is hidden there (GeneralSettingsPage), so the
+                // setting cannot be turned on without one. Building it means more than flipping the
+                // hint: extending the client area on Win32 hands Avalonia the drag region,
+                // double-click-to-maximize and the Win11 snap layouts flyout.
+            }
 
             ActualThemeVariantChanged += (_, _) => UpdateBackdrop();
             UpdateBackdrop();
@@ -84,7 +106,7 @@ namespace Clowd.UI
         /// </summary>
         protected void EnableTitleBarDrag(Control region)
         {
-            if (!OperatingSystem.IsMacOS() || region == null)
+            if (!_clientAreaExtended || region == null)
                 return;
 
             region.PointerPressed += (_, e) =>
@@ -96,6 +118,21 @@ namespace Clowd.UI
                     BeginMoveDrag(e);
             };
         }
+
+        /// <summary>
+        /// Whether the user wants windows to run their content under a transparent title bar.
+        /// Platform-neutral: this is the intent, not the means, so a platform that cannot honour it
+        /// checks for itself. Null-safe on purpose: this is read from a base window constructor,
+        /// where a missing settings file must not be able to take every window in the app down.
+        /// </summary>
+        internal static bool ExtendIntoTitleBar => SettingsRoot.Current?.General?.ExtendIntoTitleBar ?? true;
+
+        /// <summary>
+        /// Whether this window actually got an extended client area, as opposed to merely being
+        /// asked for one. Fixed at construction, and the thing to test before assuming the window
+        /// has no title bar of its own.
+        /// </summary>
+        private readonly bool _clientAreaExtended;
 
         protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {

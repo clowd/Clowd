@@ -45,6 +45,10 @@ namespace Clowd.UI.Pages
             // reports false there regardless of what is stored).
             SystemAccentSetting.IsVisible = AccentColors.SystemAccentSupported;
 
+            // Nothing to choose off macOS: the client area is never extended there, so the row
+            // would be a switch that changes nothing.
+            ExtendTitleBarSetting.IsVisible = OperatingSystem.IsMacOS();
+
             AccentSwatchRow.PointerPressed += async (s, e) =>
             {
                 var general = SettingsRoot.Current.General;

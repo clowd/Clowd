@@ -134,6 +134,19 @@
                                    Text="Choose the light or dark appearance, or follow the Windows setting." />
                     </StackPanel>
 
+                    <!-- macOS only (hidden in the code-behind): the window chrome choice. Read
+                         once per window in SystemThemedWindow's constructor, hence the caption's
+                         promise about new windows; the main window reopens itself on the spot so
+                         the change is visible. -->
+                    <StackPanel x:Name="ExtendTitleBarSetting" Classes="Setting">
+                        <CheckBox x:Name="ExtendTitleBarCheck" IsChecked="{Binding ExtendIntoTitleBar}">
+                            <TextBlock Text="Extend windows into the title bar" />
+                        </CheckBox>
+                        <TextBlock Classes="Caption"
+                                   TextWrapping="Wrap"
+                                   Text="Run window content up under a transparent title bar, the way most modern Mac apps look. Windows already open keep their current look until you close them." />
+                    </StackPanel>
+
                     <!-- The accent of the capture surfaces: the overlay, and the recording toolbar
                          and border that are styled to match it. Lives here rather than on the
                          Capture page because it is no longer the overlay's alone. The swatch shows
