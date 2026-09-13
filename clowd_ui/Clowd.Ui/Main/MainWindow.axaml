@@ -50,7 +50,14 @@
          (pages keep a 0,0,16,16 content margin for clearance). -->
     <Grid Margin="16,16,0,0" RowDefinitions="Auto,*" ColumnDefinitions="Auto,*">
 
-        <Grid Grid.Row="0" Grid.Column="0" Margin="6,0,0,24" ColumnDefinitions="Auto,*">
+        <StackPanel Grid.Row="0" Grid.Column="0">
+
+            <!--  Steps the brand row down past the macOS traffic lights, which float over this
+                  corner once the client area is extended. The right-hand column spans both rows
+                  and so keeps its own place at the top. Zero-height off macOS.  -->
+            <Border Height="{DynamicResource MacTitleBarGutterVert}" />
+
+        <Grid Margin="6,0,0,24" ColumnDefinitions="Auto,*">
             <Viewbox Width="40" Height="40" HorizontalAlignment="Left">
                 <Path Width="16" Height="16" Data="{StaticResource PathLogoSmall16}" Fill="{StaticResource ClowdAccentBrush}" />
             </Viewbox>
@@ -59,6 +66,8 @@
                 <TextBlock Opacity="0.6" Text="Screen Capture" />
             </StackPanel>
         </Grid>
+
+        </StackPanel>
 
         <Grid Grid.Row="1" Grid.Column="0" RowDefinitions="Auto,*">
 

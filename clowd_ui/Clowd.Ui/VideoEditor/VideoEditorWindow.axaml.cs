@@ -235,6 +235,9 @@ namespace Clowd.UI.VideoEditor
 
             InitializeComponent();
 
+            // Under the extended client area (macOS) this bar IS the title bar.
+            EnableTitleBarDrag(TopBar);
+
             // the browsers' col-resize (bars + arrows), not the plain SizeWestEast — which
             // GridSplitter assigns to its own Cursor on attach, so the custom cursor has to sit
             // on the template's panel, where the innermost non-null cursor wins

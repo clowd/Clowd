@@ -32,6 +32,7 @@
         <controls:DockAndWrapPanel
             x:Name="PropertiesBar"
             HorizontalAlignment="Stretch"
+            Background="Transparent"
             ItemHeight="30"
             Orientation="Horizontal">
             <controls:DockAndWrapPanel.Styles>
@@ -56,6 +57,10 @@
                     <Setter Property="BorderBrush" Value="{DynamicResource AdornerLayerBorderBrush}" />
                 </Style>
             </controls:DockAndWrapPanel.Styles>
+
+            <!--  Clears the macOS traffic lights, which float over this bar once the client
+                  area is extended. Zero-width off macOS.  -->
+            <Border Width="{DynamicResource MacTitleBarGutterHorz}" />
 
             <StackPanel>
                 <TextBlock VerticalAlignment="Center">

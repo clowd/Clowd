@@ -247,6 +247,7 @@
         <controls:DockAndWrapPanel
             x:Name="TopBar"
             HorizontalAlignment="Stretch"
+            Background="Transparent"
             ItemHeight="30"
             Orientation="Horizontal">
             <controls:DockAndWrapPanel.Styles>
@@ -263,6 +264,11 @@
                     <Setter Property="Foreground" Value="{DynamicResource ClowdStarBrush}" />
                 </Style>
             </controls:DockAndWrapPanel.Styles>
+
+            <!--  Clears the macOS traffic lights, which float over this bar once the client
+                  area is extended, and leaves bare strip to drag the window by. Zero-width off
+                  macOS.  -->
+            <Border Width="{DynamicResource MacTitleBarGutterHorz}" />
 
             <StackPanel>
                 <TextBlock
@@ -323,6 +329,7 @@
                 ToolTip.Tip="Properties panel" />
 
             <controls:ToolButton
+                Margin="0,0,6,0"
                 Padding="6"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 CanToggle="True"
@@ -332,7 +339,6 @@
 
             <controls:ToolButton
                 x:Name="btnRender"
-                Margin="6,0,0,0"
                 controls:DockAndWrapPanel.DockToEnd="True"
                 Command="{Binding CommandRender}"
                 Content="Render"
