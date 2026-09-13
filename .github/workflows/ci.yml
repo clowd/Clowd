@@ -200,6 +200,39 @@ jobs:
           -c Release -r ${{ matrix.rid }} --self-contained true
           -o publish
 
+      # macOS 26 gates its window design (the larger corner radius, the modern titlebar) on the
+      # linked-SDK field of LC_BUILD_VERSION in the MAIN executable, not on any runtime API. That
+      # executable is the .NET apphost, which Microsoft ships prebuilt declaring sdk 15.5, so
+      # AppKit puts every Clowd window in the pre-Tahoe compatibility frame. Nothing in Avalonia
+      # or the Info.plist can override it: libAvaloniaNative is already sdk 26.0 and AppKit never
+      # looks at it. So stamp the field here, leaving minos alone; sdk newer than the deployment
+      # target is exactly what an ordinary Xcode build produces, and dyld enforces only minos, so
+      # the package still runs everywhere it does today.
+      #
+      # Only gates above the currently declared 15.5 are newly opted into, which in practice means
+      # the macOS 26 ones, so behaviour on macOS 12 through 15 is unchanged. Worth knowing that
+      # this also opts the process into any future runtime cutoff for the screen capture APIs
+      # deprecated in favour of ScreenCaptureKit: ScreenColorReader still calls
+      # CGWindowListCreateImage, which the SDK headers mark obsoleted=15.0 (compile time only,
+      # and still returning images at runtime on 26.6, but Apple has signalled the intent).
+      #
+      # vtool cannot re-sign the apphost's ad-hoc signature (it only regenerates linker-signed
+      # ones), so from here until vpk signs with Developer ID in release.yml this binary has an
+      # invalid signature and is SIGKILLed on launch on Apple Silicon. That makes the uploaded
+      # clowd-osx-* artifact unrunnable as-is; add `codesign -s - --force` below if that ever
+      # needs to change.
+      - name: Stamp the macOS SDK version into the apphost
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          MINOS=$(vtool -show-build-version publish/Clowd.Ui | awk '/minos/ { print $2 }')
+          vtool -set-build-version macos "$MINOS" 26.0 -replace -output publish/Clowd.Ui publish/Clowd.Ui
+          vtool -show-build-version publish/Clowd.Ui
+          # A silent no-op here would ship the legacy frame and go unnoticed until someone looked
+          # at a window, so fail the build instead.
+          vtool -show-build-version publish/Clowd.Ui | grep -qE '^\s*sdk 26\.' \
+            || { echo "::error::apphost SDK stamp did not apply"; exit 1; }
+
       # The render tool is a separate thin exe over Clowd.VideoSDK; publishing into the
       # same directory shares the self-contained runtime and SDK assemblies, so the
       # marginal cost is the apphost. VidRenderRunner looks for it beside Clowd.Ui.
