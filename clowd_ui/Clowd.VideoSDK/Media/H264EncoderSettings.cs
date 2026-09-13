@@ -38,8 +38,10 @@ namespace Clowd.VideoSDK.Media
     /// variant (<see cref="VideoToolboxBitrateKbps"/>) to open instead.</item>
     /// </list>
     /// Uniform across all of them: a 10-second GOP (<see cref="GopFrames"/>, see
-    /// <see cref="GopSeconds"/> for the size measurements), 2 B-frames where the encoder supports them (AMF and
-    /// VideoToolbox silently drop to what the hardware offers), profile high.
+    /// <see cref="GopSeconds"/> for the size measurements) and profile high. B-frames are
+    /// <see cref="BFrames"/> everywhere except VideoToolbox, which encodes without frame
+    /// reordering (<see cref="VideoToolboxBFrames"/>, and see the VideoToolbox case of
+    /// <see cref="For"/> for why); AMF drops to whatever B-frame support the hardware has.
     /// </summary>
     public sealed class H264EncoderSettings
     {
@@ -59,6 +61,10 @@ namespace Clowd.VideoSDK.Media
 
         /// <summary>B-frames between references, where the encoder supports them.</summary>
         public const int BFrames = 2;
+
+        /// <summary>VideoToolbox encodes without frame reordering. See the VideoToolbox case of
+        /// <see cref="For"/> for why this is not <see cref="BFrames"/>.</summary>
+        public const int VideoToolboxBFrames = 0;
 
         /// <summary>The worst quality x264's crf and NVENC's cq accept.</summary>
         public const int MaxCrf = 51;
@@ -212,17 +218,42 @@ namespace Clowd.VideoSDK.Media
 
                 case VideoEncoder.VideoToolbox:
                 {
-                    // allow_sw=0 is the encoder default, stated so the intent survives an FFmpeg
-                    // bump: a software VideoToolbox session would be slower than x264 fast.
+                    // No B-frames here, deliberately. To h264_videotoolbox max_b_frames is a
+                    // boolean: it only toggles kVTCompressionPropertyKey_AllowFrameReordering,
+                    // and VideoToolbox then picks its own GOP structure. On macOS 15 (Apple
+                    // Silicon) that is a two-deep B pyramid, which comes out in decode order as
+                    // pts 0,4,2,1,3 with a uniform dts series one frame behind. FFmpeg derives
+                    // that dts assuming a single frame of reordering for H.264
+                    // (videotoolboxenc.c pins has_b_frames to 1; HEVC gets 2 for the pyramid it
+                    // knows about), and submits every frame with kCMTimeInvalid as its duration,
+                    // so VideoToolbox never reports a lead of its own. The dts is then short by
+                    // one frame and roughly a quarter of the packets leave the encoder with
+                    // dts > pts, which movenc refuses outright ("pts < dts in stream 0",
+                    // EINVAL): with Auto resolving here, that failed every render on a Mac.
+                    // Nothing on the public API reaches the assumption (has_b_frames is
+                    // overwritten as the session opens, and no option exposes VideoToolbox's
+                    // frame-delay count), and the writer cannot repair the dts itself: a
+                    // reordering lead is a count of frames, and RenderJob puts a v1 VFR render
+                    // on the microsecond time base (Mp4WriterOptions.UseMicrosecondTimeBase),
+                    // where the lead in microseconds is however long the frames VideoToolbox
+                    // pulled forward happen to last. Without reordering dts == pts, which muxes
+                    // on either grid. Turning B-frames back on here needs the fix in FFmpeg,
+                    // giving H.264 the same has_b_frames = 2 as HEVC.
+                    //
+                    // profile=high also keeps Baseline away: videotoolboxenc selects it when no
+                    // profile is set and reordering is off. allow_sw=0 is the encoder default,
+                    // stated so the intent survives an FFmpeg bump: a software VideoToolbox
+                    // session would be slower than x264 fast.
                     var options = Options(("profile", "high"), ("allow_sw", "0"));
+                    string vtCommon = $"profile=high bf={VideoToolboxBFrames} gop={gop}";
                     int kbps = VideoToolboxBitrateKbps(width, height, fpsNum, fpsDen);
                     var fallback = new H264EncoderSettings(encoder, codec, options,
-                        gop, BFrames, kbps * 1000L, 0, false, 0,
-                        $"VideoToolbox b:v={kbps}k (average bitrate: no quality mode on this Mac) {common}", null);
+                        gop, VideoToolboxBFrames, kbps * 1000L, 0, false, 0,
+                        $"VideoToolbox b:v={kbps}k (average bitrate: no quality mode on this Mac) {vtCommon}", null);
                     int q = VideoToolboxQuality(crf);
                     return new H264EncoderSettings(encoder, codec, options,
-                        gop, BFrames, 0, 0, true, q * ffmpeg.FF_QP2LAMBDA,
-                        $"VideoToolbox q:v={q} {common}", fallback);
+                        gop, VideoToolboxBFrames, 0, 0, true, q * ffmpeg.FF_QP2LAMBDA,
+                        $"VideoToolbox q:v={q} {vtCommon}", fallback);
                 }
 
                 default:

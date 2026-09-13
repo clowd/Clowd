@@ -495,7 +495,14 @@ namespace Clowd.VideoSDK.Tests
             var (log, ran, name) = RenderWith(VideoEncoder.VideoToolbox, crf: 21);
             Assert.Equal(VideoEncoder.VideoToolbox, ran);
             Assert.Equal("h264_videotoolbox", name);
+            // No quality figure in the assertion: an Intel Mac has no quality mode and lands on
+            // the bitrate variant, which logs a bitrate instead. bf=0 is the part that matters
+            // and both variants carry it, because a reordering h264_videotoolbox produces
+            // packets movenc rejects (see the VideoToolbox case of H264EncoderSettings.For).
+            // The encoder opened here, so nothing should have fallen back to x264 either.
             Assert.Contains(log, line => line.Contains("VideoToolbox ", StringComparison.Ordinal));
+            Assert.Contains(log, line => line.Contains("bf=0", StringComparison.Ordinal));
+            Assert.DoesNotContain(log, line => line.Contains("falling back", StringComparison.Ordinal));
         }
 
         /// <summary>Asking for a hardware encoder never fails the writer: where it does not open

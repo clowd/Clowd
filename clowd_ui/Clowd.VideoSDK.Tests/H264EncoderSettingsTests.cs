@@ -133,7 +133,12 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(0, s.BitRate);
             Assert.Equal("high", Opt(s, "profile"));
             Assert.Equal("0", Opt(s, "allow_sw"));
-            Assert.Equal("VideoToolbox q:v=55 profile=high bf=2 gop=300", s.Description);
+            Assert.Equal("VideoToolbox q:v=55 profile=high bf=0 gop=300", s.Description);
+            // Frame reordering is off on purpose: FFmpeg's dts for a reordering
+            // h264_videotoolbox is short by a frame and movenc rejects the packets. Both
+            // variants must stay at 0; see the VideoToolbox case of H264EncoderSettings.For.
+            Assert.Equal(0, H264EncoderSettings.VideoToolboxBFrames);
+            Assert.Equal(0, s.MaxBFrames);
 
             var fallback = s.BitrateFallback;
             Assert.NotNull(fallback);
@@ -142,7 +147,9 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(4000 * 1000L, fallback.BitRate); // the reference size at the reference rate
             Assert.Equal(s.PrivateOptions, fallback.PrivateOptions);
             Assert.Null(fallback.BitrateFallback);
+            Assert.Equal(0, fallback.MaxBFrames);
             Assert.Contains("b:v=4000k", fallback.Description, StringComparison.Ordinal);
+            Assert.Contains("bf=0", fallback.Description, StringComparison.Ordinal);
         }
 
         [Theory]
@@ -170,7 +177,9 @@ namespace Clowd.VideoSDK.Tests
             {
                 var s = At(encoder, 21, fpsNum: fpsNum, fpsDen: fpsDen);
                 Assert.Equal(frames, s.GopSize);
-                Assert.Equal(H264EncoderSettings.BFrames, s.MaxBFrames);
+                Assert.Equal(encoder == VideoEncoder.VideoToolbox
+                    ? H264EncoderSettings.VideoToolboxBFrames
+                    : H264EncoderSettings.BFrames, s.MaxBFrames);
                 Assert.Contains($"gop={frames}", s.Description, StringComparison.Ordinal);
             }
         }
