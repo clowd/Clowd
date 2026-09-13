@@ -54,32 +54,38 @@ jobs:
       TO_SHA: ${{ inputs.to_sha }}
       RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
+      # Checked out at the ref the workflow runs from, not at to_sha, because the prompt is
+      # read from here and an older to_sha predates it.
       - name: Checkout
         uses: actions/checkout@v7
         with:
           # The agent reads the diff and the surrounding code, so it needs the whole history.
           fetch-depth: 0
-          ref: ${{ inputs.to_sha }}
 
       - name: Resolve range
         run: |
           # Accept tags and refs as well as raw shas, so a manual dispatch can name a release tag.
-          git fetch --tags --force origin >/dev/null 2>&1 || true
+          git fetch --tags --force origin '+refs/heads/*:refs/remotes/origin/*' >/dev/null 2>&1 || true
           FROM=$(git rev-parse --verify "${FROM_SHA}^{commit}")
           TO=$(git rev-parse --verify "${TO_SHA}^{commit}")
           echo "FROM_SHA=$FROM" >> "$GITHUB_ENV"
           echo "TO_SHA=$TO" >> "$GITHUB_ENV"
 
-          git log --reverse --no-merges --date=short \
-            --format='%H %ad %s%n%w(0,4,4)%b' "$FROM..$TO" > commits.txt
           COUNT=$(git rev-list --no-merges --count "$FROM..$TO")
           echo "COMMIT_COUNT=$COUNT" >> "$GITHUB_ENV"
-
           echo "Range $FROM..$TO, $COUNT commits"
           if [ "$COUNT" -eq 0 ]; then
             echo "::error::No commits between $FROM and $TO."
             exit 1
           fi
+
+          # Keep the current prompt, then move the worktree to the released commit so the agent
+          # reads the code as it shipped rather than whatever has landed since.
+          cp .github/release-notes-prompt.md "$RUNNER_TEMP/prompt-instructions.md"
+          git log --reverse --no-merges --date=short \
+            --format='%H %ad %s%n%w(0,4,4)%b' "$FROM..$TO" > "$RUNNER_TEMP/commits.txt"
+          git checkout --detach --force "$TO"
+          cp "$RUNNER_TEMP/commits.txt" commits.txt
 
       - name: Install Node
         uses: actions/setup-node@v6
@@ -117,7 +123,7 @@ jobs:
             echo "Write the release notes for commit range \`$FROM_SHA..$TO_SHA\` of this"
             echo "repository ($COMMIT_COUNT commits). Follow these instructions exactly."
             echo
-            cat .github/release-notes-prompt.md
+            cat "$RUNNER_TEMP/prompt-instructions.md"
           } > prompt.txt
 
           codex exec \
