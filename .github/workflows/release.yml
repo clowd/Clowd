@@ -31,9 +31,17 @@ jobs:
     outputs:
       version: ${{ steps.create.outputs.version }}
       tag: ${{ steps.create.outputs.tag }}
+      from_sha: ${{ steps.range.outputs.from_sha }}
+      to_sha: ${{ steps.range.outputs.to_sha }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      # Only needed to turn the previous release's tag into a commit for the notes range.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Create draft release
         id: create
         run: |
@@ -58,6 +66,31 @@ jobs:
           gh release create "$TAG" --repo ${{ github.repository }} \
             --draft --title "$TAG" --notes "" $PRE
           echo "Created draft release $TAG"
+
+      # A pre-release's notes cover only its own build, so the baseline is whatever shipped last.
+      # A stable release's notes cover everything since the last stable, which folds in every
+      # pre-release in between. gh release list is newest first and drafts are excluded, so the
+      # draft created above is never picked as its own baseline.
+      - name: Resolve notes range
+        id: range
+        run: |
+          TO_SHA=$(gh run view "${{ inputs.run_id }}" --repo ${{ github.repository }} --json headSha -q .headSha)
+
+          EXCLUDE=""
+          if [ "${{ inputs.prerelease }}" != "true" ]; then EXCLUDE="--exclude-pre-releases"; fi
+          PREV_TAG=$(gh release list --repo ${{ github.repository }} --exclude-drafts $EXCLUDE \
+            --limit 1 --json tagName -q '.[0].tagName // ""')
+
+          if [ -n "$PREV_TAG" ]; then
+            FROM_SHA=$(git rev-list -n 1 "$PREV_TAG")
+            echo "Previous release $PREV_TAG at $FROM_SHA"
+          else
+            echo "::warning::No previous release found, falling back to the last 30 commits."
+            FROM_SHA=$(git rev-parse "$TO_SHA~30" 2>/dev/null || git rev-list --max-parents=0 "$TO_SHA" | tail -1)
+          fi
+
+          echo "from_sha=$FROM_SHA" >> "$GITHUB_OUTPUT"
+          echo "to_sha=$TO_SHA" >> "$GITHUB_OUTPUT"
 
       # Give the release time to become visible to the API the vpk jobs look it up with.
       - name: Wait for release to settle
@@ -233,9 +266,22 @@ jobs:
           --merge true --publish false --pre ${{ inputs.prerelease }}
         shell: bash
 
+  # Runs alongside the vpk jobs: vpk only writes a release body when it creates the release,
+  # and this draft already exists, so the two cannot race over the description.
+  notes:
+    name: release notes
+    needs: draft
+    uses: ./.github/workflows/release-notes.yml
+    with:
+      from_sha: ${{ needs.draft.outputs.from_sha }}
+      to_sha: ${{ needs.draft.outputs.to_sha }}
+      release_tag: ${{ needs.draft.outputs.tag }}
+    secrets:
+      OPENROUTER_KEY: ${{ secrets.OPENROUTER_KEY }}
+
   publish:
     name: publish release
-    needs: [draft, release]
+    needs: [draft, release, notes]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
