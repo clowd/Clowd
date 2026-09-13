@@ -110,7 +110,7 @@ jobs:
           name = "OpenRouter"
           base_url = "https://openrouter.ai/api/v1"
           env_key = "OPENROUTER_KEY"
-          wire_api = "chat"
+          wire_api = "responses"
           EOF
 
       # The runner is ephemeral and the agent only reads this repository, so the sandbox
