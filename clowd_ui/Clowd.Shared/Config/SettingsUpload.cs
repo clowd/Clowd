@@ -7,10 +7,6 @@ using System.Text.Json.Serialization;
 
 namespace Clowd.Config
 {
-    [AttributeUsage(AttributeTargets.Property, AllowMultiple = false)]
-    public class FlattenSettingsObjectAttribute : Attribute
-    { }
-
     public class UploadProviderInfo : SimpleNotifyObject
     {
         public bool IsEnabled
