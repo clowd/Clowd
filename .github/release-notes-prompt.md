@@ -18,11 +18,21 @@ screen recording tool for Windows and macOS. The audience is end users, not deve
 2. For anything that looks like a new feature, read the code it touched. Find the real
    name of the setting, menu item, button, dialog or hotkey a user would interact with,
    so the instructions you write match what they see on screen. Do not guess a name.
-3. Drop anything a user cannot observe: CI and build changes, tests, refactors,
+3. A commit that attempts a fix is not proof the fix worked, because its message is
+   written before anyone tested it. Before claiming something is fixed, check whether
+   later history contradicts it: `git log <to_sha>..origin/master` and the messages of
+   any commit touching the same area often say plainly that an earlier attempt had no
+   effect. If the fix was later found not to work, leave it out.
+4. Say so when a change silently alters what an existing user already has. Removed or
+   hidden controls, a renamed label, a changed default, and a preset that now produces
+   different output all matter more to an existing user than a new feature does, and
+   they are easy to miss because the diff is a deletion or a constant. Look for them
+   deliberately.
+5. Drop anything a user cannot observe: CI and build changes, tests, refactors,
    dependency bumps, version bumps, telemetry plumbing, internal renames. Drop cosmetic
    noise too, such as a tidied up label or a nudged margin. The test is whether a user
    would notice the change and care, not whether the diff is user facing.
-4. Write the notes to `release-notes.md` in the current directory.
+6. Write the notes to `release-notes.md` in the current directory.
 
 ## Output format
 
