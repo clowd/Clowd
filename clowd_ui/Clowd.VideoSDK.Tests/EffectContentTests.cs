@@ -188,9 +188,9 @@ namespace Clowd.VideoSDK.Tests
         public void Validate_rejects_a_linked_effect_item()
         {
             var project = EffectProject(out _, out var zoom, out _);
-            zoom.LinkGroupId = Guid.NewGuid();
+            zoom.GroupId = Guid.NewGuid();
 
-            Assert.Contains(project.Validate(), e => e.Contains("carries a link group"));
+            Assert.Contains(project.Validate(), e => e.Contains("carries a group"));
         }
 
         [Theory]
@@ -300,7 +300,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Null(left.Exit);
             Assert.Null(right.Entry);
             Assert.Equal(TransitionKind.Ramp, right.Exit.Kind);
-            Assert.Null(right.LinkGroupId);
+            Assert.Null(right.GroupId);
 
             // the halves' content is a clone, not shared state.
             var rightContent = (ZoomContent)right.Content;
@@ -339,10 +339,10 @@ namespace Clowd.VideoSDK.Tests
         public void TryRelinkTrack_refuses_effect_rows()
         {
             var project = EffectProject(out var clip, out var zoom, out _);
-            clip.LinkGroupId = Guid.NewGuid();
+            clip.GroupId = Guid.NewGuid();
 
-            Assert.False(TimelineOps.TryRelinkTrack(project, zoom.TrackId));
-            Assert.Null(zoom.LinkGroupId);
+            Assert.False(TimelineOps.TryRegroupTrack(project, zoom.TrackId));
+            Assert.Null(zoom.GroupId);
         }
     }
 }

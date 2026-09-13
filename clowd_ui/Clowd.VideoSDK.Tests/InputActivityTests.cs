@@ -426,13 +426,13 @@ namespace Clowd.VideoSDK.Tests
             // overlay mirrors its span and link group
             project.Items.Add(new Item
             {
-                Id = Guid.NewGuid(), TrackId = screenTrack.Id, LinkGroupId = group,
+                Id = Guid.NewGuid(), TrackId = screenTrack.Id, GroupId = group,
                 TimelineStartTicks = Sec(10), DurationTicks = Sec(5),
                 Content = new MediaContent { SourceId = source.Id, StreamIndex = 0, SourceInTicks = Sec(4) },
             });
             var overlay = new Item
             {
-                Id = Guid.NewGuid(), TrackId = overlayTrack.Id, LinkGroupId = group,
+                Id = Guid.NewGuid(), TrackId = overlayTrack.Id, GroupId = group,
                 TimelineStartTicks = Sec(10), DurationTicks = Sec(5),
                 Content = new CursorContent { SourceId = source.Id },
             };
@@ -452,7 +452,7 @@ namespace Clowd.VideoSDK.Tests
             // another segment of the same recording overlaps too but belongs to another group
             project.Items.Add(new Item
             {
-                Id = Guid.NewGuid(), TrackId = screenTrack.Id, LinkGroupId = Guid.NewGuid(),
+                Id = Guid.NewGuid(), TrackId = screenTrack.Id, GroupId = Guid.NewGuid(),
                 TimelineStartTicks = Sec(0), DurationTicks = Sec(30),
                 Content = new MediaContent { SourceId = source.Id, StreamIndex = 0, SourceInTicks = Sec(100) },
             });
@@ -460,13 +460,13 @@ namespace Clowd.VideoSDK.Tests
             // source past the partner's SourceIn
             project.Items.Add(new Item
             {
-                Id = Guid.NewGuid(), TrackId = screenTrack.Id, LinkGroupId = mine,
+                Id = Guid.NewGuid(), TrackId = screenTrack.Id, GroupId = mine,
                 TimelineStartTicks = Sec(8), DurationTicks = Sec(10),
                 Content = new MediaContent { SourceId = source.Id, StreamIndex = 0, SourceInTicks = Sec(1), Speed = 2.0 },
             });
             var overlay = new Item
             {
-                Id = Guid.NewGuid(), TrackId = overlayTrack.Id, LinkGroupId = mine,
+                Id = Guid.NewGuid(), TrackId = overlayTrack.Id, GroupId = mine,
                 TimelineStartTicks = Sec(10), DurationTicks = Sec(5),
                 Content = new KeyboardContent { SourceId = source.Id },
             };

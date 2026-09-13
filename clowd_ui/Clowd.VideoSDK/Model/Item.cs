@@ -11,7 +11,7 @@ namespace Clowd.VideoSDK.Model;
 /// <see cref="MediaContent.SourceInTicks"/>.
 ///
 /// Mutate items through <see cref="TimelineOps"/>, not directly: that is the only place the
-/// <see cref="LinkGroupId"/> semantics live.
+/// <see cref="GroupId"/> semantics live.
 /// </summary>
 public sealed class Item
 {
@@ -56,7 +56,9 @@ public sealed class Item
     /// <summary>Linear gain applied to the item's audio, 1.0 = unity.</summary>
     public double Volume { get; set; } = 1.0;
 
-    /// <summary>Items sharing a non-null group id move/trim/split as one — this is the sync
-    /// toggle for the rows that came from a single recording. Null = unlinked.</summary>
-    public Guid? LinkGroupId { get; set; }
+    /// <summary>Items sharing a non-null group id move/cut/split as one — the rows that came from
+    /// a single recording, or the streams of one imported file. Null = ungrouped. Serialized under
+    /// its original name so every saved project still reads.</summary>
+    [JsonPropertyName("LinkGroupId")]
+    public Guid? GroupId { get; set; }
 }

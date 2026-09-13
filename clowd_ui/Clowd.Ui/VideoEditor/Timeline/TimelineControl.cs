@@ -81,6 +81,10 @@ namespace Clowd.UI.VideoEditor.Timeline
         /// <summary>Raised when the scrub drag ends, with the final position in timeline ticks.</summary>
         public event EventHandler<long> ScrubCompleted;
 
+        /// <summary>Passthrough of <see cref="TimelineSurface.GroupDragChanged"/>: the member
+        /// count while a move drag carries a whole group, 0 once it ends.</summary>
+        public event EventHandler<int> GroupDragChanged;
+
         /// <summary>Selection passthrough from <see cref="Session"/> — the session owns selection,
         /// so the timeline, inspector and gizmo cannot disagree about it.</summary>
         public event EventHandler SelectionChanged;
@@ -209,6 +213,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             _surface.ScrubStarted += Child_ScrubStarted;
             _surface.Scrubbed += Child_Scrubbed;
             _surface.ScrubCompleted += Child_ScrubCompleted;
+            _surface.GroupDragChanged += (_, count) => GroupDragChanged?.Invoke(this, count);
 
             // the row context menu runs the very command the Delete key does, rather than a second
             // copy of the ripple/group rules. (Its two Split entries do NOT delegate here: they cut
@@ -309,7 +314,7 @@ namespace Clowd.UI.VideoEditor.Timeline
         public IReadOnlyList<Guid> SelectedItemIds => _session?.SelectedItemIds ?? Array.Empty<Guid>();
 
         /// <summary>Deletes the primary selected item — just that clip, leaving its span blank.
-        /// The rest of its link group (the recording's other rows, the row's other segments) stays
+        /// The rest of its group (the recording's other rows, the row's other segments) stays
         /// exactly where it is: deleting the middle of a split audio row silences that stretch and
         /// moves nothing. The cross-track cut is <see cref="RippleDeleteSelection"/>, offered from
         /// the context menu. The window forwards the Delete key here. Returns false when nothing
@@ -324,9 +329,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             return true;
         }
 
-        /// <summary>Cuts the selected clip's span out of its link group and closes the gap on
+        /// <summary>Cuts the selected clip's span out of its group and closes the gap on
         /// <b>all</b> tracks (<see cref="EditorSession.RippleDeleteItem"/>) — the "remove this
-        /// stretch of the recording" gesture, from the context menu's Ripple Delete. An unlinked
+        /// stretch of the recording" gesture, from the context menu's Ripple Delete. An ungrouped
         /// item is a group of one: it is removed and everything at or after it slides left.
         /// Returns false when nothing deletable is selected.</summary>
         public bool RippleDeleteSelection()
@@ -407,9 +412,9 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
             else if (e.Kind == ProjectChangeKind.Mapping)
             {
-                // unlink/relink are Mapping and come from the inspector's unlink button — the
-                // headers' link badges re-read without a rebuild.
-                _headers.RefreshLinkBadges();
+                // ungroup/relink are Mapping and come from the inspector's ungroup button — the
+                // headers' group badges re-read without a rebuild.
+                _headers.RefreshGroupBadges();
             }
 
             _surface.InvalidateVisual();

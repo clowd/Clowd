@@ -56,7 +56,7 @@ namespace Clowd.UI.VideoEditor.Timeline
                 if (!IsVideoTrack(project, other.TrackId) || !FrameComposer.IsScreenStream(source, media.StreamIndex))
                     continue;
 
-                if (item.LinkGroupId != null && other.LinkGroupId == item.LinkGroupId)
+                if (item.GroupId != null && other.GroupId == item.GroupId)
                 {
                     screen = other;
                     break;

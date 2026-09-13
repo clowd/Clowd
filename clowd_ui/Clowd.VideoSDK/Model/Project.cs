@@ -308,8 +308,8 @@ public sealed class Project
             {
                 if (track != null && track.Kind != TrackKind.Effect)
                     errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on non-effect track {track.Id}.");
-                if (item.LinkGroupId != null)
-                    errors.Add($"Effect item {item.Id} carries a link group.");
+                if (item.GroupId != null)
+                    errors.Add($"Effect item {item.Id} carries a group.");
                 if (item.Entry != null && item.Entry.Kind != TransitionKind.Ramp)
                     errors.Add($"Effect item {item.Id} has a non-ramp entry transition ({item.Entry.Kind}).");
                 if (item.Exit != null && item.Exit.Kind != TransitionKind.Ramp)
@@ -321,13 +321,13 @@ public sealed class Project
             }
 
             // input-overlay items live on video rows only and are hard-synced to their
-            // recording: an item without a link group could drift from the screen it annotates.
+            // recording: an item without a group could drift from the screen it annotates.
             if (item.Content is CursorContent or KeyboardContent)
             {
                 if (track != null && track.Kind != TrackKind.Video)
                     errors.Add($"Item {item.Id} places {item.Content.GetType().Name} on non-video track {track.Id}.");
-                if (item.LinkGroupId == null)
-                    errors.Add($"Input overlay item {item.Id} carries no link group.");
+                if (item.GroupId == null)
+                    errors.Add($"Input overlay item {item.Id} carries no group.");
             }
         }
 

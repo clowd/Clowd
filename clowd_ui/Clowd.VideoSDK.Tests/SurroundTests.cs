@@ -40,7 +40,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = 0,
                 DurationTicks = Ms(5_000),
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 0 },
-                LinkGroupId = group,
+                GroupId = group,
             };
             var second = new Item
             {
@@ -49,7 +49,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = Ms(5_000),
                 DurationTicks = Ms(5_000),
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 0, SourceInTicks = Ms(5_000) },
-                LinkGroupId = group,
+                GroupId = group,
             };
             image = new Item
             {

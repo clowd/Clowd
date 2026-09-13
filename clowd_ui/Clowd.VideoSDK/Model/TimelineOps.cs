@@ -5,12 +5,12 @@ using System.Linq;
 namespace Clowd.VideoSDK.Model;
 
 /// <summary>
-/// The editing operations, and the <b>only</b> place <see cref="Item.LinkGroupId"/> semantics
+/// The editing operations, and the <b>only</b> place <see cref="Item.GroupId"/> semantics
 /// live — timeline control, keyboard shortcuts and tests all come through here, so link behavior
 /// cannot drift between entry points. The operations that change <i>when</i> content plays
 /// (<see cref="Move"/>, <see cref="Split"/>, <see cref="RippleDelete"/>) resolve the target item's
-/// link group first and apply to the members concerned — all of them for a move, those covering
-/// the instant for a split, those overlapping the item's span for a delete (an unlinked item is a
+/// group first and apply to the members concerned — all of them for a move, those covering
+/// the instant for a split, those overlapping the item's span for a delete (an ungrouped item is a
 /// group of one); the operations
 /// that change how much of an item is shown (<see cref="TrimStart"/>, <see cref="TrimEnd"/>) or
 /// remove a lone item (<see cref="Delete"/>) are single-item.
@@ -19,7 +19,7 @@ namespace Clowd.VideoSDK.Model;
 /// timeline origin, or a trim that would take an item under <see cref="MinSegmentTicks"/> or
 /// before the start of its source, is reduced to the largest amount that fits, and the applied
 /// amount is returned so callers can reflect it. Operations that cannot be partially applied
-/// (<see cref="Split"/>, <see cref="TryRelinkTrack"/>) reject instead.
+/// (<see cref="Split"/>, <see cref="TryRegroupTrack"/>) reject instead.
 /// </summary>
 public static class TimelineOps
 {
@@ -37,23 +37,23 @@ public static class TimelineOps
     public const long MinInsertTicks = TimeSpan.TicksPerSecond;
 
     /// <summary>The items an operation on <paramref name="itemId"/> applies to: every item
-    /// sharing its non-null <see cref="Item.LinkGroupId"/>, or just the item itself when
-    /// unlinked. Throws when the id is not in the project.</summary>
-    public static IReadOnlyList<Item> GetLinkedItems(Project project, Guid itemId)
+    /// sharing its non-null <see cref="Item.GroupId"/>, or just the item itself when
+    /// ungrouped. Throws when the id is not in the project.</summary>
+    public static IReadOnlyList<Item> GetGroupedItems(Project project, Guid itemId)
     {
         var item = Require(project, itemId);
-        if (item.LinkGroupId == null)
+        if (item.GroupId == null)
             return new[] { item };
 
-        return project.Items.Where(i => i.LinkGroupId == item.LinkGroupId).ToList();
+        return project.Items.Where(i => i.GroupId == item.GroupId).ToList();
     }
 
-    /// <summary>Shifts the item's whole link group along the timeline by
+    /// <summary>Shifts the item's whole group along the timeline by
     /// <paramref name="deltaTicks"/>, clamped so no member starts before 0. Returns the delta
     /// actually applied.</summary>
     public static long Move(Project project, Guid itemId, long deltaTicks)
     {
-        var members = GetLinkedItems(project, itemId);
+        var members = GetGroupedItems(project, itemId);
 
         var minStart = members.Min(m => m.TimelineStartTicks);
         if (deltaTicks < -minStart)
@@ -69,13 +69,13 @@ public static class TimelineOps
     }
 
     /// <summary>
-    /// Moves the in-point of a <b>single</b> item, link group or not: positive
+    /// Moves the in-point of a <b>single</b> item, group or not: positive
     /// <paramref name="deltaTicks"/> shrinks it from the start, negative extends it earlier.
     /// Clamped so the item keeps at least <see cref="MinSegmentTicks"/>, starts at or after 0,
     /// and — for media — never rewinds before the start of its source
     /// (<see cref="MediaContent.SourceInTicks"/> stays ≥ 0). The media in-point moves with the
     /// trim, so every instant the item still covers maps to the source frame it mapped to before:
-    /// trimming one member of a group cannot desync it from the others, which is why trim needs
+    /// trimming one member of a group cannot ungroup it from the others, which is why trim needs
     /// no group scope. Returns the delta actually applied.
     /// </summary>
     public static long TrimStart(Project project, Guid itemId, long deltaTicks)
@@ -108,14 +108,14 @@ public static class TimelineOps
     }
 
     /// <summary>
-    /// Moves the out-point of a <b>single</b> item, link group or not: positive
+    /// Moves the out-point of a <b>single</b> item, group or not: positive
     /// <paramref name="deltaTicks"/> lengthens it, negative shortens it, clamped so it keeps at
     /// least <see cref="MinSegmentTicks"/> and — for media whose stream duration is known — never
     /// extends past the end of its source (there is no material there: video would freeze on the
     /// last frame and audio would mix to silence). An item already hanging past the source end
     /// (older project, or a stale probe) may still shrink, it just cannot grow. The item's start
     /// and in-point are untouched, so the source↔timeline mapping of every instant it still
-    /// covers is unchanged and linked rows stay in sync. Returns the delta actually applied.
+    /// covers is unchanged and grouped rows stay in sync. Returns the delta actually applied.
     /// </summary>
     public static long TrimEnd(Project project, Guid itemId, long deltaTicks)
     {
@@ -165,10 +165,10 @@ public static class TimelineOps
     }
 
     /// <summary>
-    /// Splits the item's link group at <paramref name="timelineTicks"/>: every member covering
+    /// Splits the item's group at <paramref name="timelineTicks"/>: every member covering
     /// that instant becomes two back-to-back items, the right half starting exactly there with
-    /// its media in-point advanced by the left half's length. Right halves of a linked group get
-    /// a fresh shared <see cref="Item.LinkGroupId"/> (two linked clips become two linked pairs);
+    /// its media in-point advanced by the left half's length. Right halves of a grouped group get
+    /// a fresh shared <see cref="Item.GroupId"/> (two grouped clips become two grouped pairs);
     /// left halves keep the original. Entry transitions stay on the left, exit transitions move
     /// to the right. All-or-nothing: returns false without touching the project when the target
     /// item does not cover the instant, or when any covered member would end up shorter than
@@ -180,20 +180,20 @@ public static class TimelineOps
         if (!Covers(target, timelineTicks))
             return false;
 
-        var covered = GetLinkedItems(project, itemId).Where(m => Covers(m, timelineTicks)).ToList();
+        var covered = GetGroupedItems(project, itemId).Where(m => Covers(m, timelineTicks)).ToList();
 
-        // the right halves become a link group of their own, so the two sides of the cut stay
+        // the right halves become a group of their own, so the two sides of the cut stay
         // synced within themselves without the left side dragging the right one around.
         return SplitCore(project, covered, timelineTicks,
-            target.LinkGroupId == null ? (Guid?)null : Guid.NewGuid());
+            target.GroupId == null ? (Guid?)null : Guid.NewGuid());
     }
 
     /// <summary>
-    /// Cuts <b>one</b> item, leaving the rest of its link group alone — the timeline's right-click
+    /// Cuts <b>one</b> item, leaving the rest of its group alone — the timeline's right-click
     /// split, where the pointer picked out a single clip and cutting its neighbors with it would
     /// be an edit the user did not ask for.
     ///
-    /// <para>Both halves keep the item's existing <see cref="Item.LinkGroupId"/>: the clip is still
+    /// <para>Both halves keep the item's existing <see cref="Item.GroupId"/>: the clip is still
     /// part of the same recording, it simply has two segments on its row now. Group operations
     /// cope with that already — they only ever act on the members that cover the instant in
     /// question (see <see cref="Split"/>).</para>
@@ -204,7 +204,7 @@ public static class TimelineOps
         if (!Covers(target, timelineTicks))
             return false;
 
-        return SplitCore(project, new[] { target }, timelineTicks, target.LinkGroupId);
+        return SplitCore(project, new[] { target }, timelineTicks, target.GroupId);
     }
 
     /// <summary>Cuts every item in <paramref name="covered"/> at the instant, all-or-nothing: a cut
@@ -241,7 +241,7 @@ public static class TimelineOps
                 Entry = null,
                 Exit = m.Exit,
                 Volume = m.Volume,
-                LinkGroupId = rightGroup,
+                GroupId = rightGroup,
             };
 
             m.DurationTicks = leftLength;
@@ -254,7 +254,7 @@ public static class TimelineOps
     }
 
     /// <summary>
-    /// Cuts the item's <b>own span</b> out of its link group and closes the gap: every group
+    /// Cuts the item's <b>own span</b> out of its group and closes the gap: every group
     /// member is trimmed/split to remove what it played inside <c>[start, end)</c>, and every
     /// remaining item that started at or after the cut shifts left by its length (clamped so
     /// nothing shifts to before where the cut began). This is the multi-track generalization of
@@ -283,18 +283,18 @@ public static class TimelineOps
     }
 
     /// <summary>The no-ripple counterpart of <see cref="RippleDelete"/>: cuts the item's span out
-    /// of its link group in place, leaving the gap open and everything outside the group
-    /// untouched. The delete for an imported file's linked rows, whose group means "streams of
+    /// of its group in place, leaving the gap open and everything outside the group
+    /// untouched. The delete for an imported file's grouped rows, whose group means "streams of
     /// one file" — closing the gap under unrelated material is the recording cut's semantics, not
     /// the overlay's.</summary>
-    public static void DeleteLinked(Project project, Guid itemId)
+    public static void DeleteGrouped(Project project, Guid itemId)
     {
         var target = Require(project, itemId);
         CutGroupRange(project, itemId, target.TimelineStartTicks, target.TimelineEndTicks);
     }
 
     /// <summary>
-    /// Removes what every member of the item's link group plays inside <c>[start, end)</c>: a
+    /// Removes what every member of the item's group plays inside <c>[start, end)</c>: a
     /// member inside the range is removed, one straddling an edge is trimmed (splitting in two
     /// when it hangs over both, exactly as <see cref="SplitCore"/> would cut it — in-point
     /// advanced, entry left / exit right). A remnant shorter than <see cref="MinSegmentTicks"/>
@@ -304,7 +304,7 @@ public static class TimelineOps
     /// </summary>
     private static void CutGroupRange(Project project, Guid itemId, long start, long end)
     {
-        foreach (var m in GetLinkedItems(project, itemId)
+        foreach (var m in GetGroupedItems(project, itemId)
                      .Where(m => m.TimelineStartTicks < end && m.TimelineEndTicks > start).ToList())
         {
             var leftLength = start - m.TimelineStartTicks;
@@ -329,7 +329,7 @@ public static class TimelineOps
                     Entry = null,
                     Exit = m.Exit,
                     Volume = m.Volume,
-                    LinkGroupId = m.LinkGroupId,
+                    GroupId = m.GroupId,
                 });
             }
 
@@ -345,7 +345,7 @@ public static class TimelineOps
         }
     }
 
-    /// <summary>Removes a single item, leaving a gap where it was: no ripple, and link group
+    /// <summary>Removes a single item, leaving a gap where it was: no ripple, and group
     /// members are left alone (<see cref="RippleDelete"/> is the synced-segment delete). Returns
     /// false when the id is not in the project.</summary>
     public static bool Delete(Project project, Guid itemId)
@@ -358,42 +358,42 @@ public static class TimelineOps
         return true;
     }
 
-    /// <summary>Clears <see cref="Item.LinkGroupId"/> on the given items so they edit
+    /// <summary>Clears <see cref="Item.GroupId"/> on the given items so they edit
     /// independently. Items not in the project throw; the rest of their old group is left
-    /// linked.</summary>
-    public static void Unlink(Project project, IEnumerable<Guid> itemIds)
+    /// grouped.</summary>
+    public static void Ungroup(Project project, IEnumerable<Guid> itemIds)
     {
         foreach (var id in itemIds)
-            Require(project, id).LinkGroupId = null;
+            Require(project, id).GroupId = null;
     }
 
     /// <summary>Links the given items into a fresh group (replacing any group they were in) and
     /// returns the new group id.</summary>
-    public static Guid Link(Project project, IEnumerable<Guid> itemIds)
+    public static Guid Group(Project project, IEnumerable<Guid> itemIds)
     {
         var group = Guid.NewGuid();
         foreach (var id in itemIds)
-            Require(project, id).LinkGroupId = group;
+            Require(project, id).GroupId = group;
 
         return group;
     }
 
-    /// <summary>Clears <see cref="Item.LinkGroupId"/> on every item of a track — the row's sync
-    /// toggle turned off. The other members of those groups stay linked to each other;
-    /// <see cref="TryRelinkTrack"/> is the inverse while the row is still aligned.</summary>
-    public static void UnlinkTrack(Project project, Guid trackId)
+    /// <summary>Clears <see cref="Item.GroupId"/> on every item of a track — the row's sync
+    /// toggle turned off. The other members of those groups stay grouped to each other;
+    /// <see cref="TryRegroupTrack"/> is the inverse while the row is still aligned.</summary>
+    public static void UngroupTrack(Project project, Guid trackId)
     {
         foreach (var item in project.Items)
         {
             if (item.TrackId == trackId)
-                item.LinkGroupId = null;
+                item.GroupId = null;
         }
     }
 
     /// <summary>
-    /// Dissolves every link group whose members all sit on one track. A group exists to keep
+    /// Dissolves every group whose members all sit on one track. A group exists to keep
     /// <i>rows</i> in step — the recording's screen, webcam and audio trimming and cutting as one
-    /// — so once only one row is left in it (the audio rows deleted, the webcam unlinked, a
+    /// — so once only one row is left in it (the audio rows deleted, the webcam ungrouped, a
     /// recording that never had anything but a screen) there is nothing left to keep in step,
     /// and the group would only pin that row's clips in place. Cursor/keyboard overlay items
     /// keep their group whatever the shape: validation requires it, and their row is defined by
@@ -402,8 +402,8 @@ public static class TimelineOps
     public static bool CollapseLoneGroups(Project project)
     {
         var changed = false;
-        foreach (var members in project.Items.Where(i => i.LinkGroupId != null)
-                                             .GroupBy(i => i.LinkGroupId.Value))
+        foreach (var members in project.Items.Where(i => i.GroupId != null)
+                                             .GroupBy(i => i.GroupId.Value))
         {
             if (members.Any(m => m.Content is CursorContent or KeyboardContent))
                 continue;
@@ -412,7 +412,7 @@ public static class TimelineOps
                 continue;
 
             foreach (var m in members)
-                m.LinkGroupId = null;
+                m.GroupId = null;
             changed = true;
         }
 
@@ -420,7 +420,7 @@ public static class TimelineOps
     }
 
     /// <summary>
-    /// Puts a track back into the link groups it was unlinked from, but only when that is still
+    /// Puts a track back into the groups it was ungrouped from, but only when that is still
     /// true: every item of the row must overlap exactly one group on the other tracks, and must
     /// agree with it on source alignment — same <c>TimelineStartTicks - SourceInTicks</c> offset,
     /// the invariant a trim preserves and a move breaks. Items of the row may resolve to
@@ -429,7 +429,7 @@ public static class TimelineOps
     /// leaving the project untouched when any item overlaps no group, more than one, or a group it
     /// has drifted from; a track with no items trivially succeeds.
     /// </summary>
-    public static bool TryRelinkTrack(Project project, Guid trackId)
+    public static bool TryRegroupTrack(Project project, Guid trackId)
     {
         var row = project.Items.Where(i => i.TrackId == trackId).ToList();
 
@@ -437,13 +437,13 @@ public static class TimelineOps
         if (row.Any(i => i.Content is SpeedContent or ZoomContent))
             return false;
 
-        var candidates = project.Items.Where(i => i.TrackId != trackId && i.LinkGroupId != null).ToList();
+        var candidates = project.Items.Where(i => i.TrackId != trackId && i.GroupId != null).ToList();
 
         var resolved = new List<(Item Item, Guid Group)>(row.Count);
         foreach (var item in row)
         {
             var overlapping = candidates.Where(c => Overlaps(item, c)).ToList();
-            var groups = overlapping.Select(c => c.LinkGroupId.Value).Distinct().ToList();
+            var groups = overlapping.Select(c => c.GroupId.Value).Distinct().ToList();
             if (groups.Count != 1)
                 return false;
 
@@ -455,7 +455,7 @@ public static class TimelineOps
         }
 
         foreach (var (item, group) in resolved)
-            item.LinkGroupId = group;
+            item.GroupId = group;
 
         return true;
     }

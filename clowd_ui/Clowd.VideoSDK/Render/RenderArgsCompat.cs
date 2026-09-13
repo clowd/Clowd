@@ -24,7 +24,7 @@ namespace Clowd.VideoSDK.Render
     /// source start, which is exactly what the old <c>trim,setpts=PTS-STARTPTS,concat</c> chain
     /// produced.</item>
     /// <item>three tracks — screen video (order 0), webcam video (order 1, so it composites on top),
-    /// audio — all items sharing one <see cref="Item.LinkGroupId"/>: the sync toggle for the rows
+    /// audio — all items sharing one <see cref="Item.GroupId"/>: the sync toggle for the rows
     /// that came from a single recording.</item>
     /// <item>webcam rect → <see cref="Transform"/>: the rect is in screen-frame pixels, and the
     /// model's geometry is normalized against the canvas (which <i>is</i> the screen frame), so

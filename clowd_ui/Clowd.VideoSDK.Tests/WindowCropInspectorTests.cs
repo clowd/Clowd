@@ -110,7 +110,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = startTicks,
                 DurationTicks = durationTicks,
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 0, SourceInTicks = startTicks },
-                LinkGroupId = group,
+                GroupId = group,
             };
             project.Items.Add(item);
             project.Items.Add(new Item
@@ -120,7 +120,7 @@ namespace Clowd.VideoSDK.Tests
                 TimelineStartTicks = startTicks,
                 DurationTicks = durationTicks,
                 Content = new MediaContent { SourceId = sourceId, StreamIndex = 2, SourceInTicks = startTicks },
-                LinkGroupId = group,
+                GroupId = group,
             });
             return item;
         }

@@ -56,7 +56,7 @@ namespace Clowd.VideoSDK.Tests
                         Content = new MediaContent { SourceId = sourceId, StreamIndex = 0, SourceInTicks = Ms(2_500) },
                         Entry = new Transition { Kind = TransitionKind.Fade, DurationTicks = Ms(300), Easing = TransitionEasing.CubicOut },
                         Exit = new Transition { Kind = TransitionKind.SlideLeft, DurationTicks = Ms(500), Easing = TransitionEasing.CubicInOut },
-                        LinkGroupId = linkGroup,
+                        GroupId = linkGroup,
                     },
                     new Item
                     {
@@ -77,7 +77,7 @@ namespace Clowd.VideoSDK.Tests
                             Crop = new CropRect { Left = 0.1, Top = 0.05, Right = 0.1, Bottom = 0.05 },
                             Mask = new Mask { Shape = MaskShape.RoundedRect, CornerRadius = 0.25 },
                         },
-                        LinkGroupId = linkGroup,
+                        GroupId = linkGroup,
                     },
                     new Item
                     {
@@ -87,7 +87,7 @@ namespace Clowd.VideoSDK.Tests
                         DurationTicks = Ms(10_000),
                         Content = new MediaContent { SourceId = sourceId, StreamIndex = 2, SourceInTicks = Ms(2_500) },
                         Volume = 0.75,
-                        LinkGroupId = linkGroup,
+                        GroupId = linkGroup,
                     },
                     new Item
                     {
@@ -174,8 +174,8 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(TransitionEasing.CubicOut, screen.Entry.Easing);
             Assert.Equal(TransitionKind.SlideLeft, screen.Exit.Kind);
 
-            Assert.Equal(screen.LinkGroupId, webcam.LinkGroupId);
-            Assert.NotNull(screen.LinkGroupId);
+            Assert.Equal(screen.GroupId, webcam.GroupId);
+            Assert.NotNull(screen.GroupId);
         }
 
         [Fact]
@@ -202,7 +202,7 @@ namespace Clowd.VideoSDK.Tests
             Assert.Equal(1, CountOf(json, "\"Exit\":"));
             Assert.Equal(1, CountOf(json, "\"Crop\":"));
             Assert.Equal(1, CountOf(json, "\"Mask\":"));
-            Assert.Equal(3, CountOf(json, "\"LinkGroupId\":"));
+            Assert.Equal(3, CountOf(json, "\"LinkGroupId\":")); // the wire name GroupId keeps (JsonPropertyName)
         }
 
         private static int CountOf(string haystack, string needle)

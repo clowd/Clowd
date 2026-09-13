@@ -216,7 +216,7 @@ public sealed class ZoomContent : ItemContent
 /// <summary>A rendered cursor overlay driven by the recording's input-capture data
 /// (<see cref="Source.InputCapturePath"/>). Lives on a <see cref="TrackKind.Video"/> row that is
 /// hard-synced to its recording: every item always carries the recording's
-/// <see cref="Item.LinkGroupId"/>, so it moves/trims/splits with the screen row. Position is
+/// <see cref="Item.GroupId"/>, so it moves/trims/splits with the screen row. Position is
 /// data-driven (the captured cursor path), never the item's <see cref="Item.Transform"/>.</summary>
 public sealed class CursorContent : ItemContent
 {

@@ -19,7 +19,7 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// The native column to the left of the drawing surface: one header per row (heights from
     /// <see cref="TimelineRowLayout"/>, so the two columns stay pixel-aligned) with the drag grip
     /// and the track's kind icon on the left, and on the right — reading left to right — the link
-    /// badge (on rows whose items are link-grouped), a duplicate button, the enable button (eye →
+    /// badge (on rows whose items are grouped), a duplicate button, the enable button (eye →
     /// <c>Track.Hidden</c> for picture rows, speaker → <c>Track.Muted</c> for audio rows) and a
     /// delete button. Rebuilt wholesale on Structural project changes — under ten rows, so there
     /// is nothing to diff.
@@ -32,8 +32,8 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// rows do not repeat theirs, their items on the surface already carry it. Each row inside
     /// keeps its own buttons.</para>
     ///
-    /// <para>The badge is a label, not a button: unlinking is a rare, consequential edit, so it
-    /// lives in the inspector ("Unlink from recording") where it can carry an explanation, rather
+    /// <para>The badge is a label, not a button: ungrouping is a rare, consequential edit, so it
+    /// lives in the inspector ("Ungroup from recording") where it can carry an explanation, rather
     /// than being one stray click away in every row.</para>
     ///
     /// <para>The rows live in a <see cref="StackPanel"/> inside this panel rather than being its own
@@ -42,15 +42,15 @@ namespace Clowd.UI.VideoEditor.Timeline
     /// </summary>
     internal sealed class TrackHeaderPanel : Panel, IRowReorderDragHost
     {
-        private const string SyncedTip =
-            "Synced — moves and splits with the other recording tracks. Unsync from the properties panel.";
+        private const string GroupedTip =
+            "Grouped — moves and splits with the other tracks from this recording. Ungroup from the properties panel.";
 
         /// <summary>The cursor/keyboard rows' badge tip: their sync is not a toggle. The overlay
-        /// reads the recording's input capture at the recording's own times, so an unsynced one
-        /// would draw the wrong moment — the session refuses to unlink it (see
-        /// <c>EditorSession.UnlinkTrack</c>) and the properties panel offers nothing to click.</summary>
-        private const string PinnedSyncTip =
-            "Always synced — this overlay follows the recording it was captured with.";
+        /// reads the recording's input capture at the recording's own times, so an ungrouped one
+        /// would draw the wrong moment — the session refuses to ungroup it (see
+        /// <c>EditorSession.UngroupTrack</c>) and the properties panel offers nothing to click.</summary>
+        private const string PinnedGroupTip =
+            "Always grouped — this overlay follows the recording it was captured with.";
 
         /// <summary>Breathing room either side of the grip: it is the first thing in the row, so
         /// without it the dots crowd both the panel edge and the kind icon.</summary>
@@ -72,10 +72,10 @@ namespace Clowd.UI.VideoEditor.Timeline
 
         private EditorSession _session;
 
-        /// <summary>The link badge of every built row, so <see cref="RefreshLinkBadges"/> can
-        /// re-read link state after a Mapping change (unlink/relink raise no rebuild, and come from
+        /// <summary>The group badge of every built row, so <see cref="RefreshGroupBadges"/> can
+        /// re-read group state after a Mapping change (ungroup/relink raise no rebuild, and come from
         /// the inspector rather than from this panel).</summary>
-        private readonly List<(Guid TrackId, Control Badge)> _linkBadges =
+        private readonly List<(Guid TrackId, Control Badge)> _groupBadges =
             new List<(Guid, Control)>();
 
         /// <summary>The laid-out rows of the current build, and the combined-track visual each
@@ -110,7 +110,7 @@ namespace Clowd.UI.VideoEditor.Timeline
 
             _stack.Children.Clear();
             _rowUnits.Clear();
-            _linkBadges.Clear();
+            _groupBadges.Clear();
             _rows = Array.Empty<TimelineRow>();
 
             var palette = TimelinePalette.ForVariant(ActualThemeVariant);
@@ -150,17 +150,17 @@ namespace Clowd.UI.VideoEditor.Timeline
             }
         }
 
-        /// <summary>Re-reads every row's link state from the live project — the parent calls this
-        /// on Mapping changes, because unlink/relink are Mapping (no rebuild follows) and are
+        /// <summary>Re-reads every row's group state from the live project — the parent calls this
+        /// on Mapping changes, because ungroup/relink are Mapping (no rebuild follows) and are
         /// issued from the inspector, not from here.</summary>
-        public void RefreshLinkBadges()
+        public void RefreshGroupBadges()
         {
             var project = _session?.Project;
             if (project == null)
                 return;
 
-            foreach (var (trackId, badge) in _linkBadges)
-                badge.IsVisible = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null);
+            foreach (var (trackId, badge) in _groupBadges)
+                badge.IsVisible = project.Items.Any(i => i.TrackId == trackId && i.GroupId != null);
         }
 
         /// <summary>One combined-track block: the rows <paramref name="unitStart"/> to
@@ -246,7 +246,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             var dock = new DockPanel { LastChildFill = false };
 
             // ------- the right-side cluster, docked right so the FIRST added is the RIGHTMOST.
-            // Reading order on screen is link badge → duplicate → enable (eye/speaker) → delete.
+            // Reading order on screen is group badge → duplicate → enable (eye/speaker) → delete.
             // Delete/duplicate/enable all raise Structural changes, which rebuild this whole
             // panel — nothing here updates its own icon.
             // the same brush the corner buttons above these rows use (RulerLabelBrush), so the
@@ -303,21 +303,21 @@ namespace Clowd.UI.VideoEditor.Timeline
                 dock.Children.Add(duplicate);
             }
 
-            // ------- link badge: a label saying the row's items move with the recording, not a
-            // control. Built on every row and collapsed when unlinked, so RefreshLinkBadges can
-            // flip it either way without a rebuild (unlink/relink are Mapping changes).
+            // ------- group badge: a label saying the row's items move with the recording, not a
+            // control. Built on every row and collapsed when ungrouped, so RefreshGroupBadges can
+            // flip it either way without a rebuild (ungroup/relink are Mapping changes).
             var badge = new Border
             {
                 Width = buttonSize,
                 VerticalAlignment = VerticalAlignment.Center,
-                IsVisible = project.Items.Any(i => i.TrackId == trackId && i.LinkGroupId != null),
-                Child = TimelineIcons.NewIcon(TimelineIcons.LinkGeometry, buttonSize * 0.6, palette.LinkBadgeBrush),
+                IsVisible = project.Items.Any(i => i.TrackId == trackId && i.GroupId != null),
+                Child = TimelineIcons.NewIcon(TimelineIcons.GroupGeometry, buttonSize * 0.6, palette.GroupBadgeBrush),
                 Background = Brushes.Transparent, // a null background is not hit-testable — no tooltip
             };
-            ToolTip.SetTip(badge, isInputOverlay ? PinnedSyncTip : SyncedTip);
+            ToolTip.SetTip(badge, isInputOverlay ? PinnedGroupTip : GroupedTip);
             DockPanel.SetDock(badge, Dock.Right);
             dock.Children.Add(badge);
-            _linkBadges.Add((trackId, badge));
+            _groupBadges.Add((trackId, badge));
 
             return dock;
         }
@@ -504,7 +504,7 @@ namespace Clowd.UI.VideoEditor.Timeline
             "C38.366 1.805 39.634 1.805 39.945 2.701z");
 
         /// <summary>A simple chain-link glyph (24x24 box); VectorIcons has no link icon.</summary>
-        public static readonly Geometry LinkGeometry = StreamGeometry.Parse(
+        public static readonly Geometry GroupGeometry = StreamGeometry.Parse(
             "M3.9,12C3.9,10.29 5.29,8.9 7,8.9H11V7H7A5,5 0 0,0 2,12A5,5 0 0,0 7,17H11V15.1H7C5.29," +
             "15.1 3.9,13.71 3.9,12M8,13H16V11H8V13M17,7H13V8.9H17C18.71,8.9 20.1,10.29 20.1,12C20.1," +
             "13.71 18.71,15.1 17,15.1H13V17H17A5,5 0 0,0 22,12A5,5 0 0,0 17,7Z");
