@@ -497,6 +497,22 @@ namespace Clowd
         /// </summary>
         private void SetupGlobalHotkeys()
         {
+            // libuiohook raises KeyTyped by running ToUnicodeEx on every key press it does not
+            // suppress, which corrupts the foreground app's keyboard state on Windows — e.g. Visual
+            // Studio inserts a stray character on Alt+Up/Down (SharpHook#67). Hotkeys only use
+            // KeyPressed, whose modifier mask is tracked independently, so turn it off. The flag is
+            // process-global, and setting it loads the native library, so a failure here must not
+            // take startup down with it.
+            try
+            {
+                SharpHook.Providers.UioHookProvider.Instance.KeyTypedEnabled = false;
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Failed to disable SharpHook KeyTyped events: " + ex);
+                SentryConfig.CaptureHandled(ex, "hotkey.disable-key-typed");
+            }
+
             _hotkeys = new HotkeyManager(new GlobalHotkeyHost(), SettingsRoot.Current.Hotkeys);
 
             _hotkeys.SetAction(HotkeyId.FileUpload, () => UploadFilePrompt());
