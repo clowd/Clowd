@@ -13,9 +13,21 @@ use crate::gxi::{self, BindingRes, BlendMode, PipelineDesc, ShaderId, VertexAttr
 /// One rect to draw.
 ///
 /// `dest_px` is `(min_x, min_y, max_x, max_y)` in window-local physical
-/// pixels. `params` is `(border_px, lighten, corner_radius, _)`. Set
-/// `border_rgba.a` to 0 OR `params.x` to 0 to disable the border.
-/// `corner_radius` > 0 enables SDF-based rounded corners with AA.
+/// pixels. `params` is `(border_px, lighten, corner_radius, aa_pad)` and
+/// selects one of five shader modes (checked in this order):
+///
+/// | predicate                              | mode |
+/// |----------------------------------------|------|
+/// | `corner_radius > 0 && border_px < 0`   | blurred shadow, sigma = `-border_px` (see [`Self::blurred_shadow`]) |
+/// | `corner_radius > 0 && lighten > 1.5`   | trail: orbiting accent comet on the border |
+/// | `corner_radius > 0` otherwise          | rounded fill with AA, optional border, `lighten` clamped to `[0, 1]` |
+/// | `corner_radius == 0 && lighten < 0`    | dashed border, `-lighten` = dash length in px |
+/// | `corner_radius == 0 && lighten >= 0`   | axis-aligned fill, hard border |
+///
+/// Set `border_rgba.a` to 0 OR `params.x` to 0 to disable the border.
+/// `aa_pad` is how far the caller inflated `dest_px` on every side so the
+/// SDF edge lands on the intended rect; the rounded modes need it for
+/// their AA fringe (or shadow falloff) to have room to fade.
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable, Debug, Default)]
 pub struct RectInstance {
@@ -33,6 +45,24 @@ impl RectInstance {
             fill_rgba: rgba,
             border_rgba: [0.0; 4],
             params: [0.0; 4],
+        }
+    }
+
+    /// A gaussian-blurred rounded-rect shadow. `body` is
+    /// `(min_x, min_y, max_x, max_y)` of the shadow BODY — the casting rect
+    /// already translated by its offset — and is inflated here by `pad` on
+    /// every side, exactly as the AA fringe of the rounded mode; use
+    /// `pad >= ceil(3 * sigma) + 1` so the falloff reaches ~0 before the
+    /// quad edge. Encoding: rounded mode (`corner_radius > 0`) with a
+    /// NEGATIVE `border_px` carrying `-sigma`; see the mode table at the
+    /// top of `ui_rect.wgsl`.
+    pub fn blurred_shadow(body: (f32, f32, f32, f32), radius: f32, sigma: f32, pad: f32, rgba: [f32; 4]) -> Self {
+        let (min_x, min_y, max_x, max_y) = body;
+        Self {
+            dest_px: [min_x - pad, min_y - pad, max_x + pad, max_y + pad],
+            fill_rgba: rgba,
+            border_rgba: [0.0; 4],
+            params: [-sigma.max(0.01), 0.0, radius, pad],
         }
     }
 }

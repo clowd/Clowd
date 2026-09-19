@@ -2,7 +2,7 @@
 //!
 //! One instance per render thread. Every frame the caller first invokes
 //! [`UiRenderer::prepare`] to decide what belongs on this monitor and
-//! upload all per-frame GPU data (rect/svg instance buffers, glyph
+//! upload all per-frame GPU data (rect/icon instance buffers, glyph
 //! shape+atlas), then hands the renderer an open `RenderPass` via
 //! [`UiRenderer::draw`]. The two-phase split lets the caller fold the UI
 //! draw into the same render pass as the desktop triangle, avoiding an
@@ -13,10 +13,11 @@
 //!   1. `lift` pipeline: the OCR scanning sweep.
 //!   2. `rect` pipeline, LEADING range: OCR bubble pills + shadows.
 //!   3. bubble glyph renderer: the bubbles' recognized-text glyphs.
-//!   4. `rect` pipeline, TRAILING range: backgrounds, borders, shadow,
-//!      color swatch, area indicator brackets, label underlines.
-//!   5. `svg` pipeline: button icons (lyon-tessellated meshes).
-//!   6. main glyph text: labels, tips body, area-indicator digits.
+//!   4. `rect` pipeline, TRAILING range: backgrounds, borders, the tray
+//!      shadow / fill / ring, button fills, color swatch, label underlines.
+//!   5. `icon` pipeline: the tray emblem and button icons, textured quads
+//!      out of the CPU-rasterised atlas.
+//!   6. main glyph text: labels, tips body, the "W × H" readout.
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -132,7 +133,7 @@ impl UiPipelines {
 
 /// The text stack plus every component whose construction needs it —
 /// they all allocate their `CachedBuffer`s out of the font system, and the
-/// panel additionally parses its 11 icon SVGs. Kept together because the
+/// panel additionally parses its 12 icon SVGs plus the emblem. Kept together because the
 /// `&mut TextStack` borrow makes them inherently sequential, so they are
 /// one job for the deferred builder to schedule.
 pub struct UiText {
@@ -222,7 +223,7 @@ impl UiRenderer {
     }
 
     /// Stage all per-frame work: component visibility decisions,
-    /// rect/svg instance uploads, glyph shape + atlas prep. After
+    /// rect/icon instance uploads, glyph shape + atlas prep. After
     /// `prepare` returns the caller may open a render pass and invoke
     /// [`UiRenderer::draw`] to issue the UI draw calls into it. Split
     /// from `draw` so the UI can share the same render pass as the

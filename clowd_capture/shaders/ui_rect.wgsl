@@ -4,6 +4,16 @@
 // border, and a lighten-toward-white amount used for hover. Output is
 // premultiplied alpha; the caller's blend state must match
 // (src=One, dst=OneMinusSrcAlpha).
+//
+// The `params` lanes (border_px, lighten, corner_radius, aa_pad) select
+// one of five modes; the predicates are checked in this order:
+//
+//   corner_radius > 0 && border_px < 0    blurred shadow, sigma = -border_px
+//   corner_radius > 0 && lighten > 1.5    trail (orbiting accent comet)
+//   corner_radius > 0 otherwise           rounded fill, optional border,
+//                                         lighten clamped to [0, 1]
+//   corner_radius == 0 && lighten < 0     dashed border, -lighten = dash px
+//   corner_radius == 0 && lighten >= 0    axis-aligned fill, hard border
 
 struct Uniforms {
     viewport_px: vec2<f32>,
@@ -23,8 +33,12 @@ struct Instance {
     // of border_px.
     @location(2) border_rgba: vec4<f32>,
     // (border_px, lighten_amount, corner_radius, aa_pad). border_px=0
-    // disables border. lighten_amount in [0,1] blends fill toward white
-    // (hover effect). aa_pad inflates the quad for AA fringe on rounded rects.
+    // disables border; border_px<0 with corner_radius>0 selects the
+    // blurred-shadow mode with -border_px as the gaussian sigma in px.
+    // lighten_amount in [0,1] blends fill toward white (hover effect);
+    // >1.5 selects trail mode; <0 with corner_radius==0 selects dashed
+    // mode. aa_pad inflates the quad for the AA fringe (or the shadow
+    // falloff) on rounded rects. See the mode table at the top of the file.
     @location(3) params: vec4<f32>,
 };
 
@@ -76,6 +90,20 @@ fn vs_main(@builtin(vertex_index) vi: u32, inst: Instance) -> VsOut {
     return out;
 }
 
+// Abramowitz-Stegun 7.1.26 erf, |err| < 1.5e-7. WGSL/HLSL/MSL have no
+// erf builtin. The sign is taken with a branch on purpose: naga lowers
+// sign() to HLSL sign(), which returns int.
+fn erf_approx(x: f32) -> f32 {
+    let a = abs(x);
+    let t = 1.0 / (1.0 + 0.3275911 * a);
+    let poly = ((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592;
+    let e = 1.0 - poly * t * exp(-a * a);
+    if (x < 0.0) {
+        return -e;
+    }
+    return e;
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let lp = in.local_px;
@@ -89,6 +117,22 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         let p = abs(lp - half) - (half - vec2<f32>(cr, cr));
         let d = length(max(p, vec2<f32>(0.0))) + min(max(p.x, p.y), 0.0) - cr;
         let w = max(0.5 * fwidth(d), 0.5);
+
+        if (bw < 0.0) {
+            // ── Shadow mode ────────────────────────────────────────
+            // border_px < 0 selects the mode and -border_px is the
+            // gaussian sigma in px. Coverage of the blurred shape at
+            // signed distance d from the edge is erfc(d / (sigma*sqrt2))/2:
+            // exact along straight edges, a close match at the corners.
+            // fill_rgba is the shadow colour; lighten is ignored.
+            let sigma = -bw;
+            let cov = 0.5 * (1.0 - erf_approx(d / (sigma * 1.4142135)));
+            let a = in.fill_rgba.a * cov;
+            if (a < 0.002) {
+                discard;
+            }
+            return vec4<f32>(in.fill_rgba.rgb * a, a);
+        }
 
         if (in.lighten > 1.5) {
             // ── Trail mode ─────────────────────────────────────────

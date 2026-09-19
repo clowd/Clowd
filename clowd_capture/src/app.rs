@@ -2276,9 +2276,14 @@ impl ApplicationHandler for App {
                         cycle.input.hittest = hit_test(cycle.input.virtual_cursor, sel, dpi);
 
                         let pos = cycle.input.virtual_cursor;
-                        let over_button = current_panel_layout(cycle, &self.monitors)
+                        // One layout for both tests: `PanelLayout` is `Copy`.
+                        let panel = current_panel_layout(cycle, &self.monitors);
+                        let over_button = panel
                             .and_then(|l| l.hit_test(pos.x, pos.y))
                             .is_some();
+                        let over_tray = panel
+                            .map(|l| l.contains(pos.x, pos.y))
+                            .unwrap_or(false);
                         // Pick mode owns the cursor for the whole move: the
                         // panel is gone and every pixel of the selection is
                         // a valid target, so neither the button pointer nor
@@ -2287,6 +2292,12 @@ impl ApplicationHandler for App {
                             CursorIcon::Crosshair
                         } else if over_button {
                             CursorIcon::Pointer
+                        } else if over_tray {
+                            // Dead tray (chassis, emblem, readout, padding):
+                            // its clicks are swallowed on press, so the
+                            // arrow, never a resize handle that would
+                            // promise a drag the press cannot start.
+                            CursorIcon::Default
                         } else if cycle.input.ocr.active() {
                             // The selection is frozen for the whole of OCR
                             // mode: resize arrows would promise an
@@ -2373,6 +2384,15 @@ impl ApplicationHandler for App {
                                     // set it was hit-tested in.
                                     let cmd = layout.command_at(idx);
                                     self.dispatch_command(cmd, event_loop, id);
+                                    return;
+                                }
+                                if layout.contains(pos.x, pos.y) {
+                                    // Dead tray: chassis, emblem, readout,
+                                    // padding. The tray owns the click, as
+                                    // the C# strips do, so it cannot arm a
+                                    // move/resize drag of the selection
+                                    // underneath. Deliberately not gated by
+                                    // PanelSwapGuard: nothing is dispatched.
                                     return;
                                 }
                             }

@@ -1,11 +1,14 @@
-//! Embedded SVG button icons.
+//! Embedded SVG assets for the panel.
 //!
-//! Each `include_bytes!` points at a file in `assets/icons/`; the bytes
-//! are parsed with `usvg` + tessellated with `lyon` at render-thread
-//! startup — see `ui::gpu::svg` and `ui::gpu::panel`. Fonts live in
-//! `ui::gpu::text` because they're consumed by the text stack directly.
+//! Each `include_bytes!` points at a file in `assets/icons/`. The button
+//! icons are parsed with `usvg` and rasterised into the
+//! `ui::gpu::icon::IconAtlas` by `ui::gpu::panel` on the render thread;
+//! `PANEL_ICONS` in `model.rs` is the deduped table that decides atlas
+//! slot order. Fonts live in `ui::gpu::text` because they're consumed by
+//! the text stack directly.
 
-pub const SVG_UPLOAD: &[u8] = include_bytes!("../../../../assets/icons/clowd-white.svg");
+/// Paper-plane "send" mark for the UPLOAD button (24-unit canvas, white).
+pub const SVG_UPLOAD: &[u8] = include_bytes!("../../../../assets/icons/upload.svg");
 pub const SVG_EDIT: &[u8] = include_bytes!("../../../../assets/icons/edit_image.svg");
 pub const SVG_VIDEO: &[u8] = include_bytes!("../../../../assets/icons/video_camera.svg");
 pub const SVG_SHARE: &[u8] = include_bytes!("../../../../assets/icons/share.svg");
@@ -17,3 +20,10 @@ pub const SVG_RESET: &[u8] = include_bytes!("../../../../assets/icons/refresh.sv
 pub const SVG_EXIT: &[u8] = include_bytes!("../../../../assets/icons/delete.svg");
 pub const SVG_SEARCH: &[u8] = include_bytes!("../../../../assets/icons/search.svg");
 pub const SVG_BACK: &[u8] = include_bytes!("../../../../assets/icons/back.svg");
+
+/// The Clowd logo drawn as the tray emblem at the head of the strip
+/// (16-unit canvas, brand blue baked in). NOT a button icon: it is
+/// deliberately absent from `PANEL_ICONS` because it has no button, no
+/// hover and no click, and is rasterised at its own (larger) size into
+/// the last slot of the panel's icon atlas.
+pub const SVG_CLOWD_LOGO: &[u8] = include_bytes!("../../../../assets/icons/clowd-logo.svg");

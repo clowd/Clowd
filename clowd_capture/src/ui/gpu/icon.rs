@@ -1,8 +1,9 @@
 //! CPU-rasterized icon atlas + instanced textured-quad pipeline.
 //!
-//! Icons are rasterized once via `resvg` at physical pixel size, packed
-//! into a texture atlas via `etagere`, and drawn as instanced quads.
-//! The atlas is rebuilt when the target icon size (DPI) changes.
+//! Icons are rasterized once via `resvg`, each entry at its own physical
+//! pixel size, packed into a texture atlas via `etagere`, and drawn as
+//! instanced quads. The atlas is rebuilt when any target size (DPI)
+//! changes.
 
 use bytemuck::{Pod, Zeroable};
 
@@ -28,14 +29,26 @@ const INITIAL_INSTANCE_CAPACITY: u64 = 16;
 
 pub struct IconAtlas {
     pub texture: gxi::Texture,
-    pub icon_px: u32,
-    rects: Vec<etagere::Rectangle>,
+    /// One entry per tree handed to [`Self::build`], in the same order:
+    /// the atlas cell and the square size (in px) the tree was rasterised
+    /// at. Entries differ in size (button icons vs. the tray emblem), so
+    /// the extent lives here rather than on the atlas.
+    slots: Vec<(etagere::Rectangle, u32)>,
     atlas_size: u32,
 }
 
 impl IconAtlas {
-    pub fn build(device: &gxi::Device, queue: &gxi::Queue, trees: &[usvg::Tree], icon_px: u32) -> Self {
-        let atlas_size = if icon_px <= 36 { 256u32 } else { 512 };
+    /// Rasterise each `(tree, px)` entry at its own square size — the
+    /// viewBox is stretched to the box (the C# canvas-fit rule; never
+    /// ink-fit) — and pack them into one texture. Index the result with
+    /// [`Self::uv_for`] by position in `entries`.
+    pub fn build(device: &gxi::Device, queue: &gxi::Queue, entries: &[(&usvg::Tree, u32)]) -> Self {
+        let max_px = entries
+            .iter()
+            .map(|e| e.1)
+            .max()
+            .unwrap_or(1);
+        let atlas_size = if max_px <= 36 { 256u32 } else { 512 };
         let mut allocator = etagere::AtlasAllocator::new(etagere::size2(atlas_size as i32, atlas_size as i32));
 
         let texture = device.create_texture(&TextureDesc {
@@ -45,43 +58,47 @@ impl IconAtlas {
             format: TexFormat::Rgba8Unorm,
         });
 
-        let mut rects = Vec::with_capacity(trees.len());
-        for tree in trees {
-            let Some(mut pm) = resvg::tiny_skia::Pixmap::new(icon_px, icon_px) else {
-                rects.push(etagere::Rectangle {
-                    min: etagere::point2(0, 0),
-                    max: etagere::point2(0, 0),
-                });
+        let mut slots = Vec::with_capacity(entries.len());
+        for &(tree, px) in entries {
+            let Some(mut pm) = resvg::tiny_skia::Pixmap::new(px, px) else {
+                slots.push((
+                    etagere::Rectangle {
+                        min: etagere::point2(0, 0),
+                        max: etagere::point2(0, 0),
+                    },
+                    px,
+                ));
                 continue;
             };
             let vb = tree.size();
-            let sx = icon_px as f32 / vb.width();
-            let sy = icon_px as f32 / vb.height();
+            let sx = px as f32 / vb.width();
+            let sy = px as f32 / vb.height();
             resvg::render(tree, resvg::tiny_skia::Transform::from_scale(sx, sy), &mut pm.as_mut());
             let alloc = allocator
-                .allocate(etagere::size2(icon_px as i32, icon_px as i32))
+                .allocate(etagere::size2(px as i32, px as i32))
                 .expect("icon atlas too small");
             queue.write_texture(
                 &texture,
                 (alloc.rectangle.min.x as u32, alloc.rectangle.min.y as u32),
-                (icon_px, icon_px),
+                (px, px),
                 pm.data(),
             );
-            rects.push(alloc.rectangle);
+            slots.push((alloc.rectangle, px));
         }
 
         Self {
             texture,
-            icon_px,
-            rects,
+            slots,
             atlas_size,
         }
     }
 
+    /// Normalised `(u0, v0, u1, v1)` of entry `index`, sized by the px the
+    /// entry was rasterised at.
     pub fn uv_for(&self, index: usize) -> [f32; 4] {
-        let r = &self.rects[index];
+        let (r, px) = &self.slots[index];
         let s = self.atlas_size as f32;
-        let px = self.icon_px as f32;
+        let px = *px as f32;
         [
             r.min.x as f32 / s,
             r.min.y as f32 / s,

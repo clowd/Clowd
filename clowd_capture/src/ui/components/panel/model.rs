@@ -3,10 +3,15 @@
 //! Mirrors `captureButtonDetails` at
 //! `clowd_capture_dx/DxScreenCapture.cpp:52-60`. Order matters: the same
 //! order is used for layout, rendering, and hit-testing. In the capture
-//! set index 0 is UPLOAD and the last index is EXIT; the area indicator
-//! is *not* part of these arrays — it lives at
-//! `buttonPositions[NUM_SVG_BUTTONS]` in the C++ and as a separate field
-//! on `PanelLayout` here.
+//! set index 0 is UPLOAD and the last index is EXIT; the tray emblem and
+//! the "W × H" area readout are *not* part of these arrays — they are
+//! separate, non-clickable fields on `PanelLayout`.
+//!
+//! Every button is drawn the same way (segment fill, icon, then its
+//! label): there is no primary/secondary distinction. Labels are
+//! Title-case ASCII with the accelerator glyph underlined, and the layout
+//! sizes each button from `label.len()`, so the label text is geometry as
+//! much as it is copy.
 //!
 //! The C++ reference implementation was deleted in 3a5939ac, so the
 //! `clowd_capture_dx` paths quoted throughout this module are history,
@@ -187,18 +192,19 @@ impl PanelButtonSet {
 pub struct ButtonDef {
     /// Command this button emits on click.
     pub command: Command,
-    /// Display label. The C++ uses wide strings; we store UTF-8 and
-    /// rasterize ASCII-only — no glyph in the labels needs shaping.
+    /// Display label: Title case, ASCII only, no whitespace. ASCII is a
+    /// hard requirement, not a convention — `len()` is the glyph count the
+    /// layout sizes the button by on both threads, and the bundled mono
+    /// face makes every glyph the same advance, so bytes == glyphs ==
+    /// pixels / advance. `labels_are_title_case_ascii_and_underline_index_is_in_range`
+    /// pins it.
     pub label: &'static str,
-    /// Index (into `label.chars()`) of the character that should be
-    /// underlined as the keyboard accelerator hint. Matches
+    /// BYTE index into `label` of the accelerator glyph: the renderer
+    /// underlines it via `glyph_bounds_at_byte`, and `accel_key` reads it
+    /// as a `chars()` index. The two agree only because labels are ASCII
+    /// (pinned by the same test). Matches
     /// `captureButtonDetail::underlineIndex`.
     pub underline_idx: usize,
-    /// True for the accent-colored primary buttons (UPLOAD, EDIT,
-    /// VIDEO, SHARE, SCROLL, COPY, SAVE); false for the gray secondary
-    /// buttons (OCR, RESET, BACK, EXIT). See `captureButtonDetails[i].primary`
-    /// at DxScreenCapture.cpp:52-60.
-    pub primary: bool,
     /// Index into [`PANEL_ICONS`] of this button's icon, which is also
     /// its slot in the rasterized icon atlas. Explicit rather than
     /// derived from the button's position because the two sets share
@@ -225,84 +231,77 @@ pub struct ButtonDef {
 /// SHARE and SCROLL sit after VIDEO because they are the other "hand off
 /// to a capture driver" actions — SHARE first, since like VIDEO it hands
 /// the region to a live helper rather than producing a file. OCR sits
-/// last of the actions, immediately left of RESET, and is gray rather
-/// than accented: it does not finish the capture the way the accented
-/// buttons do, it swaps the strip for a second round of decisions.
+/// last of the actions, immediately left of RESET: it does not finish
+/// the capture the way the others do, it swaps the strip for a second
+/// round of decisions.
 ///
 /// A slice (`&[ButtonDef]`) rather than a fixed-size array so the
 /// per-element `#[cfg]` doesn't have to be mirrored in a length
 /// constant; `PanelButtonSet::len()` reads the real length instead.
 ///
 /// Accelerator keys (not stored — derived from `underline_idx`):
-///   0: UPLOAD — U   (0x55)
-///   1: EDIT   — E
-///   2: VIDEO  — V   (0x56)
-///   3: SHARE  — H   (0x48), underlined on the second char because every
-///      other letter of SHARE is spoken for (S=SAVE, A/R/E=EDIT, RESET).
+///   0: Upload — U   (0x55)
+///   1: Edit   — E
+///   2: Video  — V   (0x56)
+///   3: Share  — H   (0x48), underlined on the second char because every
+///      other letter of Share is spoken for (S=Save, A/R/E=Edit, Reset).
 ///      'h' is also the pre-capture color-sampler key, which does not
 ///      collide: that branch only runs while nothing is captured, and the
 ///      panel — and therefore this lookup — only exists once something is.
-///   4: SCROLL — L   (0x4C), underlined on the fifth char because
-///      S, C and R already belong to SAVE, COPY and RESET
-///   5: COPY   — C   (0x43)
-///   6: SAVE   — S   (0x53)
+///   4: Scroll — L   (0x4C), underlined on the fifth char because
+///      S, C and R already belong to Save, Copy and Reset
+///   5: Copy   — C   (0x43)
+///   6: Save   — S   (0x53)
 ///   7: OCR    — O   (0x4F)
-///   8: RESET  — R   (0x52)
-///   9: EXIT   — X   (0x58), underlined on the second char
+///   8: Reset  — R   (0x52)
+///   9: Exit   — X   (0x58), underlined on the second char
 const NORMAL_DEFS: &[ButtonDef] = &[
     ButtonDef {
         command: Command::Upload,
-        label: "UPLOAD",
+        label: "Upload",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_UPLOAD,
         svg_bytes: super::assets::SVG_UPLOAD,
     },
     ButtonDef {
         command: Command::Edit,
-        label: "EDIT",
+        label: "Edit",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_EDIT,
         svg_bytes: super::assets::SVG_EDIT,
     },
     ButtonDef {
         command: Command::Video,
-        label: "VIDEO",
+        label: "Video",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_VIDEO,
         svg_bytes: super::assets::SVG_VIDEO,
     },
     ButtonDef {
         command: Command::Share,
-        label: "SHARE",
+        label: "Share",
         underline_idx: 1,
-        primary: true,
         icon_id: ICON_SHARE,
         svg_bytes: super::assets::SVG_SHARE,
     },
     ButtonDef {
         command: Command::ScrollCapture,
-        label: "SCROLL",
+        label: "Scroll",
         underline_idx: 4,
-        primary: true,
         icon_id: ICON_SCROLL,
         svg_bytes: super::assets::SVG_SCROLL,
     },
     ButtonDef {
         command: Command::Copy,
-        label: "COPY",
+        label: "Copy",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_COPY,
         svg_bytes: super::assets::SVG_COPY,
     },
     ButtonDef {
         command: Command::Save,
-        label: "SAVE",
+        label: "Save",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_SAVE,
         svg_bytes: super::assets::SVG_SAVE,
     },
@@ -310,23 +309,20 @@ const NORMAL_DEFS: &[ButtonDef] = &[
         command: Command::Ocr,
         label: "OCR",
         underline_idx: 0,
-        primary: false,
         icon_id: ICON_OCR,
         svg_bytes: super::assets::SVG_OCR,
     },
     ButtonDef {
         command: Command::Reset,
-        label: "RESET",
+        label: "Reset",
         underline_idx: 0,
-        primary: false,
         icon_id: ICON_RESET,
         svg_bytes: super::assets::SVG_RESET,
     },
     ButtonDef {
         command: Command::Exit,
-        label: "EXIT",
+        label: "Exit",
         underline_idx: 1,
-        primary: false,
         icon_id: ICON_EXIT,
         svg_bytes: super::assets::SVG_EXIT,
     },
@@ -335,49 +331,42 @@ const NORMAL_DEFS: &[ButtonDef] = &[
 /// The buttons shown once recognized text has been lifted off the
 /// selection: what to *do* with that text, plus the two ways out.
 ///
-/// BACK and EXIT are gray, mirroring the RESET/EXIT pairing in the
-/// capture strip — the destructive/leave actions read as secondary.
 /// The accelerators reuse `u`/`s`/`c`/`x` from the capture strip on
 /// purpose: only one set is ever on screen, and `lookup_command_by_key`
 /// is scoped to that set.
 const OCR_DEFS: &[ButtonDef] = &[
     ButtonDef {
         command: Command::OcrUpload,
-        label: "UPLOAD",
+        label: "Upload",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_UPLOAD,
         svg_bytes: super::assets::SVG_UPLOAD,
     },
     ButtonDef {
         command: Command::OcrSearch,
-        label: "SEARCH",
+        label: "Search",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_SEARCH,
         svg_bytes: super::assets::SVG_SEARCH,
     },
     ButtonDef {
         command: Command::OcrCopy,
-        label: "COPY",
+        label: "Copy",
         underline_idx: 0,
-        primary: true,
         icon_id: ICON_COPY,
         svg_bytes: super::assets::SVG_COPY,
     },
     ButtonDef {
         command: Command::OcrBack,
-        label: "BACK",
+        label: "Back",
         underline_idx: 0,
-        primary: false,
         icon_id: ICON_BACK,
         svg_bytes: super::assets::SVG_BACK,
     },
     ButtonDef {
         command: Command::Exit,
-        label: "EXIT",
+        label: "Exit",
         underline_idx: 1,
-        primary: false,
         icon_id: ICON_EXIT,
         svg_bytes: super::assets::SVG_EXIT,
     },
@@ -392,6 +381,11 @@ const OCR_DEFS: &[ButtonDef] = &[
 /// never overflow the array.
 pub const MAX_PANEL_BUTTONS: usize = const_max(NORMAL_DEFS.len(), OCR_DEFS.len());
 
+/// Longest label in either set, in glyphs (6 today: "Upload"/"Scroll"/
+/// "Search"). Sizes the column's inner width so orientation stays
+/// independent of which set and which feature switches are visible.
+pub const MAX_LABEL_CHARS: usize = const_max(max_label_len(NORMAL_DEFS), max_label_len(OCR_DEFS));
+
 /// `usize::max` is not `const fn`, and `MAX_PANEL_BUTTONS` has to be a
 /// constant because it sizes arrays.
 const fn const_max(a: usize, b: usize) -> usize {
@@ -400,6 +394,20 @@ const fn const_max(a: usize, b: usize) -> usize {
     } else {
         b
     }
+}
+
+/// Longest `label.len()` in `defs`, as a `const fn` so `MAX_LABEL_CHARS`
+/// can be a constant (labels are ASCII, so bytes are glyphs).
+const fn max_label_len(defs: &[ButtonDef]) -> usize {
+    let mut acc = 0;
+    let mut i = 0;
+    while i < defs.len() {
+        if defs[i].label.len() > acc {
+            acc = defs[i].label.len();
+        }
+        i += 1;
+    }
+    acc
 }
 
 impl ButtonDef {
@@ -617,6 +625,116 @@ mod tests {
                 assert_ne!(a, b, "PANEL_ICONS[{i}] and PANEL_ICONS[{j}] are the same icon");
             }
         }
+    }
+
+    /// The label text is geometry: the layout sizes every button from
+    /// `label.len()` on both threads, the bundled mono face makes each
+    /// glyph the same advance, and the renderer underlines by BYTE index
+    /// while `accel_key` reads a `chars()` index. All of that holds only
+    /// for ASCII, whitespace-free labels whose `underline_idx` is inside
+    /// the string and names the accelerator glyph.
+    #[test]
+    fn labels_are_title_case_ascii_and_underline_index_is_in_range() {
+        for set in PanelButtonSet::ALL {
+            for def in set.defs() {
+                let label = def.label;
+                assert!(label.is_ascii(), "{label} in {set:?} is not ASCII");
+                assert!(!label.chars().any(char::is_whitespace), "{label} in {set:?} contains whitespace");
+                assert!(
+                    label
+                        .chars()
+                        .next()
+                        .is_some_and(|c| c.is_ascii_uppercase()),
+                    "{label} in {set:?} does not start with a capital"
+                );
+                assert!(
+                    def.underline_idx < label.len(),
+                    "{label} in {set:?}: underline_idx {} past the label",
+                    def.underline_idx
+                );
+                assert_eq!(
+                    label.as_bytes()[def.underline_idx].to_ascii_lowercase() as char,
+                    def.accel_key(),
+                    "{label} in {set:?}: byte index and chars() index disagree"
+                );
+            }
+        }
+    }
+
+    /// The exact spellings from the design workbench's capture profile.
+    /// Pinned as literals because a respelling silently changes the button
+    /// widths the layout computes (and the pinned geometry tests with them).
+    #[test]
+    fn labels_match_the_workbench_capture_table() {
+        let normal: Vec<&str> = PanelButtonSet::Normal
+            .defs()
+            .iter()
+            .map(|d| d.label)
+            .collect();
+        assert_eq!(
+            normal,
+            ["Upload", "Edit", "Video", "Share", "Scroll", "Copy", "Save", "OCR", "Reset", "Exit"]
+        );
+        let ocr: Vec<&str> = PanelButtonSet::Ocr
+            .defs()
+            .iter()
+            .map(|d| d.label)
+            .collect();
+        assert_eq!(ocr, ["Upload", "Search", "Copy", "Back", "Exit"]);
+    }
+
+    /// `MAX_LABEL_CHARS` sizes the column, so it must be the true maximum
+    /// over BOTH tables (not just the visible set) and it must move when a
+    /// longer label is added.
+    #[test]
+    fn max_label_chars_is_the_longest_label() {
+        assert_eq!(MAX_LABEL_CHARS, 6);
+        let longest = PanelButtonSet::ALL
+            .iter()
+            .flat_map(|set| set.defs().iter())
+            .map(|d| d.label.len())
+            .max()
+            .unwrap();
+        assert_eq!(MAX_LABEL_CHARS, longest);
+    }
+
+    /// Title-casing the labels moved the accelerator glyphs of Share,
+    /// Scroll and Exit off an uppercase letter; `accel_key` lowercases, so
+    /// the keys must still resolve from either case.
+    #[test]
+    fn accelerators_survive_title_case() {
+        let all = PanelFeatures::ALL;
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'H'), Some(Command::Share));
+        assert_eq!(
+            lookup_command_by_key(PanelButtonSet::Normal, all, 'l'),
+            Some(Command::ScrollCapture)
+        );
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'x'), Some(Command::Exit));
+        assert_eq!(lookup_command_by_key(PanelButtonSet::Ocr, all, 'b'), Some(Command::OcrBack));
+    }
+
+    /// UPLOAD is a real button with the paper-plane mark; the Clowd logo
+    /// is the tray emblem and must never be in the button icon table (the
+    /// dedupe and icon-id tests above mean "buttons only").
+    #[test]
+    fn upload_icon_is_the_paper_plane() {
+        assert_eq!(PANEL_ICONS[ICON_UPLOAD], super::super::assets::SVG_UPLOAD);
+        assert_ne!(super::super::assets::SVG_UPLOAD, super::super::assets::SVG_CLOWD_LOGO);
+        assert!(
+            !PANEL_ICONS.contains(&super::super::assets::SVG_CLOWD_LOGO),
+            "the emblem must not be a button icon"
+        );
+    }
+
+    /// The emblem is rasterised through the same atlas path as the button
+    /// icons, so it must parse, and the layout centres a square mark, so
+    /// the canvas must be square (16 x 16 as authored).
+    #[test]
+    fn clowd_logo_parses() {
+        let tree =
+            usvg::Tree::from_data(super::super::assets::SVG_CLOWD_LOGO, &usvg::Options::default()).expect("clowd-logo.svg failed to parse");
+        let size = tree.size();
+        assert_eq!((size.width(), size.height()), (16.0, 16.0));
     }
 
     #[test]
