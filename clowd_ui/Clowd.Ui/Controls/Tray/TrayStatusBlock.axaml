@@ -1,8 +1,8 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui"
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:tray="using:Clowd.UI.Controls.Tray">
 
-    <!-- Spec §8. Two stacked lines in a 32 px row: a bold tabular fact over a dimmed explanation.
+    <!-- Spec §8. Two stacked lines in a 40 px row: a bold tabular fact over a dimmed explanation.
 
          The Padding lives on a Border rather than on the StackPanel because an Avalonia Panel has no
          Padding; the control's own Padding property is the single place it is written, so the CSS-order

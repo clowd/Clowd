@@ -10,9 +10,10 @@ using Avalonia.Media;
 namespace Clowd.UI.Controls.Tray
 {
     /// <summary>
-    /// The tray's move affordance: a bare dot grid the user drags, with a 14 px rotate button under
-    /// (horizontal) or beside (vertical) it. Neither has a fill of its own — both sit straight on the
-    /// tray, so the grip reads as part of the chassis rather than as another button.
+    /// The tray's move affordance: a dot-grid handle the user drags and a rotate button, two equal
+    /// cells under (horizontal) or beside (vertical) each other with the same hover veil. Neither has a
+    /// fill of its own at rest — both sit straight on the tray, so the grip reads as part of the chassis
+    /// rather than as another button.
     /// <para>
     /// The grip reports gestures and asks for a rotation; it never moves anything itself. Its owner
     /// owns the window and decides what a delta means, which is what keeps this control free of any
@@ -30,7 +31,7 @@ namespace Clowd.UI.Controls.Tray
     {
         /// <summary>
         /// The axis of the strip this grip sits in, pushed down by the tray. Horizontal means the grip
-        /// is a column (dots above the rotate button); Vertical means it is a row.
+        /// is a column (handle cell above the rotate cell); Vertical means it is a row.
         /// </summary>
         public static readonly StyledProperty<Orientation> OrientationProperty =
             AvaloniaProperty.Register<TrayGrip, Orientation>(nameof(Orientation), Orientation.Horizontal);

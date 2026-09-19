@@ -1,4 +1,4 @@
-<Window xmlns="https://github.com/avaloniaui"
+﻿<Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="using:Clowd.UI.Controls"
         x:Class="Clowd.UI.BorderWindow"
@@ -17,12 +17,20 @@
 
         <!-- 3px accent frame with a 2px white inner line. The window is positioned/sized so both
              lines (plus >=1 physical px of slack) sit entirely OUTSIDE the recorded region.
-             Thicknesses are set per-edge in code-behind from AccentLogicalWidth/InnerLogicalWidth,
-             which always overwrite the values below: edges flush with a monitor edge are
-             suppressed entirely (issue #56). -->
-        <Border Name="AccentBorder" BorderThickness="3">
-            <Border Name="InnerBorder" BorderThickness="2" BorderBrush="White" Background="Transparent" />
-        </Border>
+             Thicknesses and the accent's per-corner radius are set in code-behind from
+             AccentLogicalWidth/InnerLogicalWidth/AccentCornerRadius, which always overwrite the
+             values below: edges flush with a monitor edge are suppressed entirely (issue #56). The
+             radius rounds the accent's outside (and, by radius − thickness, 1 px of its inside over
+             the white corners); the white line is the child and stays a sharp rectangle: the white
+             rectangle IS the captured area. -->
+        <!-- Siblings, white FIRST, so the accent paints OVER the white: with the accent's inner edge
+             rounded (radius − thickness) its corners sit on top of the white line's square corners
+             instead of being covered by them. The white line is inset by the accent's per-edge width
+             (InnerBorder.Margin, code-behind) rather than nested as a child. -->
+        <Panel>
+            <Border Name="InnerBorder" BorderThickness="2" BorderBrush="White" Background="Transparent" Margin="3" />
+            <Border Name="AccentBorder" BorderThickness="3" CornerRadius="4" />
+        </Panel>
 
         <!-- 48pt overlay text ("WAIT…"/"PRESS START"): white glyphs with a real vector accent
              outline. Stroke is set to the accent color in code-behind. The Viewbox is DownOnly:
@@ -47,6 +55,16 @@
                  Opacity="0.4" HorizontalAlignment="Center" VerticalAlignment="Center">
             <Path Name="HiddenIcon"
                   Data="{StaticResource IconEyeOff}"
+                  Width="128" Height="128" Stretch="Uniform"
+                  Fill="White" />
+        </Viewbox>
+
+        <!-- The pause bars, shown while a rolling recording is paused (SetPausedIndicator). Inside the
+             region like the eye, and safe for the same reason: no frame is taken while it is up. -->
+        <Viewbox Name="PausedBox" IsVisible="False" Stretch="Uniform" StretchDirection="DownOnly" Margin="10"
+                 Opacity="0.4" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Path Name="PausedIcon"
+                  Data="{StaticResource IconPause}"
                   Width="128" Height="128" Stretch="Uniform"
                   Fill="White" />
         </Viewbox>

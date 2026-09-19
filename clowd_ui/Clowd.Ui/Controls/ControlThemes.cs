@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Markup.Xaml.Styling;
 
@@ -37,6 +37,7 @@ namespace Clowd.UI.Controls
             Add(app, "Tray/TrayButton");
             Add(app, "Tray/TrayPrimaryButton");
             Add(app, "Tray/TraySplitToggle");
+            Add(app, "Tray/TraySplitButton");
             Add(app, "Tray/TrayGrip");
             Add(app, "Tray/TrayStatusBlock");
         }

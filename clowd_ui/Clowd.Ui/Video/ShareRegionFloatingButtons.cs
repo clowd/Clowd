@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -54,10 +54,6 @@ namespace Clowd.UI
         public ShareRegionFloatingButtons()
             : base(new FloatingTrayOptions { Title = "Clowd Share Toolbar", PreferAboveBeforeVertical = true })
         {
-            // the grip's tooltip is where this session says how it is doing: the strip has no label,
-            // and the helper's frame rate is the only evidence the user has that the mirror is live.
-            ToolTip.SetTip(Grip, "Sharing · Drag to move");
-
             // Hide/Show. The polarity is the source-toggle one — ON (open eye, green bar) means the
             // meeting CAN see the region, the reading that works from across a room — so hiding
             // dims the tile and turns the bar red. The bar is a state light, never a meter. No
@@ -94,7 +90,7 @@ namespace Clowd.UI
 
             // Stop is fixed on this strip: a share has nothing to save, so the trailing tile never
             // morphs the way the recording strip's Cancel becomes Finish.
-            _stop = new TrayButton { Glyph = TrayGlyphs.X, Look = TrayButtonLook.Quiet };
+            _stop = new TrayButton { Glyph = TrayGlyphs.X, Look = TrayButtonLook.Danger };
             ToolTip.SetTip(_stop, "Stop sharing");
             AutomationProperties.SetName(_stop, "Stop sharing");
             _stop.Click += (s, e) => CancelClicked?.Invoke(this, EventArgs.Empty);
@@ -194,13 +190,6 @@ namespace Clowd.UI
             AutomationProperties.SetName(_resize, tip);
 
             UpdateLocks();
-        }
-
-        /// <summary>Once-a-second frame rate report from the helper, shown in the grip's tooltip —
-        /// the only evidence the user has that the mirror is still live.</summary>
-        public void SetFps(double fps)
-        {
-            ToolTip.SetTip(Grip, $"Sharing at {fps:F0} FPS · Drag to move");
         }
 
         /// <summary>The one place the share strip's enable rules are applied. Both owners — the

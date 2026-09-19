@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
@@ -22,6 +22,16 @@ namespace Clowd.UI
         private const int AccentLogicalWidth = 3;
         private const int InnerLogicalWidth = 2;
         private const int BorderLogicalWidth = AccentLogicalWidth + InnerLogicalWidth;
+
+        /// <summary>
+        /// The accent ring's OUTER corner radius, logical px. Avalonia rounds a Border's inner edge by
+        /// radius − thickness, so at 4 the accent's inner edge rounds by 1 px, and because the accent is
+        /// painted OVER the white line that rounding covers the white's corners; the white line itself —
+        /// what marks the captured pixels — stays a sharp rectangle. Applied per corner:
+        /// a corner beside a suppressed (monitor-flush) edge stays square, or the surviving edge would
+        /// end in a 2 px nick. ShareResizeWindow paints the same radius while it owns the frame.
+        /// </summary>
+        private const double AccentCornerRadius = 4;
 
         // The capture region in the platform capture coordinate space (§1.1): physical px in
         // virtual-desktop coordinates on Windows, CG points on macOS — which is also exactly what
@@ -152,6 +162,17 @@ namespace Clowd.UI
             HiddenBox.IsVisible = hidden;
         }
 
+        /// <summary>
+        /// Shows or hides the pause bars at the centre of the region: the mark that a rolling
+        /// recording is currently NOT taking frames. Renders INSIDE the region like the eye above, and
+        /// is safe for the same reason — it is up only while the recorder is paused, so the pixels it
+        /// sits on are pixels no frame is made of. The caller takes it down in the same step it resumes.
+        /// </summary>
+        public void SetPausedIndicator(bool paused)
+        {
+            PausedBox.IsVisible = paused;
+        }
+
         private void OnOpened(object sender, EventArgs e)
         {
             // Mandatory: a window that gains WS_EX_LAYERED without a subsequent
@@ -217,6 +238,14 @@ namespace Clowd.UI
 
             AccentBorder.BorderThickness = new Thickness(left ? AccentLogicalWidth : 0, top ? AccentLogicalWidth : 0,
                                                          right ? AccentLogicalWidth : 0, bottom ? AccentLogicalWidth : 0);
+            AccentBorder.CornerRadius = new CornerRadius(left && top ? AccentCornerRadius : 0,
+                                                         top && right ? AccentCornerRadius : 0,
+                                                         right && bottom ? AccentCornerRadius : 0,
+                                                         bottom && left ? AccentCornerRadius : 0);
+            // the white line sits where it did as the accent's child: inset by the accent's width on
+            // every drawn edge, flush on a suppressed one
+            InnerBorder.Margin = new Thickness(left ? AccentLogicalWidth : 0, top ? AccentLogicalWidth : 0,
+                                               right ? AccentLogicalWidth : 0, bottom ? AccentLogicalWidth : 0);
             InnerBorder.BorderThickness = new Thickness(left ? InnerLogicalWidth : 0, top ? InnerLogicalWidth : 0,
                                                         right ? InnerLogicalWidth : 0, bottom ? InnerLogicalWidth : 0);
         }

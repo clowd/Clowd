@@ -1,10 +1,11 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui"
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:tray="using:Clowd.UI.Controls.Tray">
 
     <!-- Spec §1 / §9. The tray's 4 px padding is spent as a 1 px highlight ring plus 3 px of inner
-         padding, so the outer box is exactly 40 px tall in a row and 42 px wide in a column while the
-         ring still reads as an inner edge on a dark desktop.
+         padding, so the outer box is exactly 48 px tall in a row and 48 px wide in a column while the
+         ring still reads as an inner edge on a dark desktop. The corner radius is the buttons' own
+         (TrayTokens.Corner), by request, rather than the geometric inner + padding.
 
          Fill and ring are two stacked Borders rather than one Border with Background + BorderThickness:
          Avalonia deflates a Border's background by half its border thickness, which leaves the
@@ -25,7 +26,11 @@
         <Setter Property="Background" Value="{x:Static tray:TrayTokens.TrayBrush}" />
         <Setter Property="BorderBrush" Value="{x:Static tray:TrayTokens.Ring}" />
         <Setter Property="BorderThickness" Value="1" />
-        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.Corner}" />
+        <!-- ItemsControl defaults ClipToBounds to true, which clipped the shadow to the tray's own box:
+             the window's reserve was empty and the strip looked hard-edged. The shadow is painted
+             OUTSIDE these bounds by design; nothing else in the tray needs clipping. -->
+        <Setter Property="ClipToBounds" Value="False" />
         <!-- The owning window places (and rotates) the strip from Tray.Bounds synchronously right after
              Show(), before size-to-content has shrunk the Win32 default client area, so the tray must
              never inherit a stale client size: left/top alignment inside the window's root Panel makes

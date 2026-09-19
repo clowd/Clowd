@@ -397,16 +397,15 @@ namespace Clowd.UI.Controls.Tray
         }
 
         /// <summary>
-        /// Aims the blip popup at the strip's free side — below a row, to the right of a column — with the
-        /// gap on that axis only, so it stays centred on the tray. A Popup applies its Placement when it
-        /// opens, so anything that re-aims an already-open blip has to close and re-open it.
+        /// Aims the blip popup at the strip's free side — below a row, to the right of a column. The gap
+        /// is the chip theme's own margin (<see cref="TrayTokens.TipMargin"/>), so no offset is set here
+        /// and a blip the positioner flips to the other side keeps the same clearance. A Popup applies its
+        /// Placement when it opens, so anything that re-aims an already-open blip has to close and re-open it.
         /// </summary>
         private void AimBlip()
         {
             var horizontal = Orientation == Orientation.Horizontal;
             _blip.Placement = horizontal ? PlacementMode.Bottom : PlacementMode.Right;
-            _blip.VerticalOffset = horizontal ? TrayTokens.ToolTipGapBottom : 0;
-            _blip.HorizontalOffset = horizontal ? 0 : TrayTokens.ToolTipGapRight;
         }
 
         /// <summary>Re-runs placement after the size-to-content layout pass. Call after anything that
@@ -612,11 +611,11 @@ namespace Clowd.UI.Controls.Tray
             {
                 SetOrientation(result.Orientation);
 
-                // the rotated tray has a different short edge (40 vs 42); a second pass re-measures it,
+                // the rotated tray can have a different short edge (48 vs 48 today, 40 vs 42 before); a second pass re-measures it,
                 // exactly as the old code's one immediate + one posted pass did. Bounded to a single
                 // extra pass on purpose: a region whose free space falls between the two short edges
                 // (e.g. 39 px below, 42 px right, nothing to the left) is picked Vertical when measured
-                // at 40 and Horizontal when measured at 42, so an unbounded self-requeue rotates the
+                // at one and Horizontal when measured at the other, so an unbounded self-requeue rotates the
                 // strip forever at DispatcherPriority.Loaded (TrayPlacementTests pins that geometry).
                 // The second pass may still rotate back, but it never queues a third.
                 if (!isSecondPass)
@@ -714,7 +713,9 @@ namespace Clowd.UI.Controls.Tray
         /// second — with no tip open yet — works. Anchoring to the control keeps the tip clear of
         /// both the cursor and the neighbouring tiles, which is why the side follows the
         /// rotation rather than being fixed. The small gap is the spec's, not the cursor-clearing
-        /// default; the offset on the other axis stays 0 so the tip sits centred on its control.
+        /// default, and it is the tip theme's margin rather than an offset here: an offset is applied
+        /// in the same direction after the positioner flips a tip that has no room below the strip
+        /// to above it, which put the flipped tip 7 px over the strip. Both offsets stay 0.
         /// Every control is aimed whether or not it has a tip yet: a tip assigned after this ran
         /// (an owner filling in a toggle's two tips, say) would otherwise keep the Pointer default and
         /// bring the swallowed first click back. Four idempotent attached-property writes per control
@@ -728,8 +729,8 @@ namespace Clowd.UI.Controls.Tray
             foreach (var control in Tray.GetVisualDescendants().OfType<Control>())
             {
                 ToolTip.SetPlacement(control, placement);
-                ToolTip.SetVerticalOffset(control, horizontal ? TrayTokens.ToolTipGapBottom : 0);
-                ToolTip.SetHorizontalOffset(control, horizontal ? 0 : TrayTokens.ToolTipGapRight);
+                ToolTip.SetVerticalOffset(control, 0);
+                ToolTip.SetHorizontalOffset(control, 0);
 
                 // per control, not once on the tray: ToolTip.ShowDelay does not inherit.
                 ToolTip.SetShowDelay(control, TrayTokens.ToolTipShowDelayMs);

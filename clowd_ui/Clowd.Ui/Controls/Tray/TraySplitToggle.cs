@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -34,7 +34,7 @@ namespace Clowd.UI.Controls.Tray
             AvaloniaProperty.Register<TraySplitToggle, bool>(nameof(IsOn));
 
         /// <summary>Whether the chevron half exists at all. False leaves the toggle alone in the slot
-        /// (34 wide, all four corners rounded).</summary>
+        /// (40 wide, all four corners rounded).</summary>
         public static readonly StyledProperty<bool> HasChevronProperty =
             AvaloniaProperty.Register<TraySplitToggle, bool>(nameof(HasChevron));
 
@@ -188,7 +188,7 @@ namespace Clowd.UI.Controls.Tray
             base.OnPropertyChanged(change);
 
             if (change.Property == IsOnProperty || change.Property == LevelProperty ||
-                change.Property == IsStatusOnlyProperty)
+                change.Property == IsStatusOnlyProperty || change.Property == OrientationProperty)
                 UpdatePill();
 
             // The toggle half's peer reads IsOn off this control on demand, but an assistive client only
@@ -214,15 +214,31 @@ namespace Clowd.UI.Controls.Tray
         /// fills the track and only its colour carries the state. An on, metered toggle maps its level
         /// over the track, floored at the 8 px minimum so a silent-but-live source still reads as live.
         /// A level above 1 simply runs past the track, which clips it.
+        /// <para>
+        /// The extent is the pill's Width in a row and its Height in a column (the track stands up beside
+        /// the icon there and fills from the bottom); the other dimension is released to NaN so the theme's
+        /// Stretch alignment fills it. Both are local values, which is why neither can live in a style.
+        /// </para>
         /// </summary>
         private void UpdatePill()
         {
             if (_pill == null)
                 return;
 
-            _pill.Width = !IsOn || IsStatusOnly
+            var extent = !IsOn || IsStatusOnly
                 ? TrayTokens.TrackWidth
                 : Math.Max(TrayTokens.LevelMinWidth, (Level ?? 0) * TrayTokens.TrackWidth);
+
+            if (Orientation == Orientation.Horizontal)
+            {
+                _pill.Height = double.NaN;
+                _pill.Width = extent;
+            }
+            else
+            {
+                _pill.Width = double.NaN;
+                _pill.Height = extent;
+            }
         }
     }
 }

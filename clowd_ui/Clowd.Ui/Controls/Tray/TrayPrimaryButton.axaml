@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui"
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:sys="using:System"
                     xmlns:tray="using:Clowd.UI.Controls.Tray">
@@ -8,9 +8,12 @@
          pressable) and the fills stay arithmetically correct if the tray colour ever changes.
 
          Layout notes worth knowing before editing:
-         * The width is FIXED at 60 (horizontal). The label changes every second while a transport runs;
-           a button that could grow would make the whole strip twitch. In vertical mode the width becomes
-           NaN and the button stretches to the tray's 34 px column instead.
+         * The width is FIXED at TrayTokens.PrimaryWidth (horizontal). The label changes every second
+           while a transport runs; a button that could grow would make the whole strip twitch. In vertical
+           mode the width becomes NaN and the button stretches to the tray's 40 px column instead.
+         * The glyph + label group sits in a centred DownOnly Viewbox: it is centred in the fixed box with
+           the same margin at both ends, and a label that would not fit (a long elapsed time) scales down
+           instead of being clipped or pushing the box wider.
          * `_content` declares two rows AND two columns and the children move between cells on rotation.
            `Grid.ColumnDefinitions` is not a styled property (it cannot be set from a Style), and the
            unused Auto row/column collapses to zero, so this is the cheap way to have both layouts. The
@@ -37,7 +40,7 @@
                 <Border Name="_bg"
                         Width="{x:Static tray:TrayTokens.PrimaryWidth}"
                         Height="{x:Static tray:TrayTokens.ButtonHeight}"
-                        CornerRadius="7"
+                        CornerRadius="{x:Static tray:TrayTokens.Corner}"
                         ClipToBounds="True">
                     <Border.Transitions>
                         <Transitions>
@@ -50,7 +53,7 @@
                              of stacking on it: the two states that have both fade in opposite directions
                              over the same duration, so the fill walks straight from the resting tint to
                              the hover tint without a dip through the bare fill. -->
-                        <Border Name="_veil" CornerRadius="7" IsHitTestVisible="False">
+                        <Border Name="_veil" CornerRadius="{x:Static tray:TrayTokens.Corner}" IsHitTestVisible="False">
                             <Border.Transitions>
                                 <Transitions>
                                     <BrushTransition Property="Background" Duration="{x:Static tray:TrayTokens.FillTransition}" />
@@ -58,13 +61,18 @@
                                 </Transitions>
                             </Border.Transitions>
                         </Border>
+                        <Viewbox Name="_fit"
+                                 Margin="{TemplateBinding Padding}"
+                                 Stretch="Uniform"
+                                 StretchDirection="DownOnly"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center">
                         <Grid Name="_content"
-                              Margin="{TemplateBinding Padding}"
                               ColumnDefinitions="Auto,Auto"
                               RowDefinitions="Auto,Auto"
                               ColumnSpacing="5"
                               RowSpacing="0"
-                              HorizontalAlignment="Left"
+                              HorizontalAlignment="Center"
                               VerticalAlignment="Center">
                             <Panel Name="_glyph"
                                    Grid.Row="0"
@@ -116,7 +124,8 @@
                                 </TextBlock.Transitions>
                             </TextBlock>
                         </Grid>
-                        <Border Name="_hover" CornerRadius="7" Opacity="0" IsHitTestVisible="False">
+                        </Viewbox>
+                        <Border Name="_hover" CornerRadius="{x:Static tray:TrayTokens.Corner}" Opacity="0" IsHitTestVisible="False">
                             <Border.Transitions>
                                 <Transitions>
                                     <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />

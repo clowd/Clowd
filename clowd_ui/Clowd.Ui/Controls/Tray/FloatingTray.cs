@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -15,7 +15,7 @@ namespace Clowd.UI.Controls.Tray
     /// binding, and the value is pushed into every item that implements <see cref="ITrayOrientable"/>
     /// so each of those restyles itself through its own theme selectors. Items that do not implement
     /// it need no help: a vertical column stretches them to the widest child, a horizontal row centres
-    /// them at their own 32 px height.
+    /// them at their own 40 px height.
     /// </para>
     /// </summary>
     public class FloatingTray : ItemsControl

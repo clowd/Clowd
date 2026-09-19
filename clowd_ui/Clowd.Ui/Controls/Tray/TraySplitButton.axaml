@@ -1,0 +1,76 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="using:System"
+                    xmlns:tray="using:Clowd.UI.Controls.Tray">
+
+    <!-- Two TrayButtons in one Seg-filled slot, the split toggle's silhouette without its bar. The
+         halves paint no fill of their own (Background=Transparent onto the slot) and the outer theme
+         owns their shape: the corner that meets the other half goes square, and the side half is the
+         chevron's 16 px (vertical: full width x 14) with a hairline divider on the edge it meets the
+         main half on, drawn by the half's own `_bg` Border so it never pushes the glyph off centre.
+
+         Styles here beat the halves' own TrayButton theme (a templated parent's theme outranks the
+         child's theme in Avalonia's value store), which is what lets a plain TrayButton be reused
+         for both halves instead of a second button theme. -->
+    <ControlTheme x:Key="{x:Type tray:TraySplitButton}" TargetType="tray:TraySplitButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Name="_slot"
+                        Background="{x:Static tray:TrayTokens.SegBrush}"
+                        CornerRadius="{x:Static tray:TrayTokens.Corner}">
+                    <StackPanel Name="_parts" Orientation="{TemplateBinding Orientation}">
+                        <tray:TrayButton Name="PART_Main"
+                                         Background="Transparent"
+                                         Glyph="{TemplateBinding Glyph}"
+                                         Look="{TemplateBinding Look}"
+                                         AutomationProperties.Name="{TemplateBinding MainName}"
+                                         ToolTip.Tip="{TemplateBinding MainToolTip}" />
+                        <tray:TrayButton Name="PART_Side"
+                                         Background="Transparent"
+                                         BorderBrush="{x:Static tray:TrayTokens.Divider}"
+                                         Glyph="{TemplateBinding SideGlyph}"
+                                         Look="{TemplateBinding SideLook}"
+                                         AutomationProperties.Name="{TemplateBinding SideName}"
+                                         ToolTip.Tip="{TemplateBinding SideToolTip}" />
+                    </StackPanel>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+
+        <!-- main half: the inner corner squares off against the side half -->
+        <Style Selector="^ /template/ tray|TrayButton#PART_Main">
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerLeft}" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ tray|TrayButton#PART_Main">
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerTop}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+
+        <!-- side half: the chevron's geometry and its .7 resting step, a 12 px glyph -->
+        <Style Selector="^ /template/ tray|TrayButton#PART_Side">
+            <Setter Property="Width" Value="{x:Static tray:TrayTokens.ChevronWidth}" />
+            <Setter Property="MinWidth" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="GlyphSize" Value="12" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerRight}" />
+            <Setter Property="BorderThickness" Value="1,0,0,0" />
+            <Setter Property="Opacity" Value="0.7" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{x:Static tray:TrayTokens.FillTransition}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="^ /template/ tray|TrayButton#PART_Side:pointerover:not(:disabled)">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ tray|TrayButton#PART_Side">
+            <Setter Property="Width" Value="{x:Static sys:Double.NaN}" />
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.ChevronHeight}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerBottom}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+        </Style>
+    </ControlTheme>
+
+</ResourceDictionary>

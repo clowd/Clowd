@@ -1,4 +1,4 @@
-<Styles xmlns="https://github.com/avaloniaui"
+﻿<Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:tray="using:Clowd.UI.Controls.Tray">
 
@@ -37,6 +37,9 @@
             <!-- spec writes CSS "4,8" (vertical 4, horizontal 8) -->
             <Setter Property="Padding" Value="8,4" />
             <Setter Property="CornerRadius" Value="6" />
+            <!-- the clearance from the strip, as transparent room inside the popup (TrayTokens.TipMargin
+                 says why it is not a placement offset) -->
+            <Setter Property="Margin" Value="{x:Static tray:TrayTokens.TipMargin}" />
             <Setter Property="HorizontalContentAlignment" Value="Center" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">

@@ -225,7 +225,6 @@ namespace Clowd.UI
                 _driver = new ShareRegionDriver();
                 _driver.ObscureChanged += OnObscureChanged;
                 _driver.RegionChanged += OnRegionChanged;
-                _driver.StatusReceived += OnStatusReceived;
                 _driver.CommandError += OnCommandError;
                 _driver.Ended += OnEnded;
 
@@ -328,9 +327,9 @@ namespace Clowd.UI
                 PageManager.Current.GetSettingsPage().Open(SettingsPageTab.SettingsShareRegion);
             // The toolbar has no clock of its own and this page deliberately does not grow one: an
             // elapsed timer would need a DispatcherTimer whose only job is to say how long a thing
-            // that is plainly still happening has been happening. The helper's own status line is
-            // free and says something the user cannot otherwise see, so the grip's tooltip carries
-            // that (SetFps) once the first status arrives about a second in.
+            // that is plainly still happening has been happening. The helper's once-a-second FPS
+            // status is not shown either (it used to ride in the grip tooltip, and did not belong
+            // there); the hide/show eye is the strip's whole account of the session.
             _toolbar.ShowNear(_region);
 
             // The GPU effect can fail to build before the toolbar exists (the helper emits its
@@ -1027,16 +1026,6 @@ namespace Clowd.UI
             }
         }
 
-        /// <summary>Once-a-second frame rate report from the helper — the only evidence the user has
-        /// that the mirror is still live, so it goes in the grip's tooltip.</summary>
-        private void OnStatusReceived(object sender, double fps)
-        {
-            if (_closing)
-                return;
-
-            _toolbar?.SetFps(fps);
-        }
-
         /// <summary>
         /// The helper rejected a command. For an obscure command this is logged and dropped: the
         /// tile's next ack (or the lack of one) is already the user-visible answer, and a modal
@@ -1349,7 +1338,6 @@ namespace Clowd.UI
             {
                 _driver.ObscureChanged -= OnObscureChanged;
                 _driver.RegionChanged -= OnRegionChanged;
-                _driver.StatusReceived -= OnStatusReceived;
                 _driver.CommandError -= OnCommandError;
                 _driver.Ended -= OnEnded;
                 // Safety net for the paths that reach here without having awaited a shutdown (the

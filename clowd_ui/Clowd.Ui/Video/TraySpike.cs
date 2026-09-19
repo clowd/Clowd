@@ -1,9 +1,11 @@
-using System;
+﻿using System;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.PlatformUtil;
@@ -103,7 +105,7 @@ namespace Clowd.UI
             {
                 Console.WriteLine("usage: " + ArgName + " generic|glyphs|recording|share|scroll [--vertical]"
                     + " [--shadow spec|compact] [--state <name>] [--cycle] [--nochevron] [--region full]"
-                    + " [--exit-after <ms>]");
+                    + " [--exit-after <ms>] [--snapshot <png>]");
                 Console.Out.Flush();
                 // a harness process with no window would hang: the desktop lifetime shuts down only
                 // on the tray's Exit item, and this path never sets a tray up.
@@ -111,6 +113,10 @@ namespace Clowd.UI
             }
 
             AttachTracing(window, exitAfterMs);
+
+            var snapshot = ValueOf(args, "--snapshot");
+            if (snapshot != null)
+                ScheduleSnapshot(window, snapshot);
 
             var region = String.Equals(ValueOf(args, "--region"), "full", StringComparison.OrdinalIgnoreCase)
                 ? FullScreenRegion(window)
@@ -235,6 +241,73 @@ namespace Clowd.UI
         }
 
         /// <summary>
+        /// Renders the window's content — the tray AND the transparent shadow reserve around it — to a
+        /// PNG through a RenderTargetBitmap, without a screenshot, then prints the shadow's alpha along a
+        /// line running out of the tray on each side (one number per logical px, from the tray edge to
+        /// the window edge). A non-zero last number means the reserve clips the shadow.
+        /// </summary>
+        private static void ScheduleSnapshot(FloatingTrayWindow window, string path)
+        {
+            DispatcherTimer.RunOnce(() =>
+            {
+                try
+                {
+                    var root = (Control)window.Content;
+                    var scale = window.RenderScaling;
+                    var size = window.ClientSize;
+                    var pixels = new PixelSize((int)Math.Ceiling(size.Width * scale), (int)Math.Ceiling(size.Height * scale));
+                    using var bitmap = new RenderTargetBitmap(pixels, new Vector(96 * scale, 96 * scale));
+                    bitmap.Render(root);
+                    bitmap.Save(path, PngBitmapEncoderOptions.Default);
+
+                    var stride = pixels.Width * 4;
+                    var buffer = new byte[stride * pixels.Height];
+                    var native = Marshal.AllocHGlobal(buffer.Length);
+                    try
+                    {
+                        bitmap.CopyPixels(new PixelRect(pixels), native, buffer.Length, stride);
+                        Marshal.Copy(native, buffer, 0, buffer.Length);
+                    }
+                    finally
+                    {
+                        Marshal.FreeHGlobal(native);
+                    }
+
+                    int Alpha(double x, double y)
+                    {
+                        var px = Math.Clamp((int)(x * scale), 0, pixels.Width - 1);
+                        var py = Math.Clamp((int)(y * scale), 0, pixels.Height - 1);
+                        return buffer[py * stride + px * 4 + 3];
+                    }
+
+                    var tray = window.Tray.Bounds;
+                    var cx = tray.Center.X;
+                    var cy = tray.Center.Y;
+                    string Line(string side, Func<int, int> at, int count)
+                    {
+                        var parts = new string[count];
+                        for (var i = 0; i < count; i++)
+                            parts[i] = at(i).ToString(CultureInfo.InvariantCulture);
+                        return side + " " + String.Join(",", parts);
+                    }
+
+                    Console.WriteLine("snapshot " + path);
+                    Console.WriteLine("shadow " + window.Tray.Shadow + " margin " + window.Tray.Margin);
+                    Console.WriteLine(Line("shadow-bottom", i => Alpha(cx, tray.Bottom + i), (int)(size.Height - tray.Bottom)));
+                    Console.WriteLine(Line("shadow-top", i => Alpha(cx, tray.Top - 1 - i), (int)tray.Top));
+                    Console.WriteLine(Line("shadow-left", i => Alpha(tray.Left - 1 - i, cy), (int)tray.Left));
+                    Console.WriteLine(Line("shadow-right", i => Alpha(tray.Right + i, cy), (int)(size.Width - tray.Right)));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("snapshot failed: " + ex);
+                }
+
+                Console.Out.Flush();
+            }, TimeSpan.FromMilliseconds(800));
+        }
+
+        /// <summary>
         /// A dispatcher timer that dies with its window. The three real strips are sealed, so a harness
         /// driver cannot stop its timers from <c>OnClosed</c> the way the two windows below do.
         /// </summary>
@@ -330,6 +403,15 @@ namespace Clowd.UI
                 Tray.Items.Add(NewButton(TrayGlyphs.Resize, TrayButtonLook.Normal, true, "Normal + IsActive (accent fill)"));
                 Tray.Items.Add(NewButton(TrayGlyphs.X, TrayButtonLook.Quiet, false, "Quiet"));
                 Tray.Items.Add(NewButton(TrayGlyphs.Stop, TrayButtonLook.Danger, false, "Danger"));
+
+                var split = new TraySplitButton
+                {
+                    Glyph = TrayGlyphs.Check, Look = TrayButtonLook.Normal, MainToolTip = "Split · main", MainName = "Main",
+                    SideGlyph = TrayGlyphs.X, SideToolTip = "Split · side", SideName = "Side",
+                };
+                split.MainClicked += (s, e) => ShowStatusBlip("Split · main clicked");
+                split.SideClicked += (s, e) => ShowStatusBlip("Split · side clicked");
+                Tray.Items.Add(split);
 
                 // last in the row so the visibility test below shortens the strip from its free end,
                 // leaving every other measurement in place while the printed length changes.
@@ -516,10 +598,6 @@ namespace Clowd.UI
                 // too); with no page, a blip is the only honest answer — it proves the event landed.
                 _strip.SettingsClicked += (s, e) => _strip.ShowStatusBlip("Options");
 
-                // seeds the " · 30 FPS" half of the grip tooltip (the FPS reading moved from the primary
-                // label to the grip tooltip, and nothing else on the strip shows it).
-                _strip.SetFps(30);
-
                 if (noChevron)
                     ClearChevrons();
 
@@ -536,7 +614,7 @@ namespace Clowd.UI
                     // Applying "active"/"paused" synchronously right here froze the camera slot before
                     // the list landed (a null list counts as no devices), so a direct --state active
                     // printed a chevron-less 320x40 where the waiting -> idle -> active walk reaches
-                    // 336x40. So show the idle strip first, wait for the same enumeration the strip
+                    // 372x48. So show the idle strip first, wait for the same enumeration the strip
                     // awaits (its constructor started one before this line, so ours lands no earlier),
                     // and only then apply the state - one hop later still, so the strip's own
                     // continuation (RefreshCamerasAsync -> Changed -> UpdateLocks -> SetChevron) has run.
@@ -730,9 +808,6 @@ namespace Clowd.UI
 
                 _strip.CancelClicked += (s, e) => ExitSpike();
                 _strip.SettingsClicked += (s, e) => _strip.ShowStatusBlip("Options");
-
-                // the "Sharing at 30 FPS · Drag to move" half of the grip tooltip
-                _strip.SetFps(30);
 
                 Apply(cycle ? Walk[0] : state ?? "visible");
 

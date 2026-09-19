@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -41,12 +41,13 @@ namespace Clowd.UI
         /// <summary>
         /// The strip's logical size, and the ONE place it is declared: the placement search needs it
         /// before the window has ever been laid out, so it cannot be measured. Derived from the tray's
-        /// own tokens rather than hand-mirrored from the layout — 4 + 240 + 4 + 34 + 4 + 34 + 4 =
-        /// 324 × 40 — so a token change moves the declaration with it instead of silently diverging
-        /// (which is exactly what the old pair of hand-copied constants could do).
+        /// own tokens rather than hand-mirrored from the layout — 4 + 40 (emblem) + 4 + 240 + 4 + 40 +
+        /// 4 + 40 + 4 = 380 × 48 — so a token change moves the declaration with it instead of silently
+        /// diverging (which is exactly what the old pair of hand-copied constants could do). The emblem
+        /// is the chassis's, added before this constructor's items, which is why it is counted here.
         /// </summary>
         private static readonly Size TraySize = new Size(
-            TrayTokens.TrayPad * 2 + StatusWidth + TrayTokens.Gap * 2 + TrayTokens.ButtonMinWidth * 2,
+            TrayTokens.TrayPad * 2 + TrayTokens.EmblemLength + TrayTokens.Gap + StatusWidth + TrayTokens.Gap * 2 + TrayTokens.ButtonMinWidth * 2,
             TrayTokens.ButtonHeight + TrayTokens.TrayPad * 2);
 
         private readonly TrayStatusBlock _status;

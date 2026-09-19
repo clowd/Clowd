@@ -25,7 +25,7 @@ namespace Clowd.UI.Controls.Tray
     {
         // colours (spec §0) — fixed, theme-invariant, never derived from the accent
         public static readonly Color Tray = Color.Parse("#25272B"),
-                                     Seg = Color.Parse("#2F3237"),
+                                     Seg = Color.Parse("#3A3E44"),
                                      Fg = Colors.White,
                                      Rec = Color.Parse("#E2504A"),
                                      Ok = Color.Parse("#2FA85A"),
@@ -39,8 +39,9 @@ namespace Clowd.UI.Controls.Tray
                                       WarnBrush = new ImmutableSolidColorBrush(Warn);
 
         // veils = alpha overlays over whatever is beneath (spec §0 "implement as layered overlays")
-        /// <summary>White .08 — hover veil on Normal/Quiet buttons.</summary>
-        public static readonly IBrush HoverVeil = new ImmutableSolidColorBrush(Fg, 0.08);
+        /// <summary>White .12 — hover veil on Normal/Quiet buttons. Was .08 over the original #2F3237
+        /// segment; the lighter segment needed a bigger step to keep the hover readable.</summary>
+        public static readonly IBrush HoverVeil = new ImmutableSolidColorBrush(Fg, 0.12);
 
         /// <summary>White .12 — the underline-bar track behind the level pill.</summary>
         public static readonly IBrush Track = new ImmutableSolidColorBrush(Fg, 0.12);
@@ -81,11 +82,30 @@ namespace Clowd.UI.Controls.Tray
         public const string AccentBrushKey = "TrayAccentBrush";
 
         // geometry, logical px (spec §0–§9)
-        public const double ButtonHeight = 32, ButtonMinWidth = 34;
+        public const double ButtonHeight = 40, ButtonMinWidth = 40;
+
+        /// <summary>
+        /// The one corner radius for the buttons AND the tray around them (the user asked for the two to
+        /// match rather than for the outer one to be inner + padding). A <see cref="CornerRadius"/> has no
+        /// double conversion in XAML, so the shapes themselves are tokens: the full one, and the four
+        /// "rounded on one side only" variants a split toggle's halves use — named for the side that KEEPS
+        /// its rounding.
+        /// </summary>
+        public const double Radius = 8;
+
+        public static readonly CornerRadius Corner = new CornerRadius(Radius),
+                                            CornerLeft = new CornerRadius(Radius, 0, 0, Radius),
+                                            CornerRight = new CornerRadius(0, Radius, Radius, 0),
+                                            CornerTop = new CornerRadius(Radius, Radius, 0, 0),
+                                            CornerBottom = new CornerRadius(0, 0, Radius, Radius);
+
+        /// <summary>The hover veil on the grip's two cells (dot handle, rotate button): smaller than the
+        /// button radius because a cell is half a button tall.</summary>
+        public static readonly CornerRadius GripCorner = new CornerRadius(5);
 
         /// <summary>
         /// The spec's 4 px tray padding, spent as a 1 px ring plus 3 px of inner padding so the outer
-        /// box stays exactly 40 px tall.
+        /// box is exactly <see cref="ButtonHeight"/> + 8 (48 px) tall.
         /// </summary>
         public const double TrayPad = 4, Gap = 4;
 
@@ -98,9 +118,26 @@ namespace Clowd.UI.Controls.Tray
         /// </summary>
         public static readonly Thickness TrayPadding = new Thickness(TrayPad);
 
-        public const double IconSize = 16, ChevronWidth = 16, ChevronHeight = 14, PrimaryWidth = 60, GripLength = 25.5;
-        public const double TrackWidth = 20, TrackHeight = 3, LevelMinWidth = 8;
+        public const double IconSize = 16, ChevronWidth = 16, ChevronHeight = 14, PrimaryWidth = 66;
+
+        /// <summary>
+        /// The grip's extent along the strip axis: its width in a row, its height in a column. The other
+        /// axis is the row height / column width, split into two equal cells — the dot handle and the
+        /// rotate button — so the two read as a matched pair rather than as a grid with a small button
+        /// tucked under it.
+        /// </summary>
+        public const double GripLength = 26, RotateGlyphSize = 14;
+        public const double TrackWidth = 24, TrackHeight = 4, LevelMinWidth = 8;
         public const double MenuGap = 8, ToolTipGapBottom = 7, ToolTipGapRight = 8, DragThreshold = 5;
+
+        /// <summary>
+        /// The tooltip's clearance from the strip, carried as a transparent margin INSIDE the popup rather
+        /// than as a placement offset. A placement offset is added in the same direction after the
+        /// positioner flips a tip that does not fit below the strip to above it, so the "gap" then pushed
+        /// the tip 7 px INTO the strip. A margin is symmetric: the tip sits 7 px below when it fits and 7 px
+        /// above when it does not, and 8 px beside a column either way.
+        /// </summary>
+        public static readonly Thickness TipMargin = new Thickness(ToolTipGapRight, ToolTipGapBottom);
         public const int ToolTipShowDelayMs = 350;
 
         // motion

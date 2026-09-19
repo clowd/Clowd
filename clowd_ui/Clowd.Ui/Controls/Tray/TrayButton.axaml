@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui"
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:clowd="using:Clowd"
                     xmlns:tray="using:Clowd.UI.Controls.Tray">
@@ -14,14 +14,13 @@
          from code, which is what keeps one button's hover identical to the next one's.
 
          The glyph is 16x16 with the button's Padding as its margin, so an icon-only button measures
-         8 + 16 + 8 = 32 and is then clamped up to MinWidth 34 (the spec's sz + 2). -->
+         8 + 16 + 8 = 32 and is then clamped up to MinWidth 40, a square tile. -->
     <ControlTheme x:Key="{x:Type tray:TrayButton}" TargetType="tray:TrayButton">
         <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
         <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.ButtonMinWidth}" />
         <!-- spec writes CSS "0,8" (left/right 8); Avalonia's pair is horizontal,vertical -->
         <Setter Property="Padding" Value="8,0" />
-        <!-- 7 = the spec's button radius (§2); CornerRadius has no double conversion, so it is a literal -->
-        <Setter Property="CornerRadius" Value="7" />
+        <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.Corner}" />
         <Setter Property="Background" Value="{x:Static tray:TrayTokens.SegBrush}" />
         <Setter Property="Foreground" Value="{x:Static tray:TrayTokens.FgBrush}" />
         <Setter Property="BorderThickness" Value="0" />
@@ -37,8 +36,13 @@
         <Setter Property="Template">
             <ControlTemplate>
                 <Panel>
+                    <!-- BorderBrush/BorderThickness are bound (the theme sets the thickness to 0) so a
+                         composite slot can draw a hairline divider on one edge of a half; the glyph is
+                         this Border's sibling, so the line never pushes it off centre -->
                     <Border Name="_bg"
                             Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="{TemplateBinding CornerRadius}" />
                     <!-- resting look veil (DangerFilled only): an alpha overlay, never a pre-blended
                          literal, so it stays correct if the segment colour ever moves. It fades on the
@@ -55,8 +59,8 @@
                         </Border.Transitions>
                     </Border>
                     <tray:TrayGlyphIcon Name="_icon"
-                                        Width="{x:Static tray:TrayTokens.IconSize}"
-                                        Height="{x:Static tray:TrayTokens.IconSize}"
+                                        Width="{TemplateBinding GlyphSize}"
+                                        Height="{TemplateBinding GlyphSize}"
                                         Margin="{TemplateBinding Padding}"
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"

@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="https://github.com/avaloniaui"
+﻿<ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:tray="using:Clowd.UI.Controls.Tray">
 
@@ -108,11 +108,11 @@
     <!-- The slot (spec §5, §9). One Seg-filled rounded box holding two transparent halves and, over
          the toggle half, the underline bar.
 
-         The bar is a sibling of the toggle button rather than part of its content: the spec insets it
-         7 px from the BUTTON's edges (34 - 2*7 = the 20 px track), while the button's own padding is
-         8/7 and would shift the bar half a pixel. Centring a 20 px bar in the 34 px half gives the
-         spec's insets exactly, in both orientations, with no arithmetic. It is hit-test invisible, so
-         the click still lands on the toggle underneath.
+         The bar is a sibling of the toggle button rather than part of its content: it is centred on
+         the BUTTON (a 24 x 4 track, TrayTokens.TrackWidth/TrackHeight, 8 px in from each edge of the
+         40 px half), while the button's own padding is 8/7 and would shift the bar half a pixel.
+         Centring it in the half gives equal insets exactly, in both orientations, with no arithmetic.
+         It is hit-test invisible, so the click still lands on the toggle underneath.
 
          The two halves sit in a StackPanel, not a Grid: a rotation is then one TemplateBinding rather
          than a pair of row/column definitions and four attached-property setters that have to be
@@ -122,7 +122,7 @@
             <ControlTemplate>
                 <Border Name="_slot"
                         Background="{x:Static tray:TrayTokens.SegBrush}"
-                        CornerRadius="7">
+                        CornerRadius="{x:Static tray:TrayTokens.Corner}">
                     <StackPanel Name="_parts" Orientation="{TemplateBinding Orientation}">
                         <Panel Name="_toggleHost">
                             <!-- the owner names the control; the template forwards that name to the half a screen reader actually lands on.
@@ -163,22 +163,23 @@
                             <Border Name="_track"
                                     Width="{x:Static tray:TrayTokens.TrackWidth}"
                                     Height="{x:Static tray:TrayTokens.TrackHeight}"
-                                    Margin="0,0,0,3"
+                                    Margin="0,0,0,4"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Bottom"
                                     Background="{x:Static tray:TrayTokens.Track}"
-                                    CornerRadius="3"
+                                    CornerRadius="2"
                                     ClipToBounds="True"
                                     IsHitTestVisible="False">
-                                <Border Name="_pill"
-                                        Width="{x:Static tray:TrayTokens.TrackWidth}"
-                                        HorizontalAlignment="Left"
-                                        CornerRadius="3">
+                                <!-- alignment comes from the orientation styles below, and the extent
+                                     (Width in a row, Height in a column) is written by UpdatePill -->
+                                <Border Name="_pill" CornerRadius="2">
                                     <Border.Transitions>
                                         <Transitions>
                                             <!-- the level arrives ~10 times a second; without this the
                                                  bar reads as a row of steps instead of a movement -->
                                             <DoubleTransition Property="Width"
+                                                              Duration="{x:Static tray:TrayTokens.LevelTransition}" />
+                                            <DoubleTransition Property="Height"
                                                               Duration="{x:Static tray:TrayTokens.LevelTransition}" />
                                         </Transitions>
                                     </Border.Transitions>
@@ -199,17 +200,17 @@
             </ControlTemplate>
         </Setter>
 
-        <!-- The toggle half is 32 high on both axes; everything else about it depends on the axis, so
+        <!-- The toggle half is ButtonHeight high on both axes; everything else about it depends on the axis, so
              both orientations are written out rather than one relying on the other's setters being
              reverted. -->
         <Style Selector="^ /template/ Button#PART_Toggle">
             <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
             <!-- alone in the slot, the toggle carries all four of its corners -->
-            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.Corner}" />
         </Style>
         <Style Selector="^[Orientation=Horizontal] /template/ Button#PART_Toggle">
             <!-- spec's CSS 0,7,0,8 -> left 8, right 7 in Avalonia's order: 8 + 16 + 7 = 31, clamped up
-                 to the 34 px MinWidth, which is where the split's 34 + 16 = 50 comes from -->
+                 to the 40 px MinWidth, which is where the split's 40 + 16 = 56 comes from -->
             <Setter Property="Padding" Value="8,0,7,0" />
         </Style>
         <Style Selector="^[Orientation=Vertical] /template/ Button#PART_Toggle">
@@ -218,10 +219,10 @@
         </Style>
         <!-- with a chevron the inner edge goes square, so the two halves read as one slot -->
         <Style Selector="^[Orientation=Horizontal][HasChevron=True] /template/ Button#PART_Toggle">
-            <Setter Property="CornerRadius" Value="7,0,0,7" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerLeft}" />
         </Style>
         <Style Selector="^[Orientation=Vertical][HasChevron=True] /template/ Button#PART_Toggle">
-            <Setter Property="CornerRadius" Value="7,7,0,0" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerTop}" />
         </Style>
 
         <!-- Horizontal: 16 wide beside the toggle, divider on its left, stretched to the row height.
@@ -229,14 +230,33 @@
              in the template, so switching axis simply swaps which of these two rules matches. -->
         <Style Selector="^[Orientation=Horizontal] /template/ Button#PART_Chevron">
             <Setter Property="Width" Value="{x:Static tray:TrayTokens.ChevronWidth}" />
-            <Setter Property="CornerRadius" Value="0,7,7,0" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerRight}" />
             <Setter Property="BorderThickness" Value="1,0,0,0" />
         </Style>
         <Style Selector="^[Orientation=Vertical] /template/ Button#PART_Chevron">
             <Setter Property="Height" Value="{x:Static tray:TrayTokens.ChevronHeight}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="CornerRadius" Value="0,0,7,7" />
+            <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.CornerBottom}" />
             <Setter Property="BorderThickness" Value="0,1,0,0" />
+        </Style>
+
+        <!-- The bar: an underline in a row; in a column it stands up along the RIGHT edge of the icon
+             (TrackHeight wide, TrackWidth tall) and fills from the bottom, the way a level meter reads
+             when the strip is upright. -->
+        <Style Selector="^ /template/ Border#_pill">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Border#_track">
+            <Setter Property="Width" Value="{x:Static tray:TrayTokens.TrackHeight}" />
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.TrackWidth}" />
+            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Border#_pill">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
         </Style>
 
         <!-- Red off, green on — the same two colours in every mode, so the bar can be read without

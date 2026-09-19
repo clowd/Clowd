@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -298,8 +298,8 @@ namespace Clowd.UI
 
                 IsRecording = true;
                 _toolbar.SetRecordingState(true);
-                // the grip tooltip reads "Drag to move" until the first status arrives;
-                // OnStatusReceived then feeds SetElapsed/SetFps.
+                // OnStatusReceived feeds SetElapsed from here on; the FPS in the same status is
+                // not shown anywhere on the strip.
             }
             catch (Exception ex)
             {
@@ -337,6 +337,7 @@ namespace Clowd.UI
                 }
 
                 _toolbar?.SetPausedState(IsPaused);
+                _border?.SetPausedIndicator(IsPaused);
             }
             catch (Exception ex)
             {
@@ -930,7 +931,6 @@ namespace Clowd.UI
         {
             _lastStatusElapsed = status.Elapsed;
             _toolbar?.SetElapsed(status.Elapsed);
-            _toolbar?.SetFps(status.Fps);
         }
 
         private void OnLevelsReceived(object sender, ObsLevels levels)

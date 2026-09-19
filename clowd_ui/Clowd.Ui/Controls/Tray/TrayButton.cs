@@ -1,4 +1,4 @@
-using Avalonia;
+﻿using Avalonia;
 using Avalonia.Controls;
 
 namespace Clowd.UI.Controls.Tray
@@ -28,7 +28,7 @@ namespace Clowd.UI.Controls.Tray
     }
 
     /// <summary>
-    /// The tray's plain icon button: one 16 px glyph in a 34×32 slot with a 7 px radius.
+    /// The tray's plain icon button: one 16 px glyph in a 40×40 slot with the tray radius.
     /// <para>
     /// Everything visual lives in <c>TrayButton.axaml</c>. This class is three styled properties and
     /// nothing else on purpose — a button whose fills are written from code cannot be styled, cannot
@@ -59,6 +59,12 @@ namespace Clowd.UI.Controls.Tray
         public static readonly StyledProperty<bool> IsActiveProperty =
             AvaloniaProperty.Register<TrayButton, bool>(nameof(IsActive));
 
+        /// <summary>The glyph's drawn size, <see cref="TrayTokens.IconSize"/> by default. A styled
+        /// property rather than a template literal so a composite slot can style one half smaller
+        /// (<see cref="TraySplitButton"/>'s side half draws at 12).</summary>
+        public static readonly StyledProperty<double> GlyphSizeProperty =
+            AvaloniaProperty.Register<TrayButton, double>(nameof(GlyphSize), TrayTokens.IconSize);
+
         static TrayButton()
         {
             ControlThemes.EnsureRegistered();
@@ -80,6 +86,12 @@ namespace Clowd.UI.Controls.Tray
         {
             get => GetValue(IsActiveProperty);
             set => SetValue(IsActiveProperty, value);
+        }
+
+        public double GlyphSize
+        {
+            get => GetValue(GlyphSizeProperty);
+            set => SetValue(GlyphSizeProperty, value);
         }
     }
 }

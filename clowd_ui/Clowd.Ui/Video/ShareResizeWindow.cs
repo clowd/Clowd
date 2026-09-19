@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -78,6 +78,11 @@ namespace Clowd.UI
         private const int InnerLogicalWidth = 2;
 
         private const int BorderLogicalWidth = AccentLogicalWidth + InnerLogicalWidth;
+
+        /// <summary>The accent ring's outer corner radius — <c>BorderWindow.AccentCornerRadius</c>, duplicated
+        /// for the same reason as the two widths above. The clip rounds only the accent ring's outside;
+        /// the white line stays a sharp rectangle.</summary>
+        private const double AccentCornerRadius = 4;
 
         /// <summary>Fired on every accepted drag step with the new region (already clamped to the
         /// helper's rule). The page tracks the draft rectangle from it — the border window is
@@ -401,7 +406,10 @@ namespace Clowd.UI
                 // edge flush with a monitor edge is simply clipped by the desktop.
                 var accentWidth = RoundedFrameWidth(AccentLogicalWidth);
                 var outer = r.Inflate(_frameOutset);
-                FillRing(context, outer, accentWidth, accent);
+                // the accent ring is still four rectangles (FillRing says why); the rounded clip is what
+                // softens its outer corners the way BorderWindow's CornerRadius does
+                using (context.PushClip(new RoundedRect(outer, AccentCornerRadius)))
+                    FillRing(context, outer, accentWidth, accent);
                 FillRing(context, outer.Deflate(accentWidth), RoundedFrameWidth(InnerLogicalWidth), Brushes.White);
 
                 context.FillRectangle(new SolidColorBrush(color, 0.25), r);

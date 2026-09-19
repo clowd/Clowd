@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Clowd.Config;
@@ -55,7 +55,7 @@ namespace Clowd.UI
         private readonly TraySplitToggle _spk;
         private readonly TraySplitToggle _cam;
         private readonly TrayButton _options;
-        private readonly TrayButton _end;
+        private readonly TraySplitButton _end;
 
         private bool _recording;
         private bool _paused;
@@ -87,22 +87,34 @@ namespace Clowd.UI
             _mic = BuildSource(CaptureSource.Microphone, TrayGlyphs.Mic, TrayGlyphs.MicOff, "Microphone");
             _spk = BuildSource(CaptureSource.Speaker, TrayGlyphs.Spk, TrayGlyphs.SpkOff, "System audio");
             _cam = BuildSource(CaptureSource.Webcam, TrayGlyphs.Cam, TrayGlyphs.CamOff, "Camera");
+            // a camera has no level: its bar is a full-width state light, never a meter
+            _cam.IsStatusOnly = true;
 
             _options = new TrayButton { Glyph = TrayGlyphs.Sliders };
             ToolTip.SetTip(_options, "Options");
             AutomationProperties.SetName(_options, "Options");
             _options.Click += (s, e) => SettingsClicked?.Invoke(this, EventArgs.Empty);
 
-            _end = new TrayButton();
-            _end.Click += (s, e) =>
+            // one slot, two verbs, fixed glyphs (stop | X): the stop is Finish (save) once recording and
+            // Cancel before — white until then, red after; the narrow X is always Cancel (discard), so a
+            // rolling recording can be thrown away from the strip without going through the page.
+            _end = new TraySplitButton
             {
-                // the same physical button: Cancel (discard) before recording, Finish (save) after —
-                // a rolling recording can be stopped but not discarded from the strip.
+                Glyph = TrayGlyphs.Stop,
+                MainToolTip = "Finish and save",
+                MainName = "Finish and save",
+                SideGlyph = TrayGlyphs.X,
+                SideToolTip = "Cancel and discard",
+                SideName = "Cancel",
+            };
+            _end.MainClicked += (s, e) =>
+            {
                 if (_recording)
                     FinishClicked?.Invoke(this, EventArgs.Empty);
                 else
                     CancelClicked?.Invoke(this, EventArgs.Empty);
             };
+            _end.SideClicked += (s, e) => CancelClicked?.Invoke(this, EventArgs.Empty);
 
             Tray.Items.Add(_primary);
             Tray.Items.Add(_mic);
@@ -172,13 +184,6 @@ namespace Clowd.UI
             UpdatePrimary();
         }
 
-        /// <summary>The recorder's frame rate, shown in the grip's tooltip: the primary is a fixed-width
-        /// timer and the grip has no label, so the tooltip is the one surface left for it.</summary>
-        public void SetFps(double fps)
-        {
-            ToolTip.SetTip(Grip, $"Drag to move · {fps:F0} FPS");
-        }
-
         /// <summary>Drives the microphone / system-audio level bars from obs-express's 100 ms levels
         /// feed (the page forwards <see cref="ObsLevels"/>). Peak dBFS; null means that source does not
         /// exist or the capturer was torn down — the bar empties rather than freezing.</summary>
@@ -219,17 +224,13 @@ namespace Clowd.UI
             AutomationProperties.SetName(_primary, tip);
         }
 
-        /// <summary>The single writer of the end button's glyph, look, tooltip and accessible name:
-        /// a quiet X that discards before the recording starts, a red stop that saves once it has.
-        /// Same slot, same width — the strip never resizes across states.</summary>
+        /// <summary>The single writer of the end slot's main half. Glyphs, tip and name never change —
+        /// stop "Finish and save" | X "Cancel" — only the stop's colour does: quiet white before the
+        /// recording starts (when there is nothing to save yet and it cancels, the same as the X beside
+        /// it), red once it is rolling. Same slot, same width — the strip never resizes across states.</summary>
         private void UpdateEnd()
         {
-            _end.Glyph = _recording ? TrayGlyphs.Stop : TrayGlyphs.X;
             _end.Look = _recording ? TrayButtonLook.Danger : TrayButtonLook.Quiet;
-
-            var tip = _recording ? "Finish and save" : "Cancel";
-            ToolTip.SetTip(_end, tip);
-            AutomationProperties.SetName(_end, tip);
         }
 
         /// <summary>
