@@ -63,6 +63,8 @@ usvg = { version = "0.47", default-features = false }
 resvg = { version = "0.47", default-features = false }
 etagere = "0.3"
 cosmic-text = "0.19"
+# Pure flexbox layout engine (no renderer) for the capture overlay's UI kit.
+taffy = { version = "0.14", default-features = false, features = ["std", "flexbox", "taffy_tree"] }
 arboard = "3.6"
 rfd = { version = "0.17", default-features = false }
 xdialog = "3.1"

@@ -1,32 +1,16 @@
-//! Button metadata — the static lists of commands the panel exposes.
+//! Button metadata: the static tables of what the panel can show.
 //!
-//! Mirrors `captureButtonDetails` at
-//! `clowd_capture_dx/DxScreenCapture.cpp:52-60`. Order matters: the same
-//! order is used for layout, rendering, and hit-testing. In the capture
-//! set index 0 is UPLOAD and the last index is EXIT; the tray emblem and
-//! the "W × H" area readout are *not* part of these arrays — they are
-//! separate, non-clickable fields on `PanelLayout`.
+//! Two sets ([`PanelButtonSet`]) of [`ButtonDef`]s in strip order, an icon
+//! table ([`PANEL_ICONS`]) they index into, the shell's opt-out switches
+//! ([`PanelFeatures`]) and the accelerator lookup. The tables are the full
+//! static truth; the strip on screen is `set.visible_defs(features)`, and
+//! both the composer and the accelerator lookup read that one filtered
+//! view, so a switched-off button is unreachable by mouse AND by key.
 //!
-//! Every button is drawn the same way (segment fill, icon, then its
-//! label): there is no primary/secondary distinction. Labels are
-//! Title-case ASCII with the accelerator glyph underlined, and the layout
-//! sizes each button from `label.len()`, so the label text is geometry as
-//! much as it is copy.
-//!
-//! The C++ reference implementation was deleted in 3a5939ac, so the
-//! `clowd_capture_dx` paths quoted throughout this module are history,
-//! not a live contract: SCROLL and OCR (both Windows only) have no C++
-//! counterpart and the button count deliberately no longer matches it.
-//!
-//! The panel now carries *two* sets — see [`PanelButtonSet`]. They have
-//! different lengths, which is why every consumer takes the set as a
-//! parameter instead of reaching for one global table.
-//!
-//! On top of the set, the shell can switch individual buttons off — see
-//! [`PanelFeatures`]. The tables below stay the full static truth; the
-//! *visible* strip is `set.visible_defs(features)`, and every consumer
-//! (layout, hit-testing, rendering, accelerators) works from that filtered
-//! view so a switched-off button is unreachable by mouse AND by key.
+//! Every button is drawn the same way (segment, icon over label, the
+//! accelerator glyph underlined): there is no primary/secondary
+//! distinction. The composer sizes each button from the label's glyph
+//! count, so the label text is geometry as much as it is copy.
 
 use crate::ui::command::Command;
 
@@ -70,6 +54,12 @@ pub const ICON_BACK: usize = 8;
 pub const ICON_OCR: usize = 9;
 pub const ICON_SCROLL: usize = 10;
 pub const ICON_SHARE: usize = 11;
+
+/// Atlas entry of the Clowd emblem: appended after every `PANEL_ICONS`
+/// entry so `icon_id`s keep indexing the atlas directly. Lives here, not
+/// in the renderer, because the composer that places the mark and the
+/// atlas that rasterizes it must agree on it.
+pub const EMBLEM_SLOT: usize = PANEL_ICONS.len();
 
 /// Which of the optional panel buttons the shell has left switched on.
 ///
@@ -151,11 +141,9 @@ pub enum PanelButtonSet {
 }
 
 impl PanelButtonSet {
-    /// Every set, for tests that must hold an invariant across all of
-    /// them. Only the test module iterates it today — the `allow` is
-    /// scoped to non-test builds so a genuinely-dead future addition
-    /// still warns.
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// Every set: the composer's union fit walks it so the tray's
+    /// orientation and column thickness never depend on which set is up,
+    /// and tests hold their invariants across all of them.
     pub const ALL: &'static [PanelButtonSet] = &[Self::Normal, Self::Ocr];
 
     /// Every button this set *can* show, in left-to-right (or
@@ -169,41 +157,34 @@ impl PanelButtonSet {
     }
 
     /// The buttons this set actually shows under `features`, in the same
-    /// order — the single definition of "the strip on screen", shared by
-    /// layout, hit-testing, rendering and the accelerator lookup.
-    ///
-    /// Its length is also what the geometry derives from: each strip is
-    /// re-centered with its own width (see `layout::compute_layout`), so
-    /// the panel moves under the cursor on a set swap. That is deliberate;
-    /// the double-click hazard the movement creates is absorbed by
-    /// `PanelSwapGuard` in app.rs.
-    pub fn visible_defs(self, features: PanelFeatures) -> impl Iterator<Item = &'static ButtonDef> {
+    /// order, each with its index into [`Self::defs`] — the single
+    /// definition of "the strip on screen", shared by the composer and the
+    /// accelerator lookup. The index is the table position, not the
+    /// visible position: the composer keys ids on it so a switched-off
+    /// button does not renumber its neighbours.
+    pub fn visible_defs(self, features: PanelFeatures) -> impl Iterator<Item = (usize, &'static ButtonDef)> {
         self.defs()
             .iter()
-            .filter(move |def| features.allows(def.command))
+            .enumerate()
+            .filter(move |(_, def)| features.allows(def.command))
     }
 }
 
-/// Static metadata for one button. Fields mirror the C++
-/// `captureButtonDetail` struct at `DxScreenCapture.h:24-33`, plus the
-/// SVG byte slice embedded directly so backends don't have to go
-/// through `assets.rs` for lookups.
+/// Static metadata for one button.
 #[derive(Debug, Clone, Copy)]
 pub struct ButtonDef {
     /// Command this button emits on click.
     pub command: Command,
-    /// Display label: Title case, ASCII only, no whitespace. ASCII is a
-    /// hard requirement, not a convention — `len()` is the glyph count the
-    /// layout sizes the button by on both threads, and the bundled mono
-    /// face makes every glyph the same advance, so bytes == glyphs ==
-    /// pixels / advance. `labels_are_title_case_ascii_and_underline_index_is_in_range`
+    /// Display label: Title case, ASCII, no whitespace. ASCII is a hard
+    /// requirement: the composer's mono measure counts `chars()`, the
+    /// renderer underlines by byte index and `accel_key` reads that index
+    /// as a char index, so bytes, glyphs and advance columns must all
+    /// agree. `labels_are_title_case_ascii_and_underline_index_is_in_range`
     /// pins it.
     pub label: &'static str,
     /// BYTE index into `label` of the accelerator glyph: the renderer
     /// underlines it via `glyph_bounds_at_byte`, and `accel_key` reads it
-    /// as a `chars()` index. The two agree only because labels are ASCII
-    /// (pinned by the same test). Matches
-    /// `captureButtonDetail::underlineIndex`.
+    /// as a `chars()` index (equal only because labels are ASCII).
     pub underline_idx: usize,
     /// Index into [`PANEL_ICONS`] of this button's icon, which is also
     /// its slot in the rasterized icon atlas. Explicit rather than
@@ -226,7 +207,7 @@ pub struct ButtonDef {
     pub svg_bytes: &'static [u8],
 }
 
-/// The capture-mode panel buttons in C++ order.
+/// The capture-mode panel buttons in strip order.
 ///
 /// SHARE and SCROLL sit after VIDEO because they are the other "hand off
 /// to a capture driver" actions — SHARE first, since like VIDEO it hands
@@ -234,10 +215,6 @@ pub struct ButtonDef {
 /// last of the actions, immediately left of RESET: it does not finish
 /// the capture the way the others do, it swaps the strip for a second
 /// round of decisions.
-///
-/// A slice (`&[ButtonDef]`) rather than a fixed-size array so the
-/// per-element `#[cfg]` doesn't have to be mirrored in a length
-/// constant; `PanelButtonSet::len()` reads the real length instead.
 ///
 /// Accelerator keys (not stored — derived from `underline_idx`):
 ///   0: Upload — U   (0x55)
@@ -372,44 +349,6 @@ const OCR_DEFS: &[ButtonDef] = &[
     },
 ];
 
-/// Upper bound on how many buttons any one set can have — the size of
-/// `PanelLayout`'s fixed rect array and of the renderer's per-button
-/// hover state.
-///
-/// Computed from the tables rather than hand-written (it would be 10 on
-/// Windows and 9 on macOS today) so adding a button to either set can
-/// never overflow the array.
-pub const MAX_PANEL_BUTTONS: usize = const_max(NORMAL_DEFS.len(), OCR_DEFS.len());
-
-/// Longest label in either set, in glyphs (6 today: "Upload"/"Scroll"/
-/// "Search"). Sizes the column's inner width so orientation stays
-/// independent of which set and which feature switches are visible.
-pub const MAX_LABEL_CHARS: usize = const_max(max_label_len(NORMAL_DEFS), max_label_len(OCR_DEFS));
-
-/// `usize::max` is not `const fn`, and `MAX_PANEL_BUTTONS` has to be a
-/// constant because it sizes arrays.
-const fn const_max(a: usize, b: usize) -> usize {
-    if a > b {
-        a
-    } else {
-        b
-    }
-}
-
-/// Longest `label.len()` in `defs`, as a `const fn` so `MAX_LABEL_CHARS`
-/// can be a constant (labels are ASCII, so bytes are glyphs).
-const fn max_label_len(defs: &[ButtonDef]) -> usize {
-    let mut acc = 0;
-    let mut i = 0;
-    while i < defs.len() {
-        if defs[i].label.len() > acc {
-            acc = defs[i].label.len();
-        }
-        i += 1;
-    }
-    acc
-}
-
 impl ButtonDef {
     /// The keyboard accelerator character for this button, derived from
     /// the underlined position in the label. Always lowercase.
@@ -434,32 +373,33 @@ impl ButtonDef {
 pub fn lookup_command_by_key(set: PanelButtonSet, features: PanelFeatures, c: char) -> Option<Command> {
     let lower = c.to_ascii_lowercase();
     set.visible_defs(features)
-        .find(|def| def.accel_key() == lower)
-        .map(|def| def.command)
+        .find(|(_, def)| def.accel_key() == lower)
+        .map(|(_, def)| def.command)
 }
+
+/// All 32 on/off combinations of the five switches, so invariants are
+/// checked against every strip the shell can ask for rather than just
+/// the extremes. Module level so the composer's tests can reach it too.
+#[cfg(test)]
+pub const FEATURE_COMBINATIONS: [PanelFeatures; 32] = {
+    let mut out = [PanelFeatures::ALL; 32];
+    let mut i = 0;
+    while i < 32 {
+        out[i] = PanelFeatures {
+            upload: i & 1 != 0,
+            scroll_capture: i & 2 != 0,
+            ocr: i & 4 != 0,
+            share: i & 8 != 0,
+            video: i & 16 != 0,
+        };
+        i += 1;
+    }
+    out
+};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// All eight on/off combinations of the three switches, so the
-    /// invariants below are checked against every strip the shell can ask
-    /// for rather than just the extremes.
-    const FEATURE_COMBINATIONS: [PanelFeatures; 32] = {
-        let mut out = [PanelFeatures::ALL; 32];
-        let mut i = 0;
-        while i < 32 {
-            out[i] = PanelFeatures {
-                upload: i & 1 != 0,
-                scroll_capture: i & 2 != 0,
-                ocr: i & 4 != 0,
-                share: i & 8 != 0,
-                video: i & 16 != 0,
-            };
-            i += 1;
-        }
-        out
-    };
 
     /// Every icon must survive `usvg` parsing: `PanelRenderer::new`
     /// swallows a parse failure into an empty tree and an `error!` line,
@@ -572,13 +512,30 @@ mod tests {
             for features in FEATURE_COMBINATIONS {
                 let visible: Vec<_> = set
                     .visible_defs(features)
-                    .map(|d| d.command)
+                    .map(|(_, d)| d.command)
                     .collect();
                 assert!(!visible.is_empty(), "{set:?} emptied by {features:?}");
 
                 let mut full = set.defs().iter().map(|d| d.command);
                 for cmd in &visible {
                     assert!(full.any(|c| c == *cmd), "{cmd:?} out of order in {set:?} under {features:?}");
+                }
+            }
+        }
+    }
+
+    /// The index `visible_defs` yields is the def's position in the full
+    /// table, so it survives a neighbour being switched off; the composer
+    /// derives widget ids from it on that promise.
+    #[test]
+    fn visible_defs_yields_table_indices() {
+        for set in PanelButtonSet::ALL {
+            for features in FEATURE_COMBINATIONS {
+                for (i, def) in set.visible_defs(features) {
+                    assert!(
+                        std::ptr::eq(def, &set.defs()[i]),
+                        "{set:?} {features:?}: index {i} is not the table position"
+                    );
                 }
             }
         }
@@ -627,8 +584,8 @@ mod tests {
         }
     }
 
-    /// The label text is geometry: the layout sizes every button from
-    /// `label.len()` on both threads, the bundled mono face makes each
+    /// The label text is geometry: the composer's mono measure sizes every
+    /// button from the label's glyph count, the bundled mono face makes each
     /// glyph the same advance, and the renderer underlines by BYTE index
     /// while `accel_key` reads a `chars()` index. All of that holds only
     /// for ASCII, whitespace-free labels whose `underline_idx` is inside
@@ -663,7 +620,7 @@ mod tests {
 
     /// The exact spellings from the design workbench's capture profile.
     /// Pinned as literals because a respelling silently changes the button
-    /// widths the layout computes (and the pinned geometry tests with them).
+    /// widths the composer measures (and the parity table with them).
     #[test]
     fn labels_match_the_workbench_capture_table() {
         let normal: Vec<&str> = PanelButtonSet::Normal
@@ -681,21 +638,6 @@ mod tests {
             .map(|d| d.label)
             .collect();
         assert_eq!(ocr, ["Upload", "Search", "Copy", "Back", "Exit"]);
-    }
-
-    /// `MAX_LABEL_CHARS` sizes the column, so it must be the true maximum
-    /// over BOTH tables (not just the visible set) and it must move when a
-    /// longer label is added.
-    #[test]
-    fn max_label_chars_is_the_longest_label() {
-        assert_eq!(MAX_LABEL_CHARS, 6);
-        let longest = PanelButtonSet::ALL
-            .iter()
-            .flat_map(|set| set.defs().iter())
-            .map(|d| d.label.len())
-            .max()
-            .unwrap();
-        assert_eq!(MAX_LABEL_CHARS, longest);
     }
 
     /// Title-casing the labels moved the accelerator glyphs of Share,
@@ -727,7 +669,7 @@ mod tests {
     }
 
     /// The emblem is rasterised through the same atlas path as the button
-    /// icons, so it must parse, and the layout centres a square mark, so
+    /// icons, so it must parse, and the composer centres a square mark, so
     /// the canvas must be square (16 x 16 as authored).
     #[test]
     fn clowd_logo_parses() {
@@ -756,14 +698,4 @@ mod tests {
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'o'), Some(Command::Ocr));
         assert_eq!(lookup_command_by_key(PanelButtonSet::Normal, all, 'O'), Some(Command::Ocr));
     }
-
-    // (The old `set_swap_reclick_collisions_are_pinned` test is gone with
-    // the fixed-footprint anchoring it described: the strips now re-center
-    // with their own widths on every swap, so a double-click's second
-    // press has no fixed index alignment to pin — it can land on ANY
-    // button of the new strip, or none. `PanelSwapGuard` in app.rs blocks
-    // every panel-aimed click for one OS double-click interval after any
-    // swap, which covers the entire class regardless of geometry, and the
-    // `ocr.active()` guard on `Command::ScrollCapture` still covers a
-    // stray press outliving the guard window mid-retract.)
 }

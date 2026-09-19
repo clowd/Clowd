@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::interaction::{OcrNotice, OcrState};
 use crate::settings::TipsMode;
 use crate::system::{CapturedDesktop, CursorImage};
-use crate::ui::components::panel::model::PanelFeatures;
+use crate::ui::components::panel::compose::PanelScene;
 use crate::ui::shared::{UiMonitor, UiSharedState};
 use clowd_rust_core::geometry::{to_screen_point, RectExt, ScreenPoint, ScreenPointF, ScreenRect};
 
@@ -34,7 +34,7 @@ pub struct UiStateBuildInput<'a> {
     pub scroll_pick_mode: bool,
     pub ocr: OcrState,
     pub ocr_notice: Option<OcrNotice>,
-    pub panel_features: PanelFeatures,
+    pub panel: Option<Arc<PanelScene>>,
 }
 
 pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
@@ -101,7 +101,7 @@ pub fn build_ui_shared_state(input: UiStateBuildInput<'_>) -> UiSharedState {
         // still owns the cycle's copy.)
         ocr: input.ocr,
         ocr_notice: input.ocr_notice,
-        panel_features: input.panel_features,
+        panel: input.panel,
     }
 }
 

@@ -1,20 +1,21 @@
 //! Shared UI state + visibility rules.
 //!
 //! The app thread builds one [`UiSharedState`] per tick and broadcasts it
-//! (as an [`Arc`]) to every render thread. Every render thread runs the
-//! **same** pure visibility/layout rules against its own monitor to decide
-//! what to draw — no coordination needed between threads.
+//! (as an [`Arc`]) to every render thread. Each render thread runs the
+//! pure visibility rules below against its own monitor to decide what to
+//! draw; no coordination between threads is needed.
 //!
-//! The app thread also calls the same functions to route clicks: it knows
-//! exactly where every component is because those positions are a pure
-//! function of the state it just broadcast.
+//! The button panel is the one overlay that is hit-tested as well as
+//! drawn, so it is arranged once on the app thread and shipped inside the
+//! state as a placed scene: renderers paint it and the app thread
+//! hit-tests it, and the two cannot disagree.
 
 use std::sync::Arc;
 
 use crate::interaction::{OcrNotice, OcrState};
 use crate::settings::TipsMode;
-use crate::ui::components::panel::layout::{compute_layout as compute_panel_layout, PanelLayout};
-use crate::ui::components::panel::model::{PanelButtonSet, PanelFeatures};
+use crate::ui::components::panel::compose::PanelScene;
+use crate::ui::components::panel::model::PanelButtonSet;
 use clowd_rust_core::geometry::{RectExt, ScreenPointF, ScreenRect};
 
 /// Minimal per-monitor info the UI layout rules need.
@@ -72,8 +73,8 @@ pub struct UiSharedState {
     pub has_used_magnifier: bool,
     /// Mirror of `InteractionState::scroll_pick_mode`: the user pressed
     /// SCROLL and is now picking the point wheel events will be aimed
-    /// from. Renderers use it to drop the panel — the click that follows
-    /// belongs to the picker, so nothing clickable may be in the way.
+    /// from. The panel is already gone from the broadcast (`active_panel_set`);
+    /// renderers read this for the picker's reticle and hint.
     pub scroll_pick_mode: bool,
     /// Mirror of `InteractionState::ocr`. Carried whole rather than
     /// decomposed into flags so the lifted lines, the modal state and the
@@ -83,63 +84,45 @@ pub struct UiSharedState {
     /// Mirror of `InteractionState::ocr_notice`: the transient "OCR gave
     /// you nothing" pill.
     pub ocr_notice: Option<OcrNotice>,
-    /// Which optional panel buttons the shell left switched on. Fixed for
-    /// the whole cycle, but it rides in the broadcast rather than in each
-    /// renderer's own copy of the settings so the app thread and every
-    /// render thread compute the panel from one value.
-    pub panel_features: PanelFeatures,
+    /// The arranged panel for this broadcast, or `None` when no panel is
+    /// up. Already placed, already clipped, already knows its monitor.
+    /// Built once per input change on the app thread.
+    pub panel: Option<Arc<PanelScene>>,
 }
 
-/// Return the monitor the virtual cursor is over. `None` when it sits in
-/// a gap between monitors.
-fn monitor_under_cursor(state: &UiSharedState) -> Option<UiMonitor> {
-    let cx = state.virtual_cursor.x.round() as i32;
-    let cy = state.virtual_cursor.y.round() as i32;
-    state
-        .monitors
+/// The monitor whose bounds hold the point, or `None` in a gap between
+/// monitors.
+fn monitor_at(monitors: &[UiMonitor], x: i32, y: i32) -> Option<UiMonitor> {
+    monitors
         .iter()
         .find(|m| {
             let b = m.bounds;
-            cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom()
+            x >= b.left() && x < b.right() && y >= b.top() && y < b.bottom()
         })
         .copied()
 }
 
-/// Return the monitor whose bounds contain the center of `rect`. `None`
-/// when no monitor contains the center.
-fn pick_monitor_containing_center(monitors: &[UiMonitor], rect: ScreenRect) -> Option<UiMonitor> {
-    let cx = (rect.left() + rect.right()) / 2;
-    let cy = (rect.top() + rect.bottom()) / 2;
-    monitors.iter().find_map(|m| {
-        let b = m.bounds;
-        if cx >= b.left() && cx < b.right() && cy >= b.top() && cy < b.bottom() {
-            Some(*m)
-        } else {
-            None
-        }
-    })
+/// The monitor the virtual cursor is over.
+fn monitor_under_cursor(state: &UiSharedState) -> Option<UiMonitor> {
+    monitor_at(
+        &state.monitors,
+        state.virtual_cursor.x.round() as i32,
+        state.virtual_cursor.y.round() as i32,
+    )
 }
 
-/// Result of evaluating the button-panel visibility rule.
-pub struct PanelVisibility {
-    pub monitor: UiMonitor,
-    /// Fully-computed layout (panel rect + per-button rects) in
-    /// virtual-desktop pixels.
-    pub layout: PanelLayout,
+/// The monitor whose bounds contain the center of `rect`.
+pub(crate) fn pick_monitor_containing_center(monitors: &[UiMonitor], rect: ScreenRect) -> Option<UiMonitor> {
+    monitor_at(monitors, (rect.left() + rect.right()) / 2, (rect.top() + rect.bottom()) / 2)
 }
 
 /// Which set of buttons the panel is showing, or `None` when there is no
 /// panel at all.
 ///
-/// This is the SINGLE decision point, consulted by both
-/// [`panel_visibility`] (what the renderers draw) and
-/// `app::current_panel_layout` (where the app thread routes clicks). Those
-/// two are documented mirrors of each other — see the warning above
-/// `current_panel_layout` — and the set is exactly the kind of thing that
-/// drifts between them: get it wrong and a click on BACK fires the command
-/// that happens to sit at that index in the *other* set. Keeping the
-/// decision in one pure function makes that class of bug unrepresentable
-/// rather than merely unlikely.
+/// This is the SINGLE decision point: `app::panel_scene` composes the
+/// strip from it, and `PanelSwapGuard` watches it for swaps. Keeping the
+/// decision in one pure function means the guard and the strip on screen
+/// can never disagree about which set is up.
 ///
 /// Takes the three inputs loose rather than a `&UiSharedState` so the app
 /// thread can call it straight off `InteractionState` without building a
@@ -168,25 +151,19 @@ pub fn active_panel_set(captured: bool, scroll_pick_mode: bool, ocr: &OcrState) 
     Some(PanelButtonSet::Normal)
 }
 
-/// Decide whether the button panel is visible and where. Pure function —
-/// the app thread and every render thread call this with the same state.
-pub fn panel_visibility(state: &UiSharedState) -> Option<PanelVisibility> {
-    // Deliberately ahead of `active_panel_set`, and deliberately not part
-    // of it: the Q toggle is about *drawing*, not about which buttons are
-    // live. The app-thread mirror keeps routing clicks while overlays are
-    // hidden (that is pre-existing behavior), so folding this gate into
-    // the shared function would silently change it.
+/// The panel this broadcast carries, or `None` while overlays are hidden.
+/// The scene knows its own monitor; the renderer compares
+/// `scene.monitor.bounds` to its own.
+pub fn panel_visibility(state: &UiSharedState) -> Option<&PanelScene> {
+    // Deliberately not part of `active_panel_set`: the Q toggle is about
+    // *drawing*, not about which buttons are live. The app thread keeps
+    // routing clicks while overlays are hidden (that is pre-existing
+    // behavior), so folding this gate into the shared function would
+    // silently change it.
     if !state.overlays_visible {
         return None;
     }
-    let set = active_panel_set(state.captured, state.scroll_pick_mode, &state.ocr)?;
-    let sel = state.selection?;
-    let monitor = pick_monitor_containing_center(&state.monitors, sel)?;
-    let layout = compute_panel_layout(monitor.bounds, sel, monitor.dpi_scale, set, state.panel_features)?;
-    Some(PanelVisibility {
-        monitor,
-        layout,
-    })
+    state.panel.as_deref()
 }
 
 /// Decide whether the tips panel is visible and on which monitor.
@@ -342,7 +319,7 @@ mod tests {
             scroll_pick_mode: false,
             ocr: OcrState::Idle,
             ocr_notice: None,
-            panel_features: PanelFeatures::ALL,
+            panel: None,
         }
     }
 
@@ -357,26 +334,15 @@ mod tests {
     }
 
     #[test]
-    fn panel_only_visible_after_capture() {
-        let mut s = state();
-
-        assert!(panel_visibility(&s).is_none());
-        s.captured = true;
-        assert!(panel_visibility(&s).is_some());
-        s.overlays_visible = false;
-        assert!(panel_visibility(&s).is_none());
+    fn panel_only_after_capture() {
+        assert_eq!(active_panel_set(false, false, &OcrState::Idle), None);
+        assert_eq!(active_panel_set(true, false, &OcrState::Idle), Some(PanelButtonSet::Normal));
     }
 
     #[test]
     fn panel_hidden_while_picking_scroll_point() {
-        let mut s = state();
-        s.captured = true;
-
-        assert!(panel_visibility(&s).is_some());
-        s.scroll_pick_mode = true;
-        assert!(panel_visibility(&s).is_none());
-        s.scroll_pick_mode = false;
-        assert!(panel_visibility(&s).is_some());
+        assert_eq!(active_panel_set(true, true, &OcrState::Idle), None);
+        assert_eq!(active_panel_set(true, false, &OcrState::Idle), Some(PanelButtonSet::Normal));
     }
 
     /// The panel's OCR lifecycle: HIDDEN while the sweep loops (nothing to
@@ -385,37 +351,47 @@ mod tests {
     /// one function, so this test pins the behavior for both.
     #[test]
     fn panel_hidden_while_scanning_shows_ocr_set_when_lifted() {
-        let mut s = state();
-        s.captured = true;
-        assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Normal);
-
-        s.ocr = OcrState::Scanning {
+        let region = ScreenRect::from_xy_size(20, 20, 80, 40);
+        let scanning = OcrState::Scanning {
             anchor: Instant::now(),
             req: 1,
-            region: s.selection.unwrap(),
+            region,
         };
-        assert!(panel_visibility(&s).is_none());
+        assert_eq!(active_panel_set(true, false, &scanning), None);
 
-        s.ocr = OcrState::Lifted {
+        let lifted = OcrState::Lifted {
             anchor: Instant::now(),
             req: 1,
-            region: s.selection.unwrap(),
+            region,
             dpi_scale: 1.0,
             outcome: dummy_outcome(),
         };
-        assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Ocr);
+        assert_eq!(active_panel_set(true, false, &lifted), Some(PanelButtonSet::Ocr));
     }
 
     /// BACK must hand the familiar buttons back immediately; the retract
     /// animation is cosmetic and must not hold the OCR strip on screen.
     #[test]
     fn panel_shows_normal_set_while_retracting() {
-        let mut s = state();
-        s.captured = true;
-        s.ocr = OcrState::Retracting {
+        let retracting = OcrState::Retracting {
             anchor: Instant::now(),
         };
-        assert_eq!(panel_visibility(&s).unwrap().layout.set, PanelButtonSet::Normal);
+        assert_eq!(active_panel_set(true, false, &retracting), Some(PanelButtonSet::Normal));
+    }
+
+    /// The broadcast carries the scene; the Q toggle only gates drawing.
+    #[test]
+    fn panel_visibility_follows_the_overlay_toggle() {
+        use crate::ui::components::panel::compose::compose;
+        use crate::ui::components::panel::model::PanelFeatures;
+
+        let mut s = state();
+        assert!(panel_visibility(&s).is_none(), "no scene in the broadcast, nothing to draw");
+        let scene = compose(monitor(), s.selection.unwrap(), PanelButtonSet::Normal, PanelFeatures::ALL).unwrap();
+        s.panel = Some(Arc::new(scene));
+        assert!(panel_visibility(&s).is_some());
+        s.overlays_visible = false;
+        assert!(panel_visibility(&s).is_none());
     }
 
     /// Scroll picking outranks OCR mode: the panel is gone entirely, so

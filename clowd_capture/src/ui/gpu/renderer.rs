@@ -131,11 +131,11 @@ impl UiPipelines {
     }
 }
 
-/// The text stack plus every component whose construction needs it —
-/// they all allocate their `CachedBuffer`s out of the font system, and the
-/// panel additionally parses its 12 icon SVGs plus the emblem. Kept together because the
-/// `&mut TextStack` borrow makes them inherently sequential, so they are
-/// one job for the deferred builder to schedule.
+/// The text stack plus every component whose construction needs it (they
+/// allocate their `CachedBuffer`s out of the font system), and the panel,
+/// which parses its icon SVGs plus the emblem and shapes on demand. Kept
+/// together because the `&mut TextStack` borrow makes them inherently
+/// sequential, so they are one job for the deferred builder to schedule.
 pub struct UiText {
     text: TextStack,
     area: AreaRenderer,
@@ -149,7 +149,7 @@ impl UiText {
         let area = AreaRenderer::new(&mut text);
         let hints = HintsRenderer::new(&mut text);
         let tips = TipsRenderer::new(&mut text);
-        let panel = PanelRenderer::new(&mut text);
+        let panel = PanelRenderer::new();
         Self {
             text,
             area,
