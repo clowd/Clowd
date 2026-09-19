@@ -218,6 +218,11 @@ namespace Clowd.UI.Controls.Tray
                 };
             }
 
+            // the app's mark heads every strip, after the grip and before the owner's first item. Added
+            // here, unconditionally, so no strip can forget it; a fixed-size owner has to count
+            // TrayTokens.EmblemLength (plus a gap) into the size it declares.
+            Tray.Items.Add(new TrayEmblem());
+
             // an item added after the window is up gets its tooltip aimed once its template exists.
             Tray.ContainerPrepared += (s, e) =>
             {

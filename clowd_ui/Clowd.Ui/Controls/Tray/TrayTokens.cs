@@ -127,6 +127,11 @@ namespace Clowd.UI.Controls.Tray
         /// tucked under it.
         /// </summary>
         public const double GripLength = 26, RotateGlyphSize = 14;
+
+        /// <summary>The app mark's extent along the strip axis (<see cref="TrayEmblem"/>): a 32 px mark
+        /// with 4 px either side — a button's footprint, drawn on the tray with no fill so it reads as
+        /// part of the chassis like the grip, not as a button.</summary>
+        public const double EmblemLength = 40;
         public const double TrackWidth = 24, TrackHeight = 4, LevelMinWidth = 8;
         public const double MenuGap = 8, ToolTipGapBottom = 7, ToolTipGapRight = 8, DragThreshold = 5;
 

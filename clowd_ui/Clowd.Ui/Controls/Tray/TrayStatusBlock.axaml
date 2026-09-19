@@ -26,20 +26,23 @@
                     <StackPanel Orientation="Vertical"
                                 VerticalAlignment="Center"
                                 Spacing="2">
-                        <!-- LineHeight is the spec's 1.1x, rounded to whole pixels so the pair (13 + 2 + 11)
-                             is stable at every scaling instead of drifting a subpixel per line -->
+                        <!-- LineHeight is pinned to whole pixels so the pair (14 + 2 + 12 = 28 in the 40 px
+                             row) is stable at every scaling instead of drifting a subpixel per line. It
+                             was the spec's 1.1x (13 / 11), which is BELOW the fonts' natural line height:
+                             Avalonia clips a run to its line box, so descenders ("g", "p") lost their
+                             bottom row. 1.2x clears them. -->
                         <TextBlock Name="_primary"
                                    FontSize="11.5"
                                    FontWeight="SemiBold"
                                    FontFeatures="tnum"
-                                   LineHeight="13"
+                                   LineHeight="14"
                                    Foreground="{TemplateBinding Foreground}"
                                    Text="{TemplateBinding PrimaryText}"
                                    TextTrimming="CharacterEllipsis"
                                    TextWrapping="NoWrap" />
                         <TextBlock Name="_secondary"
                                    FontSize="10"
-                                   LineHeight="11"
+                                   LineHeight="12"
                                    Opacity="0.6"
                                    Foreground="{TemplateBinding Foreground}"
                                    Text="{TemplateBinding SecondaryText}"
