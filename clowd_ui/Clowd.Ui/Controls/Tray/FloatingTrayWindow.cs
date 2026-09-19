@@ -66,10 +66,11 @@ namespace Clowd.UI.Controls.Tray
         private const string MenuShadowReserveKey = "TrayMenuShadowReserve";
 
         /// <summary>
-        /// Breathing room between a fixed-size strip and the region, in logical px. The accent frame
-        /// drawn around a region inflates itself outward by roughly 6 logical px; this is an independent
-        /// copy of that clearance and does NOT track it (the frame's constants are private to its file
-        /// and nothing in the build catches a divergence), so it is set deliberately wider than the
+        /// Breathing room between a fixed-size strip's PAINTED tray and the region, in logical px (the
+        /// shadow reserve overlaps it, see <see cref="TrayPlacement.Outside"/>). The accent frame drawn
+        /// around a region inflates itself outward by roughly 6 logical px; this is an independent copy
+        /// of that clearance and does NOT track it (the frame's constants are private to its file and
+        /// nothing in the build catches a divergence), so it is set deliberately wider than the
         /// inflation to leave real clear space between the frame and the strip rather than merely
         /// avoiding an overlap.
         /// </summary>
@@ -650,7 +651,7 @@ namespace Clowd.UI.Controls.Tray
             if (!TryGetScreenAreas(region, out _, out var workArea))
                 return null;
 
-            var rect = TrayPlacement.Outside(region, workArea, w, h, gap);
+            var rect = TrayPlacement.Outside(region, workArea, w, h, gap, TrayInsets.FromLogical(Tray.Margin, toCapture));
             if (rect == null)
                 return null;
 

@@ -108,11 +108,10 @@
     <!-- The slot (spec §5, §9). One Seg-filled rounded box holding two transparent halves and, over
          the toggle half, the underline bar.
 
-         The bar is a sibling of the toggle button rather than part of its content: it is centred on
-         the BUTTON (a 24 x 4 track, TrayTokens.TrackWidth/TrackHeight, 8 px in from each edge of the
-         40 px half), while the button's own padding is 8/7 and would shift the bar half a pixel.
-         Centring it in the half gives equal insets exactly, in both orientations, with no arithmetic.
-         It is hit-test invisible, so the click still lands on the toggle underneath.
+         The bar is a sibling of the toggle button rather than part of its content, placed by margin
+         from the half's trailing edge (a 4 x 24 track standing right of the icon in a row, 24 x 4 under
+         it in a column — TrayTokens.TrackWidth/TrackHeight), so it never depends on the content's
+         layout. It is hit-test invisible, so the click still lands on the toggle underneath.
 
          The two halves sit in a StackPanel, not a Grid: a rotation is then one TemplateBinding rather
          than a pair of row/column definitions and four attached-property setters that have to be
@@ -141,8 +140,6 @@
                                     <tray:TrayGlyphIcon Name="_iconOn"
                                                         Width="{x:Static tray:TrayTokens.IconSize}"
                                                         Height="{x:Static tray:TrayTokens.IconSize}"
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
                                                         Foreground="{x:Static tray:TrayTokens.FgBrush}"
                                                         Glyph="{TemplateBinding OnGlyph}"
                                                         IsVisible="{TemplateBinding IsOn}" />
@@ -152,20 +149,14 @@
                                     <tray:TrayGlyphIcon Name="_iconOff"
                                                         Width="{x:Static tray:TrayTokens.IconSize}"
                                                         Height="{x:Static tray:TrayTokens.IconSize}"
-                                                        HorizontalAlignment="Center"
-                                                        VerticalAlignment="Center"
                                                         Opacity="0.45"
                                                         Foreground="{x:Static tray:TrayTokens.FgBrush}"
                                                         Glyph="{TemplateBinding OffGlyph}"
                                                         IsVisible="{TemplateBinding IsOn, Converter={x:Static BoolConverters.Not}}" />
                                 </Panel>
                             </tray:TrayToggleHalfButton>
+                            <!-- size, side and alignment come from the orientation styles below -->
                             <Border Name="_track"
-                                    Width="{x:Static tray:TrayTokens.TrackWidth}"
-                                    Height="{x:Static tray:TrayTokens.TrackHeight}"
-                                    Margin="0,0,0,4"
-                                    HorizontalAlignment="Center"
-                                    VerticalAlignment="Bottom"
                                     Background="{x:Static tray:TrayTokens.Track}"
                                     CornerRadius="2"
                                     ClipToBounds="True"
@@ -200,22 +191,34 @@
             </ControlTemplate>
         </Setter>
 
-        <!-- The toggle half is ButtonHeight high on both axes; everything else about it depends on the axis, so
-             both orientations are written out rather than one relying on the other's setters being
-             reverted. -->
+        <!-- The toggle half is ToggleLength along the strip axis (icon, air, meter) and the button size
+             across it; the icon and the meter are placed by margin from the half's edges, so the
+             half's own Padding is 0. Both orientations are written out rather than one relying on the
+             other's setters being reverted. -->
         <Style Selector="^ /template/ Button#PART_Toggle">
-            <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
+            <Setter Property="Padding" Value="0" />
             <!-- alone in the slot, the toggle carries all four of its corners -->
             <Setter Property="CornerRadius" Value="{x:Static tray:TrayTokens.Corner}" />
         </Style>
         <Style Selector="^[Orientation=Horizontal] /template/ Button#PART_Toggle">
-            <!-- spec's CSS 0,7,0,8 -> left 8, right 7 in Avalonia's order: 8 + 16 + 7 = 31, clamped up
-                 to the 40 px MinWidth, which is where the split's 40 + 16 = 56 comes from -->
-            <Setter Property="Padding" Value="8,0,7,0" />
+            <Setter Property="MinWidth" Value="{x:Static tray:TrayTokens.ToggleLength}" />
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.ButtonHeight}" />
         </Style>
         <Style Selector="^[Orientation=Vertical] /template/ Button#PART_Toggle">
-            <Setter Property="Padding" Value="8,0" />
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.ToggleLength}" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+
+        <!-- The icon sits at the half's leading inset: left in a row, top in a column. -->
+        <Style Selector="^ /template/ tray|TrayGlyphIcon#_iconOn, ^ /template/ tray|TrayGlyphIcon#_iconOff">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="8,0,0,0" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ tray|TrayGlyphIcon#_iconOn, ^[Orientation=Vertical] /template/ tray|TrayGlyphIcon#_iconOff">
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="0,8,0,0" />
         </Style>
         <!-- with a chevron the inner edge goes square, so the two halves read as one slot -->
         <Style Selector="^[Orientation=Horizontal][HasChevron=True] /template/ Button#PART_Toggle">
@@ -240,23 +243,31 @@
             <Setter Property="BorderThickness" Value="0,1,0,0" />
         </Style>
 
-        <!-- The bar: an underline in a row; in a column it stands up along the RIGHT edge of the icon
-             (TrackHeight wide, TrackWidth tall) and fills from the bottom, the way a level meter reads
-             when the strip is upright. -->
-        <Style Selector="^ /template/ Border#_pill">
-            <Setter Property="HorizontalAlignment" Value="Left" />
-            <Setter Property="VerticalAlignment" Value="Stretch" />
-        </Style>
-        <Style Selector="^[Orientation=Vertical] /template/ Border#_track">
+        <!-- The meter sits on the icon's trailing side, 5 px of air between them and 5 px to the half's
+             edge beyond. In a row it stands up along the RIGHT edge (TrackHeight wide, TrackWidth
+             tall) and fills from the bottom; in a column it lies under the icon (TrackWidth wide,
+             TrackHeight tall) and fills from the left. -->
+        <Style Selector="^ /template/ Border#_track">
             <Setter Property="Width" Value="{x:Static tray:TrayTokens.TrackHeight}" />
             <Setter Property="Height" Value="{x:Static tray:TrayTokens.TrackWidth}" />
-            <Setter Property="Margin" Value="0,0,4,0" />
+            <Setter Property="Margin" Value="0,0,5,0" />
             <Setter Property="HorizontalAlignment" Value="Right" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <Style Selector="^[Orientation=Vertical] /template/ Border#_pill">
+        <Style Selector="^ /template/ Border#_pill">
             <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="VerticalAlignment" Value="Bottom" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Border#_track">
+            <Setter Property="Width" Value="{x:Static tray:TrayTokens.TrackWidth}" />
+            <Setter Property="Height" Value="{x:Static tray:TrayTokens.TrackHeight}" />
+            <Setter Property="Margin" Value="0,0,0,5" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+            <Setter Property="VerticalAlignment" Value="Bottom" />
+        </Style>
+        <Style Selector="^[Orientation=Vertical] /template/ Border#_pill">
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Stretch" />
         </Style>
 
         <!-- Red off, green on — the same two colours in every mode, so the bar can be read without

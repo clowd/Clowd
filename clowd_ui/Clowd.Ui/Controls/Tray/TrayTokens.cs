@@ -133,6 +133,14 @@ namespace Clowd.UI.Controls.Tray
         /// part of the chassis like the grip, not as a button.</summary>
         public const double EmblemLength = 40;
         public const double TrackWidth = 24, TrackHeight = 4, LevelMinWidth = 8;
+
+        /// <summary>
+        /// A split toggle's toggle half along the strip axis: 8 px inset, the 20 px icon, 5 px of air,
+        /// the 4 px meter standing beside it, 5 px inset. The meter sits on the icon's trailing side
+        /// (right in a row, below in a column), so the half is this long in a row and this tall in a
+        /// column while the other dimension stays the button size.
+        /// </summary>
+        public const double ToggleLength = 42, ToggleInset = 8;
         public const double MenuGap = 8, ToolTipGapBottom = 7, ToolTipGapRight = 8, DragThreshold = 5;
 
         /// <summary>

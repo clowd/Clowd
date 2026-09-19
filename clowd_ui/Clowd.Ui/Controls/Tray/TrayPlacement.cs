@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -40,8 +40,11 @@ namespace Clowd.UI.Controls.Tray
         /// <summary>
         /// The centred-below → [above] → right → left → inside cascade the previous toolbar window's
         /// <c>PositionNearRegion</c> used, ported verbatim with the band of window around the tray on
-        /// all four sides expressed as <paramref name="reserve"/>: every extent below is a WINDOW
-        /// extent (tray + reserve), so no reserved pixel can land inside the region on an outside rung.
+        /// all four sides expressed as <paramref name="reserve"/>: every fits-here extent below is a
+        /// WINDOW extent (tray + reserve). The gap, though, is measured from the PAINTED tray: the
+        /// window is pulled back toward the region by its near-side reserve (capped at the gap, so a
+        /// reserved pixel still never lands inside the region), and the shadow falls into the gap
+        /// instead of pushing the strip a reserve further away than the old toolbar sat.
         /// <para>
         /// All math in physical px on the monitor containing the region's center; the caller skips it
         /// once the user has dragged or rotated the strip. The short/long-edge formulation is
@@ -83,6 +86,13 @@ namespace Clowd.UI.Controls.Tray
             var winShortV = trayShort + reserve.Left + reserve.Right;    // vertical rungs: the window's width
             var winLongV = trayLong + reserve.Top + reserve.Bottom;      // vertical rungs: the window's height
 
+            // the near-side reserve overlaps the gap so the TRAY keeps maxDistance from the region;
+            // never more than the gap itself, or the window (and its click-eating fringe) would enter it
+            var pullBelow = Math.Min(reserve.Top, maxDistance);
+            var pullAbove = Math.Min(reserve.Bottom, maxDistance);
+            var pullRight = Math.Min(reserve.Left, maxDistance);
+            var pullLeft = Math.Min(reserve.Right, maxDistance);
+
             Orientation orientation;
             int indLeft, indTop;
 
@@ -91,7 +101,7 @@ namespace Clowd.UI.Controls.Tray
                 // below the selection: the shadow hangs further below, away from what is captured.
                 orientation = Orientation.Horizontal;
                 indLeft = selection.Left + selection.Width / 2 - winLongH / 2;
-                indTop = Math.Min(workArea.Bottom, selection.Bottom + maxDistance + winShortH) - winShortH;
+                indTop = Math.Min(workArea.Bottom, selection.Bottom + maxDistance - pullBelow + winShortH) - winShortH;
             }
             else if (preferAbove && topSpace >= winShortH)
             {
@@ -104,19 +114,19 @@ namespace Clowd.UI.Controls.Tray
                 // therefore gets this fourth outside-the-region rung before it considers the inside one.
                 orientation = Orientation.Horizontal;
                 indLeft = selection.Left + selection.Width / 2 - winLongH / 2;
-                indTop = Math.Max(selection.Top - maxDistance - winShortH, workArea.Top);
+                indTop = Math.Max(selection.Top - maxDistance - winShortH + pullAbove, workArea.Top);
             }
             else if (rightSpace >= winShortV)
             {
                 // to the right of the selection: the shadow goes further right, for the same reason.
                 orientation = Orientation.Vertical;
-                indLeft = Math.Min(workArea.Right, selection.Right + maxDistance + winShortV) - winShortV;
+                indLeft = Math.Min(workArea.Right, selection.Right + maxDistance - pullRight + winShortV) - winShortV;
                 indTop = selection.Bottom - winLongV;
             }
             else if (leftSpace >= winShortV)
             {
                 orientation = Orientation.Vertical;
-                indLeft = Math.Max(selection.Left - maxDistance - winShortV, workArea.Left);
+                indLeft = Math.Max(selection.Left - maxDistance - winShortV + pullLeft, workArea.Left);
                 indTop = selection.Bottom - winLongV;
             }
             else // inside capture rect
@@ -166,12 +176,15 @@ namespace Clowd.UI.Controls.Tray
         /// picture.
         /// <para>
         /// <paramref name="width"/>/<paramref name="height"/> are WINDOW extents (tray + shadow
-        /// reserve), so no reserved pixel lands in the region either. One deliberate deviation from the
-        /// old code: <paramref name="area"/> is the monitor's working area, where the original used the
-        /// full bounds and could hand back a slot underneath the taskbar.
+        /// reserve). As in <see cref="Near"/>, <paramref name="gap"/> is measured from the painted tray:
+        /// each candidate is pulled back toward the region by its near-side <paramref name="reserve"/>,
+        /// capped at the gap, and the intersection test below still rejects anything that would put a
+        /// reserved pixel in the region. One deliberate deviation from the old code:
+        /// <paramref name="area"/> is the monitor's working area, where the original used the full
+        /// bounds and could hand back a slot underneath the taskbar.
         /// </para>
         /// </summary>
-        public static ScreenRect Outside(ScreenRect region, ScreenRect area, int width, int height, int gap)
+        public static ScreenRect Outside(ScreenRect region, ScreenRect area, int width, int height, int gap, TrayInsets reserve = default)
         {
             // the part of the region actually on this monitor, so a selection spanning two
             // displays is placed against the edge the strip can reach.
@@ -182,12 +195,13 @@ namespace Clowd.UI.Controls.Tray
             var centerX = Clamp(selection.Left + selection.Width / 2 - width / 2, area.Left, area.Right - width);
             var centerY = Clamp(selection.Top + selection.Height / 2 - height / 2, area.Top, area.Bottom - height);
 
+            var pull = Math.Max(gap, 0);
             var candidates = new[]
             {
-                new ScreenRect(centerX, selection.Bottom + gap, width, height),      // below
-                new ScreenRect(selection.Right + gap, centerY, width, height),       // right
-                new ScreenRect(selection.Left - gap - width, centerY, width, height), // left
-                new ScreenRect(centerX, selection.Top - gap - height, width, height), // above
+                new ScreenRect(centerX, selection.Bottom + gap - Math.Min(reserve.Top, pull), width, height),       // below
+                new ScreenRect(selection.Right + gap - Math.Min(reserve.Left, pull), centerY, width, height),       // right
+                new ScreenRect(selection.Left - gap - width + Math.Min(reserve.Right, pull), centerY, width, height), // left
+                new ScreenRect(centerX, selection.Top - gap - height + Math.Min(reserve.Bottom, pull), width, height), // above
             };
 
             foreach (var candidate in candidates)

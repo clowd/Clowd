@@ -137,9 +137,11 @@
             </ControlTemplate>
         </Setter>
 
-        <!-- ============ Idle: nothing running. Fill Rec, white dot, no verb glyph. ============ -->
+        <!-- ============ Idle: nothing running. Accent fill (the user's capture accent, the one
+             app-configurable colour on the strip — spec §11 — rather than the record red, which is
+             reserved for "a recording exists": the Active dot and the stop button), white dot, no verb glyph. ============ -->
         <Style Selector="^[State=Idle] /template/ Border#_bg">
-            <Setter Property="Background" Value="{x:Static tray:TrayTokens.RecBrush}" />
+            <Setter Property="Background" Value="{DynamicResource TrayAccentBrush}" />
         </Style>
         <Style Selector="^[State=Idle] /template/ Border#_hover">
             <Setter Property="Background" Value="{x:Static tray:TrayTokens.WhiteVeil12}" />
@@ -275,8 +277,10 @@
         </Style>
 
         <!-- ============ Vertical: stacked glyph over label, stretched to the tray column (spec §9) ============ -->
+        <!-- 1 px of side padding, not the row's 8: the column is 40 wide and the label wants all of it.
+             The DownOnly Viewbox still shrinks a label that would not fit, so nothing clips. -->
         <Style Selector="^[Orientation=Vertical]">
-            <Setter Property="Padding" Value="2,0" />
+            <Setter Property="Padding" Value="1,0" />
         </Style>
         <Style Selector="^[Orientation=Vertical] /template/ Border#_bg">
             <Setter Property="Width" Value="{x:Static sys:Double.NaN}" />
@@ -303,7 +307,7 @@
         <Style Selector="^[Orientation=Vertical] /template/ TextBlock#_label">
             <Setter Property="Grid.Row" Value="1" />
             <Setter Property="Grid.Column" Value="0" />
-            <Setter Property="FontSize" Value="8.5" />
+            <Setter Property="FontSize" Value="11" />
             <Setter Property="HorizontalAlignment" Value="Center" />
         </Style>
     </ControlTheme>

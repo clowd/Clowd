@@ -215,9 +215,10 @@ namespace Clowd.UI.Controls.Tray
         /// over the track, floored at the 8 px minimum so a silent-but-live source still reads as live.
         /// A level above 1 simply runs past the track, which clips it.
         /// <para>
-        /// The extent is the pill's Width in a row and its Height in a column (the track stands up beside
-        /// the icon there and fills from the bottom); the other dimension is released to NaN so the theme's
-        /// Stretch alignment fills it. Both are local values, which is why neither can live in a style.
+        /// The extent is the pill's Height in a row (the track stands up beside the icon and fills from
+        /// the bottom) and its Width in a column (it lies under the icon and fills from the left); the
+        /// other dimension is released to NaN so the theme's Stretch alignment fills it. Both are local
+        /// values, which is why neither can live in a style.
         /// </para>
         /// </summary>
         private void UpdatePill()
@@ -231,13 +232,13 @@ namespace Clowd.UI.Controls.Tray
 
             if (Orientation == Orientation.Horizontal)
             {
-                _pill.Height = double.NaN;
-                _pill.Width = extent;
+                _pill.Width = double.NaN;
+                _pill.Height = extent;
             }
             else
             {
-                _pill.Width = double.NaN;
-                _pill.Height = extent;
+                _pill.Height = double.NaN;
+                _pill.Width = extent;
             }
         }
     }

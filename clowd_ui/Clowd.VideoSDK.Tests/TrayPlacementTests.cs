@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Avalonia;
 using Avalonia.Layout;
 using Avalonia.Media;
@@ -263,12 +263,12 @@ namespace Clowd.VideoSDK.Tests
         }
 
         /// <summary>The reserve's whole contract in one test. The result is the WINDOW's top-left, so
-        /// the tray lands at result + (reserve.Left, reserve.Top): on the below rung the window's top
-        /// edge keeps the 15 px gap and the TRAY therefore sits its reserve further from the region,
-        /// while a symmetric side reserve leaves the tray centred exactly where it was. That is what
-        /// keeps the shadow's click-eating fringe outside the region.</summary>
+        /// the tray lands at result + (reserve.Left, reserve.Top): on the below rung the TRAY keeps the
+        /// 15 px gap exactly where a reserve-less tray would sit — the window is pulled back toward the
+        /// region by its top reserve, so the shadow falls into the gap — and its edge never crosses into
+        /// the region (7 &lt; 15). A symmetric side reserve leaves the tray centred where it was.</summary>
         [Fact]
-        public void Near_WithAShadowReserve_ShiftsTheWindowByTheReserveFromWhereTheTrayLands()
+        public void Near_WithAShadowReserve_PullsTheWindowBackSoTheTrayKeepsTheGap()
         {
             var region = new ScreenRect(700, 300, 400, 300);
             var reserve = Compact();                            // (10, 7, 10, 13)
@@ -276,13 +276,27 @@ namespace Clowd.VideoSDK.Tests
             var bare = Near(region);
             var withReserve = Near(region, reserve: reserve);
 
-            // the window's top edge is unchanged; the TRAY inside it lands reserve.Top lower, i.e.
-            // the window is the tray's landing spot shifted by (−Left, −Top).
-            Assert.Equal(bare.Y, withReserve.Y);
-            Assert.Equal(region.Bottom + MaxDistance + reserve.Top, withReserve.Y + reserve.Top);
+            // the TRAY lands where the bare tray did; the window is that shifted by (−Left, −Top)
+            Assert.Equal(bare.Y, withReserve.Y + reserve.Top);
+            Assert.Equal(region.Bottom + MaxDistance, withReserve.Y + reserve.Top);
+            Assert.True(withReserve.Y >= region.Bottom, "the window's reserved fringe must stay outside the region");
 
             // and a left/right-symmetric reserve leaves the tray centred where it was
             Assert.Equal(bare.X, withReserve.X + reserve.Left);
+        }
+
+        /// <summary>The pull-back is capped at the gap: with a reserve deeper than the gap the window
+        /// edge lands flush against the region, never inside it.</summary>
+        [Fact]
+        public void Near_WithAReserveDeeperThanTheGap_StopsTheWindowAtTheRegionEdge()
+        {
+            var region = new ScreenRect(700, 300, 400, 300);
+            var deep = new TrayInsets(34, 22, 34, 46);          // the spec shadow's reserve
+
+            var r = Near(region, reserve: deep);
+
+            Assert.Equal(Orientation.Horizontal, r.Orientation);
+            Assert.Equal(region.Bottom, r.Y);
         }
 
         /// <summary>The second pass after a rotation. The chassis re-measures the rotated tray (336×40
@@ -340,6 +354,22 @@ namespace Clowd.VideoSDK.Tests
         // ------------------------------------------------------------------ Outside: the refusing cascade
 
         private const int FixedW = 300, FixedH = 60, Gap = 10;
+
+        /// <summary>Outside with the compact reserve: each candidate is pulled toward the region by its
+        /// near-side reserve, so the painted tray keeps the gap and the window still misses the region.</summary>
+        [Fact]
+        public void Outside_WithAShadowReserve_PullsTheWindowBackWithoutEnteringTheRegion()
+        {
+            var region = new ScreenRect(700, 300, 400, 300);
+            var reserve = Compact();                            // (10, 7, 10, 13)
+
+            var bare = TrayPlacement.Outside(region, Work, TrayLong, TrayShort, Gap);
+            var r = TrayPlacement.Outside(region, Work, TrayLong, TrayShort, Gap, reserve);
+
+            Assert.NotNull(r);
+            Assert.Equal(bare.Top - reserve.Top, r.Top);
+            Assert.False(r.IntersectsWith(region));
+        }
 
         private static ScreenRect Outside(ScreenRect region, ScreenRect area = null, int gap = Gap,
             int width = FixedW, int height = FixedH)
