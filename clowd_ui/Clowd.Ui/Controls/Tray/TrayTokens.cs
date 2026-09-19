@@ -118,7 +118,7 @@ namespace Clowd.UI.Controls.Tray
         /// </summary>
         public static readonly Thickness TrayPadding = new Thickness(TrayPad);
 
-        public const double IconSize = 16, ChevronWidth = 16, ChevronHeight = 14, PrimaryWidth = 66;
+        public const double IconSize = 20, ChevronWidth = 16, ChevronHeight = 14, PrimaryWidth = 66;
 
         /// <summary>
         /// The grip's extent along the strip axis: its width in a row, its height in a column. The other

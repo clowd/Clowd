@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -9,6 +9,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
 using Avalonia.Markup.Xaml;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Clowd.Config;
 using Clowd.Localization;
@@ -55,6 +56,23 @@ namespace Clowd
         public override void OnFrameworkInitializationCompleted()
         {
             SetupExceptionHandling();
+
+            // Text on every top-level (windows, popups, tooltips, the floating strips), tuned for the
+            // WPF "Display" look rather than Avalonia's defaults: LCD subpixel antialiasing instead of
+            // the grayscale it picks whenever it cannot prove the surface opaque, strong grid-fitting
+            // (Avalonia 12.1's TextHintingMode; the default is light) and baselines snapped to whole
+            // pixels so a line of 10 px text is never smeared across two rows. Text/RenderOptions are
+            // inherited down the visual tree and are plain static setters (not styleable), so the one
+            // place to write them is each TopLevel as it loads. Skia still falls back to grayscale where
+            // LCD is impossible (a rotated transform, a layer it must composite through). If Strong
+            // hinting ever distorts a face at 100 %, Light is the next step down, not None.
+            Control.LoadedEvent.AddClassHandler<TopLevel>((topLevel, _) =>
+            {
+                TextOptions.SetTextRenderingMode(topLevel, TextRenderingMode.SubpixelAntialias);
+                TextOptions.SetTextHintingMode(topLevel, TextHintingMode.Strong);
+                TextOptions.SetBaselinePixelAlignment(topLevel, BaselinePixelAlignment.Aligned);
+                RenderOptions.SetEdgeMode(topLevel, EdgeMode.Antialias);
+            });
 
             // the SDK's AI generators resolve the inference binary through this delegate on every
             // run — installed before Startup so the --video-edit/--video-spike harnesses (which

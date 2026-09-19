@@ -1,4 +1,4 @@
-<Application xmlns="https://github.com/avaloniaui"
+﻿<Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:semi="https://irihi.tech/semi"
              x:Class="Clowd.App"
@@ -12,6 +12,7 @@
              namespace alongside Semi.Avalonia's own theme. -->
         <semi:UrsaSemiTheme />
         <StyleInclude Source="avares://Clowd.Ui/Assets/AppResources.axaml" />
+
     </Application.Styles>
 
     <Application.Resources>

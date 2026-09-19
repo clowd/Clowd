@@ -1,6 +1,7 @@
-using System;
+﻿using System;
 using System.Linq;
 using Avalonia;
+using Avalonia.Skia;
 using Clowd.Config;
 using Clowd.UI;
 using Velopack;
@@ -132,6 +133,13 @@ namespace Clowd
                          // tray-resident: launch without a dock icon; MacDockIcon flips the
                          // activation policy to Regular whenever a real window opens.
                          .With(new MacOSPlatformOptions { ShowInDock = false })
+                         // Stencil buffers make Skia rasterise paths with multisampling instead of its
+                         // analytic coverage, which is what turned every 16 px stroked icon soft in
+                         // Avalonia 12.1.0 (AvaloniaUI/Avalonia#21899; the default flipped back to
+                         // false in 12.1.2). Pinned here so a future default cannot flip it again —
+                         // the strips and the editors are icon-heavy and the clipping speed-up is
+                         // not worth the blur.
+                         .With(new SkiaOptions { UseStencilBuffers = false })
                          .LogToTrace();
     }
 }

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
@@ -6,7 +6,7 @@
     <RootNamespace>Clowd.Drawing</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia" Version="12.1.2" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Clowd.Drawing.Tests" />
